@@ -4,6 +4,7 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("androidx.baselineprofile")
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+    id("io.gitlab.arturbosch.detekt")
     kotlin("kapt")
     kotlin("plugin.serialization")
     // Firebase Crashlytics - uncomment after adding google-services.json
@@ -182,4 +183,29 @@ secrets {
 
     // Ignore missing keys to allow builds without secrets file
     ignoreList.add("sdk.*")
+}
+
+detekt {
+    // Configuration file
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
+
+    // Baseline file for existing issues (generated with ./gradlew detektBaseline)
+    baseline = file("$rootDir/config/detekt/baseline.xml")
+
+    // Build upon default ruleset
+    buildUponDefaultConfig = true
+
+    // Run detekt on all source sets
+    source.setFrom(
+        files(
+            "src/main/kotlin",
+            "src/main/java"
+        )
+    )
+
+    // Parallel execution
+    parallel = true
+
+    // Don't fail build on issues (use baseline instead)
+    ignoreFailures = true
 }

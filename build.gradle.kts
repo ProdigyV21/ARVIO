@@ -11,6 +11,8 @@ plugins {
     // Firebase - requires google-services.json from Firebase Console
     id("com.google.gms.google-services") version "4.4.0" apply false
     id("com.google.firebase.crashlytics") version "2.9.9" apply false
+    // Static analysis
+    id("io.gitlab.arturbosch.detekt") version "1.23.4" apply false
 }
 
 
