@@ -1,0 +1,157 @@
+﻿> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:kaptGenerateStubsDebugKotlin UP-TO-DATE
+> Task :app:kaptDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:l8DexDesugarLibDebug UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+
+> Task :app:compileDebugKotlin FAILED
+./gradlew : e: file:
+///C:/Users/arvin/Do
+wnloads/arflix-analy
+sis/android-tv-nativ
+e/app/src/main/kotli
+n/com/arflix/tv/ui/c
+omponents/MediaCard.
+kt:110:26 Unresolved
+ reference: backgrou
+nd
+At line:1 char:1
++ ./gradlew :app:ass
+embleDebug > final_b
+uild_attempt.txt 2>&
+1
++ ~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+~
+    + CategoryInfo  
+            : NotS  
+  pecified: (e: f   
+ ile:///C:/U...n    
+ce: background:    S
+tring) [], Rem    ot
+eException
+    + FullyQualifie 
+   dErrorId : Nati  
+  veCommandError
+ 
+e: file:///C:/Users/
+arvin/Downloads/arfl
+ix-analysis/android-
+tv-native/app/src/ma
+in/kotlin/com/arflix
+/tv/ui/components/Me
+diaCard.kt:127:26 Un
+resolved reference: 
+size
+e: file:///C:/Users/
+arvin/Downloads/arfl
+ix-analysis/android-
+tv-native/app/src/ma
+in/kotlin/com/arflix
+/tv/ui/components/Me
+diaCard.kt:137:79 Un
+resolved reference: 
+sp
+e: file:///C:/Users/
+arvin/Downloads/arfl
+ix-analysis/android-
+tv-native/app/src/ma
+in/kotlin/com/arflix
+/tv/ui/components/Me
+diaCard.kt:147:30 Un
+resolved reference: 
+background
+e: file:///C:/Users/
+arvin/Downloads/arfl
+ix-analysis/android-
+tv-native/app/src/ma
+in/kotlin/com/arflix
+/tv/ui/components/Me
+diaCard.kt:167:30 Un
+resolved reference: 
+background
+e: file:///C:/Users/
+arvin/Downloads/arfl
+ix-analysis/android-
+tv-native/app/src/ma
+in/kotlin/com/arflix
+/tv/ui/components/Me
+diaCard.kt:173:34 Un
+resolved reference: 
+background
+e: file:///C:/Users/
+arvin/Downloads/arfl
+ix-analysis/android-
+tv-native/app/src/ma
+in/kotlin/com/arflix
+/tv/ui/components/Me
+diaCard.kt:208:29 Un
+resolved reference: 
+background
+
+FAILURE: Build faile
+d with an exception.
+
+* What went wrong:
+Execution failed for
+ task ':app:compileD
+ebugKotlin'.
+> A failure occurred
+ while executing org
+.jetbrains.kotlin.co
+mpilerRunner.GradleC
+ompilerRunnerWithWor
+kers$GradleKotlinCom
+pilerWorkAction
+   > Compilation err
+or. See log for more
+ details
+
+* Try:
+> Run with --stacktr
+ace option to get th
+e stack trace.
+> Run with --info or
+ --debug option to g
+et more log output.
+> Run with --scan to
+ get full insights.
+> Get more help at h
+ttps://help.gradle.o
+rg.
+
+BUILD FAILED in 16s
+32 actionable tasks: 2 executed, 30 up-to-date

@@ -1,0 +1,829 @@
+﻿
+12-27 15:27:43.703   650  2
+248 I ActivityManager: Forc
+e stopping com.arvio.tv app
+id=10099 user=0: from pid 9
+244
+12-27 15:27:45.935   650  2
+248 I ActivityTaskManager: 
+START u0 {flg=0x10000000 xf
+lg=0x5 cmp=com.arvio.tv/com
+.arflix.tv.MainActivity} wi
+th LAUNCH_SINGLE_TASK from 
+uid 2000 (BAL_ALLOW_PERMISS
+ION) result code=0
+12-27 15:27:45.942  1033  1
+077 V WindowManagerShell: T
+ransition requested (#42): 
+android.os.BinderProxy@fc29
+dd TransitionRequestInfo { 
+type = OPEN, triggerTask = 
+TaskInfo{userId=0 taskId=21
+ effectiveUid=10099 display
+Id=0 isRunning=true baseInt
+ent=Intent { flg=0x10000000
+ cmp=com.arvio.tv/com.arfli
+x.tv.MainActivity } baseAct
+ivity=ComponentInfo{com.arv
+io.tv/com.arflix.tv.MainAct
+ivity} topActivity=Componen
+tInfo{com.arvio.tv/com.arfl
+ix.tv.MainActivity} origAct
+ivity=null realActivity=Com
+ponentInfo{com.arvio.tv/com
+.arflix.tv.MainActivity} nu
+mActivities=1 lastActiveTim
+e=13420934 supportsMultiWin
+dow=false resizeMode=1 isRe
+sizeable=true minWidth=-1 m
+inHeight=-1 defaultMinSize=
+220 token=WCT{android.windo
+w.IWindowContainerToken$Stu
+b$Proxy@e0d5952} topActivit
+yType=1 pictureInPicturePar
+ams=null shouldDockBigOverl
+ays=true launchIntoPipHostT
+askId=-1 lastParentTaskIdBe
+forePip=-1 displayCutoutSaf
+eInsets=Rect(0, 0 - 0, 0) t
+opActivityInfo=ActivityInfo
+{4523423 com.arflix.tv.Main
+Activity} launchCookies=[] 
+positionInParent=Point(0, 0
+) parentTaskId=-1 isFocused
+=false isVisible=false isVi
+sibleRequested=false isTopA
+ctivityNoDisplay=false isSl
+eeping=false locusId=null d
+isplayAreaFeatureId=1 isTop
+ActivityTransparent=false i
+sActivityStackTransparent=f
+alse lastNonFullscreenBound
+s=Rect(840, 473 - 3000, 168
+8) capturedLink=null captur
+edLinkTimestamp=0 requested
+VisibleTypes=-9 topActivity
+RequestOpenInBrowserEducati
+onTimestamp=0 appCompatTask
+Info=AppCompatTaskInfo { to
+pActivityInSizeCompat=false
+ eligibleForLetterboxEducat
+ion= false isLetterboxEduca
+tionEnabled= false isLetter
+boxDoubleTapEnabled= false 
+eligibleForUserAspectRatioB
+utton= false topActivityBou
+ndsLetterboxed= false isFro
+mLetterboxDoubleTap= false 
+topActivityLetterboxVertica
+lPosition= -1 topActivityLe
+tterboxHorizontalPosition= 
+-1 topActivityLetterboxWidt
+h=-1 topActivityLetterboxHe
+ight=-1 topActivityAppBound
+s=Rect(0, 0 - 3840, 2160) i
+sUserFullscreenOverrideEnab
+led=false isSystemFullscree
+nOverrideEnabled=false hasM
+inAspectRatioOverride=false
+ topActivityLetterboxBounds
+=null cameraCompatTaskInfo=
+CameraCompatTaskInfo { free
+formCameraCompatMode=inacti
+ve}} topActivityMainWindowF
+rame=null}, pipChange = nul
+l, remoteTransition = null,
+ displayChange = null, flag
+s = 0, debugId = 42 }
+12-27 15:27:45.964   650   
+680 I ActivityManager: Star
+t proc 9252:com.arvio.tv/u0
+a99 for next-top-activity {
+com.arvio.tv/com.arflix.tv.
+MainActivity}
+12-27 15:27:46.210  9252  9
+252 I com.arvio.tv: Late-en
+abling -Xcheck:jni
+12-27 15:27:46.225  9252  9
+252 I com.arvio.tv: Using C
+ollectorTypeCMC GC.
+12-27 15:27:46.226  9252  9
+252 W com.arvio.tv: Unexpec
+ted CPU variant for x86: x8
+6.
+12-27 15:27:46.226  9252  9
+252 W com.arvio.tv: Known v
+ariants: atom, sandybridge,
+ silvermont, goldmont, gold
+mont-plus, goldmont-without
+-sha-xsaves, tremont, kabyl
+ake, alderlake, default
+12-27 15:27:46.957  9252  9
+252 D nativeloader: Configu
+ring clns-7 for other apk /
+data/app/~~h_DE06wZWaQ1-2v6
+JHGAqg==/com.arvio.tv-rNxbj
+lBDlYADnlgGO2HTbA==/base.ap
+k. target_sdk_version=34, u
+ses_libraries=, library_pat
+h=/data/app/~~h_DE06wZWaQ1-
+2v6JHGAqg==/com.arvio.tv-rN
+xbjlBDlYADnlgGO2HTbA==/lib/
+x86:/data/app/~~h_DE06wZWaQ
+1-2v6JHGAqg==/com.arvio.tv-
+rNxbjlBDlYADnlgGO2HTbA==/ba
+se.apk!/lib/x86, permitted_
+path=/data:/mnt/expand:/dat
+a/user/0/com.arvio.tv
+12-27 15:27:46.970  9252  9
+252 I com.arvio.tv: AssetMa
+nager2(0xeabc3f14) locale l
+ist changing from [] to [en
+-US]
+12-27 15:27:46.978  9252  9
+252 V GraphicsEnvironment: 
+com.arvio.tv is not listed 
+in per-application setting
+12-27 15:27:46.978  9252  9
+252 V GraphicsEnvironment: 
+com.arvio.tv is not listed 
+in ANGLE allowlist or setti
+ngs, returning default
+12-27 15:27:47.258  9252  9
+252 D ArvioApplication: Tra
+kt sync worker scheduled
+12-27 15:27:47.281  9252  9
+252 I com.arvio.tv: AssetMa
+nager2(0xeabc1694) locale l
+ist changing from [] to [en
+-US]
+12-27 15:27:47.530   650  2
+248 D ConnectivityService: 
+requestNetwork for uid/pid:
+10099/9252 activeRequest: n
+ull callbackRequest: 167 [N
+etworkRequest [ REQUEST id=
+168, [ Capabilities: INTERN
+ET&NOT_RESTRICTED&TRUSTED&N
+OT_VCN_MANAGED&NOT_BANDWIDT
+H_CONSTRAINED Uid: 10099 Re
+questorUid: 10099 Requestor
+Pkg: com.arvio.tv Underlyin
+gNetworks: Null] ]] callbac
+k flags: 0 order: 214748364
+7 isUidTracked: false decla
+redMethods: AVAIL|LOST|NC
+12-27 15:27:47.531   650   
+957 D EthernetNetworkFactor
+y: eth0: onNetworkNeeded fo
+r request: NetworkRequest [
+ REQUEST id=168, [ Capabili
+ties: INTERNET&NOT_RESTRICT
+ED&TRUSTED&NOT_VCN_MANAGED&
+NOT_BANDWIDTH_CONSTRAINED U
+id: 10099 RequestorUid: 100
+99 RequestorPkg: com.arvio.
+tv UnderlyingNetworks: Null
+] ]
+12-27 15:27:47.532   650   
+951 D UntrustedWifiNetworkF
+actory: got request Network
+Request [ REQUEST id=168, [
+ Capabilities: INTERNET&NOT
+_RESTRICTED&TRUSTED&NOT_VCN
+_MANAGED&NOT_BANDWIDTH_CONS
+TRAINED Uid: 10099 Requesto
+rUid: 10099 RequestorPkg: c
+om.arvio.tv UnderlyingNetwo
+rks: Null] ]
+12-27 15:27:47.532   650   
+951 D OemPaidWifiNetworkFac
+tory: got request NetworkRe
+quest [ REQUEST id=168, [ C
+apabilities: INTERNET&NOT_R
+ESTRICTED&TRUSTED&NOT_VCN_M
+ANAGED&NOT_BANDWIDTH_CONSTR
+AINED Uid: 10099 RequestorU
+id: 10099 RequestorPkg: com
+.arvio.tv UnderlyingNetwork
+s: Null] ]
+12-27 15:27:47.532   650   
+951 D MultiInternetWifiNetw
+orkFactory: got request Net
+workRequest [ REQUEST id=16
+8, [ Capabilities: INTERNET
+&NOT_RESTRICTED&TRUSTED&NOT
+_VCN_MANAGED&NOT_BANDWIDTH_
+CONSTRAINED Uid: 10099 Requ
+estorUid: 10099 RequestorPk
+g: com.arvio.tv UnderlyingN
+etworks: Null] ]
+12-27 15:27:47.556  9252  9
+268 E WM-WorkerFactory: Cou
+ld not instantiate com.arfl
+ix.tv.worker.TraktSyncWorke
+r
+12-27 15:27:47.556  9252  9
+268 E WM-WorkerFactory: jav
+a.lang.NoSuchMethodExceptio
+n: com.arflix.tv.worker.Tra
+ktSyncWorker.<init> [class 
+android.content.Context, cl
+ass androidx.work.WorkerPar
+ameters]
+12-27 15:27:47.556  9252  9
+268 E WM-WorkerWrapper: Cou
+ld not create Worker com.ar
+flix.tv.worker.TraktSyncWor
+ker
+12-27 15:27:47.562  9252  9
+268 E WM-WorkerFactory: Cou
+ld not instantiate com.arfl
+ix.tv.worker.TraktSyncWorke
+r
+12-27 15:27:47.562  9252  9
+268 E WM-WorkerFactory: jav
+a.lang.NoSuchMethodExceptio
+n: com.arflix.tv.worker.Tra
+ktSyncWorker.<init> [class 
+android.content.Context, cl
+ass androidx.work.WorkerPar
+ameters]
+12-27 15:27:47.562  9252  9
+268 E WM-WorkerWrapper: Cou
+ld not create Worker com.ar
+flix.tv.worker.TraktSyncWor
+ker
+12-27 15:27:47.842  9252  9
+252 I com.arvio.tv: hiddena
+pi: Accessing hidden method
+ Ljava/lang/invoke/MethodHa
+ndles$Lookup;-><init>(Ljava
+/lang/Class;I)V (runtime_fl
+ags=0, domain=core-platform
+, api=unsupported) from Lre
+trofit2/Platform; (domain=a
+pp) using reflection: allow
+ed
+12-27 15:27:48.121   650   
+957 D EthernetNetworkFactor
+y: eth0: onNetworkUnneeded 
+for request: NetworkRequest
+ [ REQUEST id=168, [ Capabi
+lities: INTERNET&NOT_RESTRI
+CTED&TRUSTED&NOT_VCN_MANAGE
+D&NOT_BANDWIDTH_CONSTRAINED
+ Uid: 10099 RequestorUid: 1
+0099 RequestorPkg: com.arvi
+o.tv UnderlyingNetworks: Nu
+ll] ]
+12-27 15:27:48.302   650   
+996 D ShortcutService: chan
+ging package: com.arvio.tv 
+userId=0
+12-27 15:27:48.937   650  2
+248 D CoreBackPreview: Wind
+ow{338ef55 u0 com.arvio.tv/
+com.arflix.tv.MainActivity}
+: Setting back callback OnB
+ackInvokedCallbackInfo{mCal
+lback=android.window.IOnBac
+kInvokedCallback$Stub$Proxy
+@50febda, mPriority=0, mIsA
+nimationCallback=false, mOv
+errideBehavior=0}
+12-27 15:27:49.349   650   
+670 I ActivityTaskManager: 
+Displayed com.arvio.tv/com.
+arflix.tv.MainActivity for 
+user 0: +3s425ms
+12-27 15:27:49.350   650   
+670 V WindowManager: Sent T
+ransition (#42) createdAt=1
+2-27 15:27:45.914 via reque
+st=TransitionRequestInfo { 
+type = OPEN, triggerTask = 
+TaskInfo{userId=0 taskId=21
+ effectiveUid=10099 display
+Id=0 isRunning=true baseInt
+ent=Intent { flg=0x10000000
+ cmp=com.arvio.tv/com.arfli
+x.tv.MainActivity } baseAct
+ivity=ComponentInfo{com.arv
+io.tv/com.arflix.tv.MainAct
+ivity} topActivity=Componen
+tInfo{com.arvio.tv/com.arfl
+ix.tv.MainActivity} origAct
+ivity=null realActivity=Com
+ponentInfo{com.arvio.tv/com
+.arflix.tv.MainActivity} nu
+mActivities=1 lastActiveTim
+e=13420934 supportsMultiWin
+dow=false resizeMode=1 isRe
+sizeable=true minWidth=-1 m
+inHeight=-1 defaultMinSize=
+220 token=WCT{RemoteToken{5
+90eba6 Task{30b8d68 #21 typ
+e=standard A=10099:com.arvi
+o.tv}}} topActivityType=1 p
+ictureInPictureParams=null 
+shouldDockBigOverlays=true 
+launchIntoPipHostTaskId=-1 
+lastParentTaskIdBeforePip=-
+1 displayCutoutSafeInsets=R
+ect(0, 0 - 0, 0) topActivit
+yInfo=ActivityInfo{ee519e7 
+com.arflix.tv.MainActivity}
+ launchCookies=[] positionI
+nParent=Point(0, 0) parentT
+askId=-1 isFocused=false is
+Visible=false isVisibleRequ
+ested=false isTopActivityNo
+Display=false isSleeping=fa
+lse locusId=null displayAre
+aFeatureId=1 isTopActivityT
+ransparent=false isActivity
+StackTransparent=false last
+NonFullscreenBounds=Rect(84
+0, 473 - 3000, 1688) captur
+edLink=null capturedLinkTim
+estamp=0 requestedVisibleTy
+pes=-9 topActivityRequestOp
+enInBrowserEducationTimesta
+mp=0 appCompatTaskInfo=AppC
+ompatTaskInfo { topActivity
+InSizeCompat=false eligible
+ForLetterboxEducation= fals
+e isLetterboxEducationEnabl
+ed= false isLetterboxDouble
+TapEnabled= false eligibleF
+orUserAspectRatioButton= fa
+lse topActivityBoundsLetter
+boxed= false isFromLetterbo
+xDoubleTap= false topActivi
+tyLetterboxVerticalPosition
+= -1 topActivityLetterboxHo
+rizontalPosition= -1 topAct
+ivityLetterboxWidth=-1 topA
+ctivityLetterboxHeight=-1 t
+opActivityAppBounds=Rect(0,
+ 0 - 3840, 2160) isUserFull
+screenOverrideEnabled=false
+ isSystemFullscreenOverride
+Enabled=false hasMinAspectR
+atioOverride=false topActiv
+ityLetterboxBounds=null cam
+eraCompatTaskInfo=CameraCom
+patTaskInfo { freeformCamer
+aCompatMode=inactive}} topA
+ctivityMainWindowFrame=null
+}, pipChange = null, remote
+Transition = null, displayC
+hange = null, flags = 0, de
+bugId = 42 }
+12-27 15:27:49.350   650   
+670 V WindowManager:       
+  {WCT{RemoteToken{590eba6 
+Task{30b8d68 #21 type=stand
+ard A=10099:com.arvio.tv}}}
+ m=OPEN f=NONE leash=Surfac
+e(name=Task=21)/@0x640080b 
+sb=Rect(0, 0 - 3840, 2160) 
+eb=Rect(0, 0 - 3840, 2160) 
+epz=Point(3840, 2160) d=0 t
+askParent=-1},
+12-27 15:27:49.379   650  2
+218 W JobScheduler: Job did
+n't exist in JobStore: cf3d
+64f #u0a99/6 com.arvio.tv/a
+ndroidx.work.impl.backgroun
+d.systemjob.SystemJobServic
+e
+12-27 15:27:49.383   650  2
+248 W JobScheduler: Job did
+n't exist in JobStore: 2036
+861 #u0a99/7 com.arvio.tv/a
+ndroidx.work.impl.backgroun
+d.systemjob.SystemJobServic
+e
+12-27 15:27:49.523  9252  9
+252 W com.arvio.tv: Method 
+boolean androidx.compose.ru
+ntime.snapshots.SnapshotSta
+teList.conditionalUpdate(bo
+olean, kotlin.jvm.functions
+.Function1) failed lock ver
+ification and will run slow
+er.
+12-27 15:27:49.523  9252  9
+252 W com.arvio.tv: Common 
+causes for lock verificatio
+n issues are non-optimized 
+dex code
+12-27 15:27:49.523  9252  9
+252 W com.arvio.tv: and inc
+orrect proguard optimizatio
+ns.
+12-27 15:27:49.523  9252  9
+252 W com.arvio.tv: Method 
+boolean androidx.compose.ru
+ntime.snapshots.SnapshotSta
+teList.conditionalUpdate$de
+fault(androidx.compose.runt
+ime.snapshots.SnapshotState
+List, boolean, kotlin.jvm.f
+unctions.Function1, int, ja
+va.lang.Object) failed lock
+ verification and will run 
+slower.
+12-27 15:27:49.523  9252  9
+252 W com.arvio.tv: Method 
+java.lang.Object androidx.c
+ompose.runtime.snapshots.Sn
+apshotStateList.mutate(kotl
+in.jvm.functions.Function1)
+ failed lock verification a
+nd will run slower.
+12-27 15:27:49.523  9252  9
+252 W com.arvio.tv: Method 
+void androidx.compose.runti
+me.snapshots.SnapshotStateL
+ist.update(boolean, kotlin.
+jvm.functions.Function1) fa
+iled lock verification and 
+will run slower.
+12-27 15:27:49.524  9252  9
+252 W com.arvio.tv: Method 
+void androidx.compose.runti
+me.snapshots.SnapshotStateL
+ist.update$default(androidx
+.compose.runtime.snapshots.
+SnapshotStateList, boolean,
+ kotlin.jvm.functions.Funct
+ion1, int, java.lang.Object
+) failed lock verification 
+and will run slower.
+12-27 15:27:49.802  1664  1
+806 W TifLauncherHelper: Al
+low remove LastInput? com.a
+rvio.tv in foreground
+12-27 15:27:49.975  9252  9
+286 I okhttp.OkHttpClient: 
+<-- HTTP FAILED: javax.net.
+ssl.SSLHandshakeException: 
+Chain validation failed
+12-27 15:27:49.980  9252  9
+285 I okhttp.OkHttpClient: 
+<-- HTTP FAILED: javax.net.
+ssl.SSLHandshakeException: 
+Chain validation failed
+12-27 15:27:50.001  9252  9
+283 I okhttp.OkHttpClient: 
+<-- HTTP FAILED: javax.net.
+ssl.SSLHandshakeException: 
+Chain validation failed
+--------- beginning of cras
+h
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: FATAL
+ EXCEPTION: main
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: Proce
+ss: com.arvio.tv, PID: 9252
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: javax
+.net.ssl.SSLHandshakeExcept
+ion: Chain validation faile
+d
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: 	at c
+om.android.org.conscrypt.SS
+LUtils.toSSLHandshakeExcept
+ion(SSLUtils.java:358)
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: 	at c
+om.android.org.conscrypt.Co
+nscryptEngine.convertExcept
+ion(ConscryptEngine.java:11
+31)
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: 	Supp
+ressed: javax.net.ssl.SSLHa
+ndshakeException: Chain val
+idation failed
+12-27 15:27:50.579  9252  9
+252 E AndroidRuntime: 	Caus
+ed by: java.security.cert.C
+ertificateException: Chain 
+validation failed
+12-27 15:27:50.581  9252  9
+252 E AndroidRuntime: 	Caus
+ed by: java.security.cert.C
+ertPathValidatorException: 
+Response is unreliable: its
+ validity interval is out-o
+f-date
+12-27 15:27:50.581  9252  9
+252 E AndroidRuntime: 	Caus
+ed by: java.security.cert.C
+ertPathValidatorException: 
+Response is unreliable: its
+ validity interval is out-o
+f-date
+12-27 15:27:50.581  9252  9
+252 E AndroidRuntime: 	Supp
+ressed: javax.net.ssl.SSLHa
+ndshakeException: Chain val
+idation failed
+12-27 15:27:50.581  9252  9
+252 E AndroidRuntime: 	Caus
+ed by: java.security.cert.C
+ertificateException: Chain 
+validation failed
+12-27 15:27:50.581  9252  9
+252 E AndroidRuntime: 	Caus
+ed by: java.security.cert.C
+ertPathValidatorException: 
+Response is unreliable: its
+ validity interval is out-o
+f-date
+12-27 15:27:50.583  9252  9
+252 E AndroidRuntime: 	Caus
+ed by: java.security.cert.C
+ertPathValidatorException: 
+Response is unreliable: its
+ validity interval is out-o
+f-date
+12-27 15:27:50.583  9252  9
+252 E AndroidRuntime: 	Supp
+ressed: kotlinx.coroutines.
+internal.DiagnosticCoroutin
+eContextException: [Standal
+oneCoroutine{Cancelling}@29
+495c0, Dispatchers.Main.imm
+ediate]
+12-27 15:27:50.583  9252  9
+252 E AndroidRuntime: Cause
+d by: java.security.cert.Ce
+rtificateException: Chain v
+alidation failed
+12-27 15:27:50.583  9252  9
+252 E AndroidRuntime: Cause
+d by: java.security.cert.Ce
+rtPathValidatorException: R
+esponse is unreliable: its 
+validity interval is out-of
+-date
+12-27 15:27:50.583  9252  9
+252 E AndroidRuntime: Cause
+d by: java.security.cert.Ce
+rtPathValidatorException: R
+esponse is unreliable: its 
+validity interval is out-of
+-date
+12-27 15:27:50.589   650  9
+318 I DropBoxManagerService
+: add tag=data_app_crash is
+TagEnabled=true flags=0x2
+12-27 15:27:50.590   650  2
+248 W ActivityTaskManager: 
+  Force finishing activity 
+com.arvio.tv/com.arflix.tv.
+MainActivity
+12-27 15:27:50.596  1033  1
+077 V WindowManagerShell: T
+ransition requested (#43): 
+android.os.BinderProxy@6a47
+e4 TransitionRequestInfo { 
+type = CLOSE, triggerTask =
+ TaskInfo{userId=0 taskId=2
+1 effectiveUid=10099 displa
+yId=0 isRunning=true baseIn
+tent=Intent { flg=0x1000000
+0 cmp=com.arvio.tv/com.arfl
+ix.tv.MainActivity } baseAc
+tivity=ComponentInfo{com.ar
+vio.tv/com.arflix.tv.MainAc
+tivity} topActivity=Compone
+ntInfo{com.arvio.tv/com.arf
+lix.tv.MainActivity} origAc
+tivity=null realActivity=Co
+mponentInfo{com.arvio.tv/co
+m.arflix.tv.MainActivity} n
+umActivities=1 lastActiveTi
+me=13422262 supportsMultiWi
+ndow=false resizeMode=1 isR
+esizeable=true minWidth=-1 
+minHeight=-1 defaultMinSize
+=220 token=WCT{android.wind
+ow.IWindowContainerToken$St
+ub$Proxy@d80444d} topActivi
+tyType=1 pictureInPicturePa
+rams=null shouldDockBigOver
+lays=true launchIntoPipHost
+TaskId=-1 lastParentTaskIdB
+eforePip=-1 displayCutoutSa
+feInsets=Rect(0, 0 - 0, 0) 
+topActivityInfo=ActivityInf
+o{4fabb02 com.arflix.tv.Mai
+nActivity} launchCookies=[]
+ positionInParent=Point(0, 
+0) parentTaskId=-1 isFocuse
+d=true isVisible=true isVis
+ibleRequested=true isTopAct
+ivityNoDisplay=false isSlee
+ping=false locusId=null dis
+playAreaFeatureId=1 isTopAc
+tivityTransparent=false isA
+ctivityStackTransparent=fal
+se lastNonFullscreenBounds=
+Rect(840, 473 - 3000, 1688)
+ capturedLink=null captured
+LinkTimestamp=0 requestedVi
+sibleTypes=-16 topActivityR
+equestOpenInBrowserEducatio
+nTimestamp=0 appCompatTaskI
+nfo=AppCompatTaskInfo { top
+ActivityInSizeCompat=false 
+eligibleForLetterboxEducati
+on= false isLetterboxEducat
+ionEnabled= false isLetterb
+oxDoubleTapEnabled= false e
+ligibleForUserAspectRatioBu
+tton= false topActivityBoun
+dsLetterboxed= false isFrom
+LetterboxDoubleTap= false t
+opActivityLetterboxVertical
+Position= -1 topActivityLet
+terboxHorizontalPosition= -
+1 topActivityLetterboxWidth
+=-1 topActivityLetterboxHei
+ght=-1 topActivityAppBounds
+=Rect(0, 0 - 3840, 2160) is
+UserFullscreenOverrideEnabl
+ed=false isSystemFullscreen
+OverrideEnabled=false hasMi
+nAspectRatioOverride=false 
+topActivityLetterboxBounds=
+null cameraCompatTaskInfo=C
+ameraCompatTaskInfo { freef
+ormCameraCompatMode=inactiv
+e}} topActivityMainWindowFr
+ame=null}, pipChange = null
+, remoteTransition = null, 
+displayChange = null, flags
+ = 16, debugId = 43 }
+12-27 15:27:50.624   650   
+748 W InputDispatcher: chan
+nel '338ef55 com.arvio.tv/c
+om.arflix.tv.MainActivity' 
+~ Consumer closed input cha
+nnel or an error occurred. 
+ events=0x9
+12-27 15:27:50.625   650   
+748 E InputDispatcher: chan
+nel '338ef55 com.arvio.tv/c
+om.arflix.tv.MainActivity' 
+~ Channel is unrecoverably 
+broken and will be disposed
+!
+12-27 15:27:50.625   650   
+748 I WindowManager: WINDOW
+ DIED Window{338ef55 u0 com
+.arvio.tv/com.arflix.tv.Mai
+nActivity}
+12-27 15:27:50.629   650  2
+290 I ActivityManager: Proc
+ess com.arvio.tv (pid 9252)
+ has died: fg  TOP 
+12-27 15:27:50.631   650  1
+621 I WindowManager: WIN DE
+ATH: Window{338ef55 u0 com.
+arvio.tv/com.arflix.tv.Main
+Activity EXITING}
+12-27 15:27:50.904   650   
+670 V WindowManager: Sent T
+ransition (#43) createdAt=1
+2-27 15:27:50.590 via reque
+st=TransitionRequestInfo { 
+type = CLOSE, triggerTask =
+ TaskInfo{userId=0 taskId=2
+1 effectiveUid=10099 displa
+yId=0 isRunning=true baseIn
+tent=Intent { flg=0x1000000
+0 cmp=com.arvio.tv/com.arfl
+ix.tv.MainActivity } baseAc
+tivity=ComponentInfo{com.ar
+vio.tv/com.arflix.tv.MainAc
+tivity} topActivity=Compone
+ntInfo{com.arvio.tv/com.arf
+lix.tv.MainActivity} origAc
+tivity=null realActivity=Co
+mponentInfo{com.arvio.tv/co
+m.arflix.tv.MainActivity} n
+umActivities=1 lastActiveTi
+me=13422262 supportsMultiWi
+ndow=false resizeMode=1 isR
+esizeable=true minWidth=-1 
+minHeight=-1 defaultMinSize
+=220 token=WCT{RemoteToken{
+590eba6 Task{30b8d68 #21 ty
+pe=standard A=10099:com.arv
+io.tv}}} topActivityType=1 
+pictureInPictureParams=null
+ shouldDockBigOverlays=true
+ launchIntoPipHostTaskId=-1
+ lastParentTaskIdBeforePip=
+-1 displayCutoutSafeInsets=
+Rect(0, 0 - 0, 0) topActivi
+tyInfo=ActivityInfo{ee519e7
+ com.arflix.tv.MainActivity
+} launchCookies=[] position
+InParent=Point(0, 0) parent
+TaskId=-1 isFocused=true is
+Visible=true isVisibleReque
+sted=true isTopActivityNoDi
+splay=false isSleeping=fals
+e locusId=null displayAreaF
+eatureId=1 isTopActivityTra
+nsparent=false isActivitySt
+ackTransparent=false lastNo
+nFullscreenBounds=Rect(840,
+ 473 - 3000, 1688) captured
+Link=null capturedLinkTimes
+tamp=0 requestedVisibleType
+s=-16 topActivityRequestOpe
+nInBrowserEducationTimestam
+p=0 appCompatTaskInfo=AppCo
+mpatTaskInfo { topActivityI
+nSizeCompat=false eligibleF
+orLetterboxEducation= false
+ isLetterboxEducationEnable
+d= false isLetterboxDoubleT
+apEnabled= false eligibleFo
+rUserAspectRatioButton= fal
+se topActivityBoundsLetterb
+oxed= false isFromLetterbox
+DoubleTap= false topActivit
+yLetterboxVerticalPosition=
+ -1 topActivityLetterboxHor
+izontalPosition= -1 topActi
+vityLetterboxWidth=-1 topAc
+tivityLetterboxHeight=-1 to
+pActivityAppBounds=Rect(0, 
+0 - 3840, 2160) isUserFulls
+creenOverrideEnabled=false 
+isSystemFullscreenOverrideE
+nabled=false hasMinAspectRa
+tioOverride=false topActivi
+tyLetterboxBounds=null came
+raCompatTaskInfo=CameraComp
+atTaskInfo { freeformCamera
+CompatMode=inactive}} topAc
+tivityMainWindowFrame=null}
+, pipChange = null, remoteT
+ransition = null, displayCh
+ange = null, flags = 16, de
+bugId = 43 }
+12-27 15:27:50.906   650   
+670 V WindowManager:       
+  {WCT{RemoteToken{590eba6 
+Task{30b8d68 #21 type=stand
+ard A=10099:com.arvio.tv}}}
+ m=CLOSE f=NONE leash=Surfa
+ce(name=Task=21)/@0x640080b
+ sb=Rect(0, 0 - 3840, 2160)
+ eb=Rect(0, 0 - 3840, 2160)
+ epz=Point(3840, 2160) d=0 
+taskParent=-1}
+12-27 15:27:51.093   650   
+673 W ActivityTaskManager: 
+Activity top resumed state 
+loss timeout for ActivityRe
+cord{184346763 u0 com.arvio
+.tv/com.arflix.tv.MainActiv
+ity t21 f} isExiting}
+12-27 15:27:51.222  1286  2
+288 W GLSUser : [AppCertMan
+ager] Exception while reque
+sting key: 
+12-27 15:27:51.222  1286  2
+288 W GLSUser : java.util.c
+oncurrent.ExecutionExceptio
+n: armw: Parse Proto Except
+ion with response code 400
+12-27 15:27:51.222  1286  2
+288 W GLSUser : Caused by: 
+armw: Parse Proto Exception
+ with response code 400
+12-27 15:27:51.370   650  2
+218 W WindowManager: Except
+ion thrown during dispatchA
+ppVisibility Window{338ef55
+ u0 com.arvio.tv/com.arflix
+.tv.MainActivity EXITING}
+12-27 15:27:51.370   650  2
+218 W WindowManager: androi
+d.os.DeadObjectException
+
+

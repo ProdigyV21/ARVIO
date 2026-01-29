@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ARVIO</string>
+    <string name="continue_watching">Continue Watching</string>
+    <string name="trending_movies">Trending Movies</string>
+    <string name="trending_series">Trending Series</string>
+    <string name="trending_anime">Trending Anime</string>
+    <string name="my_watchlist">My Watchlist</string>
+    <string name="settings">Settings</string>
+    <string name="search">Search</string>
+    <string name="play">Play</string>
+    <string name="sources">Sources</string>
+    <string name="trailer">Trailer</string>
+    <string name="watched">Watched</string>
+    <string name="unwatched">Unwatched</string>
+    <string name="add_to_watchlist">Add to Watchlist</string>
+    <string name="remove_from_watchlist">Remove from Watchlist</string>
+    <string name="subtitles">Subtitles</string>
+    <string name="next_episode">Next Episode</string>
+    <string name="season">Season %d</string>
+    <string name="episode">Episode %d</string>
+    <string name="cast">Cast</string>
+    <string name="more_like_this">More Like This</string>
+    <string name="default_subtitle">Default Subtitle</string>
+    <string name="auto_play_next">Auto-Play Next</string>
+    <string name="off">Off</string>
+    <string name="on">On</string>
+    <string name="loading">Loading...</string>
+    <string name="error_loading">Error loading content</string>
+    <string name="no_results">No results found</string>
+</resources>
+
+

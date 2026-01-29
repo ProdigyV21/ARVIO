@@ -1,0 +1,330 @@
+package com.arflix.tv.data.repository
+
+import android.util.Log
+import com.arflix.tv.data.api.SupabaseApi
+import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.util.Constants
+import kotlinx.serialization.Serializable
+import retrofit2.HttpException
+import java.time.Instant
+import javax.inject.Inject
+import javax.inject.Provider
+import javax.inject.Singleton
+
+/**
+ * Watch history entry for Supabase
+ */
+@Serializable
+data class WatchHistoryEntry(
+    val id: String? = null,
+    val user_id: String,
+    val media_type: String, // "movie" or "tv"
+    val show_tmdb_id: Int,
+    val show_trakt_id: Int? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val trakt_episode_id: Int? = null,
+    val tmdb_episode_id: Int? = null,
+    val title: String? = null,
+    val episode_title: String? = null,
+    val progress: Float = 0f, // 0.0-1.0
+    val duration_seconds: Long = 0,
+    val position_seconds: Long = 0,
+    val paused_at: String? = null,
+    val updated_at: String? = null,
+    val source: String? = null,
+    val backdrop_path: String? = null,
+    val poster_path: String? = null
+)
+
+/**
+ * Repository for syncing watch history with Supabase
+ */
+@Singleton
+class WatchHistoryRepository @Inject constructor(
+    private val authRepositoryProvider: Provider<AuthRepository>,
+    private val supabaseApi: SupabaseApi
+) {
+    private val TAG = "WatchHistoryRepository"
+
+    /**
+     * Save watch progress to Supabase
+     */
+    suspend fun saveProgress(
+        mediaType: MediaType,
+        tmdbId: Int,
+        title: String,
+        poster: String?,
+        backdrop: String?,
+        season: Int?,
+        episode: Int?,
+        episodeTitle: String?,
+        progress: Float,
+        duration: Long,
+        position: Long
+    ) {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
+
+        try {
+            val entry = WatchHistoryEntry(
+                user_id = userId,
+                media_type = if (mediaType == MediaType.MOVIE) "movie" else "tv",
+                show_tmdb_id = tmdbId,
+                title = title,
+                poster_path = poster,
+                backdrop_path = backdrop,
+                season = season,
+                episode = episode,
+                episode_title = episodeTitle,
+                progress = progress,
+                duration_seconds = duration,
+                position_seconds = position,
+                source = "arvio"
+            )
+
+            // Upsert - update if exists, insert if not
+            executeSupabaseCall("save watch progress") { auth ->
+                supabaseApi.upsertWatchHistory(auth = auth, item = entry.toRecord())
+            }
+
+            Log.d(TAG, "Saved progress: $title - ${(progress * 100).toInt()}%")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save progress", e)
+        }
+    }
+
+    /**
+     * Get watch history for current user
+     */
+    suspend fun getWatchHistory(): List<WatchHistoryEntry> {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return emptyList()
+
+        return try {
+            executeSupabaseCall("get watch history") { auth ->
+                supabaseApi.getWatchHistory(
+                    auth = auth,
+                    userId = "eq.$userId",
+                    order = "updated_at.desc",
+                    limit = 500
+                )
+            }.map { it.toEntry() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get watch history", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get continue watching items (progress < 90%)
+     */
+    suspend fun getContinueWatching(): List<WatchHistoryEntry> {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return emptyList()
+
+        return try {
+            val records = executeSupabaseCall("get continue watching history") { auth ->
+                supabaseApi.getWatchHistory(
+                    auth = auth,
+                    userId = "eq.$userId",
+                    order = "updated_at.desc",
+                    limit = 500
+                )
+            }
+            val threshold = Constants.WATCHED_THRESHOLD / 100f
+            records.filter { it.progress > 0f && it.progress < threshold }.map { it.toEntry() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get continue watching", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Get progress for a specific item
+     */
+    suspend fun getProgress(
+        mediaType: MediaType,
+        tmdbId: Int,
+        season: Int?,
+        episode: Int?
+    ): WatchHistoryEntry? {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return null
+
+        return try {
+            val records = executeSupabaseCall("get watch history item") { auth ->
+                supabaseApi.getWatchHistoryItem(
+                    auth = auth,
+                    userId = "eq.$userId",
+                    showTmdbId = "eq.$tmdbId",
+                    mediaType = "eq.${if (mediaType == MediaType.MOVIE) "movie" else "tv"}",
+                    season = season?.let { "eq.$it" },
+                    episode = episode?.let { "eq.$it" }
+                )
+            }
+            records.firstOrNull()?.toEntry()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get progress", e)
+            null
+        }
+    }
+
+    /**
+     * Get the latest in-progress entry for a show/movie.
+     */
+    suspend fun getLatestProgress(
+        mediaType: MediaType,
+        tmdbId: Int
+    ): WatchHistoryEntry? {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return null
+        val mediaTypeKey = if (mediaType == MediaType.MOVIE) "movie" else "tv"
+        val threshold = Constants.WATCHED_THRESHOLD / 100f
+
+        return try {
+            val records = executeSupabaseCall("get watch history by show") { auth ->
+                supabaseApi.getWatchHistoryItem(
+                    auth = auth,
+                    userId = "eq.$userId",
+                    showTmdbId = "eq.$tmdbId",
+                    mediaType = "eq.$mediaTypeKey",
+                    order = "updated_at.desc",
+                    limit = 1
+                )
+            }
+            records
+                .map { it.toEntry() }
+                .filter { it.progress > 0f && it.progress < threshold }
+                .maxByOrNull { entry ->
+                    parseEpoch(entry.updated_at).coerceAtLeast(parseEpoch(entry.paused_at))
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get latest progress", e)
+            null
+        }
+    }
+
+    /**
+     * Remove item from watch history
+     */
+    suspend fun removeFromHistory(
+        tmdbId: Int,
+        season: Int?,
+        episode: Int?
+    ) {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
+
+        try {
+            executeSupabaseCall("remove watch history item") { auth ->
+                supabaseApi.deleteWatchHistory(
+                    auth = auth,
+                    userId = "eq.$userId",
+                    showTmdbId = "eq.$tmdbId",
+                    season = season?.let { "eq.$it" },
+                    episode = episode?.let { "eq.$it" }
+                )
+            }
+            Log.d(TAG, "Removed from history: $tmdbId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to remove from history", e)
+        }
+    }
+
+    /**
+     * Clear all watch history
+     */
+    suspend fun clearHistory() {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
+
+        try {
+            executeSupabaseCall("clear watch history") { auth ->
+                supabaseApi.deleteWatchHistory(
+                    auth = auth,
+                    userId = "eq.$userId"
+                )
+            }
+            Log.d(TAG, "Cleared watch history")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear history", e)
+        }
+    }
+
+    private suspend fun <T> executeSupabaseCall(
+        operation: String,
+        block: suspend (String) -> T
+    ): T {
+        val auth = getSupabaseAuth() ?: throw IllegalStateException("Supabase auth failed")
+        return try {
+            block(auth)
+        } catch (e: HttpException) {
+            if (e.code() == 401) {
+                Log.w(TAG, "$operation unauthorized, refreshing Supabase session and retrying")
+                val refreshed = authRepositoryProvider.get().refreshAccessToken()
+                if (!refreshed.isNullOrBlank()) {
+                    return block("Bearer $refreshed")
+                }
+            }
+            throw e
+        }
+    }
+
+    private suspend fun getSupabaseAuth(): String? {
+        val authRepository = authRepositoryProvider.get()
+        val token = authRepository.getAccessToken()
+        if (!token.isNullOrBlank()) return "Bearer $token"
+        val refreshed = authRepository.refreshAccessToken()
+        return refreshed?.let { "Bearer $it" }
+    }
+
+    private fun parseEpoch(value: String?): Long {
+        if (value.isNullOrBlank()) return 0L
+        return try {
+            Instant.parse(value).toEpochMilli()
+        } catch (_: Exception) {
+            0L
+        }
+    }
+}
+
+private fun WatchHistoryEntry.toRecord(): com.arflix.tv.data.api.WatchHistoryRecord {
+    return com.arflix.tv.data.api.WatchHistoryRecord(
+        userId = user_id,
+        mediaType = media_type,
+        showTmdbId = show_tmdb_id,
+        showTraktId = show_trakt_id,
+        season = season,
+        episode = episode,
+        traktEpisodeId = trakt_episode_id,
+        tmdbEpisodeId = tmdb_episode_id,
+        progress = progress,
+        positionSeconds = position_seconds,
+        durationSeconds = duration_seconds,
+        pausedAt = paused_at,
+        updatedAt = updated_at,
+        source = source,
+        title = title,
+        episodeTitle = episode_title,
+        backdropPath = backdrop_path,
+        posterPath = poster_path
+    )
+}
+
+private fun com.arflix.tv.data.api.WatchHistoryRecord.toEntry(): WatchHistoryEntry {
+    return WatchHistoryEntry(
+        id = id,
+        user_id = userId,
+        media_type = mediaType,
+        show_tmdb_id = showTmdbId ?: 0,
+        show_trakt_id = showTraktId,
+        season = season,
+        episode = episode,
+        trakt_episode_id = traktEpisodeId,
+        tmdb_episode_id = tmdbEpisodeId,
+        title = title,
+        episode_title = episodeTitle,
+        progress = progress,
+        duration_seconds = durationSeconds,
+        position_seconds = positionSeconds,
+        paused_at = pausedAt,
+        updated_at = updatedAt,
+        source = source,
+        backdrop_path = backdropPath,
+        poster_path = posterPath
+    )
+}

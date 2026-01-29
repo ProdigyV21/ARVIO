@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Arctic Fuse 2 Inspired Colors -->
+
+    <!-- Primary Colors (Light Gray on Black) -->
+    <color name="arctic_white">#EDEDED</color>
+    <color name="arctic_black">#000000</color>
+    <color name="arctic_gray">#4D4D4D</color>
+    <color name="arctic_gray_light">#B3B3B3</color>
+
+    <!-- Accent Colors -->
+    <color name="accent_white">#FFFFFF</color>
+    <color name="accent_yellow">#FFCD3C</color>
+    <color name="accent_green">#00D588</color>
+
+    <!-- Background Colors (Pure Black) -->
+    <color name="background_dark">#000000</color>
+    <color name="background_card">#0D0D0D</color>
+    <color name="background_elevated">#1A1A1A</color>
+    <color name="background_overlay">#E7000000</color>
+
+    <!-- Text Colors -->
+    <color name="text_primary">#EDEDED</color>
+    <color name="text_secondary">#B3EDEDED</color>
+    <color name="text_tertiary">#80EDEDED</color>
+    <color name="text_disabled">#4DEDEDED</color>
+
+    <!-- IMDb/Star Yellow -->
+    <color name="imdb_yellow">#FFCD3C</color>
+
+    <!-- Status Colors -->
+    <color name="success_green">#00D588</color>
+    <color name="error_red">#E74C3C</color>
+    <color name="warning_orange">#F39C12</color>
+    <color name="info_blue">#EDEDED</color>
+    <color name="ongoing_blue">#EDEDED</color>
+
+    <!-- Legacy aliases for compatibility -->
+    <color name="pink_primary">#EDEDED</color>
+    <color name="pink_secondary">#EDEDED</color>
+    <color name="purple_accent">#EDEDED</color>
+</resources>
+

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="60dp"
+    android:viewportWidth="200"
+    android:viewportHeight="60">
+
+    <!-- A - Gradient effect with layered colors -->
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M20,45 L35,15 L40,15 L55,45 L49,45 L46,38 L29,38 L26,45 Z M32,33 L43,33 L37.5,20 Z" />
+
+    <!-- R -->
+    <path
+        android:fillColor="#C084FC"
+        android:pathData="M60,15 L75,15 C83,15 88,20 88,27 C88,32 85,36 80,38 L90,45 L83,45 L74,39 L66,39 L66,45 L60,45 Z M66,20 L66,34 L74,34 C78,34 81,31 81,27 C81,23 78,20 74,20 Z" />
+
+    <!-- V -->
+    <path
+        android:fillColor="#E879F9"
+        android:pathData="M95,15 L101,15 L115,38 L129,15 L135,15 L117,45 L113,45 Z" />
+
+    <!-- I -->
+    <path
+        android:fillColor="#F0ABFC"
+        android:pathData="M140,45 L140,15 L146,15 L146,45 Z" />
+
+    <!-- O with cyan accent -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M155,30 C155,20 163,13 175,13 C187,13 195,20 195,30 C195,40 187,47 175,47 C163,47 155,40 155,30 Z M161,30 C161,37 167,42 175,42 C183,42 189,37 189,30 C189,23 183,18 175,18 C167,18 161,23 161,30 Z" />
+</vector>
+
+

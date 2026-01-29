@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ARVIO TV Splash Theme - Shows immediately on app launch -->
+    <style name="Theme.ArflixTV.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/background_dark</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <item name="postSplashScreenTheme">@style/Theme.ArflixTV</item>
+        <item name="android:windowBackground">@color/background_dark</item>
+    </style>
+
+    <!-- ARVIO TV Theme - Arctic Fuse 2 Inspired -->
+    <style name="Theme.ArflixTV" parent="@style/Theme.Leanback">
+        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:colorBackground">@color/background_dark</item>
+        <item name="android:colorPrimary">@color/arctic_white</item>
+        <item name="android:colorAccent">@color/accent_white</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>
