@@ -1,7 +1,6 @@
 package com.arflix.tv.data.repository
 
 import android.content.Context
-import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -19,7 +18,9 @@ import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.util.AnimeMapper
 import com.arflix.tv.util.AppException
+import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
+import com.arflix.tv.util.maskToken
 import com.arflix.tv.util.Result
 import com.arflix.tv.util.runCatching
 import com.google.gson.Gson
@@ -111,14 +112,14 @@ class StreamRepository @Inject constructor(
         val addons = parseAddons(json)
             ?: parseAddons(pendingJson)
             ?: run {
-                Log.d(TAG, "No addons in storage, using defaults")
+                AppLogger.d(TAG, "No addons in storage, using defaults")
                 getDefaultAddonList()
             }
 
         // ALWAYS ensure OpenSubtitles is present and enabled
         val hasOpenSubs = addons.any { it.id == "opensubtitles" && it.type == AddonType.SUBTITLE }
         val finalAddons = if (!hasOpenSubs) {
-            Log.d(TAG, "OpenSubtitles addon missing, adding it")
+            AppLogger.d(TAG, "OpenSubtitles addon missing, adding it")
             val openSubsAddon = Addon(
                 id = "opensubtitles",
                 name = "OpenSubtitles v3",
@@ -138,7 +139,7 @@ class StreamRepository @Inject constructor(
             }
         }
 
-        Log.d(TAG, "Returning ${finalAddons.size} addons: ${finalAddons.map { it.name }}")
+        AppLogger.d(TAG, "Returning ${finalAddons.size} addons: ${finalAddons.map { it.name }}")
         finalAddons
     }
 
@@ -182,10 +183,10 @@ class StreamRepository @Inject constructor(
                 throw AppException.Unknown("Addon URL is empty")
             }
             val manifestUrl = getManifestUrl(normalizedUrl)
-            Log.d(TAG, "Fetching addon manifest from: $manifestUrl")
+            AppLogger.d(TAG, "Fetching addon manifest from: $manifestUrl")
 
             val manifest = streamApi.getAddonManifest(manifestUrl)
-            Log.d(TAG, "Got manifest: ${manifest.name} v${manifest.version}")
+            AppLogger.d(TAG, "Got manifest: ${manifest.name} v${manifest.version}")
 
             val transportUrl = getTransportUrl(normalizedUrl)
             val addonManifest = convertToAddonManifest(manifest)
@@ -275,12 +276,12 @@ class StreamRepository @Inject constructor(
             context.streamDataStore.edit { prefs ->
                 prefs.remove(PENDING_ADDONS_KEY)
             }
-            Log.d(TAG, "Addons synced to Supabase")
+            AppLogger.d(TAG, "Addons synced to Supabase")
         } else {
             context.streamDataStore.edit { prefs ->
                 prefs[PENDING_ADDONS_KEY] = json
             }
-            Log.w(TAG, "Failed to sync addons to Supabase (pending retry): ${result.exceptionOrNull()?.message}")
+            AppLogger.w(TAG, "Failed to sync addons to Supabase (pending retry): ${result.exceptionOrNull()?.message}")
         }
     }
 
@@ -297,9 +298,9 @@ class StreamRepository @Inject constructor(
                     prefs.remove(PENDING_ADDONS_KEY)
                     prefs[ADDONS_KEY] = pendingJson
                 }
-                Log.d(TAG, "Pending addons synced to Supabase")
+                AppLogger.d(TAG, "Pending addons synced to Supabase")
             } else {
-                Log.w(TAG, "Pending addons sync failed, keeping local: ${pushResult.exceptionOrNull()?.message}")
+                AppLogger.w(TAG, "Pending addons sync failed, keeping local: ${pushResult.exceptionOrNull()?.message}")
                 return@runCatching
             }
         }
@@ -325,10 +326,10 @@ class StreamRepository @Inject constructor(
                     prefs[ADDONS_KEY] = gson.toJson(mergedAddons)
                 }
 
-                Log.d(TAG, "Synced ${cloudAddons.size} addons from Supabase")
+                AppLogger.d(TAG, "Synced ${cloudAddons.size} addons from Supabase")
             }
         } else {
-            Log.d(TAG, "No addons in cloud, using local/defaults")
+            AppLogger.d(TAG, "No addons in cloud, using local/defaults")
         }
     }
 
@@ -337,10 +338,10 @@ class StreamRepository @Inject constructor(
         return try {
             val type = TypeToken.getParameterized(List::class.java, Addon::class.java).type
             val parsed: List<Addon> = gson.fromJson(json, type)
-            Log.d(TAG, "Loaded ${parsed.size} addons from storage")
+            AppLogger.d(TAG, "Loaded ${parsed.size} addons from storage")
             parsed
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse addons from storage: ${e.message}")
+            AppLogger.w(TAG, "Failed to parse addons from storage: ${e.message}")
             null
         }
     }
@@ -408,32 +409,32 @@ class StreamRepository @Inject constructor(
      * More lenient filtering to ensure custom addons work
      */
     private fun getStreamAddons(addons: List<Addon>, type: String, id: String): List<Addon> {
-        Log.d(TAG, "getStreamAddons: Filtering ${addons.size} addons for type=$type, id=$id")
+        AppLogger.d(TAG, "getStreamAddons: Filtering ${addons.size} addons for type=$type, id=$id")
 
         return addons.filter { addon ->
-            Log.d(TAG, "getStreamAddons: Checking ${addon.name} (type=${addon.type}, installed=${addon.isInstalled}, enabled=${addon.isEnabled}, url=${addon.url})")
+            AppLogger.d(TAG, "getStreamAddons: Checking ${addon.name} (type=${addon.type}, installed=${addon.isInstalled}, enabled=${addon.isEnabled}, url=${addon.url})")
 
             // Must be installed and enabled
             if (!addon.isInstalled || !addon.isEnabled) {
-                Log.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - not installed or not enabled")
+                AppLogger.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - not installed or not enabled")
                 return@filter false
             }
 
             // Skip subtitle addons
             if (addon.type == AddonType.SUBTITLE) {
-                Log.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - subtitle addon")
+                AppLogger.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - subtitle addon")
                 return@filter false
             }
 
             // Must have a URL to fetch from
             if (addon.url.isNullOrBlank()) {
-                Log.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - no URL")
+                AppLogger.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - no URL")
                 return@filter false
             }
 
             // Custom addons - always try them (user explicitly added them)
             if (addon.type == AddonType.CUSTOM) {
-                Log.d(TAG, "getStreamAddons: ${addon.name} INCLUDED (custom addon)")
+                AppLogger.d(TAG, "getStreamAddons: ${addon.name} INCLUDED (custom addon)")
                 return@filter true
             }
 
@@ -445,7 +446,7 @@ class StreamRepository @Inject constructor(
                     (resource.types.isEmpty() || resource.types.contains(type) || resource.types.contains("movie") || resource.types.contains("series")) &&
                     (resource.idPrefixes == null || resource.idPrefixes.isEmpty() || resource.idPrefixes.any { id.startsWith(it) })
                 }
-                Log.d(TAG, "getStreamAddons: ${addon.name} manifest check - hasStreamResource=$hasStreamResource, resources=${manifest.resources.map { it.name }}")
+                AppLogger.d(TAG, "getStreamAddons: ${addon.name} manifest check - hasStreamResource=$hasStreamResource, resources=${manifest.resources.map { it.name }}")
                 if (hasStreamResource) return@filter true
                 // Don't immediately skip - fall through to default check
             }
@@ -455,13 +456,13 @@ class StreamRepository @Inject constructor(
             if (idPrefixes != null && idPrefixes.isNotEmpty()) {
                 val supportsId = idPrefixes.any { id.startsWith(it) }
                 if (!supportsId) {
-                    Log.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - idPrefixes don't match: $idPrefixes")
+                    AppLogger.d(TAG, "getStreamAddons: ${addon.name} SKIPPED - idPrefixes don't match: $idPrefixes")
                     return@filter false
                 }
             }
 
             // Default: assume addon supports streaming (be lenient for unknown addons)
-            Log.d(TAG, "getStreamAddons: ${addon.name} INCLUDED (default)")
+            AppLogger.d(TAG, "getStreamAddons: ${addon.name} INCLUDED (default)")
             true
         }
     }
@@ -483,7 +484,7 @@ class StreamRepository @Inject constructor(
             val allAddons = installedAddons.first()
             val streamAddons = getStreamAddons(allAddons, contentType, imdbId)
 
-            Log.d(TAG, "Fetching from ${streamAddons.size} addons for $contentId")
+            AppLogger.d(TAG, "Fetching from ${streamAddons.size} addons for $contentId")
 
             extractAndSetDebridFromAddons(streamAddons)
 
@@ -495,16 +496,16 @@ class StreamRepository @Inject constructor(
                             withTimeout(ADDON_TIMEOUT_MS) {
                                 val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
                                 val url = buildStreamUrl(addon, baseUrl, queryParams) ?: return@withTimeout emptyList<StreamSource>()
-                                Log.d(TAG, "Fetching streams from ${addon.name}: $url")
+                                AppLogger.d(TAG, "Fetching streams from ${addon.name}: $url")
                                 val response = streamApi.getAddonStreams(url)
-                                Log.d(TAG, "Got ${response.streams?.size ?: 0} streams from ${addon.name}")
+                                AppLogger.d(TAG, "Got ${response.streams?.size ?: 0} streams from ${addon.name}")
                                 processStreams(response.streams ?: emptyList(), addon)
                             }
                         } catch (e: TimeoutCancellationException) {
-                            Log.w(TAG, "Timeout from ${addon.name} after ${ADDON_TIMEOUT_MS}ms")
+                            AppLogger.w(TAG, "Timeout from ${addon.name} after ${ADDON_TIMEOUT_MS}ms")
                             emptyList()
                         } catch (e: Exception) {
-                            Log.w(TAG, "Error from ${addon.name}: ${e.message}")
+                            AppLogger.w(TAG, "Error from ${addon.name}: ${e.message}")
                             emptyList()
                         }
                     }
@@ -536,7 +537,7 @@ class StreamRepository @Inject constructor(
                                 } ?: emptyList()
                             }
                         } catch (e: TimeoutCancellationException) {
-                            Log.w(TAG, "Subtitle timeout from ${addon.name}")
+                            AppLogger.w(TAG, "Subtitle timeout from ${addon.name}")
                             emptyList()
                         } catch (e: Exception) {
                             emptyList()
@@ -548,7 +549,7 @@ class StreamRepository @Inject constructor(
             val streams = streamJobs.awaitAll().flatten()
             subtitles.addAll(subtitleJobs.awaitAll().flatten())
 
-            Log.d(TAG, "Found ${streams.size} streams, ${subtitles.size} subtitles")
+            AppLogger.d(TAG, "Found ${streams.size} streams, ${subtitles.size} subtitles")
 
             // INSTANT MODE: Check which TorBox streams are cached for instant playback
             val markedStreams = try {
@@ -556,7 +557,7 @@ class StreamRepository @Inject constructor(
                     markCachedTorBoxStreams(streams)
                 }
             } catch (e: TimeoutCancellationException) {
-                Log.w(TAG, "TorBox cache check timed out, showing all streams")
+                AppLogger.w(TAG, "TorBox cache check timed out, showing all streams")
                 streams
             }
 
@@ -568,7 +569,7 @@ class StreamRepository @Inject constructor(
                     .thenByDescending { it.seeders ?: 0 }
             )
 
-            Log.d(TAG, "INSTANT: ${sortedStreams.count { it.isCached }} cached streams prioritized")
+            AppLogger.d(TAG, "INSTANT: ${sortedStreams.count { it.isCached }} cached streams prioritized")
 
             StreamResult(sortedStreams, subtitles)
         }
@@ -660,11 +661,11 @@ class StreamRepository @Inject constructor(
 
         if (hashToStreams.isEmpty()) return otherStreams
 
-        Log.d(TAG, "INSTANT: Checking cache for ${hashToStreams.size} TorBox hashes...")
+        AppLogger.d(TAG, "INSTANT: Checking cache for ${hashToStreams.size} TorBox hashes...")
 
         // Batch check cache status
         val cachedHashes = debridRepository.checkTorBoxCached(hashToStreams.keys.toList())
-        Log.d(TAG, "INSTANT: ${cachedHashes.size}/${hashToStreams.size} hashes are cached - ONLY showing cached!")
+        AppLogger.d(TAG, "INSTANT: ${cachedHashes.size}/${hashToStreams.size} hashes are cached - ONLY showing cached!")
 
         // FILTER: Only keep cached TorBox streams
         val cachedTorboxStreams = hashToStreams
@@ -673,7 +674,7 @@ class StreamRepository @Inject constructor(
             .flatten()
             .map { it.copy(isCached = true) }
 
-        Log.d(TAG, "INSTANT: Keeping ${cachedTorboxStreams.size} cached streams, ${otherStreams.size} direct streams")
+        AppLogger.d(TAG, "INSTANT: Keeping ${cachedTorboxStreams.size} cached streams, ${otherStreams.size} direct streams")
 
         // Return cached TorBox streams + other streams (direct URLs)
         return cachedTorboxStreams + otherStreams
@@ -683,30 +684,30 @@ class StreamRepository @Inject constructor(
      * Process raw streams into StreamSource objects - like NuvioStreaming processStreams
      */
     private fun processStreams(streams: List<StremioStream>, addon: Addon): List<StreamSource> {
-        Log.d(TAG, "processStreams: Processing ${streams.size} streams from ${addon.name}")
+        AppLogger.d(TAG, "processStreams: Processing ${streams.size} streams from ${addon.name}")
 
         // Debug: Log first few streams to see their structure
         streams.take(3).forEachIndexed { index, stream ->
-            Log.d(TAG, "processStreams: Stream $index from ${addon.name}:")
-            Log.d(TAG, "  name=${stream.name?.take(100)}")
-            Log.d(TAG, "  title=${stream.title?.take(100)}")
-            Log.d(TAG, "  description=${stream.description?.take(100)}")
-            Log.d(TAG, "  behaviorHints.cached=${stream.behaviorHints?.cached}")
-            Log.d(TAG, "  behaviorHints.videoSize=${stream.behaviorHints?.videoSize}")
-            Log.d(TAG, "  behaviorHints.filename=${stream.behaviorHints?.filename}")
-            Log.d(TAG, "  parsed size=${stream.getSize()}")
-            Log.d(TAG, "  parsed quality=${stream.getQuality()}")
+            AppLogger.d(TAG, "processStreams: Stream $index from ${addon.name}:")
+            AppLogger.d(TAG, "  name=${stream.name?.take(100)}")
+            AppLogger.d(TAG, "  title=${stream.title?.take(100)}")
+            AppLogger.d(TAG, "  description=${stream.description?.take(100)}")
+            AppLogger.d(TAG, "  behaviorHints.cached=${stream.behaviorHints?.cached}")
+            AppLogger.d(TAG, "  behaviorHints.videoSize=${stream.behaviorHints?.videoSize}")
+            AppLogger.d(TAG, "  behaviorHints.filename=${stream.behaviorHints?.filename}")
+            AppLogger.d(TAG, "  parsed size=${stream.getSize()}")
+            AppLogger.d(TAG, "  parsed quality=${stream.getQuality()}")
         }
 
         val filtered = streams.filter { stream ->
             val hasLink = stream.hasPlayableLink()
             val hasId = stream.title != null || stream.name != null
-            if (!hasLink) Log.d(TAG, "processStreams: Stream filtered - no playable link: ${stream.name ?: stream.title}")
-            if (!hasId) Log.d(TAG, "processStreams: Stream filtered - no title/name")
+            if (!hasLink) AppLogger.d(TAG, "processStreams: Stream filtered - no playable link: ${stream.name ?: stream.title}")
+            if (!hasId) AppLogger.d(TAG, "processStreams: Stream filtered - no title/name")
             hasLink && hasId
         }
 
-        Log.d(TAG, "processStreams: ${filtered.size} streams passed filter")
+        AppLogger.d(TAG, "processStreams: ${filtered.size} streams passed filter")
 
         return filtered
             .map { stream ->
@@ -769,14 +770,14 @@ class StreamRepository @Inject constructor(
         runCatching {
             val url = stream.url ?: throw AppException.Unknown("Stream URL is null")
 
-            Log.d(TAG, "Resolving stream: ${stream.source.take(50)}...")
+            AppLogger.d(TAG, "Resolving stream: ${stream.source.take(50)}...")
 
             when {
                 // TorBox proxy URLs
                 url.contains("/torbox/") -> {
                     val resolvedUrl = debridRepository.resolveTorBoxUrl(url)
                         ?: throw AppException.Network("Failed to resolve TorBox stream")
-                    Log.d(TAG, "Resolved TorBox: $resolvedUrl")
+                    AppLogger.d(TAG, "Resolved TorBox: $resolvedUrl")
                     stream.copy(url = resolvedUrl, isDebrid = true)
                 }
                 // Real-Debrid proxy URLs
@@ -815,7 +816,7 @@ class StreamRepository @Inject constructor(
                 }
                 // Direct HTTP URLs - play immediately
                 url.startsWith("http://") || url.startsWith("https://") -> {
-                    Log.d(TAG, "Direct URL - instant play")
+                    AppLogger.d(TAG, "Direct URL - instant play")
                     stream
                 }
                 else -> throw AppException.Unknown("Unsupported stream URL format")
@@ -866,14 +867,14 @@ class StreamRepository @Inject constructor(
             }
         }
 
-        Log.d(TAG, "Found ${directStreams.size} direct, ${torboxProxyStreams.size} TorBox, ${magnetStreams.size} magnet streams")
+        AppLogger.d(TAG, "Found ${directStreams.size} direct, ${torboxProxyStreams.size} TorBox, ${magnetStreams.size} magnet streams")
 
         // Direct streams are always cached/playable
         cachedStreams.addAll(directStreams)
 
         // Use TorBox's batch checkcached API for efficient cache checking
         if (torboxProxyStreams.isNotEmpty()) {
-            Log.d(TAG, "Checking TorBox cache for ${torboxProxyStreams.size} streams using batch API...")
+            AppLogger.d(TAG, "Checking TorBox cache for ${torboxProxyStreams.size} streams using batch API...")
 
             // Extract hashes from all TorBox proxy URLs
             val streamsByHash = mutableMapOf<String, MutableList<StreamSource>>()
@@ -885,11 +886,11 @@ class StreamRepository @Inject constructor(
             }
 
             val allHashes = streamsByHash.keys.toList()
-            Log.d(TAG, "Extracted ${allHashes.size} unique hashes from TorBox streams")
+            AppLogger.d(TAG, "Extracted ${allHashes.size} unique hashes from TorBox streams")
 
             // Batch check which hashes are cached (single API call!)
             val cachedHashes = debridRepository.checkTorBoxCached(allHashes)
-            Log.d(TAG, "TorBox: ${cachedHashes.size}/${allHashes.size} hashes are cached")
+            AppLogger.d(TAG, "TorBox: ${cachedHashes.size}/${allHashes.size} hashes are cached")
 
             // Get cached streams (those whose hash is in the cached set)
             val cachedTorboxStreams = streamsByHash
@@ -897,7 +898,7 @@ class StreamRepository @Inject constructor(
                 .values
                 .flatten()
 
-            Log.d(TAG, "Found ${cachedTorboxStreams.size} cached TorBox streams")
+            AppLogger.d(TAG, "Found ${cachedTorboxStreams.size} cached TorBox streams")
 
             // Now resolve only the cached streams (this will be fast since they're already cached)
             val streamsToResolve = cachedTorboxStreams.take(TORBOX_RESOLVE_MAX_STREAMS)
@@ -917,13 +918,13 @@ class StreamRepository @Inject constructor(
                         try {
                             val resolvedUrl = debridRepository.resolveTorBoxUrl(url)
                             if (resolvedUrl != null) {
-                                Log.d(TAG, "RESOLVED: ${stream.source.take(40)}...")
+                                AppLogger.d(TAG, "RESOLVED: ${stream.source.take(40)}...")
                                 stream.copy(url = resolvedUrl, isDebrid = true)
                             } else {
                                 null
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Error resolving TorBox stream: ${e.message}")
+                            AppLogger.w(TAG, "Error resolving TorBox stream: ${e.message}")
                             null
                         }
                     }
@@ -936,7 +937,7 @@ class StreamRepository @Inject constructor(
 
         // Only resolve magnets if we have a debrid service
         if (magnetStreams.isNotEmpty() && activeDebrid != DebridService.NONE) {
-            Log.d(TAG, "Resolving magnet streams with $activeDebrid")
+            AppLogger.d(TAG, "Resolving magnet streams with $activeDebrid")
 
             // Resolve first few magnet streams in parallel
             val magnetsToResolve = magnetStreams.take(MAGNET_RESOLVE_MAX)
@@ -947,14 +948,14 @@ class StreamRepository @Inject constructor(
                     try {
                         val resolvedUrl = debridRepository.unrestrictLink(url)
                         if (resolvedUrl != null) {
-                            Log.d(TAG, "Resolved magnet: ${stream.source.take(30)}...")
+                            AppLogger.d(TAG, "Resolved magnet: ${stream.source.take(30)}...")
                             stream.copy(url = resolvedUrl, isDebrid = true)
                         } else {
-                            Log.w(TAG, "Failed to resolve magnet: ${stream.source.take(30)}...")
+                            AppLogger.w(TAG, "Failed to resolve magnet: ${stream.source.take(30)}...")
                             null
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Error resolving magnet: ${e.message}")
+                        AppLogger.w(TAG, "Error resolving magnet: ${e.message}")
                         null
                     }
                 }
@@ -964,7 +965,7 @@ class StreamRepository @Inject constructor(
             cachedStreams.addAll(resolved.filterNotNull())
         }
 
-        Log.d(TAG, "CACHED-ONLY: ${cachedStreams.size} playable streams found")
+        AppLogger.d(TAG, "CACHED-ONLY: ${cachedStreams.size} playable streams found")
 
         // Sort by quality, size, seeders
         val sortedStreams = cachedStreams.sortedWith(
@@ -1149,7 +1150,7 @@ class StreamRepository @Inject constructor(
             val torboxMatch = torboxRegex.find(url)
             if (torboxMatch != null) {
                 val apiKey = torboxMatch.groupValues[1]
-                Log.d(TAG, "Found TorBox API key in addon URL: ${apiKey.take(8)}...")
+                AppLogger.d(TAG, "Found TorBox API key in addon URL: ${apiKey.maskToken()}")
                 debridRepository.setTorBoxApiKey(apiKey)
             }
 
@@ -1158,7 +1159,7 @@ class StreamRepository @Inject constructor(
             val rdMatch = rdRegex.find(url)
             if (rdMatch != null) {
                 val apiKey = rdMatch.groupValues[1]
-                Log.d(TAG, "Found Real-Debrid API key in addon URL: ${apiKey.take(8)}...")
+                AppLogger.d(TAG, "Found Real-Debrid API key in addon URL: ${apiKey.maskToken()}")
                 // Note: RD uses OAuth tokens, not API keys in URL typically
                 // But some users may have configured it this way
             }
@@ -1168,7 +1169,7 @@ class StreamRepository @Inject constructor(
             val adMatch = adRegex.find(url)
             if (adMatch != null) {
                 val apiKey = adMatch.groupValues[1]
-                Log.d(TAG, "Found AllDebrid API key in addon URL: ${apiKey.take(8)}...")
+                AppLogger.d(TAG, "Found AllDebrid API key in addon URL: ${apiKey.maskToken()}")
                 debridRepository.setAllDebridApiKey(apiKey)
             }
 
@@ -1177,7 +1178,7 @@ class StreamRepository @Inject constructor(
             val pmMatch = pmRegex.find(url)
             if (pmMatch != null) {
                 val apiKey = pmMatch.groupValues[1]
-                Log.d(TAG, "Found Premiumize API key in addon URL: ${apiKey.take(8)}...")
+                AppLogger.d(TAG, "Found Premiumize API key in addon URL: ${apiKey.maskToken()}")
                 debridRepository.setPremiumizeApiKey(apiKey)
             }
 
@@ -1186,7 +1187,7 @@ class StreamRepository @Inject constructor(
             val dlMatch = dlRegex.find(url)
             if (dlMatch != null) {
                 val apiKey = dlMatch.groupValues[1]
-                Log.d(TAG, "Found Debrid-Link API key in addon URL: ${apiKey.take(8)}...")
+                AppLogger.d(TAG, "Found Debrid-Link API key in addon URL: ${apiKey.maskToken()}")
                 debridRepository.setDebridLinkApiKey(apiKey)
             }
         }

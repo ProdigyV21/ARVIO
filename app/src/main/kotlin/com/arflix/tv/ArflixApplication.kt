@@ -2,7 +2,6 @@ package com.arflix.tv
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.Constraints
@@ -18,6 +17,8 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.arflix.tv.network.OkHttpProvider
+import com.arflix.tv.util.AppLogger
+import com.arflix.tv.util.CrashlyticsProvider
 import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.HiltAndroidApp
 import java.util.concurrent.TimeUnit
@@ -35,6 +36,9 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Initialize crash reporting (gracefully handles missing Firebase config)
+        CrashlyticsProvider.initialize()
     }
 
     override fun newImageLoader(): ImageLoader {
@@ -62,7 +66,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
-            .setMinimumLoggingLevel(Log.INFO)
+            .setMinimumLoggingLevel(android.util.Log.INFO)
             .build()
 
     /**
@@ -100,7 +104,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             syncRequest
         )
 
-        Log.d("ArvioApplication", "Trakt sync worker scheduled (startup full sync)")
+        AppLogger.d("Application", "Trakt sync worker scheduled")
     }
 
     companion object {

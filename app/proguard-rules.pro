@@ -1,5 +1,23 @@
 # Arflix TV ProGuard Rules
 
+# ============================================
+# Log stripping for release builds
+# Remove verbose, debug, and info logs
+# ============================================
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+
+# Also strip our custom AppLogger debug methods
+-assumenosideeffects class com.arflix.tv.util.AppLogger {
+    public static void v(...);
+    public static void d(...);
+    public static void i(...);
+}
+
+# ============================================
 # Keep Retrofit interfaces
 -keep,allowobfuscation,allowoptimization interface * {
     @retrofit2.http.* <methods>;
