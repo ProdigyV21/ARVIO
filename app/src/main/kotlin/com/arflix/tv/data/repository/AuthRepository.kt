@@ -613,6 +613,16 @@ class AuthRepository @Inject constructor(
         return session.expiresAt.epochSeconds <= now + bufferSeconds
     }
 
+    /**
+     * Checks if a JWT token is expired.
+     *
+     * SECURITY: Tokens without an `exp` claim are considered INVALID/EXPIRED.
+     * This prevents accepting tokens that never expire.
+     *
+     * @param token The JWT token to check
+     * @param bufferSeconds Buffer time before actual expiration (default 60s)
+     * @return true if expired or invalid, false if still valid
+     */
     private fun isJwtExpired(token: String, bufferSeconds: Long = 60): Boolean {
         return try {
             val parts = token.split(".")
@@ -621,11 +631,21 @@ class AuthRepository @Inject constructor(
                 Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP),
                 Charsets.UTF_8
             )
-            val exp = JSONObject(payload).optLong("exp", 0L)
-            if (exp <= 0L) return false
+            val json = JSONObject(payload)
+            // SECURITY FIX: Reject tokens without exp claim
+            if (!json.has("exp")) {
+                Log.w(TAG, "JWT token missing exp claim - rejecting as expired")
+                return true
+            }
+            val exp = json.getLong("exp")
+            if (exp <= 0L) {
+                Log.w(TAG, "JWT token has invalid exp claim ($exp) - rejecting as expired")
+                return true
+            }
             val now = Clock.System.now().epochSeconds
             exp <= now + bufferSeconds
         } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse JWT token: ${e.message}")
             true
         }
     }
