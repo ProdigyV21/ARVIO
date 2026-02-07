@@ -4,29 +4,23 @@
 
 ## Overview
 
-ARVIO ("the App") is an Android TV streaming application. This policy explains how we handle your information.
+ARVIO ("the App") is an Android TV media hub application. This policy explains how we handle your information.
 
 ## Data We Collect
-
-### Account Information
-- Email address (for authentication)
-- Google account info (if using Google Sign-In)
 
 ### Usage Data
 - Watch history and progress (synced to Trakt.tv if connected)
 - Watchlist items
-- App preferences and settings
+- App preferences and settings (stored locally on device)
 
 ### Device Information
-- Device type and Android version (for compatibility)
-- Crash reports (if Firebase Crashlytics is enabled)
+- Device type and Android version (for compatibility, not collected by us)
 
 ## How We Use Your Data
 
-- **Authentication**: To identify you and sync your data across devices
 - **Watch Progress**: To enable "Continue Watching" and track watched content
-- **Preferences**: To remember your settings (subtitle language, audio preferences)
-- **Crash Reports**: To fix bugs and improve app stability
+- **Preferences**: To remember your settings (subtitle language, auto-play preferences)
+- **Addon Configuration**: To remember your installed Stremio addons
 
 ## Third-Party Services
 
@@ -34,28 +28,25 @@ The App uses the following third-party services:
 
 | Service | Purpose | Privacy Policy |
 |---------|---------|----------------|
-| Supabase | Authentication & cloud sync | [supabase.com/privacy](https://supabase.com/privacy) |
-| Trakt.tv | Watch history sync | [trakt.tv/privacy](https://trakt.tv/privacy) |
-| TMDB | Movie/TV metadata | [themoviedb.org/privacy-policy](https://www.themoviedb.org/privacy-policy) |
-| Google Sign-In | Authentication | [policies.google.com/privacy](https://policies.google.com/privacy) |
-| Firebase | Crash reporting (optional) | [firebase.google.com/support/privacy](https://firebase.google.com/support/privacy) |
+| TMDB | Movie/TV metadata and images | [themoviedb.org/privacy-policy](https://www.themoviedb.org/privacy-policy) |
+| Trakt.tv | Watch history sync (optional) | [trakt.tv/privacy](https://trakt.tv/privacy) |
 
 ## Data Storage
 
-- Account and preference data is stored on Supabase servers
-- Watch history is stored on Trakt.tv (if connected)
-- Local preferences are stored on your device
+- All preferences and settings are stored locally on your device
+- Watch history is stored on Trakt.tv only if you connect your account
+- No account or personal data is stored on our servers
 
 ## Data Sharing
 
-We do not sell your personal information. Data is only shared with the third-party services listed above to provide app functionality.
+We do not collect, store, or sell your personal information. Data is only shared with the third-party services listed above when you explicitly use those features.
 
 ## Your Rights
 
 You can:
-- **Delete your account**: Contact us or delete through Supabase dashboard
 - **Disconnect Trakt**: Remove access in app settings or on trakt.tv
 - **Clear local data**: Uninstall the app or clear app data in Android settings
+- **Remove addons**: Manage installed addons in app settings
 
 ## Children's Privacy
 
@@ -67,7 +58,7 @@ We may update this policy occasionally. Changes will be posted here with an upda
 
 ## Contact
 
-For privacy questions or data deletion requests, open an issue on GitHub or contact the developer.
+For privacy questions, open an issue on GitHub or contact the developer.
 
 ---
 
