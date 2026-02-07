@@ -10,12 +10,14 @@ import retrofit2.http.Query
  */
 interface TmdbApi {
     
-    @GET("trending/movie/week")
+    // Daily trending - updates every day for fresher content
+    @GET("trending/movie/day")
     suspend fun getTrendingMovies(
         @Query("api_key") apiKey: String
     ): TmdbListResponse
-    
-    @GET("trending/tv/week")
+
+    // Daily trending - updates every day for fresher content
+    @GET("trending/tv/day")
     suspend fun getTrendingTv(
         @Query("api_key") apiKey: String
     ): TmdbListResponse
@@ -28,14 +30,22 @@ interface TmdbApi {
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("with_genres") genres: String? = null,
         @Query("with_original_language") language: String? = null,
-        @Query("first_air_date_year") year: Int? = null
+        @Query("first_air_date_year") year: Int? = null,
+        @Query("vote_count.gte") minVoteCount: Int? = null,
+        @Query("with_keywords") keywords: String? = null,
+        @Query("air_date.gte") airDateGte: String? = null,
+        @Query("air_date.lte") airDateLte: String? = null
     ): TmdbListResponse
-    
+
     @GET("discover/movie")
     suspend fun discoverMovies(
         @Query("api_key") apiKey: String,
         @Query("with_genres") genres: String? = null,
-        @Query("sort_by") sortBy: String = "popularity.desc"
+        @Query("sort_by") sortBy: String = "popularity.desc",
+        @Query("vote_count.gte") minVoteCount: Int? = null,
+        @Query("with_keywords") keywords: String? = null,
+        @Query("release_date.gte") releaseDateGte: String? = null,
+        @Query("release_date.lte") releaseDateLte: String? = null
     ): TmdbListResponse
     
     @GET("movie/{movie_id}")
@@ -256,7 +266,8 @@ data class TmdbVideo(
 )
 
 data class TmdbExternalIds(
-    @SerializedName("imdb_id") val imdbId: String? = null
+    @SerializedName("imdb_id") val imdbId: String? = null,
+    @SerializedName("tvdb_id") val tvdbId: Int? = null
 )
 
 data class TmdbPersonDetails(

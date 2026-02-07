@@ -1,11 +1,13 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
     id("androidx.baselineprofile")
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
     id("io.gitlab.arturbosch.detekt")
-    kotlin("kapt")
     kotlin("plugin.serialization")
     // Firebase Crashlytics - uncomment after adding google-services.json
     // id("com.google.gms.google-services")
@@ -20,8 +22,8 @@ android {
         applicationId = "com.arvio.tv"
         minSdk = 26
         targetSdk = 34
-        versionCode = 100
-        versionName = "1.0.0"
+        versionCode = 104
+        versionName = "1.0.4"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -41,7 +43,7 @@ android {
         create("release") {
             val keystorePropertiesFile = rootProject.file("keystore.properties")
             if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties()
+                val keystoreProperties = Properties()
                 keystoreProperties.load(keystorePropertiesFile.inputStream())
                 storeFile = file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String
@@ -80,7 +82,7 @@ android {
         debug {
             isMinifyEnabled = false
             isDebuggable = true
-            applicationIdSuffix = ".debug"
+            // applicationIdSuffix = ".debug" // Disabled to preserve settings between debug/release
             versionNameSuffix = "-debug"
 
             // Build config fields for debug
@@ -131,6 +133,13 @@ android {
     }
 }
 
+// KSP configuration for Hilt
+ksp {
+    arg("dagger.fastInit", "enabled")
+    arg("dagger.formatGeneratedSource", "disabled")
+    arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
+}
+
 dependencies {
     // Core library desugaring for Java 8+ APIs
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
@@ -160,7 +169,7 @@ dependencies {
 
     // Hilt for DI
     implementation("com.google.dagger:hilt-android:2.48")
-    kapt("com.google.dagger:hilt-compiler:2.48")
+    ksp("com.google.dagger:hilt-compiler:2.48")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
     // Leanback (TV compliance, browse fragments if needed)
@@ -205,7 +214,7 @@ dependencies {
     // WorkManager for background sync
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
-    kapt("androidx.hilt:hilt-compiler:1.1.0")
+    ksp("androidx.hilt:hilt-compiler:1.1.0")
 
     // Profile installer for baseline profiles
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
@@ -238,10 +247,6 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation("io.mockk:mockk-android:1.13.8")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
-}
-
-kapt {
-    correctErrorTypes = true
 }
 
 secrets {

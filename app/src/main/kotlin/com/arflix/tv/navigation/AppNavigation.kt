@@ -14,6 +14,7 @@ import androidx.navigation.navArgument
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.ui.screens.details.DetailsScreen
 import com.arflix.tv.ui.screens.home.HomeScreen
@@ -22,6 +23,7 @@ import com.arflix.tv.ui.screens.player.PlayerScreen
 import com.arflix.tv.ui.screens.search.SearchScreen
 import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
+import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 
 /**
  * Navigation destinations
@@ -32,6 +34,7 @@ sealed class Screen(val route: String) {
     object Search : Screen("search")
     object Watchlist : Screen("watchlist")
     object Settings : Screen("settings")
+    object ProfileSelection : Screen("profile_selection")
     
     object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}") {
         fun createRoute(
@@ -77,6 +80,8 @@ fun AppNavigation(
     preloadedHeroItem: MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
     preloadedLogoCache: Map<String, String> = emptyMap(),
+    currentProfile: Profile? = null,
+    onSwitchProfile: () -> Unit = {},
     onExitApp: () -> Unit = {}
 ) {
     val navigateHome: () -> Unit = {
@@ -110,8 +115,9 @@ fun AppNavigation(
                 preloadedHeroItem = preloadedHeroItem,
                 preloadedHeroLogoUrl = preloadedHeroLogoUrl,
                 preloadedLogoCache = preloadedLogoCache,
-                onNavigateToDetails = { mediaType, mediaId ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                currentProfile = currentProfile,
+                onNavigateToDetails = { mediaType, mediaId, initialSeason, initialEpisode ->
+                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId, initialSeason, initialEpisode))
                 },
                 onNavigateToSearch = {
                     navController.navigate(Screen.Search.route)
@@ -121,6 +127,12 @@ fun AppNavigation(
                 },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
+                },
+                onSwitchProfile = {
+                    onSwitchProfile()
+                    navController.navigate(Screen.ProfileSelection.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
                 },
                 onExitApp = onExitApp
             )
@@ -176,10 +188,27 @@ fun AppNavigation(
                 onNavigateToWatchlist = {
                     navController.navigate(Screen.Watchlist.route)
                 },
+                onSwitchProfile = {
+                    navController.navigate(Screen.ProfileSelection.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
+                },
                 onBack = { navController.popBackStack() }
             )
         }
-        
+
+        // Profile selection screen
+        composable(Screen.ProfileSelection.route) {
+            ProfileSelectionScreen(
+                onProfileSelected = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.ProfileSelection.route) { inclusive = true }
+                    }
+                },
+                onShowAddProfile = { /* Handled internally by ProfileSelectionScreen */ }
+            )
+        }
+
         // Details screen
         composable(
             route = Screen.Details.route,
@@ -205,6 +234,8 @@ fun AppNavigation(
             DetailsScreen(
                 mediaType = mediaType,
                 mediaId = mediaId,
+                initialSeason = initialSeason,
+                initialEpisode = initialEpisode,
                 onNavigateToPlayer = { type, id, season, episode, url ->
                     navController.navigate(Screen.Player.createRoute(type, id, season, episode, url))
                 },

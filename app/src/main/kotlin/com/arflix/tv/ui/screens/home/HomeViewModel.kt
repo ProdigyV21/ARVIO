@@ -141,6 +141,8 @@ class HomeViewModel @Inject constructor(
     /**
      * Set preloaded data from StartupViewModel for instant display.
      * This skips the initial network call since data is already loaded.
+     *
+     * Shows placeholder Continue Watching cards immediately while real data loads.
      */
     fun setPreloadedData(
         categories: List<Category>,
@@ -148,7 +150,6 @@ class HomeViewModel @Inject constructor(
         heroLogoUrl: String?,
         logoCache: Map<String, String>
     ) {
-        Log.d("HomeViewModel", "setPreloadedData called: ${categories.size} categories, usedPreloadedData=$usedPreloadedData")
 
         if (usedPreloadedData) {
             if (logoCache.isNotEmpty()) {
@@ -158,28 +159,52 @@ class HomeViewModel @Inject constructor(
             if (heroLogoUrl != null && currentState.heroLogoUrl == null) {
                 _uiState.value = currentState.copy(heroLogoUrl = heroLogoUrl)
             }
-            Log.d("HomeViewModel", "Preloaded data already used, skipping")
             return
         }
         if (categories.isEmpty()) {
-            Log.d("HomeViewModel", "Empty categories, skipping preload")
             return
         }
 
         usedPreloadedData = true
-        Log.d("HomeViewModel", "Setting preloaded data: ${categories.size} categories, hero=${heroItem?.title}")
 
         this.logoCache.putAll(logoCache)
-        categories.firstOrNull { it.id == "continue_watching" }?.let { category ->
-            lastContinueWatchingItems = category.items
-            lastContinueWatchingUpdateMs = SystemClock.elapsedRealtime()
+
+        // Filter out any existing continue_watching from preloaded data
+        val filteredCategories = categories.filter { it.id != "continue_watching" }.toMutableList()
+
+        // Show placeholder Continue Watching immediately while real data loads
+        // This gives instant visual feedback that something is loading
+        val placeholderItems = (1..5).map { index ->
+            MediaItem(
+                id = -index, // Negative IDs for placeholders
+                title = "",
+                mediaType = MediaType.MOVIE,
+                isPlaceholder = true
+            )
         }
+        val placeholderContinueWatching = Category(
+            id = "continue_watching",
+            title = "Continue Watching",
+            items = placeholderItems
+        )
+        filteredCategories.add(0, placeholderContinueWatching)
+
+        // Adjust hero item if it was from continue watching
+        val adjustedHeroItem = if (heroItem != null &&
+            categories.firstOrNull()?.id == "continue_watching" &&
+            categories.firstOrNull()?.items?.any { it.id == heroItem.id } == true) {
+            // Hero was from continue watching, use first item from filtered categories
+            filteredCategories.getOrNull(1)?.items?.firstOrNull() ?: heroItem
+        } else {
+            heroItem
+        }
+
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             isInitialLoad = false,
-            categories = categories,
-            heroItem = heroItem,
-            heroLogoUrl = heroLogoUrl,
+            categories = filteredCategories,
+            heroItem = adjustedHeroItem,
+            heroLogoUrl = if (adjustedHeroItem == heroItem) heroLogoUrl else null,
             error = null
         )
         refreshWatchedBadges()
@@ -188,18 +213,18 @@ class HomeViewModel @Inject constructor(
     private fun loadHomeData() {
         viewModelScope.launch {
             Trace.beginSection("HomeViewModel.loadHomeData")
-            // Wait for setPreloadedData() to be called from HomeScreen
-            // This gives time for the LaunchedEffect to run
-            delay(150)
+            // Skip delay - preloading now happens on profile focus for instant display
+            // Only add minimal delay if no preloaded data exists yet
+            if (!usedPreloadedData) {
+                delay(50) // Minimal delay for LaunchedEffect to potentially set preloaded data
+            }
 
             // Skip if preloaded data was already set
             if (usedPreloadedData && _uiState.value.categories.isNotEmpty()) {
-                Log.d("HomeViewModel", "Using preloaded data, skipping network load")
                 Trace.endSection()
                 return@launch
             }
 
-            Log.d("HomeViewModel", "Preloaded data not available, loading from network")
 
             val showLoading = _uiState.value.categories.isEmpty()
             _uiState.value = _uiState.value.copy(isLoading = showLoading, error = null)
@@ -210,6 +235,8 @@ class HomeViewModel @Inject constructor(
                     mediaRepository.getHomeCategories().toMutableList()
                 }
 
+                // Only show continue watching from profile-specific cache
+                // Don't use lastContinueWatchingItems fallback to prevent cross-profile data leakage
                 if (cachedContinueWatching.isNotEmpty()) {
                     val continueWatchingCategory = Category(
                         id = "continue_watching",
@@ -220,15 +247,6 @@ class HomeViewModel @Inject constructor(
                     lastContinueWatchingItems = continueWatchingCategory.items
                     lastContinueWatchingUpdateMs = SystemClock.elapsedRealtime()
                     categories.add(0, continueWatchingCategory)
-                } else if (lastContinueWatchingItems.isNotEmpty()) {
-                    categories.add(
-                        0,
-                        Category(
-                            id = "continue_watching",
-                            title = "Continue Watching",
-                            items = lastContinueWatchingItems
-                        )
-                    )
                 }
 
                 val heroItem = categories.firstOrNull()?.items?.firstOrNull()
@@ -277,8 +295,12 @@ class HomeViewModel @Inject constructor(
 
                 viewModelScope.launch {
                     val auth = traktRepository.isAuthenticated.first()
-                    val historyDeferred: Deferred<List<ContinueWatchingItem>> =
+                    // Only fetch history fallback if Trakt is connected for this profile
+                    // This ensures profile isolation - profiles without Trakt won't see
+                    // the user-scoped watch history from other profiles
+                    val historyDeferred: Deferred<List<ContinueWatchingItem>>? = if (auth) {
                         async { loadContinueWatchingFromHistory() }
+                    } else null
                     val traktDeferred: Deferred<List<ContinueWatchingItem>>? = if (auth) {
                         async {
                             try {
@@ -290,11 +312,11 @@ class HomeViewModel @Inject constructor(
                     } else null
 
                     val freshContinueWatching = if (traktDeferred != null) {
-                        withTimeoutOrNull(4_000L) { traktDeferred.await() } ?: emptyList()
+                        withTimeoutOrNull(15_000L) { traktDeferred.await() } ?: emptyList()
                     } else {
                         emptyList()
                     }
-                    val historyFallback = if (cachedContinueWatching.isEmpty()) {
+                    val historyFallback = if (historyDeferred != null && cachedContinueWatching.isEmpty()) {
                         historyDeferred.await()
                     } else {
                         emptyList()
@@ -374,27 +396,34 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val now = SystemClock.elapsedRealtime()
-                if (now - lastContinueWatchingUpdateMs < CONTINUE_WATCHING_REFRESH_MS) return@launch
+                val currentCategories = _uiState.value.categories.toMutableList()
+                val continueWatchingIndex = currentCategories.indexOfFirst { it.id == "continue_watching" }
+                val existingContinueWatching = currentCategories.getOrNull(continueWatchingIndex)
+                val hasPlaceholders = existingContinueWatching?.items?.any { it.isPlaceholder } == true
+
+                // Allow refresh if we have placeholders (need to replace them), otherwise throttle
+                if (!hasPlaceholders && now - lastContinueWatchingUpdateMs < CONTINUE_WATCHING_REFRESH_MS) return@launch
+
+                val auth = traktRepository.isAuthenticated.first()
                 val continueWatching = try {
                     traktRepository.getContinueWatching()
                 } catch (e: Exception) {
-                    Log.w("HomeViewModel", "Continue watching refresh failed", e)
                     emptyList()
                 }
                 val cachedContinueWatching = traktRepository.getCachedContinueWatching()
-                val historyFallback = if (continueWatching.isEmpty() && cachedContinueWatching.isEmpty()) {
+                // Only use history fallback if Trakt is connected (profile isolation)
+                val historyFallback = if (auth && continueWatching.isEmpty() && cachedContinueWatching.isEmpty()) {
                     loadContinueWatchingFromHistory()
                 } else {
                     emptyList()
                 }
+                // Priority: Fresh Trakt data > Cached data > History fallback > Last known good data
                 val resolvedContinueWatching = when {
                     continueWatching.isNotEmpty() -> continueWatching
                     cachedContinueWatching.isNotEmpty() -> cachedContinueWatching
                     historyFallback.isNotEmpty() -> historyFallback
                     else -> emptyList()
                 }
-                val currentCategories = _uiState.value.categories.toMutableList()
-                val continueWatchingIndex = currentCategories.indexOfFirst { it.id == "continue_watching" }
 
                 if (resolvedContinueWatching.isNotEmpty()) {
                     val continueWatchingCategory = Category(
@@ -410,30 +439,36 @@ class HomeViewModel @Inject constructor(
                     } else {
                         currentCategories.add(0, continueWatchingCategory)
                     }
-                } else if (lastContinueWatchingItems.isNotEmpty()) {
-                    val cachedCategory = Category(
-                        id = "continue_watching",
-                        title = "Continue Watching",
-                        items = lastContinueWatchingItems
-                    )
-                    if (continueWatchingIndex >= 0) {
-                        currentCategories[continueWatchingIndex] = cachedCategory
-                    } else {
-                        currentCategories.add(0, cachedCategory)
-                    }
-                    lastContinueWatchingUpdateMs = now
+                    _uiState.value = _uiState.value.copy(categories = currentCategories)
+                    refreshWatchedBadges()
                 } else {
-                    // No new data and nothing cached; keep current categories to avoid flicker.
-                    return@launch
+                    // No new data from any source
+                    if (hasPlaceholders) {
+                        // We had placeholders but no data loaded - remove the placeholder category
+                        if (continueWatchingIndex >= 0) {
+                            currentCategories.removeAt(continueWatchingIndex)
+                            _uiState.value = _uiState.value.copy(categories = currentCategories)
+                        }
+                    } else if (continueWatchingIndex >= 0) {
+                        // Continue Watching exists with real data - preserve it exactly as is
+                        return@launch
+                    } else if (lastContinueWatchingItems.isNotEmpty()) {
+                        // UI doesn't have Continue Watching but we have last known good items - restore them
+                        val continueWatchingCategory = Category(
+                            id = "continue_watching",
+                            title = "Continue Watching",
+                            items = lastContinueWatchingItems
+                        )
+                        currentCategories.add(0, continueWatchingCategory)
+                        _uiState.value = _uiState.value.copy(categories = currentCategories)
+                    }
+                    // Else: No data anywhere - nothing to show, UI already doesn't have it
                 }
-
-                  _uiState.value = _uiState.value.copy(categories = currentCategories)
-                  refreshWatchedBadges()
-              } catch (e: Exception) {
-                  // Silently fail
-              }
-          }
-      }
+            } catch (e: Exception) {
+                // Silently fail - don't clear existing data on error
+            }
+        }
+    }
 
     private suspend fun loadContinueWatchingFromHistory(): List<ContinueWatchingItem> {
         return try {
@@ -476,29 +511,25 @@ class HomeViewModel @Inject constructor(
                 .distinctBy { it.id }
 
             val showWatched = mutableMapOf<Int, Boolean>()
-            coroutineScope {
-                val semaphore = Semaphore(4)
-                val tasks = showItems.map { item ->
-                    async {
-                        semaphore.withPermit {
-                            item.id to traktRepository.isShowFullyWatched(item.id)
-                        }
-                    }
-                }
-                tasks.awaitAll().forEach { (id, watched) ->
-                    showWatched[id] = watched
-                }
+            // Use hasWatchedEpisodes to show checkmark for any watched episodes (not just fully watched)
+            showItems.forEach { item ->
+                showWatched[item.id] = traktRepository.hasWatchedEpisodes(item.id)
             }
 
             val updatedCategories = categories.map { category ->
-                category.copy(
-                    items = category.items.map { item ->
-                        when (item.mediaType) {
-                            MediaType.MOVIE -> item.copy(isWatched = watchedMovies.contains(item.id))
-                            MediaType.TV -> item.copy(isWatched = showWatched[item.id] == true)
+                // Skip Continue Watching - those items are in progress, not watched
+                if (category.id == "continue_watching") {
+                    category
+                } else {
+                    category.copy(
+                        items = category.items.map { item ->
+                            when (item.mediaType) {
+                                MediaType.MOVIE -> item.copy(isWatched = watchedMovies.contains(item.id))
+                                MediaType.TV -> item.copy(isWatched = showWatched[item.id] == true)
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
 
             val heroItem = _uiState.value.heroItem

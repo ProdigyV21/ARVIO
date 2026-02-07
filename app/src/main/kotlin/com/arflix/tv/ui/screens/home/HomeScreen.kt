@@ -44,7 +44,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import android.os.SystemClock
@@ -94,7 +94,6 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.MediaCard as ArvioMediaCard
 import com.arflix.tv.ui.components.MediaContextMenu
-import com.arflix.tv.ui.components.QuickActionMenu
 import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SkeletonHomePage
 import com.arflix.tv.ui.components.Toast
@@ -117,10 +116,8 @@ import com.arflix.tv.ui.theme.BackgroundGradientStart
 import com.arflix.tv.util.isInCinema
 import com.arflix.tv.util.parseRatingValue
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.abs
@@ -144,7 +141,7 @@ private val tvGenres = mapOf(
 
 @Stable
 private class HomeFocusState {
-    var isSidebarFocused by mutableStateOf(false)
+    var isSidebarFocused by mutableStateOf(true)  // Start with sidebar focused to prevent accidental navigation
     var sidebarFocusIndex by mutableIntStateOf(1)
     var currentRowIndex by mutableIntStateOf(0)
     var currentItemIndex by mutableIntStateOf(0)
@@ -172,10 +169,12 @@ fun HomeScreen(
     preloadedHeroItem: MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
     preloadedLogoCache: Map<String, String> = emptyMap(),
-    onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
+    onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onExitApp: () -> Unit = {}
 ) {
     // Use preloaded data from StartupViewModel if available
@@ -268,14 +267,11 @@ fun HomeScreen(
     val focusState = remember { HomeFocusState() }
     val fastScrollThresholdMs = 650L
 
-    // Context menu state
+    // Context menu state (Menu button only, no long-press)
     var showContextMenu by remember { mutableStateOf(false) }
     var contextMenuItem by remember { mutableStateOf<MediaItem?>(null) }
     var contextMenuIsContinueWatching by remember { mutableStateOf(false) }
     var contextMenuIsInWatchlist by remember { mutableStateOf(false) }
-    var showQuickMenu by remember { mutableStateOf(false) }
-    var quickMenuItem by remember { mutableStateOf<MediaItem?>(null) }
-    var quickMenuIsContinueWatching by remember { mutableStateOf(false) }
 
     // Preload logos for current and next rows when row changes
     LaunchedEffect(displayCategories) {
@@ -347,7 +343,7 @@ fun HomeScreen(
 
             Crossfade(
                 targetState = currentBackdrop,
-                animationSpec = tween(durationMillis = 50),  // Faster for TV performance
+                animationSpec = tween(durationMillis = 300),  // Smooth professional transition
                 label = "hero_backdrop_crossfade"
             ) { backdropUrl ->
                 if (backdropUrl != null) {
@@ -417,7 +413,6 @@ fun HomeScreen(
             contentStartPadding = contentStartPadding,
             fastScrollThresholdMs = fastScrollThresholdMs,
             isContextMenuOpen = showContextMenu,
-            isQuickMenuOpen = showQuickMenu,
             onNavigateToDetails = onNavigateToDetails,
             onNavigateToSearch = onNavigateToSearch,
             onNavigateToWatchlist = onNavigateToWatchlist,
@@ -427,18 +422,13 @@ fun HomeScreen(
                 contextMenuItem = item
                 contextMenuIsContinueWatching = isContinue
                 showContextMenu = true
-            },
-            onOpenQuickMenu = { item, isContinue ->
-                quickMenuItem = item
-                quickMenuIsContinueWatching = isContinue
-                showContextMenu = false
-                showQuickMenu = true
             }
         )
 
-        // Clock top-right
+        // Clock and profile indicator top-right
         TopBarClock(
-            modifier = Modifier.align(Alignment.TopEnd)
+            modifier = Modifier.align(Alignment.TopEnd),
+            profile = currentProfile
         )
         
         // Loading - use skeleton loaders for better UX
@@ -464,10 +454,10 @@ fun HomeScreen(
                 isWatched = item.isWatched,
                 isContinueWatching = contextMenuIsContinueWatching,
                 onPlay = {
-                    onNavigateToDetails(item.mediaType, item.id)
+                    onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
                 },
                 onViewDetails = {
-                    onNavigateToDetails(item.mediaType, item.id)
+                    onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
                 },
                 onToggleWatchlist = {
                     viewModel.toggleWatchlist(item)
@@ -486,20 +476,6 @@ fun HomeScreen(
             )
         }
 
-        quickMenuItem?.let { item ->
-            QuickActionMenu(
-                isVisible = showQuickMenu,
-                isWatched = item.isWatched,
-                canRemoveContinueWatching = quickMenuIsContinueWatching,
-                onMarkWatched = { viewModel.markWatched(item) },
-                onRemoveContinueWatching = { viewModel.removeFromContinueWatching(item) },
-                onDismiss = {
-                    showQuickMenu = false
-                    quickMenuItem = null
-                    quickMenuIsContinueWatching = false
-                }
-            )
-        }
 
         // Toast notification
         uiState.toastMessage?.let { message ->
@@ -635,7 +611,7 @@ private fun HeroSection(
         AnimatedContent(
             targetState = item,
             transitionSpec = {
-                fadeIn(animationSpec = tween(30)).togetherWith(fadeOut(animationSpec = tween(20)))
+                fadeIn(animationSpec = tween(300)).togetherWith(fadeOut(animationSpec = tween(250)))
             },
             label = "hero_metadata_animation"
         ) { currentItem ->
@@ -795,21 +771,13 @@ private fun HomeInputLayer(
     contentStartPadding: androidx.compose.ui.unit.Dp,
     fastScrollThresholdMs: Long,
     isContextMenuOpen: Boolean,
-    isQuickMenuOpen: Boolean,
-    onNavigateToDetails: (MediaType, Int) -> Unit,
+    onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToWatchlist: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onExitApp: () -> Unit,
     onOpenContextMenu: (MediaItem, Boolean) -> Unit,
-    onOpenQuickMenu: (MediaItem, Boolean) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    var selectLongPressJob by remember { mutableStateOf<Job?>(null) }
-    var selectLongPressHandled by remember { mutableStateOf(false) }
-    var selectDownSeen by remember { mutableStateOf(false) }
-    val longPressTimeoutMs = 450L
-
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -830,34 +798,12 @@ private fun HomeInputLayer(
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
-                if (isContextMenuOpen || isQuickMenuOpen) {
+                if (isContextMenuOpen) {
                     return@onPreviewKeyEvent false
                 }
                 when (event.type) {
                     KeyEventType.KeyDown -> when (event.key) {
-                        Key.Enter, Key.DirectionCenter -> {
-                            selectDownSeen = true
-                            if (!focusState.isSidebarFocused && selectLongPressJob == null) {
-                                selectLongPressHandled = false
-                                val currentItem = getFocusedItem(
-                                    categories,
-                                    focusState.currentRowIndex,
-                                    focusState.currentItemIndex
-                                )
-                                if (currentItem != null) {
-                                    selectLongPressJob = scope.launch {
-                                        delay(longPressTimeoutMs)
-                                        if (!isQuickMenuOpen && !focusState.isSidebarFocused) {
-                                            val currentCategory = categories.getOrNull(focusState.currentRowIndex)
-                                            val isContinue = currentCategory?.id == "continue_watching"
-                                            onOpenQuickMenu(currentItem, isContinue)
-                                            selectLongPressHandled = true
-                                        }
-                                    }
-                                }
-                            }
-                            true
-                        }
+                        Key.Enter, Key.DirectionCenter -> true // Consume, action on KeyUp
                         Key.DirectionLeft -> {
                             if (!focusState.isSidebarFocused) {
                                 if (focusState.currentItemIndex == 0) {
@@ -940,36 +886,24 @@ private fun HomeInputLayer(
                     }
                     KeyEventType.KeyUp -> when (event.key) {
                         Key.Enter, Key.DirectionCenter -> {
-                            selectLongPressJob?.cancel()
-                            selectLongPressJob = null
-                            if (!selectDownSeen) {
-                                true
+                            if (focusState.isSidebarFocused) {
+                                when (SidebarItem.entries[focusState.sidebarFocusIndex]) {
+                                    SidebarItem.SEARCH -> onNavigateToSearch()
+                                    SidebarItem.HOME -> { }
+                                    SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                    SidebarItem.SETTINGS -> onNavigateToSettings()
+                                }
                             } else {
-                                selectDownSeen = false
-                                if (selectLongPressHandled) {
-                                    selectLongPressHandled = false
-                                    true
-                                } else {
-                                    if (focusState.isSidebarFocused) {
-                                        when (SidebarItem.entries[focusState.sidebarFocusIndex]) {
-                                            SidebarItem.SEARCH -> onNavigateToSearch()
-                                            SidebarItem.HOME -> { }
-                                            SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                            SidebarItem.SETTINGS -> onNavigateToSettings()
-                                        }
-                                    } else {
-                                        val currentItem = getFocusedItem(
-                                            categories,
-                                            focusState.currentRowIndex,
-                                            focusState.currentItemIndex
-                                        )
-                                        currentItem?.let { item ->
-                                            onNavigateToDetails(item.mediaType, item.id)
-                                        }
-                                    }
-                                    true
+                                val currentItem = getFocusedItem(
+                                    categories,
+                                    focusState.currentRowIndex,
+                                    focusState.currentItemIndex
+                                )
+                                currentItem?.let { item ->
+                                    onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
                                 }
                             }
+                            true
                         }
                         else -> false
                     }
@@ -996,7 +930,7 @@ private fun HomeInputLayer(
             focusState = focusState,
             contentStartPadding = contentStartPadding,
             fastScrollThresholdMs = fastScrollThresholdMs,
-            onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id) }
+            onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber) }
         )
     }
 }
@@ -1246,16 +1180,9 @@ private fun ContentRow(
         (totalItems - effectiveVisibleCount).coerceAtLeast(0)
     }
     val isScrollable = totalItems > effectiveVisibleCount
-    val visualFocusedIndex by remember(rowState, focusedItemIndex, isCurrentRow, isScrollable, maxFirstIndex) {
-        derivedStateOf {
-            val atEnd = isScrollable && rowState.firstVisibleItemIndex >= maxFirstIndex
-            if (isCurrentRow && isScrollable && !atEnd) {
-                rowState.firstVisibleItemIndex
-            } else {
-                focusedItemIndex
-            }
-        }
-    }
+    // Use rememberUpdatedState to ensure items recompose when focus changes
+    val currentFocusedIndex by rememberUpdatedState(focusedItemIndex)
+    val currentIsCurrentRow by rememberUpdatedState(isCurrentRow)
     val scrollTargetIndex by remember(rowState, focusedItemIndex, isCurrentRow, totalItems, maxFirstIndex) {
         derivedStateOf {
             if (!isCurrentRow || focusedItemIndex < 0) return@derivedStateOf -1
@@ -1274,20 +1201,41 @@ private fun ContentRow(
             lastScrollIndex = -1
         }
     }
-    LaunchedEffect(scrollTargetIndex, isCurrentRow) {
+    LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex) {
         if (!isCurrentRow || scrollTargetIndex < 0) return@LaunchedEffect
-        if (lastScrollIndex == scrollTargetIndex) return@LaunchedEffect
+
+        // Calculate extra offset for items at the end of the list (past maxFirstIndex)
+        // This ensures the last items remain fully visible when focused
+        val extraOffset = if (focusedItemIndex > maxFirstIndex) {
+            ((focusedItemIndex - maxFirstIndex) * itemSpanPx).toInt()
+        } else {
+            0
+        }
+
+        // FIX: When scrolling back to first item, ensure we reset to position 0 with no offset
+        // This prevents focus from disappearing on the left side
+        if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
+            rowState.animateScrollToItem(index = 0, scrollOffset = 0)
+            lastScrollIndex = 0
+            return@LaunchedEffect
+        }
+
+        if (lastScrollIndex == scrollTargetIndex && extraOffset == 0) return@LaunchedEffect
         if (lastScrollIndex == -1) {
-            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = 0)
+            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             lastScrollIndex = scrollTargetIndex
             return@LaunchedEffect
         }
         val delta = scrollTargetIndex - lastScrollIndex
-        if (delta == 0) return@LaunchedEffect
-        if (abs(delta) > 1) {
-            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = 0)
-        } else {
-            rowState.scrollBy(itemSpanPx * delta)
+        if (delta == 0 && extraOffset > 0) {
+            // Same scroll target but need extra offset for end items
+            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        } else if (abs(delta) > 1) {
+            // Large jump - use smooth animation
+            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        } else if (delta != 0) {
+            // Single item navigation - smooth animated scroll
+            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
         lastScrollIndex = scrollTargetIndex
     }
@@ -1315,7 +1263,7 @@ private fun ContentRow(
         if (pageIndex != lastPageIndex) {
             lastPageIndex = pageIndex
             rowFade.snapTo(0.8f)
-            rowFade.animateTo(1f, animationSpec = tween(durationMillis = 180))
+            rowFade.animateTo(1f, animationSpec = tween(durationMillis = 300))
         }
     }
 
@@ -1345,7 +1293,7 @@ private fun ContentRow(
             LazyRow(
                 modifier = rowFadeModifier,
                 state = rowState,
-                contentPadding = PaddingValues(start = startPadding, end = 100.dp, top = 8.dp, bottom = 8.dp),  // Align with header
+                contentPadding = PaddingValues(start = startPadding, end = 240.dp, top = 8.dp, bottom = 8.dp),  // 210dp card + 30dp margin to keep last item visible
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
             itemsIndexed(
@@ -1356,9 +1304,8 @@ private fun ContentRow(
                 },
                 contentType = { _, item -> item.mediaType }
             ) { index, item ->
-                val itemIsFocused by remember(isCurrentRow, visualFocusedIndex, index) {
-                    derivedStateOf { isCurrentRow && index == visualFocusedIndex }
-                }
+                // Read state inside item to ensure recomposition on focus change
+                val itemIsFocused = currentIsCurrentRow && index == currentFocusedIndex
                 if (isRanked) {
                     // RANKED ITEM: Number + Card
                     Box(

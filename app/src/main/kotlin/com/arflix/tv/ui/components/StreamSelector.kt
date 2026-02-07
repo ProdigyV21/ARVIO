@@ -142,13 +142,26 @@ fun StreamSelector(
         listOf("All sources") + addonTabs.map { it.label }
     }
 
-    // Sort streams: cached first, then largest size, then quality
-    val sortedStreams = remember(streams) {
-        streams.sortedWith(
-            compareByDescending<StreamSource> { it.isCached }
-                .thenByDescending { it.sizeBytes ?: parseSize(it.size).toLong() }
-                .thenByDescending { qualityScore(it.quality) }
-        )
+    // Sort streams: quality (4K > 1080p > 720p), then largest size first
+    val sortedStreams = remember(streams, streams.size) {
+        streams.sortedWith { a, b ->
+            // 1. Higher quality first (4K > 1080p > 720p > 480p)
+            val qualityA = qualityScore(a.quality)
+            val qualityB = qualityScore(b.quality)
+            if (qualityA != qualityB) {
+                return@sortedWith qualityB - qualityA // Descending: higher quality first
+            }
+
+            // 3. Larger size first (parse from display string for consistency)
+            val sizeA = getSizeBytes(a)
+            val sizeB = getSizeBytes(b)
+            if (sizeA != sizeB) {
+                return@sortedWith sizeB.compareTo(sizeA) // Descending: larger size first
+            }
+
+            // 4. Tie-breaker: sort by source name alphabetically for stable ordering
+            a.source.compareTo(b.source)
+        }
     }
 
     // Filter streams by selected tab
@@ -610,11 +623,6 @@ private fun GlassyStreamCard(
                 // Quality badge
                 CompactQualityBadge(stream.quality)
 
-                // Cached indicator
-                if (stream.isCached) {
-                    CachedBadge()
-                }
-
                 // Size
                 if (stream.size.isNotEmpty()) {
                     Text(
@@ -759,54 +767,64 @@ private fun CompactQualityBadge(quality: String) {
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun CachedBadge() {
-    Box(
-        modifier = Modifier
-            .background(AccentGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 2.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Bolt,
-                contentDescription = null,
-                tint = AccentGreen,
-                modifier = Modifier.size(10.dp)
-            )
-            Text(
-                text = "CACHED",
-                style = ArflixTypography.caption.copy(
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Black
-                ),
-                color = AccentGreen
-            )
-        }
-    }
+// Helper function to get size in bytes for sorting
+// ALWAYS parses the display size string to ensure consistent sorting across all streams
+private fun getSizeBytes(stream: StreamSource): Long {
+    // ALWAYS parse from display string - don't use sizeBytes field
+    // This ensures consistent comparison (some streams have sizeBytes from behaviorHints
+    // in actual bytes, others have it parsed with 1024 multiplier - causes inconsistency)
+    return parseSizeString(stream.size)
 }
 
-// Helper function to parse size string to bytes for sorting
-private fun parseSize(sizeStr: String): Long {
+// Robust size string parser - handles all common formats
+private fun parseSizeString(sizeStr: String): Long {
     if (sizeStr.isBlank()) return 0L
-    val normalized = sizeStr.uppercase().trim()
-    val regex = Regex("([\\d.]+)\\s*(GB|MB|KB|TB)?")
-    val match = regex.find(normalized) ?: return 0L
-    val number = match.groupValues[1].toDoubleOrNull() ?: return 0L
-    val unit = match.groupValues[2]
+
+    // Normalize: uppercase, replace comma with dot, remove extra spaces
+    val normalized = sizeStr.uppercase()
+        .replace(",", ".")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    // Try multiple regex patterns to catch all formats
+
+    // Pattern 1: "15.2 GB", "6GB", "1.5 TB" etc.
+    val pattern1 = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
+    pattern1.find(normalized)?.let { match ->
+        val number = match.groupValues[1].toDoubleOrNull() ?: return@let
+        val unit = match.groupValues[2]
+        return calculateBytes(number, unit)
+    }
+
+    // Pattern 2: Numbers with GiB/MiB notation
+    val pattern2 = Regex("""(\d+(?:\.\d+)?)\s*(TIB|GIB|MIB|KIB)""")
+    pattern2.find(normalized)?.let { match ->
+        val number = match.groupValues[1].toDoubleOrNull() ?: return@let
+        val unit = match.groupValues[2].replace("IB", "B") // Convert TIB->TB, GIB->GB etc.
+        return calculateBytes(number, unit)
+    }
+
+    // Pattern 3: Just a number (assume bytes) - very rare
+    val pattern3 = Regex("""^(\d+(?:\.\d+)?)$""")
+    pattern3.find(normalized)?.let { match ->
+        return match.groupValues[1].toLongOrNull() ?: 0L
+    }
+
+    return 0L
+}
+
+// Calculate bytes from number and unit
+private fun calculateBytes(number: Double, unit: String): Long {
     return when (unit) {
-        "TB" -> (number * 1024 * 1024 * 1024 * 1024).toLong()
-        "GB" -> (number * 1024 * 1024 * 1024).toLong()
-        "MB" -> (number * 1024 * 1024).toLong()
-        "KB" -> (number * 1024).toLong()
+        "TB" -> (number * 1024.0 * 1024.0 * 1024.0 * 1024.0).toLong()
+        "GB" -> (number * 1024.0 * 1024.0 * 1024.0).toLong()
+        "MB" -> (number * 1024.0 * 1024.0).toLong()
+        "KB" -> (number * 1024.0).toLong()
         else -> number.toLong()
     }
 }
 
-// Helper function to get quality score for sorting
+// Helper function to get quality score for sorting (basic, used for display)
 private fun qualityScore(quality: String): Int {
     return when {
         quality.contains("4K", ignoreCase = true) || quality.contains("2160p") -> 4
@@ -816,3 +834,4 @@ private fun qualityScore(quality: String): Int {
         else -> 0
     }
 }
+

@@ -33,8 +33,7 @@ import javax.inject.Inject
 data class PlayerUiState(
     val isLoading: Boolean = true,
     val isLoadingStreams: Boolean = false,
-    val isLoadingSubtitles: Boolean = false,  // Show when fetching subtitles
-    val isResolvingStream: Boolean = false,  // New: show when resolving debrid URL
+    val isLoadingSubtitles: Boolean = false,
     val title: String = "",
     val backdropUrl: String? = null,
     val logoUrl: String? = null,
@@ -57,10 +56,10 @@ class PlayerViewModel @Inject constructor(
     private val watchHistoryRepository: WatchHistoryRepository,
     private val tmdbApi: TmdbApi
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
-    
+
     private var currentMediaType: MediaType = MediaType.MOVIE
     private var currentMediaId: Int = 0
     private var currentSeason: Int? = null
@@ -70,6 +69,9 @@ class PlayerViewModel @Inject constructor(
     private var currentBackdrop: String? = null
     private var currentEpisodeTitle: String? = null
     private var currentOriginalLanguage: String? = null
+    private var currentGenreIds: List<Int> = emptyList()
+    private var currentItemTitle: String = ""
+    private var currentTvdbId: Int? = null  // For anime Kitsu mapping
     private var lastScrobbleTime: Long = 0
     private var lastWatchHistorySaveTime: Long = 0
     private var lastIsPlaying: Boolean = false
@@ -86,7 +88,7 @@ class PlayerViewModel @Inject constructor(
         "ar", "hi", "tr", "pl", "sv", "no", "da", "fi", "el", "cs", "hu",
         "ro", "th", "vi", "id", "he"
     )
-    
+
     fun loadMedia(
         mediaType: MediaType,
         mediaId: Int,
@@ -102,7 +104,10 @@ class PlayerViewModel @Inject constructor(
         lastIsPlaying = false
         lastScrobbleTime = 0
         lastWatchHistorySaveTime = 0
-        currentOriginalLanguage = mediaRepository.getCachedItem(mediaType, mediaId)?.originalLanguage
+        val cachedItem = mediaRepository.getCachedItem(mediaType, mediaId)
+        currentOriginalLanguage = cachedItem?.originalLanguage
+        currentGenreIds = cachedItem?.genreIds ?: emptyList()
+        currentItemTitle = cachedItem?.title ?: ""
 
         viewModelScope.launch {
             val preferredAudioLanguage = resolvePreferredAudioLanguage()
@@ -114,7 +119,6 @@ class PlayerViewModel @Inject constructor(
 
             // If stream URL provided, use it directly - INSTANT
             if (providedStreamUrl != null) {
-                Log.d("PlayerViewModel", "Using provided stream URL: $providedStreamUrl")
                 // Fetch saved position for resume playback
                 val savedPosition = watchHistoryRepository.getProgress(mediaType, mediaId, seasonNumber, episodeNumber)
                     ?.position_seconds?.times(1000) ?: 0L
@@ -140,9 +144,13 @@ class PlayerViewModel @Inject constructor(
                         ?.position_seconds?.times(1000) ?: 0L
                 }
 
-                // Get IMDB ID as fast as possible
+                // Get IMDB ID and TVDB ID as fast as possible
+                // Need TVDB ID for anime Kitsu mapping, so always fetch external IDs
                 val cachedImdbId = mediaRepository.getCachedImdbId(mediaType, mediaId)
-                val imdbId = cachedImdbId ?: resolveImdbId(mediaType, mediaId)
+                val externalIds = resolveExternalIds(mediaType, mediaId)
+                currentTvdbId = externalIds.tvdbId
+
+                val imdbId = cachedImdbId ?: externalIds.imdbId
                 if (imdbId.isNullOrBlank()) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -151,52 +159,76 @@ class PlayerViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                mediaRepository.cacheImdbId(mediaType, mediaId, imdbId)
-                Log.d("PlayerViewModel", "Got IMDB ID: $imdbId - fetching streams NOW")
+                if (cachedImdbId == null) {
+                    mediaRepository.cacheImdbId(mediaType, mediaId, imdbId)
+                }
 
                 // Fetch streams IMMEDIATELY
                 val result = if (mediaType == MediaType.MOVIE) {
                     streamRepository.resolveMovieStreams(imdbId)
                 } else {
                     streamRepository.resolveEpisodeStreams(
-                        imdbId,
-                        seasonNumber ?: 1,
-                        episodeNumber ?: 1
+                        imdbId = imdbId,
+                        season = seasonNumber ?: 1,
+                        episode = episodeNumber ?: 1,
+                        tmdbId = mediaId,
+                        tvdbId = currentTvdbId,  // Pass tvdbId for anime Kitsu mapping
+                        genreIds = currentGenreIds,
+                        originalLanguage = currentOriginalLanguage,
+                        title = currentItemTitle
                     )
                 }
 
-                Log.d("PlayerViewModel", "Stream result: ${result.streams.size} streams, ${result.subtitles.size} subtitles")
 
-                // FAST MODE: Show ALL streams immediately without filtering
+                // Show all streams with valid URLs, sorted same as StreamSelector UI
                 val allStreams = result.streams
                     .filter { stream -> stream.url != null }
-                    .sortedWith(
-                        compareByDescending<StreamSource> { it.isCached }
-                            .thenByDescending { it.sizeBytes ?: 0L }
-                            .thenByDescending { qualityScore(it.quality, it.source) }
-                    )
-
-                Log.d("PlayerViewModel", "INSTANT: Loaded ${allStreams.size} streams")
+                    .sortedWith { a, b ->
+                        // 1. Higher quality first
+                        val qA = qualityScore(a.quality)
+                        val qB = qualityScore(b.quality)
+                        if (qA != qB) return@sortedWith qB - qA
+                        // 2. Larger size first
+                        val sA = parseSize(a.size)
+                        val sB = parseSize(b.size)
+                        if (sA != sB) return@sortedWith sB.compareTo(sA)
+                        // 3. Stable tie-breaker
+                        a.source.compareTo(b.source)
+                    }
 
                 // Get saved position for resume playback
                 val savedPosition = savedPositionDeferred.await()
-                Log.d("PlayerViewModel", "Saved position: ${savedPosition}ms")
 
-                // Update UI with streams immediately
+                // Determine appropriate error message
+                val errorMessage = if (allStreams.isEmpty()) {
+                    val streamingAddonsCount = streamRepository.installedAddons.first()
+                        .count { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
+
+                    if (streamingAddonsCount == 0) {
+                        "No streaming addons configured. Go to Settings > Addons to add Torrentio or another streaming addon."
+                    } else {
+                        "No streams found for this content. The addons may not have sources for this title."
+                    }
+                } else null
+
+                // Update UI with sorted streams
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isLoadingStreams = false,
                     streams = allStreams,
                     subtitles = result.subtitles,
                     savedPosition = savedPosition,
-                    error = if (allStreams.isEmpty()) "No streams found. Try adding more addons in Settings." else null
+                    error = errorMessage
                 )
 
-                // Auto-select first stream IMMEDIATELY
-                val preferredStream = pickPreferredStream(allStreams, preferredAudioLanguage)
-                if (preferredStream != null) {
-                    Log.d("PlayerViewModel", "Auto-selecting stream: ${preferredStream.source.take(50)}...")
-                    selectStream(preferredStream)
+                // Auto-select first stream (same as top of source list)
+                if (allStreams.isNotEmpty()) {
+                    // Debug: log top 3 streams so we can verify sort order
+                    allStreams.take(3).forEachIndexed { idx, s ->
+                        Log.d("PlayerVM", "AutoPick sorted[$idx]: q=${s.quality} size=${s.size} parsed=${parseSize(s.size)} src=${s.source.take(60)}")
+                    }
+                    Log.d("PlayerVM", "AutoPick selecting: ${allStreams.first().source.take(80)}")
+                    selectStream(allStreams.first())
                 }
 
                 // Apply subtitle preference in background (non-blocking)
@@ -262,35 +294,36 @@ class PlayerViewModel @Inject constructor(
                 preferredAudioLanguage = resolvePreferredAudioLanguage()
             )
         } catch (e: Exception) {
-            Log.e("PlayerViewModel", "Failed to fetch metadata: ${e.message}")
+            // Failed to fetch metadata
         }
     }
 
-    private suspend fun resolveImdbId(mediaType: MediaType, mediaId: Int): String? {
+    private data class ExternalIds(val imdbId: String?, val tvdbId: Int?)
+
+    private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): ExternalIds {
         return try {
-            when (mediaType) {
-                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY).imdbId
-                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, Constants.TMDB_API_KEY).imdbId
+            val ids = when (mediaType) {
+                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY)
+                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, Constants.TMDB_API_KEY)
             }
+            ExternalIds(imdbId = ids.imdbId, tvdbId = ids.tvdbId)
         } catch (_: Exception) {
-            null
+            ExternalIds(null, null)
         }
     }
 
     private suspend fun getDefaultSubtitle(): String {
         return try {
             val prefs = context.settingsDataStore.data.first()
-            // Default to English instead of Off to ensure subtitles are shown
-            prefs[DEFAULT_SUBTITLE_KEY] ?: "English"
+            // Default to Off - user must explicitly set preferred subtitle in settings
+            prefs[DEFAULT_SUBTITLE_KEY] ?: "Off"
         } catch (_: Exception) {
-            "English"
+            "Off"
         }
     }
 
     private fun applyPreferredSubtitle(preference: String, subtitles: List<Subtitle>, fallbackLanguage: String?) {
-        Log.d("PlayerViewModel", "Applying preferred subtitle: '$preference', available: ${subtitles.size}")
         if (preference.equals("Off", ignoreCase = true)) {
-            Log.d("PlayerViewModel", "Subtitle preference is Off, not selecting any")
             return
         }
 
@@ -299,7 +332,6 @@ class PlayerViewModel @Inject constructor(
         val normalizedFallback = fallbackLanguage
             ?.let { normalizeLanguage(it) }
             ?.takeIf { it.isNotBlank() && it != normalizedPref }
-        Log.d("PlayerViewModel", "Normalized preference: '$normalizedPref'")
 
         fun findMatch(target: String): Subtitle? {
             return subtitles.firstOrNull { sub ->
@@ -324,26 +356,18 @@ class PlayerViewModel @Inject constructor(
             ?: normalizedFallback?.let { findMatch(it) }
 
         if (match != null) {
-            Log.d("PlayerViewModel", "Auto-selected subtitle: ${match.label} (${match.lang})")
             _uiState.value = _uiState.value.copy(selectedSubtitle = match)
-        } else {
-            Log.d("PlayerViewModel", "No matching subtitle found for preference '$preference'")
         }
     }
 
-    private fun qualityScore(quality: String, source: String): Int {
-        val q = quality.uppercase()
-        val s = source.uppercase()
-        val base = when {
-            q.contains("4K") || q.contains("2160") -> 4000
-            q.contains("1080") -> 3000
-            q.contains("720") -> 2000
-            q.contains("480") -> 1000
+    private fun qualityScore(quality: String): Int {
+        return when {
+            quality.contains("4K", ignoreCase = true) || quality.contains("2160p", ignoreCase = true) -> 4
+            quality.contains("1080p", ignoreCase = true) -> 3
+            quality.contains("720p", ignoreCase = true) -> 2
+            quality.contains("480p", ignoreCase = true) -> 1
             else -> 0
         }
-        val dvBonus = if (q.contains("DOLBY VISION") || s.contains("DOLBY VISION") || q.contains("DV") || s.contains("DV")) 200 else 0
-        val hdrBonus = if (q.contains("HDR") || s.contains("HDR")) 100 else 0
-        return base + dvBonus + hdrBonus
     }
 
     private fun resolvePreferredAudioLanguage(): String {
@@ -379,13 +403,69 @@ class PlayerViewModel @Inject constructor(
         preferredLanguage: String
     ): StreamSource? {
         if (streams.isEmpty()) return null
-        val scored = streams.map { it to streamLanguageScore(it, preferredLanguage) }
-        val first = scored.firstOrNull() ?: return null
-        if (first.second > 0) return first.first
 
-        val bestScore = scored.maxOfOrNull { it.second } ?: return first.first
-        if (bestScore <= 0) return first.first
-        return scored.firstOrNull { it.second == bestScore }?.first ?: first.first
+        val maxSizeBytes = 20L * 1024 * 1024 * 1024 // 20GB - anything larger is likely a season pack
+
+        // Step 1: Filter out season packs (>20GB) from all candidates
+        val candidates = streams.filter {
+            val size = parseSize(it.size)
+            size == 0L || size < maxSizeBytes // 0 = unknown size, keep those
+        }
+
+        // Step 2: From reasonable candidates, find highest quality and pick first in addon order
+        if (candidates.isNotEmpty()) {
+            val bestQuality = candidates.maxOf { qualityScore(it.quality) }
+            return candidates.first { qualityScore(it.quality) == bestQuality }
+        }
+
+        // Step 3: Fallback if ALL streams are >20GB — just pick first stream in addon order
+        return streams.firstOrNull()
+    }
+
+    // Robust size string parser - identical to StreamSelector's parseSizeString()
+    // Handles comma decimals ("5,2 GB"), GiB notation, extra spaces, etc.
+    private fun parseSize(sizeStr: String): Long {
+        if (sizeStr.isBlank()) return 0L
+
+        // Normalize: uppercase, replace comma with dot, remove extra spaces
+        val normalized = sizeStr.uppercase()
+            .replace(",", ".")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        // Pattern 1: "15.2 GB", "6GB", "1.5 TB" etc.
+        val pattern1 = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
+        pattern1.find(normalized)?.let { match ->
+            val number = match.groupValues[1].toDoubleOrNull() ?: return@let
+            val unit = match.groupValues[2]
+            return calcBytes(number, unit)
+        }
+
+        // Pattern 2: Numbers with GiB/MiB notation
+        val pattern2 = Regex("""(\d+(?:\.\d+)?)\s*(TIB|GIB|MIB|KIB)""")
+        pattern2.find(normalized)?.let { match ->
+            val number = match.groupValues[1].toDoubleOrNull() ?: return@let
+            val unit = match.groupValues[2].replace("IB", "B")
+            return calcBytes(number, unit)
+        }
+
+        // Pattern 3: Just a number (assume bytes)
+        val pattern3 = Regex("""^(\d+(?:\.\d+)?)$""")
+        pattern3.find(normalized)?.let { match ->
+            return match.groupValues[1].toLongOrNull() ?: 0L
+        }
+
+        return 0L
+    }
+
+    private fun calcBytes(number: Double, unit: String): Long {
+        return when (unit) {
+            "TB" -> (number * 1024.0 * 1024.0 * 1024.0 * 1024.0).toLong()
+            "GB" -> (number * 1024.0 * 1024.0 * 1024.0).toLong()
+            "MB" -> (number * 1024.0 * 1024.0).toLong()
+            "KB" -> (number * 1024.0).toLong()
+            else -> number.toLong()
+        }
     }
 
     private fun extractLanguageCodes(text: String): Set<String> {
@@ -434,8 +514,8 @@ class PlayerViewModel @Inject constructor(
         return when {
             // Full names
             lowerLang == "english" || lowerLang.startsWith("english") -> "en"
-            lowerLang == "spanish" || lowerLang.startsWith("spanish") || lowerLang == "español" -> "es"
-            lowerLang == "french" || lowerLang.startsWith("french") || lowerLang == "français" -> "fr"
+            lowerLang == "spanish" || lowerLang.startsWith("spanish") || lowerLang == "espanol" -> "es"
+            lowerLang == "french" || lowerLang.startsWith("french") || lowerLang == "francais" -> "fr"
             lowerLang == "german" || lowerLang.startsWith("german") || lowerLang == "deutsch" -> "de"
             lowerLang == "italian" || lowerLang.startsWith("italian") -> "it"
             lowerLang == "portuguese" || lowerLang.startsWith("portuguese") -> "pt"
@@ -493,13 +573,12 @@ class PlayerViewModel @Inject constructor(
             else -> lowerLang
         }
     }
-    
+
     // Track current stream index for auto-retry
     private var currentStreamIndex = 0
 
     /**
-     * Select a stream for playback - resolves debrid URLs on-demand
-     * If resolution fails, automatically tries the next stream
+     * Select a stream for playback
      */
     fun selectStream(stream: StreamSource, autoRetryOnFail: Boolean = true) {
         viewModelScope.launch {
@@ -520,72 +599,15 @@ class PlayerViewModel @Inject constructor(
                     existingSubs.none { it.id == newSub.id || (it.url == newSub.url && newSub.url.isNotBlank()) }
                 }
                 if (newSubs.isNotEmpty()) {
-                    Log.d("PlayerViewModel", "Adding ${newSubs.size} subtitles from stream source")
                     _uiState.value = _uiState.value.copy(subtitles = existingSubs + newSubs)
                 }
             }
 
-            // Check if this needs debrid resolution
-            // Must match ALL debrid service URL patterns from Torrentio
-            val needsResolution = url.contains("/torbox/") ||
-                                  url.contains("/realdebrid/") ||
-                                  url.contains("/rd/") ||
-                                  url.contains("/debridlink/") ||
-                                  url.contains("/premiumize/") ||
-                                  url.contains("/alldebrid/") ||
-                                  url.startsWith("magnet:")
-
-            if (needsResolution) {
-                // Show resolving state
-                _uiState.value = _uiState.value.copy(
-                    selectedStream = stream,
-                    isResolvingStream = true,
-                    error = null
-                )
-
-                Log.d("PlayerViewModel", "Resolving stream on-demand: ${stream.source.take(50)}...")
-
-                try {
-                    val resolvedStream = streamRepository.resolveStreamForPlayback(stream)
-                    if (resolvedStream != null) {
-                        Log.d("PlayerViewModel", "Stream resolved successfully!")
-                        _uiState.value = _uiState.value.copy(
-                            selectedStream = resolvedStream,
-                            selectedStreamUrl = resolvedStream.url,
-                            isResolvingStream = false
-                        )
-                    } else {
-                        Log.e("PlayerViewModel", "Failed to resolve stream")
-                        // Auto-try next stream if enabled
-                        if (autoRetryOnFail) {
-                            tryNextStream(streams, "Resolution returned null")
-                        } else {
-                            _uiState.value = _uiState.value.copy(
-                                isResolvingStream = false,
-                                error = "Failed to resolve stream. Try another source."
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("PlayerViewModel", "Error resolving stream: ${e.message}")
-                    // Auto-try next stream if enabled
-                    if (autoRetryOnFail) {
-                        tryNextStream(streams, e.message ?: "Unknown error")
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            isResolvingStream = false,
-                            error = "Error: ${e.message}"
-                        )
-                    }
-                }
-            } else {
-                // Direct URL - use immediately
-                Log.d("PlayerViewModel", "Direct stream URL - no resolution needed")
-                _uiState.value = _uiState.value.copy(
-                    selectedStream = stream,
-                    selectedStreamUrl = stream.url
-                )
-            }
+            // Direct URL - use immediately (ExoPlayer handles redirects)
+            _uiState.value = _uiState.value.copy(
+                selectedStream = stream,
+                selectedStreamUrl = stream.url
+            )
         }
     }
 
@@ -594,18 +616,14 @@ class PlayerViewModel @Inject constructor(
      */
     private fun tryNextStream(streams: List<StreamSource>, reason: String) {
         val nextIndex = currentStreamIndex + 1
-        Log.d("PlayerViewModel", "Stream failed ($reason), trying next: $nextIndex / ${streams.size}")
 
         if (nextIndex < streams.size && nextIndex < 10) { // Limit to 10 retries
             currentStreamIndex = nextIndex
             val nextStream = streams[nextIndex]
-            Log.d("PlayerViewModel", "Auto-selecting stream #$nextIndex: ${nextStream.source.take(50)}...")
             selectStream(nextStream, autoRetryOnFail = true)
         } else {
-            Log.e("PlayerViewModel", "No more streams to try or retry limit reached")
             _uiState.value = _uiState.value.copy(
-                isResolvingStream = false,
-                error = "Failed to resolve stream. Try another source."
+                error = "Failed to play stream. Try another source."
             )
         }
     }
@@ -613,17 +631,16 @@ class PlayerViewModel @Inject constructor(
     fun updateEmbeddedSubtitles(embedded: List<Subtitle>) {
         val current = _uiState.value.subtitles.filter { !it.isEmbedded }
         // Avoid duplicates based on ID
-        val newEmbedded = embedded.filter { new -> 
-            current.none { it.id == new.id } 
+        val newEmbedded = embedded.filter { new ->
+            current.none { it.id == new.id }
         }
-        
+
         if (newEmbedded.isEmpty()) return
-        
+
         val merged = current + newEmbedded
-        Log.d("PlayerViewModel", "Merged ${newEmbedded.size} embedded subtitles. Total: ${merged.size}")
-        
+
         _uiState.value = _uiState.value.copy(subtitles = merged)
-        
+
         // Re-apply preference if currently selected is null or we are in initial state
         // This ensures embedded English subs get picked up if external ones failed
         if (_uiState.value.selectedSubtitle == null) {
@@ -638,7 +655,7 @@ class PlayerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedSubtitle = subtitle)
         recordSubtitleUsage(subtitle)
     }
-    
+
     fun disableSubtitles() {
         _uiState.value = _uiState.value.copy(selectedSubtitle = null)
     }
@@ -663,7 +680,7 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.edit { it[SUBTITLE_USAGE_KEY] = gson.toJson(map) }
         }
     }
-    
+
     fun dismissError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
@@ -690,7 +707,7 @@ class PlayerViewModel @Inject constructor(
                         episode = currentEpisode
                     )
                 } catch (e: Exception) {
-                    Log.w("PlayerViewModel", "Scrobble start failed", e)
+                    // Scrobble start failed
                 }
                 lastScrobbleTime = currentTime
             } else if (!isPlaying && lastIsPlaying) {
@@ -703,7 +720,7 @@ class PlayerViewModel @Inject constructor(
                         episode = currentEpisode
                     )
                 } catch (e: Exception) {
-                    Log.w("PlayerViewModel", "Scrobble pause immediate failed", e)
+                    // Scrobble pause immediate failed
                 }
                 lastScrobbleTime = currentTime
             } else if (isPlaying && currentTime - lastScrobbleTime >= SCROBBLE_UPDATE_INTERVAL_MS) {
@@ -716,7 +733,7 @@ class PlayerViewModel @Inject constructor(
                         episode = currentEpisode
                     )
                 } catch (e: Exception) {
-                    Log.w("PlayerViewModel", "Scrobble pause failed", e)
+                    // Scrobble pause failed
                 }
                 lastScrobbleTime = currentTime
             }
@@ -739,6 +756,19 @@ class PlayerViewModel @Inject constructor(
                     duration = durationSeconds,
                     position = positionSeconds
                 )
+
+                // Also save to local Continue Watching (profile-scoped, for profiles without Trakt)
+                traktRepository.saveLocalContinueWatching(
+                    mediaType = currentMediaType,
+                    tmdbId = currentMediaId,
+                    title = currentItemTitle.ifEmpty { currentTitle },
+                    posterPath = currentPoster,
+                    backdropPath = currentBackdrop,
+                    season = currentSeason,
+                    episode = currentEpisode,
+                    episodeTitle = currentEpisodeTitle,
+                    progress = progressPercent
+                )
             }
 
             // Mark as watched when playback ends or crosses threshold
@@ -753,7 +783,7 @@ class PlayerViewModel @Inject constructor(
                         episode = currentEpisode
                     )
                 } catch (e: Exception) {
-                    Log.w("PlayerViewModel", "Scrobble stop failed", e)
+                    // Scrobble stop failed
                 }
                 try {
                     if (currentMediaType == MediaType.TV && currentSeason != null && currentEpisode != null) {
@@ -762,7 +792,7 @@ class PlayerViewModel @Inject constructor(
                         traktRepository.deletePlaybackForContent(currentMediaId, currentMediaType)
                     }
                 } catch (e: Exception) {
-                    Log.w("PlayerViewModel", "Delete playback failed", e)
+                    // Delete playback failed
                 }
             }
 

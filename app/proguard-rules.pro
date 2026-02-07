@@ -16,19 +16,24 @@
 
 # ============================================
 # Log stripping for release builds
-# Remove verbose, debug, and info logs
+# Remove ALL logs for maximum performance
 # ============================================
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
     public static int i(...);
+    public static int w(...);
+    public static int e(...);
+    public static int wtf(...);
 }
 
-# Also strip our custom AppLogger debug methods
+# Also strip ALL our custom AppLogger methods
 -assumenosideeffects class com.arflix.tv.util.AppLogger {
     public static void v(...);
     public static void d(...);
     public static void i(...);
+    public static void w(...);
+    public static void e(...);
 }
 
 # Strip Kotlin debug assertions in release
@@ -103,16 +108,28 @@
 -dontwarn org.jellyfin.media3.**
 
 # ============================================
-# Hilt / Dagger
+# Hilt / Dagger - KEEP EVERYTHING
 # ============================================
--keep class dagger.hilt.** { *; }
--keep class javax.inject.** { *; }
--keep class * extends dagger.hilt.android.lifecycle.HiltViewModel
--keepnames @dagger.hilt.android.lifecycle.HiltViewModel class *
+# Keep ALL app classes to prevent Hilt/Dagger issues
+-keep class com.arflix.tv.** { *; }
+-keep interface com.arflix.tv.** { *; }
 
-# Keep Hilt entry points
--keep class * extends dagger.hilt.android.internal.managers.ApplicationComponentManager { *; }
--keep class * extends dagger.hilt.android.internal.managers.FragmentComponentManager { *; }
+# Keep ALL Dagger/Hilt classes and generated code
+-keep class dagger.** { *; }
+-keep class javax.inject.** { *; }
+-keep class dagger.hilt.** { *; }
+-keep class dagger.hilt.internal.** { *; }
+-keep class dagger.hilt.android.** { *; }
+-keep class dagger.hilt.android.internal.** { *; }
+
+# Keep Hilt aggregated deps (generated classes)
+-keep class hilt_aggregated_deps.** { *; }
+-keep interface hilt_aggregated_deps.** { *; }
+
+# Suppress warnings for Hilt generated classes
+-dontwarn com.arflix.tv.**_GeneratedInjector
+-dontwarn dagger.hilt.internal.aggregatedroot.codegen.**
+-dontwarn hilt_aggregated_deps.**
 
 # ============================================
 # Jetpack Compose

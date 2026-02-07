@@ -2,7 +2,6 @@ package com.arflix.tv.util
 
 import android.content.Context
 import android.media.AudioManager
-import android.util.Log
 import android.view.SoundEffectConstants
 import android.view.View
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -17,13 +16,8 @@ import javax.inject.Singleton
 class SoundManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val TAG = "SoundManager"
     private val audioManager: AudioManager? = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private var isEnabled = true
-
-    init {
-        Log.d(TAG, "Sound manager initialized")
-    }
 
     /**
      * Play navigation move sound (arrow key press)
@@ -33,8 +27,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             view?.playSoundEffect(SoundEffectConstants.NAVIGATION_DOWN)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play move sound", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -45,8 +39,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             view?.playSoundEffect(SoundEffectConstants.NAVIGATION_UP)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play move up sound", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -57,8 +51,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             view?.playSoundEffect(SoundEffectConstants.NAVIGATION_LEFT)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play move left sound", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -69,8 +63,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             view?.playSoundEffect(SoundEffectConstants.NAVIGATION_RIGHT)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play move right sound", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -82,8 +76,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             view?.playSoundEffect(SoundEffectConstants.CLICK)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play select sound", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -94,8 +88,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             view?.playSoundEffect(SoundEffectConstants.NAVIGATION_UP)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play back sound", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -106,8 +100,8 @@ class SoundManager @Inject constructor(
         if (!isEnabled) return
         try {
             audioManager?.playSoundEffect(effectType, 1.0f)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play sound effect", e)
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 

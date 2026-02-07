@@ -9,6 +9,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Provides a configured OkHttpClient instance.
  *
+ * All TMDB and Trakt API calls are routed through Supabase Edge Functions
+ * via ApiProxyInterceptor. This keeps API keys secure on the server.
+ *
  * SSL/TLS validation is handled by NetworkSecurityConfig (res/xml/network_security_config.xml):
  * - Release: System certificates only (secure)
  * - Debug: User + System certificates (allows proxy debugging)
@@ -26,6 +29,7 @@ object OkHttpProvider {
         }
 
         OkHttpClient.Builder()
+            .addInterceptor(ApiProxyInterceptor()) // Routes TMDB/Trakt through secure proxy
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

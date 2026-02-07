@@ -1,128 +1,194 @@
-# Arflix Native Android TV App
+# ARVIO - Android TV Streaming App
 
-A native Android TV application built with Kotlin, Jetpack Compose for TV, and ExoPlayer. This is a recreation of the Arflix web app designed specifically for Android TV with D-pad navigation.
+A native Android TV streaming application that aggregates content from multiple sources into a unified Netflix-style interface. Built with Kotlin and Jetpack Compose for TV.
 
-## Tech Stack
+## Features
 
-- **Kotlin** - Primary language
-- **Jetpack Compose for TV** - UI framework (`tv-foundation`, `tv-material`)
-- **ExoPlayer / Media3** - Video playback with FFmpeg extension for DTS/TrueHD/Atmos
-- **Hilt** - Dependency injection
-- **Retrofit** - Networking
-- **Coil** - Image loading
-- **Navigation Compose** - Screen navigation
+- **Content Discovery** - Browse trending, popular, and new releases from TMDB
+- **Stream Aggregation** - Resolves streams from Stremio addons with Real-Debrid/TorBox support
+- **Netflix-style UI** - Horizontal row browsing optimized for D-pad/remote navigation
+- **Video Playback** - ExoPlayer with FFmpeg decoder for 4K/HDR/DTS/Atmos support
+- **Watch Progress Sync** - Cross-device sync via Trakt.tv integration
+- **Watchlist** - Cloud-synced watchlist with Supabase
+- **Multi-profile** - Multiple user profiles per account
+- **Subtitle Support** - Multiple subtitle tracks with language selection
+- **Audio Track Selection** - Switch between audio tracks (5.1, 7.1, Atmos)
+- **Continue Watching** - Resume playback from where you left off
+- **Auto-play** - Next episode auto-play with countdown
+
+## Screenshots
+
+*Coming soon*
+
+## Requirements
+
+- Android TV device or emulator (API 26+)
+- JDK 17
+- Android Studio (Hedgehog or later recommended)
+
+## Setup
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/ARVIO-APP.git
+cd ARVIO-APP
+```
+
+### 2. Configure Secrets
+
+Copy the defaults file and fill in your values:
+
+```bash
+cp secrets.defaults.properties secrets.properties
+```
+
+Edit `secrets.properties`:
+```properties
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-supabase-anon-key
+GOOGLE_WEB_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+
+### 3. Set Up Supabase Edge Functions
+
+The app uses Supabase Edge Functions to securely proxy API requests. API keys (TMDB, Trakt) are stored server-side and never exposed in the app.
+
+#### Deploy Edge Functions
+
+```bash
+cd supabase
+
+# Link to your Supabase project
+npx supabase link --project-ref your-project-ref
+
+# Set secrets (get these from TMDB and Trakt developer portals)
+npx supabase secrets set TMDB_API_KEY=your-tmdb-api-key
+npx supabase secrets set TRAKT_CLIENT_ID=your-trakt-client-id
+npx supabase secrets set TRAKT_CLIENT_SECRET=your-trakt-client-secret
+
+# Deploy functions
+npx supabase functions deploy tmdb-proxy
+npx supabase functions deploy trakt-proxy
+```
+
+### 4. (Optional) Firebase Setup
+
+For crash reporting, add your `google-services.json` to `app/` and uncomment the Firebase plugins in `app/build.gradle.kts`.
+
+### 5. (Optional) Release Signing
+
+Create `keystore.properties` in the project root:
+
+```properties
+storeFile=path/to/your.keystore
+storePassword=your_store_password
+keyAlias=your_key_alias
+keyPassword=your_key_password
+```
+
+## Building
+
+### Debug Build
+
+```bash
+# Windows
+set JAVA_HOME=C:\Program Files\Java\jdk-17
+./gradlew.bat assembleDebug
+
+# Linux/Mac
+export JAVA_HOME=/path/to/jdk-17
+./gradlew assembleDebug
+```
+
+APK location: `app/build/outputs/apk/debug/app-debug.apk`
+
+### Release Build
+
+```bash
+./gradlew assembleRelease
+```
+
+APK location: `app/build/outputs/apk/release/app-release.apk`
+
+## Installation
+
+### Using ADB
+
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Launch
+
+```bash
+adb shell am start -n com.arvio.tv/.MainActivity
+```
+
+## Architecture
+
+- **Language**: Kotlin
+- **UI**: Jetpack Compose for TV
+- **Architecture**: MVVM with Hilt dependency injection
+- **Networking**: Retrofit + OkHttp with proxy interceptor
+- **Video**: ExoPlayer + Jellyfin FFmpeg extension
+- **Auth**: Supabase Auth (Google Sign-In, Email/Password)
+- **Sync**: Trakt.tv for watch history, Supabase for cloud data
+- **Image Loading**: Coil
 
 ## Project Structure
 
 ```
-android-tv-native/
-├── app/
-│   └── src/main/
-│       ├── kotlin/com/arflix/tv/
-│       │   ├── ArflixApplication.kt     # Application class
-│       │   ├── MainActivity.kt          # Single activity host
-│       │   ├── data/
-│       │   │   ├── api/                  # Retrofit API interfaces
-│       │   │   ├── model/                # Data classes
-│       │   │   └── repository/           # Data layer
-│       │   ├── di/                       # Hilt modules
-│       │   ├── navigation/               # Navigation graph
-│       │   ├── ui/
-│       │   │   ├── components/           # Reusable composables
-│       │   │   ├── screens/              # Screen composables
-│       │   │   └── theme/                # Colors, typography, theme
-│       │   └── util/                     # Constants, utilities
-│       └── res/                          # Resources
-├── build.gradle.kts                      # Root build file
-└── settings.gradle.kts                   # Settings
+app/src/main/kotlin/com/arflix/tv/
+├── data/
+│   ├── api/          # Retrofit API interfaces (TMDB, Trakt, Stream)
+│   ├── model/        # Data models
+│   └── repository/   # Data repositories
+├── di/               # Hilt dependency injection modules
+├── navigation/       # Navigation setup
+├── network/          # OkHttp provider, interceptors
+├── ui/
+│   ├── components/   # Reusable UI components
+│   ├── screens/      # Screen composables (Home, Details, Player, etc.)
+│   ├── skin/         # Custom design system tokens
+│   └── theme/        # Material theme setup
+├── util/             # Utilities and constants
+└── worker/           # WorkManager background tasks
 ```
 
-## Screens
+## D-Pad Navigation
 
-1. **Home** - Hero section with backdrop + category rows (horizontal scrolling)
-2. **Details** - Movie/TV show info, episodes, cast, similar content
-3. **Player** - ExoPlayer with custom TV controls
-4. **Search** - Virtual keyboard + results grid
-5. **Watchlist** - Saved items grid
-6. **Settings** - Preferences and account linking
+| Screen | Up/Down | Left/Right | Enter/OK | Back |
+|--------|---------|------------|----------|------|
+| Home | Switch rows | Navigate items | Open details | Exit |
+| Details | Scroll sections | Navigate items | Play/Select | Go back |
+| Player | Show controls | Seek ±10s | Play/Pause | Exit player |
+| Settings | Navigate items | - | Toggle/Activate | Go back |
 
-## D-pad Navigation
+## Contributing
 
-Each screen implements explicit D-pad navigation:
-
-- **Arrow keys** - Navigate between focusable elements
-- **Enter/OK** - Select/activate focused element
-- **Back** - Go back to previous screen or exit app
-
-Focus states are clearly indicated with:
-- White border/glow on focused cards
-- Pink highlight on focused buttons
-- Scale animations on focus
-
-## Building
-
-### Requirements
-
-- Android Studio Hedgehog or newer
-- JDK 17
-- Android SDK 34
-- Gradle 8.4+
-
-### Steps
-
-1. Open `android-tv-native` folder in Android Studio
-2. Sync Gradle files
-3. Build and run on an Android TV device or emulator
-
-```bash
-cd android-tv-native
-./gradlew assembleDebug
-```
-
-### Running on Emulator
-
-Create an Android TV emulator:
-1. Tools → Device Manager → Create Device
-2. Select TV category
-3. Choose a TV profile (e.g., Android TV 1080p)
-4. Select API 34 system image
-5. Finish and launch
-
-### Running on Device
-
-1. Enable Developer Options on your Android TV
-2. Enable USB debugging
-3. Connect via USB or ADB over WiFi
-4. Run from Android Studio
-
-## Configuration
-
-API keys and configuration are in `Constants.kt`:
-- TMDB API key (for content metadata)
-- Trakt API credentials (for sync)
-- Supabase credentials (for cloud storage)
-
-## Features
-
-### Implemented
-- [x] Home screen with hero + category rows
-- [x] Details screen with episodes/cast/similar
-- [x] Basic player with ExoPlayer
-- [x] Search with virtual keyboard
-- [x] Settings screen structure
-- [x] Watchlist screen structure
-- [x] D-pad navigation throughout
-
-### Coming Soon
-- [ ] Trakt integration (watch history, watchlist sync)
-- [ ] Real-Debrid/TorBox stream resolution
-- [ ] Subtitle selection in player
-- [ ] Continue Watching row
-- [ ] Person/Cast modal
-- [ ] Addon management
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-Private - For internal use only.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
+## Privacy Policy
 
+See [PRIVACY.md](PRIVACY.md) for our privacy policy.
+
+## Acknowledgments
+
+- [TMDB](https://www.themoviedb.org/) for movie/TV metadata
+- [Trakt.tv](https://trakt.tv/) for watch history sync
+- [Supabase](https://supabase.com/) for authentication and cloud sync
+- [Jellyfin](https://jellyfin.org/) for the FFmpeg decoder extension
+- [Stremio](https://www.stremio.com/) addon ecosystem
+
+## Disclaimer
+
+This application does not host or distribute any copyrighted content. It is a media player that can access publicly available content through user-configured addons and services. Users are responsible for ensuring their use complies with applicable laws in their jurisdiction.

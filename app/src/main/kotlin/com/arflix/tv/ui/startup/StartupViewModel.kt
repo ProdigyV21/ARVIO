@@ -14,14 +14,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.tracing.Trace
 import javax.inject.Inject
 
 /**
@@ -51,8 +47,10 @@ class StartupViewModel @Inject constructor(
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(8)
     private val heroLogoPreloadWidth = 300
     private val heroLogoPreloadHeight = 70
-    private val heroBackdropPreloadWidth = 1920
-    private val heroBackdropPreloadHeight = 1080
+    // PERFORMANCE: Use smaller backdrop for preload - will upscale but loads faster
+    // Full resolution is loaded lazily when actually displayed
+    private val heroBackdropPreloadWidth = 1280
+    private val heroBackdropPreloadHeight = 720
 
     private val _state = MutableStateFlow(StartupState())
     val state: StateFlow<StartupState> = _state.asStateFlow()
@@ -63,26 +61,20 @@ class StartupViewModel @Inject constructor(
 
     private fun startParallelLoading() {
         viewModelScope.launch {
-            Trace.beginSection("StartupViewModel.startParallelLoading")
             try {
-                // Phase 1: Load categories in parallel (auth runs after first draw)
+                // Load categories only - Continue Watching is profile-specific
+                // and will be loaded by HomeViewModel after profile selection
                 updateProgress(0.1f, "Loading content...")
 
-                val categoriesDeferred = async(networkDispatcher) {
-                    try {
-                        mediaRepository.getHomeCategories()
-                    } catch (e: Exception) {
-                        Log.e("StartupViewModel", "Failed to load categories", e)
-                        emptyList()
-                    }
+                val categories = try {
+                    mediaRepository.getHomeCategories()
+                } catch (e: Exception) {
+                    emptyList()
                 }
-                val categories = categoriesDeferred.await().toMutableList()
-
-                updateProgress(0.3f, "Loading your library...")
 
                 updateProgress(0.5f, "Loading artwork...")
 
-                // Get hero item
+                // Get hero item from first category
                 val heroItem = categories.firstOrNull()?.items?.firstOrNull()
                 prefetchHeroAssets(heroItem)
 
@@ -95,17 +87,13 @@ class StartupViewModel @Inject constructor(
                 )
 
                 updateProgress(1.0f, "Ready!")
-                Log.d("StartupViewModel", "Startup complete: ${categories.size} categories")
 
             } catch (e: Exception) {
-                Log.e("StartupViewModel", "Startup failed", e)
                 _state.value = _state.value.copy(
                     isLoading = false,
                     isReady = true,
                     error = e.message
                 )
-            } finally {
-                Trace.endSection()
             }
         }
     }
@@ -151,7 +139,7 @@ class StartupViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e("StartupViewModel", "Hero logo preload failed", e)
+                // Hero logo preload failed
             }
         }
     }

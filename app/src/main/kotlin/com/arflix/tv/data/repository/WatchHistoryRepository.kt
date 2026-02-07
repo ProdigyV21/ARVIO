@@ -2,10 +2,7 @@ package com.arflix.tv.data.repository
 
 import com.arflix.tv.data.api.SupabaseApi
 import com.arflix.tv.data.model.MediaType
-import com.arflix.tv.util.AppException
 import com.arflix.tv.util.Constants
-import com.arflix.tv.util.Result
-import com.arflix.tv.util.runCatching
 import kotlinx.serialization.Serializable
 import retrofit2.HttpException
 import java.time.Instant
@@ -47,6 +44,7 @@ class WatchHistoryRepository @Inject constructor(
     private val authRepositoryProvider: Provider<AuthRepository>,
     private val supabaseApi: SupabaseApi
 ) {
+
     /**
      * Save watch progress to Supabase
      */
@@ -62,11 +60,10 @@ class WatchHistoryRepository @Inject constructor(
         progress: Float,
         duration: Long,
         position: Long
-    ): Result<Unit> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    ) {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
 
-        return runCatching {
+        try {
             val entry = WatchHistoryEntry(
                 user_id = userId,
                 media_type = if (mediaType == MediaType.MOVIE) "movie" else "tv",
@@ -87,17 +84,18 @@ class WatchHistoryRepository @Inject constructor(
             executeSupabaseCall("save watch progress") { auth ->
                 supabaseApi.upsertWatchHistory(auth = auth, item = entry.toRecord())
             }
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
     /**
      * Get watch history for current user
      */
-    suspend fun getWatchHistory(): Result<List<WatchHistoryEntry>> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    suspend fun getWatchHistory(): List<WatchHistoryEntry> {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return emptyList()
 
-        return runCatching {
+        return try {
             executeSupabaseCall("get watch history") { auth ->
                 supabaseApi.getWatchHistory(
                     auth = auth,
@@ -106,17 +104,18 @@ class WatchHistoryRepository @Inject constructor(
                     limit = 500
                 )
             }.map { it.toEntry() }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
     /**
      * Get continue watching items (progress < 90%)
      */
-    suspend fun getContinueWatching(): Result<List<WatchHistoryEntry>> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    suspend fun getContinueWatching(): List<WatchHistoryEntry> {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return emptyList()
 
-        return runCatching {
+        return try {
             val records = executeSupabaseCall("get continue watching history") { auth ->
                 supabaseApi.getWatchHistory(
                     auth = auth,
@@ -127,6 +126,8 @@ class WatchHistoryRepository @Inject constructor(
             }
             val threshold = Constants.WATCHED_THRESHOLD / 100f
             records.filter { it.progress > 0f && it.progress < threshold }.map { it.toEntry() }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -138,11 +139,10 @@ class WatchHistoryRepository @Inject constructor(
         tmdbId: Int,
         season: Int?,
         episode: Int?
-    ): Result<WatchHistoryEntry?> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    ): WatchHistoryEntry? {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return null
 
-        return runCatching {
+        return try {
             val records = executeSupabaseCall("get watch history item") { auth ->
                 supabaseApi.getWatchHistoryItem(
                     auth = auth,
@@ -154,6 +154,8 @@ class WatchHistoryRepository @Inject constructor(
                 )
             }
             records.firstOrNull()?.toEntry()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -163,13 +165,12 @@ class WatchHistoryRepository @Inject constructor(
     suspend fun getLatestProgress(
         mediaType: MediaType,
         tmdbId: Int
-    ): Result<WatchHistoryEntry?> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    ): WatchHistoryEntry? {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return null
         val mediaTypeKey = if (mediaType == MediaType.MOVIE) "movie" else "tv"
         val threshold = Constants.WATCHED_THRESHOLD / 100f
 
-        return runCatching {
+        return try {
             val records = executeSupabaseCall("get watch history by show") { auth ->
                 supabaseApi.getWatchHistoryItem(
                     auth = auth,
@@ -186,6 +187,8 @@ class WatchHistoryRepository @Inject constructor(
                 .maxByOrNull { entry ->
                     parseEpoch(entry.updated_at).coerceAtLeast(parseEpoch(entry.paused_at))
                 }
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -196,11 +199,10 @@ class WatchHistoryRepository @Inject constructor(
         tmdbId: Int,
         season: Int?,
         episode: Int?
-    ): Result<Unit> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    ) {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
 
-        return runCatching {
+        try {
             executeSupabaseCall("remove watch history item") { auth ->
                 supabaseApi.deleteWatchHistory(
                     auth = auth,
@@ -210,23 +212,26 @@ class WatchHistoryRepository @Inject constructor(
                     episode = episode?.let { "eq.$it" }
                 )
             }
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
     /**
      * Clear all watch history
      */
-    suspend fun clearHistory(): Result<Unit> {
-        val userId = authRepositoryProvider.get().getCurrentUserId()
-            ?: return Result.error(AppException.Auth.SESSION_EXPIRED)
+    suspend fun clearHistory() {
+        val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
 
-        return runCatching {
+        try {
             executeSupabaseCall("clear watch history") { auth ->
                 supabaseApi.deleteWatchHistory(
                     auth = auth,
                     userId = "eq.$userId"
                 )
             }
+        } catch (_: Exception) {
+            // Silently handle errors
         }
     }
 
@@ -234,12 +239,12 @@ class WatchHistoryRepository @Inject constructor(
         operation: String,
         block: suspend (String) -> T
     ): T {
-        val auth = getSupabaseAuth()
-            ?: throw AppException.Auth("Supabase auth failed", errorCode = "ERR_SUPABASE_AUTH")
+        val auth = getSupabaseAuth() ?: throw IllegalStateException("Supabase auth failed")
         return try {
             block(auth)
         } catch (e: HttpException) {
             if (e.code() == 401) {
+                // Unauthorized, refresh session and retry
                 val refreshed = authRepositoryProvider.get().refreshAccessToken()
                 if (!refreshed.isNullOrBlank()) {
                     return block("Bearer $refreshed")

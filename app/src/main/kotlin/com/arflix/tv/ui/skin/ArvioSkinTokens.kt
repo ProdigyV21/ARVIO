@@ -172,20 +172,20 @@ data class ArvioSkinTokens(
                     ),
                 ),
                 motion = ArvioMotionTokens(
-                    focusDurationMillis = 80,    // Ultra-fast focus
+                    focusDurationMillis = 120,    // Smooth focus transitions
                     focusEasing = easeOut,
-                    screenTransitionMillis = 100, // Fast screen transitions
-                    heroFadeMillis = 100,         // Fast backdrop switch
+                    screenTransitionMillis = 150, // Smooth screen transitions
+                    heroFadeMillis = 200,         // Smooth backdrop dissolve
                 ),
                 focus = ArvioFocusTokens(
-                    scaleFocused = 1.03f,  // Minimal scale for speed
-                    scalePressed = 0.98f,
-                    durationMillis = 80,   // Ultra-snappy animations
+                    scaleFocused = 1.05f,  // Noticeable scale for TV viewing distance
+                    scalePressed = 0.97f,
+                    durationMillis = 120,  // Smooth but responsive animations
                     easing = easeOut,
                     outlineWidth = 3.dp,   // Prominent white border
                     glowWidth = 0.dp,      // No glow for performance
                     glowAlpha = 0f,        // No glow
-                    translationZFocused = 2.dp,  // Minimal elevation
+                    translationZFocused = 8.dp,  // Visible lift effect
                 ),
             )
         }

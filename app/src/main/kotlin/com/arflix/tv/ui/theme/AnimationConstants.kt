@@ -4,75 +4,85 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 
 /**
- * ARVIO Animation Constants - Arctic Fuse 2 Style Motion Design
- * Snappy, responsive transitions with premium feel
+ * ARVIO Animation Constants - Premium TV Motion Design
+ * Smooth, fluid transitions optimized for TV viewing distance
  */
 object AnimationConstants {
 
     // ============================================
-    // DURATION VALUES (Arctic Fuse 2: Snappier)
+    // DURATION VALUES (Optimized for TV smoothness)
     // ============================================
 
     /** Fast micro-interactions (focus ring, color changes) */
-    const val DURATION_FAST = 120  // Arctic Fuse 2: snappier
+    const val DURATION_FAST = 150  // Slightly longer for smooth perception on TV
 
     /** Default transitions (scale, movement) */
-    const val DURATION_NORMAL = 160  // Arctic Fuse 2: faster
+    const val DURATION_NORMAL = 200  // Smooth but responsive
 
     /** Slower emphasis animations (hero changes, page transitions) */
-    const val DURATION_EMPHASIS = 240  // Arctic Fuse 2: faster hero transitions
-    
+    const val DURATION_EMPHASIS = 300  // Visible smooth transitions
+
     /** Long decorative animations (Ken Burns, ambient effects) */
     const val DURATION_SLOW = 500
-    
+
     /** Very long animations for background effects */
     const val DURATION_EXTRA_SLOW = 1000
-    
+
     /** Ken Burns effect duration for hero backdrops */
     const val DURATION_KEN_BURNS = 20000
-    
+
+    /** Image crossfade duration */
+    const val DURATION_IMAGE_CROSSFADE = 250
+
+    /** Backdrop dissolve duration */
+    const val DURATION_BACKDROP_DISSOLVE = 200
+
     // ============================================
     // STAGGER DELAYS
     // ============================================
-    
+
     /** Delay between sequential card animations */
-    const val STAGGER_CARD = 50
-    
+    const val STAGGER_CARD = 40  // Slightly faster stagger
+
     /** Delay for section entrance animations */
-    const val STAGGER_SECTION = 100
-    
+    const val STAGGER_SECTION = 80
+
     // ============================================
-    // SCALE VALUES (Arctic Fuse 2: Subtle)
+    // SCALE VALUES (Noticeable on TV viewing distance)
     // ============================================
 
     /** Default unfocused scale */
     const val SCALE_UNFOCUSED = 1.0f
 
-    /** Focused card scale - Arctic Fuse 2: subtle lift */
+    /** Focused card scale - noticeable lift for TV */
     const val SCALE_FOCUSED = 1.05f
 
     /** Pressed/clicked scale */
     const val SCALE_PRESSED = 0.97f
-    
+
     /** Hero logo pulsing scale */
     const val SCALE_PULSE_MIN = 1.0f
     const val SCALE_PULSE_MAX = 1.02f
-    
+
     // ============================================
-    // SPRING CONFIGURATIONS (Arctic Fuse 2: Less Bouncy)
+    // SPRING CONFIGURATIONS (Natural feel with slight bounce)
     // ============================================
 
-    /** Snappy spring for focus transitions - smooth, no bounce for TV performance */
-    const val SPRING_STIFFNESS_FOCUS = Spring.StiffnessHigh
-    const val SPRING_DAMPING_FOCUS = Spring.DampingRatioNoBouncy
+    /** Focus spring - slight bounce for premium feel */
+    const val SPRING_STIFFNESS_FOCUS = 400f  // Custom stiffness for smooth response
+    const val SPRING_DAMPING_FOCUS = 0.75f   // Slight bounce
 
     /** Gentle spring for large movements */
     const val SPRING_STIFFNESS_GENTLE = Spring.StiffnessMediumLow
-    const val SPRING_DAMPING_GENTLE = Spring.DampingRatioNoBouncy
+    const val SPRING_DAMPING_GENTLE = 0.8f   // Minimal bounce
 
-    /** Tight spring for micro-interactions - snappy */
-    const val SPRING_STIFFNESS_TIGHT = Spring.StiffnessHigh
-    const val SPRING_DAMPING_TIGHT = Spring.DampingRatioNoBouncy
+    /** Tight spring for micro-interactions */
+    const val SPRING_STIFFNESS_TIGHT = 500f
+    const val SPRING_DAMPING_TIGHT = 0.85f
+
+    /** Scroll spring for smooth deceleration */
+    const val SPRING_STIFFNESS_SCROLL = 300f
+    const val SPRING_DAMPING_SCROLL = 0.9f
     
     // ============================================
     // EASING CURVES
@@ -92,19 +102,22 @@ object AnimationConstants {
     
     /** Decelerate - for elements coming to rest */
     val Decelerate = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
-    
+
+    /** Smooth decelerate - for scroll stop */
+    val SmoothDecelerate = CubicBezierEasing(0.1f, 0.0f, 0.3f, 1.0f)
+
     // ============================================
     // SHADOW & ELEVATION
     // ============================================
-    
+
     /** Unfocused card elevation */
     const val ELEVATION_CARD_UNFOCUSED = 4
-    
-    /** Focused card elevation */
-    const val ELEVATION_CARD_FOCUSED = 24
-    
+
+    /** Focused card elevation - more pronounced lift */
+    const val ELEVATION_CARD_FOCUSED = 32
+
     /** Modal/overlay elevation */
-    const val ELEVATION_MODAL = 32
+    const val ELEVATION_MODAL = 48
     
     // ============================================
     // BORDER & GLOW

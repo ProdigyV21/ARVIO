@@ -330,8 +330,19 @@ interface TraktApi {
         @Query("count_specials") countSpecials: String = "false"
     ): TraktShowProgress
     
+    // ========== Hidden Items ==========
+
+    @GET("users/hidden/progress_watched")
+    suspend fun getHiddenProgressShows(
+        @Header("Authorization") auth: String,
+        @Header("trakt-api-key") clientId: String,
+        @Header("trakt-api-version") version: String = "2",
+        @Query("type") type: String = "show",
+        @Query("limit") limit: Int = 100
+    ): List<TraktHiddenItem>
+
     // ========== Anime (Custom Lists) ==========
-    
+
     @GET("lists/anime-streaming/anime-trending/items")
     suspend fun getTrendingAnime(
         @Header("trakt-api-key") clientId: String,
@@ -360,8 +371,25 @@ data class RefreshTokenRequest(
 
 data class TraktHistoryBody(
     val movies: List<TraktMovieId>? = null,
-    val shows: List<TraktShowId>? = null,
+    val shows: List<TraktHistoryShowWithSeasons>? = null,
     val episodes: List<TraktEpisodeId>? = null
+)
+
+// For adding shows/episodes to history
+// - With seasons: marks specific episodes
+// - Without seasons (null): marks entire show
+data class TraktHistoryShowWithSeasons(
+    val ids: TraktIds,
+    val seasons: List<TraktHistorySeason>? = null
+)
+
+data class TraktHistorySeason(
+    val number: Int,
+    val episodes: List<TraktHistoryEpisodeNumber>
+)
+
+data class TraktHistoryEpisodeNumber(
+    val number: Int
 )
 
 data class TraktWatchlistBody(
@@ -505,6 +533,12 @@ data class TraktShowInfo(
     val ids: TraktIds
 )
 
+data class TraktHiddenItem(
+    @SerializedName("hidden_at") val hiddenAt: String?,
+    val type: String?,
+    val show: TraktShowInfo?
+)
+
 data class TraktEpisodeInfo(
     val season: Int,
     val number: Int,
@@ -524,6 +558,7 @@ data class TraktShowProgress(
     val aired: Int,
     val completed: Int,
     @SerializedName("last_watched_at") val lastWatchedAt: String?,
+    @SerializedName("reset_at") val resetAt: String?,
     @SerializedName("next_episode") val nextEpisode: TraktNextEpisode?,
     val seasons: List<TraktProgressSeason>?
 )

@@ -176,35 +176,6 @@ fun WatchlistScreen(
                             LoadingIndicator(color = Pink, size = 64.dp)
                         }
                     }
-                    !uiState.isAuthenticated -> {
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Bookmark,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.2f),
-                                    modifier = Modifier.size(80.dp)
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = "Sign in to view your watchlist",
-                                    style = ArflixTypography.body,
-                                    color = Color.White.copy(alpha = 0.5f)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Sign in on the login screen to continue",
-                                    style = ArflixTypography.caption,
-                                    color = Color.White.copy(alpha = 0.3f)
-                                )
-                            }
-                        }
-                    }
                     uiState.items.isEmpty() -> {
                         Box(
                             modifier = Modifier.weight(1f),
@@ -238,7 +209,7 @@ fun WatchlistScreen(
                         // Grid of items - 4 columns like screenshot
                         TvLazyVerticalGrid(
                             columns = TvGridCells.Fixed(4),
-                            contentPadding = PaddingValues(bottom = 48.dp),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(24.dp),
                             modifier = Modifier

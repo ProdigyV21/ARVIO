@@ -75,7 +75,7 @@ object AppModule {
     fun provideStreamApi(okHttpClient: OkHttpClient): StreamApi {
         // Base URL doesn't matter for dynamic URLs
         return Retrofit.Builder()
-            .baseUrl("https://api.real-debrid.com/")
+            .baseUrl("https://api.themoviedb.org/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

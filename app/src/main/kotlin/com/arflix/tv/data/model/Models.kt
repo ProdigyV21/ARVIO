@@ -40,7 +40,9 @@ data class MediaItem(
     // Character name (for person filmography / known for)
     val character: String = "",
     // Popularity score from TMDB (higher = more mainstream content)
-    val popularity: Float = 0f
+    val popularity: Float = 0f,
+    // Placeholder card - shows skeleton loading animation
+    val isPlaceholder: Boolean = false
 ) : Serializable
 
 enum class MediaType {
@@ -135,14 +137,9 @@ data class StreamSource(
     val quality: String,
     val size: String,
     val sizeBytes: Long? = null,
-    val seeders: Int? = null,
     val url: String? = null,
-    val infoHash: String? = null,
-    val fileIdx: Int? = null,
-    val isDebrid: Boolean = false,
-    val isCached: Boolean = false,
     val behaviorHints: StreamBehaviorHints? = null,
-    val subtitles: List<Subtitle> = emptyList() // Embedded subtitles from stream
+    val subtitles: List<Subtitle> = emptyList()
 ) : Serializable
 
 /**
@@ -150,7 +147,6 @@ data class StreamSource(
  */
 data class StreamBehaviorHints(
     val notWebReady: Boolean = false,
-    val cached: Boolean? = null,        // From debrid services
     val bingeGroup: String? = null,
     val countryWhitelist: List<String>? = null,
     val proxyHeaders: ProxyHeaders? = null,

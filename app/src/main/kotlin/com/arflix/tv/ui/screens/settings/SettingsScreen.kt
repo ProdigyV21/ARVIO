@@ -80,6 +80,7 @@ fun SettingsScreen(
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -95,10 +96,7 @@ fun SettingsScreen(
 
     // Input modal states
     var showCustomAddonInput by remember { mutableStateOf(false) }
-    var showTorBoxInput by remember { mutableStateOf(false) }
     var customAddonUrl by remember { mutableStateOf("") }
-    var customAddonName by remember { mutableStateOf("") }
-    var torBoxApiKey by remember { mutableStateOf("") }
     var showSubtitlePicker by remember { mutableStateOf(false) }
     var subtitlePickerIndex by remember { mutableIntStateOf(0) }
 
@@ -149,7 +147,7 @@ fun SettingsScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 // BLOCKER FIX: Ignore main screen navigation if modals are open
-                if (showCustomAddonInput || showTorBoxInput || showSubtitlePicker) return@onPreviewKeyEvent false 
+                if (showCustomAddonInput || showSubtitlePicker) return@onPreviewKeyEvent false
 
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
@@ -238,7 +236,7 @@ fun SettingsScreen(
                                     val maxIndex = when (sectionIndex) {
                                         0 -> 1 // General: 2 items (subtitle, auto-play)
                                         1 -> uiState.addons.size // Addons: N addons + "Add Custom" button
-                                        2 -> 1 // Accounts: 2 items (Account + Trakt)
+                                        2 -> 1 // Accounts: 2 items (Trakt + Switch Profile)
                                         else -> 0
                                     }
                                     if (contentFocusIndex < maxIndex) {
@@ -291,17 +289,15 @@ fun SettingsScreen(
                                         }
                                         2 -> { // Accounts
                                             when (contentFocusIndex) {
-                                                0 -> {
-                                                    if (uiState.isLoggedIn) {
-                                                        viewModel.logout()
-                                                    }
-                                                }
-                                                1 -> { // Trakt
+                                                0 -> { // Trakt
                                                     if (uiState.isTraktAuthenticated) {
                                                         viewModel.disconnectTrakt()
                                                     } else if (!uiState.isTraktPolling) {
                                                         viewModel.startTraktAuth()
                                                     }
+                                                }
+                                                1 -> { // Switch Profile
+                                                    onSwitchProfile()
                                                 }
                                             }
                                         }
@@ -358,7 +354,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.weight(1f))
                 
                 Text(
-                    text = "ARVIO v2.6.4\nBuild: Debrid Native",
+                    text = "ARVIO V1.0",
                     style = ArflixTypography.caption,
                     color = TextSecondary.copy(alpha = 0.5f)
                 )
@@ -389,16 +385,14 @@ fun SettingsScreen(
                         onAddCustomAddon = { /* TODO: Show input modal */ }
                     )
                     "accounts" -> AccountsSettings(
-                        isLoggedIn = uiState.isLoggedIn,
-                        accountEmail = uiState.accountEmail,
                         isTraktAuthenticated = uiState.isTraktAuthenticated,
                         traktCode = uiState.traktCode?.userCode,
                         traktUrl = uiState.traktCode?.verificationUrl,
                         isTraktPolling = uiState.isTraktPolling,
-                        traktExpiration = uiState.traktExpiration,
                         focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                         onConnectTrakt = { viewModel.startTraktAuth() },
-                        onDisconnectTrakt = { viewModel.disconnectTrakt() }
+                        onDisconnectTrakt = { viewModel.disconnectTrakt() },
+                        onSwitchProfile = onSwitchProfile
                     )
                 }
             }
@@ -407,44 +401,20 @@ fun SettingsScreen(
         // Custom Addon Input Modal
         if (showCustomAddonInput) {
             InputModal(
-                title = "Add Custom Addon",
+                title = "Add Addon",
                 fields = listOf(
-                    InputField("URL", customAddonUrl) { customAddonUrl = it },
-                    InputField("Name", customAddonName) { customAddonName = it }
+                    InputField("URL", customAddonUrl) { customAddonUrl = it }
                 ),
                 onConfirm = {
                     if (customAddonUrl.isNotBlank()) {
-                        viewModel.addCustomAddon(customAddonUrl, customAddonName)
+                        viewModel.addCustomAddon(customAddonUrl)
                         customAddonUrl = ""
-                        customAddonName = ""
                         showCustomAddonInput = false
                     }
                 },
                 onDismiss = {
                     customAddonUrl = ""
-                    customAddonName = ""
                     showCustomAddonInput = false
-                }
-            )
-        }
-
-        // TorBox API Key Input Modal
-        if (showTorBoxInput) {
-            InputModal(
-                title = "Enter TorBox API Key",
-                fields = listOf(
-                    InputField("API Key", torBoxApiKey) { torBoxApiKey = it }
-                ),
-                onConfirm = {
-                    if (torBoxApiKey.isNotBlank()) {
-                        viewModel.setTorBoxApiKey(torBoxApiKey)
-                        torBoxApiKey = ""
-                        showTorBoxInput = false
-                    }
-                },
-                onDismiss = {
-                    torBoxApiKey = ""
-                    showTorBoxInput = false
                 }
             )
         }
@@ -884,16 +854,14 @@ private fun AddonRow(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun AccountsSettings(
-    isLoggedIn: Boolean,
-    accountEmail: String?,
     isTraktAuthenticated: Boolean,
     traktCode: String?,
     traktUrl: String?,
     isTraktPolling: Boolean,
-    traktExpiration: String? = null,
     focusedIndex: Int,
     onConnectTrakt: () -> Unit,
-    onDisconnectTrakt: () -> Unit
+    onDisconnectTrakt: () -> Unit,
+    onSwitchProfile: () -> Unit
 ) {
     Column {
         Text(
@@ -903,16 +871,6 @@ private fun AccountsSettings(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        AccountActionRow(
-            title = "ARVIO Account",
-            description = accountEmail ?: "Not signed in",
-            actionLabel = if (isLoggedIn) "SIGN OUT" else "SIGN IN",
-            isEnabled = isLoggedIn,
-            isFocused = focusedIndex == 0
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
         // Trakt.tv
         AccountRow(
             name = "Trakt.tv",
@@ -921,10 +879,21 @@ private fun AccountsSettings(
             isPolling = isTraktPolling,
             authCode = traktCode,
             authUrl = traktUrl,
-            isFocused = focusedIndex == 1,
+            isFocused = focusedIndex == 0,
             onConnect = onConnectTrakt,
             onDisconnect = onDisconnectTrakt,
-            expirationText = traktExpiration?.let { "Expires: $it" }
+            expirationText = null  // Don't show expiration - Trakt tokens auto-refresh
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Switch Profile
+        SettingsActionRow(
+            title = "Switch Profile",
+            description = "Change to a different user profile",
+            actionLabel = "SWITCH",
+            isFocused = focusedIndex == 1,
+            onClick = onSwitchProfile
         )
     }
 }
@@ -994,16 +963,14 @@ private fun AccountActionRow(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ApiKeyAccountRow(
-    name: String,
+private fun SettingsActionRow(
+    title: String,
     description: String,
-    isConnected: Boolean,
-    apiKey: String?,
+    actionLabel: String,
     isFocused: Boolean,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onClick: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(
@@ -1015,76 +982,43 @@ private fun ApiKeyAccountRow(
                 color = if (isFocused) Pink else Color.Transparent,
                 shape = RoundedCornerShape(12.dp)
             )
-            .padding(20.dp)
+            .padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = ArflixTypography.cardTitle,
-                    color = TextPrimary
-                )
-                Text(
-                    text = description,
-                    style = ArflixTypography.caption,
-                    color = TextSecondary
-                )
-            }
-
-            if (isConnected) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(SuccessGreen.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = SuccessGreen,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "CONNECTED",
-                        style = ArflixTypography.label,
-                        color = SuccessGreen
-                    )
-                }
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(Pink.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Link,
-                        contentDescription = null,
-                        tint = Pink,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "ENTER API KEY",
-                        style = ArflixTypography.label,
-                        color = Pink
-                    )
-                }
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = ArflixTypography.cardTitle,
+                color = TextPrimary
+            )
+            Text(
+                text = description,
+                style = ArflixTypography.caption,
+                color = TextSecondary
+            )
         }
 
-        // Show API key hint when not connected
-        if (!isConnected) {
-            Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(
+                    Pink.copy(alpha = 0.2f),
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = null,
+                tint = Pink,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Get your API key from torbox.app/settings",
-                style = ArflixTypography.caption,
-                color = TextSecondary.copy(alpha = 0.6f)
+                text = actionLabel,
+                style = ArflixTypography.label,
+                color = Pink
             )
         }
     }

@@ -1,16 +1,7 @@
 package com.arflix.tv.data.api
 
 import com.google.gson.annotations.SerializedName
-import retrofit2.http.Body
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.Multipart
-import retrofit2.http.POST
-import retrofit2.http.Part
-import retrofit2.http.Path
-import retrofit2.http.Query
 import retrofit2.http.Url
 
 /**
@@ -30,89 +21,13 @@ interface StreamApi {
         @Url url: String
     ): StremioManifestResponse
 
-    // ========== Torrentio ==========
-
-    @GET
-    suspend fun getTorrentioStreams(
-        @Url url: String
-    ): StremioStreamResponse
-
     // ========== Generic Stremio Addon ==========
 
     @GET
     suspend fun getAddonStreams(
         @Url url: String
     ): StremioStreamResponse
-    
-    // ========== Real-Debrid ==========
 
-    @FormUrlEncoded
-    @POST
-    suspend fun unrestrictLink(
-        @Url url: String = "https://api.real-debrid.com/rest/1.0/unrestrict/link",
-        @Header("Authorization") auth: String,
-        @Field("link") link: String
-    ): RealDebridUnrestrictResponse
-
-    @GET("rest/1.0/torrents/instantAvailability/{hash}")
-    suspend fun checkInstantAvailability(
-        @Header("Authorization") auth: String,
-        @Path("hash") hash: String
-    ): Map<String, RealDebridAvailability>
-
-    @GET("rest/1.0/user")
-    suspend fun getRealDebridUser(
-        @Header("Authorization") auth: String
-    ): RealDebridUser
-
-    // Real-Debrid Torrent/Magnet endpoints
-    @FormUrlEncoded
-    @POST
-    suspend fun addMagnet(
-        @Url url: String = "https://api.real-debrid.com/rest/1.0/torrents/addMagnet",
-        @Header("Authorization") auth: String,
-        @Field("magnet") magnet: String
-    ): RealDebridAddMagnetResponse
-
-    @FormUrlEncoded
-    @POST
-    suspend fun selectTorrentFiles(
-        @Url url: String,
-        @Header("Authorization") auth: String,
-        @Field("files") files: String = "all"
-    )
-
-    @GET
-    suspend fun getTorrentInfo(
-        @Url url: String,
-        @Header("Authorization") auth: String
-    ): RealDebridTorrentInfo
-    
-    // ========== Real-Debrid Device Auth ==========
-    
-    @GET
-    suspend fun getRdDeviceCode(
-        @Url url: String = "https://api.real-debrid.com/oauth/v2/device/code",
-        @Query("client_id") clientId: String,
-        @Query("new_credentials") newCredentials: String = "yes"
-    ): RealDebridDeviceCode
-    
-    @GET
-    suspend fun pollRdToken(
-        @Url url: String = "https://api.real-debrid.com/oauth/v2/device/credentials",
-        @Query("client_id") clientId: String,
-        @Query("code") code: String
-    ): RealDebridCredentials
-    
-    @GET
-    suspend fun getRdAccessToken(
-        @Url url: String = "https://api.real-debrid.com/oauth/v2/token",
-        @Query("client_id") clientId: String,
-        @Query("client_secret") clientSecret: String,
-        @Query("code") code: String,
-        @Query("grant_type") grantType: String = "http://oauth.net/grant_type/device/1.0"
-    ): RealDebridToken
-    
     // ========== OpenSubtitles ==========
 
     @GET
@@ -120,45 +35,61 @@ interface StreamApi {
         @Url url: String
     ): StremioSubtitleResponse
 
-    // ========== TorBox ==========
-    // Using correct TorBox API v1 endpoints (verified from API docs)
-
-    @Multipart
-    @POST
-    suspend fun torboxCreateTorrent(
-        @Url url: String = "https://api.torbox.app/v1/api/torrents/createtorrent",
-        @Header("Authorization") auth: String,
-        @Part("magnet") magnet: okhttp3.RequestBody,
-        @Part("seed") seed: okhttp3.RequestBody,
-        @Part("allow_zip") allowZip: okhttp3.RequestBody
-    ): TorboxCreateTorrentResponse
+    // ========== Kitsu API (for anime ID lookup) ==========
 
     @GET
-    suspend fun torboxGetTorrentList(
-        @Url url: String = "https://api.torbox.app/v1/api/torrents/mylist?bypass_cache=true",
-        @Header("Authorization") auth: String
-    ): TorboxTorrentListResponse
+    suspend fun searchKitsuAnime(
+        @Url url: String
+    ): KitsuSearchResponse
 
-    // TorBox requestdl is GET with query params (correct API endpoint)
+    /**
+     * Get Kitsu mappings by external site and ID (e.g., TVDB -> Kitsu)
+     * URL: https://kitsu.io/api/edge/mappings?filter[externalSite]=thetvdb/series&filter[externalId]=ID&include=item
+     */
     @GET
-    suspend fun torboxRequestDownloadLink(
-        @Url url: String,
-        @Header("Authorization") auth: String
-    ): TorboxDownloadLinkResponse
+    suspend fun getKitsuMappings(
+        @Url url: String
+    ): KitsuMappingResponse
 
+    /**
+     * Get Kitsu anime detail by ID
+     * URL: https://kitsu.io/api/edge/anime/KITSU_ID
+     */
     @GET
-    suspend fun torboxGetUser(
-        @Url url: String = "https://api.torbox.app/v1/api/user/me",
-        @Header("Authorization") auth: String
-    ): TorboxUserResponse
+    suspend fun getKitsuAnimeDetail(
+        @Url url: String
+    ): KitsuAnimeDetailResponse
 
-    // TorBox checkcached - batch check if hashes are cached (instant availability)
-    // GET https://api.torbox.app/v1/api/torrents/checkcached?hash=hash1&hash=hash2&format=object
+    /**
+     * Get Kitsu anime media-relationships (sequel, prequel, etc.)
+     * URL: https://kitsu.io/api/edge/anime/KITSU_ID/relationships/media-relationships
+     *   or: https://kitsu.io/api/edge/anime/KITSU_ID?include=mediaRelationships.destination
+     */
     @GET
-    suspend fun torboxCheckCached(
-        @Url url: String,
-        @Header("Authorization") auth: String
-    ): TorboxCheckCachedResponse
+    suspend fun getKitsuMediaRelationships(
+        @Url url: String
+    ): KitsuMediaRelationshipsResponse
+
+    // ========== ARM API (Anime ID Resolution) ==========
+
+    /**
+     * Resolve TMDB ID to anime IDs (Kitsu, MAL, AniList) via ARM API
+     * URL: https://arm.haglund.dev/api/v2/themoviedb?id=TMDB_ID
+     * Returns list of matching entries (multiple for multi-season anime)
+     */
+    @GET
+    suspend fun getArmMappingByTmdb(
+        @Url url: String
+    ): List<ArmMappingEntry>
+
+    /**
+     * Resolve IMDB ID to anime IDs via ARM API
+     * URL: https://arm.haglund.dev/api/v2/imdb?id=IMDB_ID
+     */
+    @GET
+    suspend fun getArmMappingByImdb(
+        @Url url: String
+    ): List<ArmMappingEntry>
 }
 
 // ========== Stremio Manifest Models ==========
@@ -166,10 +97,6 @@ interface StreamApi {
 /**
  * Stremio addon manifest response - matches Stremio protocol
  * https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/responses/manifest.md
- *
- * NOTE: The 'resources' field in Stremio protocol can be either a list of strings
- * (e.g., ["catalog", "stream"]) or a list of resource descriptors. We use JsonElement
- * to handle both cases safely and provide helper methods to access them.
  */
 data class StremioManifestResponse(
     val id: String,
@@ -179,32 +106,11 @@ data class StremioManifestResponse(
     val logo: String? = null,
     val background: String? = null,
     val types: List<String>? = null,
-    @com.google.gson.annotations.SerializedName("resources")
-    val resourcesRaw: List<com.google.gson.JsonElement>? = null,
+    val resources: List<Any>? = null,  // Can be String or StremioResourceDescriptor
     val catalogs: List<StremioCatalog>? = null,
     val idPrefixes: List<String>? = null,
     val behaviorHints: StremioAddonBehaviorHints? = null
-) {
-    /**
-     * Get resource names as strings, handling both string and object formats.
-     */
-    fun getResourceNames(): List<String> {
-        return resourcesRaw?.mapNotNull { element ->
-            when {
-                element.isJsonPrimitive -> element.asString
-                element.isJsonObject -> element.asJsonObject.get("name")?.asString
-                else -> null
-            }
-        } ?: emptyList()
-    }
-
-    /**
-     * Check if the addon supports a specific resource type.
-     */
-    fun supportsResource(resourceName: String): Boolean {
-        return getResourceNames().contains(resourceName)
-    }
-}
+)
 
 data class StremioResourceDescriptor(
     val name: String,
@@ -423,166 +329,120 @@ data class StremioSubtitleResponse(
     val subtitles: List<StremioSubtitle>? = null
 )
 
-// ========== Real-Debrid Models ==========
+// ========== Kitsu API Models ==========
 
-data class RealDebridUnrestrictResponse(
+data class KitsuSearchResponse(
+    val data: List<KitsuAnime>?
+)
+
+data class KitsuAnime(
     val id: String,
-    val filename: String,
-    val mimeType: String?,
-    val filesize: Long,
-    val link: String,
-    val host: String,
-    val chunks: Int,
-    val crc: Int?,
-    val download: String,
-    val streamable: Int
+    val type: String?,
+    val attributes: KitsuAnimeAttributes?
 )
 
-data class RealDebridAvailability(
-    val rd: List<Map<String, RealDebridFileInfo>>?
+data class KitsuAnimeAttributes(
+    val canonicalTitle: String?,
+    val titles: Map<String, String>?,
+    val slug: String?,
+    val episodeCount: Int?,
+    val status: String?
 )
 
-data class RealDebridFileInfo(
-    val filename: String,
-    val filesize: Long
+// ========== Kitsu Mapping API Models ==========
+
+data class KitsuMappingResponse(
+    val data: List<KitsuMapping>?,
+    val included: List<KitsuIncludedItem>?
 )
 
-data class RealDebridUser(
-    val id: Int,
-    val username: String,
-    val email: String,
-    val points: Int,
-    val locale: String,
-    val avatar: String,
-    val type: String,
-    val premium: Int,
-    val expiration: String
-)
-
-data class RealDebridDeviceCode(
-    @SerializedName("device_code") val deviceCode: String,
-    @SerializedName("user_code") val userCode: String,
-    val interval: Int,
-    @SerializedName("expires_in") val expiresIn: Int,
-    @SerializedName("verification_url") val verificationUrl: String,
-    @SerializedName("direct_verification_url") val directVerificationUrl: String?
-)
-
-data class RealDebridCredentials(
-    @SerializedName("client_id") val clientId: String,
-    @SerializedName("client_secret") val clientSecret: String
-)
-
-data class RealDebridToken(
-    @SerializedName("access_token") val accessToken: String,
-    @SerializedName("expires_in") val expiresIn: Int,
-    @SerializedName("token_type") val tokenType: String,
-    @SerializedName("refresh_token") val refreshToken: String
-)
-
-data class RealDebridAddMagnetResponse(
+data class KitsuMapping(
     val id: String,
-    val uri: String
+    val type: String?,
+    val attributes: KitsuMappingAttributes?,
+    val relationships: KitsuMappingRelationships?
 )
 
-data class RealDebridTorrentInfo(
+data class KitsuMappingAttributes(
+    val externalSite: String?,
+    val externalId: String?
+)
+
+data class KitsuMappingRelationships(
+    val item: KitsuRelationshipData?
+)
+
+data class KitsuRelationshipData(
+    val data: KitsuRelationshipItem?
+)
+
+data class KitsuRelationshipItem(
+    val id: String?,
+    val type: String?
+)
+
+data class KitsuIncludedItem(
     val id: String,
-    val filename: String?,
-    val hash: String?,
-    val status: String,
-    val links: List<String>?
+    val type: String?,
+    val attributes: KitsuAnimeAttributes?
 )
 
-// ========== TorBox Models ==========
+// ========== Kitsu Anime Detail API Models ==========
 
-data class TorboxCreateTorrentResponse(
-    val success: Boolean,
-    val detail: String?,
-    val data: TorboxTorrentData?
+data class KitsuAnimeDetailResponse(
+    val data: KitsuAnimeDetail?
 )
 
-data class TorboxTorrentData(
-    val id: Int,
-    val hash: String?,
-    val name: String?,
-    @SerializedName("torrent_id") val torrentId: Int?
+data class KitsuAnimeDetail(
+    val id: String,
+    val type: String?,
+    val attributes: KitsuAnimeAttributes?
 )
 
-data class TorboxTorrentInfoResponse(
-    val success: Boolean,
-    val detail: String?,
-    val data: TorboxTorrentInfo?
+// ========== Kitsu Media Relationships API Models ==========
+
+data class KitsuMediaRelationshipsResponse(
+    val data: List<KitsuMediaRelationship>?,
+    val included: List<KitsuIncludedAnime>?
 )
 
-data class TorboxTorrentListResponse(
-    val success: Boolean,
-    val detail: String?,
-    val data: List<TorboxTorrentInfo>?
+data class KitsuMediaRelationship(
+    val id: String,
+    val type: String?,
+    val attributes: KitsuMediaRelationshipAttributes?,
+    val relationships: KitsuMediaRelationshipRels?
 )
 
-data class TorboxRequestLinkBody(
-    val token: String,
-    @SerializedName("torrent_id") val torrentId: Int,
-    @SerializedName("file_id") val fileId: Int,
-    val zip: Boolean = false
+data class KitsuMediaRelationshipAttributes(
+    val role: String?  // "sequel", "prequel", "side_story", "alternative_setting", etc.
 )
 
-data class TorboxTorrentInfo(
-    val id: Int,
-    val hash: String?,
-    val name: String?,
-    @SerializedName("download_state") val downloadState: String?,
-    @SerializedName("download_speed") val downloadSpeed: Long?,
-    val progress: Float?,
-    val files: List<TorboxFile>?
+data class KitsuMediaRelationshipRels(
+    val destination: KitsuRelationshipData?
 )
 
-data class TorboxFile(
-    val id: Int,
-    val name: String?,
-    val size: Long?,
-    @SerializedName("short_name") val shortName: String?
+data class KitsuIncludedAnime(
+    val id: String,
+    val type: String?,
+    val attributes: KitsuAnimeAttributes?
 )
 
-data class TorboxDownloadLinkResponse(
-    val success: Boolean,
-    val detail: String?,
-    val data: String? // Direct download URL
+// ========== ARM API Models (arm.haglund.dev) ==========
+
+/**
+ * ARM API mapping entry - maps between anime database IDs
+ * Each entry represents one season/entry in different databases
+ */
+data class ArmMappingEntry(
+    val kitsu: Int? = null,
+    val anilist: Int? = null,
+    val myanimelist: Int? = null,
+    val anidb: Int? = null,
+    @SerializedName("anime-planet") val animePlanet: String? = null,
+    val anisearch: Int? = null,
+    val livechart: Int? = null,
+    @SerializedName("notify-moe") val notifyMoe: String? = null,
+    val imdb: String? = null,
+    val themoviedb: Int? = null,
+    val thetvdb: Int? = null
 )
-
-data class TorboxUserResponse(
-    val success: Boolean,
-    val detail: String?,
-    val data: TorboxUser?
-)
-
-data class TorboxUser(
-    val id: Int,
-    val email: String?,
-    val plan: Int?,
-    @SerializedName("total_downloaded") val totalDownloaded: Long?,
-    @SerializedName("premium_expires_at") val premiumExpiresAt: String?
-)
-
-// TorBox checkcached response - returns which hashes are cached
-// Response format with format=object: { "success": true, "data": { "hash1": {...}, "hash2": null } }
-// If cached, hash value contains torrent info; if not cached, hash value is null
-data class TorboxCheckCachedResponse(
-    val success: Boolean,
-    val detail: String?,
-    val data: Map<String, TorboxCachedTorrentInfo?>?
-)
-
-data class TorboxCachedTorrentInfo(
-    val name: String?,
-    val size: Long?,
-    val hash: String?,
-    val files: List<TorboxCachedFile>?
-)
-
-data class TorboxCachedFile(
-    val name: String?,
-    val size: Long?
-)
-
-

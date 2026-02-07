@@ -98,16 +98,16 @@ fun SourceInfoOverlay(
                         horizontalArrangement = Arrangement.End
                     ) {
                         Icon(
-                            imageVector = if (source.isDebrid) Icons.Default.Cloud else Icons.Default.Storage,
+                            imageVector = Icons.Default.Storage,
                             contentDescription = null,
-                            tint = if (source.isDebrid) SuccessGreen else TextSecondary,
+                            tint = TextSecondary,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = source.addonName,
                             style = ArflixTypography.caption,
-                            color = if (source.isDebrid) SuccessGreen else TextSecondary
+                            color = TextSecondary
                         )
                     }
                     

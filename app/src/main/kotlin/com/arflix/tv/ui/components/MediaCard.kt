@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.arflix.tv.data.model.MediaItem
@@ -67,6 +67,16 @@ fun MediaCard(
     onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    // If this is a placeholder card, show skeleton only
+    if (item.isPlaceholder) {
+        PlaceholderCard(
+            width = width,
+            isLandscape = isLandscape,
+            modifier = modifier
+        )
+        return
+    }
+
     var isFocused by remember { mutableStateOf(false) }
     val visualFocused = isFocusedOverride || isFocused
 
@@ -98,7 +108,7 @@ fun MediaCard(
             .size(widthPx, heightPx)
             .precision(Precision.INEXACT)
             .allowHardware(true)
-            .crossfade(false)
+            .crossfade(250)  // Smooth 250ms fade transition
             .build()
     }
 
@@ -115,7 +125,7 @@ fun MediaCard(
             backgroundColor = ArvioSkin.colors.surface,
             outlineColor = ArvioSkin.colors.focusOutline,
             outlineWidth = jumpBorderWidth,
-            focusedScale = 1.05f,
+            focusedScale = 1.0f,
             pressedScale = 1f,
             focusedTransformOriginX = 0f,
             enableSystemFocus = enableSystemFocus,
@@ -127,11 +137,16 @@ fun MediaCard(
             },
         ) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
-                // Use AsyncImage for better TV performance (no subcomposition overhead)
-                AsyncImage(
+                // SubcomposeAsyncImage with shimmer placeholder for smooth loading
+                SubcomposeAsyncImage(
                     model = imageRequest,
                     contentDescription = item.title,
                     contentScale = ContentScale.Crop,
+                    loading = {
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .background(ArvioSkin.colors.surface)
@@ -225,6 +240,56 @@ fun MediaCard(
 }
 
 /**
+ * Placeholder card shown while Continue Watching data loads.
+ * Displays a skeleton animation to indicate loading state.
+ */
+@Composable
+private fun PlaceholderCard(
+    width: Dp,
+    isLandscape: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val aspectRatio = if (isLandscape) 16f / 9f else 2f / 3f
+    val shape = rememberArvioCardShape(ArvioSkin.radius.md)
+
+    Column(
+        modifier = modifier.width(width)
+    ) {
+        // Card skeleton
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(aspectRatio)
+                .clip(shape)
+        ) {
+            SkeletonBox(
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(ArvioSkin.spacing.x2))
+
+        // Title skeleton
+        SkeletonBox(
+            modifier = Modifier
+                .fillMaxWidth(0.7f)
+                .height(14.dp)
+                .clip(rememberArvioCardShape(ArvioSkin.radius.sm))
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Subtitle skeleton
+        SkeletonBox(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .height(12.dp)
+                .clip(rememberArvioCardShape(ArvioSkin.radius.sm))
+        )
+    }
+}
+
+/**
  * Poster-style media card (portrait orientation).
  * Phase 5: Added proper image sizing and shimmer placeholder.
  */
@@ -257,7 +322,7 @@ fun PosterCard(
             .size(widthPx, heightPx)
             .precision(Precision.INEXACT)
             .allowHardware(true)
-            .crossfade(false)
+            .crossfade(250)  // Smooth 250ms fade transition
             .build()
     }
 
@@ -277,11 +342,16 @@ fun PosterCard(
                 if (it) onFocused()
             },
         ) { _ ->
-            // Use AsyncImage for better TV performance
-            AsyncImage(
+            // SubcomposeAsyncImage with shimmer placeholder
+            SubcomposeAsyncImage(
                 model = imageRequest,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
+                loading = {
+                    SkeletonBox(
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .background(ArvioSkin.colors.surface),

@@ -76,7 +76,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -152,10 +151,9 @@ fun PlayerScreen(
     val playButtonFocusRequester = remember { FocusRequester() }
     val trackbarFocusRequester = remember { FocusRequester() }
     val subtitleButtonFocusRequester = remember { FocusRequester() }
-    val nextEpisodeButtonFocusRequester = remember { FocusRequester() }
     val containerFocusRequester = remember { FocusRequester() }
 
-    // Focus state - Netflix-style: 0=Play, 1=Subtitles, 2=Next Episode
+    // Focus state - 0=Play, 1=Subtitles
     var focusedButton by remember { mutableIntStateOf(0) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var subtitleMenuIndex by remember { mutableIntStateOf(0) }
@@ -168,9 +166,12 @@ fun PlayerScreen(
     // Error modal focus
     var errorModalFocusIndex by remember { mutableIntStateOf(0) }
 
-    // Auto-play next episode
-    var showNextEpisodePrompt by remember { mutableStateOf(false) }
-    var autoPlayCountdown by remember { mutableIntStateOf(10) }
+    // Buffering watchdog - detect stuck buffering
+    var bufferingStartTime by remember { mutableStateOf<Long?>(null) }
+    val bufferingTimeoutMs = 30_000L // 30 seconds timeout for stuck buffering
+
+    // Track stream selection time (for future diagnostics)
+    var streamSelectedTime by remember { mutableStateOf<Long?>(null) }
 
     // Load media
     LaunchedEffect(mediaType, mediaId, seasonNumber, episodeNumber) {
@@ -182,7 +183,7 @@ fun PlayerScreen(
 
     // ExoPlayer - configured for maximum codec compatibility and smooth streaming
     val exoPlayer = remember {
-        // Create HTTP data source with custom headers for debrid CDNs
+        // Create HTTP data source with custom headers
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .setAllowCrossProtocolRedirects(true)
@@ -254,9 +255,23 @@ fun PlayerScreen(
 
                 // Add error listener to try next stream on codec errors
                 addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        val stateStr = when (playbackState) {
+                            Player.STATE_IDLE -> "IDLE"
+                            Player.STATE_BUFFERING -> "BUFFERING"
+                            Player.STATE_READY -> "READY"
+                            Player.STATE_ENDED -> "ENDED"
+                            else -> "UNKNOWN($playbackState)"
+                        }
+                        android.util.Log.d("PlayerScreen", "Playback state changed: $stateStr, position=${currentPosition}ms, isPlaying=$isPlaying")
+                    }
+
+                    override fun onIsPlayingChanged(playing: Boolean) {
+                        android.util.Log.d("PlayerScreen", "isPlaying changed: $playing, state=${playbackState}, position=${currentPosition}ms")
+                    }
+
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        Log.e("PlayerScreen", "ExoPlayer error: ${error.errorCode} - ${error.message}", error)
-                        Log.e("PlayerScreen", "Error cause: ${error.cause?.javaClass?.simpleName} - ${error.cause?.message}")
+                        android.util.Log.e("PlayerScreen", "Playback error: code=${error.errorCode}, message=${error.message}, cause=${error.cause?.message}")
 
                         val streams = uiState.streams
                         // If codec/decoder error or source error, try next stream
@@ -275,18 +290,17 @@ fun PlayerScreen(
 
                         if (shouldTryNextStream) {
                             val nextIndex = currentStreamIndex + 1
-                            Log.d("PlayerScreen", "Trying next stream index: $nextIndex / ${streams.size}")
                             if (nextIndex < streams.size) {
+                                android.util.Log.d("PlayerScreen", "Trying next stream: index=$nextIndex of ${streams.size}")
                                 currentStreamIndex = nextIndex
                                 val nextStream = streams[nextIndex]
-                                Log.d("PlayerScreen", "Switching to stream: ${nextStream.source} - ${nextStream.quality}")
                                 // Reset player state before trying next stream
                                 stop()
                                 clearMediaItems()
                                 // Select next stream via ViewModel (triggers state change -> LaunchedEffect)
                                 viewModel.selectStream(nextStream)
                             } else {
-                                Log.e("PlayerScreen", "No more streams to try!")
+                                android.util.Log.e("PlayerScreen", "No more streams to try")
                             }
                         }
                     }
@@ -310,13 +324,11 @@ fun PlayerScreen(
                                         codec = format.sampleMimeType
                                     )
                                     extractedAudioTracks.add(track)
-                                    Log.d("PlayerScreen", "Audio track $trackIndex: ${format.sampleMimeType}, ${format.channelCount}ch, ${format.sampleRate}Hz, lang=${format.language}")
                                     trackIndex++
                                 }
                             }
                         }
                         audioTracks = extractedAudioTracks
-                        Log.d("PlayerScreen", "Audio tracks available: ${extractedAudioTracks.size}")
 
                         // Find currently selected audio track
                         val currentAudioGroup = tracks.groups.find { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
@@ -375,36 +387,20 @@ fun PlayerScreen(
     // Update player when stream URL changes - also add subtitle if selected
     LaunchedEffect(uiState.selectedStreamUrl) {
         val url = uiState.selectedStreamUrl
+        android.util.Log.d("PlayerScreen", "Stream URL changed: $url")
         if (url != null) {
-            Log.d("PlayerScreen", "Setting stream URL: $url")
+            // Track when stream was selected
+            streamSelectedTime = System.currentTimeMillis()
+            bufferingStartTime = null
+            hasPlaybackStarted = false  // Reset for new stream
 
-            // Try to determine MIME type from URL or default to MKV (most common for torrents)
-            val mimeType = when {
-                url.contains(".mkv", ignoreCase = true) -> MimeTypes.APPLICATION_MATROSKA
-                url.contains(".mp4", ignoreCase = true) -> MimeTypes.VIDEO_MP4
-                url.contains(".webm", ignoreCase = true) -> MimeTypes.VIDEO_WEBM
-                url.contains(".avi", ignoreCase = true) -> MimeTypes.VIDEO_H264 // fallback
-                // For debrid CDN URLs without extension, assume MKV (most remuxes are MKV)
-                url.contains("tb-cdn.st") || url.contains("real-debrid") || url.contains("debrid") -> {
-                    Log.d("PlayerScreen", "Debrid CDN detected, using MKV mime type")
-                    MimeTypes.APPLICATION_MATROSKA
-                }
-                else -> null // Let ExoPlayer figure it out
-            }
-
-            Log.d("PlayerScreen", "Detected MIME type: $mimeType")
-
+            // Let ExoPlayer auto-detect MIME type - URL extensions often don't match actual content
             val mediaItemBuilder = MediaItem.Builder()
                 .setUri(Uri.parse(url))
 
-            if (mimeType != null) {
-                mediaItemBuilder.setMimeType(mimeType)
-            }
-
             // Add subtitle if already selected (for auto-select default subtitle)
             val subtitle = uiState.selectedSubtitle
-            if (subtitle != null) {
-                Log.d("PlayerScreen", "Adding subtitle to initial load: ${subtitle.label}")
+            if (subtitle != null && subtitle.url.isNotBlank()) {
                 val subMimeType = when {
                     subtitle.url.endsWith(".vtt", ignoreCase = true) -> MimeTypes.TEXT_VTT
                     subtitle.url.endsWith(".srt", ignoreCase = true) -> MimeTypes.APPLICATION_SUBRIP
@@ -458,9 +454,13 @@ fun PlayerScreen(
         val isInitialLoad = previousSubtitle == null && subtitle != null
         previousSubtitle = subtitle
 
-        if (subtitle != null) {
-            Log.d("PlayerScreen", "Applying subtitle change: ${subtitle.label} (embedded=${subtitle.isEmbedded})")
+        // Skip rebuild for initial load - already handled in stream URL LaunchedEffect
+        if (isInitialLoad) {
+            android.util.Log.d("PlayerScreen", "Skipping subtitle rebuild for initial load")
+            return@LaunchedEffect
+        }
 
+        if (subtitle != null) {
             if (subtitle.isEmbedded) {
                 // Handle embedded subtitle selection
                 val groupIndex = subtitle.groupIndex
@@ -477,7 +477,6 @@ fun PlayerScreen(
                             )
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                             .build()
-                        Log.d("PlayerScreen", "Selected embedded subtitle track: $groupIndex:$trackIndex")
                     }
                 }
             } else {
@@ -492,8 +491,6 @@ fun PlayerScreen(
                     else -> MimeTypes.APPLICATION_SUBRIP  // Default to SRT
                 }
 
-                Log.d("PlayerScreen", "Subtitle MIME type: $mimeType")
-
                 // Build subtitle configuration with forced selection
                 val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitle.url))
                     .setMimeType(mimeType)
@@ -506,24 +503,11 @@ fun PlayerScreen(
                 val currentPosition = exoPlayer.currentPosition
                 val wasPlaying = exoPlayer.isPlaying
 
-                // Determine video MIME type
-                val videoMimeType = when {
-                    streamUrl.contains(".mkv", ignoreCase = true) -> MimeTypes.APPLICATION_MATROSKA
-                    streamUrl.contains(".mp4", ignoreCase = true) -> MimeTypes.VIDEO_MP4
-                    streamUrl.contains("tb-cdn.st") || streamUrl.contains("debrid") -> MimeTypes.APPLICATION_MATROSKA
-                    else -> null
-                }
-
-                // Rebuild media item with subtitle
-                val mediaItemBuilder = MediaItem.Builder()
+                // Rebuild media item with subtitle - let ExoPlayer auto-detect MIME type
+                val mediaItem = MediaItem.Builder()
                     .setUri(Uri.parse(streamUrl))
                     .setSubtitleConfigurations(listOf(subtitleConfig))
-
-                if (videoMimeType != null) {
-                    mediaItemBuilder.setMimeType(videoMimeType)
-                }
-
-                val mediaItem = mediaItemBuilder.build()
+                    .build()
 
                 // Set new media item and restore position
                 exoPlayer.setMediaItem(mediaItem)
@@ -543,7 +527,6 @@ fun PlayerScreen(
             }
         } else {
             // Disable subtitles
-            Log.d("PlayerScreen", "Disabling subtitles")
             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                 .buildUpon()
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -626,6 +609,35 @@ fun PlayerScreen(
             isPlaying = exoPlayer.isPlaying
             isBuffering = exoPlayer.playbackState == Player.STATE_BUFFERING
 
+            // Buffering watchdog - detect stuck buffering mid-playback, try next stream
+            if (isBuffering && hasPlaybackStarted) {
+                if (bufferingStartTime == null) {
+                    bufferingStartTime = System.currentTimeMillis()
+                } else {
+                    val bufferingDuration = System.currentTimeMillis() - (bufferingStartTime ?: 0L)
+                    if (bufferingDuration > bufferingTimeoutMs) {
+                        bufferingStartTime = null
+                        val streams = uiState.streams
+                        val nextIndex = currentStreamIndex + 1
+                        if (nextIndex < streams.size && nextIndex < 10) {
+                            android.util.Log.d("PlayerScreen", "Buffering timeout (${bufferingDuration}ms) - advancing to stream ${nextIndex}")
+                            currentStreamIndex = nextIndex
+                            exoPlayer.stop()
+                            exoPlayer.clearMediaItems()
+                            viewModel.selectStream(streams[nextIndex])
+                        } else {
+                            // No more streams to try, retry current one
+                            val currentPos = exoPlayer.currentPosition
+                            exoPlayer.seekTo(currentPos)
+                            exoPlayer.prepare()
+                            exoPlayer.play()
+                        }
+                    }
+                }
+            } else {
+                bufferingStartTime = null
+            }
+
             // Mark playback as started once we've actually started playing (not just buffering)
             if (!hasPlaybackStarted && (isPlaying || exoPlayer.playbackState == Player.STATE_READY)) {
                 hasPlaybackStarted = true
@@ -641,16 +653,9 @@ fun PlayerScreen(
                     playbackState = exoPlayer.playbackState
                 )
 
-                // Next episode prompt only for TV shows
-                if (mediaType == MediaType.TV && seasonNumber != null && episodeNumber != null) {
-                    val remainingTime = duration - currentPosition
-                    if (remainingTime in 1..30000 && !showNextEpisodePrompt) {
-                        showNextEpisodePrompt = true
-                        autoPlayCountdown = 10
-                    }
-                }
             }
 
+            // Auto-play next episode when current one ends
             if (exoPlayer.playbackState == Player.STATE_ENDED && mediaType == MediaType.TV) {
                 if (seasonNumber != null && episodeNumber != null) {
                     onPlayNext(seasonNumber, episodeNumber + 1)
@@ -658,17 +663,6 @@ fun PlayerScreen(
             }
 
             delay(500)
-        }
-    }
-
-    // Auto-play countdown
-    LaunchedEffect(showNextEpisodePrompt, autoPlayCountdown) {
-        if (showNextEpisodePrompt && autoPlayCountdown > 0) {
-            delay(1000)
-            autoPlayCountdown--
-            if (autoPlayCountdown == 0 && seasonNumber != null && episodeNumber != null) {
-                onPlayNext(seasonNumber, episodeNumber + 1)
-            }
         }
     }
 
@@ -798,7 +792,6 @@ fun PlayerScreen(
                                         selectedAudioIndex = audioTracks.indexOfFirst {
                                             it.groupIndex == track.groupIndex && it.trackIndex == track.trackIndex
                                         }.takeIf { it >= 0 } ?: track.index
-                                        Log.d("PlayerScreen", "Switched to audio track: ${track.language}, ${track.codec}")
                                     }
                                 }
                                 showSubtitleMenu = false
@@ -908,9 +901,9 @@ fun PlayerScreen(
                 } else false
             }
     ) {
-        // Loading screen - show when loading, resolving stream, no stream URL, or playback hasn't started yet
+        // Loading screen - show when loading, no stream URL, or playback hasn't started yet
         // This keeps the nice loading screen visible until player is fully ready to play
-        if (uiState.isLoading || uiState.isResolvingStream || uiState.selectedStreamUrl == null || !hasPlaybackStarted) {
+        if (uiState.isLoading || uiState.selectedStreamUrl == null || !hasPlaybackStarted) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -960,7 +953,6 @@ fun PlayerScreen(
 
                     Text(
                         text = when {
-                            uiState.isResolvingStream -> "Resolving stream..."
                             uiState.isLoadingSubtitles -> "Fetching subtitles..."
                             uiState.isLoadingStreams -> "Loading streams..."
                             uiState.selectedStreamUrl != null && !hasPlaybackStarted -> "Starting playback..."
@@ -1317,43 +1309,13 @@ fun PlayerScreen(
                                 playButtonFocusRequester.requestFocus()
                             },
                             onRightKey = {
-                                if (mediaType == MediaType.TV && seasonNumber != null) {
-                                    nextEpisodeButtonFocusRequester.requestFocus()
-                                }
+                                // Seek forward when at rightmost button
+                                exoPlayer.seekTo((currentPosition + 10000).coerceAtMost(duration))
                             },
                             onUpKey = {
                                 trackbarFocusRequester.requestFocus()
                             }
                         )
-
-                        Spacer(modifier = Modifier.width(24.dp))
-
-                        // Next Episode button (only for TV shows)
-                        if (mediaType == MediaType.TV && seasonNumber != null && episodeNumber != null) {
-                            var nextEpisodeButtonFocused by remember { mutableStateOf(false) }
-                            PlayerTextButtonFocusable(
-                                text = "Next Episode",
-                                isFocused = nextEpisodeButtonFocused,
-                                focusRequester = nextEpisodeButtonFocusRequester,
-                                onFocusChanged = { focused ->
-                                    nextEpisodeButtonFocused = focused
-                                    if (focused) focusedButton = 2
-                                },
-                                onClick = {
-                                    onPlayNext(seasonNumber, episodeNumber + 1)
-                                },
-                                onLeftKey = {
-                                    subtitleButtonFocusRequester.requestFocus()
-                                },
-                                onRightKey = {
-                                    // Seek forward when at rightmost button
-                                    exoPlayer.seekTo((currentPosition + 10000).coerceAtMost(duration))
-                                },
-                                onUpKey = {
-                                    trackbarFocusRequester.requestFocus()
-                                }
-                            )
-                        }
                     }
                 }
             }
@@ -1409,7 +1371,6 @@ fun PlayerScreen(
                     selectedAudioIndex = audioTracks.indexOfFirst {
                         it.groupIndex == track.groupIndex && it.trackIndex == track.trackIndex
                     }.takeIf { it >= 0 } ?: track.index
-                    Log.d("PlayerScreen", "Switched to audio track: ${track.language}, ${track.codec}")
                     showSubtitleMenu = false
                     showControls = true
                     // Restore focus to subtitle button after closing menu
@@ -1502,41 +1463,6 @@ fun PlayerScreen(
                 ),
                 color = Color.White
             )
-        }
-
-        // Next Episode prompt
-        AnimatedVisibility(
-            visible = showNextEpisodePrompt && mediaType == MediaType.TV,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(48.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-                    .border(1.dp, Pink.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .padding(20.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "Up Next",
-                        style = ArflixTypography.caption,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = "Episode ${(episodeNumber ?: 0) + 1}",
-                        style = ArflixTypography.sectionTitle.copy(fontSize = 22.sp),
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Starting in ${autoPlayCountdown}s",
-                        style = ArflixTypography.caption,
-                        color = Pink
-                    )
-                }
-            }
         }
 
         // Error modal

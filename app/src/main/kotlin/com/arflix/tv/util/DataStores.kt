@@ -7,3 +7,4 @@ import androidx.datastore.preferences.preferencesDataStore
 
 val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings_prefs")
 val Context.traktDataStore: DataStore<Preferences> by preferencesDataStore(name = "trakt_prefs")
+val Context.profilesDataStore: DataStore<Preferences> by preferencesDataStore(name = "profiles_prefs")

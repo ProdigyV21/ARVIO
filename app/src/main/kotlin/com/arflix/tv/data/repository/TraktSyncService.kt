@@ -53,7 +53,8 @@ class TraktSyncService @Inject constructor(
     private val traktApi: TraktApi,
     private val supabaseApi: SupabaseApi,
     private val authRepository: AuthRepository,
-    private val outboxRepository: TraktOutboxRepository
+    private val outboxRepository: TraktOutboxRepository,
+    private val profileManager: ProfileManager
 ) {
     private val TAG = "TraktSyncService"
     private val gson = Gson()
@@ -70,10 +71,10 @@ class TraktSyncService @Inject constructor(
     private val _syncEvents = MutableSharedFlow<SyncStatus>(extraBufferCapacity = 1)
     val syncEvents: SharedFlow<SyncStatus> = _syncEvents.asSharedFlow()
 
-    // DataStore keys (same as TraktRepository)
-    private val TRAKT_ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
-    private val TRAKT_REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
-    private val TRAKT_EXPIRES_AT_KEY = longPreferencesKey("expires_at")
+    // Profile-scoped DataStore keys (must match TraktRepository for token sharing)
+    private fun accessTokenKey() = profileManager.profileStringKey("trakt_access_token")
+    private fun refreshTokenKey() = profileManager.profileStringKey("trakt_refresh_token")
+    private fun expiresAtKey() = profileManager.profileLongKey("trakt_expires_at")
 
     // In-memory cache for current session (fallback if Supabase fails)
     private var cachedWatchedMovies: List<WatchedMovieRecord>? = null
@@ -105,7 +106,6 @@ class TraktSyncService @Inject constructor(
                     val supabaseUserId = userId ?: return@withContext SyncResult.Error("Not logged in")
                     updateSyncState(supabaseUserId, syncInProgress = true, lastError = null)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to update sync state (non-fatal): ${e.message}")
                 }
             }
 
@@ -119,11 +119,9 @@ class TraktSyncService @Inject constructor(
 
             val watchedMovies = fetchAllWatchedMovies()
             val (movieRecords, filteredMovies) = buildWatchedMoviesFromWatchedList(localUserId, watchedMovies)
-            
+
             // Update cache
             cachedWatchedMovies = movieRecords
-            
-            Log.d(TAG, "Full sync: Movies fetched=${watchedMovies.size}, unique=${movieRecords.size}, filtered=$filteredMovies")
 
             if (hasSupabase) {
                 movieRecords.chunked(100).forEachIndexed { index, chunk ->
@@ -139,7 +137,6 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedMovies(auth, records = chunk)
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed to upsert movies to Supabase (non-fatal): ${e.message}")
                         }
                     }
                 }
@@ -159,23 +156,18 @@ class TraktSyncService @Inject constructor(
             }
             val totalPlays = watchedShows.sumOf { it.plays }
             val useProgressExpansion = totalEpisodeItems < totalPlays
-            if (useProgressExpansion) {
-                Log.w(
-                    TAG,
-                    "Full sync: Watched episodes list incomplete (episodes=$totalEpisodeItems, plays=$totalPlays). Expanding via show progress."
-                )
-            }
             val (episodeRecords, filteredEpisodes) = if (useProgressExpansion) {
-                buildWatchedEpisodesFromShowProgress(localUserId, watchedShows)
+                // PERFORMANCE: Only expand progress for top 15 most recently watched shows
+                // This prevents 30+ API calls on startup while still getting recent watch data
+                // Old shows should already have data from previous syncs
+                val recentShows = watchedShows.sortedByDescending { it.lastWatchedAt }.take(15)
+                buildWatchedEpisodesFromShowProgress(localUserId, recentShows)
             } else {
                 buildWatchedEpisodesFromWatchedShows(localUserId, watchedShows)
             }
-            
+
             // Update cache
             cachedWatchedEpisodes = episodeRecords
-            
-            val loggedEpisodeCount = if (useProgressExpansion) episodeRecords.size else totalEpisodeItems
-            Log.d(TAG, "Full sync: Episodes fetched=$loggedEpisodeCount, unique=${episodeRecords.size}, filtered=$filteredEpisodes")
 
             if (hasSupabase) {
                 episodeRecords.chunked(100).forEachIndexed { index, chunk ->
@@ -193,7 +185,6 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedEpisodes(auth, records = chunk)
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed to upsert episodes to Supabase (non-fatal): ${e.message}")
                         }
                     }
                 }
@@ -211,7 +202,6 @@ class TraktSyncService @Inject constructor(
 
             val playbackItems = fetchAllPlaybackProgress()
             val progressRecords = buildWatchHistoryFromPlayback(localUserId, playbackItems, completionThreshold, "trakt")
-            Log.d(TAG, "Full sync: Playback fetched=${playbackItems.size}, in_progress=${progressRecords.size}")
 
             if (hasSupabase) {
                 progressRecords.chunked(100).forEach { chunk ->
@@ -221,7 +211,6 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.upsertWatchHistory(auth = auth, item = record)
                             }
                         } catch (e: Exception) {
-                             Log.w(TAG, "Failed to upsert playback to Supabase (non-fatal): ${e.message}")
                         }
                     }
                 }
@@ -229,19 +218,19 @@ class TraktSyncService @Inject constructor(
                 try {
                     cleanupTraktPlaybackProgress(localUserId, progressRecords)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to cleanup playback (non-fatal): ${e.message}")
                 }
             }
             flushOutbox()
 
-            val activities = executeTraktCall("last activities") { auth ->
-                traktApi.getLastActivities(auth, clientId)
-            }
-            val activitiesJson = gson.toJson(activities)
-
+            // Non-critical: fetch last activities for incremental sync optimization
+            // Don't fail the sync if this call fails - data is already synced
             if (hasSupabase) {
                 try {
-                    val supabaseUserId = userId ?: return@withContext SyncResult.Error("Not logged in")
+                    val activities = executeTraktCall("last activities") { auth ->
+                        traktApi.getLastActivities(auth, clientId)
+                    }
+                    val activitiesJson = gson.toJson(activities)
+                    val supabaseUserId = userId ?: return@withContext SyncResult.Success(totalMovies, totalEpisodes)
                     updateSyncState(
                         userId = supabaseUserId,
                         lastSyncAt = Instant.now().toString(),
@@ -252,7 +241,7 @@ class TraktSyncService @Inject constructor(
                         syncInProgress = false
                     )
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to update sync state completion (non-fatal): ${e.message}")
+                    // Silently ignore - sync data is already cached locally
                 }
             }
 
@@ -266,11 +255,9 @@ class TraktSyncService @Inject constructor(
             )
             _syncEvents.tryEmit(SyncStatus.COMPLETED)
 
-            Log.d(TAG, "Full sync completed: $totalMovies movies, $totalEpisodes episodes")
             SyncResult.Success(totalMovies, totalEpisodes)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Full sync failed", e)
             _syncProgress.value = SyncProgress(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
@@ -325,11 +312,9 @@ class TraktSyncService @Inject constructor(
                 }
                 syncState = syncStates.firstOrNull()
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to get sync state (falling back to full sync): ${e.message}")
             }
 
             if (syncState == null || (syncState.lastTraktActivitiesJson == null && syncState.lastTraktActivities == null)) {
-                Log.d(TAG, "No previous sync state, performing full sync")
                 _isSyncing.value = false
                 return@withContext performFullSync()
             }
@@ -355,7 +340,6 @@ class TraktSyncService @Inject constructor(
                 )
                 val historyMovies = fetchAllHistoryMovies(startAt = lastSyncAt)
                 val (movieRecords, filteredMovies) = buildWatchedMoviesFromHistory(safeUserId, historyMovies)
-                Log.d(TAG, "Incremental sync: Movies fetched=${historyMovies.size}, unique=${movieRecords.size}, filtered=$filteredMovies")
 
                 movieRecords.chunked(100).forEach { chunk ->
                     if (chunk.isNotEmpty()) {
@@ -364,7 +348,6 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedMovies(auth, records = chunk)
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed to upsert movies (non-fatal): ${e.message}")
                         }
                     }
                 }
@@ -382,7 +365,6 @@ class TraktSyncService @Inject constructor(
                 )
                 val historyEpisodes = fetchAllHistoryEpisodes(startAt = lastSyncAt)
                 val (episodeRecords, filteredEpisodes) = buildWatchedEpisodesFromHistory(safeUserId, historyEpisodes)
-                Log.d(TAG, "Incremental sync: Episodes fetched=${historyEpisodes.size}, unique=${episodeRecords.size}, filtered=$filteredEpisodes")
 
                 episodeRecords.chunked(100).forEach { chunk ->
                     if (chunk.isNotEmpty()) {
@@ -391,7 +373,6 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedEpisodes(auth, records = chunk)
                             }
                         } catch (e: Exception) {
-                             Log.w(TAG, "Failed to upsert episodes (non-fatal): ${e.message}")
                         }
                     }
                 }
@@ -412,7 +393,6 @@ class TraktSyncService @Inject constructor(
                 )
                 val playbackItems = fetchAllPlaybackProgress()
                 val progressRecords = buildWatchHistoryFromPlayback(safeUserId, playbackItems, completionThreshold, "trakt")
-                Log.d(TAG, "Incremental sync: Playback fetched=${playbackItems.size}, in_progress=${progressRecords.size}")
 
                 progressRecords.chunked(100).forEach { chunk ->
                     chunk.forEach { record ->
@@ -421,7 +401,6 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.upsertWatchHistory(auth = auth, item = record)
                             }
                         } catch (e: Exception) {
-                            Log.w(TAG, "Failed to upsert playback (non-fatal): ${e.message}")
                         }
                     }
                 }
@@ -429,7 +408,6 @@ class TraktSyncService @Inject constructor(
                 try {
                     cleanupTraktPlaybackProgress(safeUserId, progressRecords)
                 } catch (e: Exception) {
-                     Log.w(TAG, "Failed to cleanup playback (non-fatal): ${e.message}")
                 }
             }
 
@@ -445,7 +423,6 @@ class TraktSyncService @Inject constructor(
                     syncInProgress = false
                 )
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to update sync state completion (non-fatal): ${e.message}")
             }
 
             _syncProgress.value = SyncProgress(
@@ -456,11 +433,9 @@ class TraktSyncService @Inject constructor(
             )
             _syncEvents.tryEmit(SyncStatus.COMPLETED)
 
-            Log.d(TAG, "Incremental sync completed: $moviesUpdated movies, $episodesUpdated episodes")
             SyncResult.Success(moviesUpdated, episodesUpdated)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Incremental sync failed", e)
             _syncProgress.value = SyncProgress(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
@@ -493,7 +468,6 @@ class TraktSyncService @Inject constructor(
                 executeSupabaseCall("mark movie watched") { auth ->
                     supabaseApi.markMovieWatched(auth, record = record)
                 }
-                Log.d(TAG, "Marked movie $tmdbId as watched in Supabase")
             }
 
             // 2. Sync to Trakt (queue on failure or if offline)
@@ -503,10 +477,8 @@ class TraktSyncService @Inject constructor(
                         traktAuth, clientId, "2",
                         TraktHistoryBody(movies = listOf(TraktMovieId(TraktIds(tmdb = tmdbId))))
                     )
-                    Log.d(TAG, "Synced movie $tmdbId watched to Trakt")
                     true
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync movie $tmdbId to Trakt, queued", e)
                     false
                 }
             } else {
@@ -541,7 +513,6 @@ class TraktSyncService @Inject constructor(
 
             traktSyncOk || hasSupabase
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to mark movie watched", e)
             false
         }
     }
@@ -578,28 +549,30 @@ class TraktSyncService @Inject constructor(
                 executeSupabaseCall("mark episode watched") { auth ->
                     supabaseApi.markEpisodeWatched(auth, record = record)
                 }
-                Log.d(TAG, "Marked episode $showTmdbId S${season}E${episode} as watched in Supabase")
             }
 
             // 2. Sync to Trakt (queue on failure or if offline)
+            // Use shows format with nested seasons/episodes for proper episode identification
             val traktSyncOk = if (traktAuth != null) {
                 try {
                     traktApi.addToHistory(
                         traktAuth, clientId, "2",
                         TraktHistoryBody(
-                            episodes = listOf(
-                                TraktEpisodeId(
+                            shows = listOf(
+                                TraktHistoryShowWithSeasons(
                                     ids = TraktIds(tmdb = showTmdbId),
-                                    season = season,
-                                    number = episode
+                                    seasons = listOf(
+                                        TraktHistorySeason(
+                                            number = season,
+                                            episodes = listOf(TraktHistoryEpisodeNumber(number = episode))
+                                        )
+                                    )
                                 )
                             )
                         )
                     )
-                    Log.d(TAG, "Synced episode $showTmdbId S${season}E${episode} watched to Trakt")
                     true
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to sync episode $showTmdbId S${season}E${episode} to Trakt, queued", e)
                     false
                 }
             } else {
@@ -639,7 +612,6 @@ class TraktSyncService @Inject constructor(
 
             traktSyncOk || hasSupabase
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to mark episode watched", e)
             false
         }
     }
@@ -658,7 +630,6 @@ class TraktSyncService @Inject constructor(
                 executeSupabaseCall("delete watched movie") { auth ->
                     supabaseApi.deleteWatchedMovie(auth, userId = "eq.$userId", tmdbId = "eq.$tmdbId")
                 }
-                Log.d(TAG, "Removed movie $tmdbId from watched in Supabase")
             }
 
             // 2. Remove from Trakt
@@ -667,12 +638,10 @@ class TraktSyncService @Inject constructor(
                     traktAuth, clientId, "2",
                     TraktHistoryBody(movies = listOf(TraktMovieId(TraktIds(tmdb = tmdbId))))
                 )
-                Log.d(TAG, "Removed movie $tmdbId from Trakt history")
             }
 
             traktAuth != null || hasSupabase
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to mark movie unwatched", e)
             false
         }
     }
@@ -697,7 +666,6 @@ class TraktSyncService @Inject constructor(
                         episode = "eq.$episode"
                     )
                 }
-                Log.d(TAG, "Removed episode $showTmdbId S${season}E${episode} from watched in Supabase")
             }
 
             // 2. Remove from Trakt
@@ -705,21 +673,23 @@ class TraktSyncService @Inject constructor(
                 traktApi.removeFromHistory(
                     traktAuth, clientId, "2",
                     TraktHistoryBody(
-                        episodes = listOf(
-                            TraktEpisodeId(
+                        shows = listOf(
+                            TraktHistoryShowWithSeasons(
                                 ids = TraktIds(tmdb = showTmdbId),
-                                season = season,
-                                number = episode
+                                seasons = listOf(
+                                    TraktHistorySeason(
+                                        number = season,
+                                        episodes = listOf(TraktHistoryEpisodeNumber(number = episode))
+                                    )
+                                )
                             )
                         )
                     )
                 )
-                Log.d(TAG, "Removed episode $showTmdbId S${season}E${episode} from Trakt history")
             }
 
             traktAuth != null || hasSupabase
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to mark episode unwatched", e)
             false
         }
     }
@@ -773,7 +743,6 @@ class TraktSyncService @Inject constructor(
             }
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save playback progress", e)
             false
         }
     }
@@ -798,7 +767,6 @@ class TraktSyncService @Inject constructor(
             }
             records.map { it.tmdbId }.toSet()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get watched movies from Supabase", e)
             emptySet()
         }
     }
@@ -853,7 +821,6 @@ class TraktSyncService @Inject constructor(
             }
             keys
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get watched episodes from Supabase", e)
             emptySet()
         }
     }
@@ -863,9 +830,8 @@ class TraktSyncService @Inject constructor(
      */
     suspend fun getWatchedEpisodesDetailed(): List<WatchedEpisodeRecord> = withContext(Dispatchers.IO) {
         // Use in-memory cache if available (populated by sync)
-        cachedWatchedEpisodes?.let { 
-             Log.d(TAG, "getWatchedEpisodesDetailed: Returning ${it.size} cached episodes")
-             return@withContext it 
+        cachedWatchedEpisodes?.let {
+             return@withContext it
         }
 
         try {
@@ -875,7 +841,6 @@ class TraktSyncService @Inject constructor(
                 supabaseApi.getWatchedEpisodes(auth, userId = "eq.$userId")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get watched episodes from Supabase", e)
             emptyList()
         }
     }
@@ -900,7 +865,6 @@ class TraktSyncService @Inject constructor(
             val completionThreshold = Constants.WATCHED_THRESHOLD / 100f
             records.filter { it.progress > 0f && it.progress < completionThreshold }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get in-progress items", e)
             emptyList()
         }
     }
@@ -981,36 +945,31 @@ class TraktSyncService @Inject constructor(
             try {
                 if (consecutiveErrors > 0) {
                     val backoff = (consecutiveErrors * 1000L).coerceAtMost(10000L)
-                    Log.d(TAG, "Retry $consecutiveErrors/$maxRetries for movies page $page after ${backoff}ms")
                     delay(backoff)
                 } else {
                     delay(250) // Standard rate limit protection
                 }
-                
+
                 val pageItems = executeTraktCall("history movies page $page") { auth ->
                     traktApi.getHistoryMovies(auth, clientId, "2", page, limit, startAt)
                 }
-                
+
                 consecutiveErrors = 0 // Reset on success
-                Log.d(TAG, "History movies page $page count=${pageItems.size}")
-                
+
                 if (pageItems.isEmpty()) break
                 all.addAll(pageItems)
-                
+
                 if (pageItems.size < limit) break
-                
+
                 page++
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch history movies page $page (attempt ${consecutiveErrors + 1})", e)
                 consecutiveErrors++
                 if (consecutiveErrors > maxRetries) {
-                    Log.e(TAG, "Max retries reached for movies page $page, stopping fetch")
                     break
                 }
             }
         }
 
-        Log.d(TAG, "History movies total=${all.size}")
         return all
     }
 
@@ -1025,7 +984,6 @@ class TraktSyncService @Inject constructor(
             try {
                 if (consecutiveErrors > 0) {
                     val backoff = (consecutiveErrors * 1000L).coerceAtMost(10000L)
-                    Log.d(TAG, "Retry $consecutiveErrors/$maxRetries for episodes page $page after ${backoff}ms")
                     delay(backoff)
                 } else {
                     delay(250) // Standard rate limit protection
@@ -1034,27 +992,23 @@ class TraktSyncService @Inject constructor(
                 val pageItems = executeTraktCall("history episodes page $page") { auth ->
                     traktApi.getHistoryEpisodes(auth, clientId, "2", page, limit, startAt)
                 }
-                
+
                 consecutiveErrors = 0 // Reset on success
-                Log.d(TAG, "History episodes page $page count=${pageItems.size}")
-                
+
                 if (pageItems.isEmpty()) break
                 all.addAll(pageItems)
-                
+
                 if (pageItems.size < limit) break
-                
+
                 page++
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch history episodes page $page (attempt ${consecutiveErrors + 1})", e)
                 consecutiveErrors++
                 if (consecutiveErrors > maxRetries) {
-                    Log.e(TAG, "Max retries reached for episodes page $page, stopping fetch")
                     break
                 }
             }
         }
 
-        Log.d(TAG, "History episodes total=${all.size}")
         return all
     }
 
@@ -1067,13 +1021,11 @@ class TraktSyncService @Inject constructor(
             val pageItems = executeTraktCall("playback page $page") { auth ->
                 traktApi.getPlaybackProgress(auth, clientId, "2", null, page, limit)
             }
-            Log.d(TAG, "Playback page $page count=${pageItems.size}")
             if (pageItems.isEmpty()) break
             all.addAll(pageItems)
             page++
         }
 
-        Log.d(TAG, "Playback total=${all.size}")
         return all
     }
 
@@ -1184,10 +1136,6 @@ class TraktSyncService @Inject constructor(
             }
         }
 
-        if (skippedShows > 0) {
-            Log.d(TAG, "buildWatchedEpisodesFromWatchedShows: skipped shows without TMDB=$skippedShows, skipped episodes=$skippedEpisodes")
-        }
-
         return Pair(byKey.values.toList(), filtered)
     }
 
@@ -1268,7 +1216,6 @@ class TraktSyncService @Inject constructor(
                     }
 
                     if (showTraktId == null) {
-                        Log.w(TAG, "Show progress skipped (missing Trakt ID) for TMDB=$showTmdbId")
                         return@withPermit
                     }
 
@@ -1298,20 +1245,12 @@ class TraktSyncService @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Failed to fetch show progress for $showTraktId", e)
                     }
                 }
             }
         }
 
         tasks.awaitAll()
-
-        if (skippedShows.get() > 0) {
-            Log.d(
-                TAG,
-                "buildWatchedEpisodesFromShowProgress: skipped shows without TMDB=${skippedShows.get()}, skipped episodes=${skippedEpisodes.get()}"
-            )
-        }
 
         Pair(byKey.values.toList(), filtered)
     }
@@ -1449,11 +1388,9 @@ class TraktSyncService @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to delete stale playback for ${record.showTmdbId}", e)
             }
         }
 
-        Log.d(TAG, "Cleaned up ${stale.size} stale Trakt playback entries")
     }
 
     private suspend fun fetchAllSupabaseWatchHistory(
@@ -1518,11 +1455,15 @@ class TraktSyncService @Inject constructor(
                                 traktApi.addToHistory(
                                     auth, clientId, "2",
                                     TraktHistoryBody(
-                                        episodes = listOf(
-                                            TraktEpisodeId(
+                                        shows = listOf(
+                                            TraktHistoryShowWithSeasons(
                                                 ids = TraktIds(tmdb = tmdbId),
-                                                season = season,
-                                                number = episode
+                                                seasons = listOf(
+                                                    TraktHistorySeason(
+                                                        number = season,
+                                                        episodes = listOf(TraktHistoryEpisodeNumber(number = episode))
+                                                    )
+                                                )
                                             )
                                         )
                                     )
@@ -1544,7 +1485,6 @@ class TraktSyncService @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Outbox item failed: ${item.action} (${item.id})", e)
                 false
             }
 
@@ -1577,7 +1517,6 @@ class TraktSyncService @Inject constructor(
                 executeTraktCall("remove playback item") { auth ->
                     traktApi.removePlaybackItem(auth, clientId, "2", item.id)
                 }
-                Log.d(TAG, "Removed Trakt playback item ${item.id} for $tmdbId")
             } catch (e: Exception) {
                 outboxRepository.enqueue(
                     TraktOutboxItem(
@@ -1585,10 +1524,8 @@ class TraktSyncService @Inject constructor(
                         playbackId = item.id
                     )
                 )
-                Log.e(TAG, "Failed to remove Trakt playback item ${item.id}, queued", e)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to remove Trakt playback for $tmdbId", e)
         }
     }
 
@@ -1648,7 +1585,6 @@ class TraktSyncService @Inject constructor(
             block(auth)
         } catch (e: HttpException) {
             if (e.code() == 401) {
-                Log.w(TAG, "$operation unauthorized, refreshing token and retrying")
                 val refreshed = refreshTokenIfNeeded(force = true) ?: throw e
                 block("Bearer $refreshed")
             } else {
@@ -1666,7 +1602,6 @@ class TraktSyncService @Inject constructor(
             block(auth)
         } catch (e: HttpException) {
             if (e.code() == 401) {
-                Log.w(TAG, "$operation unauthorized, refreshing Supabase session and retrying")
                 val refreshed = authRepository.refreshAccessToken()
                 if (!refreshed.isNullOrBlank()) {
                     return block("Bearer $refreshed")
@@ -1695,9 +1630,9 @@ class TraktSyncService @Inject constructor(
 
     private suspend fun refreshTokenIfNeeded(force: Boolean): String? {
         val prefs = context.traktDataStore.data.first()
-        val accessToken = prefs[TRAKT_ACCESS_TOKEN_KEY] ?: return null
-        val refreshToken = prefs[TRAKT_REFRESH_TOKEN_KEY]
-        val expiresAt = prefs[TRAKT_EXPIRES_AT_KEY]
+        val accessToken = prefs[accessTokenKey()] ?: return null
+        val refreshToken = prefs[refreshTokenKey()]
+        val expiresAt = prefs[expiresAtKey()]
 
         if (refreshToken == null || expiresAt == null) {
             return if (force) null else accessToken
@@ -1719,16 +1654,15 @@ class TraktSyncService @Inject constructor(
             saveToken(newToken)
             newToken.accessToken
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to refresh Trakt token", e)
             null
         }
     }
 
     private suspend fun saveToken(token: TraktToken) {
         context.traktDataStore.edit { prefs ->
-            prefs[TRAKT_ACCESS_TOKEN_KEY] = token.accessToken
-            prefs[TRAKT_REFRESH_TOKEN_KEY] = token.refreshToken
-            prefs[TRAKT_EXPIRES_AT_KEY] = token.createdAt + token.expiresIn
+            prefs[accessTokenKey()] = token.accessToken
+            prefs[refreshTokenKey()] = token.refreshToken
+            prefs[expiresAtKey()] = token.createdAt + token.expiresIn
         }
     }
 }

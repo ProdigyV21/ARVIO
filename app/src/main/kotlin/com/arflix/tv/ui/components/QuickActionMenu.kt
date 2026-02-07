@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,11 +57,13 @@ fun QuickActionMenu(
     onDismiss: () -> Unit
 ) {
     var focusedIndex by remember { mutableIntStateOf(0) }
+    var ignoreNextEnter by remember { mutableStateOf(true) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(isVisible) {
         if (isVisible) {
             focusedIndex = 0
+            ignoreNextEnter = true
             focusRequester.requestFocus()
         }
     }
@@ -89,19 +92,24 @@ fun QuickActionMenu(
                             }
                             Key.DirectionUp, Key.DirectionDown -> true
                             Key.Enter, Key.DirectionCenter -> {
-                                when (focusedIndex) {
-                                    0 -> {
-                                        onMarkWatched()
-                                        onDismiss()
-                                    }
-                                    1 -> {
-                                        if (canRemoveContinueWatching) {
-                                            onRemoveContinueWatching()
+                                if (ignoreNextEnter) {
+                                    ignoreNextEnter = false
+                                    true
+                                } else {
+                                    when (focusedIndex) {
+                                        0 -> {
+                                            onMarkWatched()
+                                            onDismiss()
                                         }
-                                        onDismiss()
+                                        1 -> {
+                                            if (canRemoveContinueWatching) {
+                                                onRemoveContinueWatching()
+                                            }
+                                            onDismiss()
+                                        }
                                     }
+                                    true
                                 }
-                                true
                             }
                             Key.Back, Key.Escape -> {
                                 onDismiss()

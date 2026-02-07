@@ -30,6 +30,7 @@ data class DetailsUiState(
     val isLoading: Boolean = true,
     val item: MediaItem? = null,
     val imdbId: String? = null,  // Real IMDB ID for stream resolution
+    val tvdbId: Int? = null,     // TVDB ID for Kitsu anime mapping
     val logoUrl: String? = null,
     val trailerKey: String? = null,
     val episodes: List<Episode> = emptyList(),
@@ -136,10 +137,10 @@ class DetailsViewModel @Inject constructor(
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(DetailsUiState())
     val uiState: StateFlow<DetailsUiState> = _uiState.asStateFlow()
-    
+
     private var currentMediaType: MediaType = MediaType.MOVIE
     private var currentMediaId: Int = 0
 
@@ -171,7 +172,7 @@ class DetailsViewModel @Inject constructor(
             status = primary.status ?: fallback.status
         )
     }
-    
+
     fun loadDetails(mediaType: MediaType, mediaId: Int, initialSeason: Int? = null, initialEpisode: Int? = null) {
         currentMediaType = mediaType
         currentMediaId = mediaId
@@ -197,7 +198,9 @@ class DetailsViewModel @Inject constructor(
                     isLoading = initialItem == null,
                     item = initialItem,
                     currentSeason = seasonToLoad,
-                    totalSeasons = cachedTotalSeasons
+                    totalSeasons = cachedTotalSeasons,
+                    playSeason = initialSeason,
+                    playEpisode = initialEpisode
                 )
 
                 val itemDeferred = async {
@@ -215,8 +218,8 @@ class DetailsViewModel @Inject constructor(
                 val watchlistDeferred = async { watchlistRepository.isInWatchlist(mediaType, mediaId) }
                 val reviewsDeferred = async { mediaRepository.getReviews(mediaType, mediaId) }
 
-                // Fetch real IMDB ID from TMDB external_ids endpoint
-                val imdbDeferred = async { resolveImdbId(mediaType, mediaId) }
+                // Fetch real IMDB ID and TVDB ID from TMDB external_ids endpoint
+                val externalIdsDeferred = async { resolveExternalIds(mediaType, mediaId) }
                 val resumeDeferred = async { fetchResumeInfo(mediaId, mediaType) }
 
                 // For TV shows, also load episodes
@@ -269,7 +272,7 @@ class DetailsViewModel @Inject constructor(
                     traktRepository.isMovieWatched(mediaId)
                 } else {
                     // For TV shows, check if any episode is watched
-                    traktRepository.getWatchedEpisodesFromCache().any { it.startsWith("show_tmdb:$mediaId:") }
+                    traktRepository.hasWatchedEpisodes(mediaId)
                 }
                 val itemWithWatchedStatus = mergedItem.copy(isWatched = isWatched)
 
@@ -300,10 +303,14 @@ class DetailsViewModel @Inject constructor(
                 updateState { it.copy(initialSeasonIndex = initialSeasonIndex) }
 
                 launch {
-                    val imdbId = runCatching { imdbDeferred.await() }.getOrNull()
+                    val externalIds = runCatching { externalIdsDeferred.await() }.getOrNull()
+                    val imdbId = externalIds?.imdbId
+                    val tvdbId = externalIds?.tvdbId
                     if (!imdbId.isNullOrBlank()) {
                         mediaRepository.cacheImdbId(mediaType, mediaId, imdbId)
-                        updateState { state -> state.copy(imdbId = imdbId) }
+                        updateState { state -> state.copy(imdbId = imdbId, tvdbId = tvdbId) }
+                    } else if (tvdbId != null) {
+                        updateState { state -> state.copy(tvdbId = tvdbId) }
                     }
                 }
 
@@ -398,7 +405,7 @@ class DetailsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun loadSeason(seasonNumber: Int) {
         if (currentMediaType != MediaType.TV) return
         // Don't reload if already on this season
@@ -431,7 +438,7 @@ class DetailsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun toggleWatched(episodeIndex: Int? = null) {
         val currentItem = _uiState.value.item ?: return
 
@@ -502,7 +509,6 @@ class DetailsViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                android.util.Log.e("DetailsViewModel", "toggleWatched failed", e)
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to update watched status",
                     toastType = ToastType.ERROR
@@ -518,7 +524,8 @@ class DetailsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (newInWatchlist) {
-                    watchlistRepository.addToWatchlist(currentMediaType, currentMediaId)
+                    // Pass the full MediaItem so it appears instantly in watchlist
+                    watchlistRepository.addToWatchlist(currentMediaType, currentMediaId, currentItem)
                 } else {
                     watchlistRepository.removeFromWatchlist(currentMediaType, currentMediaId)
                 }
@@ -540,9 +547,9 @@ class DetailsViewModel @Inject constructor(
     fun dismissToast() {
         _uiState.value = _uiState.value.copy(toastMessage = null)
     }
-    
+
     // ========== Person Modal ==========
-    
+
     fun loadPerson(personId: Int) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -550,7 +557,7 @@ class DetailsViewModel @Inject constructor(
                 isLoadingPerson = true,
                 selectedPerson = null
             )
-            
+
             try {
                 val person = mediaRepository.getPersonDetails(personId)
                 _uiState.value = _uiState.value.copy(
@@ -564,29 +571,41 @@ class DetailsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun closePersonModal() {
         _uiState.value = _uiState.value.copy(
             showPersonModal = false,
             selectedPerson = null
         )
     }
-    
+
     // ========== Stream Resolution ==========
-    
+
     fun loadStreams(imdbId: String, season: Int? = null, episode: Int? = null) {
-        android.util.Log.d("DetailsViewModel", "loadStreams called: imdbId=$imdbId, season=$season, episode=$episode")
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingStreams = true)
 
             try {
+                // Get current item's genre IDs and language for anime detection
+                val item = _uiState.value.item
+                val genreIds = item?.genreIds ?: emptyList()
+                val originalLanguage = item?.originalLanguage
+
                 val result = if (currentMediaType == MediaType.MOVIE) {
                     streamRepository.resolveMovieStreams(imdbId)
                 } else {
-                    streamRepository.resolveEpisodeStreams(imdbId, season ?: 1, episode ?: 1)
+                    streamRepository.resolveEpisodeStreams(
+                        imdbId = imdbId,
+                        season = season ?: 1,
+                        episode = episode ?: 1,
+                        tmdbId = currentMediaId,
+                        tvdbId = _uiState.value.tvdbId,
+                        genreIds = genreIds,
+                        originalLanguage = originalLanguage,
+                        title = item?.title ?: ""
+                    )
                 }
 
-                android.util.Log.d("DetailsViewModel", "loadStreams result: ${result.streams.size} streams, ${result.subtitles.size} subtitles")
 
                 val filteredStreams = result.streams.filter { it.url != null }
                 _uiState.value = _uiState.value.copy(
@@ -595,24 +614,19 @@ class DetailsViewModel @Inject constructor(
                     subtitles = result.subtitles
                 )
             } catch (e: Exception) {
-                android.util.Log.e("DetailsViewModel", "loadStreams error: ${e.message}", e)
                 _uiState.value = _uiState.value.copy(isLoadingStreams = false)
             }
         }
     }
-    
+
     fun markEpisodeWatched(season: Int, episode: Int, watched: Boolean) {
-        android.util.Log.d("DetailsViewModel", "markEpisodeWatched called: mediaId=$currentMediaId, S${season}E${episode}, watched=$watched")
         viewModelScope.launch {
             try {
                 if (watched) {
-                    android.util.Log.d("DetailsViewModel", "Calling traktRepository.markEpisodeWatched for $currentMediaId S${season}E${episode}")
                     traktRepository.markEpisodeWatched(currentMediaId, season, episode)
                     // Also remove from Supabase watch_history (removes from Continue Watching)
-                    android.util.Log.d("DetailsViewModel", "Calling watchHistoryRepository.removeFromHistory for $currentMediaId S${season}E${episode}")
                     watchHistoryRepository.removeFromHistory(currentMediaId, season, episode)
                 } else {
-                    android.util.Log.d("DetailsViewModel", "Calling traktRepository.markEpisodeUnwatched for $currentMediaId S${season}E${episode}")
                     traktRepository.markEpisodeUnwatched(currentMediaId, season, episode)
                 }
 
@@ -623,9 +637,8 @@ class DetailsViewModel @Inject constructor(
                     } else ep
                 }
                 _uiState.value = _uiState.value.copy(episodes = updatedEpisodes)
-                android.util.Log.d("DetailsViewModel", "markEpisodeWatched completed successfully")
             } catch (e: Exception) {
-                android.util.Log.e("DetailsViewModel", "markEpisodeWatched failed", e)
+                // Failed silently
             }
         }
     }
@@ -862,14 +875,17 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun resolveImdbId(mediaType: MediaType, mediaId: Int): String? {
+    private data class ExternalIds(val imdbId: String?, val tvdbId: Int?)
+
+    private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): ExternalIds {
         return try {
-            when (mediaType) {
-                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY).imdbId
-                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, Constants.TMDB_API_KEY).imdbId
+            val ids = when (mediaType) {
+                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY)
+                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, Constants.TMDB_API_KEY)
             }
+            ExternalIds(imdbId = ids.imdbId, tvdbId = ids.tvdbId)
         } catch (_: Exception) {
-            null
+            ExternalIds(null, null)
         }
     }
 }

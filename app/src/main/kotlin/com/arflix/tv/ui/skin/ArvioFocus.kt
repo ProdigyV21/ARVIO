@@ -1,6 +1,8 @@
 package com.arflix.tv.ui.skin
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,20 +66,32 @@ fun Modifier.arvioFocusable(
 
     val tokens = ArvioSkin.focus
 
-    val focusTween = tween<Float>(durationMillis = tokens.durationMillis, easing = tokens.easing)
-
+    // Use spring physics for natural, bouncy feel
     val scale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = focusTween,
+        animationSpec = spring(
+            dampingRatio = 0.75f,  // Slight bounce for premium feel
+            stiffness = 400f       // Snappy but smooth
+        ),
         label = "arvio_focus_scale",
     )
 
-    // No animation for alpha - instant on/off for performance
-    val highlightAlpha = if (visualFocused) 1f else 0f
+    // Animate alpha for smooth border fade in/out
+    val highlightAlpha by animateFloatAsState(
+        targetValue = if (visualFocused) 1f else 0f,
+        animationSpec = tween(durationMillis = 120, easing = tokens.easing),
+        label = "arvio_focus_alpha",
+    )
 
-    // Static elevation - no animation needed
+    // Animate elevation for smooth lift effect
+    val elevationDp by animateDpAsState(
+        targetValue = if (visualFocused) tokens.translationZFocused else 0.dp,
+        animationSpec = tween(durationMillis = 120),
+        label = "arvio_focus_elevation",
+    )
+
     val density = LocalDensity.current
-    val elevationPx = with(density) { if (visualFocused) tokens.translationZFocused.toPx() else 0f }
+    val elevationPx = with(density) { elevationDp.toPx() }
     val originX = if (visualFocused) focusedTransformOriginX.coerceIn(0f, 1f) else 0.5f
     val focusTransformOrigin = TransformOrigin(originX, 0.5f)
 
@@ -111,11 +125,11 @@ fun Modifier.arvioFocusable(
         Modifier
     }
 
-    val layerModifier = if (scale != 1f || elevationPx > 0f) {
+    val layerModifier = if (scale != 1f) {
         Modifier.graphicsLayer {
             scaleX = scale
             scaleY = scale
-            shadowElevation = elevationPx
+            // Removed shadowElevation - it creates rectangular shadows that don't follow rounded corners
             transformOrigin = focusTransformOrigin
         }
     } else {

@@ -3,15 +3,29 @@ package com.arflix.tv.util
 import com.arflix.tv.BuildConfig
 
 /**
- * Application constants - API keys loaded from BuildConfig (secrets.properties)
+ * Application constants
  *
- * API keys are injected at build time via Secrets Gradle Plugin.
- * See secrets.properties (gitignored) and secrets.defaults.properties (committed).
+ * API keys are stored securely on Supabase Edge Functions (not in the app).
+ * The app calls Edge Function proxies which add the keys server-side.
  */
 object Constants {
-    // TMDB API - Key from BuildConfig (secrets.properties)
-    val TMDB_API_KEY: String get() = BuildConfig.TMDB_API_KEY
+    // Supabase - Keys from BuildConfig (secrets.properties)
+    val SUPABASE_URL: String get() = BuildConfig.SUPABASE_URL
+    val SUPABASE_ANON_KEY: String get() = BuildConfig.SUPABASE_ANON_KEY
+
+    // Edge Function Proxies - API keys are kept secure on server
+    val TMDB_PROXY_URL: String get() = "${SUPABASE_URL}/functions/v1/tmdb-proxy"
+    val TRAKT_PROXY_URL: String get() = "${SUPABASE_URL}/functions/v1/trakt-proxy"
+
+    // API Base URLs - requests are intercepted and routed through proxy
     const val TMDB_BASE_URL = "https://api.themoviedb.org/3/"
+    const val TRAKT_API_URL = "https://api.trakt.tv/"
+
+    // Legacy API key references - these are stripped by ApiProxyInterceptor
+    // The real keys are stored securely on Supabase Edge Functions
+    const val TMDB_API_KEY = "PROXIED" // Stripped by interceptor, real key on server
+    const val TRAKT_CLIENT_ID = "PROXIED" // Stripped by interceptor, real key on server
+    const val TRAKT_CLIENT_SECRET = "PROXIED" // Stripped by interceptor, real key on server
 
     // Image URLs - High quality for TV (1080p+)
     const val IMAGE_BASE = "https://image.tmdb.org/t/p/w780"           // Posters: good quality
@@ -21,27 +35,14 @@ object Constants {
     const val LOGO_BASE = "https://image.tmdb.org/t/p/w500"            // Logos: fast loading
     const val LOGO_BASE_LARGE = "https://image.tmdb.org/t/p/original"  // Large logos: full quality
 
-    // Trakt API - Keys from BuildConfig (secrets.properties)
-    val TRAKT_CLIENT_ID: String get() = BuildConfig.TRAKT_CLIENT_ID
-    val TRAKT_CLIENT_SECRET: String get() = BuildConfig.TRAKT_CLIENT_SECRET
-    const val TRAKT_API_URL = "https://api.trakt.tv/"
-
-    // Supabase - Keys from BuildConfig (secrets.properties)
-    val SUPABASE_URL: String get() = BuildConfig.SUPABASE_URL
-    val SUPABASE_ANON_KEY: String get() = BuildConfig.SUPABASE_ANON_KEY
-
     // Google Sign-In - Key from BuildConfig (secrets.properties)
     val GOOGLE_WEB_CLIENT_ID: String get() = BuildConfig.GOOGLE_WEB_CLIENT_ID
 
-    // Stremio Addons (public URLs, not secrets)
-    const val TORRENTIO_URL = "https://torrentio.strem.fun"
-    const val ANIME_KITSU_URL = "https://anime-kitsu.strem.fun"
-    const val ANIMETOSHO_URL = "https://animetosho.strem.fun"
-
     // Progress thresholds
     const val WATCHED_THRESHOLD = 90 // Percentage at which content is considered watched
-    const val MAX_PROGRESS_ENTRIES = 50
-    const val MAX_CONTINUE_WATCHING = 20
+    const val MIN_PROGRESS_THRESHOLD = 3 // Minimum % progress to appear in Continue Watching (filters accidental plays)
+    const val MAX_PROGRESS_ENTRIES = 50  // Max playback progress entries to process
+    const val MAX_CONTINUE_WATCHING = 50 // Max items in Continue Watching row
 
     // Preferences keys
     const val PREFS_NAME = "arflix_prefs"

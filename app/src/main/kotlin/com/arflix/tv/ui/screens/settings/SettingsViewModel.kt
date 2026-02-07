@@ -6,12 +6,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.arflix.tv.data.api.RealDebridDeviceCode
 import com.arflix.tv.data.api.TraktDeviceCode
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
-import com.arflix.tv.data.repository.DebridRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.TraktSyncService
@@ -54,16 +52,6 @@ data class SettingsUiState(
     val lastSyncTime: String? = null,
     val syncedMovies: Int = 0,
     val syncedEpisodes: Int = 0,
-    // Real-Debrid
-    val isRdAuthenticated: Boolean = false,
-    val rdCode: RealDebridDeviceCode? = null,
-    val isRdPolling: Boolean = false,
-    val rdUsername: String? = null,
-    val rdExpiration: String? = null,
-    // TorBox
-    val isTorBoxAuthenticated: Boolean = false,
-    val torBoxApiKey: String? = null,
-    val showTorBoxInput: Boolean = false,
     // Addons
     val addons: List<Addon> = emptyList(),
     // Toast
@@ -75,7 +63,6 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val traktRepository: TraktRepository,
-    private val debridRepository: DebridRepository,
     private val streamRepository: StreamRepository,
     private val authRepository: AuthRepository,
     private val traktSyncService: TraktSyncService
@@ -91,7 +78,6 @@ class SettingsViewModel @Inject constructor(
     private val gson = Gson()
 
     private var traktPollingJob: Job? = null
-    private var rdPollingJob: Job? = null
 
     init {
         loadSettings()
@@ -127,22 +113,11 @@ class SettingsViewModel @Inject constructor(
             val isLoggedIn = authState is AuthState.Authenticated
             val accountEmail = (authState as? AuthState.Authenticated)?.email
             val isTrakt = traktRepository.isAuthenticated.first()
-            val isRd = debridRepository.isRealDebridAuthenticated.first()
-            val isTorBox = debridRepository.isTorBoxAuthenticated.first()
 
             // Get Trakt expiration if authenticated
             var traktExpiration: String? = null
             if (isTrakt) {
                 traktExpiration = traktRepository.getTokenExpirationDate()
-            }
-
-            // Get RD user info if authenticated
-            var rdUsername: String? = null
-            var rdExpiration: String? = null
-            if (isRd) {
-                val userInfo = debridRepository.getRdUserInfo()
-                rdUsername = userInfo?.username
-                rdExpiration = userInfo?.expiration
             }
 
             // Load addons immediately to avoid showing 0
@@ -158,10 +133,6 @@ class SettingsViewModel @Inject constructor(
                 accountEmail = accountEmail,
                 isTraktAuthenticated = isTrakt,
                 traktExpiration = traktExpiration,
-                isRdAuthenticated = isRd,
-                rdUsername = rdUsername,
-                rdExpiration = rdExpiration,
-                isTorBoxAuthenticated = isTorBox,
                 addons = addons
             )
         }
@@ -219,7 +190,7 @@ class SettingsViewModel @Inject constructor(
 
     // ========== Trakt Sync ==========
 
-    fun performFullSync() {
+    fun performFullSync(silent: Boolean = false) {
         viewModelScope.launch {
             if (_uiState.value.isSyncing) return@launch
             val result = traktSyncService.performFullSync()
@@ -237,10 +208,12 @@ class SettingsViewModel @Inject constructor(
                     traktRepository.initializeWatchedCache()
                 }
                 is SyncResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        toastMessage = "Sync failed: ${result.message}",
-                        toastType = ToastType.ERROR
-                    )
+                    if (!silent) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = "Sync failed: ${result.message}",
+                            toastType = ToastType.ERROR
+                        )
+                    }
                 }
             }
         }
@@ -358,9 +331,9 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    fun addCustomAddon(url: String, name: String) {
+    fun addCustomAddon(url: String) {
         viewModelScope.launch {
-            val result = streamRepository.addCustomAddon(url, name)
+            val result = streamRepository.addCustomAddon(url)
             result.onSuccess { addon ->
                 val currentAddons = _uiState.value.addons.toMutableList()
                 currentAddons.removeAll { it.id == addon.id }
@@ -370,8 +343,7 @@ class SettingsViewModel @Inject constructor(
                     toastMessage = "Added ${addon.name}",
                     toastType = ToastType.SUCCESS
                 )
-            }.onFailure { error ->
-                android.util.Log.e("SettingsViewModel", "Failed to add addon: ${error.message}")
+            }.onFailure { _ ->
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to add addon",
                     toastType = ToastType.ERROR
@@ -444,7 +416,7 @@ class SettingsViewModel @Inject constructor(
                         toastMessage = "Trakt connected successfully",
                         toastType = ToastType.SUCCESS
                     )
-                    performFullSync()
+                    performFullSync(silent = true)
                     return@launch
                 } catch (e: Exception) {
                     // Keep polling (400 = pending, 404 = not found, etc.)
@@ -482,125 +454,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    // ========== Real-Debrid Authentication ==========
-    
-    fun startRdAuth() {
-        viewModelScope.launch {
-            try {
-                val deviceCode = debridRepository.getRdDeviceCode()
-                _uiState.value = _uiState.value.copy(
-                    rdCode = deviceCode,
-                    isRdPolling = true
-                )
-                
-                startRdPolling(deviceCode)
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    rdCode = null,
-                    isRdPolling = false
-                )
-            }
-        }
-    }
-    
-    private fun startRdPolling(deviceCode: RealDebridDeviceCode) {
-        rdPollingJob?.cancel()
-        rdPollingJob = viewModelScope.launch {
-            val expiresAt = System.currentTimeMillis() + (deviceCode.expiresIn * 1000)
-            
-            while (System.currentTimeMillis() < expiresAt) {
-                delay(deviceCode.interval * 1000L)
-                
-                try {
-                    val success = debridRepository.pollRdCredentials(
-                        deviceCode.deviceCode,
-                        deviceCode.interval
-                    )
-                    
-                    if (success) {
-                        // Get user info
-                        val userInfo = debridRepository.getRdUserInfo()
-
-                        _uiState.value = _uiState.value.copy(
-                            isRdAuthenticated = true,
-                            rdCode = null,
-                            isRdPolling = false,
-                            rdUsername = userInfo?.username,
-                            rdExpiration = userInfo?.expiration,
-                            toastMessage = "Real-Debrid connected successfully",
-                            toastType = ToastType.SUCCESS
-                        )
-                        return@launch
-                    }
-                } catch (e: Exception) {
-                    // Keep polling
-                }
-            }
-            
-            // Expired or failed
-            _uiState.value = _uiState.value.copy(
-                rdCode = null,
-                isRdPolling = false
-            )
-        }
-    }
-    
-    fun cancelRdAuth() {
-        rdPollingJob?.cancel()
-        _uiState.value = _uiState.value.copy(
-            rdCode = null,
-            isRdPolling = false
-        )
-    }
-    
-    fun disconnectRealDebrid() {
-        viewModelScope.launch {
-            debridRepository.logoutRealDebrid()
-            _uiState.value = _uiState.value.copy(
-                isRdAuthenticated = false,
-                rdUsername = null,
-                rdExpiration = null,
-                toastMessage = "Real-Debrid disconnected",
-                toastType = ToastType.SUCCESS
-            )
-        }
-    }
-    
-    // ========== TorBox ==========
-
-    fun showTorBoxApiKeyInput() {
-        _uiState.value = _uiState.value.copy(showTorBoxInput = true)
-    }
-
-    fun hideTorBoxApiKeyInput() {
-        _uiState.value = _uiState.value.copy(showTorBoxInput = false)
-    }
-
-    fun setTorBoxApiKey(apiKey: String) {
-        viewModelScope.launch {
-            debridRepository.setTorBoxApiKey(apiKey)
-            _uiState.value = _uiState.value.copy(
-                isTorBoxAuthenticated = true,
-                torBoxApiKey = apiKey.take(8) + "...",
-                showTorBoxInput = false,
-                toastMessage = "TorBox connected",
-                toastType = ToastType.SUCCESS
-            )
-        }
-    }
-
-    fun disconnectTorBox() {
-        viewModelScope.launch {
-            debridRepository.logoutTorBox()
-            _uiState.value = _uiState.value.copy(
-                isTorBoxAuthenticated = false,
-                torBoxApiKey = null,
-                toastMessage = "TorBox disconnected",
-                toastType = ToastType.SUCCESS
-            )
-        }
-    }
-
     fun dismissToast() {
         _uiState.value = _uiState.value.copy(toastMessage = null)
     }
@@ -618,7 +471,6 @@ class SettingsViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         traktPollingJob?.cancel()
-        rdPollingJob?.cancel()
     }
 }
 

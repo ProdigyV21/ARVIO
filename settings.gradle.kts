@@ -11,12 +11,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Jellyfin FFmpeg decoder for DTS/TrueHD/Atmos
+        // Jellyfin's FFmpeg extension for Media3
         maven { url = uri("https://jitpack.io") }
+        maven { url = uri("https://s01.oss.sonatype.org/content/repositories/releases/") }
     }
 }
 
-rootProject.name = "ArflixTV"
+rootProject.name = "ARVIO"
 include(":app")
 include(":baselineprofile")
-

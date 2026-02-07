@@ -10,7 +10,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +48,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -128,7 +129,10 @@ import kotlin.math.abs
 fun DetailsScreen(
     mediaType: MediaType,
     mediaId: Int,
+    initialSeason: Int? = null,
+    initialEpisode: Int? = null,
     viewModel: DetailsViewModel = hiltViewModel(),
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToPlayer: (MediaType, Int, Int?, Int?, String?) -> Unit,
     onNavigateToDetails: (MediaType, Int) -> Unit,
     onNavigateToHome: () -> Unit = {},
@@ -162,12 +166,26 @@ fun DetailsScreen(
 
     val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(mediaType, mediaId) {
-        viewModel.loadDetails(mediaType, mediaId)
+    LaunchedEffect(mediaType, mediaId, initialSeason, initialEpisode) {
+        viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
     }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+
+    // Sync episodeIndex with initialEpisodeIndex from ViewModel
+    LaunchedEffect(uiState.initialEpisodeIndex, uiState.episodes) {
+        if (uiState.initialEpisodeIndex > 0 && uiState.episodes.isNotEmpty()) {
+            episodeIndex = uiState.initialEpisodeIndex
+        }
+    }
+
+    // Sync seasonIndex with initialSeasonIndex from ViewModel
+    LaunchedEffect(uiState.initialSeasonIndex) {
+        if (uiState.initialSeasonIndex > 0) {
+            seasonIndex = uiState.initialSeasonIndex
+        }
     }
 
     Box(
@@ -185,11 +203,7 @@ fun DetailsScreen(
                     
                     when (event.key) {
                         Key.Back, Key.Escape -> {
-                            if (isSidebarFocused) {
-                                onBack()
-                            } else {
-                                isSidebarFocused = true
-                            }
+                            onBack()  // Go directly home on back press
                             true
                         }
                         Key.DirectionLeft -> {
@@ -312,7 +326,7 @@ fun DetailsScreen(
                             when (focusedSection) {
                                 FocusSection.BUTTONS -> {
                                     when (buttonIndex) {
-                                        0 -> { // Play
+                                        0 -> { // Play - Auto-play highest quality source
                                             if (mediaType == MediaType.TV) {
                                                 val season = uiState.playSeason
                                                     ?: uiState.episodes.getOrNull(episodeIndex)?.seasonNumber
@@ -328,7 +342,7 @@ fun DetailsScreen(
                                                 onNavigateToPlayer(mediaType, mediaId, null, null, null)
                                             }
                                         }
-                                        1 -> { // Sources
+                                        1 -> { // Sources - Show StreamSelector for manual selection
                                             showStreamSelector = true
                                             uiState.imdbId?.let { imdbId ->
                                                 // Pass the currently focused episode for TV shows
@@ -447,8 +461,11 @@ fun DetailsScreen(
             }
         )
         
-        // Clock
-        TopBarClock(modifier = Modifier.align(Alignment.TopEnd))
+        // Clock and profile indicator
+        TopBarClock(
+            modifier = Modifier.align(Alignment.TopEnd),
+            profile = currentProfile
+        )
         
         // Person Modal
         PersonModal(
@@ -988,71 +1005,109 @@ private fun DetailsContent(
                         with(density) { (210.dp + 14.dp).toPx().coerceAtLeast(1f) }
                     }
 
-                    val episodeScrollTargetIndex by remember(
-                        episodeRowState,
-                        episodeIndex,
-                        focusedSection
-                    ) {
+                    // Track layout readiness for scroll calculation
+                    val layoutInfo = episodeRowState.layoutInfo
+                    val totalCount = layoutInfo.totalItemsCount
+                    val visibleCount = layoutInfo.visibleItemsInfo.size
+
+                    val episodeScrollTargetIndex by remember {
                         derivedStateOf {
                             if (focusedSection != FocusSection.EPISODES || episodeIndex < 0) {
                                 return@derivedStateOf -1
                             }
-                            val visibleCount = episodeRowState.layoutInfo.visibleItemsInfo.size
-                            val totalCount = episodeRowState.layoutInfo.totalItemsCount
-                            if (totalCount == 0) return@derivedStateOf -1
-                            val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
+                            val total = episodeRowState.layoutInfo.totalItemsCount
+                            val visible = episodeRowState.layoutInfo.visibleItemsInfo.size
+                            if (total == 0) return@derivedStateOf -1
+                            val maxFirstIndex = (total - visible).coerceAtLeast(0)
                             episodeIndex.coerceAtMost(maxFirstIndex)
                         }
                     }
 
                     var lastEpisodeScrollIndex by remember { mutableIntStateOf(-1) }
+                    var hasScrolledToInitial by remember { mutableStateOf(false) }
+
+                    // Reset scroll tracking when leaving episodes section
                     LaunchedEffect(focusedSection) {
                         if (focusedSection != FocusSection.EPISODES) {
                             lastEpisodeScrollIndex = -1
+                            hasScrolledToInitial = false
                         }
                     }
 
-                    LaunchedEffect(episodeScrollTargetIndex, focusedSection) {
+                    // Scroll to initial episode when first entering episodes section
+                    LaunchedEffect(focusedSection, totalCount, episodeIndex) {
+                        if (focusedSection != FocusSection.EPISODES) return@LaunchedEffect
+                        if (totalCount == 0) return@LaunchedEffect
+                        if (hasScrolledToInitial && episodeIndex == 0) return@LaunchedEffect
+
+                        // Scroll to the correct episode
+                        val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
+                        val scrollTarget = episodeIndex.coerceAtMost(maxFirstIndex)
+                        episodeRowState.animateScrollToItem(index = scrollTarget)
+                        hasScrolledToInitial = true
+                    }
+
+                    LaunchedEffect(episodeScrollTargetIndex, focusedSection, episodeIndex) {
                         if (episodeScrollTargetIndex < 0) return@LaunchedEffect
+                        val visibleCount = episodeRowState.layoutInfo.visibleItemsInfo.size
+                        val totalCount = episodeRowState.layoutInfo.totalItemsCount
+                        val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
+
+                        // Calculate extra offset for items at the end of the list
+                        val extraOffset = if (episodeIndex > maxFirstIndex) {
+                            ((episodeIndex - maxFirstIndex) * episodeItemSpanPx).toInt()
+                        } else {
+                            0
+                        }
+
+                        // FIX: When focused on first episode, ALWAYS scroll to position 0
+                        // This ensures first episode is visible when scrolling back
+                        if (episodeIndex == 0) {
+                            val currentFirstVisible = episodeRowState.firstVisibleItemIndex
+                            val currentOffset = episodeRowState.firstVisibleItemScrollOffset
+                            // Only scroll if not already at position 0
+                            if (currentFirstVisible != 0 || currentOffset != 0) {
+                                episodeRowState.animateScrollToItem(index = 0, scrollOffset = 0)
+                            }
+                            lastEpisodeScrollIndex = 0
+                            return@LaunchedEffect
+                        }
+
+                        if (lastEpisodeScrollIndex == episodeScrollTargetIndex && extraOffset == 0) return@LaunchedEffect
                         if (lastEpisodeScrollIndex == -1) {
-                            episodeRowState.scrollToItem(index = episodeScrollTargetIndex, scrollOffset = 0)
+                            episodeRowState.animateScrollToItem(index = episodeScrollTargetIndex, scrollOffset = extraOffset)
                             lastEpisodeScrollIndex = episodeScrollTargetIndex
                             return@LaunchedEffect
                         }
                         val delta = episodeScrollTargetIndex - lastEpisodeScrollIndex
-                        if (delta == 0) return@LaunchedEffect
-                        if (abs(delta) > 1) {
-                            episodeRowState.scrollToItem(index = episodeScrollTargetIndex, scrollOffset = 0)
-                        } else {
-                            episodeRowState.scrollBy(episodeItemSpanPx * delta)
+                        if (delta == 0 && extraOffset > 0) {
+                            // Same scroll target but need extra offset for end items
+                            episodeRowState.animateScrollToItem(index = episodeScrollTargetIndex, scrollOffset = extraOffset)
+                        } else if (abs(delta) > 1) {
+                            // Large jump - use smooth animation
+                            episodeRowState.animateScrollToItem(index = episodeScrollTargetIndex, scrollOffset = extraOffset)
+                        } else if (delta != 0) {
+                            // Single item navigation - smooth animated scroll
+                            episodeRowState.animateScrollToItem(index = episodeScrollTargetIndex, scrollOffset = extraOffset)
                         }
                         lastEpisodeScrollIndex = episodeScrollTargetIndex
                     }
 
-                    val episodeFocusIndex by remember(episodeRowState, focusedSection, episodeIndex) {
-                        derivedStateOf {
-                            val visibleCount = episodeRowState.layoutInfo.visibleItemsInfo.size
-                            val totalCount = episodeRowState.layoutInfo.totalItemsCount
-                            val isScrollable = visibleCount > 0 && totalCount > visibleCount
-                            val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
-                            val atEnd = isScrollable && episodeRowState.firstVisibleItemIndex >= maxFirstIndex
-                            if (focusedSection == FocusSection.EPISODES && isScrollable && !atEnd) {
-                                episodeRowState.firstVisibleItemIndex
-                            } else {
-                                episodeIndex
-                            }
-                        }
-                    }
+                    // Use rememberUpdatedState to ensure items recompose when focus changes
+                    val currentFocusedSection by rememberUpdatedState(focusedSection)
+                    val currentEpisodeIndex by rememberUpdatedState(episodeIndex)
 
                     TvLazyRow(
                         state = episodeRowState,
-                        contentPadding = PaddingValues(start = contentStartPadding, end = 100.dp),
+                        contentPadding = PaddingValues(start = contentStartPadding, end = 400.dp),  // Extra padding to ensure last items visible
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         itemsIndexed(episodes, key = { _, ep -> ep.episodeNumber }) { index, episode ->
+                            // Read state inside item to ensure recomposition on focus change
+                            val isFocused = currentFocusedSection == FocusSection.EPISODES && index == currentEpisodeIndex
                             EpisodeCard(
                                 episode = episode,
-                                isFocused = focusedSection == FocusSection.EPISODES && index == episodeFocusIndex
+                                isFocused = isFocused
                             )
                         }
                     }
@@ -1074,7 +1129,7 @@ private fun DetailsContent(
 
                         LaunchedEffect(seasonScrollTargetIndex, focusedSection) {
                             if (seasonScrollTargetIndex < 0) return@LaunchedEffect
-                            seasonRowState.scrollToItem(index = seasonScrollTargetIndex, scrollOffset = 0)
+                            seasonRowState.animateScrollToItem(index = seasonScrollTargetIndex, scrollOffset = 0)
                         }
 
                         val seasonFocusIndex by remember(focusedSection, seasonIndex) {
@@ -1085,7 +1140,7 @@ private fun DetailsContent(
 
                         TvLazyRow(
                             state = seasonRowState,
-                            contentPadding = PaddingValues(start = contentStartPadding, end = 48.dp),
+                            contentPadding = PaddingValues(start = contentStartPadding, end = 150.dp),  // 120dp button + 30dp margin
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed((1..totalSeasons).toList(), key = { _, s -> s }) { index, season ->
@@ -1112,7 +1167,7 @@ private fun DetailsContent(
                     val castRowState = rememberTvLazyListState()
                     val density = LocalDensity.current
                     val castItemSpanPx = remember(density) {
-                        with(density) { (120.dp + 16.dp).toPx().coerceAtLeast(1f) }
+                        with(density) { (90.dp + 16.dp).toPx().coerceAtLeast(1f) }  // 90dp card + 16dp spacing
                     }
 
                     val castScrollTargetIndex by remember(
@@ -1139,36 +1194,33 @@ private fun DetailsContent(
                         }
                     }
 
-                    LaunchedEffect(castScrollTargetIndex, focusedSection) {
+                    LaunchedEffect(castScrollTargetIndex, focusedSection, castIndex) {
                         if (castScrollTargetIndex < 0) return@LaunchedEffect
-                        if (lastCastScrollIndex == -1) {
-                            castRowState.scrollToItem(index = castScrollTargetIndex, scrollOffset = 0)
+                        val visibleCount = castRowState.layoutInfo.visibleItemsInfo.size
+                        val totalCount = castRowState.layoutInfo.totalItemsCount
+                        val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
+
+                        val extraOffset = if (castIndex > maxFirstIndex) {
+                            ((castIndex - maxFirstIndex) * castItemSpanPx).toInt()
+                        } else {
+                            0
+                        }
+
+                        if (lastCastScrollIndex == -1 || abs(castScrollTargetIndex - lastCastScrollIndex) > 1) {
+                            castRowState.scrollToItem(index = castScrollTargetIndex, scrollOffset = extraOffset)
                             lastCastScrollIndex = castScrollTargetIndex
                             return@LaunchedEffect
                         }
                         val delta = castScrollTargetIndex - lastCastScrollIndex
-                        if (delta == 0) return@LaunchedEffect
-                        if (abs(delta) > 1) {
-                            castRowState.scrollToItem(index = castScrollTargetIndex, scrollOffset = 0)
-                        } else {
-                            castRowState.scrollBy(castItemSpanPx * delta)
-                        }
-                        lastCastScrollIndex = castScrollTargetIndex
-                    }
-
-                    val castFocusIndex by remember(castRowState, focusedSection, castIndex) {
-                        derivedStateOf {
-                            val visibleCount = castRowState.layoutInfo.visibleItemsInfo.size
-                            val totalCount = castRowState.layoutInfo.totalItemsCount
-                            val isScrollable = visibleCount > 0 && totalCount > visibleCount
-                            val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
-                            val atEnd = isScrollable && castRowState.firstVisibleItemIndex >= maxFirstIndex
-                            if (focusedSection == FocusSection.CAST && isScrollable && !atEnd) {
-                                castRowState.firstVisibleItemIndex
-                            } else {
-                                castIndex
+                        if (delta == 0 && extraOffset > 0) {
+                            castRowState.scrollToItem(index = castScrollTargetIndex, scrollOffset = extraOffset)
+                        } else if (delta != 0) {
+                            castRowState.animateScrollBy(castItemSpanPx * delta)
+                            if (extraOffset > 0) {
+                                castRowState.scrollToItem(index = castScrollTargetIndex, scrollOffset = extraOffset)
                             }
                         }
+                        lastCastScrollIndex = castScrollTargetIndex
                     }
 
                     Column {
@@ -1184,13 +1236,13 @@ private fun DetailsContent(
 
                         TvLazyRow(
                             state = castRowState,
-                            contentPadding = PaddingValues(start = contentStartPadding, end = 48.dp),
+                            contentPadding = PaddingValues(start = contentStartPadding, end = 120.dp),  // 90dp card + 30dp margin
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             itemsIndexed(cast, key = { _, c -> c.id }) { index, castMember ->
                                 CircularCastCard(
                                     castMember = castMember,
-                                    isFocused = focusedSection == FocusSection.CAST && index == castFocusIndex,
+                                    isFocused = focusedSection == FocusSection.CAST && index == castIndex,
                                     onClick = { /* Handled by key navigation */ }
                                 )
                             }
@@ -1235,19 +1287,31 @@ private fun DetailsContent(
                         }
                     }
 
-                    LaunchedEffect(reviewScrollTargetIndex, focusedSection) {
+                    LaunchedEffect(reviewScrollTargetIndex, focusedSection, reviewIndex) {
                         if (reviewScrollTargetIndex < 0) return@LaunchedEffect
-                        if (lastReviewScrollIndex == -1) {
-                            reviewRowState.scrollToItem(index = reviewScrollTargetIndex, scrollOffset = 0)
+                        val visibleCount = reviewRowState.layoutInfo.visibleItemsInfo.size
+                        val totalCount = reviewRowState.layoutInfo.totalItemsCount
+                        val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
+
+                        val extraOffset = if (reviewIndex > maxFirstIndex) {
+                            ((reviewIndex - maxFirstIndex) * reviewItemSpanPx).toInt()
+                        } else {
+                            0
+                        }
+
+                        if (lastReviewScrollIndex == -1 || abs(reviewScrollTargetIndex - lastReviewScrollIndex) > 1) {
+                            reviewRowState.scrollToItem(index = reviewScrollTargetIndex, scrollOffset = extraOffset)
                             lastReviewScrollIndex = reviewScrollTargetIndex
                             return@LaunchedEffect
                         }
                         val delta = reviewScrollTargetIndex - lastReviewScrollIndex
-                        if (delta == 0) return@LaunchedEffect
-                        if (abs(delta) > 1) {
-                            reviewRowState.scrollToItem(index = reviewScrollTargetIndex, scrollOffset = 0)
-                        } else {
-                            reviewRowState.scrollBy(reviewItemSpanPx * delta)
+                        if (delta == 0 && extraOffset > 0) {
+                            reviewRowState.scrollToItem(index = reviewScrollTargetIndex, scrollOffset = extraOffset)
+                        } else if (delta != 0) {
+                            reviewRowState.animateScrollBy(reviewItemSpanPx * delta)
+                            if (extraOffset > 0) {
+                                reviewRowState.scrollToItem(index = reviewScrollTargetIndex, scrollOffset = extraOffset)
+                            }
                         }
                         lastReviewScrollIndex = reviewScrollTargetIndex
                     }
@@ -1280,7 +1344,7 @@ private fun DetailsContent(
 
                         TvLazyRow(
                             state = reviewRowState,
-                            contentPadding = PaddingValues(start = contentStartPadding, end = 48.dp),
+                            contentPadding = PaddingValues(start = contentStartPadding, end = 350.dp),  // 320dp card + 30dp margin
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             itemsIndexed(reviews, key = { _, r -> r.id }) { index, review ->
@@ -1330,19 +1394,31 @@ private fun DetailsContent(
                         }
                     }
 
-                    LaunchedEffect(similarScrollTargetIndex, focusedSection) {
+                    LaunchedEffect(similarScrollTargetIndex, focusedSection, similarIndex) {
                         if (similarScrollTargetIndex < 0) return@LaunchedEffect
-                        if (lastSimilarScrollIndex == -1) {
-                            similarRowState.scrollToItem(index = similarScrollTargetIndex, scrollOffset = 0)
+                        val visibleCount = similarRowState.layoutInfo.visibleItemsInfo.size
+                        val totalCount = similarRowState.layoutInfo.totalItemsCount
+                        val maxFirstIndex = (totalCount - visibleCount).coerceAtLeast(0)
+
+                        val extraOffset = if (similarIndex > maxFirstIndex) {
+                            ((similarIndex - maxFirstIndex) * similarItemSpanPx).toInt()
+                        } else {
+                            0
+                        }
+
+                        if (lastSimilarScrollIndex == -1 || abs(similarScrollTargetIndex - lastSimilarScrollIndex) > 1) {
+                            similarRowState.scrollToItem(index = similarScrollTargetIndex, scrollOffset = extraOffset)
                             lastSimilarScrollIndex = similarScrollTargetIndex
                             return@LaunchedEffect
                         }
                         val delta = similarScrollTargetIndex - lastSimilarScrollIndex
-                        if (delta == 0) return@LaunchedEffect
-                        if (abs(delta) > 1) {
-                            similarRowState.scrollToItem(index = similarScrollTargetIndex, scrollOffset = 0)
-                        } else {
-                            similarRowState.scrollBy(similarItemSpanPx * delta)
+                        if (delta == 0 && extraOffset > 0) {
+                            similarRowState.scrollToItem(index = similarScrollTargetIndex, scrollOffset = extraOffset)
+                        } else if (delta != 0) {
+                            similarRowState.animateScrollBy(similarItemSpanPx * delta)
+                            if (extraOffset > 0) {
+                                similarRowState.scrollToItem(index = similarScrollTargetIndex, scrollOffset = extraOffset)
+                            }
                         }
                         lastSimilarScrollIndex = similarScrollTargetIndex
                     }
@@ -1375,7 +1451,7 @@ private fun DetailsContent(
 
                         TvLazyRow(
                             state = similarRowState,
-                            contentPadding = PaddingValues(start = contentStartPadding, end = 48.dp),
+                            contentPadding = PaddingValues(start = contentStartPadding, end = 210.dp),  // 180dp card + 30dp margin
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             itemsIndexed(similar, key = { _, m -> m.id }) { index, mediaItem ->

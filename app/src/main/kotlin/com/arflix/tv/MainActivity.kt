@@ -65,6 +65,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
+import com.arflix.tv.data.repository.ProfileRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.navigation.AppNavigation
@@ -79,6 +80,7 @@ import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -95,6 +97,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var authRepository: Lazy<AuthRepository>
+
+    @Inject
+    lateinit var profileRepository: Lazy<ProfileRepository>
 
     @Inject
     lateinit var streamRepository: Lazy<StreamRepository>
@@ -129,10 +134,11 @@ class MainActivity : ComponentActivity() {
             ArflixTvTheme {
                 val startupState by startupViewModel.state.collectAsState()
 
-                if (startupState.isReady && startupState.categories.isNotEmpty()) {
+                if (startupState.isReady) {
                     // Data is loaded, show the app
                     ArflixApp(
                         authRepository = authRepository.get(),
+                        profileRepository = profileRepository.get(),
                         streamRepository = streamRepository.get(),
                         traktRepository = traktRepository.get(),
                         preloadedCategories = startupState.categories,
@@ -294,6 +300,7 @@ fun ArvioLoadingScreen() {
 @Composable
 fun ArflixApp(
     authRepository: AuthRepository,
+    profileRepository: ProfileRepository,
     streamRepository: StreamRepository,
     traktRepository: TraktRepository,
     preloadedCategories: List<com.arflix.tv.data.model.Category> = emptyList(),
@@ -305,6 +312,7 @@ fun ArflixApp(
     val context = LocalContext.current
     val navController = rememberNavController()
     val authState by authRepository.authState.collectAsState()
+    val activeProfile by profileRepository.activeProfile.collectAsState(initial = null)
     var addonsSynced by remember { mutableStateOf(false) }
 
     LaunchedEffect(authState) {
@@ -318,14 +326,8 @@ fun ArflixApp(
         }
     }
 
-    if (authState is AuthState.Loading) {
-        ArvioLoadingScreen()
-        return
-    }
-    if (authState is AuthState.NotAuthenticated || authState is AuthState.Error) {
-        LoginScreen()
-        return
-    }
+    // Always show profile selection on startup - user must manually choose a profile
+    val startDestination = Screen.ProfileSelection.route
 
     Box(
         modifier = Modifier
@@ -342,11 +344,18 @@ fun ArflixApp(
     ) {
         AppNavigation(
             navController = navController,
-            startDestination = Screen.Home.route,
+            startDestination = startDestination,
             preloadedCategories = preloadedCategories,
             preloadedHeroItem = preloadedHeroItem,
             preloadedHeroLogoUrl = preloadedHeroLogoUrl,
             preloadedLogoCache = preloadedLogoCache,
+            currentProfile = activeProfile,
+            onSwitchProfile = {
+                // Clear active profile when switching
+                MainScope().launch {
+                    profileRepository.clearActiveProfile()
+                }
+            },
             onExitApp = onExitApp
         )
     }

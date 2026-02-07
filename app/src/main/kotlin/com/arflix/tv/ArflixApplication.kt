@@ -77,10 +77,12 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
+        // Use INCREMENTAL sync on startup for fast app launch
+        // Full sync only happens on periodic schedule or explicit user action
         val oneTimeRequest = OneTimeWorkRequestBuilder<TraktSyncWorker>()
             .setConstraints(constraints)
             .setInputData(
-                workDataOf(TraktSyncWorker.INPUT_SYNC_MODE to TraktSyncWorker.SYNC_MODE_FULL)
+                workDataOf(TraktSyncWorker.INPUT_SYNC_MODE to TraktSyncWorker.SYNC_MODE_INCREMENTAL)
             )
             .addTag(TraktSyncWorker.TAG)
             .build()
