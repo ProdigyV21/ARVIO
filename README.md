@@ -21,9 +21,9 @@ A media hub application for Android TV with a modern, beautiful interface. Brows
 |------|---------|
 | ![Home](screenshots/home.png) | ![Details](screenshots/details.png) |
 
-| Player | Settings |
-|--------|----------|
-| ![Player](screenshots/player.png) | ![Settings](screenshots/settings.png) |
+| Cast | Multi-Profile |
+|------|---------------|
+| ![Cast](screenshots/player.png) | ![Multi-Profile](screenshots/settings.png) |
 
 ## Download
 
