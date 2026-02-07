@@ -3,7 +3,6 @@
 // Set secret: npx supabase secrets set TMDB_API_KEY=your_key
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3"
 
@@ -36,32 +35,13 @@ serve(async (req) => {
   }
 
   try {
-    // Verify Supabase JWT
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
+    // Verify request has apikey header (Supabase standard)
+    const apiKey = req.headers.get('apikey')
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Missing apikey header' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 401,
       })
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-
-    // Verify the token is valid (either anon key or user JWT)
-    // For app requests, we accept the anon key as valid auth
-    if (token !== supabaseAnonKey) {
-      // Try to verify as user JWT
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-      const { data: { user }, error } = await supabase.auth.getUser(token)
-
-      if (error && token !== supabaseAnonKey) {
-        return new Response(JSON.stringify({ error: 'Invalid token' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 401,
-        })
-      }
     }
 
     const TMDB_API_KEY = Deno.env.get('TMDB_API_KEY')

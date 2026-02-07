@@ -80,8 +80,8 @@ fun ProfileSelectionScreen(
 
     // Reset input guard when dialogs close to prevent stray Enter key from selecting profiles
     LaunchedEffect(uiState.showAddDialog, uiState.editingProfile) {
-        if (!uiState.showAddDialog && uiState.editingProfile == null) {
-            // Dialog just closed, block input briefly
+        // Only reset when a dialog just closed (not on initial load)
+        if (!uiState.showAddDialog && uiState.editingProfile == null && isReadyForInput) {
             isReadyForInput = false
             delay(300)
             isReadyForInput = true

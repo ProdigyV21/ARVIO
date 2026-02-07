@@ -445,6 +445,39 @@ fun HomeScreen(
             }
         }
 
+        // Error state - show message when loading failed and no content
+        if (!uiState.isLoading && displayCategories.isEmpty() && uiState.error != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BackgroundDark),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Unable to load content",
+                        style = ArflixTypography.sectionTitle,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = uiState.error ?: "Please check your connection",
+                        style = ArflixTypography.body,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    androidx.tv.material3.Button(
+                        onClick = { viewModel.refresh() }
+                    ) {
+                        Text("Retry")
+                    }
+                }
+            }
+        }
+
         // Context menu
         contextMenuItem?.let { item ->
             MediaContextMenu(

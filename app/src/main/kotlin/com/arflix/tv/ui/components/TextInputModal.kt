@@ -249,11 +249,11 @@ fun TextInputModal(
                                     isInputFocused = hasFocus
                                     if (hasFocus) {
                                         focusedButton = -1
-                                        // Show keyboard when focused
-                                        v.post {
+                                        // Force show keyboard when focused (SHOW_FORCED works better on TV)
+                                        v.postDelayed({
                                             val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                                            imm?.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT)
-                                        }
+                                            imm?.showSoftInput(v, InputMethodManager.SHOW_FORCED)
+                                        }, 100)
                                     }
                                 }
                             }
@@ -262,26 +262,18 @@ fun TextInputModal(
                             .fillMaxWidth()
                             .focusRequester(inputFocusRequester),
                         update = { editText ->
-                            // Request focus when modal becomes visible
+                            // Request focus when modal becomes visible and force keyboard open
                             if (isVisible && !editText.hasFocus()) {
                                 editText.requestFocus()
-                                editText.post {
+                                // Use SHOW_FORCED to ensure keyboard appears on TV
+                                editText.postDelayed({
                                     val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                                    imm?.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
-                                }
+                                    imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+                                }, 100)
                             }
                         }
                     )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Hint text
-                Text(
-                    text = "Press Enter to open keyboard",
-                    style = ArflixTypography.caption,
-                    color = TextSecondary.copy(alpha = 0.6f)
-                )
 
                 Spacer(modifier = Modifier.height(24.dp))
 

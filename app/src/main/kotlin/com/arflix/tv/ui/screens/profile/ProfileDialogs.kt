@@ -1,5 +1,9 @@
 package com.arflix.tv.ui.screens.profile
 
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -19,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,12 +38,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.widget.doAfterTextChanged
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -48,7 +53,6 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.ProfileColors
-import com.arflix.tv.ui.components.TextInputModal
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -62,120 +66,176 @@ fun AddProfileDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val focusRequester = remember { FocusRequester() }
-    var showNameInput by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var isSurfaceFocused by remember { mutableStateOf(false) }
+    var editTextRef by remember { mutableStateOf<EditText?>(null) }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    // Name input modal
-    TextInputModal(
-        isVisible = showNameInput,
-        title = "Enter Profile Name",
-        hint = "Profile name",
-        initialValue = name,
-        onConfirm = { newName ->
-            onNameChange(newName)
-            showNameInput = false
-        },
-        onCancel = { showNameInput = false }
-    )
-
-    if (!showNameInput) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.85f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
-                contentAlignment = Alignment.Center
+                    .width(400.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF1a1a1a))
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
+                Text(
+                    text = "Add Profile",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Preview avatar
+                Box(
                     modifier = Modifier
-                        .width(400.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF1a1a1a))
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .size(100.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(ProfileColors.getByIndex(selectedColorIndex))),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Add Profile",
-                        fontSize = 24.sp,
+                        text = name.firstOrNull()?.uppercase() ?: "?",
+                        fontSize = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    // Preview avatar
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(ProfileColors.getByIndex(selectedColorIndex))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = name.firstOrNull()?.uppercase() ?: "?",
-                            fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                // Color selection
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ProfileColors.colors.forEachIndexed { index, color ->
+                        ColorButton(
+                            color = color,
+                            isSelected = index == selectedColorIndex,
+                            onClick = { onColorSelected(index) }
                         )
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    // Color selection
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ProfileColors.colors.forEachIndexed { index, color ->
-                            ColorButton(
-                                color = color,
-                                isSelected = index == selectedColorIndex,
-                                onClick = { onColorSelected(index) }
-                            )
+                // Name input field - wrapped in focusable Surface for D-pad
+                // Keyboard only opens on click, not on focus
+                Surface(
+                    onClick = {
+                        // Only open keyboard when user clicks/presses Enter
+                        editTextRef?.let { editText ->
+                            editText.requestFocus()
+                            editText.postDelayed({
+                                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+                            }, 100)
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Name input button - opens TV keyboard
-                    NameInputButton(
-                        name = name,
-                        onClick = { showNameInput = true },
-                        modifier = Modifier.focusRequester(focusRequester)
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Kids profile toggle
-                    KidsProfileToggle(
-                        isKidsProfile = isKidsProfile,
-                        onToggle = { onKidsProfileChange(!isKidsProfile) }
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Buttons
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        DialogButton(
-                            text = "Cancel",
-                            isPrimary = false,
-                            onClick = onDismiss
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            isSurfaceFocused = focusState.isFocused
+                            // Don't auto-open keyboard on focus - only track focus state
+                        },
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF2a2a2a),
+                        focusedContainerColor = Color(0xFF2a2a2a)
+                    ),
+                    border = ClickableSurfaceDefaults.border(
+                        border = androidx.tv.material3.Border(
+                            border = androidx.compose.foundation.BorderStroke(
+                                2.dp,
+                                Color.White.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                        focusedBorder = androidx.tv.material3.Border(
+                            border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                            shape = RoundedCornerShape(8.dp)
                         )
-                        DialogButton(
-                            text = "Create",
-                            isPrimary = true,
-                            enabled = name.isNotBlank(),
-                            onClick = onConfirm
-                        )
-                    }
+                    )
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            EditText(ctx).apply {
+                                editTextRef = this
+                                setText(name)
+                                setTextColor(android.graphics.Color.WHITE)
+                                setHintTextColor(android.graphics.Color.GRAY)
+                                hint = "Enter profile name"
+                                textSize = 18f
+                                background = null
+                                setPadding(48, 48, 48, 48)
+                                isSingleLine = true
+                                inputType = InputType.TYPE_CLASS_TEXT
+                                imeOptions = EditorInfo.IME_ACTION_DONE
+                                isFocusable = true
+                                isFocusableInTouchMode = true
+
+                                doAfterTextChanged { editable ->
+                                    onNameChange(editable?.toString() ?: "")
+                                }
+
+                                setOnEditorActionListener { _, actionId, _ ->
+                                    if (actionId == EditorInfo.IME_ACTION_DONE) {
+                                        val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                        imm?.hideSoftInputFromWindow(windowToken, 0)
+                                        clearFocus()
+                                        true
+                                    } else false
+                                }
+                                // No setOnFocusChangeListener - keyboard only opens on click
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        update = { editText ->
+                            // Only update text if it differs to avoid cursor jumping
+                            if (editText.text.toString() != name) {
+                                editText.setText(name)
+                                editText.setSelection(name.length)
+                            }
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Kids profile toggle
+                KidsProfileToggle(
+                    isKidsProfile = isKidsProfile,
+                    onToggle = { onKidsProfileChange(!isKidsProfile) }
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    DialogButton(
+                        text = "Cancel",
+                        isPrimary = false,
+                        onClick = onDismiss
+                    )
+                    DialogButton(
+                        text = "Create",
+                        isPrimary = true,
+                        enabled = name.isNotBlank(),
+                        onClick = onConfirm
+                    )
                 }
             }
         }
@@ -196,176 +256,184 @@ fun EditProfileDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val focusRequester = remember { FocusRequester() }
-    var showNameInput by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var isSurfaceFocused by remember { mutableStateOf(false) }
+    var editTextRef by remember { mutableStateOf<EditText?>(null) }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    // Name input modal
-    TextInputModal(
-        isVisible = showNameInput,
-        title = "Enter Profile Name",
-        hint = "Profile name",
-        initialValue = name,
-        onConfirm = { newName ->
-            onNameChange(newName)
-            showNameInput = false
-        },
-        onCancel = { showNameInput = false }
-    )
-
-    if (!showNameInput) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.85f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
-                contentAlignment = Alignment.Center
+                    .width(400.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF1a1a1a))
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
+                Text(
+                    text = "Edit Profile",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Preview avatar
+                Box(
                     modifier = Modifier
-                        .width(400.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF1a1a1a))
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .size(100.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(ProfileColors.getByIndex(selectedColorIndex))),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Edit Profile",
-                        fontSize = 24.sp,
+                        text = name.firstOrNull()?.uppercase() ?: "?",
+                        fontSize = 40.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                    // Preview avatar
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(ProfileColors.getByIndex(selectedColorIndex))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = name.firstOrNull()?.uppercase() ?: "?",
-                            fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Color selection
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ProfileColors.colors.forEachIndexed { index, color ->
-                            ColorButton(
-                                color = color,
-                                isSelected = index == selectedColorIndex,
-                                onClick = { onColorSelected(index) }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Name input button - opens TV keyboard
-                    NameInputButton(
-                        name = name,
-                        onClick = { showNameInput = true },
-                        modifier = Modifier.focusRequester(focusRequester)
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Kids profile toggle
-                    KidsProfileToggle(
-                        isKidsProfile = isKidsProfile,
-                        onToggle = { onKidsProfileChange(!isKidsProfile) }
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Buttons
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        DialogButton(
-                            text = "Delete",
-                            isPrimary = false,
-                            isDestructive = true,
-                            onClick = onDelete
-                        )
-                        DialogButton(
-                            text = "Cancel",
-                            isPrimary = false,
-                            onClick = onDismiss
-                        )
-                        DialogButton(
-                            text = "Save",
-                            isPrimary = true,
-                            enabled = name.isNotBlank(),
-                            onClick = onConfirm
+                // Color selection
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ProfileColors.colors.forEachIndexed { index, color ->
+                        ColorButton(
+                            color = color,
+                            isSelected = index == selectedColorIndex,
+                            onClick = { onColorSelected(index) }
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Name input field - wrapped in focusable Surface for D-pad
+                // Keyboard only opens on click, not on focus
+                Surface(
+                    onClick = {
+                        // Only open keyboard when user clicks/presses Enter
+                        editTextRef?.let { editText ->
+                            editText.requestFocus()
+                            editText.postDelayed({
+                                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+                            }, 100)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            isSurfaceFocused = focusState.isFocused
+                            // Don't auto-open keyboard on focus - only track focus state
+                        },
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color(0xFF2a2a2a),
+                        focusedContainerColor = Color(0xFF2a2a2a)
+                    ),
+                    border = ClickableSurfaceDefaults.border(
+                        border = androidx.tv.material3.Border(
+                            border = androidx.compose.foundation.BorderStroke(
+                                2.dp,
+                                Color.White.copy(alpha = 0.3f)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                        focusedBorder = androidx.tv.material3.Border(
+                            border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    )
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            EditText(ctx).apply {
+                                editTextRef = this
+                                setText(name)
+                                setTextColor(android.graphics.Color.WHITE)
+                                setHintTextColor(android.graphics.Color.GRAY)
+                                hint = "Enter profile name"
+                                textSize = 18f
+                                background = null
+                                setPadding(48, 48, 48, 48)
+                                isSingleLine = true
+                                inputType = InputType.TYPE_CLASS_TEXT
+                                imeOptions = EditorInfo.IME_ACTION_DONE
+                                isFocusable = true
+                                isFocusableInTouchMode = true
+
+                                doAfterTextChanged { editable ->
+                                    onNameChange(editable?.toString() ?: "")
+                                }
+
+                                setOnEditorActionListener { _, actionId, _ ->
+                                    if (actionId == EditorInfo.IME_ACTION_DONE) {
+                                        val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                        imm?.hideSoftInputFromWindow(windowToken, 0)
+                                        clearFocus()
+                                        true
+                                    } else false
+                                }
+                                // No setOnFocusChangeListener - keyboard only opens on click
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        update = { editText ->
+                            // Only update text if it differs to avoid cursor jumping
+                            if (editText.text.toString() != name) {
+                                editText.setText(name)
+                                editText.setSelection(name.length)
+                            }
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Kids profile toggle
+                KidsProfileToggle(
+                    isKidsProfile = isKidsProfile,
+                    onToggle = { onKidsProfileChange(!isKidsProfile) }
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    DialogButton(
+                        text = "Delete",
+                        isPrimary = false,
+                        isDestructive = true,
+                        onClick = onDelete
+                    )
+                    DialogButton(
+                        text = "Cancel",
+                        isPrimary = false,
+                        onClick = onDismiss
+                    )
+                    DialogButton(
+                        text = "Save",
+                        isPrimary = true,
+                        enabled = name.isNotBlank(),
+                        onClick = onConfirm
+                    )
+                }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun NameInputButton(
-    name: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isFocused by remember { mutableIntStateOf(0) }
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color(0xFF2a2a2a),
-            focusedContainerColor = Color(0xFF3a3a3a)
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                shape = RoundedCornerShape(8.dp)
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = name.ifBlank { "Enter name" },
-                fontSize = 18.sp,
-                color = if (name.isBlank()) Color.White.copy(alpha = 0.4f) else Color.White
-            )
-            Icon(
-                imageVector = Icons.Default.Edit,
-                contentDescription = "Edit",
-                tint = Color.White.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }

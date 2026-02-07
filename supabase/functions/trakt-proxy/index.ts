@@ -5,7 +5,6 @@
 //   npx supabase secrets set TRAKT_CLIENT_SECRET=your_secret
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const TRAKT_BASE_URL = "https://api.trakt.tv"
 
@@ -42,30 +41,13 @@ serve(async (req) => {
   }
 
   try {
-    // Verify Supabase JWT
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
+    // Verify request has apikey header (Supabase standard)
+    const apiKey = req.headers.get('apikey')
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Missing apikey header' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 401,
       })
-    }
-
-    const token = authHeader.replace('Bearer ', '')
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-
-    // Verify the token is valid (either anon key or user JWT)
-    if (token !== supabaseAnonKey) {
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-      const { data: { user }, error } = await supabase.auth.getUser(token)
-
-      if (error && token !== supabaseAnonKey) {
-        return new Response(JSON.stringify({ error: 'Invalid token' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 401,
-        })
-      }
     }
 
     const TRAKT_CLIENT_ID = Deno.env.get('TRAKT_CLIENT_ID')
