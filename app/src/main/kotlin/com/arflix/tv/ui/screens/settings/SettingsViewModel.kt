@@ -419,11 +419,18 @@ class SettingsViewModel @Inject constructor(
                     performFullSync(silent = true)
                     return@launch
                 } catch (e: Exception) {
-                    // Keep polling (400 = pending, 404 = not found, etc.)
-                    if (e.message?.contains("400") != true) {
-                        // Stop on actual error
+                    // Keep polling on 400 (pending) - user hasn't entered code yet
+                    // Check both HttpException code and message for 400
+                    val is400 = when (e) {
+                        is retrofit2.HttpException -> e.code() == 400
+                        else -> e.message?.contains("400") == true ||
+                                e.message?.contains("pending") == true
+                    }
+                    if (!is400) {
+                        // Stop on actual error (401, 500, etc.)
                         break
                     }
+                    // 400 = pending, continue polling
                 }
             }
             
