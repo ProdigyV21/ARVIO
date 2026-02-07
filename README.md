@@ -37,7 +37,7 @@ Powered by **ExoPlayer (Media3)** with **FFmpeg extension** for broad codec supp
 
 ### Easy Install (Downloader App)
 1. Install the **Downloader** app from Play Store on your Android TV
-2. Open Downloader and enter: **`1186429`**
+2. Open Downloader and enter: **`5867245`**
 3. Install and enjoy!
 
 ### Direct Download
