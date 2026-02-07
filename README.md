@@ -43,6 +43,10 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 See [PRIVACY.md](PRIVACY.md) for our privacy policy.
 
+## AI Disclosure
+
+This application was developed with significant assistance from AI (Claude by Anthropic). If you have concerns about using AI-generated software, please do not use this application.
+
 ## Disclaimer
 
 ARVIO is a media hub application that does not host, store, or distribute any content. It is a player interface that connects to user-configured Stremio addons and external services. Users are solely responsible for the addons they install and the content they access. The developers are not responsible for any misuse of this application.
