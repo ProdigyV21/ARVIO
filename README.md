@@ -53,6 +53,14 @@ Powered by **ExoPlayer (Media3)** with **FFmpeg extension** for broad codec supp
 ### Direct Download
 [Download APK](https://github.com/ProdigyV21/ARVIO/releases/latest) from the Releases page.
 
+## Support
+
+If ARVIO helps you, donations are always appreciated:
+- Ko-fi: https://ko-fi.com/arvio
+
+Join the community:
+- Discord: https://discord.gg/bGBBGKFZVh
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
