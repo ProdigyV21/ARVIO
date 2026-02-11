@@ -803,6 +803,7 @@ private fun HomeInputLayer(
     onOpenContextMenu: (MediaItem, Boolean) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
+    var selectPressedInHome by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
@@ -827,7 +828,11 @@ private fun HomeInputLayer(
                 }
                 when (event.type) {
                     KeyEventType.KeyDown -> when (event.key) {
-                        Key.Enter, Key.DirectionCenter -> true // Consume, action on KeyUp
+                        Key.Enter, Key.DirectionCenter -> {
+                            // Only accept KeyUp action when its KeyDown also happened on this screen.
+                            selectPressedInHome = true
+                            true
+                        }
                         Key.DirectionLeft -> {
                             if (!focusState.isSidebarFocused) {
                                 if (focusState.currentItemIndex == 0) {
@@ -910,6 +915,11 @@ private fun HomeInputLayer(
                     }
                     KeyEventType.KeyUp -> when (event.key) {
                         Key.Enter, Key.DirectionCenter -> {
+                            if (!selectPressedInHome) {
+                                // Ignore stale KeyUp events that can arrive after screen navigation.
+                                return@onPreviewKeyEvent true
+                            }
+                            selectPressedInHome = false
                             if (focusState.isSidebarFocused) {
                                 when (SidebarItem.entries[focusState.sidebarFocusIndex]) {
                                     SidebarItem.SEARCH -> onNavigateToSearch()
