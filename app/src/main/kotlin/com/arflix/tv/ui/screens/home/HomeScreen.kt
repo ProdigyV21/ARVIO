@@ -1236,7 +1236,8 @@ private fun ContentRow(
         with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
     }
 
-    // Keep focused card anchored by scrolling the row on every focus change
+    // Keep focused card anchored by scrolling the row on every focus change.
+    // Use instant scroll for single-step D-pad moves to reduce animation overhead on lower-end TV SoCs.
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(isCurrentRow) {
         if (!isCurrentRow) {
@@ -1264,20 +1265,20 @@ private fun ContentRow(
 
         if (lastScrollIndex == scrollTargetIndex && extraOffset == 0) return@LaunchedEffect
         if (lastScrollIndex == -1) {
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             lastScrollIndex = scrollTargetIndex
             return@LaunchedEffect
         }
         val delta = scrollTargetIndex - lastScrollIndex
         if (delta == 0 && extraOffset > 0) {
             // Same scroll target but need extra offset for end items
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         } else if (abs(delta) > 1) {
             // Large jump - use smooth animation
             rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         } else if (delta != 0) {
-            // Single item navigation - smooth animated scroll
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+            // Single item navigation - instant scroll keeps focus traversal responsive.
+            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
         lastScrollIndex = scrollTargetIndex
     }

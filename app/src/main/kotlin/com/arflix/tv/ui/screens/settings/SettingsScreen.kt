@@ -153,11 +153,11 @@ fun SettingsScreen(
             }.coerceAtLeast(0)
 
             if (contentFocusIndex <= 0 || maxIndex == 0 || scrollState.maxValue <= 0) {
-                scrollState.animateScrollTo(0)
+                scrollState.scrollTo(0)
             } else {
                 val ratio = contentFocusIndex.toFloat() / maxIndex.toFloat()
                 val targetScroll = (scrollState.maxValue * ratio).toInt()
-                scrollState.animateScrollTo(targetScroll.coerceIn(0, scrollState.maxValue))
+                scrollState.scrollTo(targetScroll.coerceIn(0, scrollState.maxValue))
             }
         }
     }
