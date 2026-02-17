@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -87,6 +88,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -1004,93 +1006,85 @@ private fun HomeRowsLayer(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 56.dp)
     ) {
-        Column(
+        val halfHeight = maxHeight / 2
+        val listState = rememberLazyListState()
+        val targetIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
+        LaunchedEffect(targetIndex) {
+            listState.animateScrollToItem(
+                index = targetIndex,
+                scrollOffset = 0
+            )
+        }
+        // Viewport is only the bottom 50%: selected row stays at same height, rows above disappear
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(bottom = 24.dp)
+                .height(halfHeight)
+                .clipToBounds()
         ) {
-            val safeRowIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
-            AnimatedContent(
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(bottom = halfHeight),
                 modifier = Modifier
-                    // Apply an alpha mask so row transitions fade at top/bottom edges
-                    // instead of being clipped by a hard line.
+                    .fillMaxSize()
+                    .clipToBounds()
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .drawWithContent {
                         drawContent()
-                        // Fade height matches row vertical padding so the fade only affects
-                        // the padded buffer, not the catalog title or card text.
-                        val fadePx = 28.dp.toPx()
                         val h = size.height.coerceAtLeast(1f)
-                        val stop = (fadePx / h).coerceIn(0f, 0.5f)
+                        val topFadePx = 8.dp.toPx()
+                        val bottomFadePx = 28.dp.toPx()
+                        val topStop = (topFadePx / h).coerceIn(0f, 0.15f)
+                        val bottomStop = (bottomFadePx / h).coerceIn(0f, 0.5f)
+                        // Very short top fade (edge only); row title stays 100%. Bottom fades to 50%.
                         drawRect(
                             brush = Brush.verticalGradient(
                                 colorStops = arrayOf(
-                                    0f to Color.Transparent,
-                                    stop to Color.White,
-                                    (1f - stop) to Color.White,
-                                    1f to Color.Transparent
+                                    0f to Color.White.copy(alpha = 0f),
+                                    topStop to Color.White,
+                                    (1f - bottomStop) to Color.White,
+                                    1f to Color.White.copy(alpha = 0.5f)
                                 )
                             ),
                             blendMode = BlendMode.DstIn
                         )
                     },
-                targetState = safeRowIndex,
-                transitionSpec = {
-                    // Always animate row transitions, even during fast scrolling.
-                    // Direction depends on whether we're moving down (next row)
-                    // or up (previous row).
-                    val movingDown = targetState > initialState
-                    val enter = slideInVertically(
-                        animationSpec = tween(durationMillis = 220)
-                    ) { fullHeight ->
-                        if (movingDown) fullHeight else -fullHeight
-                    } + fadeIn(animationSpec = tween(durationMillis = 200))
-
-                    val exit = slideOutVertically(
-                        animationSpec = tween(durationMillis = 220)
-                    ) { fullHeight ->
-                        if (movingDown) -fullHeight else fullHeight
-                    } + fadeOut(animationSpec = tween(durationMillis = 180))
-
-                    enter togetherWith exit
-                },
-                label = "HomeRowSwap"
-            ) { rowIndex ->
-                val category = categories.getOrNull(rowIndex)
-                if (category != null) {
-                    key(category.id) {
-                        // Extra top/bottom padding so the large fade only affects this buffer,
-                        // leaving the catalog title and card text fully visible.
-                        Box(modifier = Modifier.padding(vertical = 28.dp)) {
-                            ContentRow(
-                                category = category,
-                                cardLogoUrls = cardLogoUrls,
-                                isCurrentRow = rowIndex == focusState.currentRowIndex,
-                                isRanked = category.title.contains("Top 10", ignoreCase = true),
-                                startPadding = contentStartPadding,
-                                focusedItemIndex = focusState.currentItemIndex,
-                                isFastScrolling = isFastScrolling,
-                                onItemClick = onItemClick,
-                                onItemFocused = { _, itemIdx ->
-                                    focusState.currentRowIndex = rowIndex
-                                    focusState.currentItemIndex = itemIdx
-                                    focusState.isSidebarFocused = false
-                                    focusState.lastNavEventTime = SystemClock.elapsedRealtime()
-                                }
-                            )
-                        }
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+            itemsIndexed(categories) { index, category ->
+                key(category.id) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clipToBounds()
+                    ) {
+                        ContentRow(
+                            category = category,
+                            cardLogoUrls = cardLogoUrls,
+                            isCurrentRow = index == focusState.currentRowIndex,
+                            isRanked = category.title.contains("Top 10", ignoreCase = true),
+                            startPadding = contentStartPadding,
+                            focusedItemIndex = if (index == focusState.currentRowIndex) focusState.currentItemIndex else 0,
+                            isFastScrolling = isFastScrolling,
+                            onItemClick = onItemClick,
+                            onItemFocused = { _, itemIdx ->
+                                focusState.currentRowIndex = index
+                                focusState.currentItemIndex = itemIdx
+                                focusState.isSidebarFocused = false
+                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                            }
+                        )
                     }
                 }
             }
-
-            // Next section label below the row is intentionally hidden to keep
-            // the scroll transition clean and avoid a visible clipping line.
+            }
         }
     }
 }
@@ -1135,7 +1129,7 @@ private fun PrimeLogo(modifier: Modifier = Modifier) {
         Text(
             text = "prime",
             style = TextStyle(
-                fontSize = 20.sp, 
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Black,
                 color = PrimeBlue,
                 letterSpacing = (-0.5).sp
