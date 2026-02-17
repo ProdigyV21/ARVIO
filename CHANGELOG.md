@@ -23,6 +23,7 @@ All notable changes to this project are documented in this file.
 - Improved player startup and stream handling to reduce delays before playback starts.
 - Better Android TV keyboard and remote handling in settings/addon/list flows.
 - Improved compatibility for Fire TV / Firestick class devices.
+- Android 7 (API 24/25) support enabled by lowering app minimum SDK requirement.
 - Framerate matching behavior refined in playback flow.
 
 ### Fixed
