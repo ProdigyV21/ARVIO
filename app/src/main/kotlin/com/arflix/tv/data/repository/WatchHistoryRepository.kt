@@ -33,7 +33,10 @@ data class WatchHistoryEntry(
     val updated_at: String? = null,
     val source: String? = null,
     val backdrop_path: String? = null,
-    val poster_path: String? = null
+    val poster_path: String? = null,
+    val stream_key: String? = null,
+    val stream_addon_id: String? = null,
+    val stream_title: String? = null
 )
 
 /**
@@ -59,12 +62,14 @@ class WatchHistoryRepository @Inject constructor(
         episodeTitle: String?,
         progress: Float,
         duration: Long,
-        position: Long
+        position: Long,
+        streamKey: String? = null,
+        streamAddonId: String? = null,
+        streamTitle: String? = null
     ) {
         val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
 
-        try {
-            val entry = WatchHistoryEntry(
+        val entry = WatchHistoryEntry(
                 user_id = userId,
                 media_type = if (mediaType == MediaType.MOVIE) "movie" else "tv",
                 show_tmdb_id = tmdbId,
@@ -77,15 +82,26 @@ class WatchHistoryRepository @Inject constructor(
                 progress = progress,
                 duration_seconds = duration,
                 position_seconds = position,
-                source = "arvio"
+                source = "arvio",
+                stream_key = streamKey,
+                stream_addon_id = streamAddonId,
+                stream_title = streamTitle
             )
 
-            // Upsert - update if exists, insert if not
+        // Upsert - update if exists, insert if not.
+        // Retry without stream_* fields if the Supabase schema hasn't been migrated yet.
+        try {
             executeSupabaseCall("save watch progress") { auth ->
                 supabaseApi.upsertWatchHistory(auth = auth, item = entry.toRecord())
             }
+        } catch (e: HttpException) {
+            runCatching {
+                val fallback = entry.copy(stream_key = null, stream_addon_id = null, stream_title = null)
+                executeSupabaseCall("save watch progress fallback") { auth ->
+                    supabaseApi.upsertWatchHistory(auth = auth, item = fallback.toRecord())
+                }
+            }
         } catch (_: Exception) {
-            // Silently handle errors
         }
     }
 
@@ -291,7 +307,10 @@ private fun WatchHistoryEntry.toRecord(): com.arflix.tv.data.api.WatchHistoryRec
         title = title,
         episodeTitle = episode_title,
         backdropPath = backdrop_path,
-        posterPath = poster_path
+        posterPath = poster_path,
+        streamKey = stream_key,
+        streamAddonId = stream_addon_id,
+        streamTitle = stream_title
     )
 }
 
@@ -315,6 +334,9 @@ private fun com.arflix.tv.data.api.WatchHistoryRecord.toEntry(): WatchHistoryEnt
         updated_at = updatedAt,
         source = source,
         backdrop_path = backdropPath,
-        poster_path = posterPath
+        poster_path = posterPath,
+        stream_key = streamKey,
+        stream_addon_id = streamAddonId,
+        stream_title = streamTitle
     )
 }

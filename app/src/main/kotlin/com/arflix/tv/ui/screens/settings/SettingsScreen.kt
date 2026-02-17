@@ -1,5 +1,9 @@
 package com.arflix.tv.ui.screens.settings
 
+import android.text.InputType
+import android.text.method.PasswordTransformationMethod
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -10,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +34,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Subtitles
@@ -39,6 +46,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material3.Icon
 import com.arflix.tv.ui.components.LoadingIndicator
+import com.arflix.tv.ui.components.QrCodeImage
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import androidx.compose.runtime.Composable
@@ -50,6 +58,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -63,6 +73,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.widget.doAfterTextChanged
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
@@ -110,12 +122,14 @@ fun SettingsScreen(
     var showIptvInput by remember { mutableStateOf(false) }
     var iptvM3uUrl by remember { mutableStateOf(uiState.iptvM3uUrl) }
     var iptvEpgUrl by remember { mutableStateOf(uiState.iptvEpgUrl) }
+    var iptvXtreamUsername by remember { mutableStateOf("") }
+    var iptvXtreamPassword by remember { mutableStateOf("") }
     var showCatalogInput by remember { mutableStateOf(false) }
     var catalogInputUrl by remember { mutableStateOf("") }
     var showSubtitlePicker by remember { mutableStateOf(false) }
     var subtitlePickerIndex by remember { mutableIntStateOf(0) }
 
-    val sections = listOf("general", "iptv", "catalogs", "addons", "accounts")
+    val sections = remember { listOf("general", "iptv", "catalogs", "addons", "accounts") }
 
     val focusRequester = remember { FocusRequester() }
     val scrollState = rememberScrollState()
@@ -147,7 +161,7 @@ fun SettingsScreen(
                 0 -> 1 // General: 2 rows
                 1 -> 2 // IPTV: configure + refresh + delete
                 2 -> uiState.catalogs.size // Catalogs: add + list rows
-                3 -> uiState.addons.size // Addons + add button
+                3 -> uiState.addons.size // Addons: list + add button
                 4 -> 2 // Accounts: Cloud + Trakt + switch profile
                 else -> 0
             }.coerceAtLeast(0)
@@ -166,6 +180,8 @@ fun SettingsScreen(
         if (!showIptvInput) {
             iptvM3uUrl = uiState.iptvM3uUrl
             iptvEpgUrl = uiState.iptvEpgUrl
+            iptvXtreamUsername = ""
+            iptvXtreamPassword = ""
         }
     }
 
@@ -179,6 +195,13 @@ fun SettingsScreen(
         }
     }
 
+    LaunchedEffect(uiState.shouldSwitchProfile) {
+        if (uiState.shouldSwitchProfile) {
+            viewModel.onCloudProfileSwitchHandled()
+            onSwitchProfile()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -187,10 +210,14 @@ fun SettingsScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                     // BLOCKER FIX: Ignore main screen navigation if modals are open
-                    if (showCustomAddonInput || showSubtitlePicker || showIptvInput || showCatalogInput || uiState.showCloudEmailPasswordDialog) return@onPreviewKeyEvent false
+                    if (showCustomAddonInput || showSubtitlePicker || showIptvInput || showCatalogInput || uiState.showCloudPairDialog || uiState.showCloudEmailPasswordDialog) return@onPreviewKeyEvent false
 
                 if (event.type == KeyEventType.KeyDown) {
                     val currentSection = sections.getOrNull(sectionIndex).orEmpty()
+                    val focusedAddon = uiState.addons.getOrNull(contentFocusIndex)
+                    val focusedAddonCanDelete = focusedAddon?.let {
+                        !(it.id == "opensubtitles" && it.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
+                    } ?: false
                     when (event.key) {
                         Key.Back, Key.Escape -> {
                             when (activeZone) {
@@ -238,7 +265,11 @@ fun SettingsScreen(
                                     catalogActionIndex = 0
                                 }
                                 Zone.CONTENT -> {
-                                    if (currentSection == "addons" && contentFocusIndex < uiState.addons.size && addonActionIndex < 1) {
+                                    if (currentSection == "addons" &&
+                                        contentFocusIndex in 0 until uiState.addons.size &&
+                                        addonActionIndex < 1 &&
+                                        focusedAddonCanDelete
+                                    ) {
                                         addonActionIndex = 1
                                     } else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 2) {
                                         catalogActionIndex++
@@ -282,7 +313,7 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
-                                        0 -> 1 // General: 2 items (subtitle, auto-play)
+                                        0 -> 2 // General: 3 items (subtitle, frame-rate matching, auto-play)
                                         1 -> 2 // IPTV: Configure + Refresh + Delete
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
@@ -316,7 +347,8 @@ fun SettingsScreen(
                                         0 -> { // General
                                             when (contentFocusIndex) {
                                                 0 -> openSubtitlePicker()
-                                                1 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
+                                                1 -> viewModel.cycleFrameRateMatchingMode()
+                                                2 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
                                             }
                                         }
                                         1 -> { // IPTV
@@ -325,7 +357,7 @@ fun SettingsScreen(
                                                     showIptvInput = true
                                                 }
                                                 1 -> {
-                                                    viewModel.refreshIptv()
+                                                    viewModel.refreshIptv(force = true)
                                                 }
                                                 2 -> {
                                                     viewModel.clearIptvConfig()
@@ -341,33 +373,33 @@ fun SettingsScreen(
                                                     when (catalogActionIndex) {
                                                         0 -> viewModel.moveCatalogUp(catalog.id)
                                                         1 -> viewModel.moveCatalogDown(catalog.id)
-                                                        else -> {
-                                                            if (!catalog.isPreinstalled) {
-                                                                viewModel.removeCatalog(catalog.id)
-                                                            }
-                                                        }
+                                                        else -> viewModel.removeCatalog(catalog.id)
                                                     }
                                                 }
                                             }
                                         }
                                         3 -> { // Addons
-                                            if (contentFocusIndex < uiState.addons.size) {
-                                                val addon = uiState.addons[contentFocusIndex]
-                                                if (addonActionIndex == 0) {
-                                                    // Toggle addon on/off
-                                                    viewModel.toggleAddon(addon.id)
-                                                } else {
-                                                    // Delete addon
-                                                    viewModel.removeAddon(addon.id)
-                                                    addonActionIndex = 0
-                                                    // Adjust focus if we deleted the last item
-                                                    if (contentFocusIndex >= uiState.addons.size - 1 && contentFocusIndex > 0) {
-                                                        contentFocusIndex--
+                                            when {
+                                                contentFocusIndex in 0 until uiState.addons.size -> {
+                                                    val addon = uiState.addons[contentFocusIndex]
+                                                    val canDelete = !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
+                                                    if (addonActionIndex == 0 || !canDelete) {
+                                                        // Toggle addon on/off
+                                                        viewModel.toggleAddon(addon.id)
+                                                    } else {
+                                                        // Delete addon
+                                                        viewModel.removeAddon(addon.id)
+                                                        addonActionIndex = 0
+                                                        // Adjust focus if we deleted the last addon item
+                                                        if (contentFocusIndex >= uiState.addons.size && contentFocusIndex > 0) {
+                                                            contentFocusIndex--
+                                                        }
                                                     }
                                                 }
-                                            } else {
-                                                // "Add Custom Addon" button
-                                                showCustomAddonInput = true
+                                                else -> {
+                                                    // "Add Custom Addon" button
+                                                    showCustomAddonInput = true
+                                                }
                                             }
                                         }
                                         4 -> { // Accounts
@@ -450,7 +482,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.weight(1f))
                 
                 Text(
-                    text = "ARVIO V1.4",
+                    text = "ARVIO V1.5",
                     style = ArflixTypography.caption,
                     color = TextSecondary.copy(alpha = 0.5f),
                     modifier = Modifier.padding(start = 16.dp)
@@ -468,9 +500,11 @@ fun SettingsScreen(
                 when (sections[sectionIndex]) {
                     "general" -> GeneralSettings(
                         defaultSubtitle = uiState.defaultSubtitle,
+                        frameRateMatchingMode = uiState.frameRateMatchingMode,
                         autoPlayNext = uiState.autoPlayNext,
                         focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                         onSubtitleClick = openSubtitlePicker,
+                        onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
                         onAutoPlayToggle = { viewModel.setAutoPlayNext(it) }
                     )
                     "iptv" -> IptvSettings(
@@ -523,7 +557,7 @@ fun SettingsScreen(
             InputModal(
                 title = "Add Addon",
                 fields = listOf(
-                    InputField("URL", customAddonUrl) { customAddonUrl = it }
+                    InputField(label = "URL", value = customAddonUrl, onValueChange = { customAddonUrl = it })
                 ),
                 onConfirm = {
                     if (customAddonUrl.isNotBlank()) {
@@ -543,11 +577,39 @@ fun SettingsScreen(
             InputModal(
                 title = "Configure IPTV",
                 fields = listOf(
-                    InputField("M3U URL", iptvM3uUrl) { iptvM3uUrl = it },
-                    InputField("EPG URL (Optional)", iptvEpgUrl) { iptvEpgUrl = it }
+                    InputField(
+                        label = "M3U URL or Xtream Host",
+                        value = iptvM3uUrl,
+                        placeholder = "https://provider.host:port",
+                        onValueChange = { iptvM3uUrl = it }
+                    ),
+                    InputField(
+                        label = "Xtream Username (Optional)",
+                        value = iptvXtreamUsername,
+                        placeholder = "username",
+                        onValueChange = { iptvXtreamUsername = it }
+                    ),
+                    InputField(
+                        label = "Xtream Password (Optional)",
+                        value = iptvXtreamPassword,
+                        placeholder = "password",
+                        isSecret = true,
+                        onValueChange = { iptvXtreamPassword = it }
+                    ),
+                    InputField(
+                        label = "EPG URL (Optional)",
+                        value = iptvEpgUrl,
+                        placeholder = "Leave empty to auto-derive for Xtream",
+                        onValueChange = { iptvEpgUrl = it }
+                    )
                 ),
                 onConfirm = {
-                    viewModel.saveIptvConfig(iptvM3uUrl, iptvEpgUrl)
+                    viewModel.saveIptvConfigWithXtream(
+                        sourceOrHost = iptvM3uUrl,
+                        epgUrl = iptvEpgUrl,
+                        xtreamUsername = iptvXtreamUsername,
+                        xtreamPassword = iptvXtreamPassword
+                    )
                     showIptvInput = false
                 },
                 onDismiss = {
@@ -560,7 +622,7 @@ fun SettingsScreen(
             InputModal(
                 title = "Add Catalog",
                 fields = listOf(
-                    InputField("Catalog URL", catalogInputUrl) { catalogInputUrl = it }
+                    InputField(label = "Catalog URL", value = catalogInputUrl, onValueChange = { catalogInputUrl = it })
                 ),
                 onConfirm = {
                     if (catalogInputUrl.isNotBlank()) {
@@ -599,6 +661,16 @@ fun SettingsScreen(
                 onDismiss = { viewModel.closeCloudEmailPasswordDialog() },
                 onSignIn = { viewModel.completeCloudAuthWithEmailPassword(cloudDialogEmail, cloudDialogPassword, createAccount = false) },
                 onCreateAccount = { viewModel.completeCloudAuthWithEmailPassword(cloudDialogEmail, cloudDialogPassword, createAccount = true) }
+            )
+        }
+
+        if (uiState.showCloudPairDialog) {
+            CloudPairModal(
+                verificationUrl = uiState.cloudVerificationUrl.orEmpty(),
+                userCode = uiState.cloudUserCode.orEmpty(),
+                isWorking = uiState.isCloudAuthWorking,
+                onDismiss = { viewModel.cancelCloudAuth() },
+                onUseEmailPassword = { viewModel.openCloudEmailPasswordDialog() }
             )
         }
 
@@ -868,6 +940,206 @@ private fun CloudEmailPasswordModal(
     }
 }
 
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun CloudPairModal(
+    verificationUrl: String,
+    userCode: String,
+    isWorking: Boolean,
+    onDismiss: () -> Unit,
+    onUseEmailPassword: () -> Unit,
+) {
+    // Focus order: 0 cancel, 1 email/password
+    var focusedIndex by remember { mutableIntStateOf(1) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val modalWidth = (maxWidth * 0.62f).coerceIn(520.dp, 760.dp)
+            val qrContainerSize = (modalWidth * 0.42f).coerceIn(190.dp, 260.dp)
+            val qrBitmapSizePx = ((qrContainerSize.value * 3.2f).toInt()).coerceIn(512, 900)
+
+            Column(
+                modifier = Modifier
+                    .widthIn(max = modalWidth)
+                    .fillMaxWidth(0.62f)
+                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            when (event.key) {
+                                Key.Back, Key.Escape -> {
+                                    onDismiss()
+                                    true
+                                }
+                                Key.DirectionLeft -> {
+                                    focusedIndex = 0
+                                    true
+                                }
+                                Key.DirectionRight -> {
+                                    focusedIndex = 1
+                                    true
+                                }
+                                Key.Enter, Key.DirectionCenter -> {
+                                    when (focusedIndex) {
+                                        0 -> { onDismiss(); true }
+                                        1 -> { onUseEmailPassword(); true }
+                                        else -> false
+                                    }
+                                }
+                                else -> false
+                            }
+                        } else false
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "ARVIO Cloud Pairing",
+                    style = ArflixTypography.sectionTitle,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+
+                Text(
+                    text = "Scan this QR code to sign in and link this TV.",
+                    style = ArflixTypography.body,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                if (verificationUrl.isNotBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .size(qrContainerSize)
+                            .background(Color.White, RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        QrCodeImage(
+                            data = verificationUrl,
+                            sizePx = qrBitmapSizePx,
+                            modifier = Modifier.fillMaxSize(),
+                            foreground = android.graphics.Color.BLACK,
+                            background = android.graphics.Color.WHITE,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (userCode.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Code: $userCode",
+                            style = ArflixTypography.body,
+                            color = TextPrimary
+                        )
+                    }
+                }
+
+                if (isWorking) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LoadingIndicator(size = 20.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Waiting for approval...",
+                            style = ArflixTypography.body,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    val isCancelFocused = focusedIndex == 0
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isCancelFocused) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .border(
+                                width = if (isCancelFocused) 2.dp else 0.dp,
+                                color = if (isCancelFocused) Pink else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(vertical = 12.dp, horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.LinkOff,
+                                contentDescription = null,
+                                tint = if (isCancelFocused) TextPrimary else TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Cancel",
+                                style = ArflixTypography.button,
+                                color = if (isCancelFocused) TextPrimary else TextSecondary
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    val isFallbackFocused = focusedIndex == 1
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (isFallbackFocused) SuccessGreen else Pink.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .border(
+                                width = if (isFallbackFocused) 2.dp else 0.dp,
+                                color = if (isFallbackFocused) SuccessGreen.copy(alpha = 0.5f) else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(vertical = 12.dp, horizontal = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Link,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Use Email/Password",
+                                style = ArflixTypography.button,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private enum class Zone {
     SIDEBAR, SECTION, CONTENT
 }
@@ -917,9 +1189,11 @@ private fun SettingsSectionItem(
 @Composable
 private fun GeneralSettings(
     defaultSubtitle: String,
+    frameRateMatchingMode: String,
     autoPlayNext: Boolean,
     focusedIndex: Int,
     onSubtitleClick: () -> Unit,
+    onFrameRateMatchingClick: () -> Unit,
     onAutoPlayToggle: (Boolean) -> Unit
 ) {
     Column {
@@ -941,13 +1215,25 @@ private fun GeneralSettings(
         )
         
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Frame-Rate Matching
+        SettingsRow(
+            icon = Icons.Default.Movie,
+            title = "Match Frame Rate",
+            subtitle = "Off, Seamless only, or Always (may blank-screen on some TVs)",
+            value = frameRateMatchingMode,
+            isFocused = focusedIndex == 1,
+            onClick = onFrameRateMatchingClick
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
         
         // Auto-Play Next
         SettingsToggleRow(
             title = "Auto-Play Next",
             subtitle = "Start next episode automatically",
             isEnabled = autoPlayNext,
-            isFocused = focusedIndex == 1,
+            isFocused = focusedIndex == 2,
             onToggle = onAutoPlayToggle
         )
     }
@@ -978,7 +1264,7 @@ private fun IptvSettings(
         SettingsRow(
             icon = Icons.Default.LiveTv,
             title = "Playlist",
-            subtitle = if (m3uUrl.isBlank()) "Set M3U URL and optional EPG URL" else "M3U configured",
+            subtitle = if (m3uUrl.isBlank()) "Set M3U URL (or Xtream host/user/pass) and optional EPG URL" else "Playlist configured",
             value = if (m3uUrl.isBlank()) "NOT SET" else "$channelCount CH",
             isFocused = focusedIndex == 0,
             onClick = {}
@@ -1259,9 +1545,10 @@ private fun CatalogsSettings(
                 Spacer(modifier = Modifier.width(8.dp))
                 CatalogActionChip(
                     icon = Icons.Default.Delete,
-                    label = if (catalog.isPreinstalled) "Locked" else "Delete",
+                    label = "Delete",
                     isFocused = isRowFocused && focusedActionIndex == 2,
-                    enabled = !catalog.isPreinstalled
+                    isDestructive = true,
+                    enabled = true
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -1275,22 +1562,30 @@ private fun CatalogActionChip(
     icon: ImageVector,
     label: String,
     isFocused: Boolean,
+    isDestructive: Boolean = false,
     enabled: Boolean = true
 ) {
     val bgColor = when {
-        !enabled -> Color.White.copy(alpha = 0.05f)
-        isFocused -> Pink.copy(alpha = 0.35f)
-        else -> Color.White.copy(alpha = 0.10f)
+        !enabled -> Color.Black.copy(alpha = 0.4f)
+        isFocused && isDestructive -> Color(0xFFDC2626)
+        isFocused -> Color.White
+        else -> Color.Black
     }
     val fgColor = when {
-        !enabled -> TextSecondary.copy(alpha = 0.5f)
-        isFocused -> TextPrimary
-        else -> TextSecondary
+        !enabled -> Color.White.copy(alpha = 0.5f)
+        isFocused && isDestructive -> Color.White
+        isFocused -> Color.Black
+        else -> Color.White
     }
     Row(
         modifier = Modifier
             .requiredWidth(86.dp)
             .background(bgColor, RoundedCornerShape(8.dp))
+            .border(
+                width = if (isFocused) 0.dp else 1.dp,
+                color = Color.White.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(8.dp)
+            )
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
@@ -1332,10 +1627,12 @@ private fun AddonsSettings(
             )
         } else {
             addons.forEachIndexed { index, addon ->
+                val canDelete = !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
                 AddonRow(
                     addon = addon,
                     isFocused = focusedIndex == index,
                     focusedAction = if (focusedIndex == index) focusedActionIndex else -1,
+                    canDelete = canDelete,
                     onToggle = { onToggleAddon(addon.id) },
                     onDelete = { onDeleteAddon(addon.id) }
                 )
@@ -1386,11 +1683,14 @@ private fun AddonRow(
     addon: com.arflix.tv.data.model.Addon,
     isFocused: Boolean,
     focusedAction: Int = -1, // 0 = toggle, 1 = delete
+    canDelete: Boolean = true,
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val isToggleFocused = isFocused && focusedAction == 0
-    val isDeleteFocused = isFocused && focusedAction == 1
+    val canToggle = !(addon.id == "opensubtitles" && addon.type == com.arflix.tv.data.model.AddonType.SUBTITLE)
+    val isToggleFocused = canToggle && isFocused && focusedAction == 0
+    val isDeleteFocused = canDelete && isFocused && focusedAction == 1
+    val isEnabled = addon.isEnabled
 
     Row(
         modifier = Modifier
@@ -1462,11 +1762,11 @@ private fun AddonRow(
                         .width(48.dp)
                         .height(26.dp)
                         .background(
-                            color = if (addon.isInstalled) SuccessGreen else Color.White.copy(alpha = 0.2f),
+                            color = if (isEnabled) SuccessGreen else Color.White.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(13.dp)
                         )
                         .padding(3.dp),
-                    contentAlignment = if (addon.isInstalled) Alignment.CenterEnd else Alignment.CenterStart
+                    contentAlignment = if (isEnabled) Alignment.CenterEnd else Alignment.CenterStart
                 ) {
                     Box(
                         modifier = Modifier
@@ -1479,27 +1779,28 @@ private fun AddonRow(
                 }
             }
 
-            // Delete button
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(
-                        color = if (isDeleteFocused) Color(0xFFEF4444) else Color.White.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp)
+            if (canDelete) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            color = if (isDeleteFocused) Color(0xFFEF4444) else Color.White.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .border(
+                            width = if (isDeleteFocused) 2.dp else 0.dp,
+                            color = if (isDeleteFocused) Color.White else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete addon",
+                        tint = if (isDeleteFocused) Color.White else TextSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
-                    .border(
-                        width = if (isDeleteFocused) 2.dp else 0.dp,
-                        color = if (isDeleteFocused) Color.White else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete addon",
-                    tint = if (isDeleteFocused) Color.White else TextSecondary,
-                    modifier = Modifier.size(20.dp)
-                )
+                }
             }
         }
     }
@@ -1857,6 +2158,8 @@ private fun AccountRow(
 data class InputField(
     val label: String,
     val value: String,
+    val placeholder: String = "",
+    val isSecret: Boolean = false,
     val onValueChange: (String) -> Unit
 )
 
@@ -1865,7 +2168,7 @@ data class InputField(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun InputModal(
+private fun InputModalLegacy(
     title: String,
     fields: List<InputField>,
     onConfirm: () -> Unit,
@@ -2118,6 +2421,378 @@ private fun InputModal(
                 style = ArflixTypography.caption,
                 color = TextSecondary.copy(alpha = 0.5f)
             )
+        }
+    }
+}
+
+/**
+ * TV IME-safe input modal.
+ * - D-pad navigation is handled by the dialog container
+ * - Keyboard opens only on OK/Click on a field
+ * - Back closes the keyboard first (doesn't dismiss), second Back dismisses
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun InputModal(
+    title: String,
+    fields: List<InputField>,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var focusedIndex by remember(title, fields.size) { mutableIntStateOf(0) }
+    val totalItems = fields.size + 3 // inputs + paste + cancel + confirm
+    val formMaxHeight = if (fields.size >= 4) 360.dp else 290.dp
+
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val view = LocalView.current
+    val modalFocusRequester = remember { FocusRequester() }
+    val formScrollState = rememberScrollState()
+
+    val editTextRefs = remember { MutableList<EditText?>(fields.size) { null } }
+
+    fun anyEditTextFocused(): Boolean = editTextRefs.any { it?.hasFocus() == true }
+
+    fun hideKeyboardAll() {
+        val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        editTextRefs.forEach { edit ->
+            if (edit != null) {
+                imm?.hideSoftInputFromWindow(edit.windowToken, 0)
+                edit.clearFocus()
+                runCatching { imm?.restartInput(edit) }
+            }
+        }
+        view.requestFocus()
+    }
+
+    fun showKeyboardFor(index: Int) {
+        val edit = editTextRefs.getOrNull(index) ?: return
+        val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        edit.post {
+            edit.requestFocus()
+            val shown = imm?.showSoftInput(edit, InputMethodManager.SHOW_IMPLICIT) ?: false
+            if (!shown) imm?.showSoftInput(edit, InputMethodManager.SHOW_FORCED)
+        }
+    }
+
+    LaunchedEffect(title, fields.size) {
+        // Ensure D-pad events always start from the dialog on all TV devices.
+        modalFocusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = {
+            hideKeyboardAll()
+            onDismiss()
+        },
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.72f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(560.dp)
+                    .background(BackgroundElevated, RoundedCornerShape(14.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 20.dp, vertical = 18.dp)
+                    .focusRequester(modalFocusRequester)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            when (event.key) {
+                                Key.Back, Key.Escape -> {
+                                    if (anyEditTextFocused()) {
+                                        hideKeyboardAll()
+                                    } else {
+                                        hideKeyboardAll()
+                                        onDismiss()
+                                    }
+                                    true
+                                }
+                                Key.DirectionUp -> {
+                                    if (focusedIndex > 0) {
+                                        if (focusedIndex < fields.size) hideKeyboardAll()
+                                        focusedIndex--
+                                    }
+                                    true
+                                }
+                                Key.DirectionDown -> {
+                                    if (focusedIndex < totalItems - 1) {
+                                        if (focusedIndex < fields.size) hideKeyboardAll()
+                                        focusedIndex++
+                                    }
+                                    true
+                                }
+                                Key.DirectionLeft -> {
+                                    if (focusedIndex == fields.size + 2) focusedIndex = fields.size + 1
+                                    true
+                                }
+                                Key.DirectionRight -> {
+                                    if (focusedIndex == fields.size + 1) focusedIndex = fields.size + 2
+                                    true
+                                }
+                                Key.Enter, Key.DirectionCenter -> {
+                                    when {
+                                        focusedIndex in 0 until fields.size -> {
+                                            showKeyboardFor(focusedIndex)
+                                            true
+                                        }
+                                        focusedIndex == fields.size -> {
+                                            val clipboardText = clipboardManager.getText()?.text
+                                            val target = fields.firstOrNull()
+                                            if (clipboardText != null && target != null) {
+                                                target.onValueChange(clipboardText)
+                                            }
+                                            true
+                                        }
+                                        focusedIndex == fields.size + 1 -> {
+                                            hideKeyboardAll()
+                                            onDismiss()
+                                            true
+                                        }
+                                        focusedIndex == fields.size + 2 -> {
+                                            hideKeyboardAll()
+                                            onConfirm()
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                }
+                                else -> false
+                            }
+                        } else false
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = title,
+                    style = ArflixTypography.sectionTitle,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Use D-pad to move, press OK to edit a field",
+                    style = ArflixTypography.caption,
+                    color = TextSecondary.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = formMaxHeight)
+                        .verticalScroll(formScrollState)
+                ) {
+                    fields.forEachIndexed { index, field ->
+                        val isFocused = focusedIndex == index
+
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(
+                                            if (isFocused) Pink.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.08f),
+                                            RoundedCornerShape(11.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            if (isFocused) Pink else Color.White.copy(alpha = 0.12f),
+                                            RoundedCornerShape(11.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${index + 1}",
+                                        style = ArflixTypography.caption,
+                                        color = if (isFocused) Pink else TextSecondary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = field.label,
+                                    style = ArflixTypography.caption,
+                                    color = if (isFocused) Pink else TextSecondary
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f), RoundedCornerShape(10.dp))
+                                    .border(
+                                        width = if (isFocused) 2.dp else 1.dp,
+                                        color = if (isFocused) Pink else Color.White.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(2.dp)
+                            ) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        EditText(ctx).apply {
+                                            editTextRefs[index] = this
+                                            setText(field.value)
+                                            setTextColor(android.graphics.Color.WHITE)
+                                            setHintTextColor(android.graphics.Color.GRAY)
+                                            hint = field.placeholder.ifBlank { "Enter ${field.label.lowercase()}..." }
+                                            textSize = 16f
+                                            background = null
+                                            setPadding(20, 14, 20, 14)
+                                            isSingleLine = true
+                                            isFocusable = true
+                                            isFocusableInTouchMode = true
+
+                                            val isPasswordField = field.isSecret || field.label.contains("password", ignoreCase = true)
+                                            val isLikelyUrlField =
+                                                field.label.contains("url", ignoreCase = true) ||
+                                                    field.label.contains("m3u", ignoreCase = true) ||
+                                                    field.label.contains("epg", ignoreCase = true) ||
+                                                    field.label.contains("server", ignoreCase = true)
+                                            inputType = if (isPasswordField) {
+                                                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                                            } else if (isLikelyUrlField) {
+                                                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                                            } else {
+                                                InputType.TYPE_CLASS_TEXT
+                                            }
+                                            if (isPasswordField) {
+                                                transformationMethod = PasswordTransformationMethod.getInstance()
+                                            }
+
+                                            doAfterTextChanged { editable ->
+                                                field.onValueChange(editable?.toString() ?: "")
+                                            }
+
+                                            setOnEditorActionListener { _, actionId, _ ->
+                                                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                                                    val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                                    imm?.hideSoftInputFromWindow(windowToken, 0)
+                                                    clearFocus()
+                                                    true
+                                                } else false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    update = { editText ->
+                                        val current = editText.text?.toString().orEmpty()
+                                        if (current != field.value) {
+                                            editText.setText(field.value)
+                                            editText.setSelection(field.value.length)
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (index < fields.size - 1) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val isPasteFocused = focusedIndex == fields.size
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = if (isPasteFocused) Color.White else Color.Black.copy(alpha = 0.82f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isPasteFocused) Color.White else Color.White.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .padding(vertical = 11.dp, horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentPaste,
+                        contentDescription = "Paste",
+                        tint = if (isPasteFocused) Color.Black else Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Paste from Clipboard",
+                        style = ArflixTypography.button,
+                        color = if (isPasteFocused) Color.Black else Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val isCancelFocused = focusedIndex == fields.size + 1
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(
+                                color = if (isCancelFocused) Color.White else Color.Black.copy(alpha = 0.82f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isCancelFocused) Color.White else Color.White.copy(alpha = 0.14f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            style = ArflixTypography.button,
+                            color = if (isCancelFocused) Color.Black else Color.White
+                        )
+                    }
+
+                    val isConfirmFocused = focusedIndex == fields.size + 2
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(
+                                color = if (isConfirmFocused) Color.White else Color.Black.copy(alpha = 0.82f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isConfirmFocused) Color.White else Color.White.copy(alpha = 0.14f),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Confirm",
+                            style = ArflixTypography.button,
+                            color = if (isConfirmFocused) Color.Black else Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "OK: edit/select • Back: close keyboard first",
+                    style = ArflixTypography.caption,
+                    color = TextSecondary.copy(alpha = 0.56f)
+                )
+            }
         }
     }
 }

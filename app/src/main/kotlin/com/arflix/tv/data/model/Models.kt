@@ -138,8 +138,13 @@ data class StreamSource(
     val size: String,
     val sizeBytes: Long? = null,
     val url: String? = null,
+    val infoHash: String? = null,
+    val fileIdx: Int? = null,
     val behaviorHints: StreamBehaviorHints? = null,
-    val subtitles: List<Subtitle> = emptyList()
+    val subtitles: List<Subtitle> = emptyList(),
+    // Stremio "sources" are commonly tracker URLs. Keeping them helps P2P playback (TorrServer) work
+    // across more addons.
+    val sources: List<String> = emptyList()
 ) : Serializable
 
 /**
@@ -147,6 +152,7 @@ data class StreamSource(
  */
 data class StreamBehaviorHints(
     val notWebReady: Boolean = false,
+    val cached: Boolean? = null,
     val bingeGroup: String? = null,
     val countryWhitelist: List<String>? = null,
     val proxyHeaders: ProxyHeaders? = null,

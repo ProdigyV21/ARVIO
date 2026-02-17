@@ -1,0 +1,26 @@
+plugins = []
+headers = []
+redirects = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "C:\\Users\\arvin\\ARVIO-APP\\netlify-auth-site"
+publishOrigin = "default"
+base = "C:\\Users\\arvin\\ARVIO-APP\\netlify-auth-site"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]

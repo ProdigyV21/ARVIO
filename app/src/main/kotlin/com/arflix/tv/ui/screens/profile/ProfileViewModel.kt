@@ -10,6 +10,7 @@ import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.IptvRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,6 +102,14 @@ class ProfileViewModel @Inject constructor(
         // Persist the active profile selection
         viewModelScope.launch {
             profileRepository.setActiveProfile(profile.id)
+        }
+        // Warm IPTV caches immediately for this profile so VOD can appear in stream sources
+        // without requiring the user to open IPTV settings/pages first.
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                iptvRepository.warmupFromCacheOnly()
+                iptvRepository.warmXtreamVodCachesIfPossible()
+            }
         }
     }
 

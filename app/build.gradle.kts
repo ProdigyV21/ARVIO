@@ -20,10 +20,12 @@ android {
 
     defaultConfig {
         applicationId = "com.arvio.tv"
-        minSdk = 26
+        // Fire TV devices can be as low as Android 7.1 (API 25) or lower depending on model/OS.
+        // Lower minSdk to maximize compatibility and avoid "There was a problem parsing the package".
+        minSdk = 21
         targetSdk = 34
-        versionCode = 140
-        versionName = "1.4.0"
+        versionCode = 150
+        versionName = "1.5.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -197,6 +199,7 @@ dependencies {
 
     // Image loading - Coil
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("com.google.zxing:core:3.5.3")
 
     // Supabase (optional - for cloud sync)
     implementation("io.github.jan-tennert.supabase:postgrest-kt:2.0.4")

@@ -44,6 +44,7 @@ data class IptvSnapshot(
     val grouped: Map<String, List<IptvChannel>> = emptyMap(),
     val nowNext: Map<String, IptvNowNext> = emptyMap(),
     val favoriteGroups: List<String> = emptyList(),
+    val favoriteChannels: List<String> = emptyList(),
     val epgWarning: String? = null,
     val loadedAt: Instant = Instant.now()
 )

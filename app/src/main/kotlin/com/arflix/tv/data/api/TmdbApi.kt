@@ -13,13 +13,15 @@ interface TmdbApi {
     // Daily trending - updates every day for fresher content
     @GET("trending/movie/day")
     suspend fun getTrendingMovies(
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("page") page: Int = 1
     ): TmdbListResponse
 
     // Daily trending - updates every day for fresher content
     @GET("trending/tv/day")
     suspend fun getTrendingTv(
-        @Query("api_key") apiKey: String
+        @Query("api_key") apiKey: String,
+        @Query("page") page: Int = 1
     ): TmdbListResponse
     
     @GET("discover/tv")
@@ -34,7 +36,8 @@ interface TmdbApi {
         @Query("vote_count.gte") minVoteCount: Int? = null,
         @Query("with_keywords") keywords: String? = null,
         @Query("air_date.gte") airDateGte: String? = null,
-        @Query("air_date.lte") airDateLte: String? = null
+        @Query("air_date.lte") airDateLte: String? = null,
+        @Query("page") page: Int = 1
     ): TmdbListResponse
 
     @GET("discover/movie")
@@ -45,7 +48,8 @@ interface TmdbApi {
         @Query("vote_count.gte") minVoteCount: Int? = null,
         @Query("with_keywords") keywords: String? = null,
         @Query("release_date.gte") releaseDateGte: String? = null,
-        @Query("release_date.lte") releaseDateLte: String? = null
+        @Query("release_date.lte") releaseDateLte: String? = null,
+        @Query("page") page: Int = 1
     ): TmdbListResponse
     
     @GET("movie/{movie_id}")

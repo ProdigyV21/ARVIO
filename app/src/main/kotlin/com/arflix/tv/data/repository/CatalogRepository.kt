@@ -39,9 +39,34 @@ class CatalogRepository @Inject constructor(
 ) {
     private val gson = Gson()
     private fun catalogsKey(profileId: String) = stringPreferencesKey("profile_${profileId}_catalogs_v1")
+    private fun hiddenPreinstalledKey(profileId: String) = stringPreferencesKey("profile_${profileId}_hidden_preinstalled_catalogs_v1")
     private val legacyDefaultKey = stringPreferencesKey("profile_default_catalogs_v1")
     private val legacyGlobalKey = stringPreferencesKey("catalogs_v1")
     private val listType = object : TypeToken<List<CatalogConfig>>() {}.type
+    private val hiddenListType = object : TypeToken<List<String>>() {}.type
+
+    private fun decodeHiddenPreinstalled(profileId: String, prefs: Preferences): Set<String> {
+        val raw = prefs[hiddenPreinstalledKey(profileId)]
+        if (raw.isNullOrBlank()) return emptySet()
+        return try {
+            (gson.fromJson<List<String>>(raw, hiddenListType) ?: emptyList())
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    private suspend fun hidePreinstalledCatalog(profileId: String, catalogId: String) {
+        val trimmed = catalogId.trim()
+        if (trimmed.isBlank()) return
+        context.settingsDataStore.edit { prefs ->
+            val hidden = decodeHiddenPreinstalled(profileId, prefs).toMutableSet()
+            hidden.add(trimmed)
+            prefs[hiddenPreinstalledKey(profileId)] = gson.toJson(hidden.toList())
+        }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observeCatalogs(): Flow<List<CatalogConfig>> {
@@ -76,6 +101,24 @@ class CatalogRepository @Inject constructor(
         return readCatalogsForActiveProfile()
     }
 
+    suspend fun getHiddenPreinstalledCatalogIdsForActiveProfile(): List<String> {
+        val profileId = activeProfileId()
+        val prefs = context.settingsDataStore.data.first()
+        return decodeHiddenPreinstalled(profileId, prefs).toList()
+    }
+
+    suspend fun setHiddenPreinstalledCatalogIdsForActiveProfile(ids: List<String>) {
+        val profileId = activeProfileId()
+        val cleaned = ids.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        context.settingsDataStore.edit { prefs ->
+            if (cleaned.isEmpty()) {
+                prefs[hiddenPreinstalledKey(profileId)] = ""
+            } else {
+                prefs[hiddenPreinstalledKey(profileId)] = gson.toJson(cleaned)
+            }
+        }
+    }
+
     private suspend fun saveCatalogs(catalogs: List<CatalogConfig>) {
         val profileId = activeProfileId()
         context.settingsDataStore.edit { prefs ->
@@ -96,6 +139,15 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun ensurePreinstalledDefaults(defaultPreinstalled: List<CatalogConfig>): List<CatalogConfig> {
+        val profileId = activeProfileId()
+        val prefs = context.settingsDataStore.data.first()
+        val hidden = decodeHiddenPreinstalled(profileId, prefs)
+        val effectiveDefaults = if (hidden.isEmpty()) {
+            defaultPreinstalled
+        } else {
+            defaultPreinstalled.filterNot { it.id in hidden }
+        }
+
         val existing = getCatalogs().map { cfg ->
             val looksCustom = cfg.id.startsWith("custom_") ||
                 !cfg.sourceUrl.isNullOrBlank() ||
@@ -113,10 +165,10 @@ class CatalogRepository @Inject constructor(
                 cfg
             }
         }
-        val defaultMap = defaultPreinstalled.associateBy { it.id }
+        val defaultMap = effectiveDefaults.associateBy { it.id }
 
         val merged = if (existing.isEmpty()) {
-            defaultPreinstalled
+            effectiveDefaults
         } else {
             val kept = existing.mapNotNull { config ->
                 if (config.isPreinstalled) {
@@ -126,7 +178,7 @@ class CatalogRepository @Inject constructor(
                 }
             }.toMutableList()
 
-            val missingPreinstalled = defaultPreinstalled.filter { pre ->
+            val missingPreinstalled = effectiveDefaults.filter { pre ->
                 kept.none { it.id == pre.id }
             }
             kept.addAll(missingPreinstalled)
@@ -207,7 +259,8 @@ class CatalogRepository @Inject constructor(
         val target = current.firstOrNull { it.id == catalogId }
             ?: return Result.failure(IllegalArgumentException("Catalog not found"))
         if (target.isPreinstalled) {
-            return Result.failure(IllegalArgumentException("Preinstalled catalogs cannot be removed"))
+            val profileId = activeProfileId()
+            hidePreinstalledCatalog(profileId, catalogId)
         }
         current.removeAll { it.id == catalogId }
         saveCatalogs(current)
@@ -517,27 +570,33 @@ class CatalogRepository @Inject constructor(
     }
 
     private fun readCatalogsFromPrefs(profileId: String, prefs: Preferences): List<CatalogConfig> {
+        val hiddenPreinstalled = decodeHiddenPreinstalled(profileId, prefs)
+
         // Strict profile-first lookup to avoid leaking or prioritizing
         // catalogs from other profiles.
         val primary = parseCatalogsJson(prefs[catalogsKey(profileId)])
         if (primary.isNotEmpty()) {
-            val base = primary.distinctBy { it.id }.toMutableList()
+            val base = primary
+                .distinctBy { it.id }
+                .filterNot { cfg -> cfg.isPreinstalled && cfg.id in hiddenPreinstalled }
+                .toMutableList()
             val existingKeys = base.map { "${it.id}|${it.sourceUrl.orEmpty()}" }.toMutableSet()
 
-            // If current profile only has preinstalled rows, recover legacy custom rows
-            // saved under default/global in previous builds.
-            val legacyCustom = (
-                parseCatalogsJson(prefs[legacyDefaultKey]) +
-                parseCatalogsJson(prefs[legacyGlobalKey])
-            )
-                .filterNot { it.isPreinstalled }
-                .distinctBy { "${it.id}|${it.sourceUrl.orEmpty()}" }
+            // Legacy recovery applies only to the default profile to avoid cross-profile leakage.
+            if (profileId == "default") {
+                val legacyCustom = (
+                    parseCatalogsJson(prefs[legacyDefaultKey]) +
+                    parseCatalogsJson(prefs[legacyGlobalKey])
+                )
+                    .filterNot { it.isPreinstalled }
+                    .distinctBy { "${it.id}|${it.sourceUrl.orEmpty()}" }
 
-            legacyCustom.forEach { cfg ->
-                val key = "${cfg.id}|${cfg.sourceUrl.orEmpty()}"
-                if (!existingKeys.contains(key)) {
-                    base.add(cfg)
-                    existingKeys.add(key)
+                legacyCustom.forEach { cfg ->
+                    val key = "${cfg.id}|${cfg.sourceUrl.orEmpty()}"
+                    if (!existingKeys.contains(key)) {
+                        base.add(cfg)
+                        existingKeys.add(key)
+                    }
                 }
             }
             return base
@@ -545,10 +604,18 @@ class CatalogRepository @Inject constructor(
 
         // Legacy fallback keys (pre profile-scoping).
         val legacyDefault = parseCatalogsJson(prefs[legacyDefaultKey])
-        if (legacyDefault.isNotEmpty()) return legacyDefault.distinctBy { it.id }
+        if (legacyDefault.isNotEmpty()) {
+            return legacyDefault
+                .distinctBy { it.id }
+                .filterNot { cfg -> cfg.isPreinstalled && cfg.id in hiddenPreinstalled }
+        }
 
         val legacyGlobal = parseCatalogsJson(prefs[legacyGlobalKey])
-        if (legacyGlobal.isNotEmpty()) return legacyGlobal.distinctBy { it.id }
+        if (legacyGlobal.isNotEmpty()) {
+            return legacyGlobal
+                .distinctBy { it.id }
+                .filterNot { cfg -> cfg.isPreinstalled && cfg.id in hiddenPreinstalled }
+        }
 
         return emptyList()
     }

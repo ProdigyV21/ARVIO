@@ -258,6 +258,9 @@ data class WatchHistoryRecord(
     @SerializedName("episode_title") val episodeTitle: String? = null,
     @SerializedName("backdrop_path") val backdropPath: String? = null,
     @SerializedName("poster_path") val posterPath: String? = null,
+    @SerializedName("stream_key") val streamKey: String? = null,
+    @SerializedName("stream_addon_id") val streamAddonId: String? = null,
+    @SerializedName("stream_title") val streamTitle: String? = null,
     @SerializedName("created_at") val createdAt: String? = null
 )
 

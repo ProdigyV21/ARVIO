@@ -89,22 +89,27 @@ fun TextInputModal(
     val context = LocalContext.current
     val view = LocalView.current
 
-    // Helper function to show keyboard using InputMethodManager (works better on TV)
+    var editTextRef by remember { mutableStateOf<EditText?>(null) }
+    // Show/hide keyboard using the EditText window token (toggleSoftInput can get stuck on some TV IMEs).
     fun showKeyboard() {
+        val editText = editTextRef ?: return
         val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        // Try multiple methods to ensure keyboard shows on TV
-        view.post {
-            view.requestFocus()
-            imm?.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY)
+        editText.post {
+            editText.requestFocus()
+            val shown = imm?.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT) ?: false
+            if (!shown) imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
         }
     }
 
     fun hideKeyboard() {
+        val editText = editTextRef ?: return
         val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(view.windowToken, 0)
-        imm?.toggleSoftInput(0, InputMethodManager.HIDE_NOT_ALWAYS)
+        editText.post {
+            imm?.hideSoftInputFromWindow(editText.windowToken, 0)
+            editText.clearFocus()
+            runCatching { imm?.restartInput(editText) }
+        }
     }
-
     // Request focus on input when modal becomes visible and show keyboard
     LaunchedEffect(isVisible) {
         if (isVisible) {
@@ -113,6 +118,8 @@ fun TextInputModal(
             // Delay to ensure focus is set before showing keyboard
             kotlinx.coroutines.delay(200)
             showKeyboard()
+        } else {
+            hideKeyboard()
         }
     }
 
@@ -129,9 +136,7 @@ fun TextInputModal(
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
                             Key.Back, Key.Escape -> {
-                                if (focusedButton == -1) {
-                                    hideKeyboard()
-                                }
+                                hideKeyboard()
                                 onCancel()
                                 true
                             }
@@ -215,6 +220,7 @@ fun TextInputModal(
                     AndroidView(
                         factory = { ctx ->
                             EditText(ctx).apply {
+                                editTextRef = this
                                 setText(inputText)
                                 setTextColor(android.graphics.Color.WHITE)
                                 setHintTextColor(android.graphics.Color.GRAY)
@@ -249,10 +255,10 @@ fun TextInputModal(
                                     isInputFocused = hasFocus
                                     if (hasFocus) {
                                         focusedButton = -1
-                                        // Force show keyboard when focused (SHOW_FORCED works better on TV)
                                         v.postDelayed({
                                             val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                                            imm?.showSoftInput(v, InputMethodManager.SHOW_FORCED)
+                                            val shown = imm?.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT) ?: false
+                                            if (!shown) imm?.showSoftInput(v, InputMethodManager.SHOW_FORCED)
                                         }, 100)
                                     }
                                 }
@@ -262,13 +268,13 @@ fun TextInputModal(
                             .fillMaxWidth()
                             .focusRequester(inputFocusRequester),
                         update = { editText ->
-                            // Request focus when modal becomes visible and force keyboard open
+                            // Request focus when modal becomes visible and show keyboard
                             if (isVisible && !editText.hasFocus()) {
                                 editText.requestFocus()
-                                // Use SHOW_FORCED to ensure keyboard appears on TV
                                 editText.postDelayed({
                                     val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                                    imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+                                    val shown = imm?.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT) ?: false
+                                    if (!shown) imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
                                 }, 100)
                             }
                         }
@@ -284,13 +290,19 @@ fun TextInputModal(
                     ActionButton(
                         text = "CANCEL",
                         isFocused = focusedButton == 0,
-                        onClick = onCancel
+                        onClick = {
+                            hideKeyboard()
+                            onCancel()
+                        }
                     )
                     ActionButton(
                         text = "OK",
                         isFocused = focusedButton == 1,
                         isPrimary = true,
-                        onClick = { onConfirm(inputText) }
+                        onClick = {
+                            hideKeyboard()
+                            onConfirm(inputText)
+                        }
                     )
                 }
             }

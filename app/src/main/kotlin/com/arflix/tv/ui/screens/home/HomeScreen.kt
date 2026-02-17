@@ -9,6 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -641,16 +643,16 @@ private fun HeroSection(
                 // Get actual genre names from genre IDs
                 val genreMap = if (currentItem.mediaType == MediaType.TV) tvGenres else movieGenres
                 val genreNames = currentItem.genreIds.mapNotNull { genreMap[it] }.take(2)
-                val genreText = genreNames.joinToString(" / ").ifEmpty {
-                    if (currentItem.mediaType == MediaType.TV) "TV Series" else "Movie"
-                }
+                val genreText = genreNames.joinToString(" / ")
+                val displayDate = currentItem.releaseDate?.takeIf { it.isNotEmpty() } ?: currentItem.year
+                val hasDuration = currentItem.duration.isNotEmpty() && currentItem.duration != "0m"
+                val hasGenre = genreText.isNotEmpty()
 
                 // Metadata row: Date | Genre | Duration | IMDb rating
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val displayDate = currentItem.releaseDate?.takeIf { it.isNotEmpty() } ?: currentItem.year
                     if (displayDate.isNotEmpty()) {
                         Text(
                             text = displayDate,
@@ -662,36 +664,41 @@ private fun HeroSection(
                             color = Color.White
                         )
 
+                        if (hasGenre) {
+                            Text(
+                                text = "|",
+                                style = ArflixTypography.caption.copy(
+                                    fontSize = 14.sp,
+                                    shadow = textShadow
+                                ),
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    if (hasGenre) {
                         Text(
-                            text = "|",
+                            text = genreText,
                             style = ArflixTypography.caption.copy(
                                 fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
                                 shadow = textShadow
                             ),
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = Color.White
                         )
                     }
 
-                    Text(
-                        text = genreText,
-                        style = ArflixTypography.caption.copy(
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            shadow = textShadow
-                        ),
-                        color = Color.White
-                    )
-
-                    if (currentItem.duration.isNotEmpty() && currentItem.duration != "0m") {
-                        Text(
-                            text = "|",
-                            style = ArflixTypography.caption.copy(
-                                fontSize = 14.sp,
-                                shadow = textShadow
-                            ),
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-
+                    if (hasDuration) {
+                        if (displayDate.isNotEmpty() || hasGenre) {
+                            Text(
+                                text = "|",
+                                style = ArflixTypography.caption.copy(
+                                    fontSize = 14.sp,
+                                    shadow = textShadow
+                                ),
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
                         Text(
                             text = currentItem.duration,
                             style = ArflixTypography.caption.copy(
@@ -706,14 +713,16 @@ private fun HeroSection(
                     val rating = currentItem.imdbRating.ifEmpty { currentItem.tmdbRating }
                     val ratingValue = parseRatingValue(rating)
                     if (ratingValue > 0f) {
-                        Text(
-                            text = "|",
-                            style = ArflixTypography.caption.copy(
-                                fontSize = 14.sp,
-                                shadow = textShadow
-                            ),
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
+                        if (displayDate.isNotEmpty() || hasGenre || hasDuration) {
+                            Text(
+                                text = "|",
+                                style = ArflixTypography.caption.copy(
+                                    fontSize = 14.sp,
+                                    shadow = textShadow
+                                ),
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1003,13 +1012,26 @@ private fun HomeRowsLayer(
                 .fillMaxWidth()
                 .padding(bottom = 24.dp)
         ) {
-            categories.forEachIndexed { rowIndex, category ->
-                if (rowIndex == currentRowIndex) {
+            val safeRowIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
+            AnimatedContent(
+                targetState = safeRowIndex,
+                transitionSpec = {
+                    if (isFastScrolling) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else {
+                        fadeIn(animationSpec = tween(durationMillis = 170)) togetherWith
+                            fadeOut(animationSpec = tween(durationMillis = 130))
+                    }
+                },
+                label = "HomeRowSwap"
+            ) { rowIndex ->
+                val category = categories.getOrNull(rowIndex)
+                if (category != null) {
                     key(category.id) {
                         ContentRow(
                             category = category,
                             cardLogoUrls = cardLogoUrls,
-                            isCurrentRow = true,
+                            isCurrentRow = rowIndex == focusState.currentRowIndex,
                             isRanked = category.title.contains("Top 10", ignoreCase = true),
                             startPadding = contentStartPadding,
                             focusedItemIndex = focusState.currentItemIndex,
@@ -1237,7 +1259,7 @@ private fun ContentRow(
     }
 
     // Keep focused card anchored by scrolling the row on every focus change.
-    // Use instant scroll for single-step D-pad moves to reduce animation overhead on lower-end TV SoCs.
+    // Use smooth scroll (animated) for D-pad moves to avoid abrupt jumps.
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(isCurrentRow) {
         if (!isCurrentRow) {
@@ -1269,15 +1291,10 @@ private fun ContentRow(
             lastScrollIndex = scrollTargetIndex
             return@LaunchedEffect
         }
-        val delta = scrollTargetIndex - lastScrollIndex
-        if (delta == 0 && extraOffset > 0) {
-            // Same scroll target but need extra offset for end items
-            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else if (abs(delta) > 1) {
-            // Large jump - use smooth animation
+        val shouldAnimate = !isFastScrolling
+        if (shouldAnimate) {
             rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else if (delta != 0) {
-            // Single item navigation - instant scroll keeps focus traversal responsive.
+        } else {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
         lastScrollIndex = scrollTargetIndex

@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -69,6 +70,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -84,6 +86,8 @@ import androidx.tv.foundation.lazy.list.itemsIndexed
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
@@ -134,7 +138,7 @@ fun DetailsScreen(
     initialEpisode: Int? = null,
     viewModel: DetailsViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
-    onNavigateToPlayer: (MediaType, Int, Int?, Int?, String?, Long?) -> Unit,
+    onNavigateToPlayer: (MediaType, Int, Int?, Int?, String?, String?, Long?) -> Unit,
     onNavigateToDetails: (MediaType, Int) -> Unit,
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
@@ -145,6 +149,7 @@ fun DetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // Start on buttons for both TV and movies (buttons are now shown for both)
     var focusedSection by remember { mutableStateOf(FocusSection.BUTTONS) }
@@ -170,6 +175,19 @@ fun DetailsScreen(
 
     LaunchedEffect(mediaType, mediaId, initialSeason, initialEpisode) {
         viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
+    }
+
+    // Keep watched badges and continue target fresh when returning from player.
+    DisposableEffect(lifecycleOwner, mediaType, mediaId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshAfterPlayerReturn()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -343,11 +361,11 @@ fun DetailsScreen(
                                                 ) uiState.playPositionMs else null
                                                 onNavigateToPlayer(
                                                     mediaType, mediaId,
-                                                    season, episode, null, startPositionMs
+                                                    season, episode, uiState.imdbId, null, startPositionMs
                                                 )
                                             } else {
                                                 onNavigateToPlayer(
-                                                    mediaType, mediaId, null, null, null, uiState.playPositionMs
+                                                    mediaType, mediaId, null, null, uiState.imdbId, null, uiState.playPositionMs
                                                 )
                                             }
                                         }
@@ -384,7 +402,7 @@ fun DetailsScreen(
                                     if (ep != null) {
                                         onNavigateToPlayer(
                                             mediaType, mediaId,
-                                            ep.seasonNumber, ep.episodeNumber, null, null
+                                            ep.seasonNumber, ep.episodeNumber, uiState.imdbId, null, null
                                         )
                                     }
                                 }
@@ -502,6 +520,7 @@ fun DetailsScreen(
                 onNavigateToPlayer(
                     mediaType, mediaId,
                     ep?.seasonNumber, ep?.episodeNumber,
+                    uiState.imdbId,
                     stream.url,
                     null
                 )
@@ -520,7 +539,7 @@ fun DetailsScreen(
                     showEpisodeContextMenu = false
                     onNavigateToPlayer(
                         mediaType, mediaId,
-                        episode.seasonNumber, episode.episodeNumber, null, null
+                        episode.seasonNumber, episode.episodeNumber, uiState.imdbId, null, null
                     )
                 },
                 onSelectSource = {
@@ -1051,6 +1070,7 @@ private fun DetailsContent(
                 if (totalSeasons > 1) {
                     item {
                         val seasonRowState = rememberTvLazyListState()
+                        val seasonItems = remember(totalSeasons) { (1..totalSeasons).toList() }
                         HomeStyleRowAutoScroll(
                             rowState = seasonRowState,
                             isCurrentRow = focusedSection == FocusSection.SEASONS,
@@ -1071,7 +1091,7 @@ private fun DetailsContent(
                             contentPadding = PaddingValues(start = contentStartPadding, end = 150.dp),  // 120dp button + 30dp margin
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            itemsIndexed((1..totalSeasons).toList(), key = { _, s -> s }) { index, season ->
+                            itemsIndexed(seasonItems, key = { _, s -> s }) { index, season ->
                                 val progress = seasonProgress[season]
                                 SeasonButton(
                                     season = season,

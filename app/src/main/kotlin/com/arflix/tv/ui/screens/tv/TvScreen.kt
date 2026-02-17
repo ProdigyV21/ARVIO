@@ -115,12 +115,12 @@ fun TvScreen(
     val groupsListState = rememberLazyListState()
     val channelsListState = rememberLazyListState()
 
-    val groups by remember(uiState.snapshot.grouped, uiState.snapshot.favoriteGroups) {
+    val groups by remember(uiState.snapshot.grouped, uiState.snapshot.favoriteGroups, uiState.snapshot.favoriteChannels) {
         derivedStateOf { uiState.groups() }
     }
     val safeGroupIndex = groupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0))
     val selectedGroup = groups.getOrNull(safeGroupIndex).orEmpty()
-    val channels = uiState.snapshot.grouped[selectedGroup].orEmpty()
+    val channels = uiState.filteredChannels(selectedGroup)
     val safeChannelIndex = channelIndex.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
     val selectedChannel = selectedChannelId?.let { uiState.channelLookup[it] }
     val playingChannel = selectedChannel ?: playingChannelId?.let { uiState.channelLookup[it] }
@@ -265,11 +265,23 @@ fun TvScreen(
                 if (event.type == KeyEventType.KeyUp && isSelect) {
                     val pressMs = centerDownAtMs?.let { SystemClock.elapsedRealtime() - it } ?: 0L
                     centerDownAtMs = null
-                    if (focusZone == TvFocusZone.GROUPS && pressMs >= 550L) {
-                        val group = groups.getOrNull(safeGroupIndex)
-                        if (group != null) {
-                            viewModel.toggleFavoriteGroup(group)
-                            return@onPreviewKeyEvent true
+                    if (pressMs >= 550L) {
+                        when (focusZone) {
+                            TvFocusZone.GROUPS -> {
+                                val group = groups.getOrNull(safeGroupIndex)
+                                if (group != null) {
+                                    viewModel.toggleFavoriteGroup(group)
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            TvFocusZone.CHANNELS -> {
+                                val channel = channels.getOrNull(safeChannelIndex)
+                                if (channel != null) {
+                                    viewModel.toggleFavoriteChannel(channel.id)
+                                    return@onPreviewKeyEvent true
+                                }
+                            }
+                            TvFocusZone.SIDEBAR -> {}
                         }
                     }
                     when (focusZone) {

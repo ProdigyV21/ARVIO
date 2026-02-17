@@ -91,6 +91,7 @@ class HomeViewModel @Inject constructor(
     private var lastContinueWatchingUpdateMs: Long = 0L
     private var lastResolvedBaseCategories: List<Category> = emptyList()
     private val CONTINUE_WATCHING_REFRESH_MS = 45_000L
+    private val HOME_PLACEHOLDER_ITEM_COUNT = 8
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -137,6 +138,14 @@ class HomeViewModel @Inject constructor(
     private val logoCache = ConcurrentHashMap<String, String>()
     private val preloadedRequests = Collections.synchronizedSet(mutableSetOf<String>())
 
+    private fun publishLogoCacheSnapshotIfChanged() {
+        val current = _uiState.value.cardLogoUrls
+        if (current.size == logoCache.size && logoCache.all { (k, v) -> current[k] == v }) {
+            return
+        }
+        _uiState.value = _uiState.value.copy(cardLogoUrls = logoCache.toMap())
+    }
+
     init {
         loadHomeData()
         viewModelScope.launch {
@@ -156,6 +165,7 @@ class HomeViewModel @Inject constructor(
             delay(1200L)
             runCatching {
                 iptvRepository.warmupFromCacheOnly()
+                iptvRepository.warmXtreamVodCachesIfPossible()
             }
         }
         viewModelScope.launch {
@@ -187,7 +197,7 @@ class HomeViewModel @Inject constructor(
         if (usedPreloadedData) {
             if (logoCache.isNotEmpty()) {
                 this.logoCache.putAll(logoCache)
-                _uiState.value = _uiState.value.copy(cardLogoUrls = this.logoCache.toMap())
+                publishLogoCacheSnapshotIfChanged()
             }
             val currentState = _uiState.value
             if (heroLogoUrl != null && currentState.heroLogoUrl == null) {
@@ -257,22 +267,48 @@ class HomeViewModel @Inject constructor(
             }
             if (requestId != loadHomeRequestId) return@loadHome
 
-            // Keep preloaded UI visible, but still refresh in background to apply
-            // personalized catalogs and latest content.
-            val showLoading = _uiState.value.categories.isEmpty()
-            _uiState.value = _uiState.value.copy(isLoading = showLoading, error = null)
-
             try {
                 val cachedContinueWatching = traktRepository.preloadContinueWatchingCache()
+                val savedCatalogs = withContext(networkDispatcher) {
+                    runCatching {
+                        catalogRepository.ensurePreinstalledDefaults(
+                            mediaRepository.getDefaultCatalogConfigs()
+                        )
+                    }.getOrElse { mediaRepository.getDefaultCatalogConfigs() }
+                }
+
+                // When Home is opened from profile selection, avoid an empty frame by showing
+                // profile-ordered skeleton rows immediately while real catalogs load.
+                if (_uiState.value.categories.isEmpty()) {
+                    val skeletonCategories = buildProfileSkeletonCategories(
+                        savedCatalogs = savedCatalogs,
+                        cachedContinueWatching = cachedContinueWatching
+                    )
+                    if (requestId != loadHomeRequestId) return@loadHome
+                    if (skeletonCategories.isNotEmpty()) {
+                        val skeletonHero = skeletonCategories
+                            .asSequence()
+                            .flatMap { it.items.asSequence() }
+                            .firstOrNull { !it.isPlaceholder }
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = true,
+                            isInitialLoad = false,
+                            categories = skeletonCategories,
+                            heroItem = skeletonHero,
+                            heroLogoUrl = null,
+                            error = null
+                        )
+                    }
+                } else {
+                    // Keep preloaded/previous UI visible and refresh in background.
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = null)
+                }
+
                 val currentBaseCategories = _uiState.value.categories.filter { it.id != "continue_watching" }
                 val categories = withContext(networkDispatcher) {
                     val baseCategories = runCatching {
                         mediaRepository.getHomeCategories()
                     }.getOrElse { emptyList() }
-
-                    val savedCatalogs = catalogRepository.ensurePreinstalledDefaults(
-                        mediaRepository.getDefaultCatalogConfigs()
-                    )
 
                     val baseById = LinkedHashMap<String, Category>().apply {
                         currentBaseCategories.forEach { put(it.id, it) }
@@ -479,20 +515,72 @@ class HomeViewModel @Inject constructor(
             }
 
             customCatalogs.forEach { catalog ->
-                var loaded: Category? = null
-                for (maxItems in listOf(8, 12, 16)) {
-                    loaded = runCatching {
+                var bestLoaded: Category? = null
+                for (maxItems in listOf(20, 30, 40)) {
+                    val candidate = runCatching {
                         mediaRepository.loadCustomCatalog(catalog, maxItems = maxItems)
                     }.getOrNull()
-                    if (loaded?.items?.isNotEmpty() == true) break
-                }
-                if (loaded?.items.isNullOrEmpty()) return@forEach
 
-                loadedById[catalog.id] = loaded!!
+                    if (candidate != null && candidate.items.isNotEmpty()) {
+                        val currentBestCount = bestLoaded?.items?.size ?: 0
+                        if (candidate.items.size > currentBestCount) {
+                            bestLoaded = candidate
+                        }
+                        if (candidate.items.size >= 40) break
+                    }
+                }
+                val loaded = bestLoaded ?: return@forEach
+
+                loadedById[catalog.id] = loaded
                 val current = _uiState.value
                 publishMerged(current)
             }
         }
+    }
+
+    private fun buildProfileSkeletonCategories(
+        savedCatalogs: List<com.arflix.tv.data.model.CatalogConfig>,
+        cachedContinueWatching: List<ContinueWatchingItem>
+    ): List<Category> {
+        val placeholderItems = (1..HOME_PLACEHOLDER_ITEM_COUNT).map { index ->
+            MediaItem(
+                id = -index,
+                title = "",
+                mediaType = MediaType.MOVIE,
+                isPlaceholder = true
+            )
+        }
+
+        val rows = mutableListOf<Category>()
+        if (cachedContinueWatching.isNotEmpty()) {
+            rows.add(
+                Category(
+                    id = "continue_watching",
+                    title = "Continue Watching",
+                    items = cachedContinueWatching.map { it.toMediaItem() }
+                )
+            )
+        } else {
+            rows.add(
+                Category(
+                    id = "continue_watching",
+                    title = "Continue Watching",
+                    items = placeholderItems
+                )
+            )
+        }
+
+        savedCatalogs.forEach { cfg ->
+            rows.add(
+                Category(
+                    id = cfg.id,
+                    title = cfg.title,
+                    items = placeholderItems
+                )
+            )
+        }
+
+        return rows
     }
 
     /**
@@ -906,7 +994,7 @@ class HomeViewModel @Inject constructor(
 
             if (newLogos.isNotEmpty()) {
                 logoCache.putAll(newLogos)
-                _uiState.value = _uiState.value.copy(cardLogoUrls = logoCache.toMap())
+                publishLogoCacheSnapshotIfChanged()
                 // Preload actual images
                 preloadLogoImages(newLogos.values.toList())
             }
@@ -954,7 +1042,7 @@ class HomeViewModel @Inject constructor(
 
                 if (newLogos.isNotEmpty()) {
                     logoCache.putAll(newLogos)
-                    _uiState.value = _uiState.value.copy(cardLogoUrls = logoCache.toMap())
+                    publishLogoCacheSnapshotIfChanged()
                     // Preload actual images
                     preloadLogoImages(newLogos.values.toList())
                 }

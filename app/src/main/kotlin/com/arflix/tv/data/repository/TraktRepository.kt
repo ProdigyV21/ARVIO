@@ -1377,6 +1377,9 @@ class TraktRepository @Inject constructor(
         progress: Int, // 0-100
         positionSeconds: Long = 0L,
         durationSeconds: Long = 0L,
+        streamKey: String? = null,
+        streamAddonId: String? = null,
+        streamTitle: String? = null,
         year: String = ""
     ) {
         // Don't save if progress is too low or too high
@@ -1400,6 +1403,9 @@ class TraktRepository @Inject constructor(
             episodeTitle = episodeTitle,
             backdropPath = backdropPath,
             posterPath = posterPath,
+            streamKey = streamKey,
+            streamAddonId = streamAddonId,
+            streamTitle = streamTitle,
             year = year
         )
 
@@ -1466,6 +1472,25 @@ class TraktRepository @Inject constructor(
             gson.fromJson(json, type)
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * Get a single local Continue Watching entry (raw, without TMDB enrichment).
+     * Used for resume playback when the user isn't signed into Cloud/Trakt.
+     */
+    suspend fun getLocalContinueWatchingEntry(
+        mediaType: MediaType,
+        tmdbId: Int,
+        season: Int?,
+        episode: Int?
+    ): ContinueWatchingItem? {
+        val items = loadLocalContinueWatchingRaw()
+        return items.firstOrNull { item ->
+            if (item.id != tmdbId) return@firstOrNull false
+            if (item.mediaType != mediaType) return@firstOrNull false
+            if (mediaType == MediaType.MOVIE) return@firstOrNull true
+            item.season == season && item.episode == episode
         }
     }
 
@@ -2399,6 +2424,9 @@ data class ContinueWatchingItem(
     val episodeTitle: String? = null,
     val backdropPath: String? = null,
     val posterPath: String? = null,
+    val streamKey: String? = null,
+    val streamAddonId: String? = null,
+    val streamTitle: String? = null,
     val year: String = "",
     val releaseDate: String = "",  // Full formatted date
     val isUpNext: Boolean = false,

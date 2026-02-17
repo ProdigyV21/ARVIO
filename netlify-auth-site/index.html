@@ -1,0 +1,332 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARVIO Account</title>
+  <style>
+    :root {
+      --bg-1: #050505;
+      --bg-2: #111111;
+      --card: rgba(12, 12, 12, 0.92);
+      --line: rgba(255,255,255,0.18);
+      --text: #f5f5f5;
+      --muted: #b7b7b7;
+      --accent: #f5f5f5;
+      --accent-2: #d9d9d9;
+      --ok: #22c55e;
+      --danger: #f87171;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100%; font-family: "Segoe UI", Inter, system-ui, sans-serif; color: var(--text); }
+    body {
+      background:
+        radial-gradient(900px 500px at 0% -10%, rgba(255,255,255,0.08), transparent 60%),
+        radial-gradient(900px 500px at 100% 120%, rgba(255,255,255,0.05), transparent 60%),
+        linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .shell {
+      width: 100%;
+      max-width: 520px;
+      border-radius: 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+
+    .head {
+      padding: 20px 22px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      font-size: 14px;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.1;
+      font-weight: 700;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .body {
+      padding: 20px 22px 22px;
+    }
+
+    .pair {
+      display: none;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.1);
+      color: #f4f4f4;
+      font-size: 14px;
+    }
+
+    .pair b { letter-spacing: 0.04em; }
+
+    .status {
+      min-height: 20px;
+      margin: 2px 0 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--ok); }
+
+    .label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 12px 0 6px;
+    }
+
+    .input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 11px;
+      border: 1px solid var(--line);
+      outline: none;
+      background: rgba(0,0,0,0.30);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .input:focus {
+      border-color: rgba(255,255,255,0.65);
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.16);
+    }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+      color: var(--text);
+      border-radius: 11px;
+      padding: 12px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform .12s ease, background .2s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .btn.primary {
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      color: #111;
+      border: 0;
+    }
+
+    .foot {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .small {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="head">
+      <div class="brand">ARVIO</div>
+      <h1 class="title">Account Access</h1>
+      <p class="subtitle" id="subtitle">Sign in to your account.</p>
+    </header>
+
+    <section class="body">
+      <div class="pair" id="pairBox">Pairing code: <b id="pairCode"></b></div>
+      <div class="status" id="status"></div>
+
+      <label class="label" for="email">Email</label>
+      <input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+
+      <label class="label" for="password">Password</label>
+      <input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password" />
+
+      <div class="actions">
+        <button class="btn primary" id="signin">Sign In</button>
+        <button class="btn" id="signup">Create Account</button>
+      </div>
+
+      <p class="small">If you opened this from a TV QR code, signing in will automatically pair that TV.</p>
+      <div class="foot">ARVIO Cloud Auth</div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const SUPABASE_URL = "https://zrdwvortcfnoykltzuqf.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpyZHd2b3J0Y2Zub3lrbHR6dXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NDU4NzMsImV4cCI6MjA4MjMyMTg3M30.YfKZbSwxGs6_xMd6jkDtn1PKkfuyOHo9qVhUvFRddGU";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const qs = new URLSearchParams(window.location.search);
+    const pairCode = (qs.get("code") || "").trim();
+
+    const statusEl = document.getElementById("status");
+    const subtitleEl = document.getElementById("subtitle");
+    const pairBox = document.getElementById("pairBox");
+    const pairCodeEl = document.getElementById("pairCode");
+    const emailEl = document.getElementById("email");
+    const passEl = document.getElementById("password");
+    const signInBtn = document.getElementById("signin");
+    const signUpBtn = document.getElementById("signup");
+
+    function setStatus(msg, type = "") {
+      statusEl.textContent = msg || "";
+      statusEl.className = `status ${type}`.trim();
+    }
+
+    function setBusy(on) {
+      signInBtn.disabled = on;
+      signUpBtn.disabled = on;
+    }
+
+    if (pairCode) {
+      subtitleEl.textContent = "Sign in to pair your TV device.";
+      pairBox.style.display = "block";
+      pairCodeEl.textContent = pairCode;
+    }
+
+    async function approveTvIfNeeded() {
+      if (!pairCode) return;
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session?.access_token || !session?.refresh_token) {
+        throw new Error("No active session for TV pairing.");
+      }
+
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/tv-auth-approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ code: pairCode, refresh_token: session.refresh_token }),
+      });
+
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || "TV pairing failed");
+    }
+
+    async function approveTvViaServer(email, password) {
+      if (!pairCode) return;
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/tv-auth-web`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "signin",
+          code: pairCode,
+          email: email.trim().toLowerCase(),
+          password
+        })
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || "TV pairing failed");
+    }
+
+    async function signInEmail() {
+      const email = emailEl.value.trim().toLowerCase();
+      const password = passEl.value;
+      if (!email || !password) throw new Error("Email and password are required.");
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return { email, password };
+    }
+
+    async function signUpEmail() {
+      const email = emailEl.value.trim().toLowerCase();
+      const password = passEl.value;
+      if (!email || !password) throw new Error("Email and password are required.");
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+
+      // Try immediate sign-in when email confirmations are disabled.
+      const login = await supabase.auth.signInWithPassword({ email, password });
+      if (login.error && !String(login.error.message || "").toLowerCase().includes("email")) {
+        throw login.error;
+      }
+    }
+
+    signInBtn.onclick = async () => {
+      try {
+        setBusy(true);
+        setStatus("Signing in...");
+        const creds = await signInEmail();
+        try {
+          await approveTvIfNeeded();
+        } catch (_pairErr) {
+          await approveTvViaServer(creds.email, creds.password);
+        }
+        setStatus(pairCode ? "TV paired. Redirecting..." : "Signed in. Redirecting...", "ok");
+        setTimeout(() => { window.location.href = "https://arvio.tv"; }, 900);
+      } catch (err) {
+        setStatus(err.message || String(err), "error");
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    signUpBtn.onclick = async () => {
+      try {
+        setBusy(true);
+        setStatus("Creating account...");
+        await signUpEmail();
+        try {
+          await approveTvIfNeeded();
+        } catch (_pairErr) {
+          await approveTvViaServer(emailEl.value, passEl.value);
+        }
+        setStatus(pairCode ? "Account created and TV paired. Redirecting..." : "Account created. Redirecting...", "ok");
+        setTimeout(() => { window.location.href = "https://arvio.tv"; }, 1200);
+      } catch (err) {
+        const msg = err.message || String(err);
+        if (msg.toLowerCase().includes("email") && msg.toLowerCase().includes("confirm")) {
+          setStatus("Account created. Check your email, then sign in.", "ok");
+        } else {
+          setStatus(msg, "error");
+        }
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    // Keep first interaction explicit to avoid showing premature pairing errors.
+  </script>
+</body>
+</html>

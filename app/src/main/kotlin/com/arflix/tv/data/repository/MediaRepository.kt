@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
 import com.arflix.tv.data.api.TmdbEpisode
+import com.arflix.tv.data.api.TmdbListResponse
 import com.arflix.tv.data.api.TmdbMediaItem
 import com.arflix.tv.data.api.TmdbMovieDetails
 import com.arflix.tv.data.api.TmdbPersonDetails
@@ -61,6 +62,7 @@ class MediaRepository @Inject constructor(
     private val similarCache = mutableMapOf<String, CacheEntry<List<MediaItem>>>()
     private val logoCache = mutableMapOf<String, CacheEntry<String?>>()
     private val reviewsCache = mutableMapOf<String, CacheEntry<List<Review>>>()
+    private val seasonEpisodesCache = mutableMapOf<String, CacheEntry<List<Episode>>>()
     private val imdbIdCache = ConcurrentHashMap<String, String>()
 
     private fun <T> getFromCache(cache: Map<String, CacheEntry<T>>, key: String): T? {
@@ -114,112 +116,147 @@ class MediaRepository @Inject constructor(
      * Uses improved filters for better quality results:
      * - Trending: Uses daily TMDB trending (updates every day)
      * - Anime: Uses "anime" keyword (210024) for accurate anime content
-     * - Provider categories: 3-month window for fresh content
+     * - Provider categories: wider recency window to keep full rows populated
      */
     suspend fun getHomeCategories(): List<Category> = coroutineScope {
+        suspend fun fetchUpTo40(fetchPage: suspend (Int) -> TmdbListResponse): List<TmdbMediaItem> {
+            val first = runCatching { fetchPage(1) }.getOrNull() ?: return emptyList()
+            val firstItems = first.results
+            if (firstItems.size >= 40 || first.totalPages < 2) return firstItems.take(40)
+            val secondItems = runCatching { fetchPage(2) }.getOrNull()?.results.orEmpty()
+            return (firstItems + secondItems).distinctBy { it.id }.take(40)
+        }
+
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val calendar = Calendar.getInstance()
-        // 3-month window for provider catalogs - much fresher content
-        calendar.add(Calendar.MONTH, -3)
-        val threeMonthsAgo = dateFormat.format(calendar.time)
-        // 6-month window for anime (seasonal shows)
+        // Wider windows keep rows filled up to 40 items consistently.
+        calendar.add(Calendar.MONTH, -12)
+        val twelveMonthsAgo = dateFormat.format(calendar.time)
+        // Anime needs a wider horizon for slower seasonal cycles.
         calendar.time = Calendar.getInstance().time
-        calendar.add(Calendar.MONTH, -6)
-        val sixMonthsAgo = dateFormat.format(calendar.time)
+        calendar.add(Calendar.MONTH, -18)
+        val eighteenMonthsAgo = dateFormat.format(calendar.time)
 
         // Main trending - TMDB's daily trending for fresh content
-        val trendingMovies = async { tmdbApi.getTrendingMovies(apiKey) }
-        val trendingTv = async { tmdbApi.getTrendingTv(apiKey) }
+        val trendingMovies = async { fetchUpTo40 { page -> tmdbApi.getTrendingMovies(apiKey, page = page) } }
+        val trendingTv = async { fetchUpTo40 { page -> tmdbApi.getTrendingTv(apiKey, page = page) } }
 
         // Anime: popularity.desc tracks current buzz, air_date filter for currently airing
         val trendingAnime = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                genres = "16",
-                keywords = "210024",  // "anime" keyword ID
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = sixMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    genres = "16",
+                    keywords = "210024",  // "anime" keyword ID
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = eighteenMonthsAgo,
+                    page = page
+                )
+            }
         }
 
-        // Provider-based categories - 3-month window for fresh content
+        // Provider-based categories
         val netflix = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 8,
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 8,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val disney = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 337,
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 337,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val prime = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 9,
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 9,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val hboMax = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 1899, // Max (formerly HBO Max)
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 1899, // Max (formerly HBO Max)
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val appleTv = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 350, // Apple TV+
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 350, // Apple TV+
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val paramount = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 2303, // Paramount+ Premium
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 2303, // Paramount+ Premium
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val hulu = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 15, // Hulu
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 15, // Hulu
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
         val peacock = async {
-            tmdbApi.discoverTv(
-                apiKey,
-                watchProviders = 386, // Peacock
-                sortBy = "popularity.desc",
-                minVoteCount = 10,
-                airDateGte = threeMonthsAgo
-            )
+            fetchUpTo40 { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 386, // Peacock
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+            }
         }
 
-        // Show 25 items per category for better browsing experience.
+        // Show up to 40 items per category.
         // Keep categories resilient: if a provider call fails, we keep the other rows.
-        val maxItemsPerCategory = 25
+        val maxItemsPerCategory = 40
         suspend fun safeItems(fetch: suspend () -> List<TmdbMediaItem>, mediaType: MediaType): List<MediaItem> {
             return runCatching { fetch() }
                 .getOrElse { emptyList() }
@@ -231,57 +268,57 @@ class MediaRepository @Inject constructor(
             Category(
                 id = "trending_movies",
                 title = "Trending Movies",
-                items = safeItems({ trendingMovies.await().results }, MediaType.MOVIE)
+                items = safeItems({ trendingMovies.await() }, MediaType.MOVIE)
             ),
             Category(
                 id = "trending_tv",
                 title = "Trending Series",
-                items = safeItems({ trendingTv.await().results }, MediaType.TV)
+                items = safeItems({ trendingTv.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_anime",
                 title = "Trending Anime",
-                items = safeItems({ trendingAnime.await().results }, MediaType.TV)
+                items = safeItems({ trendingAnime.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_netflix",
                 title = "Trending on Netflix",
-                items = safeItems({ netflix.await().results }, MediaType.TV)
+                items = safeItems({ netflix.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_disney",
                 title = "Trending on Disney+",
-                items = safeItems({ disney.await().results }, MediaType.TV)
+                items = safeItems({ disney.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_prime",
                 title = "Trending on Prime Video",
-                items = safeItems({ prime.await().results }, MediaType.TV)
+                items = safeItems({ prime.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_hbo",
                 title = "Trending on Max",
-                items = safeItems({ hboMax.await().results }, MediaType.TV)
+                items = safeItems({ hboMax.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_apple",
                 title = "Trending on Apple TV+",
-                items = safeItems({ appleTv.await().results }, MediaType.TV)
+                items = safeItems({ appleTv.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_paramount",
                 title = "Trending on Paramount+",
-                items = safeItems({ paramount.await().results }, MediaType.TV)
+                items = safeItems({ paramount.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_hulu",
                 title = "Trending on Hulu",
-                items = safeItems({ hulu.await().results }, MediaType.TV)
+                items = safeItems({ hulu.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_peacock",
                 title = "Trending on Peacock",
-                items = safeItems({ peacock.await().results }, MediaType.TV)
+                items = safeItems({ peacock.await() }, MediaType.TV)
             )
         )
         val nonEmpty = categories.filter { it.items.isNotEmpty() }
@@ -289,7 +326,7 @@ class MediaRepository @Inject constructor(
         nonEmpty
     }
 
-    suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 25): Category? = coroutineScope {
+    suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 40): Category? = coroutineScope {
         val mediaRefs = when (catalog.sourceType) {
             CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
             CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
@@ -349,17 +386,17 @@ class MediaRepository @Inject constructor(
      * Get season episodes with Trakt watched status
      */
     suspend fun getSeasonEpisodes(tvId: Int, seasonNumber: Int): List<Episode> {
-        val season = tmdbApi.getTvSeason(tvId, seasonNumber, apiKey)
+        val cacheKey = "tv_${tvId}_season_$seasonNumber"
+        getFromCache(seasonEpisodesCache, cacheKey)?.let { return it }
 
-        // First ensure the global watched cache is initialized
+        val season = tmdbApi.getTvSeason(tvId, seasonNumber, apiKey)
+        // First ensure the global watched cache is initialized.
         traktRepository.initializeWatchedCache()
 
-        // Get watched episodes - try global cache first (faster, more reliable)
+        // Get watched episodes - try global cache first (faster, more reliable).
         val watchedEpisodes = if (traktRepository.hasWatchedEpisodes(tvId)) {
-            // Use global cache if it has data for this show
             traktRepository.getWatchedEpisodesFromCache()
         } else {
-            // Fall back to show-specific API call
             try {
                 traktRepository.getWatchedEpisodesForShow(tvId)
             } catch (e: Exception) {
@@ -367,12 +404,14 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        return season.episodes.map { episode ->
+        val episodes = season.episodes.map { episode ->
             val episodeKey = "show_tmdb:$tvId:$seasonNumber:${episode.episodeNumber}"
             episode.toEpisode().copy(
                 isWatched = episodeKey in watchedEpisodes
             )
         }
+        seasonEpisodesCache[cacheKey] = CacheEntry(episodes, System.currentTimeMillis())
+        return episodes
     }
     
     /**
@@ -602,7 +641,7 @@ class MediaRepository @Inject constructor(
 
         val semaphore = Semaphore(5)
         val resolved = unresolved
-            .take(28)
+            .take(40)
             .map { candidate ->
                 async {
                     semaphore.withPermit {

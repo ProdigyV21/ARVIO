@@ -42,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.foundation.lazy.grid.TvGridCells
 import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
 import androidx.tv.foundation.lazy.grid.itemsIndexed
+import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.MediaType
@@ -59,6 +60,7 @@ import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * Watchlist screen - matches webapp design with grid layout
@@ -92,6 +94,20 @@ fun WatchlistScreen(
     val rootFocusRequester = remember { FocusRequester() }
     val gridFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
+    val gridState = rememberTvLazyGridState()
+    var focusedGridIndex by remember { mutableIntStateOf(0) }
+
+    // Keep the focused card in view with smooth animated scrolling.
+    LaunchedEffect(focusedGridIndex, uiState.items.size) {
+        if (uiState.items.isEmpty()) return@LaunchedEffect
+        val safe = focusedGridIndex.coerceIn(0, uiState.items.lastIndex)
+        val distance = abs(gridState.firstVisibleItemIndex - safe)
+        if (distance > 24) {
+            gridState.scrollToItem(safe)
+        } else {
+            gridState.animateScrollToItem(safe)
+        }
+    }
 
     LaunchedEffect(Unit) {
         rootFocusRequester.requestFocus()
@@ -267,6 +283,7 @@ fun WatchlistScreen(
                         // Grid of items - 4 columns like screenshot
                         TvLazyVerticalGrid(
                             columns = TvGridCells.Fixed(gridColumns),
+                            state = gridState,
                             contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -284,6 +301,7 @@ fun WatchlistScreen(
                                     item = item,
                                     width = cardWidth,
                                     isLandscape = true,
+                                    onFocused = { focusedGridIndex = index },
                                     onClick = { onNavigateToDetails(item.mediaType, item.id) }
                                 )
                             }

@@ -143,7 +143,12 @@ class TvDeviceAuthRepository @Inject constructor(
 
     private fun parseError(body: String, fallback: String): String {
         return runCatching {
-            JSONObject(body).optString("error").ifBlank { fallback }
+            val json = JSONObject(body)
+            json.optString("error").ifBlank {
+                json.optString("message").ifBlank {
+                    json.optString("error_description").ifBlank { fallback }
+                }
+            }
         }.getOrDefault(fallback)
     }
 }

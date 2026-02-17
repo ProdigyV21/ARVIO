@@ -115,7 +115,7 @@ fun AddProfileDialog(
 
                 // Color selection
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ProfileColors.colors.forEachIndexed { index, color ->
                         ColorButton(
@@ -295,7 +295,7 @@ fun EditProfileDialog(
 
                 // Color selection
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ProfileColors.colors.forEachIndexed { index, color ->
                         ColorButton(

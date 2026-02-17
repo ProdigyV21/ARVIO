@@ -19,6 +19,7 @@ import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -147,6 +148,7 @@ class DetailsViewModel @Inject constructor(
 
     private var currentMediaType: MediaType = MediaType.MOVIE
     private var currentMediaId: Int = 0
+    private var vodAppendJob: kotlinx.coroutines.Job? = null
 
     private fun isBlankRating(value: String): Boolean {
         return value.isBlank() || value == "0.0" || value == "0"
@@ -180,6 +182,7 @@ class DetailsViewModel @Inject constructor(
     fun loadDetails(mediaType: MediaType, mediaId: Int, initialSeason: Int? = null, initialEpisode: Int? = null) {
         currentMediaType = mediaType
         currentMediaId = mediaId
+        vodAppendJob?.cancel()
 
         viewModelScope.launch {
             try {
@@ -405,15 +408,28 @@ class DetailsViewModel @Inject constructor(
 
                 launch {
                     val resumeInfo = runCatching { resumeDeferred.await() }.getOrNull()
-                    val seasonProgressResult = runCatching { seasonProgressDeferred?.await() }.getOrNull()
-                    val playTarget = buildPlayTarget(mediaType, seasonProgressResult, resumeInfo)
-                    updateState { state ->
-                        state.copy(
-                            playSeason = playTarget?.season,
-                            playEpisode = playTarget?.episode,
-                            playLabel = playTarget?.label,
-                            playPositionMs = playTarget?.positionMs
-                        )
+                    if (resumeInfo != null) {
+                        // Fast path: show Continue immediately from local history.
+                        val playTarget = buildPlayTarget(mediaType, null, resumeInfo)
+                        updateState { state ->
+                            state.copy(
+                                playSeason = playTarget?.season,
+                                playEpisode = playTarget?.episode,
+                                playLabel = playTarget?.label,
+                                playPositionMs = playTarget?.positionMs
+                            )
+                        }
+                    } else {
+                        val seasonProgressResult = runCatching { seasonProgressDeferred?.await() }.getOrNull()
+                        val playTarget = buildPlayTarget(mediaType, seasonProgressResult, null)
+                        updateState { state ->
+                            state.copy(
+                                playSeason = playTarget?.season,
+                                playEpisode = playTarget?.episode,
+                                playLabel = playTarget?.label,
+                                playPositionMs = playTarget?.positionMs
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -567,6 +583,65 @@ class DetailsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(toastMessage = null)
     }
 
+    /**
+     * Refresh watched badges and continue target when returning from Player.
+     * Uses local caches/history first for near-instant UI updates.
+     */
+    fun refreshAfterPlayerReturn() {
+        val tmdbId = currentMediaId
+        if (tmdbId == 0) return
+        val mediaType = currentMediaType
+
+        viewModelScope.launch {
+            runCatching {
+                if (traktRepository.isAuthenticated.first()) {
+                    traktRepository.initializeWatchedCache()
+                }
+            }
+
+            _uiState.value.item?.let { currentItem ->
+                val watched = if (mediaType == MediaType.MOVIE) {
+                    traktRepository.isMovieWatched(tmdbId)
+                } else {
+                    traktRepository.hasWatchedEpisodes(tmdbId)
+                }
+                _uiState.value = _uiState.value.copy(item = currentItem.copy(isWatched = watched))
+            }
+
+            if (mediaType == MediaType.TV && _uiState.value.episodes.isNotEmpty()) {
+                val prefix = "show_tmdb:$tmdbId:"
+                val cachedKeys = traktRepository.getWatchedEpisodesFromCache()
+                val watchedKeys = if (cachedKeys.any { it.startsWith(prefix) }) {
+                    cachedKeys
+                } else {
+                    runCatching { traktRepository.getWatchedEpisodesForShow(tmdbId) }.getOrDefault(emptySet())
+                }
+
+                val updatedEpisodes = _uiState.value.episodes.map { ep ->
+                    val key = "show_tmdb:$tmdbId:${ep.seasonNumber}:${ep.episodeNumber}"
+                    ep.copy(isWatched = watchedKeys.contains(key))
+                }
+                val season = _uiState.value.currentSeason
+                val progress = _uiState.value.seasonProgress.toMutableMap()
+                progress[season] = Pair(updatedEpisodes.count { it.isWatched }, updatedEpisodes.size)
+                _uiState.value = _uiState.value.copy(
+                    episodes = updatedEpisodes,
+                    seasonProgress = progress
+                )
+            }
+
+            val quickResume = fetchResumeInfoFromHistoryOnly(tmdbId, mediaType)
+            if (quickResume != null) {
+                _uiState.value = _uiState.value.copy(
+                    playSeason = quickResume.season,
+                    playEpisode = quickResume.episode,
+                    playLabel = quickResume.label,
+                    playPositionMs = quickResume.positionMs
+                )
+            }
+        }
+    }
+
     // ========== Person Modal ==========
 
     fun loadPerson(personId: Int) {
@@ -609,9 +684,41 @@ class DetailsViewModel @Inject constructor(
                 val item = _uiState.value.item
                 val genreIds = item?.genreIds ?: emptyList()
                 val originalLanguage = item?.originalLanguage
+                // Start VOD append immediately (in parallel) so TV VOD can appear faster.
+                vodAppendJob?.cancel()
+                vodAppendJob = launch {
+                    appendVodSourceInBackground(
+                        imdbId = imdbId,
+                        season = season,
+                        episode = episode,
+                        timeoutMs = 9_000L
+                    )
+                    if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
+                        delay(3_000L)
+                        appendVodSourceInBackground(
+                            imdbId = imdbId,
+                            season = season,
+                            episode = episode,
+                            timeoutMs = 18_000L
+                        )
+                    }
+                    if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
+                        delay(6_000L)
+                        appendVodSourceInBackground(
+                            imdbId = imdbId,
+                            season = season,
+                            episode = episode,
+                            timeoutMs = 28_000L
+                        )
+                    }
+                }
 
                 val result = if (currentMediaType == MediaType.MOVIE) {
-                    streamRepository.resolveMovieStreams(imdbId)
+                    streamRepository.resolveMovieStreams(
+                        imdbId = imdbId,
+                        title = item?.title.orEmpty(),
+                        year = item?.year?.toIntOrNull()
+                    )
                 } else {
                     streamRepository.resolveEpisodeStreams(
                         imdbId = imdbId,
@@ -626,10 +733,16 @@ class DetailsViewModel @Inject constructor(
                 }
 
 
-                val filteredStreams = result.streams.filter { it.url != null }
+                val filteredStreams = result.streams.filter { stream ->
+                    val u = stream.url?.trim().orEmpty()
+                    u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
+                }
+                val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
+                val mergedStreams = (filteredStreams + existingVod)
+                    .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
                 _uiState.value = _uiState.value.copy(
                     isLoadingStreams = false,
-                    streams = filteredStreams,
+                    streams = mergedStreams,
                     subtitles = result.subtitles
                 )
             } catch (e: Exception) {
@@ -673,8 +786,8 @@ class DetailsViewModel @Inject constructor(
      */
     private suspend fun fetchSeasonProgress(tmdbId: Int): SeasonProgressResult {
         return try {
-            traktRepository.initializeWatchedCache()
-            val cachedEpisodes = traktRepository.getWatchedEpisodesFromCache()
+            runCatching { traktRepository.initializeWatchedCache() }
+            val cachedEpisodes = runCatching { traktRepository.getWatchedEpisodesFromCache() }.getOrDefault(emptySet())
             val cachedCountsBySeason = mutableMapOf<Int, Int>()
             val cachedKeysForShow = cachedEpisodes.filter { it.startsWith("show_tmdb:$tmdbId:") }.toSet()
             for (key in cachedKeysForShow) {
@@ -686,7 +799,7 @@ class DetailsViewModel @Inject constructor(
             val watchedKeys = if (cachedKeysForShow.isNotEmpty()) {
                 cachedKeysForShow
             } else {
-                traktRepository.getWatchedEpisodesForShow(tmdbId)
+                runCatching { traktRepository.getWatchedEpisodesForShow(tmdbId) }.getOrDefault(emptySet())
             }
 
             val tvDetails = tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY)
@@ -736,7 +849,7 @@ class DetailsViewModel @Inject constructor(
     private suspend fun fetchResumeInfo(tmdbId: Int, mediaType: MediaType): ResumeInfo? {
         return try {
             val entry = watchHistoryRepository.getLatestProgress(mediaType, tmdbId)
-            if (entry != null) {
+            val cloudResume = if (entry != null) {
                 val resume = buildResumeFromProgress(
                     mediaType = mediaType,
                     tmdbId = tmdbId,
@@ -746,8 +859,8 @@ class DetailsViewModel @Inject constructor(
                     positionSeconds = entry.position_seconds,
                     durationSeconds = entry.duration_seconds
                 )
-                if (resume != null) return resume
-            }
+                resume
+            } else null
 
             val traktResume = try {
                 traktRepository.getContinueWatching()
@@ -755,7 +868,7 @@ class DetailsViewModel @Inject constructor(
             } catch (_: Exception) {
                 null
             }
-            if (traktResume != null) {
+            val localResume = if (traktResume != null) {
                 val resume = buildResumeFromProgress(
                     mediaType = mediaType,
                     tmdbId = tmdbId,
@@ -765,11 +878,33 @@ class DetailsViewModel @Inject constructor(
                     positionSeconds = traktResume.resumePositionSeconds,
                     durationSeconds = traktResume.durationSeconds
                 )
-                if (resume != null) return resume
-            }
+                resume
+            } else null
 
-            null
+            when {
+                cloudResume == null -> localResume
+                localResume == null -> cloudResume
+                localResume.positionMs > cloudResume.positionMs -> localResume
+                else -> cloudResume
+            }
         } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend fun fetchResumeInfoFromHistoryOnly(tmdbId: Int, mediaType: MediaType): ResumeInfo? {
+        return try {
+            val entry = watchHistoryRepository.getLatestProgress(mediaType, tmdbId) ?: return null
+            buildResumeFromProgress(
+                mediaType = mediaType,
+                tmdbId = tmdbId,
+                season = entry.season,
+                episode = entry.episode,
+                progress = entry.progress,
+                positionSeconds = entry.position_seconds,
+                durationSeconds = entry.duration_seconds
+            )
+        } catch (_: Exception) {
             null
         }
     }
@@ -911,5 +1046,43 @@ class DetailsViewModel @Inject constructor(
         } catch (_: Exception) {
             ExternalIds(null, null)
         }
+    }
+
+    private suspend fun appendVodSourceInBackground(
+        imdbId: String,
+        season: Int?,
+        episode: Int?,
+        timeoutMs: Long
+    ) {
+        val currentStreams = _uiState.value.streams
+        if (currentStreams.any { it.addonId == "iptv_xtream_vod" }) return
+        val itemTitle = _uiState.value.item?.title.orEmpty()
+
+        val vod = if (currentMediaType == MediaType.MOVIE) {
+            streamRepository.resolveMovieVodOnly(
+                imdbId = imdbId,
+                title = itemTitle,
+                year = _uiState.value.item?.year?.toIntOrNull(),
+                tmdbId = currentMediaId,
+                timeoutMs = timeoutMs
+            )
+        } else {
+            streamRepository.resolveEpisodeVodOnly(
+                imdbId = imdbId,
+                season = season ?: 1,
+                episode = episode ?: 1,
+                title = itemTitle,
+                tmdbId = currentMediaId,
+                timeoutMs = timeoutMs
+            )
+        } ?: return
+
+        if (vod.url.isNullOrBlank()) return
+        val latest = _uiState.value.streams
+        if (latest.any { it.url == vod.url && it.source == vod.source }) return
+        _uiState.value = _uiState.value.copy(
+            streams = latest + vod,
+            isLoadingStreams = false
+        )
     }
 }
