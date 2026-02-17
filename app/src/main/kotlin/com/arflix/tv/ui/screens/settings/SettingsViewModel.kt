@@ -1182,6 +1182,8 @@ class SettingsViewModel @Inject constructor(
                 }
                 catalogRepository.setHiddenPreinstalledCatalogIdsForActiveProfile(hidden)
             }
+            val cloudHasIptvKeys = root.has("iptvM3uUrl") || root.has("iptvEpgUrl") ||
+                root.has("iptvFavoriteGroups") || root.has("iptvFavoriteChannels")
             val m3u = root.optString("iptvM3uUrl")
             val epg = root.optString("iptvEpgUrl")
             val favorites = root.optJSONArray("iptvFavoriteGroups")?.toString().orEmpty().let { json ->
@@ -1196,9 +1198,15 @@ class SettingsViewModel @Inject constructor(
                     gson.fromJson<List<String>>(json, type) ?: emptyList()
                 }
             }
-            iptvRepository.importCloudConfig(m3u, epg, favorites, favoriteChannels)
-            if (m3u.isNotBlank()) {
-                refreshIptv(showToast = false, configured = false, force = false)
+            val localIptv = iptvRepository.observeConfig().first()
+            val cloudHasIptvData = m3u.isNotBlank() || epg.isNotBlank() || favorites.isNotEmpty() || favoriteChannels.isNotEmpty()
+            val localHasIptvData = localIptv.m3uUrl.isNotBlank() || localIptv.epgUrl.isNotBlank()
+            // Prevent accidental IPTV wipe when cloud payload has empty/default IPTV fields.
+            if (cloudHasIptvKeys && (cloudHasIptvData || !localHasIptvData)) {
+                iptvRepository.importCloudConfig(m3u, epg, favorites, favoriteChannels)
+                if (m3u.isNotBlank()) {
+                    refreshIptv(showToast = false, configured = false, force = false)
+                }
             }
         }.onSuccess {
             loadSettings()

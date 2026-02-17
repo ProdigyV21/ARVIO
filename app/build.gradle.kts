@@ -24,7 +24,7 @@ android {
         // Lower minSdk to maximize compatibility and avoid "There was a problem parsing the package".
         minSdk = 21
         targetSdk = 34
-        versionCode = 150
+        versionCode = 151
         versionName = "1.5.0"
 
         vectorDrawables {
