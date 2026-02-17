@@ -10,21 +10,18 @@ All notable changes to this project are documented in this file.
 ## [1.5.0] - 2026-02-17
 
 ### Added
-- Full TV device pairing stack with Supabase edge functions updates and dedicated approve/status/start flows.
-- Web pairing frontend scaffold (`netlify-auth-site/`) for QR login/register -> pair flow.
-- Skip Intro integration in player (`SkipIntroApi`, `SkipIntroRepository`, `SkipIntroButton`) with UI support.
-- QR rendering component for in-app pairing (`QrCodeImage`).
-- New Supabase migrations for user settings and watch-history stream pinning.
+- ARVIO Cloud TV pairing flow via QR sign-in/register and direct account linking.
+- VOD sources available inside source selection for playback.
+- Skip Intro integration in player with dedicated button and backend wiring.
+- QR rendering component for in-app pairing.
 
 ### Changed
 - App version bumped to `1.5.0` (`versionCode 150`).
-- Catalog system refactor for stronger profile-aware behavior and preinstalled/custom catalog handling.
-- Home data loading and row merge behavior for faster incremental catalog rendering.
-- Media repository catalog fetch logic tuned to target larger row fill and better custom list coverage.
-- Player pipeline and stream selection behavior updated for more stable playback startup and source selection.
-- Settings/Addons/Catalogs flows revised with improved focus and input handling for Android TV remote usage.
-- Supabase config and TV auth function wiring updated for production pairing flow.
-- ProGuard/network module/repository wiring updated to support new auth/player/catalog pathways.
+- Catalog limits increased from `20` to `40` entries for built-in catalogs and added Trakt/MDBList catalogs.
+- Improved player startup and stream handling to reduce delays before playback starts.
+- Better Android TV keyboard and remote handling in settings/addon/list flows.
+- Improved compatibility for Fire TV / Firestick class devices.
+- Framerate matching behavior refined in playback flow.
 
 ### Fixed
 - Source discovery regression where results became very slow or stalled after initial successful loads.
@@ -33,9 +30,9 @@ All notable changes to this project are documented in this file.
 - Large 4K stream handling and retention so high-size sources are given a fair start window.
 - VOD source visibility and matching reliability, including TV-show catalog flow improvements.
 - Subtitle menu back-navigation behavior (back now closes subtitle layer correctly instead of exiting playback flow).
-- Cloud/account pairing flow reliability between app and web sign-in path.
-- TV remote navigation issues in settings forms/addon-list sections (focus traversal and keyboard interaction).
-- Catalog row population limits causing low item counts in some custom/built-in rows.
+- ARVIO Cloud account pairing reliability between app and web sign-in path.
+- TV remote navigation issues in settings forms/addon-list sections.
+- EPG reliability and parser flow issues affecting guide behavior.
 
 ## [1.4.0] - 2026-02-14
 
