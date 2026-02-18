@@ -95,17 +95,21 @@ private enum class TvFocusZone {
 @Composable
 fun TvScreen(
     viewModel: TvViewModel = hiltViewModel(),
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
     var focusZone by rememberSaveable { mutableStateOf(if (uiState.isConfigured) TvFocusZone.GROUPS else TvFocusZone.SIDEBAR) }
-    var sidebarFocusIndex by rememberSaveable { mutableIntStateOf(3) } // TV
+    val hasProfile = currentProfile != null
+    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    var sidebarFocusIndex by rememberSaveable { mutableIntStateOf(if (hasProfile) 4 else 3) } // TV
     var groupIndex by rememberSaveable { mutableIntStateOf(0) }
     var channelIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -286,12 +290,17 @@ fun TvScreen(
                     }
                     when (focusZone) {
                         TvFocusZone.SIDEBAR -> {
-                            when (SidebarItem.entries[sidebarFocusIndex]) {
-                                SidebarItem.SEARCH -> onNavigateToSearch()
-                                SidebarItem.HOME -> onNavigateToHome()
-                                SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                SidebarItem.TV -> {}
-                                SidebarItem.SETTINGS -> onNavigateToSettings()
+                            if (hasProfile && sidebarFocusIndex == 0) {
+                                onSwitchProfile()
+                            } else {
+                                val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
+                                when (SidebarItem.entries[itemIndex]) {
+                                    SidebarItem.SEARCH -> onNavigateToSearch()
+                                    SidebarItem.HOME -> onNavigateToHome()
+                                    SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                    SidebarItem.TV -> {}
+                                    SidebarItem.SETTINGS -> onNavigateToSettings()
+                                }
                             }
                             return@onPreviewKeyEvent true
                         }
@@ -343,7 +352,9 @@ fun TvScreen(
                     }
                     Key.DirectionUp -> {
                         when (focusZone) {
-                            TvFocusZone.SIDEBAR -> if (sidebarFocusIndex > 0) sidebarFocusIndex--
+                            TvFocusZone.SIDEBAR -> if (sidebarFocusIndex > 0) {
+                                sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                            }
                             TvFocusZone.GROUPS -> {
                                 if (groupIndex > 0) groupIndex-- else focusZone = TvFocusZone.SIDEBAR
                             }
@@ -353,7 +364,9 @@ fun TvScreen(
                     }
                     Key.DirectionDown -> {
                         when (focusZone) {
-                            TvFocusZone.SIDEBAR -> if (sidebarFocusIndex < SidebarItem.entries.size - 1) sidebarFocusIndex++
+                            TvFocusZone.SIDEBAR -> if (sidebarFocusIndex < maxSidebarIndex) {
+                                sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                            }
                             TvFocusZone.GROUPS -> if (groupIndex < groups.size - 1) groupIndex++
                             TvFocusZone.CHANNELS -> if (channelIndex < channels.size - 1) channelIndex++
                         }
@@ -379,7 +392,9 @@ fun TvScreen(
             Sidebar(
                 selectedItem = SidebarItem.TV,
                 isSidebarFocused = focusZone == TvFocusZone.SIDEBAR,
-                focusedIndex = sidebarFocusIndex
+                focusedIndex = sidebarFocusIndex,
+                profile = currentProfile,
+                onProfileClick = onSwitchProfile
             )
 
             Column(

@@ -96,6 +96,7 @@ import com.arflix.tv.ui.theme.TextSecondary
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
@@ -106,7 +107,9 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     var isSidebarFocused by remember { mutableStateOf(false) }
-    var sidebarFocusIndex by remember { mutableIntStateOf(4) } // SETTINGS
+    val hasProfile = currentProfile != null
+    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 5 else 4) } // SETTINGS
     var sectionIndex by remember { mutableIntStateOf(0) }
     var contentFocusIndex by remember { mutableIntStateOf(0) }
     var activeZone by remember { mutableStateOf(Zone.CONTENT) }
@@ -280,7 +283,9 @@ fun SettingsScreen(
                         }
                         Key.DirectionUp -> {
                             when (activeZone) {
-                                Zone.SIDEBAR -> if (sidebarFocusIndex > 0) sidebarFocusIndex--
+                                Zone.SIDEBAR -> if (sidebarFocusIndex > 0) {
+                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                                }
                                 Zone.SECTION -> {
                                     if (sectionIndex > 0) {
                                         sectionIndex--
@@ -301,7 +306,9 @@ fun SettingsScreen(
                         }
                         Key.DirectionDown -> {
                             when (activeZone) {
-                                Zone.SIDEBAR -> if (sidebarFocusIndex < SidebarItem.entries.size - 1) sidebarFocusIndex++
+                                Zone.SIDEBAR -> if (sidebarFocusIndex < maxSidebarIndex) {
+                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                }
                                 Zone.SECTION -> {
                                     if (sectionIndex < sections.size - 1) {
                                         sectionIndex++
@@ -332,13 +339,17 @@ fun SettingsScreen(
                         Key.Enter, Key.DirectionCenter -> {
                             when (activeZone) {
                                 Zone.SIDEBAR -> {
-                                    // Handle sidebar navigation
-                                    when (SidebarItem.entries[sidebarFocusIndex]) {
-                                        SidebarItem.SEARCH -> onNavigateToSearch()
-                                        SidebarItem.HOME -> onNavigateToHome()
-                                        SidebarItem.TV -> onNavigateToTv()
-                                        SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                        SidebarItem.SETTINGS -> { /* Already here */ }
+                                    if (hasProfile && sidebarFocusIndex == 0) {
+                                        onSwitchProfile()
+                                    } else {
+                                        val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
+                                        when (SidebarItem.entries[itemIndex]) {
+                                            SidebarItem.SEARCH -> onNavigateToSearch()
+                                            SidebarItem.HOME -> onNavigateToHome()
+                                            SidebarItem.TV -> onNavigateToTv()
+                                            SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                            SidebarItem.SETTINGS -> { /* Already here */ }
+                                        }
                                     }
                                 }
                                 Zone.SECTION -> activeZone = Zone.CONTENT
@@ -441,7 +452,9 @@ fun SettingsScreen(
             Sidebar(
                 selectedItem = SidebarItem.SETTINGS,
                 isSidebarFocused = activeZone == Zone.SIDEBAR,
-                focusedIndex = sidebarFocusIndex
+                focusedIndex = sidebarFocusIndex,
+                profile = currentProfile,
+                onProfileClick = onSwitchProfile
             )
             
             // Settings internal sidebar

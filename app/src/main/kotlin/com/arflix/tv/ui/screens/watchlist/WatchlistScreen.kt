@@ -69,11 +69,13 @@ import kotlin.math.abs
 @Composable
 fun WatchlistScreen(
     viewModel: WatchlistViewModel = hiltViewModel(),
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -90,7 +92,9 @@ fun WatchlistScreen(
     }
     
     var isSidebarFocused by remember { mutableStateOf(false) }
-    var sidebarFocusIndex by remember { mutableIntStateOf(2) } // WATCHLIST
+    val hasProfile = currentProfile != null
+    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 3 else 2) } // WATCHLIST
     val rootFocusRequester = remember { FocusRequester() }
     val gridFocusRequester = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
@@ -117,7 +121,7 @@ fun WatchlistScreen(
         if (!uiState.isLoading && uiState.items.isEmpty()) {
             // Empty screen must always have a deterministic focus target.
             isSidebarFocused = true
-            sidebarFocusIndex = SidebarItem.WATCHLIST.ordinal
+            sidebarFocusIndex = if (hasProfile) 3 else SidebarItem.WATCHLIST.ordinal
         } else if (!uiState.isLoading && uiState.items.isNotEmpty() && !isSidebarFocused) {
             // Ensure first card can receive focus when content becomes available.
             delay(80)
@@ -171,24 +175,29 @@ fun WatchlistScreen(
                         }
                         Key.DirectionUp -> {
                             if (isSidebarFocused && sidebarFocusIndex > 0) {
-                                sidebarFocusIndex--
+                                sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
                                 true
                             } else false
                         }
                         Key.DirectionDown -> {
-                            if (isSidebarFocused && sidebarFocusIndex < SidebarItem.entries.size - 1) {
-                                sidebarFocusIndex++
+                            if (isSidebarFocused && sidebarFocusIndex < maxSidebarIndex) {
+                                sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
                                 true
                             } else false
                         }
                         Key.Enter, Key.DirectionCenter -> {
                             if (isSidebarFocused) {
-                                when (SidebarItem.entries[sidebarFocusIndex]) {
-                                    SidebarItem.SEARCH -> onNavigateToSearch()
-                                    SidebarItem.HOME -> onNavigateToHome()
-                                    SidebarItem.WATCHLIST -> { }
-                                    SidebarItem.TV -> onNavigateToTv()
-                                    SidebarItem.SETTINGS -> onNavigateToSettings()
+                                if (hasProfile && sidebarFocusIndex == 0) {
+                                    onSwitchProfile()
+                                } else {
+                                    val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
+                                    when (SidebarItem.entries[itemIndex]) {
+                                        SidebarItem.SEARCH -> onNavigateToSearch()
+                                        SidebarItem.HOME -> onNavigateToHome()
+                                        SidebarItem.WATCHLIST -> { }
+                                        SidebarItem.TV -> onNavigateToTv()
+                                        SidebarItem.SETTINGS -> onNavigateToSettings()
+                                    }
                                 }
                                 true
                             } else false
@@ -204,6 +213,8 @@ fun WatchlistScreen(
                 selectedItem = SidebarItem.WATCHLIST,
                 isSidebarFocused = isSidebarFocused,
                 focusedIndex = sidebarFocusIndex,
+                profile = currentProfile,
+                onProfileClick = onSwitchProfile,
                 onItemSelected = { item ->
                     when (item) {
                         SidebarItem.SEARCH -> onNavigateToSearch()

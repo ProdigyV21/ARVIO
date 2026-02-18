@@ -77,11 +77,13 @@ import kotlin.math.abs
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
     onNavigateToHome: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -90,7 +92,9 @@ fun SearchScreen(
     val searchBarWidth = (configuration.screenWidthDp.dp * 0.56f).coerceIn(500.dp, 760.dp)
 
     var focusZone by remember { mutableStateOf(FocusZone.SEARCH_INPUT) }
-    var sidebarFocusIndex by remember { mutableIntStateOf(0) } // SEARCH
+    val hasProfile = currentProfile != null
+    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 1 else 0) } // SEARCH
     var currentRowIndex by remember { mutableIntStateOf(0) } // 0 = Movies, 1 = TV Shows
     var movieItemIndex by remember { mutableIntStateOf(0) }
     var tvItemIndex by remember { mutableIntStateOf(0) }
@@ -182,7 +186,9 @@ fun SearchScreen(
                         }
                         Key.DirectionUp -> {
                             when (focusZone) {
-                                FocusZone.SIDEBAR -> if (sidebarFocusIndex > 0) sidebarFocusIndex--
+                                FocusZone.SIDEBAR -> if (sidebarFocusIndex > 0) {
+                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
+                                }
                                 FocusZone.RESULTS -> {
                                     if (currentRowIndex == 1 && uiState.movieResults.isNotEmpty()) {
                                         currentRowIndex = 0
@@ -197,7 +203,9 @@ fun SearchScreen(
                         }
                         Key.DirectionDown -> {
                             when (focusZone) {
-                                FocusZone.SIDEBAR -> if (sidebarFocusIndex < SidebarItem.entries.size - 1) sidebarFocusIndex++
+                                FocusZone.SIDEBAR -> if (sidebarFocusIndex < maxSidebarIndex) {
+                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                                }
                                 FocusZone.SEARCH_INPUT -> {
                                     if (uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty()) {
                                         focusZone = FocusZone.RESULTS
@@ -215,12 +223,17 @@ fun SearchScreen(
                         Key.Enter, Key.DirectionCenter -> {
                             when (focusZone) {
                                 FocusZone.SIDEBAR -> {
-                                    when (SidebarItem.entries[sidebarFocusIndex]) {
-                                        SidebarItem.SEARCH -> { /* Already here */ }
-                                        SidebarItem.HOME -> onNavigateToHome()
-                                        SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                        SidebarItem.TV -> onNavigateToTv()
-                                        SidebarItem.SETTINGS -> onNavigateToSettings()
+                                    if (hasProfile && sidebarFocusIndex == 0) {
+                                        onSwitchProfile()
+                                    } else {
+                                        val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
+                                        when (SidebarItem.entries[itemIndex]) {
+                                            SidebarItem.SEARCH -> { /* Already here */ }
+                                            SidebarItem.HOME -> onNavigateToHome()
+                                            SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                            SidebarItem.TV -> onNavigateToTv()
+                                            SidebarItem.SETTINGS -> onNavigateToSettings()
+                                        }
                                     }
                                     true
                                 }
@@ -252,7 +265,9 @@ fun SearchScreen(
             Sidebar(
                 selectedItem = SidebarItem.SEARCH,
                 isSidebarFocused = focusZone == FocusZone.SIDEBAR,
-                focusedIndex = sidebarFocusIndex
+                focusedIndex = sidebarFocusIndex,
+                profile = currentProfile,
+                onProfileClick = onSwitchProfile
             )
 
             // Main content

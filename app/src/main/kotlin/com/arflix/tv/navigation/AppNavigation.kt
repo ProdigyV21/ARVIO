@@ -154,42 +154,40 @@ fun AppNavigation(
         // Search screen
         composable(Screen.Search.route) {
             SearchScreen(
+                currentProfile = currentProfile,
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
                 },
-                onNavigateToHome = {
-                    navigateHome()
-                },
-                onNavigateToWatchlist = {
-                    navigateTopLevel(Screen.Watchlist.route)
-                },
-                onNavigateToTv = {
-                    navigateTopLevel(Screen.Tv.route)
-                },
-                onNavigateToSettings = {
-                    navigateTopLevel(Screen.Settings.route)
+                onNavigateToHome = { navigateHome() },
+                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                onNavigateToTv = { navigateTopLevel(Screen.Tv.route) },
+                onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                onSwitchProfile = {
+                    onSwitchProfile()
+                    navController.navigate(Screen.ProfileSelection.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
                 },
                 onBack = { navController.popBackStack() }
             )
         }
-        
+
         // Watchlist screen
         composable(Screen.Watchlist.route) {
             WatchlistScreen(
+                currentProfile = currentProfile,
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
                 },
-                onNavigateToHome = {
-                    navigateHome()
-                },
-                onNavigateToSearch = {
-                    navigateTopLevel(Screen.Search.route)
-                },
-                onNavigateToTv = {
-                    navigateTopLevel(Screen.Tv.route)
-                },
-                onNavigateToSettings = {
-                    navigateTopLevel(Screen.Settings.route)
+                onNavigateToHome = { navigateHome() },
+                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                onNavigateToTv = { navigateTopLevel(Screen.Tv.route) },
+                onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                onSwitchProfile = {
+                    onSwitchProfile()
+                    navController.navigate(Screen.ProfileSelection.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -198,30 +196,31 @@ fun AppNavigation(
         // TV screen
         composable(Screen.Tv.route) {
             TvScreen(
+                currentProfile = currentProfile,
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                onSwitchProfile = {
+                    onSwitchProfile()
+                    navController.navigate(Screen.ProfileSelection.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
+                },
                 onBack = { navController.popBackStack() }
             )
         }
-        
+
         // Settings screen
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateToHome = {
-                    navigateHome()
-                },
-                onNavigateToSearch = {
-                    navigateTopLevel(Screen.Search.route)
-                },
-                onNavigateToTv = {
-                    navigateTopLevel(Screen.Tv.route)
-                },
-                onNavigateToWatchlist = {
-                    navigateTopLevel(Screen.Watchlist.route)
-                },
+                currentProfile = currentProfile,
+                onNavigateToHome = { navigateHome() },
+                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                onNavigateToTv = { navigateTopLevel(Screen.Tv.route) },
+                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
                 onSwitchProfile = {
+                    onSwitchProfile()
                     navController.navigate(Screen.ProfileSelection.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }
@@ -292,6 +291,12 @@ fun AppNavigation(
                 },
                 onNavigateToSettings = {
                     navigateTopLevel(Screen.Settings.route)
+                },
+                onSwitchProfile = {
+                    onSwitchProfile()
+                    navController.navigate(Screen.ProfileSelection.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
                 },
                 onBack = { navController.popBackStack() }
             )

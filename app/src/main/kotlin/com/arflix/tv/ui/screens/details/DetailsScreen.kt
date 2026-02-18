@@ -145,6 +145,7 @@ fun DetailsScreen(
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -162,7 +163,9 @@ fun DetailsScreen(
     
     // Sidebar state
     var isSidebarFocused by remember { mutableStateOf(false) }
-    var sidebarFocusIndex by remember { mutableIntStateOf(1) }
+    val hasProfile = currentProfile != null
+    val maxSidebarIndex = if (hasProfile) SidebarItem.entries.size else SidebarItem.entries.size - 1
+    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 2 else 1) }
     
     // Stream Selector state
     var showStreamSelector by remember { mutableStateOf(false) }
@@ -265,7 +268,7 @@ fun DetailsScreen(
                         }
                         Key.DirectionUp -> {
                             if (isSidebarFocused && sidebarFocusIndex > 0) {
-                                sidebarFocusIndex--
+                                sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
                                 true
                             } else {
                                 // Navigation: BUTTONS -> EPISODES -> SEASONS -> CAST -> REVIEWS -> SIMILAR
@@ -288,8 +291,8 @@ fun DetailsScreen(
                             }
                         }
                         Key.DirectionDown -> {
-                            if (isSidebarFocused && sidebarFocusIndex < SidebarItem.entries.size - 1) {
-                                sidebarFocusIndex++
+                            if (isSidebarFocused && sidebarFocusIndex < maxSidebarIndex) {
+                                sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
                                 true
                             } else {
                                 // Navigation: BUTTONS -> EPISODES -> SEASONS -> CAST -> REVIEWS -> SIMILAR
@@ -334,13 +337,17 @@ fun DetailsScreen(
                         }
                         Key.Enter, Key.DirectionCenter -> {
                             if (isSidebarFocused) {
-                                // Handle sidebar navigation
-                                when (SidebarItem.entries[sidebarFocusIndex]) {
-                                    SidebarItem.SEARCH -> onNavigateToSearch()
-                                    SidebarItem.HOME -> onNavigateToHome()
-                                    SidebarItem.WATCHLIST -> onNavigateToWatchlist()
-                                    SidebarItem.TV -> onNavigateToTv()
-                                    SidebarItem.SETTINGS -> onNavigateToSettings()
+                                if (hasProfile && sidebarFocusIndex == 0) {
+                                    onSwitchProfile()
+                                } else {
+                                    val itemIndex = if (hasProfile) sidebarFocusIndex - 1 else sidebarFocusIndex
+                                    when (SidebarItem.entries[itemIndex]) {
+                                        SidebarItem.SEARCH -> onNavigateToSearch()
+                                        SidebarItem.HOME -> onNavigateToHome()
+                                        SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                        SidebarItem.TV -> onNavigateToTv()
+                                        SidebarItem.SETTINGS -> onNavigateToSettings()
+                                    }
                                 }
                                 return@onPreviewKeyEvent true
                             }
@@ -479,6 +486,8 @@ fun DetailsScreen(
             selectedItem = SidebarItem.HOME,
             isSidebarFocused = isSidebarFocused,
             focusedIndex = sidebarFocusIndex,
+            profile = currentProfile,
+            onProfileClick = onSwitchProfile,
             onItemSelected = { item ->
                 when (item) {
                     SidebarItem.SEARCH -> onNavigateToSearch()
@@ -490,11 +499,8 @@ fun DetailsScreen(
             }
         )
         
-        // Clock and profile indicator
-        TopBarClock(
-            modifier = Modifier.align(Alignment.TopEnd),
-            profile = currentProfile
-        )
+        // Clock (profile moved to sidebar)
+        TopBarClock(modifier = Modifier.align(Alignment.TopEnd))
         
         // Person Modal
         PersonModal(
