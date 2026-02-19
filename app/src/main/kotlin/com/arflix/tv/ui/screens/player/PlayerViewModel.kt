@@ -499,7 +499,7 @@ class PlayerViewModel @Inject constructor(
             if (mediaType == MediaType.TV) {
                 val tvDetails = details as com.arflix.tv.data.api.TmdbTvDetails
                 title = tvDetails.name
-                backdropUrl = tvDetails.backdropPath?.let { "${Constants.BACKDROP_BASE}$it" }
+                backdropUrl = tvDetails.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" }
                 posterUrl = tvDetails.posterPath?.let { "${Constants.IMAGE_BASE}$it" }
                 currentOriginalLanguage = tvDetails.originalLanguage ?: currentOriginalLanguage
 
@@ -515,7 +515,7 @@ class PlayerViewModel @Inject constructor(
             } else {
                 val movieDetails = details as com.arflix.tv.data.api.TmdbMovieDetails
                 title = movieDetails.title
-                backdropUrl = movieDetails.backdropPath?.let { "${Constants.BACKDROP_BASE}$it" }
+                backdropUrl = movieDetails.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" }
                 posterUrl = movieDetails.posterPath?.let { "${Constants.IMAGE_BASE}$it" }
                 currentOriginalLanguage = movieDetails.originalLanguage ?: currentOriginalLanguage
             }

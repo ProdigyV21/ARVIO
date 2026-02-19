@@ -205,6 +205,7 @@ fun PlayerScreen(
     var autoAdvanceAttempts by remember { mutableIntStateOf(0) }
     var triedStreamIndexes by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var isAutoAdvancing by remember { mutableStateOf(false) }
+    var lastProgressReportSecond by remember { mutableLongStateOf(-1L) }
 
     // Load media
     LaunchedEffect(mediaType, mediaId, seasonNumber, episodeNumber, imdbId, preferredAddonId, preferredSourceName, startPositionMs) {
@@ -867,14 +868,19 @@ fun PlayerScreen(
             }
 
             if (currentPosition > 0 && duration > 0) {
-                val progressPercent = (currentPosition.toFloat() / duration.toFloat() * 100).toInt()
-                viewModel.saveProgress(
-                    currentPosition,
-                    duration,
-                    progressPercent,
-                    isPlaying = exoPlayer.isPlaying,
-                    playbackState = exoPlayer.playbackState
-                )
+                val currentSecond = (currentPosition / 1000L).coerceAtLeast(0L)
+                val shouldReport = currentSecond != lastProgressReportSecond || !exoPlayer.isPlaying
+                if (shouldReport) {
+                    lastProgressReportSecond = currentSecond
+                    val progressPercent = (currentPosition.toFloat() / duration.toFloat() * 100).toInt()
+                    viewModel.saveProgress(
+                        currentPosition,
+                        duration,
+                        progressPercent,
+                        isPlaying = exoPlayer.isPlaying,
+                        playbackState = exoPlayer.playbackState
+                    )
+                }
 
             }
 
@@ -891,7 +897,7 @@ fun PlayerScreen(
                 }
             }
 
-            delay(500)
+            delay(1000)
         }
     }
 

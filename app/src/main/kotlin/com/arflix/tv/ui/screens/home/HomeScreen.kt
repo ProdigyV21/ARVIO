@@ -360,7 +360,7 @@ fun HomeScreen(
                         ImageRequest.Builder(context)
                             .data(backdropUrl)
                             .size(backdropWidthPx, backdropHeightPx)
-                            .precision(Precision.EXACT)
+                            .precision(Precision.INEXACT)
                             .allowHardware(true)
                             .crossfade(false)
                             .build()

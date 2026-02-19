@@ -86,7 +86,7 @@ class HomeViewModel @Inject constructor(
     private val imageLoader: ImageLoader,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
-    private val networkDispatcher = Dispatchers.IO.limitedParallelism(8)
+    private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private var lastContinueWatchingItems: List<MediaItem> = emptyList()
     private var lastContinueWatchingUpdateMs: Long = 0L
     private var lastResolvedBaseCategories: List<Category> = emptyList()
@@ -125,8 +125,8 @@ class HomeViewModel @Inject constructor(
         .coerceAtLeast(1)
     private val backdropPreloadWidth = cardBackdropWidth
     private val backdropPreloadHeight = cardBackdropHeight
-    private val initialLogoPrefetchRows = 2
-    private val initialLogoPrefetchItemsPerRow = 10
+    private val initialLogoPrefetchRows = 1
+    private val initialLogoPrefetchItemsPerRow = 6
 
     // Track current focus for ahead-of-focus preloading
     private var currentRowIndex = 0
@@ -586,9 +586,12 @@ class HomeViewModel @Inject constructor(
      * Uses target display sizes to reduce decode overhead.
      */
     private fun preloadImagesWithCoil(urls: List<String>, width: Int, height: Int) {
+        if (preloadedRequests.size > 4_000) {
+            preloadedRequests.clear()
+        }
         val uniqueUrls = urls.filter { url ->
             preloadedRequests.add("$url|${width}x${height}")
-        }
+        }.take(8)
         if (uniqueUrls.isEmpty()) return
 
         uniqueUrls.forEach { url ->
@@ -965,7 +968,7 @@ class HomeViewModel @Inject constructor(
             if (category.items.isEmpty()) return@launch
 
             // Preload items ahead (N+1 to N+3)
-            val itemsAhead = (itemIndex + 1..minOf(itemIndex + 4, category.items.size - 1))
+            val itemsAhead = (itemIndex + 1..minOf(itemIndex + 3, category.items.size - 1))
                 .mapNotNull { category.items.getOrNull(it) }
                 .filter { item ->
                     val key = "${item.mediaType}_${item.id}"
@@ -1007,8 +1010,8 @@ class HomeViewModel @Inject constructor(
     fun preloadLogosForCategory(categoryIndex: Int) {
         val categories = _uiState.value.categories
 
-        // Preload current + next 2 categories
-        listOf(categoryIndex, categoryIndex + 1, categoryIndex + 2).forEach { idx ->
+        // Preload current + next category
+        listOf(categoryIndex, categoryIndex + 1).forEach { idx ->
             if (idx < 0 || idx >= categories.size) return@forEach
 
             viewModelScope.launch(networkDispatcher) {
@@ -1016,7 +1019,7 @@ class HomeViewModel @Inject constructor(
                 val currentCache = logoCache
 
                 // Preload a fuller batch per row for smoother logo overlays.
-                val itemsToLoad = category.items.take(8).filter { item ->
+                val itemsToLoad = category.items.take(6).filter { item ->
                     val key = "${item.mediaType}_${item.id}"
                     !currentCache.containsKey(key)
                 }
