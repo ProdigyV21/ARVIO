@@ -728,15 +728,52 @@ class AuthRepository @Inject constructor(
     }
 
     /**
+     * Load addons directly from Supabase to avoid stale in-memory profile state.
+     */
+    suspend fun getAddonsFromProfileFresh(): Result<String?> {
+        val userId = getCurrentUserId() ?: return Result.failure(Exception("Not logged in"))
+        return try {
+            val session = ensureValidSession()
+            if (session == null) return Result.failure(Exception("Session expired"))
+
+            @Serializable
+            data class AddonsProjection(val addons: String? = null, val email: String? = null)
+
+            val row = supabase.postgrest
+                .from("profiles")
+                .select {
+                    filter { eq("id", userId) }
+                }
+                .decodeSingleOrNull<AddonsProjection>()
+
+            val current = _userProfile.value
+            val resolvedEmail = current?.email
+                ?: (authState.value as? AuthState.Authenticated)?.email
+                ?: row?.email
+                ?: ""
+
+            _userProfile.value = (current ?: UserProfile(id = userId, email = resolvedEmail)).copy(
+                id = userId,
+                email = resolvedEmail,
+                addons = row?.addons
+            )
+
+            Result.success(row?.addons)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Error loading addons from Supabase profile", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Save addons to Supabase profile
      */
     suspend fun saveAddonsToProfile(addonsJson: String): Result<Unit> {
         val userId = getCurrentUserId() ?: return Result.failure(Exception("Not logged in"))
-        val currentProfile = _userProfile.value ?: return Result.failure(Exception("No profile"))
-
         return try {
-            ensureValidSession()
-            // Create updated profile with new addons
+            val session = ensureValidSession()
+            if (session == null) return Result.failure(Exception("Session expired"))
+
             @Serializable
             data class AddonsUpdate(val addons: String)
 
@@ -746,8 +783,15 @@ class AuthRepository @Inject constructor(
                     filter { eq("id", userId) }
                 }
 
-            // Update local profile
-            _userProfile.value = currentProfile.copy(addons = addonsJson)
+            val currentProfile = _userProfile.value
+            val resolvedEmail = currentProfile?.email
+                ?: (authState.value as? AuthState.Authenticated)?.email
+                ?: ""
+            _userProfile.value = (currentProfile ?: UserProfile(id = userId, email = resolvedEmail)).copy(
+                id = userId,
+                email = resolvedEmail,
+                addons = addonsJson
+            )
             AppLogger.d(TAG, "Addons saved to Supabase")
             Result.success(Unit)
         } catch (e: Exception) {

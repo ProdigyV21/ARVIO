@@ -341,7 +341,7 @@ class StreamRepository @Inject constructor(
                 }
             }
 
-            val cloudJson = authRepository.getAddonsFromProfile()
+            val cloudJson = authRepository.getAddonsFromProfileFresh().getOrNull()
             if (!cloudJson.isNullOrEmpty()) {
                 val cloudAddons = parseAddons(cloudJson) ?: emptyList()
                 val prefs = context.streamDataStore.data.first()
