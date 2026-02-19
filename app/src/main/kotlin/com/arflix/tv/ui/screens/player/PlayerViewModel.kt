@@ -184,10 +184,20 @@ class PlayerViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    isLoadingStreams = false,
+                    isLoadingStreams = true,
                     selectedStreamUrl = resolvedProvidedUrl,
                     savedPosition = resumeData.positionMs
                 )
+                launch {
+                    populateStreamsForProvidedUrl(
+                        mediaType = mediaType,
+                        mediaId = mediaId,
+                        seasonNumber = seasonNumber,
+                        episodeNumber = episodeNumber,
+                        providedImdbId = providedImdbId,
+                        playbackUrl = resolvedProvidedUrl
+                    )
+                }
                 // Fetch metadata in background
                 launch { fetchMediaMetadata(mediaType, mediaId) }
                 // Fetch skip intervals in background (needs IMDB id)
@@ -1436,5 +1446,106 @@ class PlayerViewModel @Inject constructor(
             streams = updated,
             isLoadingStreams = false
         )
+    }
+
+    private suspend fun populateStreamsForProvidedUrl(
+        mediaType: MediaType,
+        mediaId: Int,
+        seasonNumber: Int?,
+        episodeNumber: Int?,
+        providedImdbId: String?,
+        playbackUrl: String
+    ) {
+        try {
+            val cachedImdbId = currentImdbId ?: mediaRepository.getCachedImdbId(mediaType, mediaId)
+            val imdbId = when {
+                !providedImdbId.isNullOrBlank() -> providedImdbId
+                !cachedImdbId.isNullOrBlank() -> cachedImdbId
+                else -> resolveExternalIds(mediaType, mediaId).imdbId
+            }
+
+            if (imdbId.isNullOrBlank()) {
+                _uiState.value = _uiState.value.copy(isLoadingStreams = false)
+                return
+            }
+
+            if (cachedImdbId.isNullOrBlank()) {
+                mediaRepository.cacheImdbId(mediaType, mediaId, imdbId)
+            }
+            currentImdbId = imdbId
+
+            if (mediaType == MediaType.TV && currentTvdbId == null) {
+                currentTvdbId = resolveExternalIds(mediaType, mediaId).tvdbId
+            }
+
+            val result = if (mediaType == MediaType.MOVIE) {
+                streamRepository.resolveMovieStreams(
+                    imdbId = imdbId,
+                    title = currentItemTitle,
+                    year = null
+                )
+            } else {
+                streamRepository.resolveEpisodeStreams(
+                    imdbId = imdbId,
+                    season = seasonNumber ?: 1,
+                    episode = episodeNumber ?: 1,
+                    tmdbId = mediaId,
+                    tvdbId = currentTvdbId,
+                    genreIds = currentGenreIds,
+                    originalLanguage = currentOriginalLanguage,
+                    title = currentItemTitle
+                )
+            }
+
+            val allStreams = result.streams
+                .filter { stream ->
+                    val u = stream.url?.trim().orEmpty()
+                    u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
+                }
+                .sortedWith(
+                    compareByDescending<StreamSource> { playbackPriorityScore(it) }
+                        .thenByDescending { qualityScore(it.quality) }
+                        .thenByDescending { parseSize(it.size) }
+                        .thenBy { it.source }
+                )
+
+            val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
+            val mergedStreams = (allStreams + existingVod)
+                .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
+                .sortedWith(
+                    compareByDescending<StreamSource> { playbackPriorityScore(it) }
+                        .thenByDescending { qualityScore(it.quality) }
+                        .thenByDescending { parseSize(it.size) }
+                        .thenBy { it.source }
+                )
+
+            val selectedMatch = mergedStreams.firstOrNull { stream ->
+                isSameStreamUrl(stream.url, playbackUrl)
+            }
+
+            _uiState.value = _uiState.value.copy(
+                streams = mergedStreams,
+                selectedStream = selectedMatch ?: _uiState.value.selectedStream,
+                isLoadingStreams = false
+            )
+        } catch (_: Exception) {
+            _uiState.value = _uiState.value.copy(isLoadingStreams = false)
+        }
+    }
+
+    private fun isSameStreamUrl(candidate: String?, target: String): Boolean {
+        val candidateTrimmed = candidate?.trim().orEmpty()
+        val targetTrimmed = target.trim()
+        if (candidateTrimmed.isBlank() || targetTrimmed.isBlank()) return false
+        if (candidateTrimmed.equals(targetTrimmed, ignoreCase = true)) return true
+        return normalizeStreamUrlKey(candidateTrimmed) == normalizeStreamUrlKey(targetTrimmed)
+    }
+
+    private fun normalizeStreamUrlKey(url: String): String {
+        return url
+            .substringBefore('|')
+            .substringBefore('?')
+            .trim()
+            .lowercase()
     }
 }

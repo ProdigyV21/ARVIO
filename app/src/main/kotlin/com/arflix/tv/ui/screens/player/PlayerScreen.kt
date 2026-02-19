@@ -189,6 +189,7 @@ fun PlayerScreen(
     var bufferingStartTime by remember { mutableStateOf<Long?>(null) }
     val bufferingTimeoutMs = 12_000L // Mid-playback timeout for stuck buffering
     var userSelectedSourceManually by remember { mutableStateOf(false) }
+    val allowAutomaticSourceFallback = false
     val initialBufferingTimeoutMs = remember(uiState.selectedStream, userSelectedSourceManually) {
         estimateInitialStartupTimeoutMs(
             stream = uiState.selectedStream,
@@ -370,7 +371,11 @@ fun PlayerScreen(
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_TIMEOUT
 
                         if (isSourceError) {
-                            if (!hasPlaybackStarted && !userSelectedSourceManually && tryAdvanceToNextStream()) {
+                            if (!hasPlaybackStarted &&
+                                allowAutomaticSourceFallback &&
+                                !userSelectedSourceManually &&
+                                tryAdvanceToNextStream()
+                            ) {
                                 return
                             }
                             if (!playbackIssueReported) {
@@ -842,7 +847,10 @@ fun PlayerScreen(
                 if (startupBufferDuration > initialBufferingTimeoutMs) {
                     if (!startupRecoverAttempted) {
                         startupRecoverAttempted = true
-                        if (!userSelectedSourceManually && tryAdvanceToNextStream()) {
+                        if (allowAutomaticSourceFallback &&
+                            !userSelectedSourceManually &&
+                            tryAdvanceToNextStream()
+                        ) {
                             // auto advanced to a fallback stream
                         } else {
                             exoPlayer.stop()
