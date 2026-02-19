@@ -157,6 +157,27 @@
       color: var(--muted);
       line-height: 1.45;
     }
+
+    .linkrow {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .linkbtn {
+      border: 0;
+      background: transparent;
+      color: #dcdcdc;
+      font-size: 12px;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .linkbtn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -176,10 +197,14 @@
 
       <label class="label" for="password">Password</label>
       <input class="input" id="password" type="password" autocomplete="current-password" placeholder="Your password" />
+      <div class="linkrow">
+        <button class="linkbtn" id="forgot" type="button">Forgot password?</button>
+      </div>
 
       <div class="actions">
         <button class="btn primary" id="signin">Sign In</button>
         <button class="btn" id="signup">Create Account</button>
+        <button class="btn" id="savepass" style="display:none;">Save New Password</button>
       </div>
 
       <p class="small">If you opened this from a TV QR code, signing in will automatically pair that TV.</p>
@@ -205,6 +230,12 @@
     const passEl = document.getElementById("password");
     const signInBtn = document.getElementById("signin");
     const signUpBtn = document.getElementById("signup");
+    const savePassBtn = document.getElementById("savepass");
+    const forgotBtn = document.getElementById("forgot");
+    const hashParams = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+    const queryMode = (qs.get("mode") || "").trim().toLowerCase();
+    const hashType = (hashParams.get("type") || "").trim().toLowerCase();
+    const isRecoveryMode = queryMode === "recovery" || hashType === "recovery";
 
     function setStatus(msg, type = "") {
       statusEl.textContent = msg || "";
@@ -214,6 +245,21 @@
     function setBusy(on) {
       signInBtn.disabled = on;
       signUpBtn.disabled = on;
+      savePassBtn.disabled = on;
+      forgotBtn.disabled = on;
+    }
+
+    function applyRecoveryModeUi() {
+      subtitleEl.textContent = "Set a new password for your account.";
+      pairBox.style.display = "none";
+      signInBtn.style.display = "none";
+      signUpBtn.style.display = "none";
+      forgotBtn.style.display = "none";
+      savePassBtn.style.display = "block";
+      emailEl.style.display = "none";
+      document.querySelector('label[for="email"]').style.display = "none";
+      passEl.placeholder = "New password (min 6 characters)";
+      passEl.autocomplete = "new-password";
     }
 
     if (pairCode) {
@@ -221,6 +267,7 @@
       pairBox.style.display = "block";
       pairCodeEl.textContent = pairCode;
     }
+    if (isRecoveryMode) applyRecoveryModeUi();
 
     async function approveTvIfNeeded() {
       if (!pairCode) return;
@@ -260,6 +307,22 @@
       if (!resp.ok) throw new Error(json.error || "TV pairing failed");
     }
 
+    async function signUpAndPairViaServer(email, password) {
+      if (!pairCode) return;
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/tv-auth-web`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "signup",
+          code: pairCode,
+          email: email.trim().toLowerCase(),
+          password
+        })
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || "Account creation or TV pairing failed");
+    }
+
     async function signInEmail() {
       const email = emailEl.value.trim().toLowerCase();
       const password = passEl.value;
@@ -281,6 +344,24 @@
       if (login.error && !String(login.error.message || "").toLowerCase().includes("email")) {
         throw login.error;
       }
+    }
+
+    async function sendPasswordReset() {
+      const email = emailEl.value.trim().toLowerCase();
+      if (!email) throw new Error("Enter your email first.");
+      const redirectTo = "https://auth.arvio.tv/?mode=recovery";
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+    }
+
+    async function saveNewPassword() {
+      const password = passEl.value;
+      if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) throw new Error("Recovery link expired. Request a new password reset email.");
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
     }
 
     signInBtn.onclick = async () => {
@@ -305,6 +386,18 @@
     signUpBtn.onclick = async () => {
       try {
         setBusy(true);
+        const email = emailEl.value.trim().toLowerCase();
+        const password = passEl.value;
+        if (!email || !password) throw new Error("Email and password are required.");
+
+        if (pairCode) {
+          setStatus("Creating account and pairing TV...");
+          await signUpAndPairViaServer(email, password);
+          setStatus("Account created and TV paired. Redirecting...", "ok");
+          setTimeout(() => { window.location.href = "https://arvio.tv"; }, 1200);
+          return;
+        }
+
         setStatus("Creating account...");
         await signUpEmail();
         try {
@@ -321,6 +414,33 @@
         } else {
           setStatus(msg, "error");
         }
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    forgotBtn.onclick = async () => {
+      try {
+        setBusy(true);
+        setStatus("Sending reset email...");
+        await sendPasswordReset();
+        setStatus("Password reset email sent. Check your inbox.", "ok");
+      } catch (err) {
+        setStatus(err.message || String(err), "error");
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    savePassBtn.onclick = async () => {
+      try {
+        setBusy(true);
+        setStatus("Saving new password...");
+        await saveNewPassword();
+        setStatus("Password updated. Redirecting to sign in...", "ok");
+        setTimeout(() => { window.location.href = "https://auth.arvio.tv/"; }, 1200);
+      } catch (err) {
+        setStatus(err.message || String(err), "error");
       } finally {
         setBusy(false);
       }
