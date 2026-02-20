@@ -1028,11 +1028,20 @@ private fun HomeRowsLayer(
         val halfHeight = maxHeight / 2
         val listState = rememberLazyListState()
         val targetIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
-        LaunchedEffect(targetIndex) {
-            listState.animateScrollToItem(
-                index = targetIndex,
-                scrollOffset = 0
-            )
+        LaunchedEffect(targetIndex, isFastScrolling) {
+            val currentIndex = listState.firstVisibleItemIndex
+            if (currentIndex == targetIndex) return@LaunchedEffect
+            if (isFastScrolling || abs(targetIndex - currentIndex) > 1) {
+                listState.scrollToItem(
+                    index = targetIndex,
+                    scrollOffset = 0
+                )
+            } else {
+                listState.animateScrollToItem(
+                    index = targetIndex,
+                    scrollOffset = 0
+                )
+            }
         }
         // Viewport is only the bottom 50%: selected row stays at same height, rows above disappear
         Box(
@@ -1047,8 +1056,7 @@ private fun HomeRowsLayer(
                 contentPadding = PaddingValues(bottom = halfHeight),
                 modifier = Modifier
                     .fillMaxSize()
-                    .clipToBounds()
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                    .clipToBounds(),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
             itemsIndexed(categories) { index, category ->
@@ -1290,7 +1298,7 @@ private fun ContentRow(
             lastScrollIndex = -1
         }
     }
-    LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex) {
+    LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex, isFastScrolling) {
         if (!isCurrentRow || scrollTargetIndex < 0) return@LaunchedEffect
 
         // Calculate extra offset for items at the end of the list (past maxFirstIndex)
@@ -1304,7 +1312,7 @@ private fun ContentRow(
         // FIX: When scrolling back to first item, ensure we reset to position 0 with no offset
         // This prevents focus from disappearing on the left side
         if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
-            rowState.animateScrollToItem(index = 0, scrollOffset = 0)
+            rowState.scrollToItem(index = 0, scrollOffset = 0)
             lastScrollIndex = 0
             return@LaunchedEffect
         }
@@ -1318,7 +1326,11 @@ private fun ContentRow(
         }
 
         // Always use a smooth animated scroll for D‑pad navigation between items
-        rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        if (isFastScrolling || abs(scrollTargetIndex - lastScrollIndex) > 1) {
+            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        } else {
+            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+        }
         lastScrollIndex = scrollTargetIndex
     }
 

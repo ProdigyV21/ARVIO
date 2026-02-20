@@ -37,28 +37,21 @@ class TraktSyncWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
-        Log.d(TAG, "Starting Trakt sync...")
-
         // Check if user is authenticated
         val isAuth = traktRepository.isAuthenticated.first()
         if (!isAuth) {
-            Log.d(TAG, "User not authenticated, skipping sync")
             return Result.success()
         }
 
         val syncMode = inputData.getString(INPUT_SYNC_MODE) ?: SYNC_MODE_INCREMENTAL
 
         return try {
-            Log.d(TAG, "Syncing Trakt state (mode=$syncMode)...")
             when (syncMode) {
                 SYNC_MODE_FULL -> traktSyncService.performFullSync()
                 else -> traktSyncService.performIncrementalSync()
             }
-
-            Log.d(TAG, "Trakt sync completed successfully")
             Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "Trakt sync failed", e)
             if (runAttemptCount < 3) {
                 Result.retry()
             } else {

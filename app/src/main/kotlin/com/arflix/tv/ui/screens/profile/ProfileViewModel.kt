@@ -108,7 +108,6 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 iptvRepository.warmupFromCacheOnly()
-                iptvRepository.warmXtreamVodCachesIfPossible()
             }
         }
     }

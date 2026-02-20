@@ -27,6 +27,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -435,10 +436,6 @@ class PlayerViewModel @Inject constructor(
                     val preferred = preferredFromResume ?: preferredFromNavigation
                     val selected = preferred ?: mergedStreams.first()
                     val selectedIndex = mergedStreams.indexOf(selected)
-                    Log.d(
-                        "PlayerVM",
-                        "AutoPick selecting idx=$selectedIndex preferred=${preferred != null} key=${preferredKey.orEmpty()} addon=${preferredAddonId.orEmpty()} navAddon=${currentPreferredAddonId.orEmpty()} navSrc=${currentPreferredSourceName.orEmpty()} src=${selected.source.take(80)}"
-                    )
                     selectStream(selected)
                 }
 
@@ -1273,7 +1270,7 @@ class PlayerViewModel @Inject constructor(
         if (duration <= 0) return
 
         if (progressSaveJob?.isActive == true) return
-        progressSaveJob = viewModelScope.launch {
+        progressSaveJob = viewModelScope.launch(Dispatchers.IO) {
             val currentTime = System.currentTimeMillis()
             val progressFraction = (progressPercent / 100f).coerceIn(0f, 1f)
 

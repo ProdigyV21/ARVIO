@@ -45,7 +45,9 @@ fun TopBarClock(
     LaunchedEffect(Unit) {
         while (true) {
             currentTime = getCurrentTime()
-            delay(1000)
+            val now = System.currentTimeMillis()
+            val delayToNextMinute = 60_000L - (now % 60_000L)
+            delay(delayToNextMinute.coerceIn(1_000L, 60_000L))
         }
     }
 

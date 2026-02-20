@@ -152,7 +152,6 @@ class MainActivity : ComponentActivity() {
             jankStats = JankStats.createAndTrack(window) { frameData ->
                 if (frameData.isJank) {
                     val durationMs = frameData.frameDurationUiNanos / 1_000_000
-                    Log.w("JankStats", "Jank frame: ${durationMs}ms, states=${frameData.states}")
                 }
             }
             PerformanceMetricsState.getHolderForHierarchy(window.decorView)
@@ -376,6 +375,4 @@ private fun enqueueFullTraktSync(context: android.content.Context) {
         ExistingWorkPolicy.REPLACE,
         request
     )
-
-    Log.d("MainActivity", "Enqueued full Trakt sync (REPLACE)")
 }

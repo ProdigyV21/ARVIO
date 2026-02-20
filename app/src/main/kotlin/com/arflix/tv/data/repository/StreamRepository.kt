@@ -692,8 +692,6 @@ class StreamRepository @Inject constructor(
         val subtitles = mutableListOf<Subtitle>()
         // Check if this is anime - use comprehensive detection
         val isAnime = animeMapper.isAnimeContent(tmdbId, genreIds, originalLanguage)
-        Log.d(TAG, "Episode streams: title='$title', imdbId=$imdbId, season=$season, ep=$episode, isAnime=$isAnime, lang=$originalLanguage, genres=$genreIds")
-
         // Get anime query using 5-tier fallback resolution
         val animeQuery = if (isAnime) {
             withTimeoutOrNull(1_300L) {
@@ -705,12 +703,10 @@ class StreamRepository @Inject constructor(
                     season = season,
                     episode = episode
                 )
-            }?.also { Log.d(TAG, "Anime query resolved: $it") }
+            }
         } else null
 
         val seriesId = "$imdbId:$season:$episode"
-        Log.d(TAG, "Using seriesId: $seriesId, animeQuery: $animeQuery")
-
         val allAddons = installedAddons.first()
         val streamAddons = getStreamAddons(allAddons, "series", imdbId)
         val cacheKey = streamCacheKey(
@@ -758,7 +754,6 @@ class StreamRepository @Inject constructor(
 
                         // Fallback: if Kitsu query returned zero results, retry with IMDB format
                         if (addonStreams.isEmpty() && useKitsu && contentId != seriesId) {
-                            Log.d(TAG, "Kitsu query '$contentId' returned 0 results for ${addon.name}, retrying with IMDB: $seriesId")
                             val fallbackUrl = if (queryParams != null) {
                                 "$baseUrl/stream/series/$seriesId.json?$queryParams"
                             } else {
@@ -768,7 +763,6 @@ class StreamRepository @Inject constructor(
                                 val fallbackResponse = streamApi.getAddonStreams(fallbackUrl)
                                 addonStreams = processStreams(fallbackResponse.streams ?: emptyList(), addon)
                             } catch (e: Exception) {
-                                Log.w(TAG, "IMDB fallback also failed for ${addon.name}: ${e.message}")
                             }
                         }
 

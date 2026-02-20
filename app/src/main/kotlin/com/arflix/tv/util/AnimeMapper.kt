@@ -359,7 +359,6 @@ class AnimeMapper @Inject constructor(
         if (tmdbId != null) {
             val tierArm = resolveTierArm(tmdbId, season, episode)
             if (tierArm != null) {
-                Log.d(TAG, "Tier 1 (ARM API): $tierArm")
                 return tierArm
             }
         }
@@ -369,7 +368,6 @@ class AnimeMapper @Inject constructor(
         if (tmdbId != null) {
             val tier2 = resolveTier1PerSeason(tmdbId, season, episode)
             if (tier2 != null) {
-                Log.d(TAG, "Tier 2 (per-season fallback): $tier2")
                 return tier2
             }
         }
@@ -378,7 +376,6 @@ class AnimeMapper @Inject constructor(
         if (tmdbId != null) {
             val tier3 = resolveTier2Absolute(tmdbId, season, episode)
             if (tier3 != null) {
-                Log.d(TAG, "Tier 3 (absolute): $tier3")
                 return tier3
             }
         }
@@ -387,7 +384,6 @@ class AnimeMapper @Inject constructor(
         if (tvdbId != null) {
             val tier4 = resolveTier3Tvdb(tvdbId, tmdbId, season, episode)
             if (tier4 != null) {
-                Log.d(TAG, "Tier 4 (TVDB): $tier4")
                 return tier4
             }
         }
@@ -396,7 +392,6 @@ class AnimeMapper @Inject constructor(
         if (title.isNotBlank()) {
             val tier5 = resolveTier4TitleSearch(title, tmdbId, season, episode)
             if (tier5 != null) {
-                Log.d(TAG, "Tier 5 (title search): $tier5")
                 return tier5
             }
         }
@@ -410,19 +405,16 @@ class AnimeMapper @Inject constructor(
                 try {
                     val result = resolveValidatedEpisode(kitsuId, tmdbId, season, episode)
                     val query = "kitsu:${result.first}:${result.second}"
-                    Log.d(TAG, "Tier 6 (validated kitsu): $query")
                     return query
                 } catch (e: Exception) {
                     // If validated resolution fails, fall back to basic
                     val query = "kitsu:$kitsuId:$episode"
-                    Log.d(TAG, "Tier 6 (basic kitsu, validation failed): $query")
                     return query
                 }
             }
         }
 
         val fallback = "$imdbId:$season:$episode"
-        Log.d(TAG, "Tier 6 (IMDB fallback): $fallback")
         return fallback
     }
 
@@ -483,13 +475,11 @@ class AnimeMapper @Inject constructor(
                 // If we can't get episode count (ongoing series or API error),
                 // and this is the last segment, use it
                 if (index == segments.size - 1) {
-                    Log.d(TAG, "Dynamic segment: kitsu:${segment.kitsuId}:$remaining (last segment, count unknown)")
                     return "kitsu:${segment.kitsuId}:$remaining"
                 }
                 // Otherwise, assume a reasonable default (12-13 episodes for anime cours)
                 val assumedCount = 12
                 if (remaining <= assumedCount) {
-                    Log.d(TAG, "Dynamic segment: kitsu:${segment.kitsuId}:$remaining (count unknown, assumed $assumedCount)")
                     return "kitsu:${segment.kitsuId}:$remaining"
                 }
                 remaining -= assumedCount
@@ -497,16 +487,13 @@ class AnimeMapper @Inject constructor(
             }
 
             if (remaining <= epCount) {
-                Log.d(TAG, "Dynamic segment: kitsu:${segment.kitsuId}:$remaining (fetched count: $epCount)")
                 return "kitsu:${segment.kitsuId}:$remaining"
             }
             remaining -= epCount
-            Log.d(TAG, "Dynamic segment: skipping kitsu:${segment.kitsuId} (has $epCount eps, remaining: $remaining)")
         }
 
         // Past all segments - use last segment with remaining offset
         val last = segments.last()
-        Log.d(TAG, "Dynamic segment: using last segment kitsu:${last.kitsuId}:$remaining")
         return "kitsu:${last.kitsuId}:$remaining"
     }
 
@@ -544,7 +531,6 @@ class AnimeMapper @Inject constructor(
                         }
                         count
                     } catch (e: Exception) {
-                        Log.w(TAG, "Tier 2: Failed to get TMDB season $s ep count for $tmdbId: ${e.message}")
                         0
                     }
                 dynamicOffset += epCount
@@ -554,13 +540,11 @@ class AnimeMapper @Inject constructor(
 
         if (resolvedOffset > 0 && episode >= resolvedOffset) {
             // Episode number is already absolute (TMDB uses absolute numbering for this anime)
-            Log.d(TAG, "Tier 2 (already absolute): kitsu:$kitsuId:$episode (season=$season, offset=$resolvedOffset, ep >= offset)")
             return "kitsu:$kitsuId:$episode"
         }
 
         // Episode is per-season — add offset to get absolute
         val absEpisode = resolvedOffset + episode
-        Log.d(TAG, "Tier 2 (offset): kitsu:$kitsuId:$absEpisode (season=$season, ep=$episode, offset=$resolvedOffset)")
         return "kitsu:$kitsuId:$absEpisode"
     }
 
@@ -584,9 +568,6 @@ class AnimeMapper @Inject constructor(
             if (kitsuIds.isNullOrEmpty()) {
                 return@withContext null
             }
-
-            Log.d(TAG, "ARM API: tmdbId=$tmdbId has ${kitsuIds.size} Kitsu entries, resolving S${season}E$episode")
-
             // GLOBAL FIX: Handle the case where TMDB has 1 season but Kitsu has multiple entries
             // This is the most common anime numbering discrepancy (e.g., MF Ghost, Spy x Family).
             //
@@ -604,12 +585,10 @@ class AnimeMapper @Inject constructor(
                     if (epCount == null) {
                         // Unknown count (ongoing) - if this is the last entry or episode fits, use it
                         if (kitsuId == kitsuIds.last()) {
-                            Log.d(TAG, "ARM: using last entry kitsu:$kitsuId:$remaining (count unknown)")
                             return@withContext "kitsu:$kitsuId:$remaining"
                         }
                         // Assume typical anime cour (12 episodes) and continue
                         if (remaining <= 12) {
-                            Log.d(TAG, "ARM: kitsu:$kitsuId:$remaining (count unknown, assumed 12)")
                             return@withContext "kitsu:$kitsuId:$remaining"
                         }
                         remaining -= 12
@@ -617,16 +596,13 @@ class AnimeMapper @Inject constructor(
                     }
 
                     if (remaining <= epCount) {
-                        Log.d(TAG, "ARM: kitsu:$kitsuId:$remaining (epCount=$epCount)")
                         return@withContext "kitsu:$kitsuId:$remaining"
                     }
                     remaining -= epCount
-                    Log.d(TAG, "ARM: skipping kitsu:$kitsuId (has $epCount eps, remaining=$remaining)")
                 }
 
                 // Past all entries - use last entry with remaining offset
                 val lastId = kitsuIds.last()
-                Log.d(TAG, "ARM: past all entries, using kitsu:$lastId:$remaining")
                 return@withContext "kitsu:$lastId:$remaining"
             }
 
@@ -643,17 +619,13 @@ class AnimeMapper @Inject constructor(
                     val id = kitsuIds[i]
                     val count = getKitsuEpisodeCount(id) ?: 99
                     if (remaining <= count) {
-                        Log.d(TAG, "ARM (cour walk): kitsu:$id:$remaining")
                         return@withContext "kitsu:$id:$remaining"
                     }
                     remaining -= count
                 }
             }
-
-            Log.d(TAG, "ARM (standard): kitsu:$kitsuId:$episode (seasonIndex=$seasonIndex)")
             "kitsu:$kitsuId:$episode"
         } catch (e: Exception) {
-            Log.w(TAG, "ARM API lookup failed for tmdbId=$tmdbId: ${e.message}")
             null
         }
     }
@@ -675,11 +647,9 @@ class AnimeMapper @Inject constructor(
                     evictIfNeeded(armTmdbCache)
                     armTmdbCache[tmdbId] = kitsuIds
                 }
-                Log.d(TAG, "ARM API: tmdbId=$tmdbId -> kitsuIds=$kitsuIds")
             }
             kitsuIds.ifEmpty { null }
         } catch (e: Exception) {
-            Log.w(TAG, "ARM API fetch failed: ${e.message}")
             null
         }
     }
@@ -699,7 +669,6 @@ class AnimeMapper @Inject constructor(
             }
             null
         } catch (e: Exception) {
-            Log.w(TAG, "Tier 3 TVDB lookup failed: ${e.message}")
             null
         }
     }
@@ -741,7 +710,6 @@ class AnimeMapper @Inject constructor(
             }
             null
         } catch (e: Exception) {
-            Log.w(TAG, "Tier 4 title search failed: ${e.message}")
             null
         }
     }
@@ -812,11 +780,9 @@ class AnimeMapper @Inject constructor(
             val offset = calculateTmdbSeasonOffset(tmdbId, season)
             // Detect if TMDB already uses absolute episode numbering (e.g., One Piece)
             if (offset > 0 && episode >= offset) {
-                Log.d(TAG, "Absolute numbering (already absolute): kitsu:$kitsuId:$episode (season=$season, offset=$offset, ep >= offset)")
                 return Pair(kitsuId, episode)
             }
             val absEpisode = offset + episode
-            Log.d(TAG, "Absolute numbering: kitsu:$kitsuId:$absEpisode (season=$season, ep=$episode, offset=$offset)")
             return Pair(kitsuId, absEpisode)
         }
 
@@ -825,7 +791,6 @@ class AnimeMapper @Inject constructor(
             // Season 1: validate episode is within range
             if (episodeCount != null && episode > episodeCount) {
                 // Episode exceeds this entry's count — walk sequels (cours split)
-                Log.d(TAG, "Episode $episode exceeds kitsu:$kitsuId count ($episodeCount), walking sequels")
                 val result = walkSequelsForEpisode(kitsuId, episode)
                 if (result != null) return result
             }
@@ -840,12 +805,10 @@ class AnimeMapper @Inject constructor(
         // Fallback: try absolute offset calculation
         val offset = calculateTmdbSeasonOffset(tmdbId, season)
         if (offset > 0) {
-            Log.d(TAG, "Sequel walk failed, falling back to absolute: kitsu:$kitsuId:${offset + episode}")
             return Pair(kitsuId, offset + episode)
         }
 
         // Last resort: use episode as-is with original Kitsu ID
-        Log.d(TAG, "All resolution failed, using raw: kitsu:$kitsuId:$episode")
         return Pair(kitsuId, episode)
     }
 
@@ -875,7 +838,6 @@ class AnimeMapper @Inject constructor(
             // Move to the next sequel
             val sequelId = getKitsuSequelId(currentId)
             if (sequelId == null) {
-                Log.d(TAG, "Sequel chain ended at kitsu:$currentId after $seasonsTraversed seasons (target: $targetSeason)")
                 return null
             }
             currentId = sequelId
@@ -909,7 +871,6 @@ class AnimeMapper @Inject constructor(
             val sequelId = getKitsuSequelId(currentId)
             if (sequelId == null) {
                 // No more sequels — use the last entry with remaining offset
-                Log.d(TAG, "No more sequels after kitsu:$currentId, using remaining=$remaining")
                 return Pair(currentId, remaining)
             }
             currentId = sequelId
@@ -963,7 +924,6 @@ class AnimeMapper @Inject constructor(
                     }
                     resolvedSequelId = sequel?.relationships?.destination?.data?.id?.toIntOrNull()
                 } catch (e: Exception) {
-                    Log.w(TAG, "Unfiltered media-relationships also failed for kitsu:$kitsuId: ${e.message}")
                 }
             }
 
@@ -974,11 +934,9 @@ class AnimeMapper @Inject constructor(
             }
 
             if (resolvedSequelId != null) {
-                Log.d(TAG, "Found sequel for kitsu:$kitsuId -> kitsu:$resolvedSequelId")
             }
             resolvedSequelId
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to get sequel for kitsu:$kitsuId: ${e.message}")
             cacheMutex.withLock {
                 sequelCache[kitsuId] = null
                 hasSequelCache[kitsuId] = false
@@ -1008,7 +966,6 @@ class AnimeMapper @Inject constructor(
             }
             count
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to get episode count for kitsu:$kitsuId: ${e.message}")
             null
         }
     }
@@ -1033,7 +990,6 @@ class AnimeMapper @Inject constructor(
                     }
                     count
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to get TMDB season $s episode count: ${e.message}")
                     0
                 }
             offset += epCount

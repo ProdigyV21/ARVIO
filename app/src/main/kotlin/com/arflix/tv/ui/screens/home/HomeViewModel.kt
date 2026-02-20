@@ -44,7 +44,6 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.cancelAndJoin
-import androidx.tracing.Trace
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -137,13 +136,27 @@ class HomeViewModel @Inject constructor(
 
     private val logoCache = ConcurrentHashMap<String, String>()
     private val preloadedRequests = Collections.synchronizedSet(mutableSetOf<String>())
+    private var logoCachePublishJob: Job? = null
+    private var lastLogoCachePublishMs: Long = 0L
+    private val LOGO_CACHE_PUBLISH_THROTTLE_MS = 180L
 
     private fun publishLogoCacheSnapshotIfChanged() {
         val current = _uiState.value.cardLogoUrls
         if (current.size == logoCache.size && logoCache.all { (k, v) -> current[k] == v }) {
             return
         }
+        lastLogoCachePublishMs = SystemClock.elapsedRealtime()
         _uiState.value = _uiState.value.copy(cardLogoUrls = logoCache.toMap())
+    }
+
+    private fun scheduleLogoCachePublish() {
+        if (logoCachePublishJob?.isActive == true) return
+        logoCachePublishJob = viewModelScope.launch {
+            val elapsed = SystemClock.elapsedRealtime() - lastLogoCachePublishMs
+            val waitMs = (LOGO_CACHE_PUBLISH_THROTTLE_MS - elapsed).coerceAtLeast(0L)
+            if (waitMs > 0L) delay(waitMs)
+            publishLogoCacheSnapshotIfChanged()
+        }
     }
 
     init {
@@ -165,7 +178,6 @@ class HomeViewModel @Inject constructor(
             delay(1200L)
             runCatching {
                 iptvRepository.warmupFromCacheOnly()
-                iptvRepository.warmXtreamVodCachesIfPossible()
             }
         }
         viewModelScope.launch {
@@ -259,7 +271,6 @@ class HomeViewModel @Inject constructor(
         loadHomeJob?.cancel()
         val requestId = ++loadHomeRequestId
         loadHomeJob = viewModelScope.launch loadHome@{
-            Trace.beginSection("HomeViewModel.loadHomeData")
             // Skip delay - preloading now happens on profile focus for instant display
             // Only add minimal delay if no preloaded data exists yet
             if (!usedPreloadedData) {
@@ -462,7 +473,6 @@ class HomeViewModel @Inject constructor(
                     error = if (_uiState.value.categories.isEmpty()) e.message ?: "Failed to load content" else null
                 )
             } finally {
-                Trace.endSection()
             }
         }
     }
@@ -826,7 +836,6 @@ class HomeViewModel @Inject constructor(
      * Uses fast-scroll detection for smoother experience during rapid navigation
      */
     fun updateHeroItem(item: MediaItem) {
-        Trace.beginSection("HomeViewModel.updateHeroItem")
         val cacheKey = "${item.mediaType}_${item.id}"
         val cachedLogo = logoCache[cacheKey]
 
@@ -856,7 +865,6 @@ class HomeViewModel @Inject constructor(
             heroUpdateJob?.cancel()
             performHeroUpdate(item, cachedLogo)
             scheduleHeroDetailsFetch(item, fastScrolling)
-            Trace.endSection()
             return
         }
 
@@ -882,10 +890,10 @@ class HomeViewModel @Inject constructor(
                     if (logoUrl != null && _uiState.value.heroItem?.id == item.id) {
                         logoCache[cacheKey] = logoUrl
                         _uiState.value = _uiState.value.copy(
-                            cardLogoUrls = logoCache.toMap(),
                             heroLogoUrl = logoUrl,
                             isHeroTransitioning = false
                         )
+                        scheduleLogoCachePublish()
                         // Preload the logo image
                         preloadLogoImages(listOf(logoUrl))
                     }
@@ -894,7 +902,6 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
-        Trace.endSection()
     }
 
     private fun performHeroUpdate(item: MediaItem, logoUrl: String?) {
@@ -993,7 +1000,7 @@ class HomeViewModel @Inject constructor(
 
             if (newLogos.isNotEmpty()) {
                 logoCache.putAll(newLogos)
-                publishLogoCacheSnapshotIfChanged()
+                scheduleLogoCachePublish()
                 // Preload actual images
                 preloadLogoImages(newLogos.values.toList())
             }
@@ -1041,7 +1048,7 @@ class HomeViewModel @Inject constructor(
 
                 if (newLogos.isNotEmpty()) {
                     logoCache.putAll(newLogos)
-                    publishLogoCacheSnapshotIfChanged()
+                    scheduleLogoCachePublish()
                     // Preload actual images
                     preloadLogoImages(newLogos.values.toList())
                 }

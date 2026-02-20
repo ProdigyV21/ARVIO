@@ -35,7 +35,6 @@ object CrashlyticsProvider : AppLogger.CrashContextProvider {
     fun initialize(): Boolean {
         // Check if crash reporting is enabled for this build variant
         if (!com.arflix.tv.BuildConfig.ENABLE_CRASH_REPORTING) {
-            Log.d(TAG, "Crashlytics disabled for this build variant")
             isInitialized = false
             AppLogger.init(null)
             return false
@@ -47,11 +46,9 @@ object CrashlyticsProvider : AppLogger.CrashContextProvider {
             crashlytics.setCrashlyticsCollectionEnabled(true)
             isInitialized = true
             AppLogger.init(this)
-            Log.i(TAG, "Crashlytics initialized successfully")
             true
         } catch (e: Exception) {
             // Firebase not configured - that's OK, just disable crash reporting
-            Log.w(TAG, "Crashlytics not available (Firebase not configured): ${e.message}")
             isInitialized = false
             AppLogger.init(null)
             false

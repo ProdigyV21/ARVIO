@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.arflix.tv.data.model.MediaItem
@@ -146,16 +145,12 @@ fun MediaCard(
             },
         ) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
-                // SubcomposeAsyncImage with shimmer placeholder for smooth loading
-                SubcomposeAsyncImage(
+                // Lighter image path for smooth TV scrolling.
+                SkeletonBox(modifier = Modifier.fillMaxSize())
+                AsyncImage(
                     model = imageRequest,
                     contentDescription = item.title,
                     contentScale = ContentScale.Crop,
-                    loading = {
-                        SkeletonBox(
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .background(ArvioSkin.colors.surface)
@@ -367,16 +362,11 @@ fun PosterCard(
                 if (it) onFocused()
             },
         ) { _ ->
-            // SubcomposeAsyncImage with shimmer placeholder
-            SubcomposeAsyncImage(
+            SkeletonBox(modifier = Modifier.fillMaxSize())
+            AsyncImage(
                 model = imageRequest,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
-                loading = {
-                    SkeletonBox(
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                },
                 modifier = Modifier
                     .fillMaxSize()
                     .background(ArvioSkin.colors.surface),

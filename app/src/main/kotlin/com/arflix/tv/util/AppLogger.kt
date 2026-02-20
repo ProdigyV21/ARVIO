@@ -54,7 +54,6 @@ object AppLogger {
      */
     fun v(tag: String, message: String) {
         if (BuildConfig.DEBUG) {
-            Log.v(formatTag(tag), sanitize(message))
         }
     }
 
@@ -63,7 +62,6 @@ object AppLogger {
      */
     fun d(tag: String, message: String) {
         if (BuildConfig.DEBUG) {
-            Log.d(formatTag(tag), sanitize(message))
         }
     }
 
@@ -72,7 +70,6 @@ object AppLogger {
      */
     fun i(tag: String, message: String) {
         if (BuildConfig.DEBUG) {
-            Log.i(formatTag(tag), sanitize(message))
         }
     }
 
@@ -81,7 +78,6 @@ object AppLogger {
      */
     fun w(tag: String, message: String, throwable: Throwable? = null) {
         val sanitized = sanitize(message)
-        Log.w(formatTag(tag), sanitized, throwable)
         crashContextProvider?.log("W/$tag: $sanitized")
     }
 
@@ -90,7 +86,6 @@ object AppLogger {
      */
     fun e(tag: String, message: String, throwable: Throwable? = null) {
         val sanitized = sanitize(message)
-        Log.e(formatTag(tag), sanitized, throwable)
         crashContextProvider?.log("E/$tag: $sanitized")
         throwable?.let { crashContextProvider?.recordException(it) }
     }

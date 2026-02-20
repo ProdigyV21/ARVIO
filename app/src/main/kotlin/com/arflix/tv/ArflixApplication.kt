@@ -93,6 +93,8 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         // Full sync only happens on periodic schedule or explicit user action
         val oneTimeRequest = OneTimeWorkRequestBuilder<TraktSyncWorker>()
             .setConstraints(constraints)
+            // Defer startup sync to keep first-run navigation and scrolling smooth.
+            .setInitialDelay(2, TimeUnit.MINUTES)
             .setInputData(
                 workDataOf(TraktSyncWorker.INPUT_SYNC_MODE to TraktSyncWorker.SYNC_MODE_INCREMENTAL)
             )
@@ -108,7 +110,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
 
         WorkManager.getInstance(this).enqueueUniqueWork(
             TraktSyncWorker.WORK_NAME_ON_OPEN,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             oneTimeRequest
         )
 
@@ -117,8 +119,6 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             ExistingPeriodicWorkPolicy.KEEP,
             syncRequest
         )
-
-        AppLogger.d("Application", "Trakt sync worker scheduled")
     }
 
     companion object {

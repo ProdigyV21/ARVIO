@@ -138,7 +138,6 @@ class AuthRepository @Inject constructor(
      * Note: Supabase SDK requires main thread for initialization (lifecycle observers)
      */
     suspend fun checkAuthState() {
-        AppLogger.d(TAG, "=== checkAuthState started ===")
         try {
             val prefs = context.authDataStore.data.first()
             val accessToken = prefs[PrefsKeys.ACCESS_TOKEN]
@@ -148,59 +147,44 @@ class AuthRepository @Inject constructor(
 
             val hasAccessToken = !accessToken.isNullOrBlank()
             val hasRefreshToken = !refreshToken.isNullOrBlank()
-
-            AppLogger.d(TAG, "Cached data: hasAccessToken=$hasAccessToken, hasRefreshToken=$hasRefreshToken, hasUserId=${!cachedUserId.isNullOrBlank()}, hasEmail=${!cachedEmail.isNullOrBlank()}")
-
             var session: UserSession? = null
 
             // Supabase SDK requires main thread for initialization (lifecycle observers)
             // First try: Load from SessionManager via Supabase SDK
             try {
-                AppLogger.d(TAG, "Attempting to load session from storage via Supabase SDK...")
                 session = withContext(Dispatchers.Main) {
                     supabase.auth.loadFromStorage(true)
                     supabase.auth.currentSessionOrNull()
                 }
                 if (session != null) {
-                    AppLogger.d(TAG, "Session loaded from SessionManager for user: ${session.user?.email?.sanitizeEmail()}")
                 } else {
-                    AppLogger.d(TAG, "No session found in SessionManager")
                 }
             } catch (e: Exception) {
-                AppLogger.w(TAG, "Failed to load session from storage: ${e.message}", e)
             }
 
             // Second try: Import from cached tokens
             if (session == null && hasAccessToken && hasRefreshToken) {
                 try {
-                    AppLogger.d(TAG, "Attempting to import auth tokens...")
                     session = withContext(Dispatchers.Main) {
                         supabase.auth.importAuthToken(accessToken ?: "", refreshToken ?: "", false, true)
                         supabase.auth.currentSessionOrNull()
                     }
                     if (session != null) {
-                        AppLogger.d(TAG, "Session imported from cached tokens")
                         // Save the imported session to SessionManager
                         storeSession(session)
                     }
                 } catch (e: Exception) {
-                    AppLogger.w(TAG, "Failed to import auth tokens: ${e.message}", e)
                 }
             }
 
             // Third try: Refresh the session
             if (session == null && hasRefreshToken) {
-                AppLogger.d(TAG, "Attempting to refresh session...")
                 session = withContext(Dispatchers.Main) {
                     ensureValidSession()
                 }
                 if (session != null) {
-                    AppLogger.d(TAG, "Session refreshed successfully")
                 }
             }
-
-            AppLogger.d(TAG, "Final session state: session=${if (session != null) "present" else "null"}")
-
             if (hasAccessToken || hasRefreshToken || session != null || !cachedUserId.isNullOrBlank()) {
                 val userId = session?.user?.id ?: cachedUserId
                 val email = session?.user?.email ?: cachedEmail
@@ -211,7 +195,6 @@ class AuthRepository @Inject constructor(
                     val profile = loadUserProfile(userId)
                     _userProfile.value = profile
                     _authState.value = AuthState.Authenticated(userId, email, profile)
-                    AppLogger.d(TAG, "=== Auth restored successfully: ${email.sanitizeEmail()} ===")
                 } else if (userId != null && email != null) {
                     // Fallback to cached identity even if refresh failed (avoid forcing daily logins).
                     val profile = try {
@@ -223,23 +206,18 @@ class AuthRepository @Inject constructor(
                     traktRepositoryProvider.get().syncLocalTokensToProfileIfNeeded()
                     _userProfile.value = profile
                     _authState.value = AuthState.Authenticated(userId, email, profile)
-                    AppLogger.w(TAG, "Using cached identity for ${email.sanitizeEmail()}")
                 } else {
-                    AppLogger.e(TAG, "=== Session refresh failed, user not authenticated ===")
                     _authState.value = AuthState.NotAuthenticated
                 }
             } else {
                 if (!cachedUserId.isNullOrBlank() && !cachedEmail.isNullOrBlank()) {
                     _userProfile.value = UserProfile(id = cachedUserId, email = cachedEmail)
                     _authState.value = AuthState.Authenticated(cachedUserId, cachedEmail, _userProfile.value)
-                    AppLogger.w(TAG, "=== Using cached user without tokens for ${cachedEmail.sanitizeEmail()} ===")
                 } else {
-                    AppLogger.d(TAG, "=== No auth data found, user not authenticated ===")
                     _authState.value = AuthState.NotAuthenticated
                 }
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "=== Error checking auth state: ${e.message} ===", e)
             _authState.value = AuthState.NotAuthenticated
         }
     }
@@ -248,7 +226,6 @@ class AuthRepository @Inject constructor(
      * Sign in with email and password
      */
     suspend fun signIn(email: String, password: String): Result<Unit> {
-        AppLogger.d(TAG, "=== signIn started for: ${email.sanitizeEmail()} ===")
         return try {
             _authState.value = AuthState.Loading
 
@@ -261,7 +238,6 @@ class AuthRepository @Inject constructor(
             val user = session?.user
 
             if (user != null && session != null) {
-                AppLogger.d(TAG, "Sign in successful, storing session...")
                 storeSession(session)
 
                 // Load or create profile
@@ -272,16 +248,13 @@ class AuthRepository @Inject constructor(
 
                 _userProfile.value = profile
                 _authState.value = AuthState.Authenticated(user.id, user.email ?: email, profile)
-                AppLogger.d(TAG, "=== Sign in complete: ${user.email?.sanitizeEmail()} ===")
                 Result.success(Unit)
             } else {
                 val message = safeErrorMessage(null, "Sign in failed")
-                AppLogger.e(TAG, "Sign in failed: no user in session")
                 _authState.value = AuthState.Error(message)
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "=== Sign in error: ${e.message} ===", e)
             val message = safeErrorMessage(e, "Sign in failed")
             _authState.value = AuthState.Error(message)
             Result.failure(Exception(message))
@@ -310,7 +283,6 @@ class AuthRepository @Inject constructor(
                 val profile = createDefaultProfile(user.id, user.email ?: email)
                 _userProfile.value = profile
                 _authState.value = AuthState.Authenticated(user.id, user.email ?: email, profile)
-                AppLogger.d(TAG, "Sign up successful: ${user.email?.sanitizeEmail()}")
                 Result.success(Unit)
             } else {
                 // Account created but needs email verification
@@ -319,7 +291,6 @@ class AuthRepository @Inject constructor(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Sign up error", e)
             val message = safeErrorMessage(e, "Sign up failed")
             _authState.value = AuthState.Error(message)
             Result.failure(Exception(message))
@@ -333,7 +304,6 @@ class AuthRepository @Inject constructor(
         accessToken: String,
         refreshToken: String
     ): Result<Unit> {
-        AppLogger.d(TAG, "=== signInWithSessionTokens started ===")
         return try {
             _authState.value = AuthState.Loading
             val session = withContext(Dispatchers.Main) {
@@ -349,14 +319,12 @@ class AuthRepository @Inject constructor(
                 }
                 _userProfile.value = profile
                 _authState.value = AuthState.Authenticated(user.id, user.email ?: "", profile)
-                AppLogger.d(TAG, "=== Token sign-in complete: ${user.email?.sanitizeEmail()} ===")
                 Result.success(Unit)
             } else {
                 _authState.value = AuthState.Error("Failed to import auth session")
                 Result.failure(Exception("Failed to import auth session"))
             }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Token sign-in error", e)
             val message = safeErrorMessage(e, "Sign in failed")
             _authState.value = AuthState.Error(message)
             Result.failure(Exception(message))
@@ -423,7 +391,6 @@ class AuthRepository @Inject constructor(
 
                             _userProfile.value = profile
                             _authState.value = AuthState.Authenticated(user.id, user.email ?: "", profile)
-                            AppLogger.d(TAG, "Google Sign-In successful: ${user.email?.sanitizeEmail()}")
                             Result.success(Unit)
                         } else {
                             _authState.value = AuthState.Error("Google Sign-In failed")
@@ -440,11 +407,9 @@ class AuthRepository @Inject constructor(
                 }
             }
         } catch (e: GoogleIdTokenParsingException) {
-            AppLogger.e(TAG, "Google ID token parsing error", e)
             _authState.value = AuthState.Error("Failed to parse Google credentials")
             Result.failure(e)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Google Sign-In error", e)
             _authState.value = AuthState.Error(e.message ?: "Google Sign-In failed")
             Result.failure(e)
         }
@@ -457,13 +422,11 @@ class AuthRepository @Inject constructor(
         try {
             supabase.auth.signOut()
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error signing out from Supabase", e)
         }
 
         try {
             traktRepositoryProvider.get().logout()
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error clearing Trakt session", e)
         }
 
         // Clear local data
@@ -473,7 +436,6 @@ class AuthRepository @Inject constructor(
 
         _userProfile.value = null
         _authState.value = AuthState.NotAuthenticated
-        AppLogger.d(TAG, "Signed out")
     }
     
     /**
@@ -498,13 +460,10 @@ class AuthRepository @Inject constructor(
                 } else {
                     traktRepositoryProvider.get().syncLocalTokensToProfileIfNeeded()
                 }
-
-                AppLogger.d(TAG, "Loaded profile for ${userId.hash()}")
             }
 
             result
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error loading profile", e)
             null
         }
     }
@@ -526,10 +485,7 @@ class AuthRepository @Inject constructor(
             // Set user ID in Trakt repo for Supabase sync
             traktRepositoryProvider.get().setUserId(userId)
             traktRepositoryProvider.get().syncLocalTokensToProfileIfNeeded()
-
-            AppLogger.d(TAG, "Created default profile for ${userId.hash()}")
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error creating profile", e)
         }
 
         return UserProfile(
@@ -562,10 +518,8 @@ class AuthRepository @Inject constructor(
                 }
             
             _userProfile.value = profile
-            AppLogger.d(TAG, "Profile updated")
             Result.success(Unit)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error updating profile", e)
             Result.failure(e)
         }
     }
@@ -618,7 +572,6 @@ class AuthRepository @Inject constructor(
             storeSession(refreshed)
             refreshed.accessToken
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to refresh Supabase session", e)
             null
         }
     }
@@ -630,7 +583,6 @@ class AuthRepository @Inject constructor(
                 supabase.auth.loadFromStorage(false)
                 session = supabase.auth.currentSessionOrNull()
             } catch (e: Exception) {
-                AppLogger.w(TAG, "Failed to load session before refresh", e)
             }
         }
         if (session != null && !isSessionExpired(session)) {
@@ -649,7 +601,6 @@ class AuthRepository @Inject constructor(
             storeSession(refreshed)
             refreshed
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to refresh Supabase session", e)
             null
         }
     }
@@ -680,31 +631,24 @@ class AuthRepository @Inject constructor(
             val json = JSONObject(payload)
             // SECURITY FIX: Reject tokens without exp claim
             if (!json.has("exp")) {
-                AppLogger.w(TAG, "JWT token missing exp claim - rejecting as expired")
                 return true
             }
             val exp = json.getLong("exp")
             if (exp <= 0L) {
-                AppLogger.w(TAG, "JWT token has invalid exp claim ($exp) - rejecting as expired")
                 return true
             }
             val now = Clock.System.now().epochSeconds
             exp <= now + bufferSeconds
         } catch (e: Exception) {
-            AppLogger.w(TAG, "Failed to parse JWT token: ${e.message}")
             true
         }
     }
 
     private suspend fun storeSession(session: UserSession) {
-        AppLogger.d(TAG, "Storing session for user: ${session.user?.email?.sanitizeEmail()}")
-
         // 1. Explicitly save through session manager (for Supabase SDK auto-restore)
         try {
             sessionManager.saveSession(session)
-            AppLogger.d(TAG, "Session saved to DataStoreSessionManager")
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to save session to SessionManager", e)
         }
 
         // 2. Also save tokens directly (fallback for manual restoration)
@@ -717,7 +661,6 @@ class AuthRepository @Inject constructor(
                 user.email?.let { prefs[PrefsKeys.USER_EMAIL] = it }
             }
         }
-        AppLogger.d(TAG, "Session tokens stored to DataStore")
     }
 
     /**
@@ -760,7 +703,6 @@ class AuthRepository @Inject constructor(
 
             Result.success(row?.addons)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error loading addons from Supabase profile", e)
             Result.failure(e)
         }
     }
@@ -792,10 +734,8 @@ class AuthRepository @Inject constructor(
                 email = resolvedEmail,
                 addons = addonsJson
             )
-            AppLogger.d(TAG, "Addons saved to Supabase")
             Result.success(Unit)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error saving addons to Supabase", e)
             Result.failure(e)
         }
     }
@@ -826,10 +766,8 @@ class AuthRepository @Inject constructor(
                 }
 
             _userProfile.value = currentProfile.copy(default_subtitle = subtitle)
-            AppLogger.d(TAG, "Default subtitle saved to Supabase")
             Result.success(Unit)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error saving subtitle to Supabase", e)
             Result.failure(e)
         }
     }
@@ -860,10 +798,8 @@ class AuthRepository @Inject constructor(
                 }
 
             _userProfile.value = currentProfile.copy(auto_play_next = autoPlayNext)
-            AppLogger.d(TAG, "Auto play next saved to Supabase: $autoPlayNext")
             Result.success(Unit)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error saving auto play next to Supabase", e)
             Result.failure(e)
         }
     }
@@ -880,7 +816,6 @@ class AuthRepository @Inject constructor(
                 .decodeSingleOrNull<AccountSyncStateRow>()
             Result.success(row?.payload)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error loading account sync payload", e)
             Result.failure(e)
         }
     }
@@ -899,7 +834,6 @@ class AuthRepository @Inject constructor(
                 )
             Result.success(Unit)
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Error saving account sync payload", e)
             Result.failure(e)
         }
     }

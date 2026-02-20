@@ -6,6 +6,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import com.arflix.tv.BuildConfig
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -201,6 +202,11 @@ fun PlayerScreen(
     var streamSelectedTime by remember { mutableStateOf<Long?>(null) }
     var playbackIssueReported by remember { mutableStateOf(false) }
     var startupRecoverAttempted by remember { mutableStateOf(false) }
+    var startupHardFailureReported by remember { mutableStateOf(false) }
+    var startupSameSourceRetryCount by remember { mutableIntStateOf(0) }
+    var startupSameSourceRefreshAttempted by remember { mutableStateOf(false) }
+    var startupUrlLock by remember { mutableStateOf<String?>(null) }
+    val heavyStartupMaxRetries = 6
     var rebufferRecoverAttempted by remember { mutableStateOf(false) }
     var autoAdvanceAttempts by remember { mutableIntStateOf(0) }
     var triedStreamIndexes by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -211,6 +217,10 @@ fun PlayerScreen(
     LaunchedEffect(mediaType, mediaId, seasonNumber, episodeNumber, imdbId, preferredAddonId, preferredSourceName, startPositionMs) {
         playbackIssueReported = false
         startupRecoverAttempted = false
+        startupHardFailureReported = false
+        startupSameSourceRetryCount = 0
+        startupSameSourceRefreshAttempted = false
+        startupUrlLock = null
         rebufferRecoverAttempted = false
         autoAdvanceAttempts = 0
         triedStreamIndexes = emptySet()
@@ -252,6 +262,10 @@ fun PlayerScreen(
                 userSelectedSourceManually = false
                 playbackIssueReported = false
                 startupRecoverAttempted = false
+                startupHardFailureReported = false
+                startupSameSourceRetryCount = 0
+                startupSameSourceRefreshAttempted = false
+                startupUrlLock = null
                 rebufferRecoverAttempted = false
                 isAutoAdvancing = true
                 viewModel.selectStream(streams[nextIndex])
@@ -271,8 +285,8 @@ fun PlayerScreen(
         DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(8_000)
-            .setReadTimeoutMs(25_000)
+            .setConnectTimeoutMs(20_000)
+            .setReadTimeoutMs(120_000)
             .setDefaultRequestProperties(baseRequestHeaders)
     }
 
@@ -286,8 +300,8 @@ fun PlayerScreen(
             .setBufferDurationsMs(
                 10_000,
                 300_000,
-                700,
-                2_000
+                4_000,
+                4_000
             )
             .setTargetBufferBytes(100 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(true)
@@ -318,10 +332,11 @@ fun PlayerScreen(
                         .setAllowAudioMixedMimeTypeAdaptiveness(true)
                         // Disable HDR requirement - play HDR as SDR if needed
                         .setForceLowestBitrate(false)
-                        // Don't restrict by device capabilities
-                        .setExceedVideoConstraintsIfNecessary(true)
-                        .setExceedAudioConstraintsIfNecessary(true)
-                        .setExceedRendererCapabilitiesIfNecessary(true)
+                        // Stay within device capabilities to avoid endless startup buffering
+                        // on unsupported 4K remux tracks (codec/profile/audio combination).
+                        .setExceedVideoConstraintsIfNecessary(false)
+                        .setExceedAudioConstraintsIfNecessary(false)
+                        .setExceedRendererCapabilitiesIfNecessary(false)
                         .build()
                 }
             )
@@ -347,16 +362,16 @@ fun PlayerScreen(
                             Player.STATE_ENDED -> "ENDED"
                             else -> "UNKNOWN($playbackState)"
                         }
-                        android.util.Log.d("PlayerScreen", "Playback state changed: $stateStr, position=${currentPosition}ms, isPlaying=$isPlaying")
+                        if (BuildConfig.DEBUG) {
+                        }
                     }
 
                     override fun onIsPlayingChanged(playing: Boolean) {
-                        android.util.Log.d("PlayerScreen", "isPlaying changed: $playing, state=${playbackState}, position=${currentPosition}ms")
+                        if (BuildConfig.DEBUG) {
+                        }
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        android.util.Log.e("PlayerScreen", "Playback error: code=${error.errorCode}, message=${error.message}, cause=${error.cause?.message}")
-
                         // Source/decoder/network errors on startup should fail over to another source.
                         // Error codes: https://developer.android.com/reference/androidx/media3/common/PlaybackException
                         val isSourceError = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
@@ -368,10 +383,43 @@ fun PlayerScreen(
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                            error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
                             error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_TIMEOUT
 
                         if (isSourceError) {
+                            val heavy = isLikelyHeavyStream(uiState.selectedStream)
+                            val timeoutMessage = buildString {
+                                append(error.message.orEmpty())
+                                append(' ')
+                                append(error.cause?.message.orEmpty())
+                            }.lowercase()
+                            val isTimeoutError =
+                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_TIMEOUT ||
+                                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+                                    "timeout" in timeoutMessage ||
+                                    "timed out" in timeoutMessage ||
+                                    "sockettimeout" in timeoutMessage ||
+                                    "etimedout" in timeoutMessage
+
+                            // For heavy sources, retry same source first instead of failing immediately.
+                            if (!hasPlaybackStarted && heavy && isTimeoutError && startupSameSourceRetryCount < heavyStartupMaxRetries) {
+                                startupSameSourceRetryCount += 1
+                                val wasPlaying = playWhenReady
+                                stop()
+                                prepare()
+                                playWhenReady = wasPlaying
+                                return
+                            }
+                            if (!hasPlaybackStarted && heavy && isTimeoutError) {
+                                // One-time full re-resolve of same source to refresh debrid URL/headers.
+                                if (!startupSameSourceRefreshAttempted) {
+                                    startupSameSourceRefreshAttempted = true
+                                    uiState.selectedStream?.let { viewModel.selectStream(it) }
+                                    return
+                                }
+                            }
+
                             if (!hasPlaybackStarted &&
                                 allowAutomaticSourceFallback &&
                                 !userSelectedSourceManually &&
@@ -527,8 +575,17 @@ fun PlayerScreen(
     // Update player when stream URL changes - also add subtitle if selected
     LaunchedEffect(uiState.selectedStreamUrl) {
         val url = uiState.selectedStreamUrl
-        android.util.Log.d("PlayerScreen", "Stream URL changed: $url")
+        if (BuildConfig.DEBUG) {
+        }
         if (url != null) {
+            val isNewStartupSource = startupUrlLock != url
+            if (isNewStartupSource) {
+                startupUrlLock = url
+                startupRecoverAttempted = false
+                startupHardFailureReported = false
+                startupSameSourceRetryCount = 0
+                startupSameSourceRefreshAttempted = false
+            }
             val streamHeaders = uiState.selectedStream
                 ?.behaviorHints
                 ?.proxyHeaders
@@ -542,44 +599,17 @@ fun PlayerScreen(
             bufferingStartTime = null
             hasPlaybackStarted = false  // Reset for new stream
             playbackIssueReported = false
-            startupRecoverAttempted = false
             rebufferRecoverAttempted = false
 
             // New stream means any previously-applied external subtitle config is stale.
             lastAppliedExternalSubtitleUrl = null
             lastAppliedExternalSubtitleNonce = -1
 
-            // Let ExoPlayer auto-detect MIME type - URL extensions often don't match actual content
-            val mediaItemBuilder = MediaItem.Builder()
+            // Always start playback with video-only media item first.
+            // External subtitles are applied after startup to avoid blocking stream start.
+            val mediaItem = MediaItem.Builder()
                 .setUri(Uri.parse(url))
-
-            // Add subtitle if already selected (for auto-select default subtitle)
-            val subtitle = uiState.selectedSubtitle
-            if (subtitle != null && !subtitle.isEmbedded && subtitle.url.isNotBlank()) {
-                val subtitleUrl = subtitle.url.trim().let { if (it.startsWith("//")) "https:$it" else it }
-                val cleanUrl = subtitleUrl.substringBefore('?')
-                val subMimeType = when {
-                    cleanUrl.endsWith(".vtt", ignoreCase = true) -> MimeTypes.TEXT_VTT
-                    cleanUrl.endsWith(".srt", ignoreCase = true) -> MimeTypes.APPLICATION_SUBRIP
-                    cleanUrl.endsWith(".srt.gz", ignoreCase = true) -> MimeTypes.APPLICATION_SUBRIP
-                    cleanUrl.endsWith(".ass", ignoreCase = true) -> MimeTypes.TEXT_SSA
-                    cleanUrl.endsWith(".ssa", ignoreCase = true) -> MimeTypes.TEXT_SSA
-                    cleanUrl.endsWith(".ttml", ignoreCase = true) -> MimeTypes.APPLICATION_TTML
-                    cleanUrl.endsWith(".dfxp", ignoreCase = true) -> MimeTypes.APPLICATION_TTML
-                    else -> MimeTypes.APPLICATION_SUBRIP
-                }
-                val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
-                    .setMimeType(subMimeType)
-                    .setLanguage(subtitle.lang)
-                    .setLabel(subtitle.label)
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
-                    .setRoleFlags(C.ROLE_FLAG_SUBTITLE)
-                    .build()
-                mediaItemBuilder.setSubtitleConfigurations(listOf(subtitleConfig))
-                lastAppliedExternalSubtitleUrl = subtitleUrl
-            }
-
-            val mediaItem = mediaItemBuilder.build()
+                .build()
             val resumePosition = uiState.savedPosition
             if (resumePosition > 0L) {
                 exoPlayer.setMediaItem(mediaItem, resumePosition)
@@ -590,6 +620,7 @@ fun PlayerScreen(
             exoPlayer.playWhenReady = true
 
             // Enable text track display
+            val subtitle = uiState.selectedSubtitle
             if (subtitle != null) {
                 exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                     .buildUpon()
@@ -603,7 +634,7 @@ fun PlayerScreen(
         }
     }
     // Apply subtitle when user selects a different one.
-    LaunchedEffect(uiState.selectedSubtitle, uiState.subtitleSelectionNonce) {
+    LaunchedEffect(uiState.selectedSubtitle, uiState.subtitleSelectionNonce, hasPlaybackStarted) {
         val streamUrl = uiState.selectedStreamUrl ?: return@LaunchedEffect
         val subtitle = uiState.selectedSubtitle
 
@@ -615,7 +646,7 @@ fun PlayerScreen(
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
 
-            if (lastAppliedExternalSubtitleUrl != null) {
+            if (lastAppliedExternalSubtitleUrl != null && hasPlaybackStarted) {
                 val currentPosition = exoPlayer.currentPosition
                 val wasPlaying = exoPlayer.isPlaying
                 val mediaItem = MediaItem.Builder()
@@ -657,7 +688,19 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
 
+        // Avoid first-second rebuffer: auto-selected external subtitles (nonce == 0)
+        // should not rebuild the media item during startup.
+        // External subtitles will still work when user explicitly selects one.
+        if (uiState.subtitleSelectionNonce == 0) {
+            return@LaunchedEffect
+        }
+
         // External subtitle: rebuild media item.
+        if (!hasPlaybackStarted) {
+            // Do not rebuild media item before initial playback starts.
+            // This prevents startup loops on slow/debrid streams.
+            return@LaunchedEffect
+        }
         val subtitleUrl = subtitle.url.trim().let { if (it.startsWith("//")) "https:$it" else it }
         if (subtitleUrl.isBlank()) return@LaunchedEffect
 
@@ -835,17 +878,19 @@ fun PlayerScreen(
                 bufferingStartTime = null
             }
 
-            // Initial startup watchdog: avoid waiting too long while stuck at 00:00.
+            // Initial startup watchdog: while first frame has not really started, enforce bounded startup.
+            val startupPending = uiState.selectedStreamUrl != null && !hasPlaybackStarted
             val startupStalled =
-                exoPlayer.currentPosition <= 0L &&
-                    (
-                        exoPlayer.playbackState == Player.STATE_BUFFERING ||
-                            (exoPlayer.playbackState == Player.STATE_READY && !exoPlayer.isPlaying)
-                    )
-            if (uiState.selectedStreamUrl != null && startupStalled) {
+                (
+                    exoPlayer.playbackState == Player.STATE_BUFFERING ||
+                        (exoPlayer.playbackState == Player.STATE_READY && !exoPlayer.isPlaying) ||
+                        exoPlayer.playbackState == Player.STATE_IDLE
+                )
+            if (startupPending) {
                 val selectedAt = streamSelectedTime ?: System.currentTimeMillis()
                 val startupBufferDuration = System.currentTimeMillis() - selectedAt
-                if (startupBufferDuration > initialBufferingTimeoutMs) {
+                val isHeavyStartupSource = isLikelyHeavyStream(uiState.selectedStream)
+                if (startupStalled && startupBufferDuration > initialBufferingTimeoutMs) {
                     if (!startupRecoverAttempted) {
                         startupRecoverAttempted = true
                         if (allowAutomaticSourceFallback &&
@@ -853,23 +898,43 @@ fun PlayerScreen(
                             tryAdvanceToNextStream()
                         ) {
                             // auto advanced to a fallback stream
-                        } else {
+                        } else if (!isHeavyStartupSource) {
                             exoPlayer.stop()
                             exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         }
                     }
                 }
+                val hardTimeoutMs = (initialBufferingTimeoutMs + if (isHeavyStartupSource) 45_000L else 20_000L)
+                    .coerceAtMost(180_000L)
+                if (!startupHardFailureReported && startupBufferDuration > hardTimeoutMs) {
+                    if (!startupSameSourceRefreshAttempted) {
+                        startupSameSourceRefreshAttempted = true
+                        uiState.selectedStream?.let { viewModel.selectStream(it) }
+                    } else {
+                        startupHardFailureReported = true
+                        playbackIssueReported = true
+                        viewModel.reportPlaybackError(
+                            "Source did not start in time. Try another source."
+                        )
+                    }
+                }
             }
 
             // Mark playback as started only after media time moves beyond 00:00.
-            if (!hasPlaybackStarted && (isPlaying || exoPlayer.currentPosition > 0L)) {
+            if (!hasPlaybackStarted &&
+                exoPlayer.playbackState == Player.STATE_READY &&
+                exoPlayer.isPlaying &&
+                exoPlayer.currentPosition > 800L
+            ) {
                 hasPlaybackStarted = true
             }
 
             if (currentPosition > 0 && duration > 0) {
                 val currentSecond = (currentPosition / 1000L).coerceAtLeast(0L)
-                val shouldReport = currentSecond != lastProgressReportSecond || !exoPlayer.isPlaying
+                val shouldReport =
+                    (!exoPlayer.isPlaying && currentSecond != lastProgressReportSecond) ||
+                        (exoPlayer.isPlaying && (lastProgressReportSecond < 0L || currentSecond - lastProgressReportSecond >= 3L))
                 if (shouldReport) {
                     lastProgressReportSecond = currentSecond
                     val progressPercent = (currentPosition.toFloat() / duration.toFloat() * 100).toInt()
@@ -1185,58 +1250,15 @@ fun PlayerScreen(
                 } else false
             }
     ) {
-        // Loading screen - show when loading, no stream URL, or playback hasn't started yet
-        // This keeps the nice loading screen visible until player is fully ready to play
-        if (uiState.isLoading || uiState.selectedStreamUrl == null || !hasPlaybackStarted) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                if (uiState.backdropUrl != null) {
-                    AsyncImage(
-                        model = uiState.backdropUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.7f))
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // 4 dots loading animation - purple theme
-                    WaveLoadingDots(
-                        dotCount = 4,
-                        dotSize = 14.dp,
-                        dotSpacing = 14.dp,
-                        color = PurplePrimary,
-                        secondaryColor = PurpleLight
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Text(
-                        text = when {
-                            uiState.isLoadingSubtitles -> "Fetching subtitles..."
-                            uiState.isLoadingStreams -> "Loading streams..."
-                            uiState.selectedStreamUrl != null && !hasPlaybackStarted -> "Starting playback..."
-                            else -> "Loading..."
-                        },
-                        style = ArflixTypography.body,
-                        color = TextSecondary
-                    )
-                }
-            }
-        } else {
-            // Video player with Netflix-style subtitles
+        // Keep PlayerView mounted as soon as we have a stream URL.
+        // A real video surface must exist during startup, otherwise some streams never transition out of buffering.
+        if (uiState.selectedStreamUrl != null) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         player = exoPlayer
                         useController = false
+                        setKeepContentOnPlayerReset(true)
 
                         // Enable subtitle view with Netflix-style: bold white text with black outline
                         subtitleView?.apply {
@@ -1266,6 +1288,51 @@ fun PlayerScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+        }
+
+        // Loading screen overlay - keep visible until player is fully started.
+        if (uiState.isLoading || uiState.selectedStreamUrl == null || !hasPlaybackStarted) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (uiState.backdropUrl != null) {
+                    AsyncImage(
+                        model = uiState.backdropUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.7f))
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    WaveLoadingDots(
+                        dotCount = 4,
+                        dotSize = 14.dp,
+                        dotSpacing = 14.dp,
+                        color = PurplePrimary,
+                        secondaryColor = PurpleLight
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = when {
+                            uiState.isLoadingSubtitles -> "Fetching subtitles..."
+                            uiState.isLoadingStreams -> "Loading streams..."
+                            uiState.selectedStreamUrl != null && !hasPlaybackStarted -> "Starting playback..."
+                            else -> "Loading..."
+                        },
+                        style = ArflixTypography.body,
+                        color = TextSecondary
+                    )
+                }
+            }
         }
 
         // Buffering indicator - only show after playback has started (mid-stream buffering)
@@ -1782,6 +1849,10 @@ fun PlayerScreen(
                 userSelectedSourceManually = true
                 playbackIssueReported = false
                 startupRecoverAttempted = false
+                startupHardFailureReported = false
+                startupSameSourceRetryCount = 0
+                startupSameSourceRefreshAttempted = false
+                startupUrlLock = null
                 rebufferRecoverAttempted = false
                 viewModel.selectStream(stream)
                 showSourceMenu = false
@@ -2495,7 +2566,7 @@ private fun estimateInitialStartupTimeoutMs(
     stream: StreamSource?,
     isManualSelection: Boolean
 ): Long {
-    var timeoutMs = if (isManualSelection) 12_000L else 6_500L
+    var timeoutMs = if (isManualSelection) 40_000L else 18_000L
     if (stream == null) return timeoutMs
 
     val haystack = buildString {
@@ -2513,20 +2584,21 @@ private fun estimateInitialStartupTimeoutMs(
     val sizeBytes = parseSizeToBytes(stream.size)
 
     if (haystack.contains("4k") || haystack.contains("2160")) {
-        timeoutMs = timeoutMs.coerceAtLeast(20_000L)
+        timeoutMs = timeoutMs.coerceAtLeast(70_000L)
     }
     if (haystack.contains("remux") || haystack.contains("dolby vision") || haystack.contains(" dovi")) {
-        timeoutMs = timeoutMs.coerceAtLeast(24_000L)
+        timeoutMs = timeoutMs.coerceAtLeast(80_000L)
     }
 
     timeoutMs = when {
-        sizeBytes >= 30L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(30_000L)
-        sizeBytes >= 20L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(24_000L)
-        sizeBytes >= 10L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(18_000L)
+        sizeBytes >= 40L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(110_000L)
+        sizeBytes >= 30L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(95_000L)
+        sizeBytes >= 20L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(80_000L)
+        sizeBytes >= 10L * 1024 * 1024 * 1024 -> timeoutMs.coerceAtLeast(60_000L)
         else -> timeoutMs
     }
 
-    return timeoutMs.coerceAtMost(35_000L)
+    return timeoutMs.coerceAtMost(120_000L)
 }
 
 private fun parseSizeToBytes(sizeStr: String): Long {
@@ -2549,6 +2621,28 @@ private fun parseSizeToBytes(sizeStr: String): Long {
         else -> 1.0
     }
     return (number * multiplier).toLong()
+}
+
+private fun isLikelyHeavyStream(stream: StreamSource?): Boolean {
+    if (stream == null) return false
+    val text = buildString {
+        append(stream.quality)
+        append(' ')
+        append(stream.source)
+        append(' ')
+        append(stream.addonName)
+        stream.behaviorHints?.filename?.let {
+            append(' ')
+            append(it)
+        }
+    }.lowercase()
+    val sizeBytes = parseSizeToBytes(stream.size)
+    return sizeBytes >= 20L * 1024 * 1024 * 1024 ||
+        text.contains("4k") ||
+        text.contains("2160") ||
+        text.contains("remux") ||
+        text.contains("dolby vision") ||
+        text.contains(" dovi")
 }
 
 private fun isFrameRateMatchingSupported(context: Context): Boolean {
