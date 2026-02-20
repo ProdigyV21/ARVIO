@@ -111,7 +111,8 @@ class PlayerViewModel @Inject constructor(
         "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko",
         "ar", "hi", "tr", "pl", "sv", "no", "da", "fi", "el", "cs", "hu",
         "ro", "th", "vi", "id", "he",
-        "uk", "fa", "bn", "bg", "hr", "sr", "sk", "sl", "lt", "et"
+        "uk", "fa", "bn", "bg", "hr", "sr", "sk", "sl", "lt", "et",
+        "pt-br", "pob"
     )
 
     fun loadMedia(
@@ -364,28 +365,16 @@ class PlayerViewModel @Inject constructor(
                 }
 
 
-                // Show all streams with valid URLs, sorted same as StreamSelector UI
+                // Keep exact source order consistent with Details -> Sources tab.
                 val allStreams = result.streams
                     .filter { stream ->
                         val u = stream.url?.trim().orEmpty()
                         u.isNotBlank() &&
                             !u.startsWith("magnet:", ignoreCase = true)
                     }
-                    .sortedWith(
-                        compareByDescending<StreamSource> { playbackPriorityScore(it) }
-                            .thenByDescending { qualityScore(it.quality) }
-                            .thenByDescending { parseSize(it.size) }
-                            .thenBy { it.source }
-                    )
                 val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
                 val mergedStreams = (allStreams + existingVod)
                     .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
-                    .sortedWith(
-                        compareByDescending<StreamSource> { playbackPriorityScore(it) }
-                            .thenByDescending { qualityScore(it.quality) }
-                            .thenByDescending { parseSize(it.size) }
-                            .thenBy { it.source }
-                    )
 
                 // Get saved position for resume playback
                 val resumeData = resumeDataDeferred.await()
@@ -412,19 +401,8 @@ class PlayerViewModel @Inject constructor(
                     error = errorMessage
                 )
 
-                // Auto-select: prefer the stream used previously (if we can match it), otherwise pick top of source list.
+                // Auto-select should match Sources tab behavior: first source wins unless user explicitly picked one.
                 if (mergedStreams.isNotEmpty()) {
-                    val preferredKey = resumeData.streamKey
-                    val preferredAddonId = resumeData.streamAddonId
-                    val preferredFromResume = if (!preferredKey.isNullOrBlank()) {
-                        mergedStreams.firstOrNull { s ->
-                            buildStreamKey(s) == preferredKey &&
-                                (preferredAddonId.isNullOrBlank() || s.addonId == preferredAddonId)
-                        }
-                    } else {
-                        null
-                    }
-
                     val preferredFromNavigation = mergedStreams.firstOrNull { s ->
                         val addonMatch = currentPreferredAddonId?.let { s.addonId == it } ?: true
                         val sourceMatch = currentPreferredSourceName?.let { s.source == it } ?: true
@@ -433,9 +411,7 @@ class PlayerViewModel @Inject constructor(
                         currentPreferredAddonId?.let { s.addonId == it } ?: false
                     }
 
-                    val preferred = preferredFromResume ?: preferredFromNavigation
-                    val selected = preferred ?: mergedStreams.first()
-                    val selectedIndex = mergedStreams.indexOf(selected)
+                    val selected = preferredFromNavigation ?: mergedStreams.first()
                     selectStream(selected)
                 }
 
@@ -859,7 +835,14 @@ class PlayerViewModel @Inject constructor(
             lowerLang == "french" || lowerLang.startsWith("french") || lowerLang == "francais" -> "fr"
             lowerLang == "german" || lowerLang.startsWith("german") || lowerLang == "deutsch" -> "de"
             lowerLang == "italian" || lowerLang.startsWith("italian") -> "it"
-            lowerLang == "portuguese" || lowerLang.startsWith("portuguese") -> "pt"
+            lowerLang == "portuguese" -> "pt"
+            lowerLang == "portuguese (brazil)" ||
+                lowerLang == "portuguese-brazil" ||
+                lowerLang == "brazilian portuguese" ||
+                lowerLang == "brazil portuguese" ||
+                lowerLang == "pt-br" ||
+                lowerLang == "ptbr" -> "pt-br"
+            lowerLang.startsWith("portuguese") -> "pt"
             lowerLang == "dutch" || lowerLang.startsWith("dutch") -> "nl"
             lowerLang == "russian" || lowerLang.startsWith("russian") -> "ru"
             lowerLang == "chinese" || lowerLang.startsWith("chinese") -> "zh"
@@ -900,6 +883,7 @@ class PlayerViewModel @Inject constructor(
             lowerLang == "deu" || lowerLang == "ger" -> "de"
             lowerLang == "ita" -> "it"
             lowerLang == "por" -> "pt"
+            lowerLang == "pob" || lowerLang == "pobr" -> "pt-br"
             lowerLang == "nld" || lowerLang == "dut" -> "nl"
             lowerLang == "rus" -> "ru"
             lowerLang == "zho" || lowerLang == "chi" -> "zh"
@@ -1433,12 +1417,7 @@ class PlayerViewModel @Inject constructor(
         val latest = _uiState.value.streams
         if (latest.any { it.url == vod.url && it.source == vod.source }) return
 
-        val updated = (latest + vod).sortedWith(
-            compareByDescending<StreamSource> { playbackPriorityScore(it) }
-                .thenByDescending { qualityScore(it.quality) }
-                .thenByDescending { parseSize(it.size) }
-                .thenBy { it.source }
-        )
+        val updated = latest + vod
         _uiState.value = _uiState.value.copy(
             streams = updated,
             isLoadingStreams = false
@@ -1499,22 +1478,10 @@ class PlayerViewModel @Inject constructor(
                     val u = stream.url?.trim().orEmpty()
                     u.isNotBlank() && !u.startsWith("magnet:", ignoreCase = true)
                 }
-                .sortedWith(
-                    compareByDescending<StreamSource> { playbackPriorityScore(it) }
-                        .thenByDescending { qualityScore(it.quality) }
-                        .thenByDescending { parseSize(it.size) }
-                        .thenBy { it.source }
-                )
 
             val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
             val mergedStreams = (allStreams + existingVod)
                 .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
-                .sortedWith(
-                    compareByDescending<StreamSource> { playbackPriorityScore(it) }
-                        .thenByDescending { qualityScore(it.quality) }
-                        .thenByDescending { parseSize(it.size) }
-                        .thenBy { it.source }
-                )
 
             val selectedMatch = mergedStreams.firstOrNull { stream ->
                 isSameStreamUrl(stream.url, playbackUrl)

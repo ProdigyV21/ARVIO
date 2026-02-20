@@ -57,7 +57,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -314,7 +313,7 @@ fun PlayerScreen(
                 DefaultRenderersFactory(context)
                     // Prefer hardware decoders first, use extension decoders as fallback.
                     // This is more stable for heavy 4K remux streams on TV devices.
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                     // Enable fallback decoders for any format issues
                     .setEnableDecoderFallback(true)
             )
@@ -323,6 +322,8 @@ fun PlayerScreen(
             .setTrackSelector(
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     parameters = buildUponParameters()
+                        // Prefer Dolby Vision track when available (native DV-first path).
+                        .setPreferredVideoMimeType(MimeTypes.VIDEO_DOLBY_VISION)
                         // Prefer original audio language when available
                         .setPreferredAudioLanguage(uiState.preferredAudioLanguage)
                         // Allow decoder fallback for unsupported codecs
@@ -332,11 +333,12 @@ fun PlayerScreen(
                         .setAllowAudioMixedMimeTypeAdaptiveness(true)
                         // Disable HDR requirement - play HDR as SDR if needed
                         .setForceLowestBitrate(false)
-                        // Stay within device capabilities to avoid endless startup buffering
-                        // on unsupported 4K remux tracks (codec/profile/audio combination).
-                        .setExceedVideoConstraintsIfNecessary(false)
-                        .setExceedAudioConstraintsIfNecessary(false)
-                        .setExceedRendererCapabilitiesIfNecessary(false)
+                        // DV-first compatibility path:
+                        // allow selector to exceed strict reported caps when needed,
+                        // because many Android TV devices under-report DV profile support.
+                        .setExceedVideoConstraintsIfNecessary(true)
+                        .setExceedAudioConstraintsIfNecessary(true)
+                        .setExceedRendererCapabilitiesIfNecessary(true)
                         .build()
                 }
             )
@@ -1485,7 +1487,6 @@ fun PlayerScreen(
                     ) {
                         // Focusable play/pause button - icon only with glow on focus
                         var playButtonFocused by remember { mutableStateOf(false) }
-                        val playButtonInteraction = remember { MutableInteractionSource() }
                         val playButtonScale by animateFloatAsState(
                             if (playButtonFocused) 1.3f else 1f,
                             label = "playScale"
@@ -1502,12 +1503,6 @@ fun PlayerScreen(
                                 .graphicsLayer {
                                     scaleX = playButtonScale
                                     scaleY = playButtonScale
-                                }
-                                .clickable(
-                                    interactionSource = playButtonInteraction,
-                                    indication = null
-                                ) {
-                                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                                 }
                                 .onKeyEvent { event ->
                                     if (event.type == KeyEventType.KeyDown) {
@@ -2178,7 +2173,7 @@ private fun getFullLanguageName(code: String?): String {
         normalizedCode == "fr" || normalizedCode == "fra" || normalizedCode == "fre" || normalizedCode == "french" -> "French"
         normalizedCode == "it" || normalizedCode == "ita" || normalizedCode == "italian" -> "Italian"
         normalizedCode == "pt" || normalizedCode == "por" || normalizedCode == "portuguese" -> "Portuguese"
-        normalizedCode == "pob" -> "Portuguese (Brazil)"
+        normalizedCode == "pt-br" || normalizedCode == "pob" -> "Portuguese (Brazil)"
         normalizedCode == "ru" || normalizedCode == "rus" || normalizedCode == "russian" -> "Russian"
         normalizedCode == "ja" || normalizedCode == "jpn" || normalizedCode == "japanese" -> "Japanese"
         normalizedCode == "ko" || normalizedCode == "kor" || normalizedCode == "korean" -> "Korean"

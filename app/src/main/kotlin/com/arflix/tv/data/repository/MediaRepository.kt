@@ -50,6 +50,11 @@ class MediaRepository @Inject constructor(
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient
 ) {
+    data class CategoryPageResult(
+        val items: List<MediaItem>,
+        val hasMore: Boolean
+    )
+
     private val apiKey = Constants.TMDB_API_KEY
     private val gson = Gson()
 
@@ -326,6 +331,114 @@ class MediaRepository @Inject constructor(
         nonEmpty
     }
 
+    suspend fun loadHomeCategoryPage(
+        categoryId: String,
+        page: Int
+    ): CategoryPageResult {
+        if (page < 1) return CategoryPageResult(emptyList(), hasMore = false)
+
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.MONTH, -12)
+        val twelveMonthsAgo = dateFormat.format(calendar.time)
+        calendar.time = Calendar.getInstance().time
+        calendar.add(Calendar.MONTH, -18)
+        val eighteenMonthsAgo = dateFormat.format(calendar.time)
+
+        val response = runCatching {
+            when (categoryId) {
+                "trending_movies" -> tmdbApi.getTrendingMovies(apiKey, page = page)
+                "trending_tv" -> tmdbApi.getTrendingTv(apiKey, page = page)
+                "trending_anime" -> tmdbApi.discoverTv(
+                    apiKey,
+                    genres = "16",
+                    keywords = "210024",
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = eighteenMonthsAgo,
+                    page = page
+                )
+                "trending_netflix" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 8,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_disney" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 337,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_prime" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 9,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_hbo" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 1899,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_apple" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 350,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_paramount" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 2303,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_hulu" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 15,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                "trending_peacock" -> tmdbApi.discoverTv(
+                    apiKey,
+                    watchProviders = 386,
+                    sortBy = "popularity.desc",
+                    minVoteCount = 10,
+                    airDateGte = twelveMonthsAgo,
+                    page = page
+                )
+                else -> null
+            }
+        }.getOrNull() ?: return CategoryPageResult(emptyList(), hasMore = false)
+
+        val mediaType = if (categoryId == "trending_movies") MediaType.MOVIE else MediaType.TV
+        val items = response.results
+            .map { it.toMediaItem(mediaType) }
+            .distinctBy { "${it.mediaType.name}_${it.id}" }
+        if (items.isNotEmpty()) {
+            cacheItems(items)
+        }
+        return CategoryPageResult(
+            items = items,
+            hasMore = response.page < response.totalPages
+        )
+    }
+
     suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 40): Category? = coroutineScope {
         val mediaRefs = when (catalog.sourceType) {
             CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
@@ -353,6 +466,49 @@ class MediaRepository @Inject constructor(
             id = catalog.id,
             title = catalog.title,
             items = items
+        )
+    }
+
+    suspend fun loadCustomCatalogPage(
+        catalog: CatalogConfig,
+        offset: Int,
+        limit: Int
+    ): CategoryPageResult = coroutineScope {
+        if (limit <= 0 || offset < 0) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+
+        val mediaRefs = when (catalog.sourceType) {
+            CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            CatalogSourceType.PREINSTALLED -> emptyList()
+        }.distinct()
+
+        if (mediaRefs.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+
+        val pageRefs = mediaRefs.drop(offset).take(limit)
+        if (pageRefs.isEmpty()) {
+            return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        }
+
+        val semaphore = Semaphore(6)
+        val jobs = pageRefs.map { (type, tmdbId) ->
+            async {
+                semaphore.withPermit {
+                    runCatching {
+                        when (type) {
+                            MediaType.MOVIE -> getMovieDetails(tmdbId)
+                            MediaType.TV -> getTvDetails(tmdbId)
+                        }
+                    }.getOrNull()
+                }
+            }
+        }
+        val items = jobs.mapNotNull { it.await() }
+        if (items.isNotEmpty()) {
+            cacheItems(items)
+        }
+        CategoryPageResult(
+            items = items,
+            hasMore = offset + pageRefs.size < mediaRefs.size
         )
     }
 

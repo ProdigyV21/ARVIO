@@ -180,7 +180,7 @@ fun SettingsScreen(
     LaunchedEffect(contentFocusIndex, sectionIndex) {
         if (activeZone == Zone.CONTENT) {
             val maxIndex = when (sectionIndex) {
-                0 -> 3 // General: 4 rows
+                0 -> 4 // General: 5 rows
                 1 -> 2 // IPTV: configure + refresh + delete
                 2 -> uiState.catalogs.size // Catalogs: add + list rows
                 3 -> uiState.addons.size // Addons: list + add button
@@ -339,7 +339,7 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
-                                        0 -> 3 // General: 4 items (subtitle, audio, frame-rate matching, auto-play)
+                                        0 -> 4 // General: 5 items (subtitle, audio, card layout, frame-rate matching, auto-play)
                                         1 -> 2 // IPTV: Configure + Refresh + Delete
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
@@ -378,8 +378,9 @@ fun SettingsScreen(
                                             when (contentFocusIndex) {
                                                 0 -> openSubtitlePicker()
                                                 1 -> openAudioLanguagePicker()
-                                                2 -> viewModel.cycleFrameRateMatchingMode()
-                                                3 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
+                                                2 -> viewModel.toggleCardLayoutMode()
+                                                3 -> viewModel.cycleFrameRateMatchingMode()
+                                                4 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
                                             }
                                         }
                                         1 -> { // IPTV
@@ -534,11 +535,13 @@ fun SettingsScreen(
                     "general" -> GeneralSettings(
                         defaultSubtitle = uiState.defaultSubtitle,
                         defaultAudioLanguage = uiState.defaultAudioLanguage,
+                        cardLayoutMode = uiState.cardLayoutMode,
                         frameRateMatchingMode = uiState.frameRateMatchingMode,
                         autoPlayNext = uiState.autoPlayNext,
                         focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                         onSubtitleClick = openSubtitlePicker,
                         onAudioLanguageClick = openAudioLanguagePicker,
+                        onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
                         onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
                         onAutoPlayToggle = { viewModel.setAutoPlayNext(it) }
                     )
@@ -1241,11 +1244,13 @@ private fun SettingsSectionItem(
 private fun GeneralSettings(
     defaultSubtitle: String,
     defaultAudioLanguage: String,
+    cardLayoutMode: String,
     frameRateMatchingMode: String,
     autoPlayNext: Boolean,
     focusedIndex: Int,
     onSubtitleClick: () -> Unit,
     onAudioLanguageClick: () -> Unit,
+    onCardLayoutToggle: () -> Unit,
     onFrameRateMatchingClick: () -> Unit,
     onAutoPlayToggle: (Boolean) -> Unit
 ) {
@@ -1281,13 +1286,25 @@ private fun GeneralSettings(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Card Layout
+        SettingsRow(
+            icon = Icons.Default.Widgets,
+            title = "Card Layout",
+            subtitle = "Switch between landscape and poster cards",
+            value = cardLayoutMode,
+            isFocused = focusedIndex == 2,
+            onClick = onCardLayoutToggle
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Frame-Rate Matching
         SettingsRow(
             icon = Icons.Default.Movie,
             title = "Match Frame Rate",
             subtitle = "Off, Seamless only, or Always (may blank-screen on some TVs)",
             value = frameRateMatchingMode,
-            isFocused = focusedIndex == 2,
+            isFocused = focusedIndex == 3,
             onClick = onFrameRateMatchingClick
         )
 
@@ -1298,7 +1315,7 @@ private fun GeneralSettings(
             title = "Auto-Play Next",
             subtitle = "Start next episode automatically",
             isEnabled = autoPlayNext,
-            isFocused = focusedIndex == 3,
+            isFocused = focusedIndex == 4,
             onToggle = onAutoPlayToggle
         )
     }

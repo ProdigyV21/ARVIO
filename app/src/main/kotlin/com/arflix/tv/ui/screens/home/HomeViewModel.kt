@@ -9,6 +9,7 @@ import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.arflix.tv.data.model.Category
+import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.repository.MediaRepository
@@ -85,6 +86,12 @@ class HomeViewModel @Inject constructor(
     private val imageLoader: ImageLoader,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    private data class CategoryPaginationState(
+        var loadedCount: Int = 0,
+        var hasMore: Boolean = true,
+        var isLoading: Boolean = false
+    )
+
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
     private var lastContinueWatchingItems: List<MediaItem> = emptyList()
     private var lastContinueWatchingUpdateMs: Long = 0L
@@ -126,6 +133,9 @@ class HomeViewModel @Inject constructor(
     private val backdropPreloadHeight = cardBackdropHeight
     private val initialLogoPrefetchRows = 1
     private val initialLogoPrefetchItemsPerRow = 6
+    private val initialCategoryItemCap = 40
+    private val categoryPageSize = 20
+    private val nearEndThreshold = 4
 
     // Track current focus for ahead-of-focus preloading
     private var currentRowIndex = 0
@@ -135,6 +145,8 @@ class HomeViewModel @Inject constructor(
     private var usedPreloadedData = false
 
     private val logoCache = ConcurrentHashMap<String, String>()
+    private val savedCatalogById = ConcurrentHashMap<String, CatalogConfig>()
+    private val categoryPaginationStates = ConcurrentHashMap<String, CategoryPaginationState>()
     private val preloadedRequests = Collections.synchronizedSet(mutableSetOf<String>())
     private var logoCachePublishJob: Job? = null
     private var lastLogoCachePublishMs: Long = 0L
@@ -287,6 +299,9 @@ class HomeViewModel @Inject constructor(
                         )
                     }.getOrElse { mediaRepository.getDefaultCatalogConfigs() }
                 }
+                savedCatalogById.clear()
+                savedCatalogs.forEach { savedCatalogById[it.id] = it }
+                categoryPaginationStates.clear()
 
                 // When Home is opened from profile selection, avoid an empty frame by showing
                 // profile-ordered skeleton rows immediately while real catalogs load.
@@ -344,6 +359,14 @@ class HomeViewModel @Inject constructor(
                 }
                 if (categories.any { it.id != "continue_watching" }) {
                     lastResolvedBaseCategories = categories.filter { it.id != "continue_watching" }
+                }
+                categories.forEach { category ->
+                    if (category.id != "continue_watching") {
+                        categoryPaginationStates[category.id] = CategoryPaginationState(
+                            loadedCount = category.items.size,
+                            hasMore = category.items.size >= categoryPageSize
+                        )
+                    }
                 }
                 if (requestId != loadHomeRequestId) return@loadHome
 
@@ -477,7 +500,7 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun loadCustomCatalogsIncrementally(savedCatalogs: List<com.arflix.tv.data.model.CatalogConfig>) {
+    private fun loadCustomCatalogsIncrementally(savedCatalogs: List<CatalogConfig>) {
         customCatalogsJob?.cancel()
         customCatalogsJob = viewModelScope.launch(networkDispatcher) {
             val customCatalogs = savedCatalogs.filter { cfg ->
@@ -523,25 +546,117 @@ class HomeViewModel @Inject constructor(
             }
 
             customCatalogs.forEach { catalog ->
-                var bestLoaded: Category? = null
-                for (maxItems in listOf(20, 30, 40)) {
-                    val candidate = runCatching {
-                        mediaRepository.loadCustomCatalog(catalog, maxItems = maxItems)
-                    }.getOrNull()
+                val firstPage = runCatching {
+                    mediaRepository.loadCustomCatalogPage(
+                        catalog = catalog,
+                        offset = 0,
+                        limit = initialCategoryItemCap
+                    )
+                }.getOrNull() ?: return@forEach
+                if (firstPage.items.isEmpty()) return@forEach
 
-                    if (candidate != null && candidate.items.isNotEmpty()) {
-                        val currentBestCount = bestLoaded?.items?.size ?: 0
-                        if (candidate.items.size > currentBestCount) {
-                            bestLoaded = candidate
-                        }
-                        if (candidate.items.size >= 40) break
-                    }
-                }
-                val loaded = bestLoaded ?: return@forEach
-
-                loadedById[catalog.id] = loaded
+                loadedById[catalog.id] = Category(
+                    id = catalog.id,
+                    title = catalog.title,
+                    items = firstPage.items
+                )
+                categoryPaginationStates[catalog.id] = CategoryPaginationState(
+                    loadedCount = firstPage.items.size,
+                    hasMore = firstPage.hasMore
+                )
                 val current = _uiState.value
                 publishMerged(current)
+            }
+        }
+    }
+
+    fun maybeLoadNextPageForCategory(categoryId: String, focusedItemIndex: Int) {
+        if (categoryId == "continue_watching") return
+        val currentCategory = _uiState.value.categories.firstOrNull { it.id == categoryId } ?: return
+        if (currentCategory.items.isEmpty() || currentCategory.items.all { it.isPlaceholder }) return
+        if (focusedItemIndex < currentCategory.items.size - nearEndThreshold) return
+        loadNextPageForCategory(categoryId)
+    }
+
+    private fun loadNextPageForCategory(categoryId: String) {
+        val pagination = categoryPaginationStates.getOrPut(categoryId) {
+            CategoryPaginationState(
+                loadedCount = _uiState.value.categories.firstOrNull { it.id == categoryId }?.items?.size ?: 0
+            )
+        }
+        if (!pagination.hasMore || pagination.isLoading) return
+
+        pagination.isLoading = true
+        viewModelScope.launch(networkDispatcher) {
+            try {
+                val currentCategories = _uiState.value.categories
+                val currentCategory = currentCategories.firstOrNull { it.id == categoryId } ?: return@launch
+
+                val result = if (savedCatalogById[categoryId]?.isPreinstalled == true) {
+                    val nextPage = (currentCategory.items.size / categoryPageSize) + 1
+                    mediaRepository.loadHomeCategoryPage(categoryId, nextPage)
+                } else {
+                    val catalog = savedCatalogById[categoryId] ?: return@launch
+                    mediaRepository.loadCustomCatalogPage(
+                        catalog = catalog,
+                        offset = currentCategory.items.size,
+                        limit = categoryPageSize
+                    )
+                }
+
+                if (result.items.isEmpty()) {
+                    pagination.hasMore = false
+                    return@launch
+                }
+
+                val seen = currentCategory.items
+                    .map { "${it.mediaType.name}_${it.id}" }
+                    .toHashSet()
+                val uniqueNewItems = result.items.filter { item ->
+                    seen.add("${item.mediaType.name}_${item.id}")
+                }
+                if (uniqueNewItems.isEmpty()) {
+                    pagination.hasMore = false
+                    return@launch
+                }
+
+                val updatedCategories = currentCategories.map { category ->
+                    if (category.id == categoryId) {
+                        category.copy(items = category.items + uniqueNewItems)
+                    } else {
+                        category
+                    }
+                }
+
+                uniqueNewItems.forEach { mediaRepository.cacheItem(it) }
+                val logoEntries = uniqueNewItems.take(6).mapNotNull { item ->
+                    val key = "${item.mediaType}_${item.id}"
+                    if (logoCache.containsKey(key)) return@mapNotNull null
+                    val logo = runCatching {
+                        mediaRepository.getLogoUrl(item.mediaType, item.id)
+                    }.getOrNull() ?: return@mapNotNull null
+                    key to logo
+                }
+                if (logoEntries.isNotEmpty()) {
+                    val logoMap = logoEntries.toMap()
+                    logoCache.putAll(logoMap)
+                    scheduleLogoCachePublish()
+                    preloadLogoImages(logoMap.values.toList())
+                }
+                preloadBackdropImages(uniqueNewItems.take(6).mapNotNull { it.backdrop ?: it.image })
+
+                pagination.loadedCount = updatedCategories
+                    .firstOrNull { it.id == categoryId }
+                    ?.items
+                    ?.size
+                    ?: pagination.loadedCount
+                pagination.hasMore = result.hasMore
+
+                _uiState.value = _uiState.value.copy(categories = updatedCategories)
+            } catch (_: Exception) {
+                // Keep UI stable; user can retry naturally by continuing to browse the row.
+            } finally {
+                pagination.isLoading = false
             }
         }
     }

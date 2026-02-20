@@ -273,7 +273,7 @@ fun AppNavigation(
                 initialSeason = initialSeason,
                 initialEpisode = initialEpisode,
                 currentProfile = currentProfile,
-                onNavigateToPlayer = { type, id, season, episode, imdbId, url, startPositionMs ->
+                onNavigateToPlayer = { type, id, season, episode, imdbId, url, preferredAddonId, preferredSourceName, startPositionMs ->
                     navController.navigate(
                         Screen.Player.createRoute(
                             mediaType = type,
@@ -282,6 +282,8 @@ fun AppNavigation(
                             episodeNumber = episode,
                             imdbId = imdbId,
                             streamUrl = url,
+                            preferredAddonId = preferredAddonId,
+                            preferredSourceName = preferredSourceName,
                             startPositionMs = startPositionMs
                         )
                     )

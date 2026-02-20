@@ -25,6 +25,8 @@ import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.SyncProgress
 import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.SyncResult
+import com.arflix.tv.ui.components.CARD_LAYOUT_MODE_LANDSCAPE
+import com.arflix.tv.ui.components.normalizeCardLayoutMode
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -50,6 +52,7 @@ data class SettingsUiState(
     val subtitleOptions: List<String> = emptyList(),
     val defaultAudioLanguage: String = "Auto (Original)",
     val audioLanguageOptions: List<String> = emptyList(),
+    val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
     val includeSpecials: Boolean = false,
@@ -113,6 +116,7 @@ class SettingsViewModel @Inject constructor(
     private fun defaultSubtitleKey() = profileManager.profileStringKey("default_subtitle")
     private fun defaultAudioLanguageKey() = profileManager.profileStringKey("default_audio_language")
     private fun subtitleUsageKey() = profileManager.profileStringKey("subtitle_usage_v1")
+    private fun cardLayoutModeKey() = stringPreferencesKey("card_layout_mode")
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
@@ -156,6 +160,7 @@ class SettingsViewModel @Inject constructor(
             val prefs = context.settingsDataStore.data.first()
             var defaultSub = prefs[defaultSubtitleKey()] ?: "Off"
             val defaultAudio = prefs[defaultAudioLanguageKey()] ?: "Auto (Original)"
+            val cardLayoutMode = normalizeCardLayoutMode(prefs[cardLayoutModeKey()])
             val frameRateMode = normalizeFrameRateMode(prefs[frameRateMatchingModeKey()])
             var autoPlay = prefs[autoPlayNextKey()] ?: true
             val includeSpecials = prefs[includeSpecialsKey()] ?: false
@@ -200,6 +205,7 @@ class SettingsViewModel @Inject constructor(
                 subtitleOptions = subtitleOptions,
                 defaultAudioLanguage = defaultAudio,
                 audioLanguageOptions = audioLanguageOptions,
+                cardLayoutMode = cardLayoutMode,
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
                 includeSpecials = includeSpecials,
@@ -437,6 +443,7 @@ class SettingsViewModel @Inject constructor(
             "Persian",
             "Polish",
             "Portuguese",
+            "Portuguese (Brazil)",
             "Romanian",
             "Russian",
             "Serbian",
@@ -488,6 +495,7 @@ class SettingsViewModel @Inject constructor(
             "Persian",
             "Polish",
             "Portuguese",
+            "Portuguese (Brazil)",
             "Romanian",
             "Russian",
             "Serbian",
@@ -526,6 +534,26 @@ class SettingsViewModel @Inject constructor(
 
             // Sync to cloud
             authRepository.saveAutoPlayNextToProfile(enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun toggleCardLayoutMode() {
+        val next = if (_uiState.value.cardLayoutMode.equals("Poster", ignoreCase = true)) {
+            CARD_LAYOUT_MODE_LANDSCAPE
+        } else {
+            "Poster"
+        }
+        setCardLayoutMode(next)
+    }
+
+    fun setCardLayoutMode(mode: String) {
+        val normalized = normalizeCardLayoutMode(mode)
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[cardLayoutModeKey()] = normalized
+            }
+            _uiState.value = _uiState.value.copy(cardLayoutMode = normalized)
             syncLocalStateToCloud(silent = true)
         }
     }
@@ -1132,6 +1160,7 @@ class SettingsViewModel @Inject constructor(
         root.put("updatedAt", System.currentTimeMillis())
         root.put("defaultSubtitle", prefs[defaultSubtitleKey()] ?: _uiState.value.defaultSubtitle)
         root.put("defaultAudioLanguage", prefs[defaultAudioLanguageKey()] ?: _uiState.value.defaultAudioLanguage)
+        root.put("cardLayoutMode", normalizeCardLayoutMode(prefs[cardLayoutModeKey()] ?: _uiState.value.cardLayoutMode))
         root.put("frameRateMatchingMode", prefs[frameRateMatchingModeKey()] ?: _uiState.value.frameRateMatchingMode)
         root.put("autoPlayNext", prefs[autoPlayNextKey()] ?: _uiState.value.autoPlayNext)
         root.put("includeSpecials", prefs[includeSpecialsKey()] ?: _uiState.value.includeSpecials)
@@ -1211,12 +1240,14 @@ class SettingsViewModel @Inject constructor(
             val root = JSONObject(payload)
             val defaultSubtitle = root.optString("defaultSubtitle", _uiState.value.defaultSubtitle)
             val defaultAudioLanguage = root.optString("defaultAudioLanguage", _uiState.value.defaultAudioLanguage)
+            val cardLayoutMode = normalizeCardLayoutMode(root.optString("cardLayoutMode", _uiState.value.cardLayoutMode))
             val frameRateMatchingMode = normalizeFrameRateMode(root.optString("frameRateMatchingMode", _uiState.value.frameRateMatchingMode))
             val autoPlayNext = root.optBoolean("autoPlayNext", _uiState.value.autoPlayNext)
             val includeSpecials = root.optBoolean("includeSpecials", _uiState.value.includeSpecials)
             context.settingsDataStore.edit { prefs ->
                 prefs[defaultSubtitleKey()] = defaultSubtitle
                 prefs[defaultAudioLanguageKey()] = defaultAudioLanguage
+                prefs[cardLayoutModeKey()] = cardLayoutMode
                 prefs[frameRateMatchingModeKey()] = frameRateMatchingMode
                 prefs[autoPlayNextKey()] = autoPlayNext
                 prefs[includeSpecialsKey()] = includeSpecials
@@ -1426,5 +1457,7 @@ class SettingsViewModel @Inject constructor(
         traktPollingJob?.cancel()
     }
 }
+
+
 
 

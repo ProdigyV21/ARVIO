@@ -99,9 +99,11 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.ui.components.EpisodeContextMenu
 import com.arflix.tv.ui.components.LoadingIndicator
+import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.PersonModal
 import com.arflix.tv.ui.components.PosterCard
+import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.SkeletonDetailsPage
@@ -138,7 +140,7 @@ fun DetailsScreen(
     initialEpisode: Int? = null,
     viewModel: DetailsViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
-    onNavigateToPlayer: (MediaType, Int, Int?, Int?, String?, String?, Long?) -> Unit,
+    onNavigateToPlayer: (MediaType, Int, Int?, Int?, String?, String?, String?, String?, Long?) -> Unit,
     onNavigateToDetails: (MediaType, Int) -> Unit,
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
@@ -149,6 +151,7 @@ fun DetailsScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -368,11 +371,11 @@ fun DetailsScreen(
                                                 ) uiState.playPositionMs else null
                                                 onNavigateToPlayer(
                                                     mediaType, mediaId,
-                                                    season, episode, uiState.imdbId, null, startPositionMs
+                                                    season, episode, uiState.imdbId, null, null, null, startPositionMs
                                                 )
                                             } else {
                                                 onNavigateToPlayer(
-                                                    mediaType, mediaId, null, null, uiState.imdbId, null, uiState.playPositionMs
+                                                    mediaType, mediaId, null, null, uiState.imdbId, null, null, null, uiState.playPositionMs
                                                 )
                                             }
                                         }
@@ -409,7 +412,7 @@ fun DetailsScreen(
                                     if (ep != null) {
                                         onNavigateToPlayer(
                                             mediaType, mediaId,
-                                            ep.seasonNumber, ep.episodeNumber, uiState.imdbId, null, null
+                                            ep.seasonNumber, ep.episodeNumber, uiState.imdbId, null, null, null, null
                                         )
                                     }
                                 }
@@ -476,7 +479,8 @@ fun DetailsScreen(
                     isInWatchlist = uiState.isInWatchlist,
                     genres = uiState.genres,
                     seasonProgress = uiState.seasonProgress,
-                    playLabel = uiState.playLabel
+                    playLabel = uiState.playLabel,
+                    usePosterCards = usePosterCards
                 )
             }
         }
@@ -527,7 +531,9 @@ fun DetailsScreen(
                     mediaType, mediaId,
                     ep?.seasonNumber, ep?.episodeNumber,
                     uiState.imdbId,
-                    stream.url,
+                    null,
+                    stream.addonId.takeIf { it.isNotBlank() },
+                    stream.source.takeIf { it.isNotBlank() },
                     null
                 )
             },
@@ -545,7 +551,7 @@ fun DetailsScreen(
                     showEpisodeContextMenu = false
                     onNavigateToPlayer(
                         mediaType, mediaId,
-                        episode.seasonNumber, episode.episodeNumber, uiState.imdbId, null, null
+                        episode.seasonNumber, episode.episodeNumber, uiState.imdbId, null, null, null, null
                     )
                 },
                 onSelectSource = {
@@ -647,7 +653,8 @@ private fun DetailsContent(
     isInWatchlist: Boolean,
     genres: List<String> = emptyList(),
     seasonProgress: Map<Int, Pair<Int, Int>> = emptyMap(),
-    playLabel: String? = null
+    playLabel: String? = null,
+    usePosterCards: Boolean = false
 ) {
     // === PREMIUM LAYERED TEXT SHADOWS ===
     val textShadow = Shadow(
@@ -1211,7 +1218,7 @@ private fun DetailsContent(
                         isCurrentRow = focusedSection == FocusSection.SIMILAR,
                         focusedItemIndex = similarIndex,
                         totalItems = similar.size,
-                        itemWidth = 180.dp,
+                        itemWidth = if (usePosterCards) 91.dp else 180.dp,
                         itemSpacing = 14.dp
                     )
 
@@ -1228,13 +1235,17 @@ private fun DetailsContent(
 
                         TvLazyRow(
                             state = similarRowState,
-                            contentPadding = PaddingValues(start = contentStartPadding, end = 210.dp),  // 180dp card + 30dp margin
+                            contentPadding = PaddingValues(
+                                start = contentStartPadding,
+                                end = if (usePosterCards) 112.dp else 210.dp
+                            ),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             itemsIndexed(similar, key = { _, m -> m.id }) { index, mediaItem ->
                                 SimilarMediaCard(
                                     item = mediaItem,
                                     logoImageUrl = similarLogoUrls["${mediaItem.mediaType}_${mediaItem.id}"],
+                                    usePosterCards = usePosterCards,
                                     isFocused = focusedSection == FocusSection.SIMILAR && index == similarIndex
                                 )
                             }
@@ -2173,14 +2184,15 @@ private fun StatusBadge(status: String) {
 private fun SimilarMediaCard(
     item: MediaItem,
     logoImageUrl: String?,
+    usePosterCards: Boolean,
     isFocused: Boolean
 ) {
     val mediaTypeLabel = if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
     val yearSuffix = item.year.takeIf { it.isNotBlank() }?.let { " | $it" }.orEmpty()
     MediaCard(
         item = item.copy(subtitle = "$mediaTypeLabel$yearSuffix"),
-        width = 210.dp,
-        isLandscape = true,
+        width = if (usePosterCards) 105.dp else 210.dp,
+        isLandscape = !usePosterCards,
         logoImageUrl = logoImageUrl,
         showProgress = false,
         isFocusedOverride = isFocused,

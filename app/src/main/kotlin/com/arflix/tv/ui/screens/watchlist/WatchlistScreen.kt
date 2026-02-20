@@ -47,12 +47,14 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.LoadingIndicator
+import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import com.arflix.tv.ui.components.TopBarClock
+import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.Pink
@@ -79,16 +81,25 @@ fun WatchlistScreen(
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val configuration = LocalConfiguration.current
     val gridColumns = when {
         configuration.screenWidthDp >= 2200 -> 5
         configuration.screenWidthDp >= 1600 -> 4
         else -> 3
     }
-    val cardWidth = when (gridColumns) {
-        5 -> 240.dp
-        4 -> 250.dp
-        else -> 230.dp
+    val cardWidth = if (usePosterCards) {
+        when (gridColumns) {
+            5 -> 112.dp
+            4 -> 119.dp
+            else -> 112.dp
+        }
+    } else {
+        when (gridColumns) {
+            5 -> 240.dp
+            4 -> 250.dp
+            else -> 230.dp
+        }
     }
     
     var isSidebarFocused by remember { mutableStateOf(false) }
@@ -311,7 +322,7 @@ fun WatchlistScreen(
                                 MediaCard(
                                     item = item,
                                     width = cardWidth,
-                                    isLandscape = true,
+                                    isLandscape = !usePosterCards,
                                     onFocused = { focusedGridIndex = index },
                                     onClick = { onNavigateToDetails(item.mediaType, item.id) }
                                 )

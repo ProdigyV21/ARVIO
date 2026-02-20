@@ -957,7 +957,7 @@ class TraktRepository @Inject constructor(
 
         // If no Trakt auth, use local Continue Watching for this profile
         if (auth == null) {
-            val localItems = loadLocalContinueWatching()
+            val localItems = loadLocalContinueWatchingRaw()
             cachedContinueWatching = localItems
             return@coroutineScope localItems
         }
@@ -1227,7 +1227,7 @@ class TraktRepository @Inject constructor(
 
         // Profiles without Trakt should preload local continue watching cache.
         if (refreshTokenIfNeeded() == null) {
-            val local = loadLocalContinueWatching()
+            val local = loadLocalContinueWatchingRaw()
             cachedContinueWatching = local
             return cachedContinueWatching
         }

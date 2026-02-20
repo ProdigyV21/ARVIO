@@ -101,7 +101,9 @@ import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.MediaCard as ArvioMediaCard
+import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaContextMenu
+import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
@@ -197,6 +199,7 @@ fun HomeScreen(
         }
     }
     val uiState by viewModel.uiState.collectAsState()
+    val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -317,6 +320,23 @@ fun HomeScreen(
             }
     }
 
+    // Infinite row pagination: keep initial Home fast, then append as user reaches row end.
+    LaunchedEffect(displayCategories) {
+        snapshotFlow {
+            Triple(
+                focusState.currentRowIndex,
+                focusState.currentItemIndex,
+                focusState.isSidebarFocused
+            )
+        }
+            .distinctUntilChanged()
+            .collectLatest { (rowIndex, itemIndex, sidebarFocused) ->
+                if (sidebarFocused) return@collectLatest
+                val category = displayCategories.getOrNull(rowIndex) ?: return@collectLatest
+                viewModel.maybeLoadNextPageForCategory(category.id, itemIndex)
+            }
+    }
+
     LaunchedEffect(showContextMenu, contextMenuItem) {
         if (showContextMenu) {
             val item = contextMenuItem
@@ -421,6 +441,7 @@ fun HomeScreen(
             focusState = focusState,
             contentStartPadding = contentStartPadding,
             fastScrollThresholdMs = fastScrollThresholdMs,
+            usePosterCards = usePosterCards,
             isContextMenuOpen = showContextMenu,
             currentProfile = currentProfile,
             onNavigateToDetails = onNavigateToDetails,
@@ -806,6 +827,7 @@ private fun HomeInputLayer(
     focusState: HomeFocusState,
     contentStartPadding: androidx.compose.ui.unit.Dp,
     fastScrollThresholdMs: Long,
+    usePosterCards: Boolean,
     isContextMenuOpen: Boolean,
     currentProfile: com.arflix.tv.data.model.Profile?,
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
@@ -995,6 +1017,7 @@ private fun HomeInputLayer(
             focusState = focusState,
             contentStartPadding = contentStartPadding,
             fastScrollThresholdMs = fastScrollThresholdMs,
+            usePosterCards = usePosterCards,
             onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber) }
         )
     }
@@ -1007,6 +1030,7 @@ private fun HomeRowsLayer(
     focusState: HomeFocusState,
     contentStartPadding: androidx.compose.ui.unit.Dp,
     fastScrollThresholdMs: Long,
+    usePosterCards: Boolean,
     onItemClick: (MediaItem) -> Unit
 ) {
     val currentRowIndex = focusState.currentRowIndex
@@ -1028,20 +1052,13 @@ private fun HomeRowsLayer(
         val halfHeight = maxHeight / 2
         val listState = rememberLazyListState()
         val targetIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
-        LaunchedEffect(targetIndex, isFastScrolling) {
+        LaunchedEffect(targetIndex) {
             val currentIndex = listState.firstVisibleItemIndex
             if (currentIndex == targetIndex) return@LaunchedEffect
-            if (isFastScrolling || abs(targetIndex - currentIndex) > 1) {
-                listState.scrollToItem(
-                    index = targetIndex,
-                    scrollOffset = 0
-                )
-            } else {
-                listState.animateScrollToItem(
-                    index = targetIndex,
-                    scrollOffset = 0
-                )
-            }
+            listState.animateScrollToItem(
+                index = targetIndex,
+                scrollOffset = 0
+            )
         }
         // Viewport is only the bottom 50%: selected row stays at same height, rows above disappear
         Box(
@@ -1079,6 +1096,7 @@ private fun HomeRowsLayer(
                             cardLogoUrls = cardLogoUrls,
                             isCurrentRow = index == focusState.currentRowIndex,
                             isRanked = category.title.contains("Top 10", ignoreCase = true),
+                            usePosterCards = usePosterCards,
                             startPadding = contentStartPadding,
                             focusedItemIndex = if (index == focusState.currentRowIndex) focusState.currentItemIndex else 0,
                             isFastScrolling = isFastScrolling,
@@ -1238,6 +1256,7 @@ private fun ContentRow(
     cardLogoUrls: Map<String, String>,
     isCurrentRow: Boolean,
     isRanked: Boolean = false,
+    usePosterCards: Boolean = false,
     startPadding: androidx.compose.ui.unit.Dp = 12.dp,
     focusedItemIndex: Int,
     isFastScrolling: Boolean,
@@ -1248,7 +1267,7 @@ private fun ContentRow(
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val isContinueWatching = category.id == "continue_watching"
-    val itemWidth = 210.dp
+    val itemWidth = if (usePosterCards) 105.dp else 210.dp
     val itemSpacing = 14.dp
     val availableWidthDp = configuration.screenWidthDp.dp - 56.dp - 12.dp
     val fallbackItemsPerPage = remember(configuration, density, itemWidth, itemSpacing) {
@@ -1298,7 +1317,7 @@ private fun ContentRow(
             lastScrollIndex = -1
         }
     }
-    LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex, isFastScrolling) {
+    LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex) {
         if (!isCurrentRow || scrollTargetIndex < 0) return@LaunchedEffect
 
         // Calculate extra offset for items at the end of the list (past maxFirstIndex)
@@ -1312,7 +1331,7 @@ private fun ContentRow(
         // FIX: When scrolling back to first item, ensure we reset to position 0 with no offset
         // This prevents focus from disappearing on the left side
         if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
-            rowState.scrollToItem(index = 0, scrollOffset = 0)
+            rowState.animateScrollToItem(index = 0, scrollOffset = 0)
             lastScrollIndex = 0
             return@LaunchedEffect
         }
@@ -1326,11 +1345,7 @@ private fun ContentRow(
         }
 
         // Always use a smooth animated scroll for D‑pad navigation between items
-        if (isFastScrolling || abs(scrollTargetIndex - lastScrollIndex) > 1) {
-            rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else {
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        }
+        rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         lastScrollIndex = scrollTargetIndex
     }
 
@@ -1387,8 +1402,13 @@ private fun ContentRow(
             LazyRow(
                 modifier = rowFadeModifier,
                 state = rowState,
-                contentPadding = PaddingValues(start = startPadding, end = 240.dp, top = 8.dp, bottom = 8.dp),  // 210dp card + 30dp margin to keep last item visible
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                contentPadding = PaddingValues(
+                    start = startPadding,
+                    end = itemWidth + 30.dp,
+                    top = 8.dp,
+                    bottom = 8.dp
+                ),
+                horizontalArrangement = Arrangement.spacedBy(itemSpacing)
             ) {
             itemsIndexed(
                 category.items,
@@ -1428,7 +1448,7 @@ private fun ContentRow(
                             ArvioMediaCard(
                                 item = item,
                                 width = 140.dp,  // Smaller cards
-                                isLandscape = true,
+                                isLandscape = !usePosterCards,
                                 logoImageUrl = cardLogoUrl,
                                 showProgress = false,
                                 isFocusedOverride = itemIsFocused,
@@ -1444,7 +1464,7 @@ private fun ContentRow(
                     ArvioMediaCard(
                         item = item,
                         width = itemWidth,
-                        isLandscape = true,
+                        isLandscape = !usePosterCards,
                         logoImageUrl = cardLogoUrl,
                         showProgress = isContinueWatching,
                         isFocusedOverride = itemIsFocused,

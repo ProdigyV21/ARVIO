@@ -56,9 +56,11 @@ import androidx.tv.material3.Text
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.LoadingIndicator
+import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.Sidebar
 import com.arflix.tv.ui.components.SidebarItem
+import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundCard
@@ -87,6 +89,7 @@ fun SearchScreen(
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val configuration = LocalConfiguration.current
     val isCompactHeight = configuration.screenHeightDp <= 780
     val searchBarWidth = (configuration.screenWidthDp.dp * 0.56f).coerceIn(500.dp, 760.dp)
@@ -192,7 +195,7 @@ fun SearchScreen(
                                 FocusZone.RESULTS -> {
                                     if (currentRowIndex == 1 && uiState.movieResults.isNotEmpty()) {
                                         currentRowIndex = 0
-                                    } else if (currentRowIndex == 0) {
+                                    } else {
                                         focusZone = FocusZone.SEARCH_INPUT
                                         searchFocusRequester.requestFocus()
                                     }
@@ -238,9 +241,9 @@ fun SearchScreen(
                                     true
                                 }
                                 FocusZone.SEARCH_INPUT -> {
-                                    viewModel.search()
-                                    keyboardController?.hide()
-                                    true
+                                    // Let the TextField handle center/enter so users can
+                                    // re-enter edit mode instead of forcing a re-search.
+                                    false
                                 }
                                 FocusZone.RESULTS -> {
                                     val item = if (currentRowIndex == 0) {
@@ -366,6 +369,7 @@ fun SearchScreen(
                             title = "Movies",
                             items = uiState.movieResults,
                             cardLogoUrls = uiState.cardLogoUrls,
+                            usePosterCards = usePosterCards,
                             rowState = movieRowState,
                             isCurrentRow = focusZone == FocusZone.RESULTS && currentRowIndex == 0,
                             focusedItemIndex = movieItemIndex,
@@ -380,6 +384,7 @@ fun SearchScreen(
                             title = "TV Shows",
                             items = uiState.tvResults,
                             cardLogoUrls = uiState.cardLogoUrls,
+                            usePosterCards = usePosterCards,
                             rowState = tvRowState,
                             isCurrentRow = focusZone == FocusZone.RESULTS && currentRowIndex == 1,
                             focusedItemIndex = tvItemIndex,
@@ -398,6 +403,7 @@ private fun SearchResultRow(
     title: String,
     items: List<MediaItem>,
     cardLogoUrls: Map<String, String>,
+    usePosterCards: Boolean,
     rowState: androidx.tv.foundation.lazy.list.TvLazyListState,
     isCurrentRow: Boolean,
     focusedItemIndex: Int,
@@ -406,7 +412,7 @@ private fun SearchResultRow(
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val isCompactHeight = configuration.screenHeightDp <= 780
-    val itemWidth = 210.dp
+    val itemWidth = if (usePosterCards) 105.dp else 210.dp
     val itemSpacing = 16.dp
     val sidebarWidth = 56.dp
     val horizontalPadding = 96.dp
@@ -521,7 +527,7 @@ private fun SearchResultRow(
                     MediaCard(
                         item = displayItem,
                         width = itemWidth,
-                        isLandscape = true,
+                        isLandscape = !usePosterCards,
                         logoImageUrl = cardLogoUrls["${item.mediaType}_${item.id}"],
                         showProgress = false,
                         isFocusedOverride = isCurrentRow && index == focusedItemIndex,

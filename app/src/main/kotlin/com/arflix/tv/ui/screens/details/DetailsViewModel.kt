@@ -20,6 +20,7 @@ import com.arflix.tv.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -149,6 +150,8 @@ class DetailsViewModel @Inject constructor(
     private var currentMediaType: MediaType = MediaType.MOVIE
     private var currentMediaId: Int = 0
     private var vodAppendJob: kotlinx.coroutines.Job? = null
+    private var loadStreamsJob: kotlinx.coroutines.Job? = null
+    private var loadStreamsRequestId: Long = 0L
 
     private fun isBlankRating(value: String): Boolean {
         return value.isBlank() || value == "0.0" || value == "0"
@@ -676,8 +679,23 @@ class DetailsViewModel @Inject constructor(
     // ========== Stream Resolution ==========
 
     fun loadStreams(imdbId: String, season: Int? = null, episode: Int? = null) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoadingStreams = true)
+        loadStreamsJob?.cancel()
+        val requestId = ++loadStreamsRequestId
+        val requestMediaType = currentMediaType
+        val requestMediaId = currentMediaId
+
+        loadStreamsJob = viewModelScope.launch {
+            fun isCurrentRequest(): Boolean {
+                return requestId == loadStreamsRequestId &&
+                    currentMediaType == requestMediaType &&
+                    currentMediaId == requestMediaId
+            }
+            if (!isCurrentRequest()) return@launch
+            _uiState.value = _uiState.value.copy(
+                isLoadingStreams = true,
+                streams = emptyList(),
+                subtitles = emptyList()
+            )
 
             try {
                 // Get current item's genre IDs and language for anime detection
@@ -691,7 +709,10 @@ class DetailsViewModel @Inject constructor(
                         imdbId = imdbId,
                         season = season,
                         episode = episode,
-                        timeoutMs = 9_000L
+                        timeoutMs = 9_000L,
+                        requestId = requestId,
+                        requestMediaType = requestMediaType,
+                        requestMediaId = requestMediaId
                     )
                     if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
                         delay(3_000L)
@@ -699,7 +720,10 @@ class DetailsViewModel @Inject constructor(
                             imdbId = imdbId,
                             season = season,
                             episode = episode,
-                            timeoutMs = 18_000L
+                            timeoutMs = 18_000L,
+                            requestId = requestId,
+                            requestMediaType = requestMediaType,
+                            requestMediaId = requestMediaId
                         )
                     }
                     if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
@@ -708,7 +732,10 @@ class DetailsViewModel @Inject constructor(
                             imdbId = imdbId,
                             season = season,
                             episode = episode,
-                            timeoutMs = 28_000L
+                            timeoutMs = 28_000L,
+                            requestId = requestId,
+                            requestMediaType = requestMediaType,
+                            requestMediaId = requestMediaId
                         )
                     }
                 }
@@ -740,12 +767,14 @@ class DetailsViewModel @Inject constructor(
                 val existingVod = _uiState.value.streams.filter { it.addonId == "iptv_xtream_vod" }
                 val mergedStreams = (filteredStreams + existingVod)
                     .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
+                if (!isCurrentRequest()) return@launch
                 _uiState.value = _uiState.value.copy(
                     isLoadingStreams = false,
                     streams = mergedStreams,
                     subtitles = result.subtitles
                 )
             } catch (e: Exception) {
+                if (!isCurrentRequest()) return@launch
                 _uiState.value = _uiState.value.copy(isLoadingStreams = false)
             }
         }
@@ -862,21 +891,45 @@ class DetailsViewModel @Inject constructor(
                 resume
             } else null
 
-            val traktResume = try {
-                traktRepository.getContinueWatching()
-                    .firstOrNull { it.id == tmdbId && it.mediaType == mediaType && it.progress > 0 }
-            } catch (_: Exception) {
+            val hasTrakt = runCatching { traktRepository.hasTrakt() }.getOrDefault(false)
+            val localItem = runCatching {
+                traktRepository.getLocalContinueWatchingEntry(
+                    mediaType = mediaType,
+                    tmdbId = tmdbId,
+                    season = entry?.season,
+                    episode = entry?.episode
+                )
+            }.getOrNull()
+
+            val cachedTraktItem = if (hasTrakt) {
+                runCatching {
+                    traktRepository.getCachedContinueWatching()
+                        .firstOrNull { it.id == tmdbId && it.mediaType == mediaType && it.progress > 0 }
+                }.getOrNull()
+            } else {
                 null
             }
-            val localResume = if (traktResume != null) {
+            val fetchedTraktItem = if (hasTrakt && cachedTraktItem == null) {
+                withTimeoutOrNull(1200L) {
+                    runCatching {
+                        traktRepository.getContinueWatching()
+                            .firstOrNull { it.id == tmdbId && it.mediaType == mediaType && it.progress > 0 }
+                    }.getOrNull()
+                }
+            } else {
+                null
+            }
+
+            val resumeCandidate = fetchedTraktItem ?: cachedTraktItem ?: localItem
+            val localResume = if (resumeCandidate != null) {
                 val resume = buildResumeFromProgress(
                     mediaType = mediaType,
                     tmdbId = tmdbId,
-                    season = traktResume.season,
-                    episode = traktResume.episode,
-                    progress = traktResume.progress / 100f,
-                    positionSeconds = traktResume.resumePositionSeconds,
-                    durationSeconds = traktResume.durationSeconds
+                    season = resumeCandidate.season,
+                    episode = resumeCandidate.episode,
+                    progress = resumeCandidate.progress / 100f,
+                    positionSeconds = resumeCandidate.resumePositionSeconds,
+                    durationSeconds = resumeCandidate.durationSeconds
                 )
                 resume
             } else null
@@ -1052,8 +1105,15 @@ class DetailsViewModel @Inject constructor(
         imdbId: String,
         season: Int?,
         episode: Int?,
-        timeoutMs: Long
+        timeoutMs: Long,
+        requestId: Long,
+        requestMediaType: MediaType,
+        requestMediaId: Int
     ) {
+        if (requestId != loadStreamsRequestId ||
+            currentMediaType != requestMediaType ||
+            currentMediaId != requestMediaId
+        ) return
         val currentStreams = _uiState.value.streams
         if (currentStreams.any { it.addonId == "iptv_xtream_vod" }) return
         val itemTitle = _uiState.value.item?.title.orEmpty()
@@ -1080,6 +1140,10 @@ class DetailsViewModel @Inject constructor(
         if (vod.url.isNullOrBlank()) return
         val latest = _uiState.value.streams
         if (latest.any { it.url == vod.url && it.source == vod.source }) return
+        if (requestId != loadStreamsRequestId ||
+            currentMediaType != requestMediaType ||
+            currentMediaId != requestMediaId
+        ) return
         _uiState.value = _uiState.value.copy(
             streams = latest + vod,
             isLoadingStreams = false
