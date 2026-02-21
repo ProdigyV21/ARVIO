@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.home
 
+import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import android.os.SystemClock
@@ -92,7 +93,10 @@ class HomeViewModel @Inject constructor(
         var isLoading: Boolean = false
     )
 
-    private val networkDispatcher = Dispatchers.IO.limitedParallelism(4)
+    private val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    private val isLowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 256
+    private val networkParallelism = if (isLowRamDevice) 2 else 4
+    private val networkDispatcher = Dispatchers.IO.limitedParallelism(networkParallelism)
     private var lastContinueWatchingItems: List<MediaItem> = emptyList()
     private var lastContinueWatchingUpdateMs: Long = 0L
     private var lastResolvedBaseCategories: List<Category> = emptyList()
@@ -121,8 +125,8 @@ class HomeViewModel @Inject constructor(
     private var lastPrefetchTime = 0L
     private val PREFETCH_DEBOUNCE_MS = 600L
 
-    private val logoPreloadWidth = 300
-    private val logoPreloadHeight = 70
+    private val logoPreloadWidth = if (isLowRamDevice) 260 else 300
+    private val logoPreloadHeight = if (isLowRamDevice) 60 else 70
     private val cardBackdropWidth = (240 * context.resources.displayMetrics.density)
         .toInt()
         .coerceAtLeast(1)
@@ -132,9 +136,9 @@ class HomeViewModel @Inject constructor(
     private val backdropPreloadWidth = cardBackdropWidth
     private val backdropPreloadHeight = cardBackdropHeight
     private val initialLogoPrefetchRows = 1
-    private val initialLogoPrefetchItemsPerRow = 6
-    private val initialCategoryItemCap = 40
-    private val categoryPageSize = 20
+    private val initialLogoPrefetchItemsPerRow = if (isLowRamDevice) 3 else 6
+    private val initialCategoryItemCap = if (isLowRamDevice) 28 else 40
+    private val categoryPageSize = if (isLowRamDevice) 14 else 20
     private val nearEndThreshold = 4
 
     // Track current focus for ahead-of-focus preloading
@@ -711,12 +715,12 @@ class HomeViewModel @Inject constructor(
      * Uses target display sizes to reduce decode overhead.
      */
     private fun preloadImagesWithCoil(urls: List<String>, width: Int, height: Int) {
-        if (preloadedRequests.size > 4_000) {
+        if (preloadedRequests.size > if (isLowRamDevice) 1_200 else 4_000) {
             preloadedRequests.clear()
         }
         val uniqueUrls = urls.filter { url ->
             preloadedRequests.add("$url|${width}x${height}")
-        }.take(8)
+        }.take(if (isLowRamDevice) 3 else 8)
         if (uniqueUrls.isEmpty()) return
 
         uniqueUrls.forEach { url ->
@@ -725,6 +729,7 @@ class HomeViewModel @Inject constructor(
                 .size(width.coerceAtLeast(1), height.coerceAtLeast(1))
                 .precision(Precision.INEXACT)
                 .allowHardware(true)
+                .memoryCachePolicy(if (isLowRamDevice) coil.request.CachePolicy.READ_ONLY else coil.request.CachePolicy.ENABLED)
                 .build()
             imageLoader.enqueue(request)
         }

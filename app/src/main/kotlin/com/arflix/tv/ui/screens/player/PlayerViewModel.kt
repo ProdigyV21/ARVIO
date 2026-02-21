@@ -312,36 +312,17 @@ class PlayerViewModel @Inject constructor(
                         fetchSkipIntervals(imdbId, seasonNumber, episodeNumber)
                     }
                 }
-                // Start VOD append early so TV/anime VOD can surface before addon resolution completes.
+                // Start VOD append in background - single fast attempt, no retries blocking UI
                 vodAppendJob?.cancel()
                 vodAppendJob = launch {
+                    // Single attempt with reasonable timeout - VOD is supplementary, not critical
                     appendVodSourceInBackground(
                         mediaType = mediaType,
                         imdbId = imdbId,
                         seasonNumber = seasonNumber,
                         episodeNumber = episodeNumber,
-                        timeoutMs = 9_000L
+                        timeoutMs = 2_500L
                     )
-                    if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
-                        delay(3_000L)
-                        appendVodSourceInBackground(
-                            mediaType = mediaType,
-                            imdbId = imdbId,
-                            seasonNumber = seasonNumber,
-                            episodeNumber = episodeNumber,
-                            timeoutMs = 18_000L
-                        )
-                    }
-                    if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
-                        delay(6_000L)
-                        appendVodSourceInBackground(
-                            mediaType = mediaType,
-                            imdbId = imdbId,
-                            seasonNumber = seasonNumber,
-                            episodeNumber = episodeNumber,
-                            timeoutMs = 28_000L
-                        )
-                    }
                 }
 
                 // Fetch streams IMMEDIATELY

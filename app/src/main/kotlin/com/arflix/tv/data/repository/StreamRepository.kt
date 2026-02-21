@@ -499,13 +499,14 @@ class StreamRepository @Inject constructor(
     }
 
     // Stream source requests should return quickly to keep player startup responsive.
-    private val ADDON_TIMEOUT_MS = 15000L
+    // Most addons respond in 1-3 seconds; 5s is enough to catch slow ones without blocking UI.
+    private val ADDON_TIMEOUT_MS = 5000L
     // Subtitles should never block source availability.
-    private val SUBTITLE_TIMEOUT_MS = 4000L
-    // If addons return nothing, allow a longer Xtream VOD lookup to recover playback.
-    private val VOD_LOOKUP_TIMEOUT_MS = 3500L
+    private val SUBTITLE_TIMEOUT_MS = 3000L
+    // If addons return nothing, allow a short Xtream VOD lookup to recover playback.
+    private val VOD_LOOKUP_TIMEOUT_MS = 2500L
     // If addons already returned streams, keep VOD lookup short to avoid UI delay.
-    private val VOD_APPEND_TIMEOUT_MS = 1200L
+    private val VOD_APPEND_TIMEOUT_MS = 1000L
     private val STREAM_RESULT_CACHE_TTL_MS = 120_000L
 
     private fun streamCacheKey(
@@ -692,9 +693,9 @@ class StreamRepository @Inject constructor(
         val subtitles = mutableListOf<Subtitle>()
         // Check if this is anime - use comprehensive detection
         val isAnime = animeMapper.isAnimeContent(tmdbId, genreIds, originalLanguage)
-        // Get anime query using 5-tier fallback resolution
+        // Get anime query using 5-tier fallback resolution (reduced timeout for faster startup)
         val animeQuery = if (isAnime) {
-            withTimeoutOrNull(1_300L) {
+            withTimeoutOrNull(600L) {
                 animeMapper.resolveAnimeEpisodeQuery(
                     tmdbId = tmdbId,
                     tvdbId = tvdbId,
@@ -752,7 +753,7 @@ class StreamRepository @Inject constructor(
                         val response = streamApi.getAddonStreams(url)
                         var addonStreams = processStreams(response.streams ?: emptyList(), addon)
 
-                        // Fallback: if Kitsu query returned zero results, retry with IMDB format
+                        // Quick fallback: if Kitsu query returned zero results, try IMDB format
                         if (addonStreams.isEmpty() && useKitsu && contentId != seriesId) {
                             val fallbackUrl = if (queryParams != null) {
                                 "$baseUrl/stream/series/$seriesId.json?$queryParams"
@@ -762,24 +763,7 @@ class StreamRepository @Inject constructor(
                             try {
                                 val fallbackResponse = streamApi.getAddonStreams(fallbackUrl)
                                 addonStreams = processStreams(fallbackResponse.streams ?: emptyList(), addon)
-                            } catch (e: Exception) {
-                            }
-                        }
-
-                        // Fallback 2: For anime, try absolute episode numbering (imdb:0:absoluteEp)
-                        if (addonStreams.isEmpty() && isAnime && season > 0) {
-                            val absoluteEpisode = if (season == 1) episode else ((season - 1) * 12) + episode
-                            val absoluteId = "$imdbId:0:$absoluteEpisode"
-                            val absoluteUrl = if (queryParams != null) {
-                                "$baseUrl/stream/series/$absoluteId.json?$queryParams"
-                            } else {
-                                "$baseUrl/stream/series/$absoluteId.json"
-                            }
-                            try {
-                                val absoluteResponse = streamApi.getAddonStreams(absoluteUrl)
-                                addonStreams = processStreams(absoluteResponse.streams ?: emptyList(), addon)
-                            } catch (_: Exception) {
-                            }
+                            } catch (_: Exception) {}
                         }
                         addonStreams
                     }
@@ -810,7 +794,8 @@ class StreamRepository @Inject constructor(
         tmdbId: Int? = null,
         timeoutMs: Long = 2_500L
     ): StreamSource? = withContext(Dispatchers.IO) {
-        withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
+        android.util.Log.d("IPTV_VOD", "resolveEpisodeVodOnly START: title=$title, S${season}E${episode}, timeout=$timeoutMs")
+        val result = withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
             runCatching {
                 iptvRepository.findEpisodeVodSource(
                     title = title,
@@ -820,7 +805,46 @@ class StreamRepository @Inject constructor(
                     tmdbId = tmdbId,
                     allowNetwork = true
                 )
-            }.getOrNull()
+            }.getOrElse { e ->
+                android.util.Log.e("IPTV_VOD", "resolveEpisodeVodOnly exception: ${e.message}")
+                null
+            }
+        }
+        android.util.Log.d("IPTV_VOD", "resolveEpisodeVodOnly result: ${result?.url?.take(50) ?: "null"}")
+        result
+    }
+
+    suspend fun prefetchEpisodeVod(
+        imdbId: String?,
+        season: Int,
+        episode: Int,
+        title: String = "",
+        tmdbId: Int? = null
+    ) = withContext(Dispatchers.IO) {
+        if (title.isBlank()) return@withContext
+        runCatching {
+            iptvRepository.prefetchEpisodeVodResolution(
+                title = title,
+                season = season,
+                episode = episode,
+                imdbId = imdbId,
+                tmdbId = tmdbId
+            )
+        }
+    }
+
+    suspend fun prefetchSeriesVodInfo(
+        imdbId: String?,
+        title: String = "",
+        tmdbId: Int? = null
+    ) = withContext(Dispatchers.IO) {
+        if (title.isBlank()) return@withContext
+        runCatching {
+            iptvRepository.prefetchSeriesInfoForShow(
+                title = title,
+                imdbId = imdbId,
+                tmdbId = tmdbId
+            )
         }
     }
 

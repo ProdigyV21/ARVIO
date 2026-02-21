@@ -435,6 +435,44 @@ class DetailsViewModel @Inject constructor(
                         }
                     }
                 }
+
+                if (mediaType == MediaType.TV) {
+                    launch {
+                        val titleForPrefetch = baseState.item?.title.orEmpty().ifBlank { mergedItem.title }
+                        if (titleForPrefetch.isBlank()) {
+                            return@launch
+                        }
+                        // Start immediately with TMDB/title so resolver can warm caches ASAP.
+                        streamRepository.prefetchSeriesVodInfo(
+                            imdbId = null,
+                            title = titleForPrefetch,
+                            tmdbId = mediaId
+                        )
+                        val externalIds = runCatching { externalIdsDeferred.await() }.getOrNull()
+                        streamRepository.prefetchSeriesVodInfo(
+                            imdbId = externalIds?.imdbId,
+                            title = titleForPrefetch,
+                            tmdbId = mediaId
+                        )
+                        val resumeInfo = runCatching { resumeDeferred.await() }.getOrNull()
+                        val loadedEpisodes = runCatching { episodesDeferred?.await() }.getOrNull().orEmpty()
+                        val targetSeason = initialSeason
+                            ?: resumeInfo?.season
+                            ?: loadedEpisodes.firstOrNull()?.seasonNumber
+                            ?: seasonToLoad
+                        val targetEpisode = initialEpisode
+                            ?: resumeInfo?.episode
+                            ?: loadedEpisodes.firstOrNull()?.episodeNumber
+                            ?: 1
+                        streamRepository.prefetchEpisodeVod(
+                            imdbId = externalIds?.imdbId,
+                            season = targetSeason,
+                            episode = targetEpisode,
+                            title = titleForPrefetch,
+                            tmdbId = mediaId
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -702,42 +740,20 @@ class DetailsViewModel @Inject constructor(
                 val item = _uiState.value.item
                 val genreIds = item?.genreIds ?: emptyList()
                 val originalLanguage = item?.originalLanguage
-                // Start VOD append immediately (in parallel) so TV VOD can appear faster.
+                // Start VOD append in background - runs parallel to addon stream fetch
                 vodAppendJob?.cancel()
                 vodAppendJob = launch {
+                    // TV shows need more time: catalog load (3s) + series info (2s) + buffer
+                    val vodTimeout = if (currentMediaType == MediaType.MOVIE) 3_000L else 8_000L
                     appendVodSourceInBackground(
                         imdbId = imdbId,
                         season = season,
                         episode = episode,
-                        timeoutMs = 9_000L,
+                        timeoutMs = vodTimeout,
                         requestId = requestId,
                         requestMediaType = requestMediaType,
                         requestMediaId = requestMediaId
                     )
-                    if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
-                        delay(3_000L)
-                        appendVodSourceInBackground(
-                            imdbId = imdbId,
-                            season = season,
-                            episode = episode,
-                            timeoutMs = 18_000L,
-                            requestId = requestId,
-                            requestMediaType = requestMediaType,
-                            requestMediaId = requestMediaId
-                        )
-                    }
-                    if (_uiState.value.streams.none { it.addonId == "iptv_xtream_vod" }) {
-                        delay(6_000L)
-                        appendVodSourceInBackground(
-                            imdbId = imdbId,
-                            season = season,
-                            episode = episode,
-                            timeoutMs = 28_000L,
-                            requestId = requestId,
-                            requestMediaType = requestMediaType,
-                            requestMediaId = requestMediaId
-                        )
-                    }
                 }
 
                 val result = if (currentMediaType == MediaType.MOVIE) {
@@ -1110,13 +1126,21 @@ class DetailsViewModel @Inject constructor(
         requestMediaType: MediaType,
         requestMediaId: Int
     ) {
+        android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground START: imdbId=$imdbId, S${season}E${episode}, type=$requestMediaType, timeout=$timeoutMs")
         if (requestId != loadStreamsRequestId ||
             currentMediaType != requestMediaType ||
             currentMediaId != requestMediaId
-        ) return
+        ) {
+            android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: request mismatch, skipping")
+            return
+        }
         val currentStreams = _uiState.value.streams
-        if (currentStreams.any { it.addonId == "iptv_xtream_vod" }) return
+        if (currentStreams.any { it.addonId == "iptv_xtream_vod" }) {
+            android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: VOD already present, skipping")
+            return
+        }
         val itemTitle = _uiState.value.item?.title.orEmpty()
+        android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: calling repository for title=$itemTitle")
 
         val vod = if (currentMediaType == MediaType.MOVIE) {
             streamRepository.resolveMovieVodOnly(
@@ -1135,15 +1159,30 @@ class DetailsViewModel @Inject constructor(
                 tmdbId = currentMediaId,
                 timeoutMs = timeoutMs
             )
-        } ?: return
+        }
+        if (vod == null) {
+            android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: repository returned null")
+            return
+        }
+        android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: GOT VOD url=${vod.url?.take(50)}")
 
-        if (vod.url.isNullOrBlank()) return
+        if (vod.url.isNullOrBlank()) {
+            android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: VOD URL is blank")
+            return
+        }
         val latest = _uiState.value.streams
-        if (latest.any { it.url == vod.url && it.source == vod.source }) return
+        if (latest.any { it.url == vod.url && it.source == vod.source }) {
+            android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: duplicate URL, skipping")
+            return
+        }
         if (requestId != loadStreamsRequestId ||
             currentMediaType != requestMediaType ||
             currentMediaId != requestMediaId
-        ) return
+        ) {
+            android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: request changed, skipping")
+            return
+        }
+        android.util.Log.d("IPTV_VOD", "appendVodSourceInBackground: ADDING VOD to streams!")
         _uiState.value = _uiState.value.copy(
             streams = latest + vod,
             isLoadingStreams = false
