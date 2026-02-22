@@ -111,10 +111,22 @@ class CatalogRepository @Inject constructor(
         return readCatalogsForActiveProfile()
     }
 
+    suspend fun getCatalogsForProfile(profileId: String): List<CatalogConfig> {
+        val safeProfileId = profileId.trim().ifBlank { "default" }
+        val prefs = context.settingsDataStore.data.first()
+        return readCatalogsFromPrefs(safeProfileId, prefs)
+    }
+
     suspend fun getHiddenPreinstalledCatalogIdsForActiveProfile(): List<String> {
         val profileId = activeProfileId()
         val prefs = context.settingsDataStore.data.first()
         return decodeHiddenPreinstalled(profileId, prefs).toList()
+    }
+
+    suspend fun getHiddenPreinstalledCatalogIdsForProfile(profileId: String): List<String> {
+        val safeProfileId = profileId.trim().ifBlank { "default" }
+        val prefs = context.settingsDataStore.data.first()
+        return decodeHiddenPreinstalled(safeProfileId, prefs).toList()
     }
 
     suspend fun setHiddenPreinstalledCatalogIdsForActiveProfile(ids: List<String>) {
@@ -129,10 +141,38 @@ class CatalogRepository @Inject constructor(
         }
     }
 
+    suspend fun setHiddenPreinstalledCatalogIdsForProfile(profileId: String, ids: List<String>) {
+        val safeProfileId = profileId.trim().ifBlank { "default" }
+        val cleaned = ids.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        context.settingsDataStore.edit { prefs ->
+            if (cleaned.isEmpty()) {
+                prefs[hiddenPreinstalledKey(safeProfileId)] = ""
+            } else {
+                prefs[hiddenPreinstalledKey(safeProfileId)] = gson.toJson(cleaned)
+            }
+        }
+    }
+
     private suspend fun saveCatalogs(catalogs: List<CatalogConfig>) {
         val profileId = activeProfileId()
         context.settingsDataStore.edit { prefs ->
             prefs[catalogsKey(profileId)] = gson.toJson(catalogs)
+        }
+    }
+
+    suspend fun replaceCatalogsForProfile(profileId: String, catalogs: List<CatalogConfig>) {
+        val safeProfileId = profileId.trim().ifBlank { "default" }
+        val sanitized = catalogs
+            .distinctBy { it.id }
+            .map { cfg ->
+                val looksCustom = cfg.id.startsWith("custom_") ||
+                    cfg.sourceType == CatalogSourceType.ADDON ||
+                    !cfg.sourceUrl.isNullOrBlank() ||
+                    !cfg.sourceRef.isNullOrBlank()
+                if (looksCustom) cfg.copy(isPreinstalled = false) else cfg
+            }
+        context.settingsDataStore.edit { prefs ->
+            prefs[catalogsKey(safeProfileId)] = gson.toJson(sanitized)
         }
     }
 

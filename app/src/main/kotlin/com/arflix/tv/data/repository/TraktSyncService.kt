@@ -80,6 +80,10 @@ class TraktSyncService @Inject constructor(
     private var cachedWatchedMovies: List<WatchedMovieRecord>? = null
     private var cachedWatchedEpisodes: List<WatchedEpisodeRecord>? = null
 
+    private fun profileHistorySource(base: String): String {
+        return "profile:${profileManager.getProfileIdSync()}:$base"
+    }
+
     /**
      * Perform a full sync from Trakt to Supabase
      * This imports ALL watched movies and episodes, overwriting existing data
@@ -201,7 +205,12 @@ class TraktSyncService @Inject constructor(
             )
 
             val playbackItems = fetchAllPlaybackProgress()
-            val progressRecords = buildWatchHistoryFromPlayback(localUserId, playbackItems, completionThreshold, "trakt")
+            val progressRecords = buildWatchHistoryFromPlayback(
+                localUserId,
+                playbackItems,
+                completionThreshold,
+                profileHistorySource("trakt")
+            )
 
             if (hasSupabase) {
                 progressRecords.chunked(100).forEach { chunk ->
@@ -731,7 +740,7 @@ class TraktSyncService @Inject constructor(
                 durationSeconds = durationSeconds,
                 pausedAt = Instant.now().toString(),
                 updatedAt = Instant.now().toString(),
-                source = "arvio",
+                source = profileHistorySource("arvio"),
                 title = title,
                 episodeTitle = episodeTitle,
                 backdropPath = backdropPath,
@@ -1366,7 +1375,7 @@ class TraktSyncService @Inject constructor(
         current: List<WatchHistoryRecord>
     ) {
         val currentKeys = current.mapNotNull { buildWatchHistoryKey(it) }.toSet()
-        val existing = fetchAllSupabaseWatchHistory(userId, "eq.trakt")
+        val existing = fetchAllSupabaseWatchHistory(userId, "eq.${profileHistorySource("trakt")}")
         val stale = existing.filter { record ->
             val key = buildWatchHistoryKey(record)
             key != null && !currentKeys.contains(key)
@@ -1384,7 +1393,7 @@ class TraktSyncService @Inject constructor(
                         mediaType = "eq.${record.mediaType}",
                         season = record.season?.let { "eq.$it" },
                         episode = record.episode?.let { "eq.$it" },
-                        source = "eq.trakt"
+                        source = "eq.${profileHistorySource("trakt")}"
                     )
                 }
             } catch (e: Exception) {

@@ -108,6 +108,12 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 iptvRepository.warmupFromCacheOnly()
+                // Also trigger a non-forced background refresh so Live TV starts loading
+                // as soon as profile is selected.
+                iptvRepository.loadSnapshot(
+                    forcePlaylistReload = false,
+                    forceEpgReload = false
+                )
             }
         }
     }

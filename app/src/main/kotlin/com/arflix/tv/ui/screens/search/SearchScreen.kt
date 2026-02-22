@@ -24,7 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,7 +43,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,9 +66,6 @@ import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.abs
 
 /**
  * Search screen with centered search bar and separate Movies/TV Shows rows
@@ -410,43 +405,19 @@ private fun SearchResultRow(
     onItemClick: (MediaItem) -> Unit
 ) {
     val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-    val isCompactHeight = configuration.screenHeightDp <= 780
-    val itemWidth = if (usePosterCards) 105.dp else 210.dp
+    val screenHeight = configuration.screenHeightDp
+    val isCompactHeight = screenHeight <= 780
+    val itemWidth = when {
+        usePosterCards && screenHeight <= 600 -> 82.dp
+        usePosterCards && screenHeight <= 700 -> 92.dp
+        usePosterCards -> 102.dp
+        !usePosterCards && screenHeight <= 600 -> 170.dp
+        !usePosterCards && screenHeight <= 700 -> 188.dp
+        else -> 210.dp
+    }
     val itemSpacing = 16.dp
-    val sidebarWidth = 56.dp
-    val horizontalPadding = 96.dp
-    val availableWidthDp = (configuration.screenWidthDp.dp - sidebarWidth - horizontalPadding)
-        .coerceAtLeast(1.dp)
-    val fallbackItemsPerPage = remember(configuration, density) {
-        val availablePx = with(density) { availableWidthDp.roundToPx().coerceAtLeast(1) }
-        val itemSpanPx = with(density) { (itemWidth + itemSpacing).roundToPx().coerceAtLeast(1) }
-        max(1, availablePx / itemSpanPx)
-    }
-    var baseVisibleCount by remember { mutableIntStateOf(0) }
-    val visibleCount = rowState.layoutInfo.visibleItemsInfo.size
-    LaunchedEffect(visibleCount) {
-        if (visibleCount > 0 && baseVisibleCount == 0) {
-            baseVisibleCount = visibleCount
-        }
-    }
-    val itemsPerPage = remember(fallbackItemsPerPage, baseVisibleCount) {
-        if (baseVisibleCount > 0) min(baseVisibleCount, fallbackItemsPerPage) else fallbackItemsPerPage
-    }
-    val effectiveVisibleCount = remember(items.size, itemsPerPage, visibleCount) {
-        if (visibleCount > 0) min(visibleCount, items.size.coerceAtLeast(1)) else itemsPerPage
-    }
-    val maxFirstIndex = (items.size - effectiveVisibleCount).coerceAtLeast(0)
-    val scrollTargetIndex by remember(rowState, focusedItemIndex, isCurrentRow, items.size, maxFirstIndex) {
-        derivedStateOf {
-            if (!isCurrentRow || focusedItemIndex < 0) return@derivedStateOf -1
-            if (items.isEmpty()) return@derivedStateOf -1
-            focusedItemIndex.coerceAtMost(maxFirstIndex)
-        }
-    }
-    val itemSpanPx = remember(density, itemWidth, itemSpacing) {
-        with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
-    }
+    val rowStartPadding = if (isCompactHeight) 12.dp else 16.dp
+    val rowEndPadding = if (isCompactHeight) 120.dp else 160.dp
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
 
     LaunchedEffect(isCurrentRow) {
@@ -454,35 +425,12 @@ private fun SearchResultRow(
             lastScrollIndex = -1
         }
     }
-    LaunchedEffect(scrollTargetIndex, isCurrentRow, focusedItemIndex) {
-        if (!isCurrentRow || scrollTargetIndex < 0) return@LaunchedEffect
-
-        val extraOffset = if (focusedItemIndex > maxFirstIndex) {
-            ((focusedItemIndex - maxFirstIndex) * itemSpanPx).toInt()
-        } else 0
-
-        if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
-            rowState.animateScrollToItem(index = 0, scrollOffset = 0)
-            lastScrollIndex = 0
-            return@LaunchedEffect
-        }
-
-        if (lastScrollIndex == scrollTargetIndex && extraOffset == 0) return@LaunchedEffect
-        if (lastScrollIndex == -1) {
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-            lastScrollIndex = scrollTargetIndex
-            return@LaunchedEffect
-        }
-
-        val delta = scrollTargetIndex - lastScrollIndex
-        if (delta == 0 && extraOffset > 0) {
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else if (abs(delta) > 1) {
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else if (delta != 0) {
-            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        }
-        lastScrollIndex = scrollTargetIndex
+    LaunchedEffect(isCurrentRow, focusedItemIndex, items.size) {
+        if (!isCurrentRow || items.isEmpty()) return@LaunchedEffect
+        val targetIndex = focusedItemIndex.coerceIn(0, items.lastIndex)
+        if (lastScrollIndex == targetIndex) return@LaunchedEffect
+        rowState.animateScrollToItem(index = targetIndex, scrollOffset = 0)
+        lastScrollIndex = targetIndex
     }
 
     Column {
@@ -502,10 +450,10 @@ private fun SearchResultRow(
             TvLazyRow(
                 state = rowState,
                 contentPadding = PaddingValues(
-                    start = 0.dp,
-                    end = 160.dp,
+                    start = rowStartPadding,
+                    end = rowEndPadding,
                     top = if (isCompactHeight) 10.dp else 16.dp,
-                    bottom = if (isCompactHeight) 16.dp else 24.dp
+                    bottom = if (isCompactHeight) 24.dp else 28.dp
                 ),
                 horizontalArrangement = Arrangement.spacedBy(itemSpacing),
                 pivotOffsets = androidx.tv.foundation.PivotOffsets(
@@ -519,7 +467,7 @@ private fun SearchResultRow(
                         MediaType.TV -> "TV Show"
                         MediaType.MOVIE -> "Movie"
                     }
-                    val yearValue = item.year.ifBlank { item.releaseDate?.takeLast(4).orEmpty() }
+                    val yearValue = item.year.ifBlank { item.releaseDate?.take(4).orEmpty() }
                     val yearDisplay = if (yearValue.isNotBlank()) " | $yearValue" else ""
                     val displayItem = item.copy(
                         subtitle = "$mediaTypeLabel$yearDisplay"

@@ -991,7 +991,7 @@ class HomeViewModel @Inject constructor(
         return try {
             val entries = watchHistoryRepository.getContinueWatching()
             if (entries.isEmpty()) return emptyList()
-            entries.distinctBy { entry ->
+            val mapped = entries.distinctBy { entry ->
                 "${entry.media_type}:${entry.show_tmdb_id}:${entry.season ?: -1}:${entry.episode ?: -1}"
             }.mapNotNull { entry ->
                 val mediaType = if (entry.media_type == "tv") MediaType.TV else MediaType.MOVIE
@@ -1009,6 +1009,7 @@ class HomeViewModel @Inject constructor(
                     posterPath = entry.poster_path
                 )
             }
+            traktRepository.enrichContinueWatchingItems(mapped)
         } catch (_: Exception) {
             emptyList()
         }

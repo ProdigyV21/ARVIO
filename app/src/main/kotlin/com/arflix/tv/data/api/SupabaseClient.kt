@@ -51,6 +51,7 @@ interface SupabaseApi {
         @Query("user_id") userId: String,
         @Query("show_tmdb_id") showTmdbId: String,
         @Query("media_type") mediaType: String,
+        @Query("source") source: String? = null,
         @Query("season") season: String? = null,
         @Query("episode") episode: String? = null,
         @Query("select") select: String = "*",

@@ -45,8 +45,17 @@ data class WatchHistoryEntry(
 @Singleton
 class WatchHistoryRepository @Inject constructor(
     private val authRepositoryProvider: Provider<AuthRepository>,
-    private val supabaseApi: SupabaseApi
+    private val supabaseApi: SupabaseApi,
+    private val profileManager: ProfileManager
 ) {
+    private fun profileHistorySource(base: String): String {
+        return "profile:${profileManager.getProfileIdSync()}:$base"
+    }
+
+    private fun profileHistorySourceFilter(): String {
+        // PostgREST wildcard for LIKE is '*'
+        return "like.profile:${profileManager.getProfileIdSync()}:*"
+    }
 
     /**
      * Save watch progress to Supabase
@@ -82,7 +91,7 @@ class WatchHistoryRepository @Inject constructor(
                 progress = progress,
                 duration_seconds = duration,
                 position_seconds = position,
-                source = "arvio",
+                source = profileHistorySource("arvio"),
                 stream_key = streamKey,
                 stream_addon_id = streamAddonId,
                 stream_title = streamTitle
@@ -116,6 +125,7 @@ class WatchHistoryRepository @Inject constructor(
                 supabaseApi.getWatchHistory(
                     auth = auth,
                     userId = "eq.$userId",
+                    source = profileHistorySourceFilter(),
                     order = "updated_at.desc",
                     limit = 500
                 )
@@ -136,6 +146,7 @@ class WatchHistoryRepository @Inject constructor(
                 supabaseApi.getWatchHistory(
                     auth = auth,
                     userId = "eq.$userId",
+                    source = profileHistorySourceFilter(),
                     order = "updated_at.desc",
                     limit = 500
                 )
@@ -166,6 +177,7 @@ class WatchHistoryRepository @Inject constructor(
                     userId = "eq.$userId",
                     showTmdbId = "eq.$tmdbId",
                     mediaType = "eq.${if (mediaType == MediaType.MOVIE) "movie" else "tv"}",
+                    source = profileHistorySourceFilter(),
                     season = season?.let { "eq.$it" },
                     episode = episode?.let { "eq.$it" }
                 )
@@ -193,6 +205,7 @@ class WatchHistoryRepository @Inject constructor(
                     userId = "eq.$userId",
                     showTmdbId = "eq.$tmdbId",
                     mediaType = "eq.$mediaTypeKey",
+                    source = profileHistorySourceFilter(),
                     order = "updated_at.desc",
                     limit = 50
                 )
@@ -224,6 +237,7 @@ class WatchHistoryRepository @Inject constructor(
                     auth = auth,
                     userId = "eq.$userId",
                     showTmdbId = "eq.$tmdbId",
+                    source = profileHistorySourceFilter(),
                     season = season?.let { "eq.$it" },
                     episode = episode?.let { "eq.$it" }
                 )
@@ -243,7 +257,8 @@ class WatchHistoryRepository @Inject constructor(
             executeSupabaseCall("clear watch history") { auth ->
                 supabaseApi.deleteWatchHistory(
                     auth = auth,
-                    userId = "eq.$userId"
+                    userId = "eq.$userId",
+                    source = profileHistorySourceFilter()
                 )
             }
         } catch (_: Exception) {

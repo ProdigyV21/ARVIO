@@ -62,7 +62,6 @@ class StreamRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val streamApi: StreamApi,
     private val okHttpClient: OkHttpClient,
-    private val authRepository: AuthRepository,
     private val profileManager: ProfileManager,
     private val animeMapper: AnimeMapper,
     private val iptvRepository: IptvRepository
@@ -78,7 +77,9 @@ class StreamRepository @Inject constructor(
 
     // Profile-scoped preference keys - each profile has its own addons
     private fun addonsKey() = profileManager.profileStringKey("installed_addons")
+    private fun addonsKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "installed_addons")
     private fun pendingAddonsKey() = profileManager.profileStringKey("pending_addons")
+    private fun pendingAddonsKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "pending_addons")
     private fun hiddenBuiltInAddonsKey() = profileManager.profileStringKey("hidden_builtin_addons_v1")
     private fun torrServerBaseUrlKey() = profileManager.profileStringKey("torrserver_base_url_v1")
     fun observeTorrServerBaseUrl(): Flow<String> =
@@ -326,24 +327,30 @@ class StreamRepository @Inject constructor(
         saveAddons(enforceOpenSubtitles(addons))
     }
 
+    suspend fun getAddonsForProfile(profileId: String): List<Addon> {
+        val prefs = context.streamDataStore.data.first()
+        val stored = parseAddons(prefs[addonsKeyFor(profileId)])
+        return enforceOpenSubtitles(stored ?: getDefaultAddonList())
+    }
+
+    suspend fun replaceAddonsForProfile(profileId: String, addons: List<Addon>) {
+        val resolved = enforceOpenSubtitles(addons)
+        context.streamDataStore.edit { prefs ->
+            prefs[addonsKeyFor(profileId)] = gson.toJson(resolved)
+            prefs.remove(pendingAddonsKeyFor(profileId))
+        }
+        if (profileManager.getProfileIdSync() == profileId) {
+            synchronized(streamResultCache) { streamResultCache.clear() }
+        }
+    }
+
     private suspend fun saveAddons(addons: List<Addon>) {
         val json = gson.toJson(addons)
 
-        // Save locally
+        // Save locally (profile-scoped only).
         context.streamDataStore.edit { prefs ->
             prefs[addonsKey()] = json
-        }
-
-        // Sync to Supabase (non-blocking)
-        val result = authRepository.saveAddonsToProfile(json)
-        if (result.isSuccess) {
-            context.streamDataStore.edit { prefs ->
-                prefs.remove(pendingAddonsKey())
-            }
-        } else {
-            context.streamDataStore.edit { prefs ->
-                prefs[pendingAddonsKey()] = json
-            }
+            prefs.remove(pendingAddonsKey())
         }
         synchronized(streamResultCache) { streamResultCache.clear() }
     }
@@ -353,51 +360,7 @@ class StreamRepository @Inject constructor(
      * Merges cloud addons with local defaults
      */
     suspend fun syncAddonsFromCloud() {
-        try {
-            val pendingJson = context.streamDataStore.data.first()[pendingAddonsKey()]
-            if (!pendingJson.isNullOrEmpty()) {
-                val pushResult = authRepository.saveAddonsToProfile(pendingJson)
-                if (pushResult.isSuccess) {
-                    context.streamDataStore.edit { prefs ->
-                        prefs.remove(pendingAddonsKey())
-                        prefs[addonsKey()] = pendingJson
-                    }
-                } else {
-                    return
-                }
-            }
-
-            val cloudJson = authRepository.getAddonsFromProfileFresh().getOrNull()
-            if (!cloudJson.isNullOrEmpty()) {
-                val cloudAddons = parseAddons(cloudJson) ?: emptyList()
-                val prefs = context.streamDataStore.data.first()
-                val localAddons = parseAddons(prefs[addonsKey()]) ?: emptyList()
-                val hiddenBuiltIns = decodeHiddenBuiltIns(prefs)
-
-                if (cloudAddons.isNotEmpty()) {
-                    // Use cloud addons, but ensure built-in ones are present
-                    val builtInIds = setOf("opensubtitles")
-                    val defaultBuiltIns = getDefaultAddonList()
-                        .filter { it.id in builtInIds }
-                        .filterNot { hiddenBuiltIns.contains(it.id) }
-
-                    // Merge local + cloud (prefer local to avoid losing recent changes)
-                    val mergedLocalCloud = mergeAddonLists(localAddons, cloudAddons)
-                    val mergedIds = mergedLocalCloud.map { it.id }.toSet()
-                    val missingBuiltIns = defaultBuiltIns.filter { it.id !in mergedIds }
-                    val mergedAddons = enforceOpenSubtitles(mergedLocalCloud + missingBuiltIns)
-
-                    // Save merged list locally
-                    context.streamDataStore.edit { prefs ->
-                        prefs[addonsKey()] = gson.toJson(mergedAddons)
-                    }
-                    synchronized(streamResultCache) { streamResultCache.clear() }
-
-                }
-            } else {
-            }
-        } catch (e: Exception) {
-        }
+        // Deprecated path: addons are synced via account_sync_state payload per profile.
     }
 
     private fun parseAddons(json: String?): List<Addon>? {

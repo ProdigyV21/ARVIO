@@ -957,7 +957,7 @@ class TraktRepository @Inject constructor(
 
         // If no Trakt auth, use local Continue Watching for this profile
         if (auth == null) {
-            val localItems = loadLocalContinueWatchingRaw()
+            val localItems = loadLocalContinueWatching()
             cachedContinueWatching = localItems
             return@coroutineScope localItems
         }
@@ -1507,6 +1507,22 @@ class TraktRepository @Inject constructor(
         // Enrich items with TMDB data in parallel (limited concurrency)
         val semaphore = kotlinx.coroutines.sync.Semaphore(5)
         rawItems.map { item ->
+            async {
+                semaphore.withPermit {
+                    enrichLocalContinueWatchingItem(item)
+                }
+            }
+        }.awaitAll()
+    }
+
+    /**
+     * Enrich arbitrary Continue Watching items with TMDB metadata so non-Trakt
+     * and Trakt paths render identical card details.
+     */
+    suspend fun enrichContinueWatchingItems(items: List<ContinueWatchingItem>): List<ContinueWatchingItem> = coroutineScope {
+        if (items.isEmpty()) return@coroutineScope emptyList()
+        val semaphore = kotlinx.coroutines.sync.Semaphore(5)
+        items.map { item ->
             async {
                 semaphore.withPermit {
                     enrichLocalContinueWatchingItem(item)

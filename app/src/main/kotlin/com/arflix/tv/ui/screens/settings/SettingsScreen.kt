@@ -523,7 +523,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.weight(1f))
                 
                 Text(
-                    text = "ARVIO V1.5",
+                    text = "ARVIO V1.6",
                     style = ArflixTypography.caption,
                     color = TextSecondary.copy(alpha = 0.5f),
                     modifier = Modifier.padding(start = 16.dp)

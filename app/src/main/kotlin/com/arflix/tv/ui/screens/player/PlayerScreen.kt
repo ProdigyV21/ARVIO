@@ -192,9 +192,10 @@ fun PlayerScreen(
 
     // Buffering watchdog - detect stuck buffering
     var bufferingStartTime by remember { mutableStateOf<Long?>(null) }
-    val bufferingTimeoutMs = 12_000L // Mid-playback timeout for stuck buffering
+    val bufferingTimeoutMs = 25_000L // Mid-playback timeout for stuck buffering
     var userSelectedSourceManually by remember { mutableStateOf(false) }
-    val allowAutomaticSourceFallback = false
+    val allowStartupSourceFallback = true
+    val allowMidPlaybackSourceFallback = false
     val initialBufferingTimeoutMs = remember(uiState.selectedStream, userSelectedSourceManually) {
         estimateInitialStartupTimeoutMs(
             stream = uiState.selectedStream,
@@ -214,6 +215,7 @@ fun PlayerScreen(
     var blackVideoReadySinceMs by remember { mutableStateOf<Long?>(null) }
     val heavyStartupMaxRetries = 6
     var rebufferRecoverAttempted by remember { mutableStateOf(false) }
+    var longRebufferCount by remember { mutableIntStateOf(0) }
     var autoAdvanceAttempts by remember { mutableIntStateOf(0) }
     var triedStreamIndexes by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var isAutoAdvancing by remember { mutableStateOf(false) }
@@ -230,6 +232,7 @@ fun PlayerScreen(
         startupSameSourceRefreshAttempted = false
         startupUrlLock = null
         rebufferRecoverAttempted = false
+        longRebufferCount = 0
         autoAdvanceAttempts = 0
         triedStreamIndexes = emptySet()
         isAutoAdvancing = false
@@ -275,6 +278,7 @@ fun PlayerScreen(
                 startupSameSourceRefreshAttempted = false
                 startupUrlLock = null
                 rebufferRecoverAttempted = false
+                longRebufferCount = 0
                 isAutoAdvancing = true
                 viewModel.selectStream(streams[nextIndex])
                 true
@@ -312,17 +316,18 @@ fun PlayerScreen(
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpDataSourceFactory)
 
-        // FAST START buffering - minimal buffer before starting, build up while playing
+        // Balanced startup buffering: avoid aggressive under-buffering while
+        // keeping startup responsive. Heavy streams get extra startup gating below.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                10_000,
-                300_000,
-                4_000,
-                4_000
+                45_000,
+                240_000,
+                7_000,
+                12_000
             )
-            .setTargetBufferBytes(100 * 1024 * 1024)
+            .setTargetBufferBytes(C.LENGTH_UNSET)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(15_000, true) // Keep 15 seconds of back buffer
+            .setBackBuffer(20_000, true)
             .build()
 
         ExoPlayer.Builder(context)
@@ -439,7 +444,7 @@ fun PlayerScreen(
                             }
 
                             if (!hasPlaybackStarted &&
-                                allowAutomaticSourceFallback &&
+                                allowStartupSourceFallback &&
                                 !userSelectedSourceManually &&
                                 tryAdvanceToNextStream()
                             ) {
@@ -627,6 +632,7 @@ fun PlayerScreen(
             hasPlaybackStarted = false  // Reset for new stream
             playbackIssueReported = false
             rebufferRecoverAttempted = false
+            longRebufferCount = 0
 
             // New stream means any previously-applied external subtitle config is stale.
             lastAppliedExternalSubtitleUrl = null
@@ -643,8 +649,28 @@ fun PlayerScreen(
             } else {
                 exoPlayer.setMediaItem(mediaItem)
             }
+            // Startup gate: wait for a minimum buffered-ahead window before playing.
+            // This reduces the "starts then buffers in first seconds" issue on large files.
+            val heavy = isLikelyHeavyStream(uiState.selectedStream)
+            val startupBufferedTargetMs = if (heavy) 12_000L else 6_000L
+            val startupWaitTimeoutMs = if (heavy) 75_000L else 35_000L
+
+            exoPlayer.playWhenReady = false
             exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
+
+            launch {
+                val waitStart = System.currentTimeMillis()
+                while (!playerReleased) {
+                    val bufferedAheadMs = (exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)
+                    val ready = exoPlayer.playbackState == Player.STATE_READY
+                    if (ready && bufferedAheadMs >= startupBufferedTargetMs) break
+                    if (System.currentTimeMillis() - waitStart >= startupWaitTimeoutMs) break
+                    delay(200)
+                }
+                if (!playerReleased) {
+                    exoPlayer.playWhenReady = true
+                }
+            }
 
             // Enable text track display
             val subtitle = uiState.selectedSubtitle
@@ -661,7 +687,7 @@ fun PlayerScreen(
         }
     }
     // Apply subtitle when user selects a different one.
-    LaunchedEffect(uiState.selectedSubtitle, uiState.subtitleSelectionNonce, hasPlaybackStarted) {
+    LaunchedEffect(uiState.selectedSubtitle, uiState.subtitleSelectionNonce, hasPlaybackStarted, currentPosition / 5_000L) {
         if (playerReleased) return@LaunchedEffect
         val streamUrl = uiState.selectedStreamUrl ?: return@LaunchedEffect
         val subtitle = uiState.selectedSubtitle
@@ -720,6 +746,11 @@ fun PlayerScreen(
         if (!hasPlaybackStarted) {
             // Do not rebuild media item before initial playback starts.
             // This prevents startup loops on slow/debrid streams.
+            return@LaunchedEffect
+        }
+        if (currentPosition < 6_000L && lastAppliedExternalSubtitleUrl == null) {
+            // Avoid immediate post-start re-prepare (common source of first-second buffering).
+            // We'll retry via the coarse time key once playback is stable.
             return@LaunchedEffect
         }
         val subtitleUrl = subtitle.url.trim().let { if (it.startsWith("//")) "https:$it" else it }
@@ -871,19 +902,27 @@ fun PlayerScreen(
                     val bufferingDuration = System.currentTimeMillis() - (bufferingStartTime ?: 0L)
                     if (bufferingDuration > bufferingTimeoutMs) {
                         bufferingStartTime = null
+                        longRebufferCount += 1
+                        if (allowMidPlaybackSourceFallback &&
+                            !userSelectedSourceManually &&
+                            longRebufferCount >= 1 &&
+                            tryAdvanceToNextStream()
+                        ) {
+                            continue
+                        }
                         if (!rebufferRecoverAttempted) {
                             rebufferRecoverAttempted = true
-                            val resumeAt = exoPlayer.currentPosition.coerceAtLeast(0L)
-                            val wasPlaying = exoPlayer.playWhenReady
-                            exoPlayer.stop()
-                            exoPlayer.prepare()
-                            if (resumeAt > 0L) exoPlayer.seekTo(resumeAt)
-                            exoPlayer.playWhenReady = wasPlaying
+                            // Avoid hard re-prepare loops that can worsen long-form buffering.
+                            // Nudge playback state only; let load control continue buffering.
+                            exoPlayer.playWhenReady = true
                         }
                     }
                 }
             } else {
                 bufferingStartTime = null
+                if (exoPlayer.isPlaying && exoPlayer.playbackState == Player.STATE_READY) {
+                    longRebufferCount = 0
+                }
             }
 
             // Initial startup watchdog: while first frame has not really started, enforce bounded startup.
@@ -901,14 +940,12 @@ fun PlayerScreen(
                 if (startupStalled && startupBufferDuration > initialBufferingTimeoutMs) {
                     if (!startupRecoverAttempted) {
                         startupRecoverAttempted = true
-                        if (allowAutomaticSourceFallback &&
+                        if (allowStartupSourceFallback &&
                             !userSelectedSourceManually &&
                             tryAdvanceToNextStream()
                         ) {
                             // auto advanced to a fallback stream
                         } else if (!isHeavyStartupSource) {
-                            exoPlayer.stop()
-                            exoPlayer.prepare()
                             exoPlayer.playWhenReady = true
                         }
                     }
@@ -1903,6 +1940,7 @@ fun PlayerScreen(
                 startupSameSourceRefreshAttempted = false
                 startupUrlLock = null
                 rebufferRecoverAttempted = false
+                longRebufferCount = 0
                 viewModel.selectStream(stream)
                 showSourceMenu = false
                 showControls = true

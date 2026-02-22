@@ -53,6 +53,7 @@ class WatchlistRepository @Inject constructor(
 
     // Profile-scoped DataStore key
     private fun watchlistKey() = profileManager.profileStringKey("local_watchlist_v1")
+    private fun watchlistKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "local_watchlist_v1")
 
     // In-memory cache for quick lookups
     private val keyCache = mutableSetOf<String>()
@@ -231,6 +232,32 @@ class WatchlistRepository @Inject constructor(
         itemsCache.clear()
         _watchlistItems.value = emptyList()
         cacheLoaded = false
+    }
+
+    suspend fun exportWatchlistForProfile(profileId: String): List<LocalWatchlistItem> {
+        val safeProfileId = profileId.trim().ifBlank { "default" }
+        return try {
+            val prefs = context.traktDataStore.data.first()
+            val json = prefs[watchlistKeyFor(safeProfileId)] ?: return emptyList()
+            val type = TypeToken.getParameterized(
+                MutableList::class.java,
+                LocalWatchlistItem::class.java
+            ).type
+            gson.fromJson<List<LocalWatchlistItem>>(json, type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun importWatchlistForProfile(profileId: String, items: List<LocalWatchlistItem>) {
+        val safeProfileId = profileId.trim().ifBlank { "default" }
+        val json = runCatching { gson.toJson(items) }.getOrDefault("[]")
+        context.traktDataStore.edit { prefs ->
+            prefs[watchlistKeyFor(safeProfileId)] = json
+        }
+        if (profileManager.getProfileIdSync() == safeProfileId) {
+            clearWatchlistCache()
+        }
     }
 
     /**

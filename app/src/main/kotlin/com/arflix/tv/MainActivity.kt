@@ -66,7 +66,6 @@ import androidx.work.workDataOf
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.ProfileRepository
-import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
@@ -79,10 +78,8 @@ import com.arflix.tv.ui.theme.BackgroundGradientStart
 import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.math.PI
 import kotlin.math.cos
@@ -100,9 +97,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var profileRepository: Lazy<ProfileRepository>
-
-    @Inject
-    lateinit var streamRepository: Lazy<StreamRepository>
 
     @Inject
     lateinit var traktRepository: Lazy<TraktRepository>
@@ -137,7 +131,6 @@ class MainActivity : ComponentActivity() {
                 ArflixApp(
                     authRepository = authRepository.get(),
                     profileRepository = profileRepository.get(),
-                    streamRepository = streamRepository.get(),
                     traktRepository = traktRepository.get(),
                     preloadedCategories = startupState.categories,
                     preloadedHeroItem = startupState.heroItem,
@@ -294,7 +287,6 @@ fun ArvioLoadingScreen() {
 fun ArflixApp(
     authRepository: AuthRepository,
     profileRepository: ProfileRepository,
-    streamRepository: StreamRepository,
     traktRepository: TraktRepository,
     preloadedCategories: List<com.arflix.tv.data.model.Category> = emptyList(),
     preloadedHeroItem: com.arflix.tv.data.model.MediaItem? = null,
@@ -309,19 +301,7 @@ fun ArflixApp(
     var lastAddonsSyncKey by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(authState, activeProfile?.id) {
-        val authed = authState as? AuthState.Authenticated
-        val profileId = activeProfile?.id
-        if (authed != null && !profileId.isNullOrBlank()) {
-            // Addons are stored per local profile, but synced to Supabase per account.
-            // Ensure every profile gets the account's addon set so streaming sources are available after profile switches.
-            val key = "${authed.userId}:$profileId"
-            if (lastAddonsSyncKey != key) {
-                lastAddonsSyncKey = key
-                withContext(Dispatchers.IO) {
-                    streamRepository.syncAddonsFromCloud()
-                }
-            }
-        } else if (authState is AuthState.NotAuthenticated) {
+        if (authState is AuthState.NotAuthenticated) {
             lastAddonsSyncKey = null
         }
     }

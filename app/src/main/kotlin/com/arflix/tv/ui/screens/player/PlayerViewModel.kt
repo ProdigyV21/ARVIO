@@ -1,4 +1,4 @@
-package com.arflix.tv.ui.screens.player
+﻿package com.arflix.tv.ui.screens.player
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
@@ -383,7 +383,8 @@ class PlayerViewModel @Inject constructor(
                     error = errorMessage
                 )
 
-                // Auto-select should match Sources tab behavior: first source wins unless user explicitly picked one.
+                // Auto-select: respect explicit navigation preference, otherwise choose
+                // the most playback-stable stream profile.
                 if (mergedStreams.isNotEmpty()) {
                     val preferredFromNavigation = mergedStreams.firstOrNull { s ->
                         val addonMatch = currentPreferredAddonId?.let { s.addonId == it } ?: true
@@ -393,7 +394,9 @@ class PlayerViewModel @Inject constructor(
                         currentPreferredAddonId?.let { s.addonId == it } ?: false
                     }
 
-                    val selected = preferredFromNavigation ?: mergedStreams.first()
+                    val preferredLanguage = _uiState.value.preferredAudioLanguage.ifBlank { resolvePreferredAudioLanguage() }
+                    val stabilitySelected = pickPreferredStream(mergedStreams, preferredLanguage)
+                    val selected = preferredFromNavigation ?: stabilitySelected ?: mergedStreams.first()
                     selectStream(selected)
                 }
 
@@ -549,8 +552,8 @@ class PlayerViewModel @Inject constructor(
     private suspend fun getDefaultSubtitle(): String {
         return try {
             val prefs = context.settingsDataStore.data.first()
-            // Default to Off - user must explicitly set preferred subtitle in settings
-            prefs[defaultSubtitleKey()] ?: "Off"
+            val raw = prefs[defaultSubtitleKey()]?.trim().orEmpty()
+            if (isSubtitleDisabledPreference(raw)) "Off" else raw
         } catch (_: Exception) {
             "Off"
         }
@@ -571,7 +574,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun applyPreferredSubtitle(preference: String, subtitles: List<Subtitle>, fallbackLanguage: String?) {
-        if (preference.equals("Off", ignoreCase = true)) {
+        if (isSubtitleDisabledPreference(preference)) {
+            _uiState.value = _uiState.value.copy(selectedSubtitle = null)
             return
         }
 
@@ -606,6 +610,16 @@ class PlayerViewModel @Inject constructor(
         if (match != null) {
             _uiState.value = _uiState.value.copy(selectedSubtitle = match)
         }
+    }
+
+    private fun isSubtitleDisabledPreference(value: String?): Boolean {
+        val normalized = value?.trim()?.lowercase().orEmpty()
+        return normalized.isBlank() ||
+            normalized == "off" ||
+            normalized == "none" ||
+            normalized == "no subtitles" ||
+            normalized == "disabled" ||
+            normalized == "disable"
     }
 
     private fun qualityScore(quality: String): Int {
@@ -705,20 +719,19 @@ class PlayerViewModel @Inject constructor(
 
         val maxSizeBytes = 20L * 1024 * 1024 * 1024 // 20GB - anything larger is likely a season pack
 
-        // Step 1: Filter out season packs (>20GB) from all candidates
+        // Step 1: Filter out season packs (>20GB) when possible.
         val candidates = streams.filter {
             val size = parseSize(it.size)
             size == 0L || size < maxSizeBytes // 0 = unknown size, keep those
         }
+        val pool = if (candidates.isNotEmpty()) candidates else streams
 
-        // Step 2: From reasonable candidates, find highest quality and pick first in addon order
-        if (candidates.isNotEmpty()) {
-            val bestQuality = candidates.maxOf { qualityScore(it.quality) }
-            return candidates.first { qualityScore(it.quality) == bestQuality }
+        // Step 2: Score by language affinity and playback stability.
+        return pool.maxByOrNull { stream ->
+            val langScore = streamLanguageScore(stream, preferredLanguage)
+            val stabilityScore = playbackPriorityScore(stream)
+            (langScore * 10_000) + stabilityScore
         }
-
-        // Step 3: Fallback if ALL streams are >20GB — just pick first stream in addon order
-        return streams.firstOrNull()
     }
 
     // Robust size string parser - identical to StreamSelector's parseSizeString()

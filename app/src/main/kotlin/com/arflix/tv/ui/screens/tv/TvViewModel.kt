@@ -68,7 +68,10 @@ data class TvUiState(
         val favorites = snapshot.favoriteGroups.filter { dynamicGroups.contains(it) }
         val others = dynamicGroups.filterNot { snapshot.favoriteGroups.contains(it) }
         val ordered = favorites + others
-        return if (snapshot.favoriteChannels.isNotEmpty()) {
+        val hasFavoriteChannelsInSnapshot = snapshot.favoriteChannels
+            .toHashSet()
+            .let { ids -> snapshot.channels.any { ids.contains(it.id) } }
+        return if (hasFavoriteChannelsInSnapshot) {
             listOf(FAVORITES_GROUP_NAME) + ordered
         } else {
             ordered
@@ -86,6 +89,7 @@ class TvViewModel @Inject constructor(
     val uiState: StateFlow<TvUiState> = _uiState.asStateFlow()
     private var refreshJob: Job? = null
     private var warmVodJob: Job? = null
+    private var pendingForcedReload: Boolean = false
 
     init {
         observeConfigAndFavorites()
@@ -107,8 +111,9 @@ class TvViewModel @Inject constructor(
                 warmXtreamVodCache()
                 val hasPotentialEpg = config.epgUrl.isNotBlank() || config.m3uUrl.contains("get.php", ignoreCase = true)
                 val needsEpgRetry = hasPotentialEpg && cached.channels.isNotEmpty() && cached.nowNext.isEmpty()
-                if (iptvRepository.isSnapshotStale(cached) || needsEpgRetry) {
-                    refresh(force = false, showLoading = false)
+                val needsChannelReload = config.m3uUrl.isNotBlank() && cached.channels.isEmpty()
+                if (iptvRepository.isSnapshotStale(cached) || needsEpgRetry || needsChannelReload) {
+                    refresh(force = needsChannelReload, showLoading = needsChannelReload)
                 }
             } else {
                 refresh(force = false, showLoading = true)
@@ -130,6 +135,11 @@ class TvViewModel @Inject constructor(
                     favoriteChannels = favoriteChannels
                 )
                 _uiState.value = _uiState.value.copy(config = config, snapshot = snapshot)
+
+                // Auto-heal cases where the app has IPTV config but an empty in-memory snapshot.
+                if (config.m3uUrl.isNotBlank() && snapshot.channels.isEmpty() && refreshJob?.isActive != true) {
+                    refresh(force = true, showLoading = true)
+                }
             }
         }
     }
@@ -172,6 +182,11 @@ class TvViewModel @Inject constructor(
                     loadingPercent = 100
                 )
                 warmXtreamVodCache()
+                if (!force && _uiState.value.isConfigured && snapshot.channels.isEmpty()) {
+                    // Soft refresh returned empty even though IPTV is configured:
+                    // schedule one forced reload to bypass stale in-memory paths.
+                    pendingForcedReload = true
+                }
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -181,7 +196,13 @@ class TvViewModel @Inject constructor(
                 )
             }
         }.also { job ->
-            job.invokeOnCompletion { refreshJob = null }
+            job.invokeOnCompletion {
+                refreshJob = null
+                if (pendingForcedReload) {
+                    pendingForcedReload = false
+                    refresh(force = true, showLoading = true)
+                }
+            }
         }
     }
 

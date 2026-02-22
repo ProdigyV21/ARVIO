@@ -218,11 +218,18 @@ fun HomeScreen(
     val cardLogoUrls by viewModel.cardLogoUrls.collectAsState()
     val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val lifecycleOwner = LocalLifecycleOwner.current
+    var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        // Prevent stale select key events from previous screen from reopening details.
+        suppressSelectUntilMs = SystemClock.elapsedRealtime() + 300L
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshContinueWatchingOnly()
+                suppressSelectUntilMs = SystemClock.elapsedRealtime() + 300L
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -459,6 +466,7 @@ fun HomeScreen(
             categories = displayCategories,
             cardLogoUrls = cardLogoUrls,
             focusState = focusState,
+            suppressSelectUntilMs = suppressSelectUntilMs,
             contentStartPadding = contentStartPadding,
             fastScrollThresholdMs = fastScrollThresholdMs,
             usePosterCards = usePosterCards,
@@ -838,6 +846,7 @@ private fun HomeInputLayer(
     categories: List<Category>,
     cardLogoUrls: Map<String, String>,
     focusState: HomeFocusState,
+    suppressSelectUntilMs: Long,
     contentStartPadding: androidx.compose.ui.unit.Dp,
     fastScrollThresholdMs: Long,
     usePosterCards: Boolean,
@@ -885,6 +894,9 @@ private fun HomeInputLayer(
                 when (event.type) {
                     KeyEventType.KeyDown -> when (event.key) {
                         Key.Enter, Key.DirectionCenter -> {
+                            if (SystemClock.elapsedRealtime() < suppressSelectUntilMs) {
+                                return@onPreviewKeyEvent true
+                            }
                             // Only accept KeyUp action when its KeyDown also happened on this screen.
                             selectPressedInHome = true
                             true
@@ -971,6 +983,10 @@ private fun HomeInputLayer(
                     }
                     KeyEventType.KeyUp -> when (event.key) {
                         Key.Enter, Key.DirectionCenter -> {
+                            if (SystemClock.elapsedRealtime() < suppressSelectUntilMs) {
+                                selectPressedInHome = false
+                                return@onPreviewKeyEvent true
+                            }
                             if (!selectPressedInHome) {
                                 // Ignore stale KeyUp events that can arrive after screen navigation.
                                 return@onPreviewKeyEvent true

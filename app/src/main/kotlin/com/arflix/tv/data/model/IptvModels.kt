@@ -20,7 +20,9 @@ data class IptvChannel(
  */
 data class IptvNowNext(
     val now: IptvProgram? = null,
-    val next: IptvProgram? = null
+    val next: IptvProgram? = null,
+    val later: IptvProgram? = null,
+    val upcoming: List<IptvProgram> = emptyList()
 )
 
 /**
