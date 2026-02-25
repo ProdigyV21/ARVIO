@@ -8,8 +8,11 @@ import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.api.TraktDeviceCode
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CatalogConfig
+import com.arflix.tv.data.model.CloudStreamExtension
+import com.arflix.tv.data.model.CloudStreamPluginEntry
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.repository.AuthRepository
+import com.arflix.tv.data.repository.CloudStreamRepository
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.IptvRepository
@@ -94,6 +97,9 @@ data class SettingsUiState(
     // Addons
     val addons: List<Addon> = emptyList(),
     val torrServerBaseUrl: String = "",
+    // CloudStream
+    val cloudStreamExtensions: List<CloudStreamExtension> = emptyList(),
+    val cloudStreamPlugins: List<CloudStreamPluginEntry> = emptyList(),
     // Toast
     val toastMessage: String? = null,
     val toastType: ToastType = ToastType.INFO
@@ -112,7 +118,8 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val profileRepository: ProfileRepository,
     private val tvDeviceAuthRepository: TvDeviceAuthRepository,
-    private val traktSyncService: TraktSyncService
+    private val traktSyncService: TraktSyncService,
+    private val cloudStreamRepository: CloudStreamRepository
 ) : ViewModel() {
 
     private data class CloudProfileSettings(
@@ -172,6 +179,7 @@ class SettingsViewModel @Inject constructor(
         observeIptvConfig()
         initializeCatalogs()
         observeCatalogs()
+        observeCloudStreamExtensions()
     }
 
     private fun loadSettings() {
@@ -1620,6 +1628,45 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    private fun observeCloudStreamExtensions() {
+        viewModelScope.launch {
+            cloudStreamRepository.extensions.collect { extensions ->
+                _uiState.value = _uiState.value.copy(
+                    cloudStreamExtensions = extensions,
+                    cloudStreamPlugins = extensions.flatMap { it.plugins }
+                        .distinctBy { it.url.ifBlank { it.name } }
+                )
+            }
+        }
+    }
+
+    fun addCloudStreamRepository(url: String) {
+        viewModelScope.launch {
+            val result = cloudStreamRepository.addExtensionRepository(url.trim())
+            result.onSuccess { ext ->
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = "Added '${ext.manifest.name}' with ${ext.plugins.size} plugin(s)",
+                    toastType = ToastType.SUCCESS
+                )
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = "Failed to add repository: ${err.message}",
+                    toastType = ToastType.ERROR
+                )
+            }
+        }
+    }
+
+    fun removeCloudStreamRepository(url: String) {
+        viewModelScope.launch {
+            cloudStreamRepository.removeExtensionRepository(url)
+            _uiState.value = _uiState.value.copy(
+                toastMessage = "Repository removed",
+                toastType = ToastType.SUCCESS
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         traktPollingJob?.cancel()

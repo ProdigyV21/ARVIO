@@ -5,6 +5,7 @@ import coil.Coil
 import coil.ImageLoader
 import com.arflix.tv.data.api.AniSkipApi
 import com.arflix.tv.data.api.ArmApi
+import com.arflix.tv.data.api.CloudStreamApi
 import com.arflix.tv.data.api.IntroDbApi
 import com.arflix.tv.data.api.StreamApi
 import com.arflix.tv.data.api.SupabaseApi
@@ -137,5 +138,26 @@ object AppModule {
     @Singleton
     fun provideArmApi(@Named("arm") retrofit: Retrofit): ArmApi {
         return retrofit.create(ArmApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("cloudstream")
+    fun provideCloudStreamRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        val csClient = okHttpClient.newBuilder()
+            .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("https://raw.githubusercontent.com/")
+            .client(csClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCloudStreamApi(@Named("cloudstream") retrofit: Retrofit): CloudStreamApi {
+        return retrofit.create(CloudStreamApi::class.java)
     }
 }

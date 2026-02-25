@@ -27,6 +27,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import okhttp3.OkHttpClient
@@ -1109,6 +1110,37 @@ class MediaRepository @Inject constructor(
             }
         cacheItems(items)
         return items
+    }
+
+    /**
+     * Deep search: TMDB + CloudStream extensions in parallel, with deduplication by title+year.
+     */
+    suspend fun deepSearch(
+        query: String,
+        cloudStreamRepository: CloudStreamRepository
+    ): List<MediaItem> = coroutineScope {
+        val tmdbJob = async { runCatching { search(query) }.getOrElse { emptyList() } }
+        val csJob = async {
+            withTimeoutOrNull(10_000L) {
+                runCatching { cloudStreamRepository.searchAll(query) }.getOrElse { emptyList() }
+            } ?: emptyList()
+        }
+        val tmdbResults = tmdbJob.await()
+        val csResults = csJob.await()
+        mergeDeepSearchResults(tmdbResults, csResults)
+    }
+
+    private fun mergeDeepSearchResults(
+        primary: List<MediaItem>,
+        secondary: List<MediaItem>
+    ): List<MediaItem> {
+        val combined = primary.toMutableList()
+        val seen = primary.map { it.title.lowercase() to it.year }.toHashSet()
+        for (item in secondary) {
+            val key = item.title.lowercase() to item.year
+            if (seen.add(key)) combined.add(item)
+        }
+        return combined
     }
 
     /**

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.repository.CloudStreamRepository
 import com.arflix.tv.data.repository.MediaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -21,6 +22,8 @@ import javax.inject.Inject
 data class SearchUiState(
     val query: String = "",
     val isLoading: Boolean = false,
+    val isDeepSearchEnabled: Boolean = false,
+    val isDeepSearchLoading: Boolean = false,
     val results: List<MediaItem> = emptyList(),
     val movieResults: List<MediaItem> = emptyList(),
     val tvResults: List<MediaItem> = emptyList(),
@@ -30,7 +33,8 @@ data class SearchUiState(
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    private val mediaRepository: MediaRepository
+    private val mediaRepository: MediaRepository,
+    private val cloudStreamRepository: CloudStreamRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -65,10 +69,19 @@ class SearchViewModel @Inject constructor(
 
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            val deepEnabled = _uiState.value.isDeepSearchEnabled
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                isDeepSearchLoading = deepEnabled,
+                error = null
+            )
 
             try {
-                val results = mediaRepository.search(query)
+                val results = if (deepEnabled) {
+                    mediaRepository.deepSearch(query, cloudStreamRepository)
+                } else {
+                    mediaRepository.search(query)
+                }
 
                 // Smart sorting: prioritize main content over documentaries/specials
                 // 1. Exact/close title matches first
@@ -125,6 +138,7 @@ class SearchViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    isDeepSearchLoading = false,
                     results = sortedResults,
                     movieResults = movies,
                     tvResults = tvShows,
@@ -133,6 +147,7 @@ class SearchViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    isDeepSearchLoading = false,
                     error = e.message
                 )
             }
@@ -146,6 +161,13 @@ class SearchViewModel @Inject constructor(
             if (_uiState.value.query.length >= 2) {
                 search()
             }
+        }
+    }
+
+    fun toggleDeepSearch(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(isDeepSearchEnabled = enabled)
+        if (_uiState.value.query.length >= 2) {
+            search()
         }
     }
 
