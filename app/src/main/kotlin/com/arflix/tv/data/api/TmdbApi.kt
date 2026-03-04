@@ -125,9 +125,16 @@ interface TmdbApi {
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String
     ): TmdbExternalIds
-    
-    @GET("search/multi")
-    suspend fun searchMulti(
+
+    @GET("search/movie")
+    suspend fun searchMovie(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("page") page: Int = 1
+    ): TmdbListResponse
+
+    @GET("search/tv")
+    suspend fun searchTv(
         @Query("api_key") apiKey: String,
         @Query("query") query: String,
         @Query("page") page: Int = 1
