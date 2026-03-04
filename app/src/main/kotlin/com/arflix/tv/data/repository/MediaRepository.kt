@@ -790,24 +790,23 @@ class MediaRepository @Inject constructor(
             return cached.data
         }
 
-        val response = runCatching {
-            tmdbApi.searchMulti(
-                apiKey = apiKey,
-                query = cleanedTitle,
-                page = 1
-            )
-        }.getOrNull()
+        val candidates: List<Triple<MediaType, Int, Double>> = runCatching {
 
-        val candidates = response?.results
-            ?.mapNotNull { item ->
-                val type = when (item.mediaType?.lowercase(Locale.US)) {
-                    "movie" -> MediaType.MOVIE
-                    "tv" -> MediaType.TV
-                    else -> null
-                } ?: return@mapNotNull null
-                Triple(type, item.id, item.popularity)
-            }
-            .orEmpty()
+            val movieResults =
+                if (mediaTypeHint == null || mediaTypeHint == MediaType.MOVIE) {
+                    tmdbApi.searchMovie(apiKey, cleanedTitle, 1).results
+                        .map { Triple(MediaType.MOVIE, it.id, (it.popularity ?: 0).toDouble()) }
+                } else emptyList()
+
+            val tvResults =
+                if (mediaTypeHint == null || mediaTypeHint == MediaType.TV) {
+                    tmdbApi.searchTv(apiKey, cleanedTitle, 1).results
+                        .map { Triple(MediaType.TV, it.id, (it.popularity ?: 0).toDouble()) }
+                } else emptyList()
+
+            movieResults + tvResults
+
+        }.getOrDefault(emptyList())
 
         val scoped = if (mediaTypeHint != null) {
             candidates.filter { it.first == mediaTypeHint }
@@ -1131,17 +1130,22 @@ class MediaRepository @Inject constructor(
     /**
      * Search media
      */
-    suspend fun search(query: String): List<MediaItem> {
-        val results = tmdbApi.searchMulti(apiKey, query)
-        val items = results.results
-            .filter { it.mediaType == "movie" || it.mediaType == "tv" }
-            .map {
-                it.toMediaItem(
-                    if (it.mediaType == "tv") MediaType.TV else MediaType.MOVIE
-                )
-            }
+    suspend fun search(query: String): List<MediaItem> = coroutineScope {
+        val moviesDeferred = async {
+            tmdbApi.searchMovie(apiKey, query).results
+                .map { it.toMediaItem(MediaType.MOVIE) }
+        }
+
+        val tvDeferred = async {
+            tmdbApi.searchTv(apiKey, query).results
+                .map { it.toMediaItem(MediaType.TV) }
+        }
+
+        val items = moviesDeferred.await() + tvDeferred.await()
+            .sortedByDescending { it.popularity }
+
         cacheItems(items)
-        return items
+        items
     }
 
     /**
@@ -1274,22 +1278,20 @@ class MediaRepository @Inject constructor(
                 async {
                     semaphore.withPermit {
                         runCatching {
-                            val search = tmdbApi.searchMulti(apiKey, candidate.title).results
-                            val typeMatched = search.filter { result ->
-                                val resultType = when (result.mediaType) {
-                                    "movie" -> MediaType.MOVIE
-                                    "tv" -> MediaType.TV
-                                    else -> null
-                                }
-                                resultType == candidate.type
+                            val search = when (candidate.type) {
+                                MediaType.MOVIE ->
+                                    tmdbApi.searchMovie(apiKey, candidate.title).results
+
+                                MediaType.TV ->
+                                    tmdbApi.searchTv(apiKey, candidate.title).results
                             }
-                            val strictYear = typeMatched.firstOrNull { result ->
+                            val strictYear = search.firstOrNull { result ->
                                 val yearText = (result.releaseDate ?: result.firstAirDate)
                                     ?.take(4)
                                     ?.toIntOrNull()
                                 candidate.year == null || yearText == candidate.year
                             }
-                            val fallback = typeMatched.firstOrNull()
+                            val fallback = search.firstOrNull()
                             val picked = strictYear ?: fallback
                             picked?.id?.let { candidate.type to it }
                         }.getOrNull()
