@@ -207,20 +207,10 @@ class HomeViewModel @Inject constructor(
                 return@mapNotNull item
             }
 
-            // Season loaded but has no known episodes => invalid/future target.
-            if (seasonEpisodes.isEmpty()) {
-                return@mapNotNull null
-            }
-
+            // Try to enrich with TMDB episode data, but keep item regardless
             val matchedEpisode = seasonEpisodes.firstOrNull { it.episodeNumber == episode }
-                ?: return@mapNotNull null
-
-            if (!isEpisodeAlreadyAired(matchedEpisode.airDate)) {
-                return@mapNotNull null
-            }
-
             item.copy(
-                episodeTitle = item.episodeTitle ?: matchedEpisode.name
+                episodeTitle = item.episodeTitle ?: matchedEpisode?.name ?: "Episode $episode"
             )
         }
     }

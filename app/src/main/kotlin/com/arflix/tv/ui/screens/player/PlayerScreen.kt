@@ -957,3 +957,58 @@ private class PlaybackCookieJar : CookieJar {
     override fun saveFromResponse(u: HttpUrl, cookies: List<Cookie>) { if (cookies.isNotEmpty()) c[u.host] = cookies.toMutableList() }
     override fun loadForRequest(u: HttpUrl): List<Cookie> = c[u.host] ?: emptyList()
 }
+
+/**
+ * PULSING LOGO COMPONENT
+ */
+@Composable
+private fun PulsingLogo(
+    logoUrl: String?,
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!logoUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = logoUrl,
+                contentDescription = title,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .width(360.dp)
+                    .height(180.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+            )
+        } else {
+            Text(
+                text = title,
+                style = ArflixTypography.sectionTitle.copy(
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.Bold,
+                    shadow = Shadow(Color.Black, Offset(2f, 2f), 8f)
+                ),
+                color = Color.White,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+            )
+        }
+    }
+}
