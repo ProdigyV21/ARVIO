@@ -56,6 +56,7 @@ class CloudSyncRepository @Inject constructor(
         val autoPlayNext: Boolean = true,
         val autoPlaySingleSource: Boolean = true,
         val autoPlayMinQuality: String = "Any",
+        val autoPlayMaxQuality: String = "4K",
         val includeSpecials: Boolean = false
     )
 
@@ -77,6 +78,8 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
     private fun autoPlayMinQualityKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
+    private fun autoPlayMaxQualityKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "auto_play_max_quality")
     private fun includeSpecialsKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "include_specials")
 
@@ -88,6 +91,7 @@ class CloudSyncRepository @Inject constructor(
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
+    private fun autoPlayMaxQualityKey() = profileManager.profileStringKey("auto_play_max_quality")
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
 
     // ── Normalize helpers ──
@@ -108,6 +112,16 @@ class CloudSyncRepository @Inject constructor(
             "1080p", "fullhd", "fhd" -> "1080p"
             "4k", "2160p", "uhd" -> "4K"
             else -> "Any"
+        }
+    }
+
+    private fun normalizeAutoPlayMaxQuality(raw: String?): String {
+        return when (raw?.trim()?.lowercase()) {
+            "any" -> "Any"
+            "720p", "hd" -> "720p"
+            "1080p", "fullhd", "fhd" -> "1080p"
+            "4k", "2160p", "uhd" -> "4K"
+            else -> "4K"
         }
     }
 
@@ -144,6 +158,9 @@ class CloudSyncRepository @Inject constructor(
                         autoPlayMinQuality = normalizeAutoPlayMinQuality(
                             prefs[autoPlayMinQualityKeyFor(profile.id)] ?: "Any"
                         ),
+                        autoPlayMaxQuality = normalizeAutoPlayMaxQuality(
+                            prefs[autoPlayMaxQualityKeyFor(profile.id)] ?: "4K"
+                        ),
                         includeSpecials = prefs[includeSpecialsKeyFor(profile.id)] ?: false
                     )
                 )
@@ -160,6 +177,7 @@ class CloudSyncRepository @Inject constructor(
         root.put("autoPlayNext", prefs[autoPlayNextKey()] ?: true)
         root.put("autoPlaySingleSource", prefs[autoPlaySingleSourceKey()] ?: true)
         root.put("autoPlayMinQuality", normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()] ?: "Any"))
+        root.put("autoPlayMaxQuality", normalizeAutoPlayMaxQuality(prefs[autoPlayMaxQualityKey()] ?: "4K"))
         root.put("includeSpecials", prefs[includeSpecialsKey()] ?: false)
 
         root.put("activeProfileId", profileRepository.getActiveProfileId() ?: JSONObject.NULL)
@@ -315,6 +333,7 @@ class CloudSyncRepository @Inject constructor(
         val fallbackAutoPlayNext = root.optBoolean("autoPlayNext", true)
         val fallbackAutoPlaySingleSource = root.optBoolean("autoPlaySingleSource", true)
         val fallbackAutoPlayMinQuality = normalizeAutoPlayMinQuality(root.optString("autoPlayMinQuality", "Any"))
+        val fallbackAutoPlayMaxQuality = normalizeAutoPlayMaxQuality(root.optString("autoPlayMaxQuality", "4K"))
         val fallbackIncludeSpecials = root.optBoolean("includeSpecials", false)
 
         // ── Profiles ──
@@ -351,6 +370,7 @@ class CloudSyncRepository @Inject constructor(
                         prefs[autoPlayNextKeyFor(profileId)] = state.autoPlayNext
                         prefs[autoPlaySingleSourceKeyFor(profileId)] = state.autoPlaySingleSource
                         prefs[autoPlayMinQualityKeyFor(profileId)] = normalizeAutoPlayMinQuality(state.autoPlayMinQuality)
+                        prefs[autoPlayMaxQualityKeyFor(profileId)] = normalizeAutoPlayMaxQuality(state.autoPlayMaxQuality)
                         prefs[includeSpecialsKeyFor(profileId)] = state.includeSpecials
                     }
                 }
@@ -365,6 +385,7 @@ class CloudSyncRepository @Inject constructor(
                 prefs[autoPlayNextKeyFor(activeProfileId)] = fallbackAutoPlayNext
                 prefs[autoPlaySingleSourceKeyFor(activeProfileId)] = fallbackAutoPlaySingleSource
                 prefs[autoPlayMinQualityKeyFor(activeProfileId)] = fallbackAutoPlayMinQuality
+                prefs[autoPlayMaxQualityKeyFor(activeProfileId)] = fallbackAutoPlayMaxQuality
                 prefs[includeSpecialsKeyFor(activeProfileId)] = fallbackIncludeSpecials
             }
         }

@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.HighQuality
-import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -33,9 +31,15 @@ import androidx.tv.material3.Text
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
-import com.arflix.tv.ui.theme.SuccessGreen
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
+
+// ---------------------------------------------------------------------------
+// SHARED REGEX PATTERNS — Identical to StreamSelector/DetailsScreen
+// ---------------------------------------------------------------------------
+private val REGEX_4K   = Regex("""\b(4K|2160p|UHD|ULTRA)\b""",   RegexOption.IGNORE_CASE)
+private val REGEX_1080 = Regex("""\b(1080p|FHD|FULLHD)\b""",      RegexOption.IGNORE_CASE)
+private val REGEX_720  = Regex("""\b(720p|HD)\b""",               RegexOption.IGNORE_CASE)
 
 /**
  * Source info overlay for the video player
@@ -76,22 +80,23 @@ fun SourceInfoOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
                     ) {
+                        val qualityColor = getQualityColor(source.quality)
                         Icon(
                             imageVector = Icons.Default.HighQuality,
                             contentDescription = null,
-                            tint = getQualityColor(source.quality),
+                            tint = qualityColor,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = source.quality.uppercase(),
                             style = ArflixTypography.label,
-                            color = getQualityColor(source.quality)
+                            color = qualityColor
                         )
                     }
-                    
+
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     // Source indicator
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -110,7 +115,7 @@ fun SourceInfoOverlay(
                             color = TextSecondary
                         )
                     }
-                    
+
                     // Size info
                     if (source.size.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -127,79 +132,13 @@ fun SourceInfoOverlay(
 }
 
 /**
- * Player bottom bar showing playback info
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun PlayerInfoBar(
-    title: String,
-    subtitle: String? = null,
-    isLive: Boolean = false,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
-                )
-            )
-            .padding(24.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = ArflixTypography.sectionTitle,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = ArflixTypography.body,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        
-        if (isLive) {
-            Row(
-                modifier = Modifier
-                    .background(Color(0xFFEF4444), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.LiveTv,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "LIVE",
-                    style = ArflixTypography.badge,
-                    color = Color.White
-                )
-            }
-        }
-    }
-}
-
-/**
- * Get color based on quality string
+ * Get color based on quality string using word-boundary Regex
  */
 private fun getQualityColor(quality: String): Color {
     return when {
-        quality.contains("4K", ignoreCase = true) || 
-        quality.contains("2160p", ignoreCase = true) -> Color(0xFFFFD700) // Gold
-        quality.contains("1080p", ignoreCase = true) -> Pink
-        quality.contains("720p", ignoreCase = true) -> Color(0xFF3B82F6) // Blue
+        REGEX_4K.containsMatchIn(quality) -> Color(0xFFFFD700) // Gold
+        REGEX_1080.containsMatchIn(quality) -> Pink
+        REGEX_720.containsMatchIn(quality) -> Color(0xFF3B82F6) // Blue
         else -> TextSecondary
     }
 }

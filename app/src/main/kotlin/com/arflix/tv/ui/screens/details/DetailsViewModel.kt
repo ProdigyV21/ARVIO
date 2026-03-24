@@ -83,7 +83,8 @@ data class DetailsUiState(
     val playLabel: String? = null,
     val playPositionMs: Long? = null,
     val autoPlaySingleSource: Boolean = true,
-    val autoPlayMinQuality: String = "Any"
+    val autoPlayMinQuality: String = "Any",
+    val autoPlayMaxQuality: String = "4K"
 )
 
 data class StreamingServiceUi(
@@ -178,6 +179,7 @@ class DetailsViewModel @Inject constructor(
     @Volatile private var initialLoadComplete = false
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
+    private fun autoPlayMaxQualityKey() = profileManager.profileStringKey("auto_play_max_quality")
 
     private fun isBlankRating(value: String): Boolean {
         return value.isBlank() || value == "0.0" || value == "0"
@@ -190,6 +192,16 @@ class DetailsViewModel @Inject constructor(
             "1080p", "fullhd", "fhd" -> "1080p"
             "4k", "2160p", "uhd" -> "4K"
             else -> "Any"
+        }
+    }
+
+    private fun normalizeAutoPlayMaxQuality(raw: String?): String {
+        return when (raw?.trim()?.lowercase()) {
+            "any" -> "Any"
+            "720p", "hd" -> "720p"
+            "1080p", "fullhd", "fhd" -> "1080p"
+            "4k", "2160p", "uhd" -> "4K"
+            else -> "4K"
         }
     }
 
@@ -229,6 +241,7 @@ class DetailsViewModel @Inject constructor(
                 val prefs = context.settingsDataStore.data.first()
                 val autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
                 val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
+                val autoPlayMaxQuality = normalizeAutoPlayMaxQuality(prefs[autoPlayMaxQualityKey()])
                 val previousState = _uiState.value
                 val previousMatches = previousState.item?.id == mediaId &&
                     previousState.item?.mediaType == mediaType
@@ -258,7 +271,8 @@ class DetailsViewModel @Inject constructor(
                         null
                     },
                     autoPlaySingleSource = autoPlaySingleSource,
-                    autoPlayMinQuality = autoPlayMinQuality
+                    autoPlayMinQuality = autoPlayMinQuality,
+                    autoPlayMaxQuality = autoPlayMaxQuality
                 )
 
                 val itemDeferred = async {

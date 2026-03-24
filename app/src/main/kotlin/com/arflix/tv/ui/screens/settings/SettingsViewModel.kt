@@ -71,6 +71,7 @@ data class SettingsUiState(
     val autoPlayNext: Boolean = true,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
+    val autoPlayMaxQuality: String = "4K",
     val dnsProvider: String = "System DNS",
     val dnsProviderOptions: List<String> = listOf("System DNS", "Cloudflare", "Google", "AdGuard"),
     val includeSpecials: Boolean = false,
@@ -169,6 +170,8 @@ class SettingsViewModel @Inject constructor(
     private fun autoPlaySingleSourceKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
     private fun autoPlayMinQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
+    private fun autoPlayMaxQualityKey() = profileManager.profileStringKey("auto_play_max_quality")
+    private fun autoPlayMaxQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_max_quality")
     private fun dnsProviderKey() = profileManager.profileStringKey("dns_provider")
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private fun includeSpecialsKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "include_specials")
@@ -250,6 +253,7 @@ class SettingsViewModel @Inject constructor(
                 context.settingsDataStore.edit { it[autoPlayNextKey()] = true }
             }
             val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
+            val autoPlayMaxQuality = normalizeAutoPlayMaxQuality(prefs[autoPlayMaxQualityKey()])
             val dnsProviderValue = normalizeDnsProviderValue(prefs[dnsProviderKey()])
             val includeSpecials = prefs[includeSpecialsKey()] ?: false
 
@@ -285,6 +289,7 @@ class SettingsViewModel @Inject constructor(
                 autoPlayNext = autoPlay,
                 autoPlaySingleSource = autoPlaySingleSource,
                 autoPlayMinQuality = autoPlayMinQuality,
+                autoPlayMaxQuality = autoPlayMaxQuality,
                 dnsProvider = dnsProviderLabel(dnsProviderValue),
                 includeSpecials = includeSpecials,
                 isLoggedIn = isLoggedIn,
@@ -663,6 +668,28 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun cycleAutoPlayMaxQuality() {
+        val current = normalizeAutoPlayMaxQuality(_uiState.value.autoPlayMaxQuality)
+        val next = when (current) {
+            "Any" -> "720p"
+            "720p" -> "1080p"
+            "1080p" -> "4K"
+            else -> "Any"
+        }
+        setAutoPlayMaxQuality(next)
+    }
+
+    private fun setAutoPlayMaxQuality(value: String) {
+        val normalized = normalizeAutoPlayMaxQuality(value)
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[autoPlayMaxQualityKey()] = normalized
+            }
+            _uiState.value = _uiState.value.copy(autoPlayMaxQuality = normalized)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
     fun toggleCardLayoutMode() {
         val next = if (_uiState.value.cardLayoutMode.equals("Poster", ignoreCase = true)) {
             CARD_LAYOUT_MODE_LANDSCAPE
@@ -742,6 +769,16 @@ class SettingsViewModel @Inject constructor(
             "1080p", "fullhd", "fhd" -> "1080p"
             "4k", "2160p", "uhd" -> "4K"
             else -> "Any"
+        }
+    }
+
+    private fun normalizeAutoPlayMaxQuality(raw: String?): String {
+        return when (raw?.trim()?.lowercase()) {
+            "any" -> "Any"
+            "720p", "hd" -> "720p"
+            "1080p", "fullhd", "fhd" -> "1080p"
+            "4k", "2160p", "uhd" -> "4K"
+            else -> "4K"
         }
     }
 

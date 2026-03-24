@@ -248,7 +248,7 @@ fun SettingsScreen(
         if (scrollState.maxValue <= 0) return@LaunchedEffect
 
         val maxIndex = when (sectionIndex) {
-            0 -> 9 // General: 10 items
+            0 -> 10 // General: 11 items
             1 -> 2 // IPTV
             2 -> uiState.catalogs.size // Catalogs
             3 -> uiState.addons.size // Addons
@@ -414,7 +414,7 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
-                                        0 -> 9 // General: 10 items (subtitle, audio, content lang, card, frame rate, dns, ui mode, autoplay, single-source, min quality)
+                                        0 -> 10 // General: 11 items (subtitle, audio, content lang, card, frame rate, dns, ui mode, autoplay, single-source, min quality, max quality)
                                         1 -> 2 // IPTV: Configure + Refresh + Delete
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
@@ -464,6 +464,7 @@ fun SettingsScreen(
                                                 7 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
                                                 8 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
                                                 9 -> viewModel.cycleAutoPlayMinQuality()
+                                                10 -> viewModel.cycleAutoPlayMaxQuality()
                                             }
                                         }
                                         1 -> { // IPTV
@@ -583,6 +584,7 @@ fun SettingsScreen(
                             autoPlayNext = uiState.autoPlayNext,
                             autoPlaySingleSource = uiState.autoPlaySingleSource,
                             autoPlayMinQuality = uiState.autoPlayMinQuality,
+                            autoPlayMaxQuality = uiState.autoPlayMaxQuality,
                             deviceModeOverride = uiState.deviceModeOverride,
                             focusedIndex = -1,
                             onSubtitleClick = openSubtitlePicker,
@@ -593,6 +595,7 @@ fun SettingsScreen(
                             onAutoPlayToggle = { viewModel.setAutoPlayNext(it) },
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
+                            onAutoPlayMaxQualityClick = { viewModel.cycleAutoPlayMaxQuality() },
                             onDeviceModeClick = {
                                 val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
                                 viewModel.setDeviceModeOverride(next)
@@ -743,6 +746,7 @@ fun SettingsScreen(
                             autoPlayNext = uiState.autoPlayNext,
                             autoPlaySingleSource = uiState.autoPlaySingleSource,
                             autoPlayMinQuality = uiState.autoPlayMinQuality,
+                            autoPlayMaxQuality = uiState.autoPlayMaxQuality,
                             contentLanguage = uiState.contentLanguage,
                             deviceModeOverride = uiState.deviceModeOverride,
                             focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
@@ -754,6 +758,7 @@ fun SettingsScreen(
                             onAutoPlayToggle = { viewModel.setAutoPlayNext(it) },
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
+                            onAutoPlayMaxQualityClick = { viewModel.cycleAutoPlayMaxQuality() },
                             onDeviceModeClick = {
                                 val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
                                 viewModel.setDeviceModeOverride(next)
@@ -1977,6 +1982,7 @@ private fun GeneralSettings(
     autoPlayNext: Boolean,
     autoPlaySingleSource: Boolean,
     autoPlayMinQuality: String,
+    autoPlayMaxQuality: String,
     deviceModeOverride: String = "auto",
     focusedIndex: Int,
     onSubtitleClick: () -> Unit,
@@ -1987,6 +1993,7 @@ private fun GeneralSettings(
     onAutoPlayToggle: (Boolean) -> Unit,
     onAutoPlaySingleSourceToggle: (Boolean) -> Unit,
     onAutoPlayMinQualityClick: () -> Unit,
+    onAutoPlayMaxQualityClick: () -> Unit,
     onDeviceModeClick: () -> Unit = {},
     onContentLanguageClick: () -> Unit = {}
 ) {
@@ -2114,6 +2121,17 @@ private fun GeneralSettings(
             value = autoPlayMinQuality,
             isFocused = focusedIndex == 9,
             onClick = onAutoPlayMinQualityClick
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsRow(
+            icon = Icons.Default.HighQuality,
+            title = "Preferred Max Quality",
+            subtitle = "Highest resolution to auto-select (Filters out larger files)",
+            value = autoPlayMaxQuality,
+            isFocused = focusedIndex == 10,
+            onClick = onAutoPlayMaxQualityClick
         )
     }
 }
