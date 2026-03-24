@@ -264,9 +264,39 @@ class SearchViewModel @Inject constructor(
 
     private fun debounceSearch() { searchJob?.cancel(); searchJob = viewModelScope.launch { delay(450); if (_uiState.value.query.length >= 2) search() } }
 
+    /** Normalize text for search matching: lowercase, replace & with and, strip articles */
+    private fun normalizeForSearch(text: String): String {
+        return text.lowercase()
+            .replace("&", "and")
+            .replace("'", "")
+            .replace(":", " ")
+            .replace("  ", " ")
+            .trim()
+    }
+
     private fun sortResults(query: String, results: List<MediaItem>): List<MediaItem> {
-        val ql = query.lowercase()
-        return results.sortedWith(compareBy<MediaItem> { val t = it.title.lowercase(); when { t == ql -> 0; t.startsWith(ql) -> 1; t.contains(ql) -> 2; else -> 3 } }.thenByDescending { val isDoc = it.genreIds.contains(99); val isSp = it.title.lowercase().let { t -> t.contains("making of") || t.contains("behind the") || t.contains("featurette") }; if (isDoc || isSp) it.popularity * 0.1f else it.popularity }.thenByDescending { it.year.toIntOrNull() ?: 0 })
+        val ql = normalizeForSearch(query)
+        return results.sortedWith(
+            compareBy<MediaItem> { item ->
+                val t = normalizeForSearch(item.title)
+                when {
+                    t == ql -> 0                    // exact match
+                    t.startsWith(ql) -> 1           // starts with query
+                    t.contains(ql) -> 2             // contains query
+                    ql.split(" ").all { word -> t.contains(word) } -> 2  // all words present
+                    else -> 3
+                }
+            }
+            .thenByDescending { item ->
+                val isDoc = item.genreIds.contains(99) || item.genreIds.contains(10763)
+                val isSp = item.title.lowercase().let { t ->
+                    t.contains("making of") || t.contains("behind the") ||
+                    t.contains("featurette") || t.contains("special")
+                }
+                if (isDoc || isSp) item.popularity * 0.05f else item.popularity
+            }
+            .thenByDescending { it.year.toIntOrNull() ?: 0 }
+        )
     }
 
     fun clearSearch() { searchJob?.cancel(); cachedSuggestionQuery = ""; cachedSuggestionResults = emptyList(); _uiState.value = _uiState.value.copy(query = "", isLoading = false, results = emptyList(), movieResults = emptyList(), tvResults = emptyList(), cardLogoUrls = emptyMap(), error = null, isAiSearch = false, aiInterpretation = null, aiResults = emptyList()) }

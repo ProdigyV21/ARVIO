@@ -26,8 +26,8 @@ android {
         // Lower minSdk to maximize compatibility and avoid "There was a problem parsing the package".
         minSdk = 21
         targetSdk = 35
-        versionCode = 194
-        versionName = "1.9.3"
+        versionCode = 196
+        versionName = "1.9.4"
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
 

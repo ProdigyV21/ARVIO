@@ -3149,16 +3149,17 @@ private fun buildExternalSubtitleConfigurations(subtitles: List<Subtitle>): List
 }
 
 private fun subtitleMimeTypeFromUrl(url: String): String {
-    val cleanUrl = url.substringBefore('?')
+    val cleanUrl = url.substringBefore('?').lowercase()
     return when {
-        cleanUrl.endsWith(".vtt", ignoreCase = true) -> MimeTypes.TEXT_VTT
-        cleanUrl.endsWith(".srt", ignoreCase = true) -> MimeTypes.APPLICATION_SUBRIP
-        cleanUrl.endsWith(".srt.gz", ignoreCase = true) -> MimeTypes.APPLICATION_SUBRIP
-        cleanUrl.endsWith(".ass", ignoreCase = true) -> MimeTypes.TEXT_SSA
-        cleanUrl.endsWith(".ssa", ignoreCase = true) -> MimeTypes.TEXT_SSA
-        cleanUrl.endsWith(".ttml", ignoreCase = true) -> MimeTypes.APPLICATION_TTML
-        cleanUrl.endsWith(".dfxp", ignoreCase = true) -> MimeTypes.APPLICATION_TTML
-        else -> MimeTypes.APPLICATION_SUBRIP
+        cleanUrl.endsWith(".vtt") -> MimeTypes.TEXT_VTT
+        cleanUrl.endsWith(".srt") || cleanUrl.endsWith(".srt.gz") -> MimeTypes.APPLICATION_SUBRIP
+        cleanUrl.endsWith(".ass") || cleanUrl.endsWith(".ssa") -> MimeTypes.TEXT_SSA
+        cleanUrl.endsWith(".ttml") || cleanUrl.endsWith(".dfxp") -> MimeTypes.APPLICATION_TTML
+        // Extensionless URLs from addons (Comet, OpenSubtitles, etc.) - default to
+        // WebVTT which is the most common format served by subtitle addons.
+        // ExoPlayer handles VTT more gracefully than SRT when there's a format mismatch.
+        cleanUrl.contains("/subtitles/") || cleanUrl.contains("/subs/") || !cleanUrl.substringAfterLast('/').contains('.') -> MimeTypes.TEXT_VTT
+        else -> MimeTypes.TEXT_VTT  // Safe fallback - VTT parser is more lenient
     }
 }
 

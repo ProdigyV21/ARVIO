@@ -811,6 +811,7 @@ class MediaRepository @Inject constructor(
             tmdbApi.searchMulti(
                 apiKey = apiKey,
                 query = cleanedTitle,
+                language = contentLanguage,
                 page = 1
             )
         }.getOrNull()
@@ -1490,7 +1491,7 @@ class MediaRepository @Inject constructor(
                 async {
                     semaphore.withPermit {
                         runCatching {
-                            val search = tmdbApi.searchMulti(apiKey, candidate.title).results
+                            val search = tmdbApi.searchMulti(apiKey, candidate.title, language = contentLanguage).results
                             val typeMatched = search.filter { result ->
                                 val resultType = when (result.mediaType) {
                                     "movie" -> MediaType.MOVIE

@@ -401,7 +401,7 @@ class HomeViewModel @Inject constructor(
     private val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     private val isLowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 256
     // IO concurrency for network requests (logo fetches, catalog loads, etc.)
-    private val networkParallelism = if (isLowRamDevice) 2 else 4
+    private val networkParallelism = if (isLowRamDevice) 3 else 6
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(networkParallelism)
     private var lastContinueWatchingItems: List<MediaItem> = emptyList()
     private var lastContinueWatchingUpdateMs: Long = 0L
@@ -1042,9 +1042,10 @@ class HomeViewModel @Inject constructor(
                     lastContinueWatchingUpdateMs = SystemClock.elapsedRealtime()
                     categories.add(0, continueWatchingCategory)
                 } else {
-                    // Preserve Continue Watching that refreshContinueWatchingOnly() may have
-                    // already added while we were loading categories. Without this, the
-                    // state overwrite at line below would discard CW data.
+                    // Preserve Continue Watching from ANY previous state to prevent the race
+                    // condition where loadHomeData overwrites CW that was set by init preload,
+                    // auth observer, or sync observer. Check both current UI state and the
+                    // preload cache to avoid dropping valid CW data.
                     val existingCW = _uiState.value.categories.firstOrNull {
                         it.id == "continue_watching" && it.items.isNotEmpty() &&
                                 it.items.none { item -> item.isPlaceholder }
@@ -1052,6 +1053,8 @@ class HomeViewModel @Inject constructor(
                     if (existingCW != null) {
                         categories.add(0, existingCW)
                     }
+                    // If no existing CW found, don't overwrite - a concurrent refresh may
+                    // be in progress. The CW row will appear once refresh completes.
                 }
 
                 val heroItem = categories.firstOrNull()?.items?.firstOrNull()

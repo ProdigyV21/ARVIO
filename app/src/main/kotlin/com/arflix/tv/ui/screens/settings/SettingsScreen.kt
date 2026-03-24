@@ -2723,6 +2723,7 @@ private fun AddonRow(
                 Box(
                     modifier = Modifier
                         .size(36.dp)
+                        .clickable { onDelete() }
                         .background(
                             color = if (isDeleteFocused) Color(0xFFEF4444) else Color.White.copy(alpha = 0.1f),
                             shape = RoundedCornerShape(8.dp)

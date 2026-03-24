@@ -301,12 +301,13 @@ fun HomeScreen(
     val heroLeftScrim = remember {
         Brush.horizontalGradient(
             colorStops = arrayOf(
-                0.0f to Color.Black.copy(alpha = 0.85f),
-                0.15f to Color.Black.copy(alpha = 0.75f),
-                0.25f to Color.Black.copy(alpha = 0.55f),
-                0.35f to Color.Black.copy(alpha = 0.35f),
-                0.45f to Color.Black.copy(alpha = 0.15f),
-                0.55f to Color.Transparent,
+                0.0f to Color.Black.copy(alpha = 0.95f),
+                0.12f to Color.Black.copy(alpha = 0.88f),
+                0.22f to Color.Black.copy(alpha = 0.72f),
+                0.32f to Color.Black.copy(alpha = 0.50f),
+                0.42f to Color.Black.copy(alpha = 0.30f),
+                0.55f to Color.Black.copy(alpha = 0.10f),
+                0.70f to Color.Transparent,
                 1.0f to Color.Transparent
             )
         )
@@ -314,9 +315,10 @@ fun HomeScreen(
     val heroTopScrim = remember {
         Brush.verticalGradient(
             colorStops = arrayOf(
-                0.0f to Color.Black.copy(alpha = 0.5f),
-                0.05f to Color.Black.copy(alpha = 0.25f),
-                0.12f to Color.Transparent,
+                0.0f to Color.Black.copy(alpha = 0.7f),
+                0.06f to Color.Black.copy(alpha = 0.45f),
+                0.15f to Color.Black.copy(alpha = 0.15f),
+                0.25f to Color.Transparent,
                 1.0f to Color.Transparent
             )
         )
