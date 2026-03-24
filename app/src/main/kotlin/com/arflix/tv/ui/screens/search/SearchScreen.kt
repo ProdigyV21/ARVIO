@@ -52,7 +52,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -112,7 +111,7 @@ fun SearchScreen(
     val isCompactHeight = configuration.screenHeightDp <= 780
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     val searchBarWidth = if (isTouchDevice) (configuration.screenWidthDp.dp * 0.9f).coerceIn(280.dp, 760.dp)
-        else (configuration.screenWidthDp.dp * 0.56f).coerceIn(500.dp, 760.dp)
+    else (configuration.screenWidthDp.dp * 0.56f).coerceIn(500.dp, 760.dp)
 
     val hasSearchResults = uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty()
     val hasAiResults = uiState.isAiSearch && uiState.aiResults.isNotEmpty()
@@ -360,7 +359,9 @@ private fun RowsLayer(
     val screenHeight = configuration.screenHeightDp
 
     val itemWidth = if (usePosterCards) 130.dp else 260.dp
-    val rowHeight = if (usePosterCards) 250.dp else 210.dp
+
+    // Increased row heights to accommodate taller images + 3 lines of text
+    val rowHeight = if (usePosterCards) 340.dp else 260.dp
 
     val listState = rememberLazyListState()
     val targetIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
@@ -411,7 +412,8 @@ private fun RowsLayer(
 
                         LazyRow(
                             state = rowState,
-                            contentPadding = PaddingValues(start = 8.dp, end = itemWidth + 30.dp, top = 4.dp, bottom = 4.dp),
+                            // Added more top and bottom padding so the focus scale doesn't clip
+                            contentPadding = PaddingValues(start = 8.dp, end = itemWidth + 30.dp, top = 12.dp, bottom = 24.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             itemsIndexed(category.items, key = { _, item -> "${item.mediaType}_${item.id}" }) { itemIdx, item ->
