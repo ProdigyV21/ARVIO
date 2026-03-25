@@ -111,6 +111,7 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.ui.components.MediaCard as ArvioMediaCard
+import com.arflix.tv.ui.components.TrailerPlayer
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
@@ -547,6 +548,14 @@ fun HomeScreen(
                         }
                     },
                     update = { pv -> pv.player = heroExoPlayer },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // YouTube trailer auto-play (muted, no controls)
+            if (heroVideoUrl == null && uiState.trailerAutoPlay && uiState.heroTrailerKey != null) {
+                TrailerPlayer(
+                    youtubeKey = uiState.heroTrailerKey!!,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1021,22 +1030,22 @@ private fun HeroSection(
                     .trim()
                     .ifBlank { "No description available." }
 
-                val overviewMaxHeight = 66.dp
+                val overviewMaxHeight = 72.dp
                 Box(
                     modifier = Modifier
-                        .width(560.dp)
+                        .width(360.dp)
                         .height(overviewMaxHeight)
                 ) {
                     Text(
                         text = displayOverview,
                         style = ArflixTypography.body.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 20.sp,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                            lineHeight = 17.sp,
                             shadow = textShadow
                         ),
-                        color = Color.White,
-                        maxLines = 3,
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

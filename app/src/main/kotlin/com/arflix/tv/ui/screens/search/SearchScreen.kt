@@ -363,7 +363,11 @@ private fun RowsLayer(
     val screenHeight = configuration.screenHeightDp
 
     val itemWidth = if (usePosterCards) 130.dp else 260.dp
-    val rowHeight = if (usePosterCards) 250.dp else 210.dp
+    val rowHeight = if (usePosterCards) {
+        if (screenHeight <= 640) 260.dp else 340.dp
+    } else {
+        if (screenHeight <= 640) 200.dp else 260.dp
+    }
 
     val listState = rememberLazyListState()
     val targetIndex = currentRowIndex.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
@@ -414,7 +418,7 @@ private fun RowsLayer(
 
                         LazyRow(
                             state = rowState,
-                            contentPadding = PaddingValues(start = 8.dp, end = itemWidth + 30.dp, top = 4.dp, bottom = 4.dp),
+                            contentPadding = PaddingValues(start = 8.dp, end = itemWidth + 30.dp, top = 12.dp, bottom = 24.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             itemsIndexed(category.items, key = { _, item -> "${item.mediaType}_${item.id}" }) { itemIdx, item ->

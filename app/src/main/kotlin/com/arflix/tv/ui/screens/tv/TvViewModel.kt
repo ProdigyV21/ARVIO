@@ -32,7 +32,7 @@ data class TvUiState(
     val favoritesOnly: Boolean = false,
     val query: String = ""
 ) {
-    val isConfigured: Boolean get() = config.m3uUrl.isNotBlank()
+    val isConfigured: Boolean get() = config.m3uUrl.isNotBlank() || config.stalkerPortalUrl.isNotBlank()
 
     fun filteredChannels(group: String): List<IptvChannel> {
         val source = if (group == FAVORITES_GROUP_NAME) {
@@ -63,23 +63,28 @@ data class TvUiState(
 
     fun groups(): List<String> {
         val dynamicGroups = snapshot.grouped.keys.toList()
-        val favorites = snapshot.favoriteGroups.filter { dynamicGroups.contains(it) }
-        val others = dynamicGroups.filterNot { snapshot.favoriteGroups.contains(it) }
-        val ordered = favorites + others
+        val hiddenSet = snapshot.hiddenGroups.toHashSet()
+        val visibleGroups = dynamicGroups.filterNot { hiddenSet.contains(it) }
+        val favorites = snapshot.favoriteGroups.filter { visibleGroups.contains(it) }
+        val others = visibleGroups.filterNot { snapshot.favoriteGroups.contains(it) }
+        val baseOrdered = if (snapshot.groupOrder.isNotEmpty()) {
+            val orderMap = snapshot.groupOrder.withIndex().associate { (i, g) -> g to i }
+            (favorites + others).sortedBy { orderMap[it] ?: Int.MAX_VALUE }
+        } else { favorites + others }
         val hasFavoriteChannelsInSnapshot = snapshot.favoriteChannels
             .toHashSet()
             .let { ids -> snapshot.channels.any { ids.contains(it.id) } }
         return if (hasFavoriteChannelsInSnapshot) {
-            listOf(FAVORITES_GROUP_NAME) + ordered
+            listOf(FAVORITES_GROUP_NAME) + baseOrdered
         } else {
-            ordered
+            baseOrdered
         }
     }
 }
 
 @HiltViewModel
 class TvViewModel @Inject constructor(
-    private val iptvRepository: IptvRepository,
+    val iptvRepository: IptvRepository,
     private val cloudSyncRepository: CloudSyncRepository
 ) : ViewModel() {
 
@@ -134,15 +139,18 @@ class TvViewModel @Inject constructor(
     private fun observeConfigAndFavorites() {
         viewModelScope.launch {
             combine(
-                iptvRepository.observeConfig(),
-                iptvRepository.observeFavoriteGroups(),
-                iptvRepository.observeFavoriteChannels()
-            ) { config, favoriteGroups, favoriteChannels ->
-                Triple(config, favoriteGroups, favoriteChannels)
-            }.collect { (config, favoriteGroups, favoriteChannels) ->
+                combine(iptvRepository.observeConfig(), iptvRepository.observeFavoriteGroups(), iptvRepository.observeFavoriteChannels()) { a, b, c -> Triple(a, b, c) },
+                iptvRepository.observeHiddenGroups(),
+                iptvRepository.observeGroupOrder()
+            ) { triple, hiddenGroups, groupOrder ->
+                Triple(triple, hiddenGroups, groupOrder)
+            }.collect { (triple, hiddenGroups, groupOrder) ->
+                val (config, favoriteGroups, favoriteChannels) = triple
                 val snapshot = _uiState.value.snapshot.copy(
                     favoriteGroups = favoriteGroups,
-                    favoriteChannels = favoriteChannels
+                    favoriteChannels = favoriteChannels,
+                    hiddenGroups = hiddenGroups,
+                    groupOrder = groupOrder
                 )
                 _uiState.value = _uiState.value.copy(config = config, snapshot = snapshot)
 
@@ -300,6 +308,24 @@ class TvViewModel @Inject constructor(
         viewModelScope.launch {
             iptvRepository.toggleFavoriteChannel(channelId)
             syncIptvFavoritesToCloud()
+        }
+    }
+
+    fun toggleHiddenGroup(groupName: String) {
+        viewModelScope.launch { iptvRepository.toggleHiddenGroup(groupName) }
+    }
+
+    fun moveGroupUp(groupName: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.groups().filterNot { it == FAVORITES_GROUP_NAME }
+            iptvRepository.moveGroupUp(groupName, current)
+        }
+    }
+
+    fun moveGroupDown(groupName: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.groups().filterNot { it == FAVORITES_GROUP_NAME }
+            iptvRepository.moveGroupDown(groupName, current)
         }
     }
 

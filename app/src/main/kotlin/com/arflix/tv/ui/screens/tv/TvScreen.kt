@@ -10,7 +10,20 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.StarOutline
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -143,6 +156,7 @@ fun TvScreen(
     var channelIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
     var playingChannelId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showGroupContextMenu by remember { mutableStateOf(false) }
     // When launched from Home with a stream URL, start in fullscreen immediately
     // to avoid a flash of the TV page channel list.
     var isFullScreen by rememberSaveable { mutableStateOf(initialStreamUrl != null) }
@@ -342,9 +356,16 @@ fun TvScreen(
     }
 
     LaunchedEffect(playingChannelId, playingChannel?.streamUrl) {
-        val stream = playingChannel?.streamUrl ?: return@LaunchedEffect
+        var stream = playingChannel?.streamUrl ?: return@LaunchedEffect
         if (isPlayerReleased) return@LaunchedEffect
-        // Skip if this exact stream was already prepared (e.g., by instant playback above)
+        // Resolve Stalker portal cmd to actual stream URL
+        if (stream.startsWith("ffmpeg") || (stream.startsWith("/") && !stream.startsWith("//"))) {
+            val stalker = viewModel.iptvRepository.cachedStalkerApi
+            if (stalker != null) {
+                val resolved = stalker.resolveStreamUrl(stream)
+                if (resolved != null) stream = resolved else return@LaunchedEffect
+            }
+        }
         if (stream == lastPreparedStreamUrl) return@LaunchedEffect
         lastPreparedStreamUrl = stream
         prepareStream(stream)
@@ -421,6 +442,14 @@ fun TvScreen(
             .background(BackgroundDark)
             .focusable()
             .onPreviewKeyEvent { event ->
+                // When context menu is open, let it handle all key events
+                if (showGroupContextMenu) {
+                    if (event.type == KeyEventType.KeyDown && (event.key == Key.Back || event.key == Key.Escape)) {
+                        showGroupContextMenu = false
+                        return@onPreviewKeyEvent true
+                    }
+                    return@onPreviewKeyEvent false
+                }
                 if (isFullScreen) {
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
@@ -485,7 +514,7 @@ fun TvScreen(
                     if (pressMs >= 550L) {
                         when (focusZone) {
                             TvFocusZone.GROUPS -> groups.getOrNull(safeGroupIndex)?.let {
-                                viewModel.toggleFavoriteGroup(it)
+                                showGroupContextMenu = true
                                 return@onPreviewKeyEvent true
                             }
 
@@ -660,11 +689,26 @@ fun TvScreen(
                             focusZone = TvFocusZone.GROUPS
                             channelIndex = 0
                         },
+                        onGroupLongPress = { index ->
+                            groupIndex = index
+                            showGroupContextMenu = true
+                        },
+                        showMenuForIndex = if (showGroupContextMenu) safeGroupIndex else -1,
+                        onDismissMenu = { showGroupContextMenu = false },
+                        onToggleFavorite = { viewModel.toggleFavoriteGroup(it) },
+                        onToggleHidden = { viewModel.toggleHiddenGroup(it) },
+                        onMoveUp = { viewModel.moveGroupUp(it) },
+                        onMoveDown = { viewModel.moveGroupDown(it) },
+
                         modifier = Modifier
                             .width(if (isMobile) 140.dp else 170.dp)
                             .fillMaxHeight()
                             .padding(start = 6.dp, top = 4.dp, bottom = 4.dp, end = 6.dp)
                     )
+
+
+
+
                 }
 
                 // Main content: EPG info + player top, guide bottom
@@ -995,9 +1039,15 @@ private fun CategoryRail(
     isFocused: Boolean,
     listState: LazyListState,
     onGroupClick: (Int) -> Unit = {},
+    onGroupLongPress: (Int) -> Unit = {},
+    showMenuForIndex: Int = -1,
+    onDismissMenu: () -> Unit = {},
+    onToggleFavorite: (String) -> Unit = {},
+    onToggleHidden: (String) -> Unit = {},
+    onMoveUp: (String) -> Unit = {},
+    onMoveDown: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Seamless rail - no background box, items sit directly on dark surface
     LazyColumn(
         state = listState,
         verticalArrangement = Arrangement.spacedBy(1.dp),
@@ -1008,45 +1058,62 @@ private fun CategoryRail(
                 name = group,
                 isFocused = isFocused && index == focusedGroupIndex,
                 isFavorite = favoriteGroups.contains(group),
-                onClick = { onGroupClick(index) }
+                onClick = { onGroupClick(index) },
+                onLongPress = { onGroupLongPress(index) },
+                showMenu = index == showMenuForIndex,
+                onDismissMenu = onDismissMenu,
+                onToggleFavorite = { onToggleFavorite(group) },
+                onToggleHidden = { onToggleHidden(group) },
+                onMoveUp = { onMoveUp(group) },
+                onMoveDown = { onMoveDown(group) }
             )
         }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun GroupRailItem(name: String, isFocused: Boolean, isFavorite: Boolean, onClick: () -> Unit = {}) {
+private fun GroupRailItem(
+    name: String, isFocused: Boolean, isFavorite: Boolean,
+    showMenu: Boolean = false,
+    onClick: () -> Unit = {},
+    onLongPress: () -> Unit = {},
+    onDismissMenu: () -> Unit = {},
+    onToggleFavorite: () -> Unit = {},
+    onToggleHidden: () -> Unit = {},
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {}
+) {
+    Box {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(if (isFocused) Color.White.copy(alpha = 0.07f) else Color.Transparent)
             .then(if (isFocused) Modifier.border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp)) else Modifier)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isFavorite) {
-            Icon(
-                imageVector = Icons.Default.Star,
-                contentDescription = null,
-                tint = Color(0xFFF5C518).copy(alpha = 0.8f),
-                modifier = Modifier.size(10.dp)
-            )
+            Icon(Icons.Default.Star, null, tint = Color(0xFFF5C518).copy(alpha = 0.8f), modifier = Modifier.size(10.dp))
             Spacer(modifier = Modifier.width(5.dp))
         }
-        Text(
-            text = name,
-            style = ArflixTypography.caption.copy(
-                fontSize = 11.sp,
-                fontWeight = if (isFocused) FontWeight.Medium else FontWeight.Normal,
-                lineHeight = 14.sp
-            ),
-            color = if (isFocused) Color.White else Color.White.copy(alpha = 0.4f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Text(name, style = ArflixTypography.caption.copy(fontSize = 11.sp, fontWeight = if (isFocused) FontWeight.Medium else FontWeight.Normal, lineHeight = 14.sp),
+            color = if (isFocused) Color.White else Color.White.copy(alpha = 0.4f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (showMenu) {
+        DropdownMenu(
+            expanded = true,
+            onDismissRequest = onDismissMenu,
+            modifier = Modifier.background(Color.Black.copy(alpha = 0.95f))
+        ) {
+            FocusableMenuItem(if (isFavorite) "Unfavorite" else "Favorite", if (isFavorite) Icons.Default.StarOutline else Icons.Default.Star, Color(0xFFF5C518)) { onDismissMenu(); onToggleFavorite() }
+            FocusableMenuItem("Hide", Icons.Default.VisibilityOff) { onDismissMenu(); onToggleHidden() }
+            FocusableMenuItem("Move Up", Icons.Default.KeyboardArrowUp) { onDismissMenu(); onMoveUp() }
+            FocusableMenuItem("Move Down", Icons.Default.KeyboardArrowDown) { onDismissMenu(); onMoveDown() }
+        }
+    }
     }
 }
 
@@ -1775,6 +1842,20 @@ private fun ensureReadableProgramWidths(items: List<ProgramSegment>): List<Progr
 
     // Remove zero-weight fillers
     return boosted.filter { !(it.isFiller && it.weight < 0.01f) }
+}
+
+@Composable
+private fun FocusableMenuItem(label: String, icon: ImageVector, iconTint: Color = Color.White.copy(alpha = 0.6f), onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    DropdownMenuItem(
+        text = { Text(label, style = ArflixTypography.caption.copy(fontSize = 12.sp, fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Normal), color = if (focused) Color.White else Color.White.copy(alpha = 0.8f)) },
+        leadingIcon = { Icon(icon, null, tint = if (focused) iconTint else iconTint.copy(alpha = 0.5f), modifier = Modifier.size(16.dp)) },
+        onClick = onClick,
+        modifier = Modifier
+            .height(40.dp)
+            .onFocusChanged { focused = it.isFocused }
+            .then(if (focused) Modifier.border(2.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)) else Modifier)
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

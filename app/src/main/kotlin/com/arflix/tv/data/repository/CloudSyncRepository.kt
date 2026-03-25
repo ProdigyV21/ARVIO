@@ -59,13 +59,18 @@ class CloudSyncRepository @Inject constructor(
         val autoPlaySingleSource: Boolean = true,
         val autoPlayMinQuality: String = "Any",
         val autoPlayMaxQuality: String = "4K",
-        val includeSpecials: Boolean = false
+        val trailerAutoPlay: Boolean = false,
+        val includeSpecials: Boolean = false,
+        val iptvHiddenGroups: String = "",
+        val iptvGroupOrder: String = ""
     )
 
     // ── DataStore key helpers ──
 
     private fun contentLanguageKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "content_language")
+    private fun trailerAutoPlayKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, "trailer_auto_play")
     private fun defaultSubtitleKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "default_subtitle")
     private fun subtitleSizeKeyFor(profileId: String) =
@@ -74,6 +79,10 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "subtitle_color")
     private fun defaultAudioLanguageKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "default_audio_language")
+    private fun iptvHiddenGroupsKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "iptv_hidden_groups")
+    private fun iptvGroupOrderKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "iptv_group_order")
     private fun cardLayoutModeKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "card_layout_mode")
     private fun frameRateMatchingModeKeyFor(profileId: String) =
@@ -171,7 +180,10 @@ class CloudSyncRepository @Inject constructor(
                         autoPlayMaxQuality = normalizeAutoPlayMaxQuality(
                             prefs[autoPlayMaxQualityKeyFor(profile.id)] ?: "4K"
                         ),
-                        includeSpecials = prefs[includeSpecialsKeyFor(profile.id)] ?: false
+                        trailerAutoPlay = prefs[trailerAutoPlayKeyFor(profile.id)] ?: false,
+                        includeSpecials = prefs[includeSpecialsKeyFor(profile.id)] ?: false,
+                        iptvHiddenGroups = prefs[iptvHiddenGroupsKeyFor(profile.id)] ?: "",
+                        iptvGroupOrder = prefs[iptvGroupOrderKeyFor(profile.id)] ?: ""
                     )
                 )
             }
@@ -356,7 +368,6 @@ class CloudSyncRepository @Inject constructor(
             val profiles: List<Profile> = gson.fromJson(json, type) ?: emptyList()
             val activeProfileId = root.optString("activeProfileId").ifBlank { null }
             if (profiles.isNotEmpty()) {
-                // Preserve local active profile if it exists in cloud set
                 val localActiveId = profileRepository.getActiveProfileId()
                 val effectiveActiveId = if (localActiveId != null &&
                     profiles.any { it.id == localActiveId }
@@ -387,7 +398,10 @@ class CloudSyncRepository @Inject constructor(
                         prefs[autoPlaySingleSourceKeyFor(profileId)] = state.autoPlaySingleSource
                         prefs[autoPlayMinQualityKeyFor(profileId)] = normalizeAutoPlayMinQuality(state.autoPlayMinQuality)
                         prefs[autoPlayMaxQualityKeyFor(profileId)] = normalizeAutoPlayMaxQuality(state.autoPlayMaxQuality)
+                        prefs[trailerAutoPlayKeyFor(profileId)] = state.trailerAutoPlay
                         prefs[includeSpecialsKeyFor(profileId)] = state.includeSpecials
+                        if (state.iptvHiddenGroups.isNotBlank()) prefs[iptvHiddenGroupsKeyFor(profileId)] = state.iptvHiddenGroups
+                        if (state.iptvGroupOrder.isNotBlank()) prefs[iptvGroupOrderKeyFor(profileId)] = state.iptvGroupOrder
                     }
                 }
             }

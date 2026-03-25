@@ -56,6 +56,8 @@ data class PlayerUiState(
     val savedPosition: Long = 0,
     val preferredAudioLanguage: String = "en",
     val frameRateMatchingMode: String = "Off",
+    val subtitleSize: String = "Medium",
+    val subtitleColor: String = "White",
     val error: String? = null,
     val isSetupError: Boolean = false, // true when error is due to missing addons (shows friendly guide instead of red error)
     // Skip intro/recap
@@ -173,11 +175,15 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val preferredAudioLanguage = resolvePreferredAudioLanguage()
             val frameRateMatchingMode = resolveFrameRateMatchingMode()
+            val subSize = context.settingsDataStore.data.first()[profileManager.profileStringKey("subtitle_size")] ?: "Medium"
+            val subColor = context.settingsDataStore.data.first()[profileManager.profileStringKey("subtitle_color")] ?: "White"
             _uiState.value = PlayerUiState(
                 isLoading = true,
                 isLoadingStreams = true,
                 preferredAudioLanguage = preferredAudioLanguage,
-                frameRateMatchingMode = frameRateMatchingMode
+                frameRateMatchingMode = frameRateMatchingMode,
+                subtitleSize = subSize,
+                subtitleColor = subColor
             )
 
             // If stream URL provided, use it directly (except magnet links, which require resolution).

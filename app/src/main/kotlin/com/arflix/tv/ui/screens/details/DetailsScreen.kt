@@ -1,7 +1,5 @@
 package com.arflix.tv.ui.screens.details
 
-import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -24,7 +22,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -119,6 +116,9 @@ import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.SkeletonDetailsPage
 import com.arflix.tv.ui.components.StreamSelector
+import com.arflix.tv.ui.components.TrailerPlayer
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.input.key.onKeyEvent
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
@@ -171,7 +171,6 @@ fun DetailsScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val isMobile = LocalDeviceType.current.isTouchDevice()
 
-    // Start on buttons for both TV and movies (buttons are now shown for both)
     var focusedSection by remember { mutableStateOf(FocusSection.BUTTONS) }
     var buttonIndex by remember { mutableIntStateOf(0) }
     var episodeIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -189,6 +188,7 @@ fun DetailsScreen(
 
     // Stream Selector state
     var showStreamSelector by remember { mutableStateOf(false) }
+    var showTrailerPlayer by remember { mutableStateOf(false) }
     var pendingAutoPlayRequest by remember { mutableStateOf<PendingAutoPlayRequest?>(null) }
 
     // Episode Context Menu state
@@ -205,7 +205,6 @@ fun DetailsScreen(
         viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
     }
 
-    // Keep watched badges and continue target fresh when returning from player.
     DisposableEffect(lifecycleOwner, mediaType, mediaId) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -229,11 +228,6 @@ fun DetailsScreen(
 
     // ---------------------------------------------------------------------------
     // CRITICAL AUTO-PLAY LOGIC — FIXED
-    //
-    // qualityScoreForAutoPlay now uses word-boundary Regex (same engine as
-    // StreamSelector / SourceInfoOverlay) so "DS4K", "PSEUDO4K", etc. are NOT
-    // mis-scored as 4K.  The filter then checks score in minThreshold..maxThreshold
-    // so a 1080p cap correctly rejects genuine 4K streams and accepts 1080p.
     // ---------------------------------------------------------------------------
     LaunchedEffect(pendingAutoPlayRequest, uiState.isLoadingStreams, uiState.streams) {
         val request = pendingAutoPlayRequest ?: return@LaunchedEffect
@@ -243,7 +237,6 @@ fun DetailsScreen(
         val minThreshold = minQualityThreshold(uiState.autoPlayMinQuality)
         val maxThreshold = maxQualityThreshold(uiState.autoPlayMaxQuality)
 
-        // Strict range filter — uses hybrid quality detection (filename first, then metadata)
         val filteredStreams = validStreams
             .filter { stream ->
                 val score = getQualityScore(stream.extractQuality())
@@ -267,8 +260,6 @@ fun DetailsScreen(
                     request.startPositionMs
                 )
             }
-            // No stream matched the quality range — fall back to selector so the
-            // user can choose manually rather than silently playing the wrong quality.
             else -> {
                 showStreamSelector = true
             }
@@ -276,14 +267,12 @@ fun DetailsScreen(
         pendingAutoPlayRequest = null
     }
 
-    // Sync episodeIndex with initialEpisodeIndex from ViewModel
     LaunchedEffect(uiState.initialEpisodeIndex, uiState.episodes) {
         if (uiState.initialEpisodeIndex > 0 && uiState.episodes.isNotEmpty()) {
             episodeIndex = uiState.initialEpisodeIndex
         }
     }
 
-    // Sync seasonIndex with initialSeasonIndex from ViewModel
     LaunchedEffect(uiState.initialSeasonIndex) {
         if (uiState.initialSeasonIndex > 0) {
             seasonIndex = uiState.initialSeasonIndex
@@ -295,13 +284,13 @@ fun DetailsScreen(
         if (event.type == KeyEventType.KeyDown) {
             // Check if any modal is showing
             if (showStreamSelector || showEpisodeContextMenu || showSeasonContextMenu || uiState.showPersonModal) {
-                return@onPreviewKeyEvent false // Let the modal handle it
+                return@onPreviewKeyEvent false
             }
 
             when (event.key) {
                 Key.Back, Key.Escape -> {
-                    onBack()
-                    true
+                    if (showTrailerPlayer) { showTrailerPlayer = false; true }
+                    else { onBack(); true }
                 }
                 Key.DirectionLeft -> {
                     if (isSidebarFocused) {
@@ -310,7 +299,6 @@ fun DetailsScreen(
                         }
                         true
                     } else {
-                        // Check if at leftmost item in any section - go to sidebar
                         val atLeftmost = when (focusedSection) {
                             FocusSection.BUTTONS -> buttonIndex == 0
                             FocusSection.EPISODES -> episodeIndex == 0
@@ -348,7 +336,6 @@ fun DetailsScreen(
                     if (isSidebarFocused) {
                         true
                     } else {
-                        // Navigation: BUTTONS -> SEASONS -> EPISODES -> CAST -> REVIEWS -> SIMILAR
                         val isTV = mediaType == MediaType.TV
                         val hasEpisodes = uiState.episodes.isNotEmpty()
                         val hasCast = uiState.cast.isNotEmpty()
@@ -382,7 +369,6 @@ fun DetailsScreen(
                         isSidebarFocused = false
                         true
                     } else {
-                        // Navigation: BUTTONS -> SEASONS -> EPISODES -> CAST -> REVIEWS -> SIMILAR
                         val isTV = mediaType == MediaType.TV
                         val hasEpisodes = uiState.episodes.isNotEmpty()
                         val hasSeasons = uiState.totalSeasons > 1
@@ -419,7 +405,7 @@ fun DetailsScreen(
                             FocusSection.REVIEWS -> {
                                 if (hasSimilar) FocusSection.SIMILAR else FocusSection.REVIEWS
                             }
-                            FocusSection.SIMILAR -> FocusSection.SIMILAR  // Stay on similar (bottom)
+                            FocusSection.SIMILAR -> FocusSection.SIMILAR
                         }
                         true
                     }
@@ -496,24 +482,12 @@ fun DetailsScreen(
                                 }
                                 1 -> { // Sources - Show StreamSelector for manual selection
                                     showStreamSelector = true
-                                    // Pass the currently focused episode for TV shows
                                     val ep = uiState.episodes.getOrNull(episodeIndex)
                                     viewModel.loadStreams(uiState.imdbId, ep?.seasonNumber, ep?.episodeNumber)
                                 }
-                                2 -> { // Trailer
-                                    uiState.trailerKey?.let { key ->
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$key"))
-                                            context.startActivity(intent)
-                                        } catch (e: Exception) {
-                                            // Fallback: try vnd.youtube URI
-                                            try {
-                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$key"))
-                                                context.startActivity(intent)
-                                            } catch (e2: Exception) {
-                                                // Could not open trailer
-                                            }
-                                        }
+                                2 -> { // Trailer - in-app overlay
+                                    uiState.trailerKey?.let {
+                                        showTrailerPlayer = true
                                     }
                                 }
                                 3 -> viewModel.toggleWatched(episodeIndex)
@@ -550,7 +524,6 @@ fun DetailsScreen(
                     }
                     true
                 }
-                // Long press or menu key for context menu
                 Key.Menu -> {
                     if (focusedSection == FocusSection.EPISODES) {
                         contextMenuEpisode = uiState.episodes.getOrNull(episodeIndex)
@@ -586,9 +559,7 @@ fun DetailsScreen(
             .focusable()
             .then(keyModifier)
     ) {
-        // Main content - full screen with sidebar overlay (same as HomeScreen)
         if (uiState.isLoading || uiState.item == null) {
-            // Use skeleton loader for better UX
             SkeletonDetailsPage(
                 isTV = mediaType == MediaType.TV,
                 modifier = Modifier.fillMaxSize()
@@ -662,18 +633,8 @@ fun DetailsScreen(
                                 val ep = uiState.episodes.getOrNull(episodeIndex)
                                 viewModel.loadStreams(uiState.imdbId, ep?.seasonNumber, ep?.episodeNumber)
                             }
-                            2 -> { // Trailer
-                                uiState.trailerKey?.let { key ->
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$key"))
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        try {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$key"))
-                                            context.startActivity(intent)
-                                        } catch (_: Exception) {}
-                                    }
-                                }
+                            2 -> { // Trailer - in-app overlay
+                                uiState.trailerKey?.let { showTrailerPlayer = true }
                             }
                             3 -> viewModel.toggleWatched(episodeIndex)
                             4 -> viewModel.toggleWatchlist()
@@ -733,6 +694,22 @@ fun DetailsScreen(
                 onNavigateToDetails(type, id)
             }
         )
+
+        // In-app Trailer Player (fullscreen overlay)
+        if (showTrailerPlayer && uiState.trailerKey != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .zIndex(50f)
+            ) {
+                TrailerPlayer(
+                    youtubeKey = uiState.trailerKey!!,
+                    modifier = Modifier.fillMaxSize(),
+                    delayMs = 0L
+                )
+            }
+        }
 
         // Stream Selector Modal
         StreamSelector(
@@ -828,8 +805,8 @@ private data class PendingAutoPlayRequest(
     val startPositionMs: Long?
 )
 
-// Threshold helpers — now uses centralized quality detection from StreamQualityUtils
-// "Any" / empty max maps to 4 (no upper cap).
+// ---------------------------------------------------------------------------
+// Threshold helpers
 // ---------------------------------------------------------------------------
 private fun minQualityThreshold(value: String): Int = when (value.trim().lowercase()) {
     "720p", "hd"             -> 2
@@ -843,6 +820,18 @@ private fun maxQualityThreshold(value: String): Int = when (value.trim().lowerca
     "1080p", "fullhd", "fhd" -> 3
     "4k", "2160p", "uhd"     -> 4
     else                     -> 4  // "Any" / unset → no upper cap
+}
+
+/** Score quality from ALL stream text (source + quality + addonName) for more accurate detection */
+private fun qualityScoreForStream(stream: com.arflix.tv.data.model.StreamSource): Int {
+    val combined = listOfNotNull(stream.quality, stream.source, stream.addonName).joinToString(" ")
+    return when {
+        combined.contains("2160p", ignoreCase = true) || Regex("\\b4[kK]\\b").containsMatchIn(combined) -> 4
+        combined.contains("1080p", ignoreCase = true) -> 3
+        combined.contains("720p", ignoreCase = true) -> 2
+        combined.contains("480p", ignoreCase = true) -> 1
+        else -> 0
+    }
 }
 
 private fun isAutoPlayableStream(stream: com.arflix.tv.data.model.StreamSource): Boolean {
@@ -919,11 +908,10 @@ private fun DetailsContent(
     onSimilarClick: (Int) -> Unit = {}
 ) {
     val focusSectionForUi = if (contentHasFocus) focusedSection else null
-    // === PREMIUM LAYERED TEXT SHADOWS ===
     val textShadow = Shadow(
         color = Color.Black.copy(alpha = 0.9f),
         offset = Offset(0f, 2f),
-        blurRadius = 8f  // Soft spread shadow for better readability
+        blurRadius = 8f
     )
 
     // ===================== MOBILE LAYOUT =====================
@@ -953,7 +941,6 @@ private fun DetailsContent(
                     .fillMaxSize()
                     .verticalScroll(mobileScrollState)
             ) {
-                // --- Backdrop with gradient ---
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -965,7 +952,6 @@ private fun DetailsContent(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
-                    // Strong bottom gradient
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -980,7 +966,6 @@ private fun DetailsContent(
                                 )
                             )
                     )
-                    // Title over backdrop bottom
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -1012,7 +997,6 @@ private fun DetailsContent(
                     }
                 }
 
-                // --- Metadata & content on black background ---
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1021,7 +1005,6 @@ private fun DetailsContent(
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Metadata row
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1078,22 +1061,20 @@ private fun DetailsContent(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Description
                     Text(
                         text = item.overview,
                         style = ArflixTypography.body.copy(
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
                             fontWeight = FontWeight.Normal
                         ),
-                        color = Color.White.copy(alpha = 0.85f),
-                        maxLines = 3,
+                        color = Color.White.copy(alpha = 0.88f),
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Action buttons row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1118,7 +1099,6 @@ private fun DetailsContent(
                         )
                     }
 
-                    // --- TV Show: Season selector & Episodes ---
                     if (item.mediaType == MediaType.TV && episodes.isNotEmpty()) {
                         if (totalSeasons > 1) {
                             Spacer(modifier = Modifier.height(20.dp))
@@ -1161,7 +1141,6 @@ private fun DetailsContent(
                     }
                 }
 
-                // Episodes LazyRow (outside the inner Column to allow independent horizontal scroll)
                 if (item.mediaType == MediaType.TV && episodes.isNotEmpty()) {
                     LazyRow(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
@@ -1180,7 +1159,6 @@ private fun DetailsContent(
                     }
                 }
 
-                // Cast section
                 if (cast.isNotEmpty()) {
                     Column(
                         modifier = Modifier
@@ -1212,7 +1190,6 @@ private fun DetailsContent(
                     }
                 }
 
-                // Similar / More Like This section
                 if (similar.isNotEmpty()) {
                     Column(
                         modifier = Modifier
@@ -1246,7 +1223,6 @@ private fun DetailsContent(
                     }
                 }
 
-                // Bottom spacing
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
@@ -1255,7 +1231,6 @@ private fun DetailsContent(
     // ===================== END MOBILE LAYOUT =====================
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Full-screen hero background
         AsyncImage(
             model = item.backdrop ?: item.image,
             contentDescription = null,
@@ -1263,9 +1238,6 @@ private fun DetailsContent(
             modifier = Modifier.fillMaxSize()
         )
 
-        // === PREMIUM MULTI-LAYER SCRIM SYSTEM ===
-
-        // Layer 1: Strong left gradient for hero text area (Netflix-style)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1284,7 +1256,6 @@ private fun DetailsContent(
                 )
         )
 
-        // Layer 2: Top vignette for clock/status area
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1300,7 +1271,6 @@ private fun DetailsContent(
                 )
         )
 
-        // Layer 3: Bottom floor-fade
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1316,7 +1286,6 @@ private fun DetailsContent(
                 )
         )
 
-        // Hero metadata positioned above the content rows
         val heroStartPadding = 36.dp
         val heroEndPadding = 400.dp
         val configuration = LocalConfiguration.current
@@ -1488,27 +1457,24 @@ private fun DetailsContent(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                val displayOverview = item.overview
-
                 Box(
                     modifier = Modifier
-                        .width(560.dp)
+                        .width(360.dp)
                         .height(overviewMaxHeight)
                 ) {
                     Text(
-                        text = displayOverview,
+                        text = item.overview,
                         style = ArflixTypography.body.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            lineHeight = 20.sp,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Normal,
+                            lineHeight = 17.sp,
                             shadow = textShadow
                         ),
-                        color = Color.White,
-                        maxLines = 3,
+                        color = Color.White.copy(alpha = 0.9f),
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-
             }
         }
 
@@ -1531,11 +1497,7 @@ private fun DetailsContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val playButtonLabel = if (!playLabel.isNullOrBlank()) {
-                    playLabel
-                } else {
-                    "Play"
-                }
+                val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else "Play"
                 Box(modifier = Modifier.clickable { onButtonClick(0) }) {
                     PremiumActionButton(
                         icon = Icons.Default.PlayArrow,
@@ -1581,10 +1543,8 @@ private fun DetailsContent(
             }
         }
 
-        // Scrollable content area at the bottom
         val contentScrollState = rememberTvLazyListState()
 
-        // Calculate section indices dynamically
         val isTV = item.mediaType == MediaType.TV
         val hasEpisodes = isTV && episodes.isNotEmpty()
         val hasSeasons = isTV && totalSeasons > 1
@@ -1592,15 +1552,14 @@ private fun DetailsContent(
         val hasReviews = reviews.isNotEmpty()
         val hasSimilar = similar.isNotEmpty()
 
-        // Build index map for each section (accounting for spacer items)
         var idx = 0
         val seasonsIdx = if (hasSeasons) idx.also { idx++ } else -1
         val episodesIdx = if (hasEpisodes) idx.also { idx++ } else -1
-        if (hasCast) idx++  // spacer
+        if (hasCast) idx++
         val castIdx = if (hasCast) idx.also { idx++ } else -1
-        if (hasReviews) idx++  // spacer
+        if (hasReviews) idx++
         val reviewsIdx = if (hasReviews) idx.also { idx++ } else -1
-        if (hasSimilar) idx++  // spacer
+        if (hasSimilar) idx++
         val similarIdx = if (hasSimilar) idx.also { idx++ } else -1
 
         LaunchedEffect(focusedSection, contentHasFocus) {
@@ -1646,7 +1605,6 @@ private fun DetailsContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 12.dp)
         ) {
-            // TV rows: Seasons first, then Episodes
             if (item.mediaType == MediaType.TV && episodes.isNotEmpty()) {
                 if (totalSeasons > 1) {
                     item {
@@ -1725,7 +1683,6 @@ private fun DetailsContent(
                 }
             }
 
-            // Cast section
             if (cast.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1772,7 +1729,6 @@ private fun DetailsContent(
                 }
             }
 
-            // Reviews section
             if (reviews.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(64.dp))
@@ -1818,7 +1774,6 @@ private fun DetailsContent(
                 }
             }
 
-            // More Like This section
             if (similar.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(80.dp))
@@ -1870,7 +1825,6 @@ private fun DetailsContent(
                 }
             }
 
-            // Bottom spacing
             item {
                 Spacer(modifier = Modifier.height(20.dp))
             }
@@ -1969,9 +1923,6 @@ private fun HomeStyleRowAutoScroll(
     }
 }
 
-/**
- * Mobile action button — labeled, tappable, Netflix-style
- */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun MobileActionButton(
@@ -2017,9 +1968,6 @@ private fun MobileActionButton(
     }
 }
 
-/**
- * Premium ActionButton with smooth animations and glass morphism effect
- */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PremiumActionButton(
@@ -2205,9 +2153,7 @@ private fun EpisodeCard(
     } else {
         null
     }
-    val previewText = episode.overview
-        .trim()
-        .ifEmpty { "No episode synopsis available." }
+    val previewText = episode.overview.trim().ifEmpty { "No episode synopsis available." }
     val episodeAirDateLabel = remember(episode.airDate) { formatEpisodeAirDateLabel(episode.airDate) }
     val isEpisodeUnaired = remember(episode.airDate) { isFutureEpisodeAirDate(episode.airDate) }
 
@@ -2750,16 +2696,8 @@ private fun ImdbBadge(rating: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = "IMDb",
-                style = ArflixTypography.label,
-                color = Color.Black
-            )
-            Text(
-                text = rating,
-                style = ArflixTypography.label,
-                color = Color.Black
-            )
+            Text(text = "IMDb", style = ArflixTypography.label, color = Color.Black)
+            Text(text = rating, style = ArflixTypography.label, color = Color.Black)
         }
     }
 }
@@ -2768,7 +2706,6 @@ private fun ImdbBadge(rating: String) {
 @Composable
 private fun OngoingBadge() {
     val cyanColor = Color(0xFF22D3EE)
-
     Row(
         modifier = Modifier
             .background(cyanColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
@@ -2783,11 +2720,7 @@ private fun OngoingBadge() {
             tint = cyanColor,
             modifier = Modifier.size(14.dp)
         )
-        Text(
-            text = "ONGOING",
-            style = ArflixTypography.label,
-            color = cyanColor
-        )
+        Text(text = "ONGOING", style = ArflixTypography.label, color = cyanColor)
     }
 }
 
@@ -2800,11 +2733,7 @@ private fun GenreBadge(genre: String) {
             .border(1.dp, Pink.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(
-            text = genre.uppercase(),
-            style = ArflixTypography.label,
-            color = Pink
-        )
+        Text(text = genre.uppercase(), style = ArflixTypography.label, color = Pink)
     }
 }
 
@@ -2812,18 +2741,13 @@ private fun GenreBadge(genre: String) {
 @Composable
 private fun LanguageBadge(language: String) {
     val purpleColor = Purple
-
     Box(
         modifier = Modifier
             .background(purpleColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
             .border(1.dp, purpleColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(
-            text = language.uppercase(),
-            style = ArflixTypography.label,
-            color = purpleColor
-        )
+        Text(text = language.uppercase(), style = ArflixTypography.label, color = purpleColor)
     }
 }
 
@@ -2831,18 +2755,13 @@ private fun LanguageBadge(language: String) {
 @Composable
 private fun BudgetBadge(budget: String) {
     val greenColor = Color(0xFF10B981)
-
     Box(
         modifier = Modifier
             .background(greenColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
             .border(1.dp, greenColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(
-            text = "BUDGET: $budget",
-            style = ArflixTypography.label,
-            color = greenColor
-        )
+        Text(text = "BUDGET: $budget", style = ArflixTypography.label, color = greenColor)
     }
 }
 
@@ -2855,18 +2774,13 @@ private fun StatusBadge(status: String) {
         status.contains("Cancel", ignoreCase = true) -> Pair(Color(0xFFEF4444), Color(0xFFEF4444))
         else -> Pair(Color(0xFF6B7280), Color(0xFF6B7280))
     }
-
     Box(
         modifier = Modifier
             .background(bgColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
             .border(1.dp, bgColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(
-            text = status.uppercase(),
-            style = ArflixTypography.label,
-            color = textColor
-        )
+        Text(text = status.uppercase(), style = ArflixTypography.label, color = textColor)
     }
 }
 

@@ -2,6 +2,8 @@ package com.arflix.tv.ui.screens.home
 
 import android.app.ActivityManager
 import android.content.Context
+import com.arflix.tv.util.settingsDataStore
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -62,6 +64,8 @@ data class HomeUiState(
     // Current hero (may update during transitions)
     val heroItem: MediaItem? = null,
     val heroLogoUrl: String? = null,
+    val heroTrailerKey: String? = null,
+    val trailerAutoPlay: Boolean = false,
     val heroOverviewOverride: String? = null,
     val cardLogoUrls: Map<String, String> = emptyMap(),
     // Previous hero for crossfade (Phase 2.1)
@@ -631,6 +635,17 @@ class HomeViewModel @Inject constructor(
     }
 
     init {
+        // Load trailer auto-play setting
+        viewModelScope.launch {
+            try {
+                val prefs = context.settingsDataStore.data.first()
+                // Search for any profile key that matches trailer_auto_play
+                val trailerEnabled = prefs.asMap().any { (key, value) ->
+                    key.name.endsWith("_trailer_auto_play") && value == true
+                }
+                _uiState.value = _uiState.value.copy(trailerAutoPlay = trailerEnabled)
+            } catch (_: Exception) {}
+        }
         // Restore logo URL cache from disk for instant clearlogos on cold start
         restoreLogoCacheFromDisk()
         if (logoCache.isNotEmpty()) {
@@ -1939,18 +1954,33 @@ class HomeViewModel @Inject constructor(
             return
         }
 
-        // Save previous hero for crossfade animation
+        // Save previous hero for crossfade animation, clear trailer for new hero
         _uiState.value = currentState.copy(
             previousHeroItem = currentState.heroItem,
             previousHeroLogoUrl = currentState.heroLogoUrl,
             heroItem = item,
             heroLogoUrl = logoUrl,
             heroOverviewOverride = null,
+            heroTrailerKey = null,
             isHeroTransitioning = true
         )
     }
 
     private fun hydrateHeroDetailsIfNeeded(item: MediaItem) {
+        // Always fetch trailer for new hero item
+        if (_uiState.value.trailerAutoPlay) {
+            // Clear previous trailer immediately
+            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
+            viewModelScope.launch(networkDispatcher) {
+                try {
+                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
+                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
+                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
         val normalizedOverview = item.overview.trim()
         val looksTruncated = normalizedOverview.endsWith("...") || normalizedOverview.length < 120
         if (normalizedOverview.isNotBlank() && !looksTruncated && item.duration.isNotBlank() && item.duration != "0m") {
@@ -1996,6 +2026,14 @@ class HomeViewModel @Inject constructor(
                         isHeroTransitioning = false
                     )
                 }
+
+                // Fetch trailer key for hero (YouTube)
+                try {
+                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
+                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
+                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
+                    }
+                } catch (_: Exception) {}
             } catch (_: Exception) {
             }
         }
@@ -2003,6 +2041,20 @@ class HomeViewModel @Inject constructor(
 
     private fun scheduleHeroDetailsFetch(item: MediaItem, fastScrolling: Boolean) {
         heroDetailsJob?.cancel()
+
+        // Always fetch trailer for new hero item (separate from details cache)
+        if (_uiState.value.trailerAutoPlay) {
+            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
+            viewModelScope.launch(networkDispatcher) {
+                try {
+                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
+                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
+                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
         heroDetailsJob = viewModelScope.launch(networkDispatcher) {
             val detailsKey = "${item.mediaType}_${item.id}"
             val cachedDetails = heroDetailsCache[detailsKey]

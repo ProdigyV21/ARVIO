@@ -1252,6 +1252,9 @@ fun PlayerScreen(
     }
 
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
+    // Read subtitle appearance prefs
+    val subtitleSizePref = uiState.subtitleSize
+    val subtitleColorPref = uiState.subtitleColor
     val aspectModeLabel = when (playerResizeMode) {
         AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Zoom"
         AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Fill"
@@ -1540,23 +1543,29 @@ fun PlayerScreen(
 
                         // Enable subtitle view with Netflix-style: bold white text with black outline
                         subtitleView?.apply {
-                            // Use CaptionStyleCompat from ui package
+                            // Read subtitle appearance from user settings
+                            val subSizeSp = when (subtitleSizePref) {
+                                "Small" -> 18f; "Large" -> 30f; "Extra Large" -> 36f; else -> 24f
+                            }
+                            val subFgColor = when (subtitleColorPref) {
+                                "Yellow" -> android.graphics.Color.YELLOW
+                                "Green" -> android.graphics.Color.GREEN
+                                "Cyan" -> android.graphics.Color.CYAN
+                                else -> android.graphics.Color.WHITE
+                            }
                             setStyle(
                                 androidx.media3.ui.CaptionStyleCompat(
-                                    android.graphics.Color.WHITE,                    // Foreground color
-                                    android.graphics.Color.TRANSPARENT,              // Background color (transparent = no box)
-                                    android.graphics.Color.TRANSPARENT,              // Window color
-                                    androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,  // Text outline
-                                    android.graphics.Color.BLACK,                    // Edge color (black outline)
-                                    android.graphics.Typeface.DEFAULT_BOLD           // Bold typeface
+                                    subFgColor,
+                                    android.graphics.Color.TRANSPARENT,
+                                    android.graphics.Color.TRANSPARENT,
+                                    androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                                    android.graphics.Color.BLACK,
+                                    android.graphics.Typeface.DEFAULT_BOLD
                                 )
                             )
-                            // Normalize embedded subtitle styling to keep size consistent
                             setApplyEmbeddedStyles(false)
                             setApplyEmbeddedFontSizes(false)
-                            // Set subtitle text size - not too big, not too small (like Netflix)
-                            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 24f)
-                            // Position subtitles at bottom with some margin
+                            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subSizeSp)
                             setBottomPaddingFraction(0.08f)
                         }
                     }
@@ -1590,10 +1599,7 @@ fun PlayerScreen(
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    PulsingLogo(
-                        logoUrl = uiState.logoUrl,
-                        title = uiState.title
-                    )
+                    PulsingLogo(logoUrl = uiState.logoUrl, title = uiState.title)
 
                     Spacer(modifier = Modifier.height(20.dp))
 
@@ -1618,10 +1624,7 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                PulsingLogo(
-                    logoUrl = uiState.logoUrl,
-                    title = uiState.title
-                )
+                PulsingLogo(logoUrl = uiState.logoUrl, title = uiState.title)
             }
         }
 
@@ -1733,53 +1736,24 @@ fun PlayerScreen(
                     }
 
                     // Right side - Ends At + Clock
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
+                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
                         val currentTime = remember { mutableStateOf("") }
                         val endsAtTime = remember { mutableStateOf("") }
-
                         LaunchedEffect(duration, currentPosition) {
                             while (true) {
                                 val now = System.currentTimeMillis()
                                 val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
                                 currentTime.value = sdf.format(java.util.Date(now))
-
                                 if (duration > 0 && currentPosition >= 0) {
                                     val remainingMs = (duration - currentPosition).coerceAtLeast(0L)
-                                    val endTime = now + remainingMs
-                                    endsAtTime.value = sdf.format(java.util.Date(endTime))
-                                } else {
-                                    endsAtTime.value = ""
-                                }
-
+                                    endsAtTime.value = sdf.format(java.util.Date(now + remainingMs))
+                                } else { endsAtTime.value = "" }
                                 kotlinx.coroutines.delay(1000)
                             }
                         }
-
-                        Text(
-                            text = currentTime.value,
-                            style = ArflixTypography.body.copy(
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Medium
-                            ),
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
+                        Text(currentTime.value, style = ArflixTypography.body.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium), color = TextSecondary, maxLines = 1)
                         if (endsAtTime.value.isNotBlank()) {
-                            Text(
-                                text = "Ends at ${endsAtTime.value}",
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = TextSecondary.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
+                            Text("Ends at ${endsAtTime.value}", style = ArflixTypography.caption.copy(fontSize = 12.sp), color = TextSecondary.copy(alpha = 0.7f), maxLines = 1, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
                 }
@@ -2320,7 +2294,25 @@ private fun PlayerIconButton(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PulsingLogo(logoUrl: String?, title: String, modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.92f, targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(animation = animTween(1200, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
+        label = "pulseScale"
+    )
+    Box(modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale }, contentAlignment = Alignment.Center) {
+        if (!logoUrl.isNullOrBlank()) {
+            AsyncImage(model = logoUrl, contentDescription = title, contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth(0.5f).height(100.dp))
+        } else {
+            Text(title, style = ArflixTypography.sectionTitle.copy(fontSize = 36.sp, fontWeight = FontWeight.Bold),
+                color = Color.White, modifier = Modifier.padding(horizontal = 24.dp))
+        }
+    }
+}
+
 @Composable
 private fun ErrorButton(
     text: String,
@@ -2374,63 +2366,6 @@ private fun ErrorButton(
                 text = text,
                 style = ArflixTypography.button,
                 color = if (isFocused) Color.Black else if (isPrimary) Pink else TextSecondary
-            )
-        }
-    }
-}
-
-/**
- * Animated pulsing logo for loading states
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PulsingLogo(
-    logoUrl: String?,
-    title: String,
-    modifier: Modifier = Modifier
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
-
-    Box(
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        if (!logoUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = logoUrl,
-                contentDescription = title,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .width(280.dp)
-                    .height(100.dp)
-            )
-        } else {
-            Text(
-                text = title,
-                style = ArflixTypography.sectionTitle.copy(
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    shadow = Shadow(
-                        color = Color.Black.copy(alpha = 0.8f),
-                        offset = Offset(0f, 4f),
-                        blurRadius = 12f
-                    )
-                ),
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 24.dp)
             )
         }
     }

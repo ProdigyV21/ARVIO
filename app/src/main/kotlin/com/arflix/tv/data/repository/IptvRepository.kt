@@ -72,7 +72,9 @@ import java.security.MessageDigest
 
 data class IptvConfig(
     val m3uUrl: String = "",
-    val epgUrl: String = ""
+    val epgUrl: String = "",
+    val stalkerPortalUrl: String = "",
+    val stalkerMacAddress: String = ""
 )
 
 data class IptvLoadProgress(
@@ -102,6 +104,7 @@ class IptvRepository @Inject constructor(
 
     @Volatile
     private var cachedChannels: List<IptvChannel> = emptyList()
+    @Volatile var cachedStalkerApi: com.arflix.tv.data.api.StalkerApi? = null
 
     @Volatile
     private var cachedNowNext: ConcurrentHashMap<String, IptvNowNext> = ConcurrentHashMap()
@@ -182,7 +185,9 @@ class IptvRepository @Inject constructor(
         profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
             IptvConfig(
                 m3uUrl = decryptConfigValue(prefs[m3uUrlKey()].orEmpty()),
-                epgUrl = decryptConfigValue(prefs[epgUrlKey()].orEmpty())
+                epgUrl = decryptConfigValue(prefs[epgUrlKey()].orEmpty()),
+                stalkerPortalUrl = decryptConfigValue(prefs[stalkerPortalUrlKey()].orEmpty()),
+                stalkerMacAddress = prefs[stalkerMacAddressKey()].orEmpty()
             )
         }
 
@@ -196,12 +201,34 @@ class IptvRepository @Inject constructor(
             decodeFavoriteChannels(prefs)
         }
 
+    fun observeHiddenGroups(): Flow<List<String>> =
+        profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
+            decodeHiddenGroups(prefs)
+        }
+
+    fun observeGroupOrder(): Flow<List<String>> =
+        profileManager.activeProfileId.combine(context.settingsDataStore.data) { _, prefs ->
+            decodeGroupOrder(prefs)
+        }
+
     suspend fun saveConfig(m3uUrl: String, epgUrl: String) {
         val normalizedM3u = normalizeIptvInput(m3uUrl)
         val normalizedEpg = normalizeEpgInput(epgUrl)
         context.settingsDataStore.edit { prefs ->
             prefs[m3uUrlKey()] = encryptConfigValue(normalizedM3u)
             prefs[epgUrlKey()] = encryptConfigValue(normalizedEpg)
+        }
+        invalidateCache()
+    }
+
+    suspend fun saveStalkerConfig(portalUrl: String, macAddress: String) {
+        val normalizedUrl = portalUrl.trim().trimEnd('/')
+        val normalizedMac = macAddress.trim().uppercase().let { mac ->
+            if (mac.isNotEmpty() && !mac.startsWith("00:1A:79:")) mac else mac
+        }
+        context.settingsDataStore.edit { prefs ->
+            prefs[stalkerPortalUrlKey()] = encryptConfigValue(normalizedUrl)
+            prefs[stalkerMacAddressKey()] = normalizedMac
         }
         invalidateCache()
     }
@@ -497,6 +524,42 @@ class IptvRepository @Inject constructor(
         }
     }
 
+    suspend fun toggleHiddenGroup(groupName: String) {
+        val trimmed = groupName.trim()
+        if (trimmed.isEmpty()) return
+        context.settingsDataStore.edit { prefs ->
+            val existing = decodeHiddenGroups(prefs).toMutableList()
+            if (existing.contains(trimmed)) {
+                existing.remove(trimmed)
+            } else {
+                existing.add(trimmed)
+            }
+            prefs[hiddenGroupsKey()] = gson.toJson(existing)
+        }
+    }
+
+    suspend fun moveGroupUp(groupName: String, currentGroups: List<String> = emptyList()) {
+        context.settingsDataStore.edit { prefs ->
+            var order = decodeGroupOrder(prefs).toMutableList()
+            if (order.isEmpty() && currentGroups.isNotEmpty()) order = currentGroups.toMutableList()
+            if (order.isEmpty()) return@edit
+            val idx = order.indexOf(groupName)
+            if (idx > 0) { order.removeAt(idx); order.add(idx - 1, groupName) }
+            prefs[groupOrderKey()] = gson.toJson(order)
+        }
+    }
+
+    suspend fun moveGroupDown(groupName: String, currentGroups: List<String> = emptyList()) {
+        context.settingsDataStore.edit { prefs ->
+            var order = decodeGroupOrder(prefs).toMutableList()
+            if (order.isEmpty() && currentGroups.isNotEmpty()) order = currentGroups.toMutableList()
+            if (order.isEmpty()) return@edit
+            val idx = order.indexOf(groupName)
+            if (idx >= 0 && idx < order.size - 1) { order.removeAt(idx); order.add(idx + 1, groupName) }
+            prefs[groupOrderKey()] = gson.toJson(order)
+        }
+    }
+
     suspend fun toggleFavoriteChannel(channelId: String) {
         val trimmed = channelId.trim()
         if (trimmed.isEmpty()) return
@@ -526,7 +589,7 @@ class IptvRepository @Inject constructor(
             val profileId = profileManager.getProfileIdSync()
             ensureCacheOwnership(profileId, config)
             cleanupIptvCacheDirectory()
-            if (config.m3uUrl.isBlank()) {
+            if (config.m3uUrl.isBlank() && config.stalkerPortalUrl.isBlank()) {
                 return@withContext IptvSnapshot(
                     channels = emptyList(),
                     grouped = emptyMap(),
@@ -535,6 +598,38 @@ class IptvRepository @Inject constructor(
                     favoriteChannels = observeFavoriteChannels().first(),
                     loadedAt = Instant.now()
                 )
+            }
+
+            // ── Stalker Portal path ──
+            if (config.m3uUrl.isBlank() && config.stalkerPortalUrl.isNotBlank()) {
+                onProgress(IptvLoadProgress("Connecting to Stalker portal...", 10))
+                val stalker = com.arflix.tv.data.api.StalkerApi(config.stalkerPortalUrl, config.stalkerMacAddress)
+                if (!stalker.handshake()) {
+                    return@withContext IptvSnapshot(epgWarning = "Stalker handshake failed. Check Portal URL and MAC.", loadedAt = Instant.now())
+                }
+                onProgress(IptvLoadProgress("Loading channels from portal...", 30))
+                stalker.getProfile()
+                val channels = stalker.getChannels()
+                onProgress(IptvLoadProgress("Loaded ${channels.size} channels", 80))
+                val grouped = channels.groupBy { it.group }
+                val favGroups = observeFavoriteGroups().first()
+                val favChannels = observeFavoriteChannels().first()
+                val hiddenGroups = observeHiddenGroups().first()
+                val groupOrder = observeGroupOrder().first()
+                cachedChannels = channels
+                cachedStalkerApi = stalker
+                val snapshot = IptvSnapshot(
+                    channels = channels,
+                    grouped = grouped,
+                    nowNext = emptyMap(),
+                    favoriteGroups = favGroups,
+                    favoriteChannels = favChannels,
+                    hiddenGroups = hiddenGroups,
+                    groupOrder = groupOrder,
+                    loadedAt = Instant.now()
+                )
+                onProgress(IptvLoadProgress("Done", 100))
+                return@withContext snapshot
             }
 
             val cachedFromDisk = if (cachedChannels.isEmpty()) readCache(config) else null
@@ -980,6 +1075,8 @@ class IptvRepository @Inject constructor(
     private fun m3uUrlKeyFor(profileId: String): Preferences.Key<String> =
         profileManager.profileStringKeyFor(profileId, "iptv_m3u_url")
     private fun epgUrlKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_epg_url")
+    private fun stalkerPortalUrlKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_stalker_portal_url")
+    private fun stalkerMacAddressKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_stalker_mac_address")
     private fun epgUrlKeyFor(profileId: String): Preferences.Key<String> =
         profileManager.profileStringKeyFor(profileId, "iptv_epg_url")
     private fun favoriteGroupsKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_favorite_groups")
@@ -999,6 +1096,27 @@ class IptvRepository @Inject constructor(
                 ?.filter { it.isNotBlank() }
                 ?.distinct()
                 ?: emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun hiddenGroupsKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_hidden_groups")
+    private fun groupOrderKey(): Preferences.Key<String> = profileManager.profileStringKey("iptv_group_order")
+
+    private fun decodeHiddenGroups(prefs: Preferences): List<String> {
+        val raw = prefs[hiddenGroupsKey()].orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val type = object : TypeToken<List<String>>() {}.type
+            gson.fromJson<List<String>>(raw, type)?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun decodeGroupOrder(prefs: Preferences): List<String> {
+        val raw = prefs[groupOrderKey()].orEmpty()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            val type = object : TypeToken<List<String>>() {}.type
+            gson.fromJson<List<String>>(raw, type)?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
         }.getOrDefault(emptyList())
     }
 

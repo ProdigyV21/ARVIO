@@ -161,6 +161,9 @@ fun SettingsScreen(
     var showCustomAddonInput by remember { mutableStateOf(false) }
     var customAddonUrl by remember { mutableStateOf("") }
     var showIptvInput by remember { mutableStateOf(false) }
+    var showStalkerInput by remember { mutableStateOf(false) }
+    var stalkerPortalUrlInput by remember { mutableStateOf("") }
+    var stalkerMacInput by remember { mutableStateOf("") }
     var iptvM3uUrl by remember { mutableStateOf(uiState.iptvM3uUrl) }
     var iptvEpgUrl by remember { mutableStateOf(uiState.iptvEpgUrl) }
     var iptvXtreamUsername by remember { mutableStateOf("") }
@@ -250,8 +253,8 @@ fun SettingsScreen(
         if (scrollState.maxValue <= 0) return@LaunchedEffect
 
         val maxIndex = when (sectionIndex) {
-            0 -> 12 // General: 13 items
-            1 -> 2 // IPTV
+            0 -> 13 // General: 14 items (0-13)
+            1 -> 3  // IPTV: Configure + Refresh + Delete + Stalker
             2 -> uiState.catalogs.size // Catalogs
             3 -> uiState.addons.size // Addons
             4 -> 3 // Accounts
@@ -366,7 +369,7 @@ fun SettingsScreen(
                                         focusedAddonCanDelete
                                     ) {
                                         addonActionIndex = 1
-} else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 3) {
+                                    } else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 3) {
                                         catalogActionIndex++
                                     }
                                 }
@@ -416,8 +419,8 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
-                                        0 -> 12 // General: 13 items
-                                        1 -> 2 // IPTV: Configure + Refresh + Delete
+                                        0 -> 13 // General: 14 items (0-13)
+                                        1 -> 3  // IPTV: Configure + Refresh + Delete + Stalker
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
                                         4 -> 3 // Accounts: Cloud + Trakt + Switch Profile + App Update
@@ -456,19 +459,20 @@ fun SettingsScreen(
                                     when (sectionIndex) {
                                         0 -> { // General
                                             when (contentFocusIndex) {
-                                                0 -> openSubtitlePicker()
-                                                1 -> viewModel.cycleSubtitleSize()
-                                                2 -> viewModel.cycleSubtitleColor()
-                                                3 -> openAudioLanguagePicker()
-                                                4 -> openContentLanguagePicker()
-                                                5 -> viewModel.toggleCardLayoutMode()
-                                                6 -> viewModel.cycleFrameRateMatchingMode()
-                                                7 -> openDnsProviderPicker()
-                                                8 -> { val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }; viewModel.setDeviceModeOverride(next) }
-                                                9 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
-                                                10 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
-                                                11 -> viewModel.cycleAutoPlayMinQuality()
-                                                12 -> viewModel.cycleAutoPlayMaxQuality()
+                                                0 -> openContentLanguagePicker()
+                                                1 -> openSubtitlePicker()
+                                                2 -> openAudioLanguagePicker()
+                                                3 -> viewModel.cycleSubtitleSize()
+                                                4 -> viewModel.cycleSubtitleColor()
+                                                5 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
+                                                6 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
+                                                7 -> viewModel.cycleAutoPlayMinQuality()
+                                                8 -> viewModel.cycleAutoPlayMaxQuality()
+                                                9 -> viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay)
+                                                10 -> viewModel.cycleFrameRateMatchingMode()
+                                                11 -> viewModel.toggleCardLayoutMode()
+                                                12 -> { val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }; viewModel.setDeviceModeOverride(next) }
+                                                13 -> openDnsProviderPicker()
                                             }
                                         }
                                         1 -> { // IPTV
@@ -481,6 +485,11 @@ fun SettingsScreen(
                                                 }
                                                 2 -> {
                                                     viewModel.clearIptvConfig()
+                                                }
+                                                3 -> {
+                                                    stalkerPortalUrlInput = uiState.iptvStalkerUrl
+                                                    stalkerMacInput = uiState.iptvStalkerMac
+                                                    showStalkerInput = true
                                                 }
                                             }
                                         }
@@ -592,10 +601,9 @@ fun SettingsScreen(
                             subtitleSize = uiState.subtitleSize,
                             subtitleColor = uiState.subtitleColor,
                             deviceModeOverride = uiState.deviceModeOverride,
+                            trailerAutoPlay = uiState.trailerAutoPlay,
                             focusedIndex = -1,
                             onSubtitleClick = openSubtitlePicker,
-                            onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
-                            onSubtitleColorClick = { viewModel.cycleSubtitleColor() },
                             onAudioLanguageClick = openAudioLanguagePicker,
                             onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
@@ -604,11 +612,14 @@ fun SettingsScreen(
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
                             onAutoPlayMaxQualityClick = { viewModel.cycleAutoPlayMaxQuality() },
+                            onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
                             onDeviceModeClick = {
                                 val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
                                 viewModel.setDeviceModeOverride(next)
                             },
-                            onContentLanguageClick = openContentLanguagePicker
+                            onContentLanguageClick = openContentLanguagePicker,
+                            onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
+                            onSubtitleColorClick = { viewModel.cycleSubtitleColor() }
                         )
                         "iptv" -> IptvSettings(
                             m3uUrl = uiState.iptvM3uUrl,
@@ -620,8 +631,11 @@ fun SettingsScreen(
                             statusType = uiState.iptvStatusType,
                             progressText = uiState.iptvProgressText,
                             progressPercent = uiState.iptvProgressPercent,
+                            stalkerUrl = uiState.iptvStalkerUrl,
+                            stalkerMac = uiState.iptvStalkerMac,
                             focusedIndex = -1,
                             onConfigure = { showIptvInput = true },
+                            onConfigureStalker = { stalkerPortalUrlInput = uiState.iptvStalkerUrl; stalkerMacInput = uiState.iptvStalkerMac; showStalkerInput = true },
                             onRefresh = { viewModel.refreshIptv() },
                             onDelete = { viewModel.clearIptvConfig() }
                         )
@@ -748,6 +762,7 @@ fun SettingsScreen(
                         "general" -> GeneralSettings(
                             defaultSubtitle = uiState.defaultSubtitle,
                             defaultAudioLanguage = uiState.defaultAudioLanguage,
+                            contentLanguage = uiState.contentLanguage,
                             dnsProvider = uiState.dnsProvider,
                             cardLayoutMode = uiState.cardLayoutMode,
                             frameRateMatchingMode = uiState.frameRateMatchingMode,
@@ -757,12 +772,10 @@ fun SettingsScreen(
                             autoPlayMaxQuality = uiState.autoPlayMaxQuality,
                             subtitleSize = uiState.subtitleSize,
                             subtitleColor = uiState.subtitleColor,
-                            contentLanguage = uiState.contentLanguage,
                             deviceModeOverride = uiState.deviceModeOverride,
+                            trailerAutoPlay = uiState.trailerAutoPlay,
                             focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                             onSubtitleClick = openSubtitlePicker,
-                            onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
-                            onSubtitleColorClick = { viewModel.cycleSubtitleColor() },
                             onAudioLanguageClick = openAudioLanguagePicker,
                             onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
@@ -771,11 +784,14 @@ fun SettingsScreen(
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
                             onAutoPlayMaxQualityClick = { viewModel.cycleAutoPlayMaxQuality() },
+                            onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
                             onDeviceModeClick = {
                                 val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
                                 viewModel.setDeviceModeOverride(next)
                             },
-                            onContentLanguageClick = openContentLanguagePicker
+                            onContentLanguageClick = openContentLanguagePicker,
+                            onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
+                            onSubtitleColorClick = { viewModel.cycleSubtitleColor() }
                         )
                         "iptv" -> IptvSettings(
                             m3uUrl = uiState.iptvM3uUrl,
@@ -787,8 +803,11 @@ fun SettingsScreen(
                             statusType = uiState.iptvStatusType,
                             progressText = uiState.iptvProgressText,
                             progressPercent = uiState.iptvProgressPercent,
+                            stalkerUrl = uiState.iptvStalkerUrl,
+                            stalkerMac = uiState.iptvStalkerMac,
                             focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                             onConfigure = { showIptvInput = true },
+                            onConfigureStalker = { stalkerPortalUrlInput = uiState.iptvStalkerUrl; stalkerMacInput = uiState.iptvStalkerMac; showStalkerInput = true },
                             onRefresh = { viewModel.refreshIptv() },
                             onDelete = { viewModel.clearIptvConfig() }
                         )
@@ -911,6 +930,31 @@ fun SettingsScreen(
                 onDismiss = {
                     showIptvInput = false
                 }
+            )
+        }
+
+        if (showStalkerInput) {
+            InputModal(
+                title = "Stalker Portal",
+                fields = listOf(
+                    InputField(
+                        label = "Portal URL",
+                        value = stalkerPortalUrlInput,
+                        placeholder = "http://portal.example.com",
+                        onValueChange = { stalkerPortalUrlInput = it }
+                    ),
+                    InputField(
+                        label = "MAC Address",
+                        value = stalkerMacInput,
+                        placeholder = "00:1A:79:XX:XX:XX",
+                        onValueChange = { stalkerMacInput = it }
+                    )
+                ),
+                onConfirm = {
+                    viewModel.saveStalkerConfig(stalkerPortalUrlInput, stalkerMacInput)
+                    showStalkerInput = false
+                },
+                onDismiss = { showStalkerInput = false }
             )
         }
 
@@ -1998,6 +2042,7 @@ private fun GeneralSettings(
     subtitleSize: String = "Normal",
     subtitleColor: String = "White",
     deviceModeOverride: String = "auto",
+    trailerAutoPlay: Boolean = false,
     focusedIndex: Int,
     onSubtitleClick: () -> Unit,
     onAudioLanguageClick: () -> Unit,
@@ -2011,167 +2056,171 @@ private fun GeneralSettings(
     onSubtitleSizeClick: () -> Unit = {},
     onSubtitleColorClick: () -> Unit = {},
     onDeviceModeClick: () -> Unit = {},
-    onContentLanguageClick: () -> Unit = {}
+    onContentLanguageClick: () -> Unit = {},
+    onTrailerAutoPlayToggle: (Boolean) -> Unit = {}
 ) {
     Column {
+        // ── Language & Subtitles ──
         Text(
-            text = "Player Preferences",
-            style = ArflixTypography.sectionTitle,
-            color = TextPrimary,
-            modifier = Modifier.padding(bottom = 24.dp)
+            text = "Language & Subtitles",
+            style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.8.sp),
+            color = TextSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
         )
-        
-        // Default Subtitle
+
+        SettingsRow(
+            icon = Icons.Default.Subtitles,
+            title = "Content Language",
+            subtitle = "Titles, descriptions and metadata",
+            value = TMDB_LANGUAGES.firstOrNull { it.first == contentLanguage }?.second ?: contentLanguage,
+            isFocused = focusedIndex == 0,
+            onClick = onContentLanguageClick
+        )
+        Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
             icon = Icons.Default.Subtitles,
             title = "Default Subtitle",
-            subtitle = "Preferred language for auto-selection",
+            subtitle = "Auto-select subtitle language",
             value = defaultSubtitle,
-            isFocused = focusedIndex == 0,
+            isFocused = focusedIndex == 1,
             onClick = onSubtitleClick
         )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Subtitle Size
-        SettingsRow(
-            icon = Icons.Default.FormatSize,
-            title = "Subtitle Size",
-            subtitle = "Adjust text size for subtitles",
-            value = subtitleSize,
-            isFocused = focusedIndex == 1,
-            onClick = onSubtitleSizeClick
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Subtitle Color
-        SettingsRow(
-            icon = Icons.Default.ColorLens,
-            title = "Subtitle Color",
-            subtitle = "Adjust text color for subtitles",
-            value = subtitleColor,
-            isFocused = focusedIndex == 2,
-            onClick = onSubtitleColorClick
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Default Audio
+        Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
             icon = Icons.Default.VolumeUp,
             title = "Default Audio",
-            subtitle = "Preferred audio track language",
+            subtitle = "Preferred audio track",
             value = defaultAudioLanguage,
-            isFocused = focusedIndex == 3,
+            isFocused = focusedIndex == 2,
             onClick = onAudioLanguageClick
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Content Language
+        Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
-            icon = Icons.Default.Language,
-            title = "Content Language",
-            subtitle = "Language for titles, descriptions, and metadata",
-            value = TMDB_LANGUAGES.firstOrNull { it.first == contentLanguage }?.second ?: contentLanguage,
+            icon = Icons.Default.FormatSize,
+            title = "Subtitle Size",
+            subtitle = "Text size for subtitles",
+            value = subtitleSize,
+            isFocused = focusedIndex == 3,
+            onClick = onSubtitleSizeClick
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsRow(
+            icon = Icons.Default.ColorLens,
+            title = "Subtitle Color",
+            subtitle = "Text color for subtitles",
+            value = subtitleColor,
             isFocused = focusedIndex == 4,
-            onClick = onContentLanguageClick
+            onClick = onSubtitleColorClick
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // ── Playback ──
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Playback",
+            style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.8.sp),
+            color = TextSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+        )
 
-        // Card Layout
-        SettingsRow(
-            icon = Icons.Default.Widgets,
-            title = "Card Layout",
-            subtitle = "Switch between landscape and poster cards",
-            value = cardLayoutMode,
+        SettingsToggleRow(
+            title = "Auto-Play Next",
+            subtitle = "Start next episode automatically",
+            isEnabled = autoPlayNext,
             isFocused = focusedIndex == 5,
-            onClick = onCardLayoutToggle
+            onToggle = onAutoPlayToggle
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Frame-Rate Matching
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsToggleRow(
+            title = "Auto-Play Single Source",
+            subtitle = "Skip source picker with one source",
+            isEnabled = autoPlaySingleSource,
+            isFocused = focusedIndex == 6,
+            onToggle = onAutoPlaySingleSourceToggle
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsRow(
+            icon = Icons.Default.HighQuality,
+            title = "Auto-Play Min Quality",
+            subtitle = "Min quality for auto-play",
+            value = autoPlayMinQuality,
+            isFocused = focusedIndex == 7,
+            onClick = onAutoPlayMinQualityClick
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsRow(
+            icon = Icons.Default.HighQuality,
+            title = "Auto-Play Max Quality",
+            subtitle = "Max quality for auto-play",
+            value = autoPlayMaxQuality,
+            isFocused = focusedIndex == 8,
+            onClick = onAutoPlayMaxQualityClick
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsToggleRow(
+            title = "Trailer Auto-Play",
+            subtitle = "Play trailers in hero banner",
+            isEnabled = trailerAutoPlay,
+            isFocused = focusedIndex == 9,
+            onToggle = onTrailerAutoPlayToggle
+        )
+        Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
             icon = Icons.Default.Movie,
             title = "Match Frame Rate",
-            subtitle = "Off, Seamless only, or Always (may blank-screen on some TVs)",
+            subtitle = "Off, Seamless, or Always",
             value = frameRateMatchingMode,
-            isFocused = focusedIndex == 6,
+            isFocused = focusedIndex == 10,
             onClick = onFrameRateMatchingClick
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsRow(
-            icon = Icons.Default.Language,
-            title = "DNS Provider",
-            subtitle = "Resolver for API/image/stream requests. Changes apply immediately.",
-            value = dnsProvider,
-            isFocused = focusedIndex == 7,
-            onClick = onDnsProviderClick
+        // ── Interface ──
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Interface",
+            style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.8.sp),
+            color = TextSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Device UI Mode
+        SettingsRow(
+            icon = Icons.Default.Widgets,
+            title = "Card Layout",
+            subtitle = "Landscape or poster cards",
+            value = cardLayoutMode,
+            isFocused = focusedIndex == 11,
+            onClick = onCardLayoutToggle
+        )
+        Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
             icon = Icons.Default.Settings,
             title = "UI Mode",
-            subtitle = "Force TV, Tablet, or Phone layout. Restart app after changing.",
+            subtitle = "Force TV, Tablet, or Phone",
             value = when (deviceModeOverride) {
                 "tv" -> "TV"
                 "tablet" -> "Tablet"
                 "phone" -> "Phone"
                 else -> "Auto"
             },
-            isFocused = focusedIndex == 8,
+            isFocused = focusedIndex == 12,
             onClick = onDeviceModeClick
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Auto-Play Next
-        SettingsToggleRow(
-            title = "Auto-Play Next",
-            subtitle = "Start next episode automatically",
-            isEnabled = autoPlayNext,
-            isFocused = focusedIndex == 9,
-            onToggle = onAutoPlayToggle
+        // ── Network ──
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Network",
+            style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.8.sp),
+            color = TextSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsToggleRow(
-            title = "Auto-Play Single Source",
-            subtitle = "Skip source picker when only one valid source exists",
-            isEnabled = autoPlaySingleSource,
-            isFocused = focusedIndex == 10,
-            onToggle = onAutoPlaySingleSourceToggle
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         SettingsRow(
-            icon = Icons.Default.HighQuality,
-            title = "Auto-Play Min Quality",
-            subtitle = "Minimum quality required for single-source auto-play",
-            value = autoPlayMinQuality,
-            isFocused = focusedIndex == 11,
-            onClick = onAutoPlayMinQualityClick
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        SettingsRow(
-            icon = Icons.Default.HighQuality,
-            title = "Preferred Max Quality",
-            subtitle = "Highest resolution to auto-select (Filters out larger files)",
-            value = autoPlayMaxQuality,
-            isFocused = focusedIndex == 12,
-            onClick = onAutoPlayMaxQualityClick
+            icon = Icons.Default.Language,
+            title = "DNS Provider",
+            subtitle = "Resolve API and stream requests",
+            value = dnsProvider,
+            isFocused = focusedIndex == 13,
+            onClick = onDnsProviderClick
         )
     }
 }
@@ -2189,7 +2238,10 @@ private fun IptvSettings(
     progressText: String?,
     progressPercent: Int,
     focusedIndex: Int,
+    stalkerUrl: String = "",
+    stalkerMac: String = "",
     onConfigure: () -> Unit,
+    onConfigureStalker: () -> Unit = {},
     onRefresh: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -2288,6 +2340,34 @@ private fun IptvSettings(
                     color = statusColor
                 )
             }
+        }
+
+        // ── Stalker Portal ──
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Stalker Portal (MAC)",
+            style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.8.sp),
+            color = TextSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+        )
+
+        SettingsRow(
+            icon = Icons.Default.LiveTv,
+            title = "Stalker Portal",
+            subtitle = if (stalkerUrl.isBlank()) "Not configured" else stalkerUrl.take(40),
+            value = if (stalkerUrl.isBlank()) "ADD" else "EDIT",
+            isFocused = focusedIndex == 3,
+            onClick = onConfigureStalker
+        )
+
+        if (stalkerMac.isNotBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "MAC: $stalkerMac",
+                style = ArflixTypography.caption.copy(fontSize = 10.sp),
+                color = TextSecondary.copy(alpha = 0.5f),
+                modifier = Modifier.padding(start = 4.dp)
+            )
         }
     }
 }

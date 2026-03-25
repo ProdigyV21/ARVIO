@@ -187,31 +187,23 @@ object OkHttpProvider {
         }
     }
 
+    /** Resolve bootstrap IPs safely - IPv6 may fail on some devices/emulators */
+    private fun safeResolve(vararg addresses: String): List<InetAddress> {
+        return addresses.mapNotNull { addr ->
+            try { InetAddress.getByName(addr) } catch (_: Exception) { null }
+        }
+    }
+
     private val cloudflareBootstrapHosts: List<InetAddress> by lazy {
-        listOf(
-            InetAddress.getByName("1.1.1.1"),
-            InetAddress.getByName("1.0.0.1"),
-            InetAddress.getByName("2606:4700:4700::1111"),
-            InetAddress.getByName("2606:4700:4700::1001")
-        )
+        safeResolve("1.1.1.1", "1.0.0.1")
     }
 
     private val googleBootstrapHosts: List<InetAddress> by lazy {
-        listOf(
-            InetAddress.getByName("8.8.8.8"),
-            InetAddress.getByName("8.8.4.4"),
-            InetAddress.getByName("2001:4860:4860::8888"),
-            InetAddress.getByName("2001:4860:4860::8844")
-        )
+        safeResolve("8.8.8.8", "8.8.4.4")
     }
 
     private val adguardBootstrapHosts: List<InetAddress> by lazy {
-        listOf(
-            InetAddress.getByName("94.140.14.14"),
-            InetAddress.getByName("94.140.15.15"),
-            InetAddress.getByName("2a10:50c0::ad1:ff"),
-            InetAddress.getByName("2a10:50c0::ad2:ff")
-        )
+        safeResolve("94.140.14.14", "94.140.15.15")
     }
 
     fun parseDnsProvider(raw: String?): AppDnsProvider {
