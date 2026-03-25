@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,7 +134,6 @@ fun SearchScreen(
         else -> uiState.discoverLogoUrls
     }
 
-    var focusZone by remember { mutableStateOf(FocusZone.SEARCH_INPUT) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 1 else 0) }
@@ -151,6 +151,9 @@ fun SearchScreen(
     LaunchedEffect(Unit) { searchFocusRequester.requestFocus(); suppressSelectUntilMs = SystemClock.elapsedRealtime() + 300L }
 
     val showFilters = uiState.query.isEmpty()
+
+    // Persist focusZone across navigation back from Details - use rememberSaveable instead of remember
+    var focusZone by rememberSaveable { mutableStateOf(FocusZone.SEARCH_INPUT) }
 
     // D-pad handler: manages zone transitions. FILTERS zone lets native focus handle Left/Right.
     val dpadModifier = if (!isTouchDevice) {
