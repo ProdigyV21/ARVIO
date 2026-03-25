@@ -76,6 +76,11 @@ import androidx.tv.material3.Text
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.extractQuality
+import com.arflix.tv.util.getQualityScore
+import com.arflix.tv.util.isQuality4K
+import com.arflix.tv.util.isQuality1080
+import com.arflix.tv.util.isQuality720
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
@@ -89,15 +94,8 @@ private val AccentBlue = Color(0xFF3B82F6)
 private val AccentPurple = Color(0xFF8B5CF6)
 private val AccentGold = Color(0xFFF59E0B)
 
-// ---------------------------------------------------------------------------
-// SHARED REGEX PATTERNS — single source of truth for the entire file.
-// Word-boundary \b prevents tokens like "DS4K", "PSEUDO4K", "DS4Kdownscaled"
-// from matching the 4K pattern.  All Composables and helpers below use these.
-// ---------------------------------------------------------------------------
-private val REGEX_4K   = Regex("""\b(4K|2160p|UHD|ULTRA)\b""",   RegexOption.IGNORE_CASE)
-private val REGEX_1080 = Regex("""\b(1080p|FHD|FULLHD)\b""",      RegexOption.IGNORE_CASE)
-private val REGEX_720  = Regex("""\b(720p|HD)\b""",               RegexOption.IGNORE_CASE)
-private val REGEX_480  = Regex("""\b(480p|SD)\b""",               RegexOption.IGNORE_CASE)
+// Quality detection now uses StreamQualityUtils for hybrid filename + metadata detection
+// This ensures accurate quality even when providers have incorrect metadata
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -189,12 +187,12 @@ fun StreamSelector(
         }
     }
 
-    // Stat counts using shared regex — same engine as badges, so counts are always accurate.
+    // Stat counts using hybrid quality detection — checks filename first, then metadata
     val count4K = remember(streams) {
-        streams.count { REGEX_4K.containsMatchIn(it.quality) }
+        streams.count { isQuality4K(it.extractQuality()) }
     }
     val count1080 = remember(streams) {
-        streams.count { REGEX_1080.containsMatchIn(it.quality) }
+        streams.count { isQuality1080(it.extractQuality()) }
     }
 
     AnimatedVisibility(
@@ -487,8 +485,8 @@ private fun GlassyStreamCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Quality badge — uses shared regex via CompactQualityBadge
-                CompactQualityBadge(stream.quality)
+                // Quality badge — uses hybrid quality detection
+                CompactQualityBadge(stream.extractQuality())
 
                 // Cached indicator
                 if (stream.behaviorHints?.cached == true) {
@@ -559,15 +557,16 @@ private fun CachedBadge() {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun MobileStreamCard(stream: StreamSource, isSelected: Boolean, onClick: () -> Unit) {
-    val is4K   = REGEX_4K.containsMatchIn(stream.quality)
-    val is1080  = REGEX_1080.containsMatchIn(stream.quality)
-    val is720   = REGEX_720.containsMatchIn(stream.quality)
+    val extractedQuality = stream.extractQuality()
+    val is4K   = isQuality4K(extractedQuality)
+    val is1080  = isQuality1080(extractedQuality)
+    val is720   = isQuality720(extractedQuality)
 
     val qualityText = when {
         is4K   -> "4K"
         is1080  -> "1080p"
         is720   -> "720p"
-        else    -> stream.quality.split(" ").firstOrNull()?.take(6) ?: "SD"
+        else    -> extractedQuality.split(" ").firstOrNull()?.take(6) ?: "SD"
     }
 
     val qualityColor = when {
@@ -705,9 +704,9 @@ private fun MiniStatCard(icon: ImageVector, value: String, label: String, color:
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CompactQualityBadge(quality: String) {
-    val is4K  = REGEX_4K.containsMatchIn(quality)
-    val is1080 = REGEX_1080.containsMatchIn(quality)
-    val is720  = REGEX_720.containsMatchIn(quality)
+    val is4K  = isQuality4K(quality)
+    val is1080 = isQuality1080(quality)
+    val is720  = isQuality720(quality)
     val isHDR  = quality.contains("HDR", ignoreCase = true)
     val isDV   = quality.contains("DV", ignoreCase = true) || quality.contains("Dolby Vision", ignoreCase = true)
 
@@ -771,13 +770,7 @@ private fun CompactQualityBadge(quality: String) {
 // Uses the same REGEX_* patterns as the badge, scorer, and filter in
 // DetailsScreen, so a stream's sort position always matches its displayed badge.
 // ---------------------------------------------------------------------------
-private fun qualityScore(quality: String): Int = when {
-    REGEX_4K.containsMatchIn(quality)   -> 4
-    REGEX_1080.containsMatchIn(quality) -> 3
-    REGEX_720.containsMatchIn(quality)  -> 2
-    REGEX_480.containsMatchIn(quality)  -> 1
-    else                                -> 0
-}
+private fun qualityScore(quality: String): Int = getQualityScore(quality)
 
 // Helper — always parses the display size string for consistent cross-stream comparison
 private fun getSizeBytes(stream: StreamSource): Long = parseSizeString(stream.size)

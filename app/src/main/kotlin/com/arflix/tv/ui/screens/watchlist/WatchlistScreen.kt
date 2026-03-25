@@ -35,7 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -149,7 +149,7 @@ fun WatchlistScreen(
                 }
             }
             .focusable()
-            .onKeyEvent { event ->
+            .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.Back, Key.Escape -> {
@@ -162,7 +162,11 @@ fun WatchlistScreen(
                         }
                         Key.DirectionLeft -> {
                             if (!isSidebarFocused) {
-                                true
+                                // If on the leftmost column, move to Sidebar/TopBar
+                                if (focusedGridIndex % gridColumns == 0) {
+                                    isSidebarFocused = true
+                                    true
+                                } else false // Let the grid handle internal left movement
                             } else {
                                 if (sidebarFocusIndex > 0) {
                                     sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
@@ -176,14 +180,16 @@ fun WatchlistScreen(
                                     sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
                                 }
                                 true
-                            } else {
-                                false
-                            }
+                            } else false
                         }
                         Key.DirectionUp -> {
-                            if (isSidebarFocused) {
-                                true
-                            } else false
+                            if (!isSidebarFocused) {
+                                // If on the top row, move focus back to the Top Bar
+                                if (focusedGridIndex < gridColumns) {
+                                    isSidebarFocused = true
+                                    true
+                                } else false // Let grid scroll up
+                            } else true
                         }
                         Key.DirectionDown -> {
                             if (isSidebarFocused) {

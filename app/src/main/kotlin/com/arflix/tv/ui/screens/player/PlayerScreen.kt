@@ -131,7 +131,7 @@ import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.StreamSelector
 import com.arflix.tv.ui.components.WaveLoadingDots
 import androidx.compose.ui.text.style.TextOverflow
-import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.extractQuality
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.PurpleDark
@@ -1708,7 +1708,7 @@ fun PlayerScreen(
                                 modifier = Modifier.padding(top = 4.dp)
                             ) {
                                 Text(
-                                    text = stream.quality,
+                                    text = stream.extractQuality(),
                                     style = ArflixTypography.caption.copy(fontSize = 12.sp),
                                     color = Pink,
                                     maxLines = 1,
@@ -3171,7 +3171,7 @@ private fun estimateInitialStartupTimeoutMs(
     if (stream == null) return timeoutMs
 
     val haystack = buildString {
-        append(stream.quality)
+        append(stream.extractQuality())
         append(' ')
         append(stream.source)
         append(' ')
@@ -3261,7 +3261,7 @@ private fun parseSizeToBytes(sizeStr: String): Long {
 private fun isLikelyHeavyStream(stream: StreamSource?): Boolean {
     if (stream == null) return false
     val text = buildString {
-        append(stream.quality)
+        append(stream.extractQuality())
         append(' ')
         append(stream.source)
         append(' ')
@@ -3283,7 +3283,7 @@ private fun isLikelyHeavyStream(stream: StreamSource?): Boolean {
 private fun isLikelyDolbyVisionStream(stream: StreamSource?): Boolean {
     if (stream == null) return false
     val text = buildString {
-        append(stream.quality)
+        append(stream.extractQuality())
         append(' ')
         append(stream.source)
         append(' ')

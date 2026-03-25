@@ -682,15 +682,8 @@ class PlayerViewModel @Inject constructor(
             normalized == "disable"
     }
 
-    private fun qualityScore(quality: String): Int {
-        return when {
-            quality.contains("4K", ignoreCase = true) || quality.contains("2160p", ignoreCase = true) -> 4
-            quality.contains("1080p", ignoreCase = true) -> 3
-            quality.contains("720p", ignoreCase = true) -> 2
-            quality.contains("480p", ignoreCase = true) -> 1
-            else -> 0
-        }
-    }
+    // qualityScore is no longer needed - use getQualityScore from StreamQualityUtils instead.
+    // Kept for reference but can be deleted if unused elsewhere
 
     /**
      * Prioritize streams for real-world TV playback stability and startup speed.
@@ -707,7 +700,7 @@ class PlayerViewModel @Inject constructor(
             }
         }.lowercase()
 
-        var score = qualityScore(stream.quality) * 100
+        var score = getQualityScore(stream.extractQuality()) * 100
 
         val sizeBytes = parseSize(stream.size)
         score += when {

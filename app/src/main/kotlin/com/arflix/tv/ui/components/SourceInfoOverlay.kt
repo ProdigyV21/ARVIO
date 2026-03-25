@@ -33,13 +33,12 @@ import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
+import com.arflix.tv.util.extractQuality
+import com.arflix.tv.util.isQuality4K
+import com.arflix.tv.util.isQuality1080
+import com.arflix.tv.util.isQuality720
 
-// ---------------------------------------------------------------------------
-// SHARED REGEX PATTERNS — Identical to StreamSelector/DetailsScreen
-// ---------------------------------------------------------------------------
-private val REGEX_4K   = Regex("""\b(4K|2160p|UHD|ULTRA)\b""",   RegexOption.IGNORE_CASE)
-private val REGEX_1080 = Regex("""\b(1080p|FHD|FULLHD)\b""",      RegexOption.IGNORE_CASE)
-private val REGEX_720  = Regex("""\b(720p|HD)\b""",               RegexOption.IGNORE_CASE)
+// Quality detection now uses StreamQualityUtils for hybrid filename + metadata detection
 
 /**
  * Source info overlay for the video player
@@ -59,6 +58,7 @@ fun SourceInfoOverlay(
         modifier = modifier
     ) {
         stream?.let { source ->
+            val extractedQuality = source.extractQuality()
             Box(
                 modifier = Modifier
                     .background(
@@ -80,7 +80,7 @@ fun SourceInfoOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
                     ) {
-                        val qualityColor = getQualityColor(source.quality)
+                        val qualityColor = getQualityColor(extractedQuality)
                         Icon(
                             imageVector = Icons.Default.HighQuality,
                             contentDescription = null,
@@ -89,7 +89,7 @@ fun SourceInfoOverlay(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = source.quality.uppercase(),
+                            text = extractedQuality.uppercase(),
                             style = ArflixTypography.label,
                             color = qualityColor
                         )
@@ -132,13 +132,13 @@ fun SourceInfoOverlay(
 }
 
 /**
- * Get color based on quality string using word-boundary Regex
+ * Get color based on quality string using hybrid detection
  */
 private fun getQualityColor(quality: String): Color {
     return when {
-        REGEX_4K.containsMatchIn(quality) -> Color(0xFFFFD700) // Gold
-        REGEX_1080.containsMatchIn(quality) -> Pink
-        REGEX_720.containsMatchIn(quality) -> Color(0xFF3B82F6) // Blue
+        isQuality4K(quality) -> Color(0xFFFFD700) // Gold
+        isQuality1080(quality) -> Pink
+        isQuality720(quality) -> Color(0xFF3B82F6) // Blue
         else -> TextSecondary
     }
 }

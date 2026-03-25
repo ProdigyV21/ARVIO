@@ -136,6 +136,8 @@ import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.isInCinema
 import com.arflix.tv.util.parseRatingValue
+import com.arflix.tv.util.extractQuality
+import com.arflix.tv.util.getQualityScore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -241,13 +243,13 @@ fun DetailsScreen(
         val minThreshold = minQualityThreshold(uiState.autoPlayMinQuality)
         val maxThreshold = maxQualityThreshold(uiState.autoPlayMaxQuality)
 
-        // Strict range filter — uses the fixed regex scorer so DS4K is never 4K.
+        // Strict range filter — uses hybrid quality detection (filename first, then metadata)
         val filteredStreams = validStreams
             .filter { stream ->
-                val score = qualityScoreForAutoPlay(stream.quality)
+                val score = getQualityScore(stream.extractQuality())
                 score in minThreshold..maxThreshold
             }
-            .sortedByDescending { qualityScoreForAutoPlay(it.quality) }
+            .sortedByDescending { getQualityScore(it.extractQuality()) }
 
         val bestStream = filteredStreams.firstOrNull()
 
@@ -826,29 +828,7 @@ private data class PendingAutoPlayRequest(
     val startPositionMs: Long?
 )
 
-// ---------------------------------------------------------------------------
-// FIXED: qualityScoreForAutoPlay
-//
-// Uses strict word-boundary Regex — identical engine to StreamSelector's
-// qualityScore and CompactQualityBadge — so tokens like "DS4K", "PSEUDO4K",
-// or any metadata that merely contains "4K" as a substring do NOT get scored
-// as 4K.  Only whole-word "4K", "2160p", "UHD", or "ULTRA" count as score 4.
-// ---------------------------------------------------------------------------
-private val regex4K   = Regex("""\b(4K|2160p|UHD|ULTRA)\b""",   RegexOption.IGNORE_CASE)
-private val regex1080 = Regex("""\b(1080p|FHD|FULLHD)\b""",      RegexOption.IGNORE_CASE)
-private val regex720  = Regex("""\b(720p|HD)\b""",               RegexOption.IGNORE_CASE)
-private val regex480  = Regex("""\b(480p|SD)\b""",               RegexOption.IGNORE_CASE)
-
-private fun qualityScoreForAutoPlay(quality: String): Int = when {
-    regex4K.containsMatchIn(quality)   -> 4
-    regex1080.containsMatchIn(quality) -> 3
-    regex720.containsMatchIn(quality)  -> 2
-    regex480.containsMatchIn(quality)  -> 1
-    else                               -> 0
-}
-
-// ---------------------------------------------------------------------------
-// Threshold helpers — unchanged logic, but kept next to the scorer for clarity.
+// Threshold helpers — now uses centralized quality detection from StreamQualityUtils
 // "Any" / empty max maps to 4 (no upper cap).
 // ---------------------------------------------------------------------------
 private fun minQualityThreshold(value: String): Int = when (value.trim().lowercase()) {
