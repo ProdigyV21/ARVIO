@@ -177,6 +177,7 @@ class DetailsViewModel @Inject constructor(
     private var loadStreamsRequestId: Long = 0L
     /** Set to true after loadDetails() child coroutines finish populating episodes/seasons. */
     @Volatile private var initialLoadComplete = false
+    
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
     private fun autoPlayMaxQualityKey() = profileManager.profileStringKey("auto_play_max_quality")
@@ -1338,6 +1339,18 @@ class DetailsViewModel @Inject constructor(
      * Resolve real IMDB ID from TMDB using external_ids endpoint
      * This is required for addon stream resolution
      */
+    private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): ExternalIds {
+        return try {
+            val ids = when (mediaType) {
+                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY)
+                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, Constants.TMDB_API_KEY)
+            }
+            ExternalIds(imdbId = ids.imdbId, tvdbId = ids.tvdbId)
+        } catch (_: Exception) {
+            ExternalIds(null, null)
+        }
+    }
+
     /**
      * Fetch season progress for a TV show
      * Returns Map<seasonNumber, Pair<watchedCount, totalCount>>
@@ -1665,20 +1678,6 @@ class DetailsViewModel @Inject constructor(
                     label = "Start S1E1"
                 )
             }
-        }
-    }
-
-    private data class ExternalIds(val imdbId: String?, val tvdbId: Int?)
-
-    private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): ExternalIds {
-        return try {
-            val ids = when (mediaType) {
-                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY)
-                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, Constants.TMDB_API_KEY)
-            }
-            ExternalIds(imdbId = ids.imdbId, tvdbId = ids.tvdbId)
-        } catch (_: Exception) {
-            ExternalIds(null, null)
         }
     }
 

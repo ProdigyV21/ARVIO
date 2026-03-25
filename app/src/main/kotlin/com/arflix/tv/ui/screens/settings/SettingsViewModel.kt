@@ -789,6 +789,8 @@ class SettingsViewModel @Inject constructor(
             "4k", "2160p", "uhd" -> "4K"
             else -> "4K"
         }
+    }
+
     fun cycleSubtitleSize() {
         val next = when (_uiState.value.subtitleSize) { "Small" -> "Medium"; "Medium" -> "Large"; "Large" -> "Extra Large"; else -> "Small" }
         viewModelScope.launch { context.settingsDataStore.edit { it[subtitleSizeKey()] = next }; _uiState.value = _uiState.value.copy(subtitleSize = next) }
@@ -1834,4 +1836,3 @@ class SettingsViewModel @Inject constructor(
         traktPollingJob?.cancel()
     }
 }
-

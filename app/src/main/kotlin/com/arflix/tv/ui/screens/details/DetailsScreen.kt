@@ -1106,7 +1106,7 @@ private fun DetailsContent(
                         MobileActionButton(icon = Icons.Default.Movie, text = "Trailer", onClick = { onButtonClick(2) })
                         MobileActionButton(
                             icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                            text = if (buttonWatched) "Watched" else "Watched",
+                            text = if (buttonWatched) "Watched" else "Mark Watched",
                             isActive = buttonWatched,
                             onClick = { onButtonClick(3) }
                         )

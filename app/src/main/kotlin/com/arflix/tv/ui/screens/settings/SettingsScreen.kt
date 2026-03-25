@@ -53,6 +53,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material3.Icon
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.QrCodeImage
@@ -248,7 +250,7 @@ fun SettingsScreen(
         if (scrollState.maxValue <= 0) return@LaunchedEffect
 
         val maxIndex = when (sectionIndex) {
-            0 -> 10 // General: 11 items
+            0 -> 12 // General: 13 items
             1 -> 2 // IPTV
             2 -> uiState.catalogs.size // Catalogs
             3 -> uiState.addons.size // Addons
@@ -414,7 +416,7 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     // Dynamic max based on current section
                                     val maxIndex = when (sectionIndex) {
-                                        0 -> 10 // General: 11 items (subtitle, audio, content lang, card, frame rate, dns, ui mode, autoplay, single-source, min quality, max quality)
+                                        0 -> 12 // General: 13 items
                                         1 -> 2 // IPTV: Configure + Refresh + Delete
                                         2 -> uiState.catalogs.size // Catalogs: Add + N catalogs
                                         3 -> uiState.addons.size // Addons: N addons + "Add Custom" button
@@ -455,16 +457,18 @@ fun SettingsScreen(
                                         0 -> { // General
                                             when (contentFocusIndex) {
                                                 0 -> openSubtitlePicker()
-                                                1 -> openAudioLanguagePicker()
-                                                2 -> openContentLanguagePicker()
-                                                3 -> viewModel.toggleCardLayoutMode()
-                                                4 -> viewModel.cycleFrameRateMatchingMode()
-                                                5 -> openDnsProviderPicker()
-                                                6 -> { val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }; viewModel.setDeviceModeOverride(next) }
-                                                7 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
-                                                8 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
-                                                9 -> viewModel.cycleAutoPlayMinQuality()
-                                                10 -> viewModel.cycleAutoPlayMaxQuality()
+                                                1 -> viewModel.cycleSubtitleSize()
+                                                2 -> viewModel.cycleSubtitleColor()
+                                                3 -> openAudioLanguagePicker()
+                                                4 -> openContentLanguagePicker()
+                                                5 -> viewModel.toggleCardLayoutMode()
+                                                6 -> viewModel.cycleFrameRateMatchingMode()
+                                                7 -> openDnsProviderPicker()
+                                                8 -> { val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }; viewModel.setDeviceModeOverride(next) }
+                                                9 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
+                                                10 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
+                                                11 -> viewModel.cycleAutoPlayMinQuality()
+                                                12 -> viewModel.cycleAutoPlayMaxQuality()
                                             }
                                         }
                                         1 -> { // IPTV
@@ -585,9 +589,13 @@ fun SettingsScreen(
                             autoPlaySingleSource = uiState.autoPlaySingleSource,
                             autoPlayMinQuality = uiState.autoPlayMinQuality,
                             autoPlayMaxQuality = uiState.autoPlayMaxQuality,
+                            subtitleSize = uiState.subtitleSize,
+                            subtitleColor = uiState.subtitleColor,
                             deviceModeOverride = uiState.deviceModeOverride,
                             focusedIndex = -1,
                             onSubtitleClick = openSubtitlePicker,
+                            onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
+                            onSubtitleColorClick = { viewModel.cycleSubtitleColor() },
                             onAudioLanguageClick = openAudioLanguagePicker,
                             onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
@@ -747,10 +755,14 @@ fun SettingsScreen(
                             autoPlaySingleSource = uiState.autoPlaySingleSource,
                             autoPlayMinQuality = uiState.autoPlayMinQuality,
                             autoPlayMaxQuality = uiState.autoPlayMaxQuality,
+                            subtitleSize = uiState.subtitleSize,
+                            subtitleColor = uiState.subtitleColor,
                             contentLanguage = uiState.contentLanguage,
                             deviceModeOverride = uiState.deviceModeOverride,
                             focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                             onSubtitleClick = openSubtitlePicker,
+                            onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
+                            onSubtitleColorClick = { viewModel.cycleSubtitleColor() },
                             onAudioLanguageClick = openAudioLanguagePicker,
                             onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
@@ -1983,6 +1995,8 @@ private fun GeneralSettings(
     autoPlaySingleSource: Boolean,
     autoPlayMinQuality: String,
     autoPlayMaxQuality: String,
+    subtitleSize: String = "Normal",
+    subtitleColor: String = "White",
     deviceModeOverride: String = "auto",
     focusedIndex: Int,
     onSubtitleClick: () -> Unit,
@@ -1994,6 +2008,8 @@ private fun GeneralSettings(
     onAutoPlaySingleSourceToggle: (Boolean) -> Unit,
     onAutoPlayMinQualityClick: () -> Unit,
     onAutoPlayMaxQualityClick: () -> Unit,
+    onSubtitleSizeClick: () -> Unit = {},
+    onSubtitleColorClick: () -> Unit = {},
     onDeviceModeClick: () -> Unit = {},
     onContentLanguageClick: () -> Unit = {}
 ) {
@@ -2017,13 +2033,37 @@ private fun GeneralSettings(
         
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Subtitle Size
+        SettingsRow(
+            icon = Icons.Default.FormatSize,
+            title = "Subtitle Size",
+            subtitle = "Adjust text size for subtitles",
+            value = subtitleSize,
+            isFocused = focusedIndex == 1,
+            onClick = onSubtitleSizeClick
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Subtitle Color
+        SettingsRow(
+            icon = Icons.Default.ColorLens,
+            title = "Subtitle Color",
+            subtitle = "Adjust text color for subtitles",
+            value = subtitleColor,
+            isFocused = focusedIndex == 2,
+            onClick = onSubtitleColorClick
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Default Audio
         SettingsRow(
             icon = Icons.Default.VolumeUp,
             title = "Default Audio",
             subtitle = "Preferred audio track language",
             value = defaultAudioLanguage,
-            isFocused = focusedIndex == 1,
+            isFocused = focusedIndex == 3,
             onClick = onAudioLanguageClick
         )
 
@@ -2031,11 +2071,11 @@ private fun GeneralSettings(
 
         // Content Language
         SettingsRow(
-            icon = Icons.Default.Subtitles,
+            icon = Icons.Default.Language,
             title = "Content Language",
             subtitle = "Language for titles, descriptions, and metadata",
             value = TMDB_LANGUAGES.firstOrNull { it.first == contentLanguage }?.second ?: contentLanguage,
-            isFocused = focusedIndex == 2,
+            isFocused = focusedIndex == 4,
             onClick = onContentLanguageClick
         )
 
@@ -2047,7 +2087,7 @@ private fun GeneralSettings(
             title = "Card Layout",
             subtitle = "Switch between landscape and poster cards",
             value = cardLayoutMode,
-            isFocused = focusedIndex == 3,
+            isFocused = focusedIndex == 5,
             onClick = onCardLayoutToggle
         )
 
@@ -2059,7 +2099,7 @@ private fun GeneralSettings(
             title = "Match Frame Rate",
             subtitle = "Off, Seamless only, or Always (may blank-screen on some TVs)",
             value = frameRateMatchingMode,
-            isFocused = focusedIndex == 4,
+            isFocused = focusedIndex == 6,
             onClick = onFrameRateMatchingClick
         )
 
@@ -2070,7 +2110,7 @@ private fun GeneralSettings(
             title = "DNS Provider",
             subtitle = "Resolver for API/image/stream requests. Changes apply immediately.",
             value = dnsProvider,
-            isFocused = focusedIndex == 5,
+            isFocused = focusedIndex == 7,
             onClick = onDnsProviderClick
         )
 
@@ -2087,7 +2127,7 @@ private fun GeneralSettings(
                 "phone" -> "Phone"
                 else -> "Auto"
             },
-            isFocused = focusedIndex == 6,
+            isFocused = focusedIndex == 8,
             onClick = onDeviceModeClick
         )
 
@@ -2098,7 +2138,7 @@ private fun GeneralSettings(
             title = "Auto-Play Next",
             subtitle = "Start next episode automatically",
             isEnabled = autoPlayNext,
-            isFocused = focusedIndex == 7,
+            isFocused = focusedIndex == 9,
             onToggle = onAutoPlayToggle
         )
 
@@ -2108,7 +2148,7 @@ private fun GeneralSettings(
             title = "Auto-Play Single Source",
             subtitle = "Skip source picker when only one valid source exists",
             isEnabled = autoPlaySingleSource,
-            isFocused = focusedIndex == 8,
+            isFocused = focusedIndex == 10,
             onToggle = onAutoPlaySingleSourceToggle
         )
 
@@ -2119,7 +2159,7 @@ private fun GeneralSettings(
             title = "Auto-Play Min Quality",
             subtitle = "Minimum quality required for single-source auto-play",
             value = autoPlayMinQuality,
-            isFocused = focusedIndex == 9,
+            isFocused = focusedIndex == 11,
             onClick = onAutoPlayMinQualityClick
         )
 
@@ -2130,7 +2170,7 @@ private fun GeneralSettings(
             title = "Preferred Max Quality",
             subtitle = "Highest resolution to auto-select (Filters out larger files)",
             value = autoPlayMaxQuality,
-            isFocused = focusedIndex == 10,
+            isFocused = focusedIndex == 12,
             onClick = onAutoPlayMaxQualityClick
         )
     }
@@ -3647,9 +3687,9 @@ private fun InputModal(
                                             val isPasswordField = field.isSecret || field.label.contains("password", ignoreCase = true)
                                             val isLikelyUrlField =
                                                 field.label.contains("url", ignoreCase = true) ||
-                                                    field.label.contains("m3u", ignoreCase = true) ||
-                                                    field.label.contains("epg", ignoreCase = true) ||
-                                                    field.label.contains("server", ignoreCase = true)
+                                                        field.label.contains("m3u", ignoreCase = true) ||
+                                                        field.label.contains("epg", ignoreCase = true) ||
+                                                        field.label.contains("server", ignoreCase = true)
                                             inputType = if (isPasswordField) {
                                                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                                             } else if (isLikelyUrlField) {

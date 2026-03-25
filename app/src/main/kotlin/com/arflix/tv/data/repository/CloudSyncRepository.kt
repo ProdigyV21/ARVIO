@@ -49,6 +49,8 @@ class CloudSyncRepository @Inject constructor(
 
     data class CloudProfileSettings(
         val defaultSubtitle: String = "Off",
+        val subtitleSize: String = "Normal",
+        val subtitleColor: String = "White",
         val defaultAudioLanguage: String = "Auto (Original)",
         val contentLanguage: String = "en-US",
         val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
@@ -66,6 +68,10 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "content_language")
     private fun defaultSubtitleKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "default_subtitle")
+    private fun subtitleSizeKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "subtitle_size")
+    private fun subtitleColorKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "subtitle_color")
     private fun defaultAudioLanguageKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "default_audio_language")
     private fun cardLayoutModeKeyFor(profileId: String) =
@@ -85,6 +91,8 @@ class CloudSyncRepository @Inject constructor(
 
     // Active-profile key shortcuts (used for legacy flat fields in snapshot)
     private fun defaultSubtitleKey() = profileManager.profileStringKey("default_subtitle")
+    private fun subtitleSizeKey() = profileManager.profileStringKey("subtitle_size")
+    private fun subtitleColorKey() = profileManager.profileStringKey("subtitle_color")
     private fun defaultAudioLanguageKey() = profileManager.profileStringKey("default_audio_language")
     private fun cardLayoutModeKey() = profileManager.profileStringKey("card_layout_mode")
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
@@ -145,6 +153,8 @@ class CloudSyncRepository @Inject constructor(
                     profile.id,
                     CloudProfileSettings(
                         defaultSubtitle = prefs[defaultSubtitleKeyFor(profile.id)] ?: "Off",
+                        subtitleSize = prefs[subtitleSizeKeyFor(profile.id)] ?: "Normal",
+                        subtitleColor = prefs[subtitleColorKeyFor(profile.id)] ?: "White",
                         defaultAudioLanguage = prefs[defaultAudioLanguageKeyFor(profile.id)] ?: "Auto (Original)",
                         contentLanguage = prefs[contentLanguageKeyFor(profile.id)] ?: "en-US",
                         cardLayoutMode = normalizeCardLayoutMode(
@@ -171,6 +181,8 @@ class CloudSyncRepository @Inject constructor(
         root.put("updatedAt", System.currentTimeMillis())
         // Legacy flat fields (for backward compat with older clients)
         root.put("defaultSubtitle", prefs[defaultSubtitleKey()] ?: "Off")
+        root.put("subtitleSize", prefs[subtitleSizeKey()] ?: "Normal")
+        root.put("subtitleColor", prefs[subtitleColorKey()] ?: "White")
         root.put("defaultAudioLanguage", prefs[defaultAudioLanguageKey()] ?: "Auto (Original)")
         root.put("cardLayoutMode", normalizeCardLayoutMode(prefs[cardLayoutModeKey()] ?: CARD_LAYOUT_MODE_LANDSCAPE))
         root.put("frameRateMatchingMode", prefs[frameRateMatchingModeKey()] ?: "Off")
@@ -327,6 +339,8 @@ class CloudSyncRepository @Inject constructor(
         val root = JSONObject(payload)
 
         val fallbackDefaultSubtitle = root.optString("defaultSubtitle", "Off")
+        val fallbackSubtitleSize = root.optString("subtitleSize", "Normal")
+        val fallbackSubtitleColor = root.optString("subtitleColor", "White")
         val fallbackDefaultAudioLanguage = root.optString("defaultAudioLanguage", "Auto (Original)")
         val fallbackCardLayoutMode = normalizeCardLayoutMode(root.optString("cardLayoutMode", CARD_LAYOUT_MODE_LANDSCAPE))
         val fallbackFrameRateMatchingMode = normalizeFrameRateMode(root.optString("frameRateMatchingMode", "Off"))
@@ -363,6 +377,8 @@ class CloudSyncRepository @Inject constructor(
                 context.settingsDataStore.edit { prefs ->
                     settingsByProfile.forEach { (profileId, state) ->
                         prefs[defaultSubtitleKeyFor(profileId)] = state.defaultSubtitle
+                        prefs[subtitleSizeKeyFor(profileId)] = state.subtitleSize
+                        prefs[subtitleColorKeyFor(profileId)] = state.subtitleColor
                         prefs[defaultAudioLanguageKeyFor(profileId)] = state.defaultAudioLanguage
                         prefs[contentLanguageKeyFor(profileId)] = state.contentLanguage
                         prefs[cardLayoutModeKeyFor(profileId)] = normalizeCardLayoutMode(state.cardLayoutMode)
@@ -379,6 +395,8 @@ class CloudSyncRepository @Inject constructor(
             // Legacy fallback: single-profile settings
             context.settingsDataStore.edit { prefs ->
                 prefs[defaultSubtitleKeyFor(activeProfileId)] = fallbackDefaultSubtitle
+                prefs[subtitleSizeKeyFor(activeProfileId)] = fallbackSubtitleSize
+                prefs[subtitleColorKeyFor(activeProfileId)] = fallbackSubtitleColor
                 prefs[defaultAudioLanguageKeyFor(activeProfileId)] = fallbackDefaultAudioLanguage
                 prefs[cardLayoutModeKeyFor(activeProfileId)] = fallbackCardLayoutMode
                 prefs[frameRateMatchingModeKeyFor(activeProfileId)] = fallbackFrameRateMatchingMode
