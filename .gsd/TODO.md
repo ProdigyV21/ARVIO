@@ -1,0 +1,1 @@
+- [ ] Problem: Episodes in horizontal scroll layout. Difficult for 500-1000+ episodes. Solution: Add toggle for Horizontal/Vertical list (Expand button). `medium` — 2026-03-27
