@@ -5,6 +5,7 @@ import coil.Coil
 import com.arflix.tv.BuildConfig
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.api.TraktDeviceCode
@@ -157,6 +158,10 @@ class SettingsViewModel @Inject constructor(
     private val apkDownloader: ApkDownloader
 ) : ViewModel() {
 
+    companion object {
+        private const val DNS_RELOAD_NONCE_PREF = "dns_reload_nonce"
+    }
+
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
@@ -182,6 +187,7 @@ class SettingsViewModel @Inject constructor(
     private fun subtitleSizeKey() = profileManager.profileStringKey("subtitle_size")
     private fun subtitleColorKey() = profileManager.profileStringKey("subtitle_color")
     private fun dnsProviderKey() = profileManager.profileStringKey("dns_provider")
+    private fun dnsReloadNonceKey() = longPreferencesKey(DNS_RELOAD_NONCE_PREF)
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private fun includeSpecialsKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "include_specials")
     private val gson = Gson()
@@ -270,6 +276,11 @@ class SettingsViewModel @Inject constructor(
             val subtitleColor = prefs[subtitleColorKey()] ?: "White"
             val dnsProviderValue = normalizeDnsProviderValue(prefs[dnsProviderKey()])
             val includeSpecials = prefs[includeSpecialsKey()] ?: false
+
+            // Keep runtime DNS in sync with the saved preference.
+            withContext(Dispatchers.IO) {
+                OkHttpProvider.setDnsProvider(OkHttpProvider.parseDnsProvider(dnsProviderValue))
+            }
 
             // Check auth statuses
             val authState = authRepository.authState.first()
@@ -832,22 +843,58 @@ class SettingsViewModel @Inject constructor(
 
             withContext(Dispatchers.IO) {
                 OkHttpProvider.setDnsProvider(OkHttpProvider.parseDnsProvider(value))
-                // Warm up the new DNS provider's lazy init off the main thread
-                // so the first image request doesn't block
-                runCatching { OkHttpProvider.dns.lookup("image.tmdb.org") }
             }
             context.settingsDataStore.edit { prefs ->
                 prefs[dnsProviderKey()] = value
+                // Explicit signal for app-wide reload; only written on user-initiated DNS change.
+                prefs[dnsReloadNonceKey()] = System.currentTimeMillis()
             }
             _uiState.value = _uiState.value.copy(
                 dnsProvider = dnsProviderLabel(value)
             )
 
-            // Replace Coil image loader with one using the new DNS
-            val imageLoader = withContext(Dispatchers.IO) {
-                OkHttpProvider.createCoilImageLoader(context)
+            // Warm up DNS and rebuild Coil client without blocking UI transitions.
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { OkHttpProvider.dns.lookup("image.tmdb.org") }
+                val imageLoader = OkHttpProvider.createCoilImageLoader(context)
+                withContext(Dispatchers.Main) {
+                    Coil.setImageLoader(imageLoader)
+                }
             }
-            Coil.setImageLoader(imageLoader)
+        }
+    }
+
+    fun testDnsResolution(hostname: String = "example.com") {
+        viewModelScope.launch {
+            val selectedProvider = _uiState.value.dnsProvider
+            val result = withContext(Dispatchers.IO) {
+                runCatching { OkHttpProvider.dns.lookup(hostname) }
+            }
+
+            _uiState.value = result.fold(
+                onSuccess = { addresses ->
+                    if (addresses.isEmpty()) {
+                        _uiState.value.copy(
+                            toastMessage = "DNS test failed: no records for $hostname ($selectedProvider)",
+                            toastType = ToastType.ERROR
+                        )
+                    } else {
+                        val preview = addresses
+                            .take(3)
+                            .joinToString(", ") { it.hostAddress ?: "unknown" }
+                        _uiState.value.copy(
+                            toastMessage = "DNS OK ($selectedProvider): $preview",
+                            toastType = ToastType.SUCCESS
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.value.copy(
+                        toastMessage = "DNS failed ($selectedProvider): ${error.message ?: "Unknown error"}",
+                        toastType = ToastType.ERROR
+                    )
+                }
+            )
         }
     }
 

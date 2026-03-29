@@ -106,7 +106,7 @@ android {
         debug {
             isMinifyEnabled = false
             isDebuggable = true
-            // applicationIdSuffix = ".debug" // Disabled to preserve settings between debug/release
+            // applicationIdSuffix = ".debug" // Keep debug separate from release for side-by-side installs
             versionNameSuffix = "-debug"
 
             // Build config fields for debug
@@ -117,7 +117,7 @@ android {
         // Staging build type for testing release builds
         create("staging") {
             initWith(getByName("release"))
-            applicationIdSuffix = ".staging"
+            // applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
             signingConfig = signingConfigs.getByName("debug")
 

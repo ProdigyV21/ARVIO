@@ -23,6 +23,7 @@ import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.RealtimeSyncManager
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.CrashlyticsProvider
 import com.arflix.tv.worker.TraktSyncWorker
@@ -31,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -55,6 +57,22 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     @Inject
     lateinit var watchlistRepository: WatchlistRepository
 
+    private suspend fun applyPersistedDnsProviderAtStartup() {
+        val prefs = settingsDataStore.data.first()
+        val activeProfileId = profileManager.getProfileIdSync()
+        val activeKeyName = profileManager.profileStringKeyFor(activeProfileId, "dns_provider").name
+        val activeRaw = prefs.asMap().entries
+            .firstOrNull { entry -> entry.key.name == activeKeyName }
+            ?.value as? String
+        val fallbackRaw = prefs.asMap().entries
+            .firstOrNull { entry -> entry.key.name.endsWith("_dns_provider") && entry.value is String }
+            ?.value as? String
+        val rawProvider = activeRaw ?: fallbackRaw ?: "system"
+        val provider = OkHttpProvider.parseDnsProvider(rawProvider)
+        OkHttpProvider.setDnsProvider(provider)
+        AppLogger.d("AppDns", "Startup DNS bootstrap profile=$activeProfileId provider=$provider raw=$rawProvider")
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -72,6 +90,8 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             runCatching { profileManager.initialize() }
             // Preload watchlist cache in background for instant display
             runCatching { watchlistRepository.getWatchlistItems() }
+            runCatching { applyPersistedDnsProviderAtStartup() }
+                .onFailure { AppLogger.w("AppDns", "Failed startup DNS bootstrap: ${it.message}") }
             if (!authRepository.getCurrentUserId().isNullOrBlank()) {
                 // Pull cloud state shortly after startup for faster cross-device sync.
                 delay(3_000L)

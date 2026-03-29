@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 rootProject.name = "ARVIO"
 include(":app")
 include(":benchmark")
+include(":Arvio debug")

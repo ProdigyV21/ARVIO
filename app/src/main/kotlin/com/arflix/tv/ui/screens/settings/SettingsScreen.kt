@@ -499,6 +499,7 @@ fun SettingsScreen(
                                                 11 -> openUiModeWarningDialog()
                                                 12 -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
                                                 13 -> openDnsProviderPicker()
+
                                             }
                                         }
                                         1 -> { // IPTV
@@ -2149,7 +2150,7 @@ private fun GeneralSettings(
     trailerAutoPlay: Boolean = false,
     onSubtitleSizeClick: () -> Unit = {},
     onSubtitleColorClick: () -> Unit = {},
-    onTrailerAutoPlayToggle: (Boolean) -> Unit = {}
+    onTrailerAutoPlayToggle: (Boolean) -> Unit = {},
 ) {
     Column {
         // ── Language & Subtitles ──
@@ -2313,6 +2314,8 @@ private fun GeneralSettings(
             isFocused = focusedIndex == 13,
             onClick = onDnsProviderClick
         )
+
+
     }
 }
 

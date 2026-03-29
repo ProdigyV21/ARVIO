@@ -218,10 +218,32 @@ object OkHttpProvider {
 
     fun setDnsProvider(provider: AppDnsProvider) {
         selectedDnsProvider = provider
+        appConnectionPool.evictAll()
+        cancelInFlightTmdbCalls()
         Log.i(TAG, "Using DNS provider=$provider")
-        dnsScope.launch {
-            appConnectionPool.evictAll()
-            Log.i(TAG, "Evicted pooled app connections after DNS change")
+        Log.i(TAG, "Evicted pooled app connections after DNS change")
+    }
+
+    private fun cancelInFlightTmdbCalls() {
+        val dispatcher = appClient?.dispatcher ?: return
+        val targetHosts = setOf("api.themoviedb.org", "image.tmdb.org")
+
+        var canceled = 0
+        dispatcher.runningCalls().forEach { call ->
+            if (call.request().url.host in targetHosts) {
+                call.cancel()
+                canceled++
+            }
+        }
+        dispatcher.queuedCalls().forEach { call ->
+            if (call.request().url.host in targetHosts) {
+                call.cancel()
+                canceled++
+            }
+        }
+
+        if (canceled > 0) {
+            Log.i(TAG, "Canceled $canceled in-flight TMDB calls after DNS change")
         }
     }
 

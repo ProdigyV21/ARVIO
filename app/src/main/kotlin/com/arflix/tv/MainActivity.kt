@@ -69,7 +69,9 @@ import com.arflix.tv.util.detectDeviceType
 import com.arflix.tv.util.deviceHasTouchScreen
 import com.arflix.tv.util.settingsDataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -115,6 +117,10 @@ import kotlin.math.sin
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        private val DNS_RELOAD_NONCE_KEY = longPreferencesKey("dns_reload_nonce")
+    }
 
     @Inject
     lateinit var authRepository: Lazy<AuthRepository>
@@ -196,6 +202,20 @@ class MainActivity : ComponentActivity() {
             val activeProfileLoaded by remember {
                 profileRepository.get().activeProfileId.map { true }
             }.collectAsState(initial = false)
+            val dnsReloadNonce by remember {
+                this@MainActivity.settingsDataStore.data
+                    .map { prefs -> prefs[DNS_RELOAD_NONCE_KEY] ?: 0L }
+                    .distinctUntilChanged()
+            }.collectAsState(initial = 0L)
+            var previousDnsReloadNonce by remember { mutableStateOf<Long?>(null) }
+            LaunchedEffect(dnsReloadNonce) {
+                val previous = previousDnsReloadNonce
+                previousDnsReloadNonce = dnsReloadNonce
+                if (previous != null && dnsReloadNonce > 0L && dnsReloadNonce != previous) {
+                    // Reload only on explicit user DNS change events, never on startup reads.
+                    this@MainActivity.recreate()
+                }
+            }
             val deviceType = when (deviceModeOverride) {
                 "tv" -> DeviceType.TV
                 "tablet" -> DeviceType.TABLET

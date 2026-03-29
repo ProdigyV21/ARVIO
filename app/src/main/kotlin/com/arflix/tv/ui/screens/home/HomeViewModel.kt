@@ -24,6 +24,7 @@ import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.IptvRepository
+import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.WatchHistoryRepository
 import com.arflix.tv.data.repository.WatchlistRepository
@@ -96,6 +97,7 @@ class HomeViewModel @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
     private val cloudSyncRepository: CloudSyncRepository,
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
+    private val profileManager: ProfileManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val imageLoader: ImageLoader by lazy(LazyThreadSafetyMode.NONE) {
@@ -501,6 +503,82 @@ class HomeViewModel @Inject constructor(
     private val LOGO_CACHE_PUBLISH_THROTTLE_MS = if (isLowRamDevice) 400L else 180L
     private val LOGO_CACHE_IDLE_REQUIRED_MS = if (isLowRamDevice) 350L else 200L
     private val LOGO_CACHE_FAST_SCROLL_IDLE_MS = if (isLowRamDevice) 180L else 100L
+    private var observedDnsProvider: String? = null
+
+    private fun normalizeDnsProvider(raw: String?): String {
+        return raw?.trim()?.uppercase(Locale.US)
+            ?.takeIf { it in setOf("SYSTEM", "CLOUDFLARE", "GOOGLE", "ADGUARD") }
+            ?: "SYSTEM"
+    }
+
+    private fun observeDnsProviderChanges() {
+        viewModelScope.launch {
+            context.settingsDataStore.data
+                .map { prefs ->
+                    val prefsMap = prefs.asMap()
+                    val activeKeyName = profileManager.profileStringKey("dns_provider").name
+                    val activeRaw = prefsMap.entries
+                        .firstOrNull { entry -> entry.key.name == activeKeyName }
+                        ?.value as? String
+                    val fallbackRaw = prefsMap.entries
+                        .firstOrNull { entry -> entry.key.name.endsWith("_dns_provider") && entry.value is String }
+                        ?.value as? String
+                    normalizeDnsProvider(activeRaw ?: fallbackRaw)
+                }
+                .distinctUntilChanged()
+                .collect { provider ->
+                    if (observedDnsProvider == null) {
+                        observedDnsProvider = provider
+                        return@collect
+                    }
+                    if (provider == observedDnsProvider) {
+                        return@collect
+                    }
+                    observedDnsProvider = provider
+                    forceHardHomeReloadForDnsChange(provider)
+                }
+        }
+    }
+
+    private fun forceHardHomeReloadForDnsChange(provider: String) {
+        System.err.println("HomeVM: DNS changed to $provider, forcing full content reload")
+
+        loadHomeJob?.cancel()
+        customCatalogsJob?.cancel()
+        refreshContinueWatchingJob?.cancel()
+        watchedBadgesJob?.cancel()
+        prefetchJob?.cancel()
+        preloadCategoryJob?.cancel()
+        preloadCategoryPriorityJob?.cancel()
+        heroUpdateJob?.cancel()
+        heroDetailsJob?.cancel()
+
+        usedPreloadedData = false
+        lastResolvedBaseCategories = emptyList()
+        lastContinueWatchingItems = emptyList()
+        lastContinueWatchingUpdateMs = 0L
+        savedCatalogById.clear()
+        categoryPaginationStates.clear()
+        preloadedRequests.clear()
+        iptvChannelMap.clear()
+
+        _cardLogoUrls.value = emptyMap()
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            isInitialLoad = true,
+            categories = emptyList(),
+            error = null,
+            heroItem = null,
+            heroLogoUrl = null,
+            heroTrailerKey = null,
+            heroOverviewOverride = null,
+            previousHeroItem = null,
+            previousHeroLogoUrl = null,
+            isHeroTransitioning = false
+        )
+
+        loadHomeData()
+    }
 
     private fun getCachedLogo(key: String): String? = synchronized(logoCacheLock) {
         logoCache[key]
@@ -640,6 +718,7 @@ class HomeViewModel @Inject constructor(
     }
 
     init {
+        observeDnsProviderChanges()
         // Load trailer auto-play setting
         viewModelScope.launch {
             try {
