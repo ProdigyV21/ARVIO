@@ -2,7 +2,10 @@
 
 package com.arflix.tv.ui.screens.player
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -176,16 +179,27 @@ fun PlayerScreen(
     onPlayNext: (Int, Int, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val uiState by viewModel.uiState.collectAsState()
     val latestUiState by rememberUpdatedState(uiState)
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
     val deviceType = LocalDeviceType.current
 
+    // Keep playback in landscape while the player is visible, then restore the app's prior orientation.
+    DisposableEffect(activity) {
+        val previousOrientation = activity?.requestedOrientation
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        onDispose {
+            if (previousOrientation != null) {
+                activity.requestedOrientation = previousOrientation
+            }
+        }
+    }
+
     // On mobile, enable immersive fullscreen for the player and restore system bars on exit.
     // TV is always in fullscreen so no change is needed there.
     DisposableEffect(Unit) {
-        val activity = context as? android.app.Activity
         val window = activity?.window
         if (window != null && deviceType != com.arflix.tv.util.DeviceType.TV) {
             val controller = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
@@ -3349,6 +3363,14 @@ private fun resolveFrameRateStrategyForMode(mode: String): Int {
 
 private fun resolveFrameRateOffStrategy(): Int {
     return readMedia3FrameRateConst("VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF", fallback = 0)
+}
+
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
 }
 
 private fun resolveFrameRateSeamlessStrategy(): Int {
