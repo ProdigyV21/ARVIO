@@ -70,6 +70,8 @@ class TraktSyncService @Inject constructor(
     private val _syncEvents = MutableSharedFlow<SyncStatus>(extraBufferCapacity = 1)
     val syncEvents: SharedFlow<SyncStatus> = _syncEvents.asSharedFlow()
 
+    private val supabaseAuthMutex = Mutex()
+
     // Profile-scoped DataStore keys (must match TraktRepository for token sharing)
     private fun accessTokenKey() = profileManager.profileStringKey("trakt_access_token")
     private fun refreshTokenKey() = profileManager.profileStringKey("trakt_refresh_token")
@@ -1446,6 +1448,7 @@ class TraktSyncService @Inject constructor(
                                 )
                             }
                         } catch (e: Exception) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
                         }
                     }
                 }
@@ -1661,7 +1664,9 @@ class TraktSyncService @Inject constructor(
         // Try getting auth, force-refresh if initial attempt fails
         var auth = getSupabaseAuth()
         if (auth == null) {
-            val refreshed = authRepository.refreshAccessToken()
+            val refreshed = supabaseAuthMutex.withLock {
+                authRepository.refreshAccessToken()
+            }
             auth = if (!refreshed.isNullOrBlank()) "Bearer $refreshed" else null
         }
         if (auth == null) throw IllegalStateException("Supabase auth failed")
@@ -1669,7 +1674,9 @@ class TraktSyncService @Inject constructor(
             block(auth)
         } catch (e: HttpException) {
             if (e.code() == 401) {
-                val refreshed = authRepository.refreshAccessToken()
+                val refreshed = supabaseAuthMutex.withLock {
+                    authRepository.refreshAccessToken()
+                }
                 if (!refreshed.isNullOrBlank()) {
                     return block("Bearer $refreshed")
                 }
