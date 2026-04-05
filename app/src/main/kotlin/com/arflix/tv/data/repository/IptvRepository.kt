@@ -23,6 +23,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Response
+import java.io.IOException
+import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -2899,7 +2905,7 @@ class IptvRepository @Inject constructor(
         }.distinct()
     }
 
-    private fun fetchXtreamLiveChannels(
+    private suspend fun fetchXtreamLiveChannels(
         creds: XtreamCredentials,
         onProgress: (IptvLoadProgress) -> Unit
     ): List<IptvChannel> {
@@ -2942,24 +2948,49 @@ class IptvRepository @Inject constructor(
         }
     }
 
-    private fun <T> requestJson(
+    private suspend fun <T> requestJson(
         url: String,
         type: Type,
         client: OkHttpClient = iptvHttpClient
-    ): T? {
+    ): T? = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
             .header("Accept", "application/json,*/*")
             .get()
             .build()
-        val response = client.newCall(request).execute()
-        response.use {
-            if (!it.isSuccessful) return null
-            val body = it.body?.string() ?: return null
-            if (body.isBlank()) return null
-            return runCatching { gson.fromJson<T>(body, type) }.getOrNull()
+
+        val call = client.newCall(request)
+
+        continuation.invokeOnCancellation {
+            call.cancel()
         }
+
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resume(null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (!continuation.isActive) {
+                    response.close()
+                    return
+                }
+                response.use {
+                    if (!it.isSuccessful) {
+                        continuation.resume(null)
+                        return
+                    }
+                    val body = it.body?.string()
+                    if (body.isNullOrBlank()) {
+                        continuation.resume(null)
+                        return
+                    }
+                    val result = runCatching { gson.fromJson<T>(body, type) }.getOrNull()
+                    continuation.resume(result)
+                }
+            }
+        })
     }
 
     private fun fetchAndParseM3uOnce(
