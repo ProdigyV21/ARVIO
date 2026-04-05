@@ -209,6 +209,15 @@ fun SettingsScreen(
         contentLanguagePickerIndex = TMDB_LANGUAGES.indexOfFirst { it.first == uiState.contentLanguage }.coerceAtLeast(0)
         showContentLanguagePicker = true
     }
+    val openUiModeWarningDialog = {
+        nextUiMode = when (uiState.deviceModeOverride) {
+            "auto" -> "tv"
+            "tv" -> "tablet"
+            "tablet" -> "phone"
+            else -> "auto"
+        }
+        showUiModeWarningDialog = true
+    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -487,7 +496,7 @@ fun SettingsScreen(
                                                 8 -> viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay)
                                                 9 -> viewModel.cycleFrameRateMatchingMode()
                                                 10 -> viewModel.toggleCardLayoutMode()
-                                                11 -> { val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }; viewModel.setDeviceModeOverride(next) }
+                                                11 -> openUiModeWarningDialog()
                                                 12 -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
                                                 13 -> openDnsProviderPicker()
                                             }
@@ -629,11 +638,7 @@ fun SettingsScreen(
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
                             trailerAutoPlay = uiState.trailerAutoPlay,
                             onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
-                            onDeviceModeClick = {
-                                val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
-                                nextUiMode = next
-                                showUiModeWarningDialog = true
-                            },
+                            onDeviceModeClick = openUiModeWarningDialog,
                             onContentLanguageClick = openContentLanguagePicker,
                             onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
                             onSkipProfileSelectionToggle = { viewModel.setSkipProfileSelection(it) },
@@ -802,11 +807,7 @@ fun SettingsScreen(
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
                             trailerAutoPlay = uiState.trailerAutoPlay,
                             onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
-                            onDeviceModeClick = {
-                                val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
-                                nextUiMode = next
-                                showUiModeWarningDialog = true
-                            },
+                            onDeviceModeClick = openUiModeWarningDialog,
                             onContentLanguageClick = openContentLanguagePicker,
                             onSkipProfileSelectionToggle = { viewModel.setSkipProfileSelection(it) },
                             onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
