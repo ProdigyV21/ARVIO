@@ -27,6 +27,7 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -1796,10 +1797,11 @@ class TraktRepository @Inject constructor(
 
         // Enrich items with TMDB data in parallel (limited concurrency)
         val semaphore = kotlinx.coroutines.sync.Semaphore(5)
+        val seasonCache = java.util.concurrent.ConcurrentHashMap<Pair<Int, Int>, Deferred<com.arflix.tv.data.api.TmdbSeasonDetails?>>()
         rawItems.map { item ->
             async {
                 semaphore.withPermit {
-                    enrichLocalContinueWatchingItem(item)
+                    enrichLocalContinueWatchingItem(item, seasonCache)
                 }
             }
         }.awaitAll()
@@ -1812,10 +1814,11 @@ class TraktRepository @Inject constructor(
     suspend fun enrichContinueWatchingItems(items: List<ContinueWatchingItem>): List<ContinueWatchingItem> = coroutineScope {
         if (items.isEmpty()) return@coroutineScope emptyList()
         val semaphore = kotlinx.coroutines.sync.Semaphore(5)
+        val seasonCache = java.util.concurrent.ConcurrentHashMap<Pair<Int, Int>, Deferred<com.arflix.tv.data.api.TmdbSeasonDetails?>>()
         items.map { item ->
             async {
                 semaphore.withPermit {
-                    enrichLocalContinueWatchingItem(item)
+                    enrichLocalContinueWatchingItem(item, seasonCache)
                 }
             }
         }.awaitAll()
@@ -1825,13 +1828,16 @@ class TraktRepository @Inject constructor(
      * Enrich a local Continue Watching item with TMDB data
      * Matches the Trakt enrichment behavior: uses SHOW backdrop/overview, not episode
      */
-    private suspend fun enrichLocalContinueWatchingItem(item: ContinueWatchingItem): ContinueWatchingItem {
+    private suspend fun enrichLocalContinueWatchingItem(
+        item: ContinueWatchingItem,
+        seasonCache: java.util.concurrent.ConcurrentHashMap<Pair<Int, Int>, Deferred<com.arflix.tv.data.api.TmdbSeasonDetails?>> = java.util.concurrent.ConcurrentHashMap()
+    ): ContinueWatchingItem = coroutineScope {
         // Skip if already enriched (has overview and backdrop with full URL)
-        if (item.overview.isNotEmpty() && item.backdropPath?.startsWith("http") == true) return item
+        if (item.overview.isNotEmpty() && item.backdropPath?.startsWith("http") == true) return@coroutineScope item
 
         val apiKey = Constants.TMDB_API_KEY
-        return try {
-            if (item.mediaType == MediaType.TV) {
+        try {
+            return@coroutineScope if (item.mediaType == MediaType.TV) {
                 val details = try {
                     tmdbApi.getTvDetails(item.id, apiKey)
                 } catch (_: Exception) { null }
@@ -1839,8 +1845,16 @@ class TraktRepository @Inject constructor(
                 // Get episode info for episode title only (not for backdrop/overview)
                 val episodeInfo = if (item.season != null && item.episode != null && item.episodeTitle.isNullOrEmpty()) {
                     try {
-                        val seasonDetails = tmdbApi.getTvSeason(item.id, item.season, apiKey)
-                        seasonDetails.episodes.find { it.episodeNumber == item.episode }
+                        val cacheKey = Pair(item.id, item.season)
+                        val deferredSeason = seasonCache.getOrPut(cacheKey) {
+                            async {
+                                try {
+                                    tmdbApi.getTvSeason(item.id, item.season, apiKey)
+                                } catch (_: Exception) { null }
+                            }
+                        }
+                        val seasonDetails = deferredSeason.await()
+                        seasonDetails?.episodes?.find { it.episodeNumber == item.episode }
                     } catch (_: Exception) { null }
                 } else null
 
