@@ -178,6 +178,8 @@ fun SettingsScreen(
     var dnsProviderPickerIndex by remember { mutableIntStateOf(0) }
     var showContentLanguagePicker by remember { mutableStateOf(false) }
     var contentLanguagePickerIndex by remember { mutableIntStateOf(0) }
+    var showUiModeWarningDialog by remember { mutableStateOf(false) }
+    var nextUiMode by remember { mutableStateOf("") }
 
     val sections = remember { listOf("general", "iptv", "catalogs", "addons", "accounts") }
 
@@ -305,6 +307,7 @@ fun SettingsScreen(
         showAudioLanguagePicker ||
         showDnsProviderPicker ||
         showContentLanguagePicker ||
+        showUiModeWarningDialog ||
         uiState.showCloudPairDialog ||
         uiState.showCloudEmailPasswordDialog ||
         uiState.showAppUpdateDialog ||
@@ -628,7 +631,8 @@ fun SettingsScreen(
                             onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
                             onDeviceModeClick = {
                                 val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
-                                viewModel.setDeviceModeOverride(next)
+                                nextUiMode = next
+                                showUiModeWarningDialog = true
                             },
                             onContentLanguageClick = openContentLanguagePicker,
                             onSubtitleSizeClick = { viewModel.cycleSubtitleSize() },
@@ -800,7 +804,8 @@ fun SettingsScreen(
                             onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
                             onDeviceModeClick = {
                                 val next = when (uiState.deviceModeOverride) { "auto" -> "tv"; "tv" -> "tablet"; "tablet" -> "phone"; else -> "auto" }
-                                viewModel.setDeviceModeOverride(next)
+                                nextUiMode = next
+                                showUiModeWarningDialog = true
                             },
                             onContentLanguageClick = openContentLanguagePicker,
                             onSkipProfileSelectionToggle = { viewModel.setSkipProfileSelection(it) },
@@ -1114,6 +1119,19 @@ fun SettingsScreen(
             UnknownSourcesModal(
                 onDismiss = { viewModel.dismissAppUpdateDialog() },
                 onOpenSettings = { viewModel.openUnknownSourcesSettings() }
+            )
+        }
+
+        if (showUiModeWarningDialog) {
+            UiModeWarningDialog(
+                nextMode = nextUiMode,
+                onConfirm = {
+                    viewModel.setDeviceModeOverride(nextUiMode)
+                    showUiModeWarningDialog = false
+                },
+                onDismiss = {
+                    showUiModeWarningDialog = false
+                }
             )
         }
 
