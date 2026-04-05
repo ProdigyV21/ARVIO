@@ -33,7 +33,7 @@ class IptvBenchmarkTest {
             withContext(Dispatchers.IO.limitedParallelism(20)) {
                 items.map { item ->
                     async {
-                        delay(10)
+                        Thread.sleep(10)
                     }
                 }.awaitAll()
             }
