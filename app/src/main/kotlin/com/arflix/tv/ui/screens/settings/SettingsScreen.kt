@@ -4177,6 +4177,142 @@ private fun SubtitlePickerModal(
 }
 
 /** All TMDB-supported languages as (code, displayName) pairs. */
+@Composable
+private fun UiModeWarningDialog(
+    nextMode: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var focusedIndex by remember { mutableIntStateOf(0) } // 0 = Confirm, 1 = Cancel
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        ModalScrim(onDismiss = onDismiss) {
+            Column(
+                modifier = Modifier
+                    .then(
+                        if (LocalDeviceType.current.isTouchDevice()) Modifier.fillMaxWidth(0.92f).widthIn(max = 400.dp)
+                        else Modifier.width(400.dp)
+                    )
+                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
+                    .padding(if (LocalDeviceType.current.isTouchDevice()) 20.dp else 28.dp)
+                    .focusRequester(focusRequester)
+                    .focusable()
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            when (event.key) {
+                                Key.Back, Key.Escape -> {
+                                    onDismiss()
+                                    true
+                                }
+                                Key.DirectionLeft -> {
+                                    if (focusedIndex > 0) focusedIndex--
+                                    true
+                                }
+                                Key.DirectionRight -> {
+                                    if (focusedIndex < 1) focusedIndex++
+                                    true
+                                }
+                                Key.Enter, Key.DirectionCenter -> {
+                                    if (focusedIndex == 0) onConfirm() else onDismiss()
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else false
+                    }
+            ) {
+                Text(
+                    text = "Change UI Mode",
+                    style = ArflixTypography.sectionTitle,
+                    color = TextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val modeString = when (nextMode) {
+                    "tv" -> "TV"
+                    "tablet" -> "Tablet"
+                    "phone" -> "Phone"
+                    else -> "Auto"
+                }
+
+                Text(
+                    text = "Are you sure you want to change the UI mode to $modeString?",
+                    style = ArflixTypography.body,
+                    color = TextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    val isConfirmFocused = focusedIndex == 0
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                color = if (isConfirmFocused) SuccessGreen else SuccessGreen.copy(alpha = 0.6f)
+                            )
+                            .clickable { onConfirm() }
+                            .border(
+                                width = if (isConfirmFocused) 2.dp else 0.dp,
+                                color = if (isConfirmFocused) Color.White else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Confirm",
+                            style = ArflixTypography.button,
+                            color = Color.White
+                        )
+                    }
+
+                    val isCancelFocused = focusedIndex == 1
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                color = if (isCancelFocused) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)
+                            )
+                            .clickable { onDismiss() }
+                            .border(
+                                width = if (isCancelFocused) 2.dp else 0.dp,
+                                color = if (isCancelFocused) Pink else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            style = ArflixTypography.button,
+                            color = if (isCancelFocused) TextPrimary else TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 val TMDB_LANGUAGES = listOf(
     "en-US" to "English",
     "nl-NL" to "Dutch (Nederlands)",
