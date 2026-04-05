@@ -4,6 +4,7 @@ import com.arflix.tv.data.api.TmdbApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
 import javax.inject.Inject
@@ -43,6 +44,7 @@ class AnimeMapper @Inject constructor(
     private val sequelCache = mutableMapOf<Int, Int?>()            // kitsuId -> sequelKitsuId (null = no sequel)
     private val hasSequelCache = mutableMapOf<Int, Boolean>()      // kitsuId -> whether it has a sequel
     private val armTmdbCache = mutableMapOf<Int, List<Int>>()      // tmdbId -> list of Kitsu IDs (one per season)
+    private val inFlightRequests = mutableMapOf<Int, CompletableDeferred<Unit>>() // tmdbId -> guard against concurrent API calls
 
     // ========== Hardcoded Maps ==========
 
@@ -520,7 +522,7 @@ class AnimeMapper @Inject constructor(
             ensureSeasonEpisodeCountsCached(tmdbId, maxKnownSeason, season)
             for (s in maxKnownSeason until season) {
                 val cacheKey = "$tmdbId:$s"
-                val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] } ?: 0
+                val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] } ?: return null
                 dynamicOffset += epCount
             }
             dynamicOffset
@@ -766,12 +768,14 @@ class AnimeMapper @Inject constructor(
         if (isAbsoluteNumbering) {
             // Absolute numbering: calculate offset from TMDB seasons
             val offset = calculateTmdbSeasonOffset(tmdbId, season)
-            // Detect if TMDB already uses absolute episode numbering (e.g., One Piece)
-            if (offset > 0 && episode >= offset) {
-                return Pair(kitsuId, episode)
+            if (offset != null) {
+                // Detect if TMDB already uses absolute episode numbering (e.g., One Piece)
+                if (offset > 0 && episode >= offset) {
+                    return Pair(kitsuId, episode)
+                }
+                val absEpisode = offset + episode
+                return Pair(kitsuId, absEpisode)
             }
-            val absEpisode = offset + episode
-            return Pair(kitsuId, absEpisode)
         }
 
         // Per-season numbering: need to find the correct Kitsu entry for this season + episode
@@ -792,7 +796,7 @@ class AnimeMapper @Inject constructor(
 
         // Fallback: try absolute offset calculation
         val offset = calculateTmdbSeasonOffset(tmdbId, season)
-        if (offset > 0) {
+        if (offset != null && offset > 0) {
             return Pair(kitsuId, offset + episode)
         }
 
@@ -962,14 +966,14 @@ class AnimeMapper @Inject constructor(
      * Calculate the absolute episode offset by summing TMDB episode counts
      * for all seasons before the target season.
      */
-    private suspend fun calculateTmdbSeasonOffset(tmdbId: Int?, season: Int): Int {
+    private suspend fun calculateTmdbSeasonOffset(tmdbId: Int?, season: Int): Int? {
         if (tmdbId == null || season <= 1) return 0
 
         var offset = 0
         ensureSeasonEpisodeCountsCached(tmdbId, 1, season)
         for (s in 1 until season) {
             val cacheKey = "$tmdbId:$s"
-            val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] } ?: 0
+            val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] } ?: return null
             offset += epCount
         }
         return offset
@@ -985,6 +989,8 @@ class AnimeMapper @Inject constructor(
      */
     private suspend fun ensureSeasonEpisodeCountsCached(tmdbId: Int, startSeason: Int, endSeason: Int) {
         var missingAny = false
+        var deferred: CompletableDeferred<Unit>? = null
+
         cacheMutex.withLock {
             for (s in startSeason until endSeason) {
                 if (!tmdbSeasonEpCountCache.containsKey("$tmdbId:$s")) {
@@ -992,9 +998,23 @@ class AnimeMapper @Inject constructor(
                     break
                 }
             }
+
+            if (missingAny) {
+                val existingRequest = inFlightRequests[tmdbId]
+                if (existingRequest != null) {
+                    deferred = existingRequest
+                } else {
+                    inFlightRequests[tmdbId] = CompletableDeferred()
+                }
+            }
         }
 
         if (missingAny) {
+            if (deferred != null) {
+                deferred!!.await()
+                return
+            }
+
             try {
                 val tvDetails = tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY)
                 cacheMutex.withLock {
@@ -1002,9 +1022,15 @@ class AnimeMapper @Inject constructor(
                     for (season in tvDetails.seasons) {
                         tmdbSeasonEpCountCache["$tmdbId:${season.seasonNumber}"] = season.episodeCount
                     }
+                    val completed = inFlightRequests.remove(tmdbId)
+                    completed?.complete(Unit)
                 }
             } catch (e: Exception) {
                 // Keep the same error handling logic (return 0 in loop if cache miss persists)
+                cacheMutex.withLock {
+                    val completed = inFlightRequests.remove(tmdbId)
+                    completed?.complete(Unit)
+                }
             }
         }
     }
