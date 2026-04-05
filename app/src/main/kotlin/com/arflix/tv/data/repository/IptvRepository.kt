@@ -3210,38 +3210,43 @@ class IptvRepository @Inject constructor(
     private suspend fun fetchXtreamEpgListingsAsync(
         creds: XtreamCredentials,
         streamIds: List<Int>,
+        timeoutMillis: Long = 60_000L,
         onStreamProcessed: (Int, Boolean) -> Unit = { _, _ -> }
-    ): List<XtreamEpgListing> = withContext(Dispatchers.IO.limitedParallelism(20)) {
-        val sampleLogged = java.util.concurrent.atomic.AtomicBoolean(false)
-        streamIds.map { sid ->
-            async {
-                var hadError = false
-                val url = "${creds.baseUrl}/player_api.php?username=${creds.username}" +
-                    "&password=${creds.password}&action=get_short_epg&stream_id=$sid&limit=12"
-                var listings: List<XtreamEpgListing>? = null
-                try {
-                    var resp: XtreamEpgResponse? = requestJson(url, XtreamEpgResponse::class.java)
-                    listings = resp?.epgListings
-                    if (listings.isNullOrEmpty()) {
-                        val fallbackUrl = "${creds.baseUrl}/player_api.php?username=${creds.username}" +
-                            "&password=${creds.password}&action=get_short_epg&stream_id=$sid"
-                        resp = requestJson(fallbackUrl, XtreamEpgResponse::class.java)
-                        listings = resp?.epgListings
+    ): List<XtreamEpgListing> {
+        val result = withTimeoutOrNull(timeoutMillis) {
+            withContext(Dispatchers.IO.limitedParallelism(20)) {
+                val sampleLogged = java.util.concurrent.atomic.AtomicBoolean(false)
+                streamIds.map { sid ->
+                    async {
+                        var hadError = false
+                        val url = "${creds.baseUrl}/player_api.php?username=${creds.username}" +
+                            "&password=${creds.password}&action=get_short_epg&stream_id=$sid&limit=12"
+                        var listings: List<XtreamEpgListing>? = null
+                        try {
+                            var resp: XtreamEpgResponse? = requestJson(url, XtreamEpgResponse::class.java)
+                            listings = resp?.epgListings
+                            if (listings.isNullOrEmpty()) {
+                                val fallbackUrl = "${creds.baseUrl}/player_api.php?username=${creds.username}" +
+                                    "&password=${creds.password}&action=get_short_epg&stream_id=$sid"
+                                resp = requestJson(fallbackUrl, XtreamEpgResponse::class.java)
+                                listings = resp?.epgListings
+                            }
+                            if (!listings.isNullOrEmpty() && sampleLogged.compareAndSet(false, true)) {
+                                val sample = listings.first()
+                                System.err.println("[EPG] Sample response for stream_id=$sid: channelId=${sample.channelId} epgId=${sample.epgId} streamId=${sample.streamId} start=${sample.start} startTs=${sample.startTimestamp} title=${sample.title?.take(40)}")
+                            }
+                        } catch (_: Exception) { hadError = true }
+                        onStreamProcessed(sid, hadError)
+                        listings ?: emptyList()
                     }
-                    if (!listings.isNullOrEmpty() && sampleLogged.compareAndSet(false, true)) {
-                        val sample = listings.first()
-                        System.err.println("[EPG] Sample response for stream_id=$sid: channelId=${sample.channelId} epgId=${sample.epgId} streamId=${sample.streamId} start=${sample.start} startTs=${sample.startTimestamp} title=${sample.title?.take(40)}")
-                    }
-                } catch (_: Exception) { hadError = true }
-                onStreamProcessed(sid, hadError)
-                listings ?: emptyList()
+                }.awaitAll().flatten()
             }
-        }.awaitAll().flatten()
+        }
+        return result ?: emptyList()
     }
 
     /**
      * Build IptvNowNext map from Xtream EPG listings.
-
      * Groups listings by channel, sorts by start time, assigns now/next/later/upcoming.
      */
     private fun buildNowNextFromXtreamListings(
