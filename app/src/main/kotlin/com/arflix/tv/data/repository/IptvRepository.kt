@@ -972,9 +972,11 @@ class IptvRepository @Inject constructor(
     }
 
     /**
-     * Lightweight EPG refresh for specific channels using Xtream short EPG API.
-     * Only fetches EPG for the given channel IDs. Updates cachedNowNext in place.
-     * Returns the updated nowNext entries for those channels, or null if not an Xtream provider.
+     * Refreshes short Xtream EPG data for the specified channel IDs.
+     *
+     * Updates the repository's in-memory `cachedNowNext` entries for channels that have Xtream stream identifiers.
+     *
+     * @return A map of channel ID to `IptvNowNext` containing the updated EPG entries for those channels, or `null` if Xtream credentials are not available or no EPG data was retrieved.
      */
     suspend fun refreshEpgForChannels(channelIds: Set<String>): Map<String, IptvNowNext>? {
         if (channelIds.isEmpty()) return null
@@ -3161,8 +3163,10 @@ class IptvRepository @Inject constructor(
      * Returns null if the API is not supported or fails (caller should fall back to XMLTV).
      */
     /**
-     * Extract the Xtream stream ID from an IptvChannel.
-     * Uses the explicit field if set, otherwise parses from the "xtream:123" id format.
+     * Determine the Xtream numeric stream identifier for a channel.
+     *
+     * @param ch The channel to inspect; may contain an explicit `xtreamStreamId` or an `id` with the `xtream:{id}` form.
+     * @return The numeric Xtream stream id if present, `null` otherwise.
      */
     private fun resolveXtreamStreamId(ch: IptvChannel): Int? {
         ch.xtreamStreamId?.let { return it }
@@ -3172,6 +3176,14 @@ class IptvRepository @Inject constructor(
         return null
     }
 
+    /**
+     * Fetches short EPG listings from an Xtream provider and converts them into now/next program snapshots per channel.
+     *
+     * @param creds Xtream credentials used to query the provider's short EPG endpoints.
+     * @param channels The channels to resolve short EPG for; only channels with resolvable Xtream stream IDs are queried.
+     * @param onProgress Callback invoked with load progress updates.
+     * @return A map from IPTV channel ID to its derived IptvNowNext when listings were successfully retrieved and considered reliable, or `null` if no listings were available or the fetch was deemed unreliable (e.g., excessive errors).
+     */
     private suspend fun fetchXtreamShortEpg(
         creds: XtreamCredentials,
         channels: List<IptvChannel>,
@@ -3237,6 +3249,21 @@ class IptvRepository @Inject constructor(
 
 
 
+    /**
+     * Fetches short EPG listings for the given Xtream stream IDs in parallel.
+     *
+     * Requests the Xtream `get_short_epg` endpoint for each stream ID (first with a `limit=12`,
+     * then a fallback without `limit` if the first response is empty). Records one sample log
+     * for the first non-empty response observed and invokes `onStreamProcessed` for each stream
+     * to report whether that stream encountered an error.
+     *
+     * @param creds Xtream credentials and base URL used to construct API requests.
+     * @param streamIds The list of Xtream stream IDs to query.
+     * @param onStreamProcessed Callback invoked once per stream ID with `(streamId, hadError)`,
+     *   where `hadError` is `true` if the request sequence for that stream failed.
+     * @return A flattened list of all `XtreamEpgListing` objects returned by the provider
+     *   (empty if no listings were retrieved).
+     */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private suspend fun fetchXtreamEpgListingsAsync(
         creds: XtreamCredentials,
@@ -3277,8 +3304,14 @@ class IptvRepository @Inject constructor(
     }
 
     /**
-     * Build IptvNowNext map from Xtream EPG listings.
-     * Groups listings by channel, sorts by start time, assigns now/next/later/upcoming.
+     * Constructs a mapping of IPTV channel IDs to their current and upcoming program windows from a list of Xtream short EPG listings.
+     *
+     * The function groups listings by resolved channel (using `epgIdToChannelIds` and `streamIdToChannelIds`), orders programs by start time, and populates `now`, `next`, `later`, `upcoming`, and `recent` slots for each channel.
+     *
+     * @param listings Xtream short EPG listings to convert into program windows.
+     * @param epgIdToChannelIds Map from EPG identifier to the list of IPTV channel IDs that share that EPG id.
+     * @param streamIdToChannelIds Map from Xtream stream identifier to the list of IPTV channel IDs that correspond to that stream.
+     * @return A map keyed by IPTV channel ID with values of `IptvNowNext`. Each `IptvNowNext` may contain `now`, `next`, `later`, a truncated `upcoming` list (at most 12 items), and a `recent` list of programs that ended within the recent cutoff window.
      */
     private fun buildNowNextFromXtreamListings(
         listings: List<XtreamEpgListing>,

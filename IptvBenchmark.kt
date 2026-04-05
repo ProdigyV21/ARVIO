@@ -7,6 +7,13 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import kotlin.system.measureTimeMillis
 
+/**
+ * Runs two microbenchmarks that compare a fixed-size thread pool and a coroutine-based approach
+ * on a workload of 2000 simulated tasks, and prints each approach's elapsed time.
+ *
+ * The thread-pool benchmark submits one blocking task per item to a 20-thread executor; the
+ * coroutine benchmark launches one coroutine per item constrained to 20 concurrent workers.
+ */
 fun main() = runBlocking {
     val items = (1..2000).toList()
 
