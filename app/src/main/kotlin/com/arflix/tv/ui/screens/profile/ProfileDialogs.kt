@@ -1,6 +1,7 @@
 package com.arflix.tv.ui.screens.profile
 
 import android.text.InputType
+import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -81,6 +82,7 @@ fun AddProfileDialog(
 ) {
     ProfileDialogContent(
         title = "Add Profile",
+        autoFocusNameInput = true,
         name = name,
         onNameChange = onNameChange,
         selectedColorIndex = selectedColorIndex,
@@ -114,6 +116,7 @@ fun EditProfileDialog(
 ) {
     ProfileDialogContent(
         title = "Edit Profile",
+        autoFocusNameInput = false,
         name = name,
         onNameChange = onNameChange,
         selectedColorIndex = selectedColorIndex,
@@ -135,6 +138,7 @@ fun EditProfileDialog(
 @Composable
 private fun ProfileDialogContent(
     title: String,
+    autoFocusNameInput: Boolean,
     name: String,
     onNameChange: (String) -> Unit,
     selectedColorIndex: Int,
@@ -151,15 +155,46 @@ private fun ProfileDialogContent(
     var editTextRef by remember { mutableStateOf<EditText?>(null) }
     val confirmButtonFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(isTouchDevice) {
-        if (!isTouchDevice) {
+    fun showKeyboard(editText: EditText) {
+        editText.post {
+            val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            val shown = imm?.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT) ?: false
+            if (!shown) {
+                @Suppress("DEPRECATION")
+                imm?.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+            }
+        }
+    }
+
+    fun hideKeyboard(editText: EditText? = editTextRef) {
+        editText?.post {
+            val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.hideSoftInputFromWindow(editText.windowToken, 0)
+            editText.clearFocus()
+        }
+    }
+
+    LaunchedEffect(isTouchDevice, autoFocusNameInput) {
+        if (!isTouchDevice && !autoFocusNameInput) {
             // Always give the dialog a visible focused control on TV.
             runCatching { confirmButtonFocusRequester.requestFocus() }
         }
     }
 
+    LaunchedEffect(autoFocusNameInput, editTextRef) {
+        val editText = editTextRef ?: return@LaunchedEffect
+        if (autoFocusNameInput) {
+            editText.requestFocus()
+            editText.setSelection(editText.text?.length ?: 0)
+            showKeyboard(editText)
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            hideKeyboard()
+            onDismiss()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(
@@ -235,11 +270,7 @@ private fun ProfileDialogContent(
                             .clickable {
                                 editTextRef?.let { et ->
                                     et.requestFocus()
-                                    et.postDelayed({
-                                        val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                                        @Suppress("DEPRECATION")
-                                        imm?.showSoftInput(et, InputMethodManager.SHOW_FORCED)
-                                    }, 100)
+                                    et.postDelayed({ showKeyboard(et) }, 100)
                                 }
                             }
                     ) {
@@ -262,11 +293,14 @@ private fun ProfileDialogContent(
                                     doAfterTextChanged { editable ->
                                         onNameChange(editable?.toString() ?: "")
                                     }
-                                    setOnEditorActionListener { _, actionId, _ ->
-                                        if (actionId == EditorInfo.IME_ACTION_DONE) {
-                                            val imm = ctx.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                                            imm?.hideSoftInputFromWindow(windowToken, 0)
-                                            clearFocus()
+                                    setOnEditorActionListener { _, actionId, event ->
+                                        val isDoneAction = actionId == EditorInfo.IME_ACTION_DONE
+                                        val isEnterKey =
+                                            event?.keyCode == KeyEvent.KEYCODE_ENTER &&
+                                                event.action == KeyEvent.ACTION_UP
+                                        if (isDoneAction || isEnterKey) {
+                                            hideKeyboard(this)
+                                            runCatching { confirmButtonFocusRequester.requestFocus() }
                                             true
                                         } else false
                                     }
@@ -294,7 +328,10 @@ private fun ProfileDialogContent(
                             text = confirmLabel,
                             isPrimary = true,
                             enabled = name.isNotBlank(),
-                            onClick = onConfirm,
+                            onClick = {
+                                hideKeyboard()
+                                onConfirm()
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .focusRequester(confirmButtonFocusRequester)
@@ -303,9 +340,26 @@ private fun ProfileDialogContent(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            DialogButton(text = "Cancel", isPrimary = false, onClick = onDismiss, modifier = Modifier.weight(1f))
+                            DialogButton(
+                                text = "Cancel",
+                                isPrimary = false,
+                                onClick = {
+                                    hideKeyboard()
+                                    onDismiss()
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                             if (onDelete != null) {
-                                DialogButton(text = "Delete", isPrimary = false, isDestructive = true, onClick = onDelete, modifier = Modifier.weight(1f))
+                                DialogButton(
+                                    text = "Delete",
+                                    isPrimary = false,
+                                    isDestructive = true,
+                                    onClick = {
+                                        hideKeyboard()
+                                        onDelete()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
@@ -520,6 +574,7 @@ private fun DialogButton(
     if (isTouchDevice) {
         Box(
             modifier = modifier
+                .focusable()
                 .clip(RoundedCornerShape(6.dp))
                 .background(if (isFocused > 0) focusedContainerColor else containerColor)
                 .then(
