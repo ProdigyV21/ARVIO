@@ -28,6 +28,8 @@ import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -1846,13 +1848,23 @@ class TraktRepository @Inject constructor(
                 val episodeInfo = if (item.season != null && item.episode != null && item.episodeTitle.isNullOrEmpty()) {
                     try {
                         val cacheKey = Pair(item.id, item.season)
-                        val deferredSeason = seasonCache.getOrPut(cacheKey) {
-                            async {
-                                try {
+                        val newDeferred = CompletableDeferred<com.arflix.tv.data.api.TmdbSeasonDetails?>()
+                        val existingDeferred = seasonCache.putIfAbsent(cacheKey, newDeferred)
+
+                        val deferredSeason = if (existingDeferred == null) {
+                            // We won the insert, do the network call
+                            launch {
+                                val result = try {
                                     tmdbApi.getTvSeason(item.id, item.season, apiKey)
                                 } catch (_: Exception) { null }
+                                newDeferred.complete(result)
                             }
+                            newDeferred
+                        } else {
+                            // Another coroutine is already fetching
+                            existingDeferred
                         }
+
                         val seasonDetails = deferredSeason.await()
                         seasonDetails?.episodes?.find { it.episodeNumber == item.episode }
                     } catch (_: Exception) { null }
