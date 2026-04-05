@@ -230,7 +230,8 @@ data class TmdbTvDetails(
     @SerializedName("number_of_episodes") val numberOfEpisodes: Int = 0,
     @SerializedName("episode_run_time") val episodeRunTime: List<Int> = emptyList(),
     val status: String? = null,
-    val genres: List<TmdbGenre> = emptyList()
+    val genres: List<TmdbGenre> = emptyList(),
+    val seasons: List<TmdbTvSeason> = emptyList()
 )
 
 data class TmdbSeasonDetails(
@@ -272,3 +273,13 @@ data class TmdbReview(val id: String = "", val author: String = "", @SerializedN
 data class TmdbAuthorDetails(val name: String = "", val username: String = "", @SerializedName("avatar_path") val avatarPath: String? = null, val rating: Float? = null)
 data class TmdbFindResponse(@SerializedName("movie_results") val movieResults: List<TmdbFindItem> = emptyList(), @SerializedName("tv_results") val tvResults: List<TmdbFindItem> = emptyList())
 data class TmdbFindItem(val id: Int = 0, val popularity: Float = 0f)
+
+data class TmdbTvSeason(
+    val id: Int = 0,
+    @SerializedName("season_number") val seasonNumber: Int = 1,
+    @SerializedName("episode_count") val episodeCount: Int = 0,
+    val name: String? = null,
+    val overview: String? = null,
+    @SerializedName("poster_path") val posterPath: String? = null,
+    @SerializedName("air_date") val airDate: String? = null
+)

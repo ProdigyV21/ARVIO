@@ -517,20 +517,10 @@ class AnimeMapper @Inject constructor(
             val maxKnownSeason = offsets.keys.maxOrNull() ?: return null
             val maxKnownOffset = offsets[maxKnownSeason] ?: return null
             var dynamicOffset = maxKnownOffset
+            ensureSeasonEpisodeCountsCached(tmdbId, maxKnownSeason, season)
             for (s in maxKnownSeason until season) {
                 val cacheKey = "$tmdbId:$s"
-                val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] }
-                    ?: try {
-                        val seasonDetails = tmdbApi.getTvSeason(tmdbId, s, Constants.TMDB_API_KEY)
-                        val count = seasonDetails.episodes.size
-                        cacheMutex.withLock {
-                            evictIfNeeded(tmdbSeasonEpCountCache)
-                            tmdbSeasonEpCountCache[cacheKey] = count
-                        }
-                        count
-                    } catch (e: Exception) {
-                        0
-                    }
+                val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] } ?: 0
                 dynamicOffset += epCount
             }
             dynamicOffset
@@ -976,26 +966,48 @@ class AnimeMapper @Inject constructor(
         if (tmdbId == null || season <= 1) return 0
 
         var offset = 0
+        ensureSeasonEpisodeCountsCached(tmdbId, 1, season)
         for (s in 1 until season) {
             val cacheKey = "$tmdbId:$s"
-            val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] }
-                ?: try {
-                    val seasonDetails = tmdbApi.getTvSeason(tmdbId, s, Constants.TMDB_API_KEY)
-                    val count = seasonDetails.episodes.size
-                    cacheMutex.withLock {
-                        evictIfNeeded(tmdbSeasonEpCountCache)
-                        tmdbSeasonEpCountCache[cacheKey] = count
-                    }
-                    count
-                } catch (e: Exception) {
-                    0
-                }
+            val epCount = cacheMutex.withLock { tmdbSeasonEpCountCache[cacheKey] } ?: 0
             offset += epCount
         }
         return offset
     }
 
     // ========== Cache helpers ==========
+
+    /**
+     * Ensures that the episode counts for the given seasons are cached.
+     * It checks if all required seasons are already in the cache. If not, it makes
+     * a single getTvDetails call to fetch all seasons and populates the cache,
+     * avoiding the N+1 problem of querying each season individually.
+     */
+    private suspend fun ensureSeasonEpisodeCountsCached(tmdbId: Int, startSeason: Int, endSeason: Int) {
+        var missingAny = false
+        cacheMutex.withLock {
+            for (s in startSeason until endSeason) {
+                if (!tmdbSeasonEpCountCache.containsKey("$tmdbId:$s")) {
+                    missingAny = true
+                    break
+                }
+            }
+        }
+
+        if (missingAny) {
+            try {
+                val tvDetails = tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY)
+                cacheMutex.withLock {
+                    evictIfNeeded(tmdbSeasonEpCountCache)
+                    for (season in tvDetails.seasons) {
+                        tmdbSeasonEpCountCache["$tmdbId:${season.seasonNumber}"] = season.episodeCount
+                    }
+                }
+            } catch (e: Exception) {
+                // Keep the same error handling logic (return 0 in loop if cache miss persists)
+            }
+        }
+    }
 
     private fun <K> evictIfNeeded(cache: MutableMap<K, *>) {
         if (cache.size >= MAX_CACHE_SIZE) {
