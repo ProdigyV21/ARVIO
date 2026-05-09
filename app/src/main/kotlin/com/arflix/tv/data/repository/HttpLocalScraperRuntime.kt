@@ -529,24 +529,19 @@ class HttpLocalScraperRuntime @Inject constructor(
             "https://vsrc.su/embed/$imdbId"
         }
         val embedHtml = getText(embedUrl)
-        val iframeSrc = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-            .find(embedHtml)
+        val iframeSrc = IFRAME_SRC_REGEX.find(embedHtml)
             ?.groupValues
             ?.getOrNull(1)
             ?: return@runCatching emptyList<HttpResolvedStream>()
         val iframeUrl = if (iframeSrc.startsWith("//")) "https:$iframeSrc" else iframeSrc
         val iframeHtml = getText(iframeUrl, mapOf("Referer" to "https://vsrc.su/"))
-        val prorcpSrc = Regex("""src:\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE)
-            .find(iframeHtml)
+        val prorcpSrc = PRORCP_SRC_REGEX.find(iframeHtml)
             ?.groupValues
             ?.getOrNull(1)
             ?: return@runCatching emptyList<HttpResolvedStream>()
         val cloudUrl = URL(URL("https://cloudnestra.com/"), prorcpSrc).toString()
         val cloudHtml = getText(cloudUrl, mapOf("Referer" to "https://cloudnestra.com/"))
-        val divMatch = Regex(
-            """<div id="([^"]+)"[^>]*style=["']display\s*:\s*none;?["'][^>]*>([a-zA-Z0-9:/.,{}\-_=+ ]+)</div>""",
-            RegexOption.IGNORE_CASE
-        ).find(cloudHtml) ?: return@runCatching emptyList<HttpResolvedStream>()
+        val divMatch = DIV_MATCH_REGEX.find(cloudHtml) ?: return@runCatching emptyList<HttpResolvedStream>()
         val decrypted = postJson(
             url = "https://enc-dec.app/api/dec-cloudnestra",
             body = """{"text":${gson.toJson(divMatch.groupValues[2])},"div_id":${gson.toJson(divMatch.groupValues[1])}}"""
@@ -733,7 +728,7 @@ class HttpLocalScraperRuntime @Inject constructor(
     }
 
     private suspend fun resolveTmdbId(imdbId: String, mediaType: String): Int? {
-        val clean = imdbId.trim().takeIf { it.matches(Regex("tt\\d{5,}")) } ?: return null
+        val clean = imdbId.trim().takeIf { it.matches(IMDB_ID_REGEX) } ?: return null
         val key = "$mediaType:$clean"
         synchronized(tmdbIdCache) {
             if (tmdbIdCache.containsKey(key)) return tmdbIdCache[key]
@@ -897,7 +892,7 @@ class HttpLocalScraperRuntime @Inject constructor(
     private fun qualityFromText(value: String): String = normalizeQuality(value.ifBlank { "Auto" })
 
     private fun sanitizeProviderLabel(value: String): String {
-        return value.replace(Regex("nu" + "vio", RegexOption.IGNORE_CASE), "HTTP").trim()
+        return value.replace(NUVIO_REGEX, "HTTP").trim()
     }
 
     private fun String.urlEncode(): String = java.net.URLEncoder.encode(this, "UTF-8")
@@ -959,6 +954,14 @@ class HttpLocalScraperRuntime @Inject constructor(
     )
 
     companion object {
+        private val IFRAME_SRC_REGEX = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        private val PRORCP_SRC_REGEX = Regex("""src:\s*['"]([^'"]+)['"]""", RegexOption.IGNORE_CASE)
+        private val DIV_MATCH_REGEX = Regex(
+            """<div id="([^"]+)"[^>]*style=["']display\s*:\s*none;?["'][^>]*>([a-zA-Z0-9:/.,{}\-_=+ ]+)</div>""",
+            RegexOption.IGNORE_CASE
+        )
+        private val IMDB_ID_REGEX = Regex("tt\\d{5,}")
+        private val NUVIO_REGEX = Regex("nu" + "vio", RegexOption.IGNORE_CASE)
         private const val HTTP_LOCAL_MANIFEST_PREFIX = "http.local."
         private const val LEGACY_LOCAL_MANIFEST_PREFIX = "nu" + "vio.local."
         private const val USER_AGENT =

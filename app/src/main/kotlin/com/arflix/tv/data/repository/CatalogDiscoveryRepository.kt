@@ -187,7 +187,7 @@ class CatalogDiscoveryRepository @Inject constructor(
             append(result.description.orEmpty().lowercase())
         }
         val tokens = query.lowercase()
-            .split(Regex("[^a-z0-9]+"))
+            .split(NON_ALPHA_NUM_REGEX)
             .filter { it.length >= 3 }
             .distinct()
         if (tokens.isEmpty()) return 0
@@ -196,5 +196,8 @@ class CatalogDiscoveryRepository @Inject constructor(
             val bodyScore = if (searchable.contains(token)) 1 else 0
             titleScore + bodyScore
         }
+    }
+    private companion object {
+        private val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
     }
 }

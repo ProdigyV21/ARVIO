@@ -50,6 +50,19 @@ class CatalogRepository @Inject constructor(
 ) {
     private companion object {
         private const val ADDON_SOURCE_REF_PREFIX = "addon_catalog|"
+
+        private val TITLE_FROM_META_REGEX = Regex(
+            """<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']""",
+            RegexOption.IGNORE_CASE
+        )
+        private val TITLE_FROM_TAG_REGEX = Regex(
+            """<title>([^<]+)</title>""",
+            RegexOption.IGNORE_CASE
+        )
+        private val TRAKT_URL_REGEX = Regex(
+            """https?://(?:www\.)?trakt\.tv/users/[^"'\s<]+/lists/[^"'\s<]+""",
+            RegexOption.IGNORE_CASE
+        )
     }
 
     private val bundledPreinstalledCatalogsById by lazy(LazyThreadSafetyMode.NONE) {
@@ -814,15 +827,9 @@ class CatalogRepository @Inject constructor(
             }
         }
 
-        val titleFromMeta = Regex(
-            """<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']""",
-            RegexOption.IGNORE_CASE
-        ).find(html)?.groupValues?.getOrNull(1)
+        val titleFromMeta = TITLE_FROM_META_REGEX.find(html)?.groupValues?.getOrNull(1)
 
-        val titleFromTag = Regex(
-            """<title>([^<]+)</title>""",
-            RegexOption.IGNORE_CASE
-        ).find(html)?.groupValues?.getOrNull(1)
+        val titleFromTag = TITLE_FROM_TAG_REGEX.find(html)?.groupValues?.getOrNull(1)
             ?.replace(" - MDBList", "", ignoreCase = true)
 
         val titleFromSlug = extractMdblistSlugTitle(url)
@@ -846,10 +853,7 @@ class CatalogRepository @Inject constructor(
     }
 
     private fun extractTraktUrl(html: String): String? {
-        return Regex(
-            """https?://(?:www\.)?trakt\.tv/users/[^"'\s<]+/lists/[^"'\s<]+""",
-            RegexOption.IGNORE_CASE
-        ).find(html)?.value
+        return TRAKT_URL_REGEX.find(html)?.value
     }
 
     private suspend fun fetchUrl(url: String): String? {
