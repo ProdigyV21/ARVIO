@@ -15,6 +15,7 @@ import com.arflix.tv.util.EpisodePointer
 import com.arflix.tv.util.EpisodeProgressSnapshot
 import com.arflix.tv.util.WatchedEpisodeSnapshot
 import com.arflix.tv.util.Constants
+import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.traktDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -542,7 +543,9 @@ class TraktRepository @Inject constructor(
         try {
             val traktShowId = tmdbToTraktIdCache[showTmdbId]
             syncService.markEpisodeWatched(showTmdbId, season, episode, traktShowId)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            AppLogger.e("TraktRepository", "Failed to mark episode watched", e)
+        }
     }
 
     /**
@@ -558,7 +561,9 @@ class TraktRepository @Inject constructor(
         try {
             val traktShowId = tmdbToTraktIdCache[showTmdbId]
             syncService.markEpisodeWatchedInSupabaseOnly(showTmdbId, season, episode, traktShowId)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            AppLogger.e("TraktRepository", "Failed to mark episode watched in Supabase", e)
+        }
     }
 
     /**
@@ -839,7 +844,9 @@ class TraktRepository @Inject constructor(
                     watchedEpisodesCache.addAll(directKeys)
                     return watchedEpisodesCache.filter { it.startsWith(prefix) }.toSet()
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                AppLogger.e("TraktRepository", "Failed to resolve show TMDB ID to Trakt ID", e)
+            }
 
             return result
         }

@@ -569,7 +569,7 @@ class HomeServerRepository @Inject constructor(
                     gson.fromJson(root, HomeServerProfileConfig::class.java).connections
                 }
                 root.isJsonArray -> {
-                    val type = object : TypeToken<List<HomeServerConnection>>() {}.type
+                    val type = TypeToken.getParameterized(List::class.java, HomeServerConnection::class.java).type
                     gson.fromJson<List<HomeServerConnection>>(root, type)
                 }
                 root.isJsonObject -> listOf(gson.fromJson(root, HomeServerConnection::class.java))

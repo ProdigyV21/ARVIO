@@ -81,7 +81,7 @@ class CatalogRepository @Inject constructor(
     private fun hiddenHomeServerKey(profileId: String) = stringPreferencesKey("profile_${profileId}_hidden_home_server_catalogs_v1")
     private val legacyDefaultKey = stringPreferencesKey("profile_default_catalogs_v1")
     private val legacyGlobalKey = stringPreferencesKey("catalogs_v1")
-    private val listType = object : TypeToken<List<CatalogConfig>>() {}.type
+    private val listType = TypeToken.getParameterized(List::class.java, CatalogConfig::class.java).type
     private val hiddenListType = TypeToken.getParameterized(List::class.java, String::class.java).type
 
     private fun decodeHiddenPreinstalled(profileId: String, prefs: Preferences): Set<String> {
@@ -997,7 +997,7 @@ class CatalogRepository @Inject constructor(
         // Legacy/compat parse: recover from older/partial enum values so existing
         // custom catalogs don't disappear after app updates.
         return runCatching {
-            val rawType = object : TypeToken<List<Map<String, Any?>>>() {}.type
+            val rawType = TypeToken.getParameterized(List::class.java, TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type).type
             val rawList = gson.fromJson<List<Map<String, Any?>>>(json, rawType).orEmpty()
             rawList.mapNotNull { row ->
                 val id = (row["id"] as? String)?.trim().orEmpty()
@@ -1024,7 +1024,7 @@ class CatalogRepository @Inject constructor(
                     val jsonValue = gson.toJson(row["collectionSources"])
                     gson.fromJson<List<CollectionSourceConfig>>(
                         jsonValue,
-                        object : TypeToken<List<CollectionSourceConfig>>() {}.type
+                        TypeToken.getParameterized(List::class.java, CollectionSourceConfig::class.java).type
                     ) ?: emptyList()
                 }.getOrDefault(emptyList())
                 val requiredAddonUrls = runCatching {
