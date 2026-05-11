@@ -49,23 +49,6 @@ class CatalogRepository @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val invalidationBus: CloudSyncInvalidationBus
 ) {
-    private companion object {
-        private const val ADDON_SOURCE_REF_PREFIX = "addon_catalog|"
-
-        private val TITLE_FROM_META_REGEX = Regex(
-            """<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']""",
-            RegexOption.IGNORE_CASE
-        )
-        private val TITLE_FROM_TAG_REGEX = Regex(
-            """<title>([^<]+)</title>""",
-            RegexOption.IGNORE_CASE
-        )
-        private val TRAKT_URL_REGEX = Regex(
-            """https?://(?:www\.)?trakt\.tv/users/[^"'\s<]+/lists/[^"'\s<]+""",
-            RegexOption.IGNORE_CASE
-        )
-    }
-
     private val bundledPreinstalledCatalogsById by lazy(LazyThreadSafetyMode.NONE) {
         MediaRepository.buildPreinstalledDefaults().associateBy { it.id }
     }
@@ -1255,6 +1238,23 @@ class CatalogRepository @Inject constructor(
 
     private fun asTrimmedString(value: Any?): String? {
         return (value as? String)?.trim().takeUnless { it.isNullOrBlank() }
+    }
+
+    private companion object {
+        private const val ADDON_SOURCE_REF_PREFIX = "addon_catalog|"
+
+        private val TITLE_FROM_META_REGEX = Regex(
+            """<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']""",
+            RegexOption.IGNORE_CASE
+        )
+        private val TITLE_FROM_TAG_REGEX = Regex(
+            """<title>([^<]+)</title>""",
+            RegexOption.IGNORE_CASE
+        )
+        private val TRAKT_URL_REGEX = Regex(
+            """https?://(?:www\.)?trakt\.tv/users/[^"'\s<]+/lists/[^"'\s<]+""",
+            RegexOption.IGNORE_CASE
+        )
     }
 }
 
