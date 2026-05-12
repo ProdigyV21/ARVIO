@@ -375,15 +375,7 @@ class IptvRepository @Inject constructor(
                         parsed.encodedPath.endsWith("/player_api.php")
                     )
             ) {
-                val username = parsed.queryParameter("username")?.trim()?.ifBlank { null }
-                    ?: parsed.queryParameter("user")?.trim()?.ifBlank { null }
-                    ?: parsed.queryParameter("uname")?.trim()?.ifBlank { null }
-                    ?: ""
-                val password = parsed.queryParameter("password")?.trim()?.ifBlank { null }
-                    ?: parsed.queryParameter("pass")?.trim()?.ifBlank { null }
-                    ?: parsed.queryParameter("pwd")?.trim()?.ifBlank { null }
-                    ?: ""
-                if (username.isNotBlank() && password.isNotBlank()) {
+                extractXtreamCredentialsFromUrl(parsed)?.let { (username, password) ->
                     val base = parsed.toXtreamBaseUrl()
                     return buildXtreamM3uUrl(base, username, password)
                 }
@@ -444,15 +436,7 @@ class IptvRepository @Inject constructor(
                     parsed.encodedPath.endsWith("/get.php") ||
                     parsed.encodedPath.endsWith("/player_api.php")
                 if (isXtreamPath) {
-                    val username = parsed.queryParameter("username")?.trim()?.ifBlank { null }
-                        ?: parsed.queryParameter("user")?.trim()?.ifBlank { null }
-                        ?: parsed.queryParameter("uname")?.trim()?.ifBlank { null }
-                        ?: ""
-                    val password = parsed.queryParameter("password")?.trim()?.ifBlank { null }
-                        ?: parsed.queryParameter("pass")?.trim()?.ifBlank { null }
-                        ?: parsed.queryParameter("pwd")?.trim()?.ifBlank { null }
-                        ?: ""
-                    if (username.isNotBlank() && password.isNotBlank()) {
+                    extractXtreamCredentialsFromUrl(parsed)?.let { (username, password) ->
                         val base = parsed.toXtreamBaseUrl()
                         return buildXtreamEpgUrl(base, username, password)
                     }
@@ -486,6 +470,21 @@ class IptvRepository @Inject constructor(
         return trimmed
     }
 
+    private fun extractXtreamCredentialsFromUrl(parsed: okhttp3.HttpUrl): Pair<String, String>? {
+        val username = parsed.queryParameter("username")?.trim()?.ifBlank { null }
+            ?: parsed.queryParameter("user")?.trim()?.ifBlank { null }
+            ?: parsed.queryParameter("uname")?.trim()?.ifBlank { null }
+            ?: ""
+        val password = parsed.queryParameter("password")?.trim()?.ifBlank { null }
+            ?: parsed.queryParameter("pass")?.trim()?.ifBlank { null }
+            ?: parsed.queryParameter("pwd")?.trim()?.ifBlank { null }
+            ?: ""
+        if (username.isNotBlank() && password.isNotBlank()) {
+            return Pair(username, password)
+        }
+        return null
+    }
+
     private data class XtreamTriplet(
         val host: String,
         val username: String,
@@ -496,9 +495,12 @@ class IptvRepository @Inject constructor(
         // Multi-line: host\nuser\npass.
         val partsByLine = raw
             .split('\n', '\r')
+            .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
-        if (partsByLine.size >= 3) {
+            .take(3)
+            .toList()
+        if (partsByLine.size == 3) {
             return XtreamTriplet(
                 host = partsByLine[0],
                 username = partsByLine[1],
@@ -509,9 +511,12 @@ class IptvRepository @Inject constructor(
         // Space-separated: host user pass.
         val partsBySpace = raw
             .split(MULTI_SPACE_REGEX)
+            .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
-        if (partsBySpace.size >= 3) {
+            .take(3)
+            .toList()
+        if (partsBySpace.size == 3) {
             return XtreamTriplet(
                 host = partsBySpace[0],
                 username = partsBySpace[1],
@@ -1211,28 +1216,35 @@ class IptvRepository @Inject constructor(
         val result = mutableMapOf<String, IptvNowNext>()
         for (channelId in channelIds) {
             val existing = cached[channelId] ?: continue
-            // Collect all known programs from the cached entry
-            val allPrograms = buildList {
-                existing.now?.let { add(it) }
-                existing.next?.let { add(it) }
-                existing.later?.let { add(it) }
-                addAll(existing.upcoming)
-                addAll(existing.recent)
-            }.sortedBy { it.startUtcMillis }
+            // Collect all known programs from the cached entry efficiently
+            val allPrograms = java.util.ArrayList<IptvProgram>(
+                (if (existing.now != null) 1 else 0) +
+                    (if (existing.next != null) 1 else 0) +
+                    (if (existing.later != null) 1 else 0) +
+                    existing.upcoming.size +
+                    existing.recent.size
+            )
+            existing.now?.let { allPrograms.add(it) }
+            existing.next?.let { allPrograms.add(it) }
+            existing.later?.let { allPrograms.add(it) }
+            allPrograms.addAll(existing.upcoming)
+            allPrograms.addAll(existing.recent)
+            allPrograms.sortBy { it.startUtcMillis }
 
             var now: IptvProgram? = null
             var next: IptvProgram? = null
             var later: IptvProgram? = null
-            val upcoming = mutableListOf<IptvProgram>()
-            val recent = mutableListOf<IptvProgram>()
+            val upcoming = java.util.ArrayList<IptvProgram>(epgUpcomingProgramLimit)
+            val recent = java.util.ArrayList<IptvProgram>()
 
-            for (p in allPrograms) {
+            for (i in 0 until allPrograms.size) {
+                val p = allPrograms[i]
                 when {
                     p.endUtcMillis <= nowMs && p.endUtcMillis > recentCutoff -> recent.add(p)
                     p.isLive(nowMs) -> now = p
                     p.startUtcMillis > nowMs && next == null -> next = p
                     p.startUtcMillis > nowMs && later == null -> later = p
-                    p.startUtcMillis > nowMs -> upcoming.add(p)
+                    p.startUtcMillis > nowMs && upcoming.size < epgUpcomingProgramLimit -> upcoming.add(p)
                 }
             }
 
@@ -1240,7 +1252,7 @@ class IptvRepository @Inject constructor(
                 now = now,
                 next = next,
                 later = later,
-                upcoming = upcoming.take(epgUpcomingProgramLimit),
+                upcoming = upcoming,
                 recent = recent
             )
         }
