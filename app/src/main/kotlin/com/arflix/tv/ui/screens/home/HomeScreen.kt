@@ -185,17 +185,21 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.res.stringResource
 
-private val overviewHtmlTagRegex = Regex("<[^>]*>")
-private val overviewNonBreakingSpaceRegex = Regex("[\\u00A0\\u2007\\u202F]")
-private val overviewUnicodeSpaceRegex = Regex("\\p{Z}+")
-private val overviewWhitespaceRegex = Regex("\\s+")
+
+
+private object HomeRegexes {
+    val HTML_TAG = Regex("<[^>]*>")
+    val NON_BREAKING_SPACE = Regex("[\u00A0\u2007\u202F]")
+    val UNICODE_SPACE = Regex("\\p{Z}+")
+    val WHITESPACE = Regex("\\s+")
+}
 
 private fun cleanOverviewText(value: String): String {
     return value
-        .replace(overviewHtmlTagRegex, " ")
-        .replace(overviewNonBreakingSpaceRegex, " ")
-        .replace(overviewUnicodeSpaceRegex, " ")
-        .replace(overviewWhitespaceRegex, " ")
+        .replace(HomeRegexes.HTML_TAG, " ")
+        .replace(HomeRegexes.NON_BREAKING_SPACE, " ")
+        .replace(HomeRegexes.UNICODE_SPACE, " ")
+        .replace(HomeRegexes.WHITESPACE, " ")
         .trim()
         .ifBlank { "No description available." }
 }

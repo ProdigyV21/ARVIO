@@ -704,22 +704,33 @@ private data class SourcePresentation(
     val sortDirect: Boolean
 )
 
-private val AV1_REGEX = Regex("""\bAV1\b""", RegexOption.IGNORE_CASE)
-private val HEVC_REGEX = Regex("""\b(HEVC|X265|H265)\b""", RegexOption.IGNORE_CASE)
-private val H264_REGEX = Regex("""\b(H264|X264|AVC)\b""", RegexOption.IGNORE_CASE)
-private val REMUX_REGEX = Regex("""\bREMUX\b""", RegexOption.IGNORE_CASE)
-private val BLURAY_REGEX = Regex("""\b(BLURAY|BDRIP|BDREMUX)\b""", RegexOption.IGNORE_CASE)
-private val WEBDL_REGEX = Regex("""\b(WEB[- .]?DL|WEBDL)\b""", RegexOption.IGNORE_CASE)
-private val WEBRIP_REGEX = Regex("""\bWEB[- .]?RIP\b""", RegexOption.IGNORE_CASE)
-private val HDTV_REGEX = Regex("""\bHDTV\b""", RegexOption.IGNORE_CASE)
-private val CAM_REGEX = Regex("""\b(CAM|TS|TELESYNC|HDCAM)\b""", RegexOption.IGNORE_CASE)
-private val ATMOS_REGEX = Regex("""\bATMOS\b""", RegexOption.IGNORE_CASE)
-private val TRUEHD_REGEX = Regex("""\bTRUEHD\b""", RegexOption.IGNORE_CASE)
-private val DTS_REGEX = Regex("""\b(DTS[- .]?HD|DTS|DDP|EAC3|AC3|AAC)\b""", RegexOption.IGNORE_CASE)
-private val CH71_REGEX = Regex("""\b7[ .]?1\b""", RegexOption.IGNORE_CASE)
-private val CH51_REGEX = Regex("""\b5[ .]?1\b""", RegexOption.IGNORE_CASE)
-private val MULTI_AUDIO_REGEX = Regex("""\b(MULTI|DUAL[ .-]?AUDIO|MULTI[ .-]?AUDIO)\b""", RegexOption.IGNORE_CASE)
-private val LANGUAGE_HINT_REGEX = Regex("""\b(ENG|ENGLISH|HIN|HINDI|TAM|TAMIL|TEL|TELUGU|JPN|JAPANESE|KOR|KOREAN|SPA|SPANISH|FRE|FRENCH|GER|GERMAN|ITA|ITALIAN)\b""", RegexOption.IGNORE_CASE)
+
+
+private object StreamRegexes {
+    val AV1 = Regex("""\bAV1\b""", RegexOption.IGNORE_CASE)
+    val HEVC = Regex("""\b(HEVC|X265|H265)\b""", RegexOption.IGNORE_CASE)
+    val H264 = Regex("""\b(H264|X264|AVC)\b""", RegexOption.IGNORE_CASE)
+    val REMUX = Regex("""\bREMUX\b""", RegexOption.IGNORE_CASE)
+    val BLURAY = Regex("""\b(BLURAY|BDRIP|BDREMUX)\b""", RegexOption.IGNORE_CASE)
+    val WEBDL = Regex("""\b(WEB[- .]?DL|WEBDL)\b""", RegexOption.IGNORE_CASE)
+    val WEBRIP = Regex("""\bWEB[- .]?RIP\b""", RegexOption.IGNORE_CASE)
+    val HDTV = Regex("""\bHDTV\b""", RegexOption.IGNORE_CASE)
+    val CAM = Regex("""\b(CAM|TS|TELESYNC|HDCAM)\b""", RegexOption.IGNORE_CASE)
+    val ATMOS = Regex("""\bATMOS\b""", RegexOption.IGNORE_CASE)
+    val TRUEHD = Regex("""\bTRUEHD\b""", RegexOption.IGNORE_CASE)
+    val DTS = Regex("""\b(DTS[- .]?HD|DTS|DDP|EAC3|AC3|AAC)\b""", RegexOption.IGNORE_CASE)
+    val CH71 = Regex("""\b7[ .]?1\b""", RegexOption.IGNORE_CASE)
+    val CH51 = Regex("""\b5[ .]?1\b""", RegexOption.IGNORE_CASE)
+    val MULTI_AUDIO = Regex("""\b(MULTI|DUAL[ .-]?AUDIO|MULTI[ .-]?AUDIO)\b""", RegexOption.IGNORE_CASE)
+    val LANGUAGE_HINT = Regex("""\b(ENG|ENGLISH|HIN|HINDI|TAM|TAMIL|TEL|TELUGU|JPN|JAPANESE|KOR|KOREAN|SPA|SPANISH|FRE|FRENCH|GER|GERMAN|ITA|ITALIAN)\b""", RegexOption.IGNORE_CASE)
+    val DV = Regex("""\b(DV|DoVi|Dolby[\s._-]*Vision)\b""", RegexOption.IGNORE_CASE)
+    val HDR = Regex("""\bHDR(10\+?|10)?\b""", RegexOption.IGNORE_CASE)
+    val IMAX = Regex("""\bIMAX\b""", RegexOption.IGNORE_CASE)
+    val WHITESPACE = Regex("""\s+""")
+    val SIZE_PATTERN_1 = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
+    val SIZE_PATTERN_2 = Regex("""(\d+(?:\.\d+)?)\s*(TIB|GIB|MIB|KIB)""")
+    val SIZE_PATTERN_3 = Regex("""^(\d+(?:\.\d+)?)$""")
+}
 
 private fun sourceTabId(stream: StreamSource): String {
     val baseName = stream.addonName.split(" - ").firstOrNull()?.trim() ?: stream.addonName
@@ -745,7 +756,7 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
         searchBlob.contains("2160p", true) || searchBlob.contains("4K", true) -> "4K"
         searchBlob.contains("1080p", true) -> "1080p"
         searchBlob.contains("720p", true) -> "720p"
-        CAM_REGEX.containsMatchIn(searchBlob) -> "CAM"
+        StreamRegexes.CAM.containsMatchIn(searchBlob) -> "CAM"
         else -> stream.quality.split(" ").firstOrNull()?.take(8) ?: "SD"
     }
     val resolutionScore = when (resolutionLabel) {
@@ -764,12 +775,12 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
     }
 
     val releaseLabel = when {
-        REMUX_REGEX.containsMatchIn(searchBlob) -> "REMUX"
-        BLURAY_REGEX.containsMatchIn(searchBlob) -> "BluRay"
-        WEBDL_REGEX.containsMatchIn(searchBlob) -> "WEB-DL"
-        WEBRIP_REGEX.containsMatchIn(searchBlob) -> "WEBRip"
-        HDTV_REGEX.containsMatchIn(searchBlob) -> "HDTV"
-        CAM_REGEX.containsMatchIn(searchBlob) -> "CAM"
+        StreamRegexes.REMUX.containsMatchIn(searchBlob) -> "REMUX"
+        StreamRegexes.BLURAY.containsMatchIn(searchBlob) -> "BluRay"
+        StreamRegexes.WEBDL.containsMatchIn(searchBlob) -> "WEB-DL"
+        StreamRegexes.WEBRIP.containsMatchIn(searchBlob) -> "WEBRip"
+        StreamRegexes.HDTV.containsMatchIn(searchBlob) -> "HDTV"
+        StreamRegexes.CAM.containsMatchIn(searchBlob) -> "CAM"
         else -> null
     }
     val releaseScore = when (releaseLabel) {
@@ -782,18 +793,18 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
     }
 
     val codecLabel = when {
-        AV1_REGEX.containsMatchIn(searchBlob) -> "AV1"
-        HEVC_REGEX.containsMatchIn(searchBlob) -> "HEVC"
-        H264_REGEX.containsMatchIn(searchBlob) -> "H.264"
+        StreamRegexes.AV1.containsMatchIn(searchBlob) -> "AV1"
+        StreamRegexes.HEVC.containsMatchIn(searchBlob) -> "HEVC"
+        StreamRegexes.H264.containsMatchIn(searchBlob) -> "H.264"
         else -> null
     }
 
     val audioLabel = when {
-        ATMOS_REGEX.containsMatchIn(searchBlob) -> "Atmos"
-        TRUEHD_REGEX.containsMatchIn(searchBlob) -> "TrueHD"
-        CH71_REGEX.containsMatchIn(searchBlob) -> "7.1"
-        CH51_REGEX.containsMatchIn(searchBlob) -> "5.1"
-        DTS_REGEX.containsMatchIn(searchBlob) -> DTS_REGEX.find(searchBlob)?.value?.uppercase()
+        StreamRegexes.ATMOS.containsMatchIn(searchBlob) -> "Atmos"
+        StreamRegexes.TRUEHD.containsMatchIn(searchBlob) -> "TrueHD"
+        StreamRegexes.CH71.containsMatchIn(searchBlob) -> "7.1"
+        StreamRegexes.CH51.containsMatchIn(searchBlob) -> "5.1"
+        StreamRegexes.DTS.containsMatchIn(searchBlob) -> StreamRegexes.DTS.find(searchBlob)?.value?.uppercase()
         else -> null
     }
 
@@ -831,10 +842,10 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
         sub.lang.takeIf { it.isNotBlank() }
     }.distinct()
     val languageLabel = when {
-        MULTI_AUDIO_REGEX.containsMatchIn(searchBlob) -> "Multi-audio"
+        StreamRegexes.MULTI_AUDIO.containsMatchIn(searchBlob) -> "Multi-audio"
         subtitleLangs.size > 1 -> "${subtitleLangs.size} langs"
         subtitleLangs.size == 1 -> subtitleLangs.first().uppercase()
-        else -> LANGUAGE_HINT_REGEX.find(searchBlob)?.value?.uppercase()
+        else -> StreamRegexes.LANGUAGE_HINT.find(searchBlob)?.value?.uppercase()
     }
 
     val chips = buildList {
@@ -844,9 +855,9 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
         languageLabel?.let(::add)
         releaseLabel?.let(::add)
         codecLabel?.let(::add)
-        if (HDR_REGEX.containsMatchIn(searchBlob)) add("HDR")
-        if (DV_REGEX.containsMatchIn(searchBlob)) add("DV")
-        if (IMAX_REGEX.containsMatchIn(searchBlob)) add("IMAX")
+        if (StreamRegexes.HDR.containsMatchIn(searchBlob)) add("HDR")
+        if (StreamRegexes.DV.containsMatchIn(searchBlob)) add("DV")
+        if (StreamRegexes.IMAX.containsMatchIn(searchBlob)) add("IMAX")
         audioLabel?.let(::add)
         if (stream.size.isNotBlank()) add(stream.size)
     }
@@ -1192,9 +1203,6 @@ private fun FilterTab(
 // Pre-compiled badge detection regexes. All use word boundaries to avoid matching
 // "DV" inside "DVD" or "HDVD" (the long-standing bug that made the DV badge appear
 // on SD DVDrip sources). IMAX detection was missing entirely before issue #118.
-private val DV_REGEX = Regex("""\b(DV|DoVi|Dolby[\s._-]*Vision)\b""", RegexOption.IGNORE_CASE)
-private val HDR_REGEX = Regex("""\bHDR(10\+?|10)?\b""", RegexOption.IGNORE_CASE)
-private val IMAX_REGEX = Regex("""\bIMAX\b""", RegexOption.IGNORE_CASE)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -1214,9 +1222,9 @@ private fun CompactQualityBadge(stream: StreamSource) {
     val is4K = quality.contains("4K", ignoreCase = true) || quality.contains("2160p")
     val is1080 = quality.contains("1080p")
     val is720 = quality.contains("720p")
-    val isHDR = HDR_REGEX.containsMatchIn(searchBlob)
-    val isDV = DV_REGEX.containsMatchIn(searchBlob)
-    val isIMAX = IMAX_REGEX.containsMatchIn(searchBlob)
+    val isHDR = StreamRegexes.HDR.containsMatchIn(searchBlob)
+    val isDV = StreamRegexes.DV.containsMatchIn(searchBlob)
+    val isIMAX = StreamRegexes.IMAX.containsMatchIn(searchBlob)
 
     val displayText = when {
         is4K -> "4K"
@@ -1320,13 +1328,13 @@ private fun parseSizeString(sizeStr: String): Long {
     // Normalize: uppercase, replace comma with dot, remove extra spaces
     val normalized = sizeStr.uppercase()
         .replace(",", ".")
-        .replace(Regex("\\s+"), " ")
+        .replace(StreamRegexes.WHITESPACE, " ")
         .trim()
 
     // Try multiple regex patterns to catch all formats
 
     // Pattern 1: "15.2 GB", "6GB", "1.5 TB" etc.
-    val pattern1 = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
+    val pattern1 = StreamRegexes.SIZE_PATTERN_1
     pattern1.find(normalized)?.let { match ->
         val number = match.groupValues[1].toDoubleOrNull() ?: return@let
         val unit = match.groupValues[2]
@@ -1334,7 +1342,7 @@ private fun parseSizeString(sizeStr: String): Long {
     }
 
     // Pattern 2: Numbers with GiB/MiB notation
-    val pattern2 = Regex("""(\d+(?:\.\d+)?)\s*(TIB|GIB|MIB|KIB)""")
+    val pattern2 = StreamRegexes.SIZE_PATTERN_2
     pattern2.find(normalized)?.let { match ->
         val number = match.groupValues[1].toDoubleOrNull() ?: return@let
         val unit = match.groupValues[2].replace("IB", "B") // Convert TIB->TB, GIB->GB etc.
@@ -1342,7 +1350,7 @@ private fun parseSizeString(sizeStr: String): Long {
     }
 
     // Pattern 3: Just a number (assume bytes) - very rare
-    val pattern3 = Regex("""^(\d+(?:\.\d+)?)$""")
+    val pattern3 = StreamRegexes.SIZE_PATTERN_3
     pattern3.find(normalized)?.let { match ->
         return match.groupValues[1].toLongOrNull() ?: 0L
     }
