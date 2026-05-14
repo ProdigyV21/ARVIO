@@ -7,6 +7,8 @@ import android.content.pm.PackageInstaller
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * Handles PackageInstaller session callbacks for the in-app APK updater.
@@ -19,7 +21,11 @@ import android.widget.Toast
  * hangs forever and no install ever happens — which is exactly what was reported in
  * issues #116, #99, and #75 for versions 1.9.3 through 1.9.73.
  */
+@AndroidEntryPoint
 class ApkInstallReceiver : BroadcastReceiver() {
+
+    @Inject
+    lateinit var updateStatusManager: UpdateStatusManager
 
     override fun onReceive(context: Context, intent: Intent) {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999)
@@ -48,6 +54,10 @@ class ApkInstallReceiver : BroadcastReceiver() {
 
                 try {
                     context.startActivity(confirmIntent)
+                    // We are waiting for the user to confirm in the system UI
+                    updateStatusManager.updateStatus(
+                        UpdateStatus.Installing(AppUpdate("", "", "", "", "", "")) // We don't have the full AppUpdate object here, but the status type indicates what's happening
+                    )
                 } catch (e: Exception) {
                     // Some Android TV forks (particularly Chinese AOSP variants) don't
                     // handle the system confirm intent correctly. Log but don't crash.
@@ -58,6 +68,7 @@ class ApkInstallReceiver : BroadcastReceiver() {
 
             PackageInstaller.STATUS_SUCCESS -> {
                 Log.i(TAG, "Update installed successfully.")
+                updateStatusManager.updateStatus(UpdateStatus.Success)
                 // No toast needed — the new APK is installing/replacing the running process.
             }
 
@@ -78,6 +89,7 @@ class ApkInstallReceiver : BroadcastReceiver() {
                     PackageInstaller.STATUS_FAILURE_STORAGE -> "Not enough storage to install update."
                     else -> message ?: "Update install failed."
                 }
+                updateStatusManager.updateStatus(UpdateStatus.Failure(userMessage))
                 showToast(context, userMessage)
             }
 

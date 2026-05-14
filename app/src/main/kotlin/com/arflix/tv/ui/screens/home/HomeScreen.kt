@@ -1214,6 +1214,17 @@ fun HomeScreen(
                 onDismiss = { viewModel.dismissToast() }
             )
         }
+
+        // App Update Modal
+        if (uiState.showAppUpdateDialog) {
+            com.arflix.tv.ui.components.AppUpdateModal(
+                status = uiState.updateStatus,
+                onDownload = { viewModel.downloadAppUpdate() },
+                onInstall = { viewModel.installAppUpdateOrRequestPermission() },
+                onDismiss = { viewModel.dismissAppUpdateDialog() },
+                onIgnore = { viewModel.ignoreAppUpdate() }
+            )
+        }
     }
 }
 
@@ -2505,7 +2516,8 @@ private fun HomeInputLayer(
                 focusedIndex = focusState.sidebarFocusIndex,
                 profile = currentProfile,
                 profileCount = profileCount,
-                clockFormat = clockFormat
+                clockFormat = clockFormat,
+                hasUpdateBadge = uiState.hasUpdateBadge
             )
         }
 

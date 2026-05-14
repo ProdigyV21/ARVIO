@@ -93,7 +93,11 @@ data class HomeUiState(
     val syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     // Toast
     val toastMessage: String? = null,
-    val toastType: ToastType = ToastType.INFO
+    val toastType: ToastType = ToastType.INFO,
+    // App Updates
+    val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
+    val showAppUpdateDialog: Boolean = false,
+    val hasUpdateBadge: Boolean = false
 )
 
 data class HomeCollectionRow(
@@ -122,6 +126,10 @@ class HomeViewModel @Inject constructor(
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val realtimeSyncManager: com.arflix.tv.data.repository.RealtimeSyncManager,
     private val profileManager: ProfileManager,
+    private val appUpdateRepository: com.arflix.tv.updater.AppUpdateRepository,
+    private val apkDownloader: com.arflix.tv.updater.ApkDownloader,
+    private val updatePreferences: com.arflix.tv.updater.UpdatePreferences,
+    private val updateStatusManager: com.arflix.tv.updater.UpdateStatusManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val imageLoader: ImageLoader by lazy(LazyThreadSafetyMode.NONE) {
@@ -1331,6 +1339,36 @@ class HomeViewModel @Inject constructor(
                     // Apply catalog reorder/add/remove immediately on Home.
                     loadHomeData()
                 }
+        }
+
+        // Observe global update status to drive UI
+        viewModelScope.launch {
+            updateStatusManager.status.collect { status ->
+                // Dialog is open when we have an update or are downloading/installing/erroring
+                val showDialog = status !is com.arflix.tv.updater.UpdateStatus.Idle && status !is com.arflix.tv.updater.UpdateStatus.Checking && status !is com.arflix.tv.updater.UpdateStatus.Success
+                val hasBadge = status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable || status is com.arflix.tv.updater.UpdateStatus.ReadyToInstall || status is com.arflix.tv.updater.UpdateStatus.Downloading
+                
+                // If it's a new update, check if it was ignored
+                var shouldShowNow = showDialog
+                if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
+                    val ignoredTag = updatePreferences.ignoredTag.first()
+                    if (ignoredTag == status.update.tag) {
+                        shouldShowNow = false // User ignored this version
+                    }
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    updateStatus = status,
+                    showAppUpdateDialog = shouldShowNow,
+                    hasUpdateBadge = hasBadge && shouldShowNow
+                )
+            }
+        }
+
+        // Check for updates shortly after startup
+        viewModelScope.launch {
+            delay(if (isLowRamDevice) 15_000L else 10_000L)
+            checkForAppUpdates(silent = true)
         }
     }
 
@@ -3848,6 +3886,131 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    // --- App Update Methods ---
+
+    fun checkForAppUpdates(silent: Boolean = false) {
+        if (!appUpdateRepository.supportsSelfUpdate()) return
+
+        viewModelScope.launch {
+            if (!silent) {
+                updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Checking)
+            }
+            
+            val result = appUpdateRepository.getLatestUpdate()
+            result.onSuccess { update ->
+                val localVer = appUpdateRepository.getInstalledVersionName()
+                val isNewer = com.arflix.tv.updater.VersionUtils.isRemoteNewer(update.tag, localVer)
+
+                if (isNewer) {
+                    updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.UpdateAvailable(update))
+                } else {
+                    if (!silent) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = "You already have the latest version",
+                            toastType = ToastType.INFO
+                        )
+                    }
+                    updateStatusManager.reset()
+                }
+            }.onFailure { error ->
+                if (!silent) {
+                    _uiState.value = _uiState.value.copy(
+                        toastMessage = error.message ?: "Failed to check for updates",
+                        toastType = ToastType.ERROR
+                    )
+                }
+                updateStatusManager.reset()
+            }
+        }
+    }
+
+    fun downloadAppUpdate() {
+        val currentStatus = updateStatusManager.status.value
+        val update = when (currentStatus) {
+            is com.arflix.tv.updater.UpdateStatus.UpdateAvailable -> currentStatus.update
+            is com.arflix.tv.updater.UpdateStatus.Failure -> currentStatus.update
+            else -> return
+        } ?: return
+
+        if (!appUpdateRepository.supportsSelfUpdate()) return
+
+        viewModelScope.launch {
+            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(0f, update))
+
+            val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val dest = java.io.File(java.io.File(context.cacheDir, "updates"), safeName)
+            
+            val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                apkDownloader.download(update.assetUrl, dest) { downloaded, total ->
+                    val progress = if (total != null && total > 0L) {
+                        (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                    } else null
+                    
+                    updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(progress, update))
+                }
+            }
+
+            result.onSuccess { file ->
+                updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.ReadyToInstall(file.absolutePath, update))
+                // Automatically prompt install once downloaded
+                installAppUpdateOrRequestPermission()
+            }.onFailure { error ->
+                updateStatusManager.updateStatus(
+                    com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: "Download failed", update)
+                )
+            }
+        }
+    }
+
+    fun installAppUpdateOrRequestPermission() {
+        val currentStatus = updateStatusManager.status.value
+        if (currentStatus !is com.arflix.tv.updater.UpdateStatus.ReadyToInstall && currentStatus !is com.arflix.tv.updater.UpdateStatus.Failure) return
+        
+        val apkPath = if (currentStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) currentStatus.apkPath else return
+        val update = currentStatus.update
+        val apkFile = java.io.File(apkPath)
+
+        if (!apkFile.exists()) {
+            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Failure("Downloaded file is missing", update))
+            return
+        }
+
+        if (!com.arflix.tv.updater.ApkInstaller.canRequestPackageInstalls(context)) {
+            // If we can't request package installs, we should let the user know, but for now
+            // launchInstall handles falling back to Intent.ACTION_VIEW
+        }
+
+        val conflictMsg = com.arflix.tv.updater.ApkInstaller.checkSignatureConflict(context, apkFile)
+        if (conflictMsg != null) {
+            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Failure(conflictMsg, update))
+            return
+        }
+
+        com.arflix.tv.updater.ApkInstaller.launchInstall(context, apkFile)
+        updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Installing(update))
+
+        // Mark this release as ignored so it doesn't pop up again if the user cancels the install
+        viewModelScope.launch {
+            updatePreferences.setIgnoredTag(update.tag)
+        }
+    }
+
+    fun dismissAppUpdateDialog() {
+        _uiState.value = _uiState.value.copy(showAppUpdateDialog = false)
+        // We do not reset updateStatusManager here, so the badge remains active
+    }
+
+    fun ignoreAppUpdate() {
+        val currentStatus = updateStatusManager.status.value
+        if (currentStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
+            viewModelScope.launch {
+                updatePreferences.setIgnoredTag(currentStatus.update.tag)
+            }
+        }
+        _uiState.value = _uiState.value.copy(showAppUpdateDialog = false, hasUpdateBadge = false)
+        updateStatusManager.reset()
     }
 }
 

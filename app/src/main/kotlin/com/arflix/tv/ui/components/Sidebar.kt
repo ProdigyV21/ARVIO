@@ -71,6 +71,7 @@ fun Sidebar(
     isSidebarFocused: Boolean = false,
     focusedIndex: Int = 1,
     profile: Profile? = null,
+    hasUpdateBadge: Boolean = false,
     onProfileClick: () -> Unit = {},
     onItemSelected: (SidebarItem) -> Unit = {},
     modifier: Modifier = Modifier
@@ -136,6 +137,7 @@ fun Sidebar(
                 item = bottomItem,
                 isSelected = bottomItem == selectedItem,
                 isFocused = isSidebarFocused && settingsFocused,
+                hasBadge = hasUpdateBadge
             )
             Spacer(modifier = Modifier.height(7.dp))
         }
@@ -207,6 +209,7 @@ private fun SidebarIcon(
     item: SidebarItem,
     isSelected: Boolean,
     isFocused: Boolean,
+    hasBadge: Boolean = false
 ) {
     // Animated icon color - dark grey normally, pure white when focused
     val iconColor by animateColorAsState(
@@ -291,6 +294,18 @@ private fun SidebarIcon(
                         scaleY = scale
                     }
             )
+
+            // Update Badge
+            if (hasBadge) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-4).dp, y = 4.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(com.arflix.tv.ui.theme.AccentRed)
+                )
+            }
         }
     }
 }

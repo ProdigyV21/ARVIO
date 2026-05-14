@@ -96,6 +96,7 @@ fun AppTopBar(
     profileCount: Int = 1,
     clockFormat: String = "24h",
     syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
+    hasUpdateBadge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // Always show the profile avatar when a profile exists — it's clickable
@@ -169,7 +170,8 @@ fun AppTopBar(
                 // Settings gear icon (no text label)
                 TopBarSettingsGear(
                     isFocused = settingsFocused,
-                    isSelected = settingsSelected
+                    isSelected = settingsSelected,
+                    hasBadge = hasUpdateBadge
                 )
 
                 Text(
@@ -264,7 +266,8 @@ private fun TopBarNavChip(
 @Composable
 private fun TopBarSettingsGear(
     isFocused: Boolean,
-    isSelected: Boolean
+    isSelected: Boolean,
+    hasBadge: Boolean = false
 ) {
     val iconColor by animateColorAsState(
         targetValue = when {
@@ -307,6 +310,18 @@ private fun TopBarSettingsGear(
             tint = iconColor,
             modifier = Modifier.size(20.dp)
         )
+
+        // Update Badge
+        if (hasBadge) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = (-2).dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(com.arflix.tv.ui.theme.AccentRed)
+            )
+        }
     }
 }
 
