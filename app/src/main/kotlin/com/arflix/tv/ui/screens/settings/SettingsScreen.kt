@@ -1699,6 +1699,7 @@ fun SettingsScreen(
             com.arflix.tv.ui.components.AppUpdateModal(
                 status = uiState.updateStatus,
                 onDownload = { viewModel.downloadAppUpdate() },
+                onCancelDownload = { viewModel.cancelDownloadAppUpdate() },
                 onInstall = { viewModel.installAppUpdateOrRequestPermission() },
                 onDismiss = { viewModel.dismissAppUpdateDialog() },
                 onIgnore = { viewModel.ignoreAppUpdate() }

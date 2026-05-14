@@ -65,6 +65,7 @@ private data class ActionButtonConfig(
 fun AppUpdateModal(
     status: UpdateStatus,
     onDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
     onInstall: () -> Unit,
     onDismiss: () -> Unit,
     onIgnore: () -> Unit
@@ -85,7 +86,8 @@ fun AppUpdateModal(
                 ActionButtonConfig("Retry Install", onInstall, highlighted = true)
             )
             is UpdateStatus.Downloading -> listOf(
-                ActionButtonConfig("Hide", onDismiss)
+                ActionButtonConfig("Hide", onDismiss),
+                ActionButtonConfig("Cancel", onCancelDownload)
             )
             is UpdateStatus.Failure -> listOf(
                 ActionButtonConfig("Close", onDismiss),

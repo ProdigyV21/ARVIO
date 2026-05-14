@@ -2568,13 +2568,13 @@ class SettingsViewModel @Inject constructor(
     fun ignoreAppUpdate() {
         val currentStatus = updateStatusManager.status.value
         if (currentStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
-            viewModelScope.launch {
-                updatePreferences.setIgnoredTag(currentStatus.update.tag)
-            }
+            updateStatusManager.sessionIgnoredTag = currentStatus.update.tag
         }
         _uiState.value = _uiState.value.copy(showAppUpdateDialog = false)
         updateStatusManager.reset()
     }
+
+    private var downloadJob: kotlinx.coroutines.Job? = null
 
     fun downloadAppUpdate() {
         val currentStatus = updateStatusManager.status.value
@@ -2586,7 +2586,7 @@ class SettingsViewModel @Inject constructor(
 
         if (!appUpdateRepository.supportsSelfUpdate()) return
 
-        viewModelScope.launch {
+        downloadJob = viewModelScope.launch {
             updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(0f, update))
 
             val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -2610,6 +2610,15 @@ class SettingsViewModel @Inject constructor(
                     com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: "Download failed", update)
                 )
             }
+        }
+    }
+
+    fun cancelDownloadAppUpdate() {
+        downloadJob?.cancel()
+        downloadJob = null
+        val currentStatus = updateStatusManager.status.value
+        if (currentStatus is com.arflix.tv.updater.UpdateStatus.Downloading) {
+            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.UpdateAvailable(currentStatus.update))
         }
     }
 

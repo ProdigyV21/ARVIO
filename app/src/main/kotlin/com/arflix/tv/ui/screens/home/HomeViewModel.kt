@@ -1349,8 +1349,7 @@ class HomeViewModel @Inject constructor(
                 var shouldAutoOpen = false
                 var isIgnored = false
                 if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
-                    val ignoredTag = updatePreferences.ignoredTag.first()
-                    if (ignoredTag == status.update.tag) {
+                    if (updateStatusManager.sessionIgnoredTag == status.update.tag) {
                         isIgnored = true
                     }
                 }
@@ -3932,6 +3931,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private var downloadJob: kotlinx.coroutines.Job? = null
+
     fun downloadAppUpdate() {
         val currentStatus = updateStatusManager.status.value
         val update = when (currentStatus) {
@@ -3942,7 +3943,7 @@ class HomeViewModel @Inject constructor(
 
         if (!appUpdateRepository.supportsSelfUpdate()) return
 
-        viewModelScope.launch {
+        downloadJob = viewModelScope.launch {
             updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(0f, update))
 
             val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -3967,6 +3968,15 @@ class HomeViewModel @Inject constructor(
                     com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: "Download failed", update)
                 )
             }
+        }
+    }
+
+    fun cancelDownloadAppUpdate() {
+        downloadJob?.cancel()
+        downloadJob = null
+        val currentStatus = updateStatusManager.status.value
+        if (currentStatus is com.arflix.tv.updater.UpdateStatus.Downloading) {
+            updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.UpdateAvailable(currentStatus.update))
         }
     }
 
@@ -4011,9 +4021,7 @@ class HomeViewModel @Inject constructor(
     fun ignoreAppUpdate() {
         val currentStatus = updateStatusManager.status.value
         if (currentStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
-            viewModelScope.launch {
-                updatePreferences.setIgnoredTag(currentStatus.update.tag)
-            }
+            updateStatusManager.sessionIgnoredTag = currentStatus.update.tag
         }
         _uiState.value = _uiState.value.copy(showAppUpdateDialog = false, hasUpdateBadge = false)
         updateStatusManager.reset()

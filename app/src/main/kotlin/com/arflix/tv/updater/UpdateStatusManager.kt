@@ -22,6 +22,8 @@ class UpdateStatusManager @Inject constructor() {
     private val _status = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
     val status: StateFlow<UpdateStatus> = _status.asStateFlow()
 
+    var sessionIgnoredTag: String? = null
+
     fun updateStatus(newStatus: UpdateStatus) {
         _status.value = newStatus
     }
