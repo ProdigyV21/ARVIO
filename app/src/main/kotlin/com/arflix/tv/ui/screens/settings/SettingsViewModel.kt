@@ -375,19 +375,8 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             updateStatusManager.status.collect { status ->
-                val showDialog = status !is com.arflix.tv.updater.UpdateStatus.Idle && status !is com.arflix.tv.updater.UpdateStatus.Checking && status !is com.arflix.tv.updater.UpdateStatus.Success
-                var shouldShowNow = showDialog
-                
-                if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
-                    val ignoredTag = updatePreferences.ignoredTag.first()
-                    if (ignoredTag == status.update.tag) {
-                        shouldShowNow = false // User ignored this version
-                    }
-                }
-
                 _uiState.value = _uiState.value.copy(
-                    updateStatus = status,
-                    showAppUpdateDialog = shouldShowNow
+                    updateStatus = status
                 )
             }
         }

@@ -53,6 +53,13 @@ import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.updater.UpdateStatus
 
+private data class ActionButtonConfig(
+    val label: String,
+    val action: () -> Unit,
+    val highlighted: Boolean = false,
+    val enabled: Boolean = true
+)
+
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalTvFoundationApi::class)
 @Composable
 fun AppUpdateModal(
@@ -62,8 +69,35 @@ fun AppUpdateModal(
     onDismiss: () -> Unit,
     onIgnore: () -> Unit
 ) {
-    val primaryEnabled = status is UpdateStatus.UpdateAvailable || status is UpdateStatus.ReadyToInstall || status is UpdateStatus.Installing
-    var focusedIndex by remember(primaryEnabled) { mutableIntStateOf(if (primaryEnabled) 2 else 0) }
+    val buttons = remember(status) {
+        when (status) {
+            is UpdateStatus.UpdateAvailable -> listOf(
+                ActionButtonConfig("Close", onDismiss),
+                ActionButtonConfig("Ignore", onIgnore),
+                ActionButtonConfig("Download", onDownload, highlighted = true)
+            )
+            is UpdateStatus.ReadyToInstall -> listOf(
+                ActionButtonConfig("Close", onDismiss),
+                ActionButtonConfig("Install", onInstall, highlighted = true)
+            )
+            is UpdateStatus.Installing -> listOf(
+                ActionButtonConfig("Hide", onDismiss),
+                ActionButtonConfig("Retry Install", onInstall, highlighted = true)
+            )
+            is UpdateStatus.Downloading -> listOf(
+                ActionButtonConfig("Hide", onDismiss)
+            )
+            is UpdateStatus.Failure -> listOf(
+                ActionButtonConfig("Close", onDismiss),
+                ActionButtonConfig("Retry", onDownload, highlighted = true)
+            )
+            else -> listOf(
+                ActionButtonConfig("Close", onDismiss)
+            )
+        }
+    }
+
+    var focusedIndex by remember(buttons) { mutableIntStateOf(buttons.lastIndex) }
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -98,21 +132,11 @@ fun AppUpdateModal(
                                 true
                             }
                             Key.DirectionRight -> {
-                                focusedIndex = (focusedIndex + 1).coerceAtMost(2)
+                                focusedIndex = (focusedIndex + 1).coerceAtMost(buttons.lastIndex)
                                 true
                             }
                             Key.Enter, Key.DirectionCenter -> {
-                                when (focusedIndex) {
-                                    0 -> onDismiss()
-                                    1 -> onIgnore()
-                                    2 -> if (primaryEnabled) {
-                                        when (status) {
-                                            is UpdateStatus.UpdateAvailable -> onDownload()
-                                            is UpdateStatus.ReadyToInstall, is UpdateStatus.Installing -> onInstall()
-                                            else -> {}
-                                        }
-                                    }
-                                }
+                                buttons.getOrNull(focusedIndex)?.action?.invoke()
                                 true
                             }
                             else -> false
@@ -198,28 +222,15 @@ fun AppUpdateModal(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    UpdateActionButton("Close", focusedIndex == 0, onDismiss)
-                    if (status is UpdateStatus.UpdateAvailable || status is UpdateStatus.Failure) {
-                        UpdateActionButton("Ignore", focusedIndex == 1, onIgnore)
+                    buttons.forEachIndexed { index, btn ->
+                        UpdateActionButton(
+                            label = btn.label,
+                            isFocused = focusedIndex == index,
+                            onClick = btn.action,
+                            highlighted = btn.highlighted,
+                            enabled = btn.enabled
+                        )
                     }
-                    UpdateActionButton(
-                        label = when (status) {
-                            is UpdateStatus.ReadyToInstall -> "Install"
-                            is UpdateStatus.Installing -> "Retry Install"
-                            is UpdateStatus.UpdateAvailable -> "Download"
-                            else -> "Latest"
-                        },
-                        isFocused = focusedIndex == 2,
-                        onClick = {
-                            when (status) {
-                                is UpdateStatus.UpdateAvailable -> onDownload()
-                                is UpdateStatus.ReadyToInstall, is UpdateStatus.Installing -> onInstall()
-                                else -> {}
-                            }
-                        },
-                        highlighted = true,
-                        enabled = primaryEnabled
-                    )
                 }
             }
         }

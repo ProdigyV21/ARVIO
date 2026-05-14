@@ -1341,27 +1341,32 @@ class HomeViewModel @Inject constructor(
                 }
         }
 
-        // Observe global update status to drive UI
         viewModelScope.launch {
+            var previousStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle
             updateStatusManager.status.collect { status ->
-                // Dialog is open when we have an update or are downloading/installing/erroring
-                val showDialog = status !is com.arflix.tv.updater.UpdateStatus.Idle && status !is com.arflix.tv.updater.UpdateStatus.Checking && status !is com.arflix.tv.updater.UpdateStatus.Success
                 val hasBadge = status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable || status is com.arflix.tv.updater.UpdateStatus.ReadyToInstall || status is com.arflix.tv.updater.UpdateStatus.Downloading
                 
-                // If it's a new update, check if it was ignored
-                var shouldShowNow = showDialog
+                var shouldAutoOpen = false
+                var isIgnored = false
                 if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
                     val ignoredTag = updatePreferences.ignoredTag.first()
                     if (ignoredTag == status.update.tag) {
-                        shouldShowNow = false // User ignored this version
+                        isIgnored = true
                     }
+                }
+
+                // Auto-open only when we first discover a new unignored update
+                if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && previousStatus !is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && !isIgnored) {
+                    shouldAutoOpen = true
                 }
 
                 _uiState.value = _uiState.value.copy(
                     updateStatus = status,
-                    showAppUpdateDialog = shouldShowNow,
-                    hasUpdateBadge = hasBadge && shouldShowNow
+                    showAppUpdateDialog = if (shouldAutoOpen) true else _uiState.value.showAppUpdateDialog,
+                    hasUpdateBadge = hasBadge && !isIgnored
                 )
+                
+                previousStatus = status
             }
         }
 
