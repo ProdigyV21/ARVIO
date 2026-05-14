@@ -148,6 +148,7 @@ data class SettingsUiState(
     val iptvProgressText: String? = null,
     val iptvProgressPercent: Int = 0,
     // App updates
+    val isSelfUpdateSupported: Boolean = true,
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
     val showAppUpdateDialog: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
@@ -388,9 +389,6 @@ class SettingsViewModel @Inject constructor(
                     updateStatus = status,
                     showAppUpdateDialog = shouldShowNow
                 )
-            }
-        }
-                }
             }
         }
     }

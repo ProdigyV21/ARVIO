@@ -1370,6 +1370,7 @@ class HomeViewModel @Inject constructor(
             delay(if (isLowRamDevice) 15_000L else 10_000L)
             checkForAppUpdates(silent = true)
         }
+
     }
 
     /**

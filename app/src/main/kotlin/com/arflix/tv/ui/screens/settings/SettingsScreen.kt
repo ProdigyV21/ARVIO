@@ -911,7 +911,7 @@ fun SettingsScreen(
                                                     viewModel.forceCloudSyncNow()
                                                 }
                                                 3 -> {
-                                                    if (uiState.downloadedApkPath != null) {
+                                                    if (uiState.updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) {
                                                         viewModel.installAppUpdateOrRequestPermission()
                                                     } else {
                                                         viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true)
@@ -1264,10 +1264,7 @@ fun SettingsScreen(
                             isTraktPolling = uiState.isTraktPolling,
                             isForceCloudSyncing = uiState.isForceCloudSyncing,
                             isSelfUpdateSupported = uiState.isSelfUpdateSupported,
-                            isCheckingForUpdate = uiState.isCheckingForUpdate,
-                            isAppUpdateAvailable = uiState.isAppUpdateAvailable,
-                            availableAppUpdate = uiState.availableAppUpdate,
-                            downloadedApkPath = uiState.downloadedApkPath,
+                            updateStatus = uiState.updateStatus,
                             focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                             onConnectCloud = {
                                 if (isTouchDevice) {
@@ -3091,7 +3088,7 @@ private fun MobileSettingsMainPage(
                     icon = Icons.Default.SystemUpdate,
                     title = stringResource(R.string.app_version),
                     subtitle = "V${BuildConfig.VERSION_NAME}",
-                    value = if (uiState.isAppUpdateAvailable) "Update Available" else "Check Updates",
+                    value = if (uiState.updateStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) "Update Available" else "Check Updates",
                     isFocused = false,
                     showDivider = false,
                     onClick = { viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true) }
@@ -3554,9 +3551,6 @@ private fun MobileSettingsRow(
 private enum class Zone {
     SIDEBAR, SECTION, CONTENT
 }
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -6425,10 +6419,7 @@ private fun AccountsSettings(
     isTraktPolling: Boolean,
     isForceCloudSyncing: Boolean,
     isSelfUpdateSupported: Boolean,
-    isCheckingForUpdate: Boolean,
-    isAppUpdateAvailable: Boolean,
-    availableAppUpdate: com.arflix.tv.updater.AppUpdate?,
-    downloadedApkPath: String?,
+    updateStatus: com.arflix.tv.updater.UpdateStatus,
     focusedIndex: Int,
     onConnectCloud: () -> Unit,
     onDisconnectCloud: () -> Unit,
@@ -6505,22 +6496,22 @@ private fun AccountsSettings(
             title = stringResource(R.string.app_update),
             description = when {
                 !isSelfUpdateSupported -> "This install is managed by the Play Store"
-                downloadedApkPath != null -> "Latest update downloaded and ready to install"
-                isCheckingForUpdate -> "Checking GitHub Releases for a newer APK"
-                isAppUpdateAvailable -> "Update available: ${availableAppUpdate?.title ?: availableAppUpdate?.tag ?: "latest release"}"
-                availableAppUpdate != null -> "You already have ARVIO v${BuildConfig.VERSION_NAME}"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall -> "Latest update downloaded and ready to install"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.Checking -> "Checking GitHub Releases for a newer APK"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable -> "Update available: ${updateStatus.update.title.ifBlank { updateStatus.update.tag }}"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.Success -> "You already have the latest ARVIO version"
                 else -> "Check GitHub Releases for the latest ARVIO APK"
             },
             actionLabel = when {
                 !isSelfUpdateSupported -> "PLAY"
-                downloadedApkPath != null -> "INSTALL"
-                isCheckingForUpdate -> "CHECKING"
-                isAppUpdateAvailable -> "UPDATE"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall -> "INSTALL"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.Checking -> "CHECKING"
+                updateStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable -> "UPDATE"
                 else -> "CHECK"
             },
             isFocused = focusedIndex == 3,
             onClick = {
-                if (downloadedApkPath != null) onInstallUpdate() else onCheckUpdates()
+                if (updateStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) onInstallUpdate() else onCheckUpdates()
             },
             modifier = Modifier.settingsFocusSlot(3)
         )

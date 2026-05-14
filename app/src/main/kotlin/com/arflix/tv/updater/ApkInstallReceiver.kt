@@ -56,7 +56,7 @@ class ApkInstallReceiver : BroadcastReceiver() {
                     context.startActivity(confirmIntent)
                     // We are waiting for the user to confirm in the system UI
                     updateStatusManager.updateStatus(
-                        UpdateStatus.Installing(AppUpdate("", "", "", "", "", "")) // We don't have the full AppUpdate object here, but the status type indicates what's happening
+                        UpdateStatus.Installing(null) // We don't have the full AppUpdate object here, but the status type indicates what's happening
                     )
                 } catch (e: Exception) {
                     // Some Android TV forks (particularly Chinese AOSP variants) don't
