@@ -1133,6 +1133,27 @@ class HomeViewModel @Inject constructor(
                         }
                     }
                 }
+
+                // CRITICAL: Pull the cloud snapshot before refreshing CW. When Device A
+                // removes a CW item, it does:
+                //   1. removeFromHistory() → Supabase DELETE (broadcast via WebSocket)
+                //   2. pushToCloud() → updates account_sync_state with dismissed CW + local CW
+                // Device B receives the DELETE instantly via WebSocket, but its DataStore
+                // still has the old dismissed CW set and local CW cache — so the dismissed
+                // filter doesn't catch the item and the local CW re-fetch shows it again.
+                // Pulling the cloud snapshot first ensures Device B's DataStore has the
+                // latest dismissed CW + local CW data before the CW refresh runs.
+                // The 5s debounce in RealtimeSyncManager gives Device A's pushToCloud()
+                // time to complete before this pull arrives.
+                runCatching {
+                    cloudSyncRepository.pullFromCloud()
+                }.onSuccess { restoreResult ->
+                    if (restoreResult == CloudSyncRepository.RestoreResult.RESTORED) {
+                        // Cloud state changed — reload home data to pick up catalog/addon/settings changes too
+                        loadHomeData()
+                    }
+                }
+
                 // Full refresh: re-resolve from all sources (Trakt, local, Supabase).
                 // This runs after the fast path so the progress bar updates immediately,
                 // then the authoritative Trakt data (with correct subtitle/resume label)

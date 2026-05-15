@@ -18,6 +18,7 @@ import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -465,6 +466,13 @@ class CloudSyncRepository @Inject constructor(
     //  PUSH LOCAL STATE TO CLOUD
     // ══════════════════════════════════════════════════════════
 
+    /**
+     * Push local state to cloud with automatic retry on transient failure.
+     * Retries up to 2 additional times with 1.5s gap, covering common network
+     * hiccups (DNS failover, TLS renegotiation) without making callers wait
+     * longer than ~4s total. If all attempts fail, isPushDirty stays true so
+     * the periodic sync or foreground resume retries later.
+     */
     suspend fun pushToCloud(): Result<Unit> = cloudSyncMutex.withLock {
         if (authRepository.getCurrentUserId().isNullOrBlank()) {
             AppLogger.breadcrumb(
@@ -474,43 +482,74 @@ class CloudSyncRepository @Inject constructor(
             )
             return@withLock Result.failure(IllegalStateException("Not logged in"))
         }
-        val payload = runCatching { buildCloudSnapshotJson() }.getOrElse {
-            isPushDirty = true
-            AppLogger.recordException(
-                throwable = it,
-                context = mapOf(
-                    "error_area" to "CloudSync",
-                    "cloud_flow" to "push_build_payload",
-                    "dirty" to isPushDirty.toString()
+
+        // Attempt the push up to 3 times total (initial + 2 retries)
+        val maxAttempts = 3
+        val retryDelayMs = 1_500L
+        var lastError: Throwable? = null
+
+        for (attempt in 1..maxAttempts) {
+            // Build payload fresh each attempt in case state changed during retry gap
+            val payload = runCatching { buildCloudSnapshotJson() }.getOrElse {
+                lastError = it
+                if (attempt < maxAttempts) {
+                    AppLogger.breadcrumb(
+                        tag = "CloudSync",
+                        message = "push_build_attempt=${attempt}_failed",
+                        severity = "warning"
+                    )
+                    delay(retryDelayMs)
+                    continue
+                }
+                isPushDirty = true
+                AppLogger.recordException(
+                    throwable = it,
+                    context = mapOf(
+                        "error_area" to "CloudSync",
+                        "cloud_flow" to "push_build_payload",
+                        "attempt" to attempt,
+                        "dirty" to isPushDirty.toString()
+                    )
                 )
-            )
-            return@withLock Result.failure(it)
-        }
-        val result = authRepository.saveAccountSyncPayload(payload)
-        if (result.isSuccess) {
-            isPushDirty = false
-            AppLogger.breadcrumb(
-                tag = "CloudSync",
-                message = "push_success size=${payloadSizeBucket(payload)}",
-                severity = "info"
-            )
-            onPushCompleted?.invoke()
-        } else {
-            // Mark dirty so the next ON_RESUME or periodic sync retries the push.
-            // Without this, a single network hiccup would permanently diverge the
-            // cloud state until the user explicitly changes another setting.
-            isPushDirty = true
-            AppLogger.recordException(
-                throwable = result.exceptionOrNull() ?: IllegalStateException("Cloud push failed"),
-                context = mapOf(
-                    "error_area" to "CloudSync",
-                    "cloud_flow" to "push_save_payload",
-                    "dirty" to isPushDirty.toString(),
-                    "payload_size" to payloadSizeBucket(payload)
+                return@withLock Result.failure(it)
+            }
+
+            val result = authRepository.saveAccountSyncPayload(payload)
+            if (result.isSuccess) {
+                isPushDirty = false
+                AppLogger.breadcrumb(
+                    tag = "CloudSync",
+                    message = "push_success attempt=${attempt} size=${payloadSizeBucket(payload)}",
+                    severity = "info"
                 )
-            )
+                onPushCompleted?.invoke()
+                return@withLock result
+            }
+
+            lastError = result.exceptionOrNull()
+            if (attempt < maxAttempts) {
+                AppLogger.breadcrumb(
+                    tag = "CloudSync",
+                    message = "push_save_attempt=${attempt}_failed_retrying",
+                    severity = "warning"
+                )
+                delay(retryDelayMs)
+            }
         }
-        result
+
+        // All attempts exhausted — mark dirty so periodic/foreground sync retries
+        isPushDirty = true
+        val finalError = lastError ?: IllegalStateException("Cloud push failed after $maxAttempts attempts")
+        AppLogger.recordException(
+            throwable = finalError,
+            context = mapOf(
+                "error_area" to "CloudSync",
+                "cloud_flow" to "push_save_payload",
+                "attempts" to maxAttempts,
+                "dirty" to isPushDirty.toString()
+            )
+        )
+        Result.failure(finalError)
     }
 
     // ══════════════════════════════════════════════════════════
@@ -995,6 +1034,13 @@ class CloudSyncRepository @Inject constructor(
         traktRepository.clearAllProfileCaches()
         watchHistoryRepository.clearProfileCaches()
 
-        System.err.println("[CLOUD-SYNC] Full cloud restore applied successfully")
+        // Re-initialize the watched cache for the current profile immediately after
+        // clearing. Without this, clearAllProfileCaches() sets cacheInitialized = false,
+        // and the next UI read (e.g. fetchSeasonProgress, loadSeason, isEpisodeWatched)
+        // would either trigger a slow re-fetch or fall back to stale/empty data —
+        // causing watched badges to disappear and the season-watched revert bug.
+        runCatching { traktRepository.initializeWatchedCache() }
+
+        System.err.println("[CLOUD-SYNC] Full cloud restore applied successfully after cache re-init")
     }
 }
