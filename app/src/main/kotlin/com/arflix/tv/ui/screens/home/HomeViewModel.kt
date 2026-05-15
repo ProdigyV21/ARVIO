@@ -1345,11 +1345,12 @@ class HomeViewModel @Inject constructor(
             var previousStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle
             updateStatusManager.status.collect { status ->
                 val hasBadge = status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable || status is com.arflix.tv.updater.UpdateStatus.ReadyToInstall || status is com.arflix.tv.updater.UpdateStatus.Downloading
-                
+
                 var shouldAutoOpen = false
                 var isIgnored = false
                 if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
-                    if (updateStatusManager.sessionIgnoredTag == status.update.tag) {
+                    val persistedIgnoredTag = updatePreferences.ignoredTag.first()
+                    if (persistedIgnoredTag == status.update.tag || updateStatusManager.sessionIgnoredTag == status.update.tag) {
                         isIgnored = true
                     }
                 }
@@ -1364,7 +1365,7 @@ class HomeViewModel @Inject constructor(
                     showAppUpdateDialog = if (shouldAutoOpen) true else _uiState.value.showAppUpdateDialog,
                     hasUpdateBadge = hasBadge && !isIgnored
                 )
-                
+
                 previousStatus = status
             }
         }
@@ -3902,7 +3903,7 @@ class HomeViewModel @Inject constructor(
             if (!silent) {
                 updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Checking)
             }
-            
+
             val result = appUpdateRepository.getLatestUpdate()
             result.onSuccess { update ->
                 val localVer = appUpdateRepository.getInstalledVersionName()
@@ -3948,13 +3949,13 @@ class HomeViewModel @Inject constructor(
 
             val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             val dest = java.io.File(java.io.File(context.cacheDir, "updates"), safeName)
-            
+
             val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
                 apkDownloader.download(update.assetUrl, dest) { downloaded, total ->
                     val progress = if (total != null && total > 0L) {
                         (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
                     } else null
-                    
+
                     updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(progress, update))
                 }
             }
@@ -3983,7 +3984,7 @@ class HomeViewModel @Inject constructor(
     fun installAppUpdateOrRequestPermission() {
         val currentStatus = updateStatusManager.status.value
         if (currentStatus !is com.arflix.tv.updater.UpdateStatus.ReadyToInstall && currentStatus !is com.arflix.tv.updater.UpdateStatus.Failure) return
-        
+
         val apkPath = if (currentStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) currentStatus.apkPath else return
         val update = currentStatus.update
         val apkFile = java.io.File(apkPath)
@@ -4022,10 +4023,12 @@ class HomeViewModel @Inject constructor(
         val currentStatus = updateStatusManager.status.value
         if (currentStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
             updateStatusManager.sessionIgnoredTag = currentStatus.update.tag
+            viewModelScope.launch {
+                updatePreferences.setIgnoredTag(currentStatus.update.tag)
+            }
         }
         _uiState.value = _uiState.value.copy(showAppUpdateDialog = false, hasUpdateBadge = false)
         updateStatusManager.reset()
     }
 }
-
 

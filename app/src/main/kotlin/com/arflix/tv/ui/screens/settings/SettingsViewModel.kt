@@ -539,7 +539,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
-    
+
     private fun observeAddons() {
         viewModelScope.launch {
             streamRepository.installedAddons.collect { addons ->
@@ -672,7 +672,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun setDefaultSubtitle(language: String) {
         viewModelScope.launch {
             // Save locally
@@ -1293,7 +1293,7 @@ class SettingsViewModel @Inject constructor(
     fun cycleQualityFilterPreset() {
         viewModelScope.launch {
             val currentPreset = detectQualityFilterPreset(_uiState.value.qualityFilters)
-            
+
             // Prevent losing custom filters by cycling into a preset
             if (currentPreset == QualityFilterPreset.CUSTOM) {
                 _uiState.value = _uiState.value.copy(
@@ -1302,7 +1302,7 @@ class SettingsViewModel @Inject constructor(
                 )
                 return@launch
             }
-            
+
             val nextPreset = when (currentPreset) {
                 QualityFilterPreset.OFF -> QualityFilterPreset.HD_1080_PLUS
                 QualityFilterPreset.HD_1080_PLUS -> QualityFilterPreset.HD_1080_ONLY
@@ -1358,7 +1358,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     // ========== Addon Management ==========
-    
+
     fun toggleAddon(addonId: String) {
         viewModelScope.launch {
             streamRepository.toggleAddon(addonId)
@@ -1369,7 +1369,7 @@ class SettingsViewModel @Inject constructor(
             syncLocalStateToCloud(silent = true)
         }
     }
-    
+
     fun addCustomAddon(url: String) {
         viewModelScope.launch {
             val result = streamRepository.addCustomAddon(url)
@@ -1836,7 +1836,7 @@ class SettingsViewModel @Inject constructor(
             syncLocalStateToCloud(silent = true)
         }
     }
-    
+
     fun removeAddon(addonId: String) {
         viewModelScope.launch {
             streamRepository.removeAddon(addonId)
@@ -2444,7 +2444,7 @@ class SettingsViewModel @Inject constructor(
             var restoreResult = withTimeoutOrNull(30_000L) {
                 restoreCloudStateToLocalInternal(silent = true)
             } ?: CloudRestoreResult.FAILED
-            
+
             if (restoreResult == CloudRestoreResult.FAILED) {
                 delay(1200)
                 restoreResult = withTimeoutOrNull(30_000L) {
@@ -2569,6 +2569,9 @@ class SettingsViewModel @Inject constructor(
         val currentStatus = updateStatusManager.status.value
         if (currentStatus is com.arflix.tv.updater.UpdateStatus.UpdateAvailable) {
             updateStatusManager.sessionIgnoredTag = currentStatus.update.tag
+            viewModelScope.launch {
+                updatePreferences.setIgnoredTag(currentStatus.update.tag)
+            }
         }
         _uiState.value = _uiState.value.copy(showAppUpdateDialog = false)
         updateStatusManager.reset()
@@ -2591,13 +2594,13 @@ class SettingsViewModel @Inject constructor(
 
             val safeName = update.assetName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             val dest = File(File(context.cacheDir, "updates"), safeName)
-            
+
             val result = withContext(Dispatchers.IO) {
                 apkDownloader.download(update.assetUrl, dest) { downloaded, total ->
                     val progress = if (total != null && total > 0L) {
                         (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
                     } else null
-                    
+
                     updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(progress, update))
                 }
             }
@@ -2625,7 +2628,7 @@ class SettingsViewModel @Inject constructor(
     fun installAppUpdateOrRequestPermission() {
         val currentStatus = updateStatusManager.status.value
         if (currentStatus !is com.arflix.tv.updater.UpdateStatus.ReadyToInstall && currentStatus !is com.arflix.tv.updater.UpdateStatus.Failure) return
-        
+
         val apkPath = if (currentStatus is com.arflix.tv.updater.UpdateStatus.ReadyToInstall) currentStatus.apkPath else return
         val update = currentStatus.update
         val apkFile = File(apkPath)
@@ -2659,9 +2662,9 @@ class SettingsViewModel @Inject constructor(
             context.startActivity(intent)
         }
     }
-    
+
     // ========== Trakt Authentication ==========
-    
+
     fun startTraktAuth() {
         val current = _uiState.value
         if (current.isTraktAuthStarting || current.isTraktPolling) return
@@ -2723,10 +2726,10 @@ class SettingsViewModel @Inject constructor(
         traktPollingJob = viewModelScope.launch {
             val expiresAt = System.currentTimeMillis() + (deviceCode.expiresIn * 1000)
             var lastFailure: String? = null
-            
+
             while (System.currentTimeMillis() < expiresAt) {
                 delay(deviceCode.interval * 1000L)
-                
+
                 try {
                     traktRepository.pollForToken(deviceCode.deviceCode)
 
@@ -2767,7 +2770,7 @@ class SettingsViewModel @Inject constructor(
                     // 400 = pending, continue polling
                 }
             }
-            
+
             // Expired or failed
             _uiState.value = _uiState.value.copy(
                 traktCode = null,
@@ -2778,7 +2781,7 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
-    
+
     fun cancelTraktAuth() {
         traktPollingJob?.cancel()
         _uiState.value = _uiState.value.copy(
@@ -2787,7 +2790,7 @@ class SettingsViewModel @Inject constructor(
             isTraktPolling = false
         )
     }
-    
+
     fun disconnectTrakt() {
         viewModelScope.launch {
             cancelTraktAuth()
@@ -2816,7 +2819,7 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
-    
+
     override fun onCleared() {
         super.onCleared()
         traktPollingJob?.cancel()

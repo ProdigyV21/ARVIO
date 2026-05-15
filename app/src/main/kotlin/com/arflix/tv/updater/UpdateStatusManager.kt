@@ -23,12 +23,25 @@ class UpdateStatusManager @Inject constructor() {
     val status: StateFlow<UpdateStatus> = _status.asStateFlow()
 
     var sessionIgnoredTag: String? = null
+    private var lastUpdate: AppUpdate? = null
 
     fun updateStatus(newStatus: UpdateStatus) {
-        _status.value = newStatus
+        val statusWithContext = when (newStatus) {
+            is UpdateStatus.UpdateAvailable -> newStatus.also { lastUpdate = it.update }
+            is UpdateStatus.Downloading -> newStatus.also { lastUpdate = it.update }
+            is UpdateStatus.ReadyToInstall -> newStatus.also { lastUpdate = it.update }
+            is UpdateStatus.Installing -> newStatus.also { if (it.update != null) lastUpdate = it.update }
+            is UpdateStatus.Failure -> {
+                val update = newStatus.update ?: lastUpdate
+                if (update != null) newStatus.copy(update = update) else newStatus
+            }
+            else -> newStatus
+        }
+        _status.value = statusWithContext
     }
 
     fun reset() {
+        lastUpdate = null
         _status.value = UpdateStatus.Idle
     }
 }
