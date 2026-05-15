@@ -106,6 +106,7 @@ class CloudSyncRepository @Inject constructor(
         val subtitleColor: String = "White",
         val subtitleStyle: String = "Bold",
         val subtitleOffset: String = "Low",
+        val subtitleStylized: Boolean = true,
         val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
         val frameRateMatchingMode: String = "Off",
         val autoPlayNext: Boolean = true,
@@ -160,6 +161,8 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "subtitle_offset")
     private fun subtitleStyleKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "subtitle_style")
+    private fun subtitleStylizedKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, "subtitle_stylized")
     private fun iptvHiddenGroupsKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "iptv_hidden_groups")
     private fun iptvGroupOrderKeyFor(profileId: String) =
@@ -279,6 +282,7 @@ class CloudSyncRepository @Inject constructor(
                         subtitleColor = prefs[subtitleColorKeyFor(profile.id)] ?: "White",
                         subtitleOffset = prefs[subtitleOffsetKeyFor(profile.id)] ?: "Low",
                         subtitleStyle = prefs[subtitleStyleKeyFor(profile.id)] ?: "Bold",
+                        subtitleStylized = prefs[subtitleStylizedKeyFor(profile.id)] ?: true,
                         iptvHiddenGroups = prefs[iptvHiddenGroupsKeyFor(profile.id)] ?: "",
                         iptvGroupOrder = prefs[iptvGroupOrderKeyFor(profile.id)] ?: "",
                         secondarySubtitle = prefs[secondarySubtitleKeyFor(profile.id)] ?: "Off",
@@ -695,6 +699,7 @@ class CloudSyncRepository @Inject constructor(
                         prefs[subtitleColorKeyFor(profileId)] = state.subtitleColor
                         prefs[subtitleOffsetKeyFor(profileId)] = state.subtitleOffset
                         prefs[subtitleStyleKeyFor(profileId)] = state.subtitleStyle
+                        prefs[subtitleStylizedKeyFor(profileId)] = state.subtitleStylized
                         if (state.iptvHiddenGroups.isNotBlank()) prefs[iptvHiddenGroupsKeyFor(profileId)] = state.iptvHiddenGroups
                         if (state.iptvGroupOrder.isNotBlank()) prefs[iptvGroupOrderKeyFor(profileId)] = state.iptvGroupOrder
                         prefs[secondarySubtitleKeyFor(profileId)] = state.secondarySubtitle.ifBlank { "Off" }
