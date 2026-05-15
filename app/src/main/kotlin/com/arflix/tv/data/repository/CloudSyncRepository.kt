@@ -467,11 +467,19 @@ class CloudSyncRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════
 
     /**
-     * Push local state to cloud with automatic retry on transient failure.
-     * Retries up to 2 additional times with 1.5s gap, covering common network
-     * hiccups (DNS failover, TLS renegotiation) without making callers wait
-     * longer than ~4s total. If all attempts fail, isPushDirty stays true so
-     * the periodic sync or foreground resume retries later.
+     * Push local state to cloud with automatic retry on transient network failure.
+     *
+     * Builds the JSON payload once (local serialization — no network I/O, so retry
+     * is pointless), then retries the network save ([saveAccountSyncPayload]) up to
+     * 2 additional times with 1.5s gap. This covers common network hiccups (DNS
+     * failover, TLS renegotiation) without making callers wait longer than ~4s
+     * total. If all attempts fail, [isPushDirty] stays `true` so the periodic sync
+     * or foreground-resume retry picks it up later.
+     *
+     * NOTE: Retries run inside [cloudSyncMutex] to prevent concurrent pushes from
+     * interleaving. This is acceptable because the mutex is released between calls
+     * to [saveAccountSyncPayload] via the delay, and the coordinator no longer adds
+     * its own outer retry loop (removed to avoid stacked backoff).
      */
     suspend fun pushToCloud(): Result<Unit> = cloudSyncMutex.withLock {
         if (authRepository.getCurrentUserId().isNullOrBlank()) {
@@ -483,37 +491,28 @@ class CloudSyncRepository @Inject constructor(
             return@withLock Result.failure(IllegalStateException("Not logged in"))
         }
 
-        // Attempt the push up to 3 times total (initial + 2 retries)
+        // Build payload once — local serialization only (DataStore + in-memory reads),
+        // no network I/O. Retrying on build failure would waste time for no benefit.
+        val payload = runCatching { buildCloudSnapshotJson() }.getOrElse {
+            isPushDirty = true
+            AppLogger.recordException(
+                throwable = it,
+                context = mapOf(
+                    "error_area" to "CloudSync",
+                    "cloud_flow" to "push_build_payload",
+                    "dirty" to isPushDirty.toString()
+                )
+            )
+            return@withLock Result.failure(it)
+        }
+
+        // Retry the network save on transient failure; the payload is stable
+        // (built once above) so we don't need to rebuild between attempts.
         val maxAttempts = 3
         val retryDelayMs = 1_500L
         var lastError: Throwable? = null
 
         for (attempt in 1..maxAttempts) {
-            // Build payload fresh each attempt in case state changed during retry gap
-            val payload = runCatching { buildCloudSnapshotJson() }.getOrElse {
-                lastError = it
-                if (attempt < maxAttempts) {
-                    AppLogger.breadcrumb(
-                        tag = "CloudSync",
-                        message = "push_build_attempt=${attempt}_failed",
-                        severity = "warning"
-                    )
-                    delay(retryDelayMs)
-                    continue
-                }
-                isPushDirty = true
-                AppLogger.recordException(
-                    throwable = it,
-                    context = mapOf(
-                        "error_area" to "CloudSync",
-                        "cloud_flow" to "push_build_payload",
-                        "attempt" to attempt,
-                        "dirty" to isPushDirty.toString()
-                    )
-                )
-                return@withLock Result.failure(it)
-            }
-
             val result = authRepository.saveAccountSyncPayload(payload)
             if (result.isSuccess) {
                 isPushDirty = false

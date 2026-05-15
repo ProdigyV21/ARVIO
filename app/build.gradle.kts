@@ -188,6 +188,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.core:core-splashscreen:1.0.1")  // Android 12+ Splash Screen
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     // Provides collectAsStateWithLifecycle — pauses Flow collection while the
     // screen is off so we don't drive recompositions on invisible UI.

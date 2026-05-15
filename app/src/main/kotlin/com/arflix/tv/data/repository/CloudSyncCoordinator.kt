@@ -20,11 +20,6 @@ class CloudSyncCoordinator @Inject constructor(
 ) {
     companion object {
         private const val TAG = "CloudSyncCoordinator"
-        // Retry backoff schedule (ms) for when a cloud push fails.
-        // The coordinator retries 0.5s → 2s → 6s after the initial debounce,
-        // giving transient network issues a chance to recover before the
-        // periodic 45s sync in RealtimeSyncManager picks it up.
-        private val RETRY_DELAYS_MS = longArrayOf(500L, 2_000L, 6_000L)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -58,11 +53,14 @@ class CloudSyncCoordinator @Inject constructor(
     }
 
     /**
-     * Debounce invalidation events, then push to cloud with retry on failure.
-     * If pushToCloud() fails (even after its internal retries), this method
-     * schedules up to 3 additional retries with exponential backoff
-     * (0.5s → 2s → 6s after debounce) so transient network issues don't
-     * silently drop user changes until the 45s periodic sync.
+     * Debounce invalidation events, then push to cloud.
+     *
+     * Retry logic lives entirely inside [CloudSyncRepository.pushToCloud] (up to 3
+     * attempts with 1.5s gaps). The coordinator does not add its own retry loop to
+     * avoid stacking backoffs and holding [cloudSyncMutex] for tens of seconds
+     * across nested retry cycles. If pushToCloud fails after all internal retries,
+     * the dirty flag is set so the periodic sync (45s) or foreground-resume retry
+     * (ArflixApplication) picks it up.
      */
     private fun scheduleFlush(invalidation: CloudSyncInvalidation) {
         synchronized(lifecycleLock) {
@@ -72,19 +70,12 @@ class CloudSyncCoordinator @Inject constructor(
                 delay(debounceMsFor(invalidation.scope))
                 if (authRepository.getCurrentUserId().isNullOrBlank()) return@launch
 
-                // Attempt push with retry backoff
-                for ((retryIndex, retryDelay) in RETRY_DELAYS_MS.withIndex()) {
-                    if (retryIndex > 0) {
-                        delay(retryDelay)
-                    }
-                    val result = runCatching { cloudSyncRepository.pushToCloud() }
-                    if (result.isSuccess) return@launch
-                    Log.w(TAG, "Push attempt ${retryIndex + 1} failed after ${invalidation.scope}: ${result.exceptionOrNull()?.message}")
+                val result = runCatching { cloudSyncRepository.pushToCloud() }
+                if (result.isFailure) {
+                    Log.w(TAG, "Push failed after ${invalidation.scope}: ${result.exceptionOrNull()?.message}")
+                    // Mark dirty so periodic/foreground sync retries
+                    cloudSyncRepository.markLocalStateDirty()
                 }
-
-                // All retries exhausted — mark dirty so periodic/foreground sync picks it up
-                cloudSyncRepository.markLocalStateDirty()
-                Log.w(TAG, "Push exhausted retries after ${invalidation.scope}, marked dirty for later retry")
             }
         }
     }

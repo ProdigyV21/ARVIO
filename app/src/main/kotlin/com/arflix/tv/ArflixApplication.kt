@@ -1,12 +1,10 @@
 package com.arflix.tv
 
-import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
 import android.content.ComponentCallbacks2
 import android.graphics.Bitmap
 import android.os.Build
-import android.os.Bundle
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.Constraints
@@ -48,8 +46,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.arflix.tv.util.settingsDataStore
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 /**
@@ -105,36 +105,29 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         // Wire realtime push notification
         cloudSyncRepository.onPushCompleted = { realtimeSyncManager.markPush() }
 
-        // Track foreground/background transitions via activity lifecycle callbacks.
+        // Track foreground/background transitions via ProcessLifecycleOwner.
+        // Unlike ActivityLifecycleCallbacks with an AtomicInteger counter,
+        // ProcessLifecycleOwner correctly handles configuration changes
+        // (rotation, theme changes) and activity-to-activity navigation where
+        // the new activity starts before the old one stops — it fires only on
+        // genuine app-level foreground/background transitions.
         // When the app comes to foreground, retry any pending dirty push so user
         // changes (CW dismissals, settings edits, addon changes) that failed during
         // a previous background session are propagated immediately — instead of
         // waiting up to 45s for the periodic sync tick.
-        val foregroundActivityCount = AtomicInteger(0)
-        registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-            override fun onActivityStarted(activity: Activity) {
-                if (foregroundActivityCount.incrementAndGet() == 1) {
-                    // App just came to foreground — retry dirty push if needed
-                    appScope.launch(Dispatchers.IO) {
-                        // Brief delay to let the UI settle before network work
-                        delay(500L)
-                        if (authRepository.getCurrentUserId().isNullOrBlank()) return@launch
-                        if (cloudSyncRepository.isPushDirty) {
-                            android.util.Log.i("ArflixApp", "Foreground: retrying dirty push")
-                            runCatching { cloudSyncRepository.pushToCloud() }
-                                .onFailure { android.util.Log.w("ArflixApp", "Foreground push retry failed: ${it.message}") }
-                        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                appScope.launch(Dispatchers.IO) {
+                    // Brief delay to let the UI settle before network work
+                    delay(500L)
+                    if (authRepository.getCurrentUserId().isNullOrBlank()) return@launch
+                    if (cloudSyncRepository.isPushDirty) {
+                        android.util.Log.i("ArflixApp", "Foreground: retrying dirty push")
+                        runCatching { cloudSyncRepository.pushToCloud() }
+                            .onFailure { android.util.Log.w("ArflixApp", "Foreground push retry failed: ${it.message}") }
                     }
                 }
             }
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
-            override fun onActivityStopped(activity: Activity) {
-                foregroundActivityCount.decrementAndGet()
-            }
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {}
         })
 
         appScope.launch {

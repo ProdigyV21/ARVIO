@@ -318,17 +318,19 @@ class DetailsViewModel @Inject constructor(
                 } else null
 
                 // For TV shows, fetch season progress (watched/total per season).
-                // IMPORTANT: Initialize watched cache FIRST so fetchSeasonProgress()
-                // can read from the in-memory cache rather than falling back to a
-                // backend query that may return stale or empty data. The async below
-                // starts immediately, but initializeWatchedCache() runs synchronously
-                // before it, ensuring the cache is populated before fetchSeasonProgress
-                // checks getWatchedEpisodesFromCache().
-                if (mediaType == MediaType.TV) {
-                    runCatching { traktRepository.initializeWatchedCache() }
-                }
+                // initializeWatchedCache() runs inside the async block so it executes
+                // on the coroutine dispatcher (not the UI thread) and in parallel with
+                // the other deferreds above (item, watchlist, externalIds, resume, logo,
+                // episodes). If the cache is already warm, initializeWatchedCache is
+                // a no-op (it guards on cacheInitialized internally). If cold, it
+                // fetches from Supabase/Trakt before fetchSeasonProgress reads it —
+                // preventing the season-watched revert bug where an empty cache caused
+                // fallback to stale backend data.
                 val seasonProgressDeferred = if (mediaType == MediaType.TV) {
-                    async { fetchSeasonProgress(mediaId) }
+                    async {
+                        runCatching { traktRepository.initializeWatchedCache() }
+                        fetchSeasonProgress(mediaId)
+                    }
                 } else null
 
                 val requestMediaId = mediaId
