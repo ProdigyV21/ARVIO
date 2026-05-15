@@ -219,13 +219,26 @@ class RealtimeSyncManager @Inject constructor(
     }
 
     private fun joinChannel(ws: WebSocket, userId: String) {
-        // Channel 1: account_sync_state UPDATEs
+        // Channel 1: account_sync_state INSERTs + UPDATEs.
+        // saveAccountSyncPayload() uses upsert() which does an INSERT when the
+        // row doesn't exist yet (first-ever push from a device). If we only
+        // subscribe to UPDATE, other devices won't get a realtime notification
+        // for the very first push — they'd have to wait up to 45s for the
+        // periodic sync to discover it. Subscribing to both INSERT and UPDATE
+        // ensures the WebSocket fires on every push, regardless of whether the
+        // row was just created or already existed.
         val accountSyncJoin = JSONObject().apply {
             put("topic", "realtime:account_sync")
             put("event", "phx_join")
             put("payload", JSONObject().apply {
                 put("config", JSONObject().apply {
                     put("postgres_changes", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("event", "INSERT")
+                            put("schema", "public")
+                            put("table", "account_sync_state")
+                            put("filter", "user_id=eq.$userId")
+                        })
                         put(JSONObject().apply {
                             put("event", "UPDATE")
                             put("schema", "public")
