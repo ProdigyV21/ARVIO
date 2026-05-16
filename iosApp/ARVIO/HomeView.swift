@@ -19,19 +19,27 @@ struct HeroSection: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            PosterBackdrop(item: item)
+            Image("ARVIOTVBanner")
+                .resizable()
+                .scaledToFill()
                 .frame(height: 360)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
-            LinearGradient(colors: [Color.black.opacity(0.0), Color.black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
+            LinearGradient(colors: [Color.black.opacity(0.08), Color.black.opacity(0.86)], startPoint: .center, endPoint: .bottom)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 12) {
+                Image("ARVIOFeatureGraphic")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 260)
+                    .padding(.bottom, 2)
+
                 Text(item.title)
                     .font(.system(size: 42, weight: .bold))
                     .foregroundStyle(ArvioTheme.textPrimary)
 
-                Text("\(item.subtitle)  •  \(item.year)  •  \(item.duration)")
+                Text("\(item.subtitle)  -  \(item.year)  -  \(item.duration)")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(ArvioTheme.textSecondary)
 

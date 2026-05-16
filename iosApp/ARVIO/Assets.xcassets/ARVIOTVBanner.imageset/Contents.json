@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "ARVIO_TV_Banner_1280x720.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

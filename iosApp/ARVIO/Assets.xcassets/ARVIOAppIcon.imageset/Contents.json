@@ -1,0 +1,13 @@
+{
+  "images": [
+    {
+      "filename": "ARVIO_PlayStore_Icon_512.png",
+      "idiom": "universal",
+      "scale": "1x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

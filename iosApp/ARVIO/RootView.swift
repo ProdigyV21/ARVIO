@@ -90,26 +90,10 @@ struct TopNavigation: View {
 
 struct BrandMark: View {
     var body: some View {
-        ZStack {
-            Triangle()
-                .fill(LinearGradient(colors: [ArvioTheme.gold, Color(hex: "#f1c778")], startPoint: .top, endPoint: .bottom))
-                .frame(width: 34, height: 42)
-            Triangle()
-                .fill(Color.black.opacity(0.26))
-                .frame(width: 14, height: 28)
-                .offset(x: -1)
-        }
-        .frame(width: 52)
-    }
-}
-
-struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
+        Image("ARVIOAppIcon")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
