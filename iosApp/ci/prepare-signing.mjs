@@ -123,6 +123,7 @@ async function main() {
   const privateKeyPath = path.join(signingDir, "ios_distribution.key");
   const csrPath = path.join(signingDir, "ios_distribution.csr");
   const certificatePath = path.join(signingDir, "ios_distribution.cer");
+  const certificatePemPath = path.join(signingDir, "ios_distribution.pem");
   const p12Path = path.join(signingDir, "ios_distribution.p12");
   const profilePath = path.join(signingDir, "ARVIO_App_Store.mobileprovision");
   const p12Password = crypto.randomBytes(18).toString("base64url");
@@ -151,13 +152,14 @@ async function main() {
   })).data;
 
   fs.writeFileSync(certificatePath, Buffer.from(certificate.attributes.certificateContent, "base64"));
+  run("openssl", ["x509", "-inform", "DER", "-in", certificatePath, "-out", certificatePemPath]);
   run("openssl", [
     "pkcs12",
     "-export",
     "-inkey",
     privateKeyPath,
     "-in",
-    certificatePath,
+    certificatePemPath,
     "-out",
     p12Path,
     "-password",
