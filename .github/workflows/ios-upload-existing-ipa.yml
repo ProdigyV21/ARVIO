@@ -1,0 +1,48 @@
+name: iOS Upload Existing IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      ipa_run_id:
+        description: GitHub Actions run ID containing the ARVIO-iOS-IPA artifact
+        required: true
+        type: string
+
+jobs:
+  upload:
+    name: Upload Existing IPA to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Write App Store Connect key
+        env:
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+
+      - name: Download IPA artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IPA_RUN_ID: ${{ inputs.ipa_run_id }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/export"
+          gh run download "$IPA_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name ARVIO-iOS-IPA \
+            --dir "$RUNNER_TEMP/export"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/export/ARVIO.ipa" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
