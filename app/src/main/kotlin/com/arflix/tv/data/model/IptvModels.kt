@@ -13,7 +13,10 @@ data class IptvChannel(
     val logo: String? = null,
     val epgId: String? = null,
     val rawTitle: String = name,
-    val xtreamStreamId: Int? = null
+    val xtreamStreamId: Int? = null,
+    val catchupDays: Int = 0,
+    val catchupType: String? = null,
+    val catchupSource: String? = null
 )
 
 /**

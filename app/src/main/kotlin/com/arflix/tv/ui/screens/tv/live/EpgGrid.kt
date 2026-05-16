@@ -85,7 +85,7 @@ fun EpgGrid(
     nowNext: Map<String, IptvNowNext>,
     selectedChannelId: String?,
     focusSelectedChannelSignal: Int,
-    onChannelSelect: (EnrichedChannel) -> Unit,
+    onChannelSelect: (EnrichedChannel, IptvProgram?) -> Unit,
     onChannelFocused: (EnrichedChannel) -> Unit = {},
     onChannelFavoriteToggle: (String) -> Unit,
     favorites: Set<String>,
@@ -105,7 +105,7 @@ fun EpgGrid(
     // Window: now − 30 min → now + 2 h = 2.5 h total.
     // Past is limited to 30 min so most of the ruler is future programmes
     // (what you're about to watch), not what already aired.
-    val windowStartMillis = remember { roundedWindowStart() }
+    var windowStartMillis by remember { mutableStateOf(roundedWindowStart()) }
     val windowEndMillis = remember(windowStartMillis) {
         windowStartMillis + EpgWindowMinutes * 60L * 1000L
     }
@@ -197,9 +197,65 @@ fun EpgGrid(
         runCatching { selectedChannelFocusRequester.requestFocus() }
     }
 
+    val days = remember {
+        val base = roundedWindowStart()
+        (0..6).map { i ->
+            val start = base - i * 24 * 60 * 60_000L
+            val label = when (i) {
+                0 -> "TODAY"
+                1 -> "YESTERDAY"
+                else -> {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.timeInMillis = start
+                    cal.getDisplayName(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.SHORT, java.util.Locale.US)?.uppercase() ?: "DAY"
+                }
+            }
+            EpgDay(label, start)
+        }
+    }
+    var selectedDayIdx by remember { mutableIntStateOf(0) }
+    LaunchedEffect(selectedDayIdx) {
+        windowStartMillis = days[selectedDayIdx].startMillis
+    }
+
     Column(
         modifier = modifier.fillMaxSize().background(LiveColors.Bg),
     ) {
+        // ─── Day Selector ───────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(LiveColors.PanelDeep)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("ARCHIVE", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
+            days.forEachIndexed { idx, day ->
+                val isSelected = selectedDayIdx == idx
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (isSelected) LiveColors.Accent else LiveColors.Panel)
+                        .border(1.dp, if (isSelected) LiveColors.Accent else LiveColors.Divider, RoundedCornerShape(4.dp))
+                        .pointerInput(Unit) { detectTapGestures { selectedDayIdx = idx } }
+                        .focusable()
+                        .onKeyEvent { ev ->
+                            if (ev.type == KeyEventType.KeyDown && (ev.key == Key.DirectionCenter || ev.key == Key.Enter)) {
+                                selectedDayIdx = idx; true
+                            } else false
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = day.label,
+                        style = LiveType.Badge.copy(color = if (isSelected) LiveColors.Bg else LiveColors.Fg)
+                    )
+                }
+            }
+        }
+
         // ─── Header row ─────────────────────────────────────────────
         Row(
             modifier = Modifier
@@ -310,7 +366,7 @@ fun EpgGrid(
                             nowNext = nowNext[ch.id],
                             isFavorite = ch.id in favorites,
                             stripe = idx % 2 == 1,
-                            onClick = { onChannelSelect(ch) },
+                            onClick = { onChannelSelect(ch, null) },
                             onFocused = { onChannelFocused(ch) },
                             onMoveLeft = onMoveLeftFromChannels,
                             onFavoriteToggle = { onChannelFavoriteToggle(ch.id) },
@@ -368,7 +424,7 @@ fun EpgGrid(
                                 stripe = idx % 2 == 1,
                                 isActive = ch.id == selectedChannelId,
                                 rowHeight = rowHeight,
-                                onClick = { onChannelSelect(ch) },
+                                onClick = { program -> onChannelSelect(ch, program) },
                                 onFocused = { onChannelFocused(ch) },
                             )
                         }
@@ -399,7 +455,7 @@ private fun ProgramsRow(
     stripe: Boolean,
     isActive: Boolean,
     rowHeight: Dp,
-    onClick: () -> Unit,
+    onClick: (IptvProgram?) -> Unit,
     onFocused: () -> Unit,
 ) {
     val nowMillis = clockTickMillis
@@ -423,6 +479,8 @@ private fun ProgramsRow(
             placements.forEach { placement ->
                 val offset = (placement.startMin * pxPerMin).dp
                 val width = (placement.durationMin * pxPerMin).dp
+                val isCatchupSupported = channel.catchupDays > 0 &&
+                    placement.program.startUtcMillis >= System.currentTimeMillis() - channel.catchupDays * 24 * 60 * 60_000L
                 ProgramCell(
                     program = placement.program,
                     clockTickMillis = clockTickMillis,
@@ -430,8 +488,15 @@ private fun ProgramsRow(
                     isNow = placement.isNow,
                     isPast = placement.isPast,
                     isFocusTarget = placement.isNow,
-                    focusable = false,
-                    onClick = onClick,
+                    focusable = !placement.isPast || isCatchupSupported,
+                    isCatchupSupported = isCatchupSupported,
+                    onClick = {
+                        if (placement.isPast && isCatchupSupported) {
+                            onClick(placement.program)
+                        } else if (!placement.isPast) {
+                            onClick(null)
+                        }
+                    },
                     onFocused = onFocused,
                     rowHeight = rowHeight,
                     modifier = Modifier.offset(x = offset),
@@ -471,6 +536,8 @@ private fun NowLine(
 }
 
 private data class TimeSlot(val millis: Long, val label: String, val isNow: Boolean)
+
+private data class EpgDay(val label: String, val startMillis: Long)
 
 private fun buildHalfHourSlots(startMillis: Long, count: Int): List<TimeSlot> {
     val out = ArrayList<TimeSlot>(count)

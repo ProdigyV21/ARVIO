@@ -59,6 +59,7 @@ fun ProgramCell(
     isPast: Boolean,
     isFocusTarget: Boolean,
     focusable: Boolean = true,
+    isCatchupSupported: Boolean = false,
     onClick: () -> Unit,
     onFocused: () -> Unit = {},
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
@@ -86,7 +87,7 @@ fun ProgramCell(
         label = "program-cell-scale",
     )
     val contentAlpha by animateFloatAsState(
-        targetValue = if (isPast && !focused) 0.55f else 1f,
+        targetValue = if (isPast && !focused && !isCatchupSupported) 0.55f else 1f,
         animationSpec = tween(durationMillis = 150),
         label = "program-cell-alpha",
     )

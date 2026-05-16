@@ -578,6 +578,55 @@ class IptvRepository @Inject constructor(
         return "$safeBase/xmltv.php?username=$u&password=$p"
     }
 
+    fun getCatchupUrl(channel: IptvChannel, program: IptvProgram): String {
+        val startUnix = program.startUtcMillis / 1000L
+        val endUnix = program.endUtcMillis / 1000L
+        val durationMin = (program.endUtcMillis - program.startUtcMillis) / 60_000L
+
+        return when (channel.catchupType?.lowercase(Locale.US)) {
+            "xtream" -> {
+                val creds = resolveXtreamCredentials(channel.streamUrl) ?: return channel.streamUrl
+                val startDt = LocalDateTime.ofInstant(Instant.ofEpochMilli(program.startUtcMillis), ZoneId.of("UTC"))
+                val startStr = startDt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd:HH-mm"))
+                "${creds.baseUrl}/timeshift/${creds.username}/${creds.password}/$durationMin/$startStr/${channel.xtreamStreamId}.ts"
+            }
+            "flussonic", "ts" -> {
+                val connector = if (channel.streamUrl.contains("?")) "&" else "?"
+                "${channel.streamUrl}${connector}utc=$startUnix"
+            }
+            "append", "shift" -> {
+                val connector = if (channel.streamUrl.contains("?")) "&" else "?"
+                "${channel.streamUrl}${connector}utc=$startUnix&lutc=$endUnix"
+            }
+            "default", "source" -> {
+                val source = channel.catchupSource ?: return channel.streamUrl
+                val startDt = LocalDateTime.ofInstant(Instant.ofEpochMilli(program.startUtcMillis), ZoneId.of("UTC"))
+                source
+                    .replace("{Y}", startDt.format(DateTimeFormatter.ofPattern("yyyy")))
+                    .replace("{m}", startDt.format(DateTimeFormatter.ofPattern("MM")))
+                    .replace("{d}", startDt.format(DateTimeFormatter.ofPattern("dd")))
+                    .replace("{H}", startDt.format(DateTimeFormatter.ofPattern("HH")))
+                    .replace("{M}", startDt.format(DateTimeFormatter.ofPattern("mm")))
+                    .replace("{S}", startDt.format(DateTimeFormatter.ofPattern("ss")))
+            }
+            else -> {
+                // If catchup-source is present but type is unknown, try placeholder replacement anyway
+                if (!channel.catchupSource.isNullOrBlank()) {
+                    val startDt = LocalDateTime.ofInstant(Instant.ofEpochMilli(program.startUtcMillis), ZoneId.of("UTC"))
+                    channel.catchupSource
+                        .replace("{Y}", startDt.format(DateTimeFormatter.ofPattern("yyyy")))
+                        .replace("{m}", startDt.format(DateTimeFormatter.ofPattern("MM")))
+                        .replace("{d}", startDt.format(DateTimeFormatter.ofPattern("dd")))
+                        .replace("{H}", startDt.format(DateTimeFormatter.ofPattern("HH")))
+                        .replace("{M}", startDt.format(DateTimeFormatter.ofPattern("mm")))
+                        .replace("{S}", startDt.format(DateTimeFormatter.ofPattern("ss")))
+                } else {
+                    channel.streamUrl
+                }
+            }
+        }
+    }
+
     suspend fun clearConfig() {
         context.settingsDataStore.edit { prefs ->
             prefs.remove(m3uUrlKey())
@@ -1753,7 +1802,9 @@ class IptvRepository @Inject constructor(
         val name: String? = null,
         @SerializedName("stream_icon") val streamIcon: String? = null,
         @SerializedName("epg_channel_id") val epgChannelId: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        @SerializedName("tv_archive") val tvArchive: Int? = null,
+        @SerializedName("tv_archive_duration") val tvArchiveDuration: Int? = null
     )
 
     private data class XtreamVodStream(
@@ -3573,14 +3624,24 @@ class IptvRepository @Inject constructor(
     private fun resolveXtreamCredentials(url: String): XtreamCredentials? {
         if (url.isBlank()) return null
         val parsed = url.toHttpUrlOrNull() ?: return null
-        val username = parsed.queryParameter("username")?.trim()?.ifBlank { null }
+        var username = parsed.queryParameter("username")?.trim()?.ifBlank { null }
             ?: parsed.queryParameter("user")?.trim()?.ifBlank { null }
             ?: parsed.queryParameter("uname")?.trim()?.ifBlank { null }
             ?: ""
-        val password = parsed.queryParameter("password")?.trim()?.ifBlank { null }
+        var password = parsed.queryParameter("password")?.trim()?.ifBlank { null }
             ?: parsed.queryParameter("pass")?.trim()?.ifBlank { null }
             ?: parsed.queryParameter("pwd")?.trim()?.ifBlank { null }
             ?: ""
+
+        // Try extracting from path if query params are missing (common for /live/user/pass/id format)
+        if (username.isBlank() || password.isBlank()) {
+            val segments = parsed.pathSegments
+            if (segments.size >= 4) {
+                username = segments[segments.size - 3]
+                password = segments[segments.size - 2]
+            }
+        }
+
         if (username.isBlank() || password.isBlank()) return null
         // Accept any URL with username/password params; derive baseUrl from scheme+host+port
         val path = parsed.encodedPath.lowercase(Locale.US)
@@ -3683,7 +3744,9 @@ class IptvRepository @Inject constructor(
                 logo = stream.streamIcon?.takeIf { it.isNotBlank() },
                 epgId = stream.epgChannelId?.trim()?.takeIf { it.isNotBlank() },
                 rawTitle = name,
-                xtreamStreamId = streamId
+                xtreamStreamId = streamId,
+                catchupDays = (stream.tvArchive ?: stream.tvArchiveDuration ?: 0).coerceAtLeast(0),
+                catchupType = if ((stream.tvArchive ?: 0) > 0 || (stream.tvArchiveDuration ?: 0) > 0) "xtream" else null
             )
         }
     }
@@ -4315,6 +4378,9 @@ class IptvRepository @Inject constructor(
                 val channelName = extractChannelName(metadata)
                 val groupTitle = extractAttr(metadata, "group-title")?.takeIf { it.isNotBlank() } ?: "Uncategorized"
                 val logo = extractAttr(metadata, "tvg-logo")
+                val catchupType = extractAttr(metadata, "catchup")
+                val catchupDays = extractAttr(metadata, "catchup-days")?.toIntOrNull() ?: 0
+                val catchupSource = extractAttr(metadata, "catchup-source")
 
                 channels += IptvChannel(
                     id = id,
@@ -4323,7 +4389,10 @@ class IptvRepository @Inject constructor(
                     group = groupTitle,
                     logo = logo,
                     epgId = epgId,
-                    rawTitle = metadata ?: channelName
+                    rawTitle = metadata ?: channelName,
+                    catchupDays = catchupDays,
+                    catchupType = catchupType,
+                    catchupSource = catchupSource
                 )
                 parsedCount++
                 if (parsedCount % 5000 == 0) {
@@ -4343,7 +4412,10 @@ class IptvRepository @Inject constructor(
         if (channels.isEmpty()) return emptyMap()
 
         val nowUtc = System.currentTimeMillis()
-        val recentCutoff = nowUtc - (30 * 60_000L)  // Keep programs that ended within past 30 min
+        val maxCatchupDays = channels.maxOfOrNull { it.catchupDays } ?: 0
+        val catchupCutoff = nowUtc - (maxCatchupDays.coerceAtMost(7) * 24 * 60 * 60_000L)
+        val recentCutoff = minOf(nowUtc - (30 * 60_000L), catchupCutoff)
+
         val keyLookup = buildChannelKeyLookup(channels)
         val xmlChannelNameMap = mutableMapOf<String, MutableSet<String>>()
         val nowCandidates = mutableMapOf<String, IptvProgram?>()
@@ -4427,7 +4499,8 @@ class IptvRepository @Inject constructor(
                                 addUpcomingCandidate(future, program, limit = epgUpcomingProgramLimit)
                             } else if (program.endUtcMillis <= nowUtc && program.endUtcMillis > recentCutoff) {
                                 val recent = recentCandidates.getOrPut(channel.id) { mutableListOf() }
-                                if (recent.size < epgRecentProgramLimit) recent.add(program)
+                                val limit = if (channel.catchupDays > 0) 1000 else epgRecentProgramLimit
+                                if (recent.size < limit) recent.add(program)
                             }
                         }
                         currentChannelKey = null
@@ -4457,13 +4530,16 @@ class IptvRepository @Inject constructor(
     ): Map<String, IptvNowNext> {
         if (channels.isEmpty()) return emptyMap()
 
+        val nowUtc = System.currentTimeMillis()
+        val maxCatchupDays = channels.maxOfOrNull { it.catchupDays } ?: 0
+        val catchupCutoff = nowUtc - (maxCatchupDays.coerceAtMost(7) * 24 * 60 * 60_000L)
+        val recentCutoff = minOf(nowUtc - (30 * 60_000L), catchupCutoff)
+
         val keyLookup = buildChannelKeyLookup(channels)
         val xmlChannelNameMap = mutableMapOf<String, MutableSet<String>>()
         val nowCandidates = mutableMapOf<String, IptvProgram?>()
         val upcomingCandidates = mutableMapOf<String, MutableList<IptvProgram>>()
         val recentCandidates = mutableMapOf<String, MutableList<IptvProgram>>()
-        val nowUtc = System.currentTimeMillis()
-        val recentCutoff = nowUtc - (30 * 60_000L)  // Keep programs that ended within past 30 min
 
         val factory = SAXParserFactory.newInstance().apply {
             isNamespaceAware = false
@@ -4576,7 +4652,8 @@ class IptvRepository @Inject constructor(
                             } else if (program.endUtcMillis <= nowUtc && program.endUtcMillis > recentCutoff) {
                                 // Recently ended program – keep for the past-window in the EPG guide
                                 val recent = recentCandidates.getOrPut(channel.id) { mutableListOf() }
-                                if (recent.size < epgRecentProgramLimit) recent.add(program)
+                                val limit = if (channel.catchupDays > 0) 1000 else epgRecentProgramLimit
+                                if (recent.size < limit) recent.add(program)
                             }
                         }
                         currentChannelKey = null

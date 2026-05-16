@@ -34,6 +34,7 @@ data class EnrichedChannel(
     val name: String get() = source.name
     val streamUrl: String get() = source.streamUrl
     val logo: String? get() = source.logo
+    val catchupDays: Int get() = source.catchupDays
 }
 
 data class LiveCategoryIndex(

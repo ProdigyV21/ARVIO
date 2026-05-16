@@ -68,6 +68,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.arflix.tv.data.model.IptvChannel
+import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.ui.screens.tv.TvUiState
 import com.arflix.tv.ui.screens.tv.TvViewModel
@@ -290,6 +291,7 @@ fun LiveTvScreen(
     // channel of the first non-empty category.
     var playingChannelId by rememberSaveable { mutableStateOf<String?>(initialChannelId) }
     var focusedChannelId by rememberSaveable { mutableStateOf<String?>(initialChannelId) }
+    var playingCatchupProgram by remember { mutableStateOf<IptvProgram?>(null) }
     val playingChannel = remember(playingChannelId, enrichedState.value, filteredChannels) {
         playingChannelId?.let { enrichedState.value.index.byId[it] }
             ?: filteredChannels.firstOrNull { it.id == playingChannelId }
@@ -463,7 +465,15 @@ fun LiveTvScreen(
     }
 
     // When the selected channel changes, swap media item.
-    val currentStreamUrl by rememberUpdatedState(playingChannel?.streamUrl ?: initialStreamUrl)
+    val currentStreamUrl = remember(playingChannel, playingCatchupProgram) {
+        val ch = playingChannel ?: return@remember initialStreamUrl
+        val pr = playingCatchupProgram
+        if (pr != null) {
+            viewModel.iptvRepository.getCatchupUrl(ch.source, pr)
+        } else {
+            ch.streamUrl
+        }
+    }
     val openFullScreenPlayer = remember(playingChannelId, currentStreamUrl) {
         {
             if (playingChannelId != null || currentStreamUrl != null) {
@@ -478,11 +488,15 @@ fun LiveTvScreen(
         exoPlayer.setMediaItem(
             MediaItem.Builder()
                 .setUri(stream)
-                .setLiveConfiguration(
-                    MediaItem.LiveConfiguration.Builder()
-                        .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
-                        .setTargetOffsetMs(4_000).build()
-                )
+                .apply {
+                    if (playingCatchupProgram == null) {
+                        setLiveConfiguration(
+                            MediaItem.LiveConfiguration.Builder()
+                                .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
+                                .setTargetOffsetMs(4_000).build()
+                        )
+                    }
+                }
                 .build()
         )
         exoPlayer.prepare()
@@ -634,12 +648,13 @@ fun LiveTvScreen(
                         focusSelectedChannelSignal = focusSelectedChannelSignal,
                         compact = true,
                         gridFocused = focusZone == LiveTvFocusZone.EPG,
-                        onChannelSelect = { channel ->
+                        onChannelSelect = { channel, program ->
                             focusedChannelId = channel.id
-                            if (channel.id == playingChannelId && !isFullScreen) {
+                            if (channel.id == playingChannelId && playingCatchupProgram == program && !isFullScreen) {
                                 isFullScreen = true
                             } else {
                                 playingChannelId = channel.id
+                                playingCatchupProgram = program
                             }
                         },
                         onChannelFocused = { channel -> focusedChannelId = channel.id },
@@ -716,7 +731,7 @@ fun LiveTvScreen(
                         focusSelectedChannelSignal = focusSelectedChannelSignal,
                         compact = compactTouchLayout,
                         gridFocused = focusZone == LiveTvFocusZone.EPG,
-                        onChannelSelect = { channel ->
+                        onChannelSelect = { channel, program ->
                             // Two-step activation:
                             //  1st tap on a channel → tune it in the mini-
                             //      player so the user can preview without
@@ -726,10 +741,11 @@ fun LiveTvScreen(
                             // Picking a different channel while already full-
                             // screen swaps the stream but keeps fullscreen.
                             focusedChannelId = channel.id
-                            if (channel.id == playingChannelId && !isFullScreen) {
+                            if (channel.id == playingChannelId && playingCatchupProgram == program && !isFullScreen) {
                                 isFullScreen = true
                             } else {
                                 playingChannelId = channel.id
+                                playingCatchupProgram = program
                             }
                         },
                         onChannelFocused = { channel -> focusedChannelId = channel.id },
