@@ -162,6 +162,13 @@ async function main() {
     certificatePemPath,
     "-out",
     p12Path,
+    "-legacy",
+    "-certpbe",
+    "PBE-SHA1-3DES",
+    "-keypbe",
+    "PBE-SHA1-3DES",
+    "-macalg",
+    "sha1",
     "-password",
     `pass:${p12Password}`,
   ]);
