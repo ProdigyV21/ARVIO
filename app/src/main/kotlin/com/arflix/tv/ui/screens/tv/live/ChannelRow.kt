@@ -11,7 +11,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Row2
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -67,6 +68,7 @@ fun ChannelRow(
     onClick: () -> Unit,
     onFavoriteToggle: () -> Unit,
     onMoveLeft: () -> Unit = {},
+    onMoveUp: () -> Boolean = { false },
     onFocused: () -> Unit = {},
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
     forceFocused: Boolean = false,
@@ -119,9 +121,11 @@ fun ChannelRow(
             // repeatCount == 1) on CENTER / ENTER / MENU triggers favorite
             // toggle, giving the user the "hold OK" gesture everywhere.
             .onKeyEvent { ev ->
-                if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionLeft) {
-                    onMoveLeft()
-                    return@onKeyEvent true
+                if (ev.type == KeyEventType.KeyDown) {
+                    when (ev.key) {
+                        Key.DirectionLeft -> { onMoveLeft(); return@onKeyEvent true }
+                        Key.DirectionUp -> if (onMoveUp()) return@onKeyEvent true
+                    }
                 }
                 val isLongHoldCenter = ev.type == KeyEventType.KeyDown &&
                     (ev.key == Key.DirectionCenter || ev.key == Key.Enter) &&
@@ -182,6 +186,15 @@ fun ChannelRow(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
                         tint = Color(0xFFFFC04A), // Golden star
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
+                if (channel.catchupDays > 0) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Filled.History,
+                        contentDescription = "Catchup available",
+                        tint = LiveColors.Accent.copy(alpha = 0.8f),
                         modifier = Modifier.size(11.dp),
                     )
                 }

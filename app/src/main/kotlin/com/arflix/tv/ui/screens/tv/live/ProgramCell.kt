@@ -135,7 +135,13 @@ fun ProgramCell(
                     Modifier
                 }
             )
-            .pointerInput(Unit) { detectTapGestures(onTap = { onClick() }) }
+            .then(
+                if (focusable) {
+                    Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onClick() }) }
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
         if (isNow) {
@@ -158,11 +164,19 @@ fun ProgramCell(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val nowMs = clockTickMillis
-                val isNewTag = (nowMs - program.startUtcMillis) in 0..24L * 60 * 60 * 1000L &&
-                    !program.isLive(nowMs)
-                if (isNewTag) {
-                    Badge("NEW", LiveColors.Bg, LiveColors.Accent)
+                if (isNow) {
+                    Badge("LIVE", Color.White, LiveColors.LiveRed)
                     Spacer(Modifier.size(6.dp))
+                } else if (isPast && isCatchupSupported) {
+                    Badge("ARCHIVE", LiveColors.Bg, LiveColors.Accent)
+                    Spacer(Modifier.size(6.dp))
+                } else if (!isPast) {
+                    val isNewTag = (nowMs - program.startUtcMillis) in 0..24L * 60 * 60 * 1000L &&
+                        !program.isLive(nowMs)
+                    if (isNewTag) {
+                        Badge("NEW", LiveColors.Bg, LiveColors.Accent)
+                        Spacer(Modifier.size(6.dp))
+                    }
                 }
                 Text(
                     text = program.title,

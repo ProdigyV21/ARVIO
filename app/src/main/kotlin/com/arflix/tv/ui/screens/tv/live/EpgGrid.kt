@@ -95,11 +95,11 @@ fun EpgGrid(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val pxPerMin = LiveDims.EpgPxPerMinute
+    val pxPerMin = if (compact) 96f / 30f else LiveDims.EpgPxPerMinute.toFloat()
     val selectedChannelFocusRequester = remember { FocusRequester() }
     val headerHeight = if (compact) 32.dp else LiveDims.EpgHeaderHeight
     val channelColumnWidth = if (compact) 164.dp else LiveDims.EpgChannelColWidth
-    val halfHourWidth = if (compact) 96.dp else LiveDims.EpgHalfHourWidth
+    val halfHourWidth = (pxPerMin * 30f).dp
     val rowHeight = if (compact) 52.dp else LiveDims.EpgRowHeight
 
     // Window: now − 30 min → now + 2 h = 2.5 h total.
@@ -161,16 +161,6 @@ fun EpgGrid(
 
     val scope = rememberCoroutineScope()
 
-    // Park NOW ~30 dp from the left so only a thin slice of the past is
-    // visible and the rest of the viewport holds upcoming programmes.
-    LaunchedEffect(Unit) {
-        with(density) {
-            val nowOffsetMin = ((clockTickMillis - windowStartMillis) / 60_000L).toInt()
-            val targetPx = (nowOffsetMin * pxPerMin).dp.toPx().toInt() - 30.dp.toPx().toInt()
-            hScroll.scrollTo(targetPx.coerceAtLeast(0))
-        }
-    }
-
     // Scroll the grid to the active channel whenever the selection changes
     // from outside (e.g. search result picked). Uses a keyed LaunchedEffect
     // on both selection and channel list identity so a late-arriving list
@@ -197,9 +187,12 @@ fun EpgGrid(
         runCatching { selectedChannelFocusRequester.requestFocus() }
     }
 
-    val days = remember {
+    val maxCatchupDays = remember(channels) {
+        (channels.maxOfOrNull { it.catchupDays } ?: 0).coerceIn(0, 7)
+    }
+    val days = remember(maxCatchupDays) {
         val base = roundedWindowStart()
-        (0..6).map { i ->
+        (0..maxCatchupDays).map { i ->
             val start = base - i * 24 * 60 * 60_000L
             val label = when (i) {
                 0 -> "TODAY"
@@ -214,44 +207,85 @@ fun EpgGrid(
         }
     }
     var selectedDayIdx by remember { mutableIntStateOf(0) }
-    LaunchedEffect(selectedDayIdx) {
-        windowStartMillis = days[selectedDayIdx].startMillis
+    val activeDayIdx = selectedDayIdx.coerceIn(0, days.lastIndex)
+    val dayFocusRequesters = remember(days.size) { List(days.size) { FocusRequester() } }
+    var focusedDayIdx by remember { mutableStateOf<Int?>(null) }
+    val showDaySelector = days.size > 1
+
+    LaunchedEffect(days.size, activeDayIdx) {
+        if (selectedDayIdx != activeDayIdx) selectedDayIdx = activeDayIdx
+    }
+
+    LaunchedEffect(activeDayIdx, days) {
+        windowStartMillis = days[activeDayIdx].startMillis
+        if (activeDayIdx == 0) {
+            with(density) {
+                val nowOffsetMin = ((clockTickMillis - days[0].startMillis) / 60_000L).toInt()
+                val targetPx = (nowOffsetMin * pxPerMin).dp.toPx().toInt() - 30.dp.toPx().toInt()
+                hScroll.scrollTo(targetPx.coerceAtLeast(0))
+            }
+        } else {
+            hScroll.scrollTo(0)
+        }
     }
 
     Column(
         modifier = modifier.fillMaxSize().background(LiveColors.Bg),
     ) {
-        // ─── Day Selector ───────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(LiveColors.PanelDeep)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("ARCHIVE", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
-            days.forEachIndexed { idx, day ->
-                val isSelected = selectedDayIdx == idx
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (isSelected) LiveColors.Accent else LiveColors.Panel)
-                        .border(1.dp, if (isSelected) LiveColors.Accent else LiveColors.Divider, RoundedCornerShape(4.dp))
-                        .pointerInput(Unit) { detectTapGestures { selectedDayIdx = idx } }
-                        .focusable()
-                        .onKeyEvent { ev ->
-                            if (ev.type == KeyEventType.KeyDown && (ev.key == Key.DirectionCenter || ev.key == Key.Enter)) {
-                                selectedDayIdx = idx; true
-                            } else false
-                        }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = day.label,
-                        style = LiveType.Badge.copy(color = if (isSelected) LiveColors.Bg else LiveColors.Fg)
-                    )
+        if (showDaySelector) {
+            // ─── Day Selector ───────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LiveColors.PanelDeep)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("ARCHIVE", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
+                days.forEachIndexed { idx, day ->
+                    val isSelected = activeDayIdx == idx
+                    val isFocused = focusedDayIdx == idx
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSelected) LiveColors.Accent else LiveColors.Panel)
+                            .border(
+                                width = if (isFocused) 2.dp else 1.dp,
+                                color = when {
+                                    isFocused -> LiveColors.FocusRing
+                                    isSelected -> LiveColors.Accent
+                                    else -> LiveColors.Divider
+                                },
+                                shape = RoundedCornerShape(4.dp),
+                            )
+                            .pointerInput(Unit) { detectTapGestures { selectedDayIdx = idx } }
+                            .focusRequester(dayFocusRequesters[idx])
+                            .onFocusChanged { if (it.hasFocus) focusedDayIdx = idx }
+                            .focusable()
+                            .onKeyEvent { ev ->
+                                if (ev.type == KeyEventType.KeyDown) {
+                                    when (ev.key) {
+                                        Key.DirectionCenter, Key.Enter -> {
+                                            selectedDayIdx = idx
+                                            true
+                                        }
+                                        Key.DirectionDown -> {
+                                            selectedChannelFocusRequester.requestFocus()
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                } else false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = day.label,
+                            style = LiveType.Badge.copy(color = if (isSelected) LiveColors.Bg else LiveColors.Fg)
+                        )
+                    }
                 }
             }
         }
@@ -317,19 +351,21 @@ fun EpgGrid(
                     }
                 }
                 // Cyan "NOW hh:mm" pill hovering above the now-line inside the header.
-                val nowMin = ((clockTickMillis - windowStartMillis) / 60_000L).toInt()
-                val nowOffset = (nowMin * pxPerMin).dp
-                Box(
-                    modifier = Modifier
-                        .offset(x = nowOffset - 46.dp, y = 6.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(LiveColors.Accent)
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        text = "NOW " + formatClock(clockTickMillis),
-                        style = LiveType.Badge.copy(color = LiveColors.Bg),
-                    )
+                if (clockTickMillis in windowStartMillis until windowEndMillis) {
+                    val nowMin = ((clockTickMillis - windowStartMillis) / 60_000L).toInt()
+                    val nowOffset = (nowMin * pxPerMin).dp
+                    Box(
+                        modifier = Modifier
+                            .offset(x = nowOffset - 46.dp, y = 6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LiveColors.Accent)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = "NOW " + formatClock(clockTickMillis),
+                            style = LiveType.Badge.copy(color = LiveColors.Bg),
+                        )
+                    }
                 }
             }
         }
@@ -369,6 +405,14 @@ fun EpgGrid(
                             onClick = { onChannelSelect(ch, null) },
                             onFocused = { onChannelFocused(ch) },
                             onMoveLeft = onMoveLeftFromChannels,
+                            onMoveUp = {
+                                if (showDaySelector && idx == channelListState.firstVisibleItemIndex) {
+                                    dayFocusRequesters.getOrNull(activeDayIdx)?.requestFocus()
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
                             onFavoriteToggle = { onChannelFavoriteToggle(ch.id) },
                             rowHeight = rowHeight,
                             forceFocused = gridFocused && ch.id == selectedChannelId,
@@ -390,10 +434,15 @@ fun EpgGrid(
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         state = programListState,
-                        userScrollEnabled = false,
                         modifier = Modifier
                             .fillMaxSize()
-                            .horizontalScroll(hScroll),
+                            .horizontalScroll(hScroll)
+                            .onKeyEvent { ev ->
+                                if (ev.type == KeyEventType.KeyDown && ev.key == Key.Back) {
+                                    selectedChannelFocusRequester.requestFocus()
+                                    true
+                                } else false
+                            },
                     ) {
                         itemsIndexed(
                             channels,
@@ -430,12 +479,14 @@ fun EpgGrid(
                         }
                     }
                     // NOW glow line across full body
-                    NowLine(
-                        clockTickMillis = clockTickMillis,
-                        windowStartMillis = windowStartMillis,
-                        pxPerMin = pxPerMin,
-                        hScrollOffsetPx = hScroll.value,
-                    )
+                    if (clockTickMillis in windowStartMillis until windowEndMillis) {
+                        NowLine(
+                            clockTickMillis = clockTickMillis,
+                            windowStartMillis = windowStartMillis,
+                            pxPerMin = pxPerMin,
+                            hScrollOffsetPx = hScroll.value,
+                        )
+                    }
                 }
             }
         }
@@ -451,7 +502,7 @@ private fun ProgramsRow(
     windowStartMillis: Long,
     windowEndMillis: Long,
     totalWidth: Dp,
-    pxPerMin: Int,
+    pxPerMin: Float,
     stripe: Boolean,
     isActive: Boolean,
     rowHeight: Dp,
@@ -480,6 +531,7 @@ private fun ProgramsRow(
                 val offset = (placement.startMin * pxPerMin).dp
                 val width = (placement.durationMin * pxPerMin).dp
                 val isCatchupSupported = channel.catchupDays > 0 &&
+                    !placement.isPlaceholder &&
                     placement.program.startUtcMillis >= System.currentTimeMillis() - channel.catchupDays * 24 * 60 * 60_000L
                 ProgramCell(
                     program = placement.program,
@@ -511,7 +563,7 @@ private fun ProgramsRow(
 private fun NowLine(
     clockTickMillis: Long,
     windowStartMillis: Long,
-    pxPerMin: Int,
+    pxPerMin: Float,
     hScrollOffsetPx: Int,
 ) {
     val density = LocalDensity.current
@@ -550,16 +602,16 @@ private fun buildHalfHourSlots(startMillis: Long, count: Int): List<TimeSlot> {
     return out
 }
 
-/** Round down to the nearest half-hour, shifted 30 min back so the user
- *  can still see what just aired without the past dominating the viewport. */
+/** Round down to the start of the current day (00:00) so the user can
+ *  scroll back through the full daily timeline for catchup. */
 private fun roundedWindowStart(): Long {
     val cal = java.util.Calendar.getInstance()
     cal.timeInMillis = System.currentTimeMillis()
+    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+    cal.set(java.util.Calendar.MINUTE, 0)
     cal.set(java.util.Calendar.SECOND, 0)
     cal.set(java.util.Calendar.MILLISECOND, 0)
-    val min = cal.get(java.util.Calendar.MINUTE)
-    cal.set(java.util.Calendar.MINUTE, if (min >= 30) 30 else 0)
-    return cal.timeInMillis - 30L * 60_000L
+    return cal.timeInMillis
 }
 
 private fun programsInWindow(
@@ -587,7 +639,8 @@ private data class ProgramPlacement(
     val startMin: Int,
     val durationMin: Int,
     val isNow: Boolean,
-    val isPast: Boolean
+    val isPast: Boolean,
+    val isPlaceholder: Boolean = false,
 )
 
 private fun buildProgramPlacements(
@@ -596,23 +649,54 @@ private fun buildProgramPlacements(
     windowEndMillis: Long,
     nowMillis: Long
 ): List<ProgramPlacement> {
-    if (programs.isEmpty()) return emptyList()
-
     val placements = mutableListOf<ProgramPlacement>()
     var cursor = windowStartMillis
+
     programs.forEach { program ->
+        // 1. Fill gap before this program
+        if (program.startUtcMillis > cursor) {
+            val gapEnd = minOf(program.startUtcMillis, windowEndMillis)
+            if (gapEnd > cursor) {
+                placements += ProgramPlacement(
+                    program = IptvProgram("No Information", startUtcMillis = cursor, endUtcMillis = gapEnd),
+                    startMin = ((cursor - windowStartMillis) / 60_000L).toInt(),
+                    durationMin = ((gapEnd - cursor) / 60_000L).toInt().coerceAtLeast(1),
+                    isNow = nowMillis in cursor until gapEnd,
+                    isPast = gapEnd <= nowMillis,
+                    isPlaceholder = true,
+                )
+                cursor = gapEnd
+            }
+        }
+
+        if (cursor >= windowEndMillis) return@forEach
+
+        // 2. Add the actual program
         val clampedStart = maxOf(program.startUtcMillis, windowStartMillis, cursor)
         val clampedEnd = minOf(program.endUtcMillis, windowEndMillis)
-        if (clampedEnd <= clampedStart) return@forEach
-
-        placements += ProgramPlacement(
-            program = program,
-            startMin = ((clampedStart - windowStartMillis) / 60_000L).toInt().coerceAtLeast(0),
-            durationMin = ((clampedEnd - clampedStart) / 60_000L).toInt().coerceAtLeast(1),
-            isNow = nowMillis in clampedStart until clampedEnd,
-            isPast = clampedEnd <= nowMillis
-        )
-        cursor = clampedEnd
+        if (clampedEnd > clampedStart) {
+            placements += ProgramPlacement(
+                program = program,
+                startMin = ((clampedStart - windowStartMillis) / 60_000L).toInt(),
+                durationMin = ((clampedEnd - clampedStart) / 60_000L).toInt().coerceAtLeast(1),
+                isNow = nowMillis in clampedStart until clampedEnd,
+                isPast = clampedEnd <= nowMillis
+            )
+            cursor = clampedEnd
+        }
     }
+
+    // 3. Fill trailing gap
+    if (cursor < windowEndMillis) {
+        placements += ProgramPlacement(
+            program = IptvProgram("No Information", startUtcMillis = cursor, endUtcMillis = windowEndMillis),
+            startMin = ((cursor - windowStartMillis) / 60_000L).toInt(),
+            durationMin = ((windowEndMillis - cursor) / 60_000L).toInt().coerceAtLeast(1),
+            isNow = nowMillis in cursor until windowEndMillis,
+            isPast = windowEndMillis <= nowMillis,
+            isPlaceholder = true,
+        )
+    }
+
     return placements
 }

@@ -367,7 +367,11 @@ class TvViewModel @Inject constructor(
     private fun hasAnyEpgData(snapshot: IptvSnapshot): Boolean {
         if (snapshot.nowNext.isEmpty()) return false
         return snapshot.nowNext.values.any { item ->
-            item.now != null || item.next != null || item.later != null || item.upcoming.isNotEmpty()
+            item.now != null ||
+                item.next != null ||
+                item.later != null ||
+                item.upcoming.isNotEmpty() ||
+                item.recent.isNotEmpty()
         }
     }
 
@@ -376,7 +380,8 @@ class TvViewModel @Inject constructor(
             item.now != null ||
                 item.next != null ||
                 item.later != null ||
-                item.upcoming.isNotEmpty()
+                item.upcoming.isNotEmpty() ||
+                item.recent.isNotEmpty()
             )
     }
 

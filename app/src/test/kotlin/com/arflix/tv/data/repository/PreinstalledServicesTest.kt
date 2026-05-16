@@ -40,7 +40,8 @@ class PreinstalledServicesTest {
         "collection_service_prime_video",
         "collection_service_hbo_max",
         "collection_service_hulu",
-        "collection_service_paramountplus"
+        "collection_service_paramountplus",
+        "collection_service_crunchyroll"
     )
 
     private val servicesWithoutHeroVideo = serviceOrder.toSet() - serviceVideoIds
@@ -92,7 +93,8 @@ class PreinstalledServicesTest {
             "collection_service_prime_video" to "networks%20videos/amazonprime.mp4",
             "collection_service_hbo_max" to "networks%20videos/hbomax.mp4",
             "collection_service_hulu" to "networks%20videos/hulu.mp4",
-            "collection_service_paramountplus" to "networks%20videos/paramount.mp4"
+            "collection_service_paramountplus" to "networks%20videos/paramount.mp4",
+            "collection_service_crunchyroll" to "networks%20videos/crunchyroll.mp4"
         )
         services.forEach { cfg ->
             val video = cfg.collectionHeroVideoUrl

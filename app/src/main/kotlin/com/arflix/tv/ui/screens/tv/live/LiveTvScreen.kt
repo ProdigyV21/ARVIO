@@ -403,6 +403,7 @@ fun LiveTvScreen(
         val nextIdx = ((start + delta) % size + size) % size
         playingChannelId = all[nextIdx].id
         focusedChannelId = all[nextIdx].id
+        playingCatchupProgram = null
     }
 
     // ExoPlayer lifecycle — mirrors the legacy screen's setup verbatim so live
@@ -482,7 +483,7 @@ fun LiveTvScreen(
             }
         }
     }
-    LaunchedEffect(currentStreamUrl) {
+    LaunchedEffect(currentStreamUrl, playingCatchupProgram) {
         val stream = currentStreamUrl ?: return@LaunchedEffect
         delay(90L)
         exoPlayer.setMediaItem(
