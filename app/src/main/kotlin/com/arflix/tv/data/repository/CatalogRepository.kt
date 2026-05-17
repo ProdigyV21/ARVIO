@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import com.arflix.tv.network.OkHttpProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URI
@@ -958,7 +959,7 @@ class CatalogRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Android TV; ARVIO)")
+                .header("User-Agent", OkHttpProvider.userAgent)
                 .build()
             runCatching {
                 okHttpClient.newCall(request).execute().use { response ->

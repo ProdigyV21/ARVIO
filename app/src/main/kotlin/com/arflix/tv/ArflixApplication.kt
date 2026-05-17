@@ -82,13 +82,17 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         // a single volatile assignment.
         OkHttpProvider.init(this)
 
-        // Initialize global DNS provider from DataStore before network calls.
+        // Initialize global DNS provider and user agent from DataStore before network calls.
         appScope.launch(Dispatchers.IO) {
             val prefs = settingsDataStore.data.first()
             val dnsKey = androidx.datastore.preferences.core.stringPreferencesKey(OkHttpProvider.DNS_PROVIDER_PREF_KEY)
             val dnsPref = prefs[dnsKey]
             val provider = OkHttpProvider.parseDnsProvider(dnsPref)
             OkHttpProvider.setDnsProvider(provider)
+
+            val uaKey = androidx.datastore.preferences.core.stringPreferencesKey(OkHttpProvider.USER_AGENT_PREF_KEY)
+            val savedUserAgent = prefs[uaKey]?.takeIf { it.isNotBlank() } ?: OkHttpProvider.DEFAULT_USER_AGENT
+            OkHttpProvider.setCustomUserAgent(savedUserAgent)
 
             runCatching { OkHttpProvider.dns.lookup("image.tmdb.org") }
         }

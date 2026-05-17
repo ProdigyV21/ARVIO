@@ -487,7 +487,7 @@ fun PlayerScreen(
     }
     val httpDataSourceFactory = remember(playbackHttpClient) {
         OkHttpDataSource.Factory(playbackHttpClient)
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setUserAgent(OkHttpProvider.userAgent)
             .setDefaultRequestProperties(baseRequestHeaders)
     }
     val mediaCache = remember(context) { PlaybackCacheSingleton.getInstance(context) }

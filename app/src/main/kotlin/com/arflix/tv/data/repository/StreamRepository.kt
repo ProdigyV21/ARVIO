@@ -2343,8 +2343,7 @@ class StreamRepository @Inject constructor(
             withTimeout(STREAM_REDIRECT_RESOLUTION_TIMEOUT_MS) {
                 val requestHeaders = headers.toMutableMap()
                 if (requestHeaders.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-                    requestHeaders["User-Agent"] =
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    requestHeaders["User-Agent"] = OkHttpProvider.userAgent
                 }
                 if (requestHeaders.keys.none { it.equals("Accept", ignoreCase = true) }) {
                     requestHeaders["Accept"] = "*/*"
@@ -2381,8 +2380,7 @@ class StreamRepository @Inject constructor(
             extra = emptyMap()
         ).toMutableMap()
         if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-            headers["User-Agent"] =
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            headers["User-Agent"] = OkHttpProvider.userAgent
         }
         if (headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
             headers["Accept"] = "*/*"
@@ -2587,8 +2585,7 @@ class StreamRepository @Inject constructor(
             ).toMutableMap()
 
             if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-                headers["User-Agent"] =
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                headers["User-Agent"] = OkHttpProvider.userAgent
             }
             if (headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
                 headers["Accept"] = "*/*"

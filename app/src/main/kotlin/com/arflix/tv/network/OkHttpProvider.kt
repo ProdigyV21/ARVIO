@@ -51,6 +51,8 @@ object OkHttpProvider {
     private const val ADGUARD_DOH_URL = "https://dns.adguard-dns.com/dns-query"
 
     const val DNS_PROVIDER_PREF_KEY = "dns_provider_global"
+    const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Android TV; ARVIO)"
+    const val USER_AGENT_PREF_KEY = "custom_user_agent_global"
 
     enum class AppDnsProvider {
         SYSTEM,
@@ -72,6 +74,15 @@ object OkHttpProvider {
 
     @Volatile
     private var selectedDnsProvider: AppDnsProvider = AppDnsProvider.SYSTEM
+
+    @Volatile
+    private var _customUserAgent: String = DEFAULT_USER_AGENT
+
+    val userAgent: String get() = _customUserAgent
+
+    fun setCustomUserAgent(value: String) {
+        _customUserAgent = value
+    }
 
     private val dnsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val clientLock = Any()
@@ -183,7 +194,13 @@ object OkHttpProvider {
             }
         }
 
+        val userAgentInterceptor = Interceptor { chain ->
+            val original = chain.request()
+            chain.proceed(original.newBuilder().header("User-Agent", _customUserAgent).build())
+        }
+
         val builder = OkHttpClient.Builder()
+            .addInterceptor(userAgentInterceptor)
             // TMDB/Trakt calls are proxied when Supabase proxy config is present.
             // Contributors can still use direct calls with their own local keys.
             .addInterceptor(ApiProxyInterceptor())
@@ -207,7 +224,12 @@ object OkHttpProvider {
     }
 
     private fun buildPlaybackClient(): OkHttpClient {
+        val userAgentInterceptor = Interceptor { chain ->
+            val original = chain.request()
+            chain.proceed(original.newBuilder().header("User-Agent", _customUserAgent).build())
+        }
         return OkHttpClient.Builder()
+            .addInterceptor(userAgentInterceptor)
             .connectionPool(playbackConnectionPool)
             .followRedirects(true)
             .followSslRedirects(true)

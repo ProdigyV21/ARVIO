@@ -41,6 +41,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.arflix.tv.network.OkHttpProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLDecoder
@@ -3272,7 +3273,7 @@ class MediaRepository @Inject constructor(
     private fun fetchUrl(url: String): String? {
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android TV; ARVIO)")
+            .header("User-Agent", OkHttpProvider.userAgent)
             .build()
         return runCatching {
             okHttpClient.newCall(request).execute().use { response ->

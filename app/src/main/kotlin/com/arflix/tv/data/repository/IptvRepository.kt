@@ -34,6 +34,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Deferred
+import com.arflix.tv.network.OkHttpProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
@@ -3695,7 +3696,7 @@ class IptvRepository @Inject constructor(
     ): T? = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
+            .header("User-Agent", OkHttpProvider.userAgent)
             .header("Accept", "application/json,*/*")
             .get()
             .build()
@@ -3739,7 +3740,7 @@ class IptvRepository @Inject constructor(
     ): List<IptvChannel> {
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
+            .header("User-Agent", OkHttpProvider.userAgent)
             .header("Accept", "*/*")
             .get()
             .build()
@@ -3792,15 +3793,11 @@ class IptvRepository @Inject constructor(
                 .build()
         }
 
-        var response = iptvHttpClient.newCall(epgRequest(url, "VLC/3.0.20 LibVLC/3.0.20")).execute()
+        var response = iptvHttpClient.newCall(epgRequest(url, OkHttpProvider.userAgent)).execute()
         if (!response.isSuccessful && response.code in setOf(511, 403, 401)) {
             response.close()
             response = iptvHttpClient.newCall(
-                epgRequest(
-                    url,
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                )
+                epgRequest(url, OkHttpProvider.userAgent)
             ).execute()
         }
         response.use { safeResponse ->
@@ -3825,7 +3822,7 @@ class IptvRepository @Inject constructor(
                 try {
                     // Re-download
                     val retryResponse = iptvHttpClient.newCall(
-                        epgRequest(url, "VLC/3.0.20 LibVLC/3.0.20")
+                        epgRequest(url, OkHttpProvider.userAgent)
                     ).execute()
                     retryResponse.use { rr ->
                         val retryStream = rr.body?.byteStream()

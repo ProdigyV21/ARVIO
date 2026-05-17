@@ -130,6 +130,8 @@
     <string name="show_loading_stats">Show Loading Stats</string>
     <string name="volume_boost">Volume Boost</string>
     <string name="dns_provider">DNS Provider</string>
+    <string name="custom_user_agent">Custom User-Agent</string>
+    <string name="custom_user_agent_desc">Override the HTTP User-Agent for all requests</string>
     <string name="add_playlist">Add Playlist</string>
     <string name="refresh_iptv">Refresh IPTV Data</string>
     <string name="delete_iptv">Delete IPTV Playlists</string>

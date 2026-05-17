@@ -169,6 +169,7 @@ import com.arflix.tv.ui.theme.TextSecondary
 import kotlin.math.abs
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
+import com.arflix.tv.network.OkHttpProvider
 
 /**
  * Per-section registry of [BringIntoViewRequester]s keyed by the row's
@@ -209,7 +210,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "playback" -> listOf(10, 11, 12, 13, 14, 16, 15, 27)
         "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22)
         "profiles" -> listOf(19)
-        "network" -> listOf(25, 26)
+        "network" -> listOf(25, 26, 34)
         else -> emptyList()
     }
 }
@@ -331,6 +332,7 @@ fun SettingsScreen(
     var qualityFilterDeviceName by remember { mutableStateOf("") }
     var showAiModelDialog by remember { mutableStateOf(false) }
     var showAiApiKeyDialog by remember { mutableStateOf(false) }
+    var showCustomUserAgentDialog by remember { mutableStateOf(false) }
     var qualityFilterRegexPattern by remember { mutableStateOf("") }
     var showHomeServerInput by remember { mutableStateOf(false) }
     var showPlexHomeServerInput by remember { mutableStateOf(false) }
@@ -596,6 +598,7 @@ fun SettingsScreen(
         showUiModeWarningDialog ||
         showAiModelDialog ||
         showAiApiKeyDialog ||
+        showCustomUserAgentDialog ||
         uiState.aiKeyServerState.isActive ||
         uiState.showCloudPairDialog ||
         uiState.showCloudEmailPasswordDialog ||
@@ -793,6 +796,7 @@ fun SettingsScreen(
                                                 24 -> viewModel.cycleFocusBorderColor()
                                                 25 -> openDnsProviderPicker()
                                                 26 -> viewModel.setShowLoadingStats(!uiState.showLoadingStats)
+                                                34 -> showCustomUserAgentDialog = true
                                                 27 -> viewModel.cycleVolumeBoost()
                                                 28 -> viewModel.setSubtitleAiEnabled(!uiState.subtitleAiEnabled)
                                                 29 -> showAiModelDialog = true
@@ -1002,7 +1006,8 @@ fun SettingsScreen(
                     plexHomeServerUrl = ""
                     showPlexHomeServerInput = true
                 },
-                onAddCustomAddonClick = { showCustomAddonInput = true }
+                onAddCustomAddonClick = { showCustomAddonInput = true },
+                openCustomUserAgentDialog = { showCustomUserAgentDialog = true }
             )
         } else {
             AppTopBar(
@@ -1190,7 +1195,9 @@ fun SettingsScreen(
                             onSubtitleAiAutoSelectToggle = { viewModel.setSubtitleAiAutoSelect(it) },
                             onSubtitleRemoveHearingImpairedToggle = { viewModel.setSubtitleRemoveHearingImpaired(it) },
                             onSubtitleAiApiKeyClick = { showAiApiKeyDialog = true },
-                            onSubtitleAiQrClick = { viewModel.startAiKeyServer() }
+                            onSubtitleAiQrClick = { viewModel.startAiKeyServer() },
+                            customUserAgent = uiState.customUserAgent,
+                            onCustomUserAgentClick = { showCustomUserAgentDialog = true }
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -1211,6 +1218,16 @@ fun SettingsScreen(
                                     showAiApiKeyDialog = false
                                 },
                                 onDismiss = { showAiApiKeyDialog = false }
+                            )
+                        }
+                        if (showCustomUserAgentDialog) {
+                            CustomUserAgentDialog(
+                                currentValue = uiState.customUserAgent,
+                                onSave = { value ->
+                                    viewModel.setCustomUserAgent(value)
+                                    showCustomUserAgentDialog = false
+                                },
+                                onDismiss = { showCustomUserAgentDialog = false }
                             )
                         }
                         if (uiState.aiKeyServerState.isActive) {
@@ -1707,6 +1724,17 @@ fun SettingsScreen(
                     showAiApiKeyDialog = false
                 },
                 onDismiss = { showAiApiKeyDialog = false }
+            )
+        }
+
+        if (isTouchDevice && showCustomUserAgentDialog) {
+            CustomUserAgentDialog(
+                currentValue = uiState.customUserAgent,
+                onSave = { value ->
+                    viewModel.setCustomUserAgent(value)
+                    showCustomUserAgentDialog = false
+                },
+                onDismiss = { showCustomUserAgentDialog = false }
             )
         }
 
@@ -2984,7 +3012,8 @@ private fun MobileSettingsLayout(
     onRenameCatalogClick: (CatalogConfig) -> Unit,
     onConnectHomeServerClick: () -> Unit,
     onConnectPlexHomeServerClick: () -> Unit,
-    onAddCustomAddonClick: () -> Unit
+    onAddCustomAddonClick: () -> Unit,
+    openCustomUserAgentDialog: () -> Unit = {}
 ) {
     BackHandler(enabled = page != "MAIN") {
         onNavigate("MAIN")
@@ -3067,7 +3096,8 @@ private fun MobileSettingsLayout(
                 onRenameCatalogClick = onRenameCatalogClick,
                 onConnectHomeServerClick = onConnectHomeServerClick,
                 onConnectPlexHomeServerClick = onConnectPlexHomeServerClick,
-                onAddCustomAddonClick = onAddCustomAddonClick
+                onAddCustomAddonClick = onAddCustomAddonClick,
+                openCustomUserAgentDialog = openCustomUserAgentDialog
             )
         }
     }
@@ -3229,7 +3259,8 @@ private fun MobileSettingsSubPage(
     onRenameCatalogClick: (CatalogConfig) -> Unit,
     onConnectHomeServerClick: () -> Unit,
     onConnectPlexHomeServerClick: () -> Unit,
-    onAddCustomAddonClick: () -> Unit
+    onAddCustomAddonClick: () -> Unit,
+    openCustomUserAgentDialog: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     Column(
@@ -3306,8 +3337,15 @@ private fun MobileSettingsSubPage(
                         title = stringResource(R.string.dns_provider),
                         value = uiState.dnsProvider,
                         isFocused = false,
-                        showDivider = false,
                         onClick = openDnsProviderPicker
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Language,
+                        title = stringResource(R.string.custom_user_agent),
+                        value = uiState.customUserAgent.take(20).let { if (uiState.customUserAgent.length > 20) "$it…" else it },
+                        isFocused = false,
+                        showDivider = false,
+                        onClick = openCustomUserAgentDialog
                     )
                 }
             }
@@ -4176,7 +4214,8 @@ private fun tvSettingsPanelFacts(
         )
         "network" -> listOf(
             "DNS" to uiState.dnsProvider,
-            "Loading stats" to if (uiState.showLoadingStats) "On" else "Off"
+            "Loading stats" to if (uiState.showLoadingStats) "On" else "Off",
+            "User-Agent" to uiState.customUserAgent.take(40)
         )
         "iptv" -> listOf(
             "Playlists" to "${uiState.iptvPlaylists.size}/3",
@@ -4336,7 +4375,9 @@ private fun TvGeneralSettingsRows(
     onSubtitleAiAutoSelectToggle: (Boolean) -> Unit = {},
     onSubtitleRemoveHearingImpairedToggle: (Boolean) -> Unit = {},
     onSubtitleAiApiKeyClick: () -> Unit = {},
-    onSubtitleAiQrClick: () -> Unit = {}
+    onSubtitleAiQrClick: () -> Unit = {},
+    customUserAgent: String = OkHttpProvider.DEFAULT_USER_AGENT,
+    onCustomUserAgentClick: () -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
@@ -4440,6 +4481,7 @@ private fun TvGeneralSettingsRows(
                 31 -> SettingsToggleRow(stringResource(R.string.ai_remove_hi_title), stringResource(R.string.ai_remove_hi_desc), subtitleRemoveHearingImpaired, focusedIndex == localIndex, onSubtitleRemoveHearingImpairedToggle, Modifier.settingsFocusSlot(localIndex).alpha(if (subtitleAiEnabled) 1f else 0.4f))
                 32 -> SettingsRow(Icons.Default.VpnKey, stringResource(R.string.ai_api_key_title), stringResource(R.string.ai_api_key_desc), maskAiApiKey(subtitleAiApiKey, stringResource(R.string.ai_key_not_set)), focusedIndex == localIndex, onSubtitleAiApiKeyClick, Modifier.settingsFocusSlot(localIndex).alpha(if (subtitleAiEnabled) 1f else 0.4f))
                 33 -> SettingsRow(Icons.Default.QrCode, stringResource(R.string.ai_scan_qr_title), stringResource(R.string.ai_scan_qr_desc), "", focusedIndex == localIndex, onSubtitleAiQrClick, Modifier.settingsFocusSlot(localIndex).alpha(if (subtitleAiEnabled) 1f else 0.4f))
+                34 -> SettingsRow(Icons.Default.Language, stringResource(R.string.custom_user_agent), stringResource(R.string.custom_user_agent_desc), customUserAgent.take(30).let { if (customUserAgent.length > 30) "$it…" else it }, focusedIndex == localIndex, onCustomUserAgentClick, Modifier.settingsFocusSlot(localIndex))
             }
         }
     }
@@ -4515,7 +4557,9 @@ private fun GeneralSettings(
     onSubtitleAiAutoSelectToggle: (Boolean) -> Unit = {},
     onSubtitleRemoveHearingImpairedToggle: (Boolean) -> Unit = {},
     onSubtitleAiApiKeyClick: () -> Unit = {},
-    onSubtitleAiQrClick: () -> Unit = {}
+    onSubtitleAiQrClick: () -> Unit = {},
+    customUserAgent: String = OkHttpProvider.DEFAULT_USER_AGENT,
+    onCustomUserAgentClick: () -> Unit = {}
 ) {
     Column {
         // ── Language & Subtitles ──
@@ -4818,6 +4862,16 @@ private fun GeneralSettings(
             onToggle = onShowLoadingStatsToggle,
             modifier = Modifier.settingsFocusSlot(26)
         )
+        Spacer(modifier = Modifier.height(10.dp))
+        SettingsRow(
+            icon = Icons.Default.Language,
+            title = stringResource(R.string.custom_user_agent),
+            subtitle = stringResource(R.string.custom_user_agent_desc),
+            value = customUserAgent.take(30).let { if (customUserAgent.length > 30) "$it…" else it },
+            isFocused = focusedIndex == 34,
+            onClick = onCustomUserAgentClick,
+            modifier = Modifier.settingsFocusSlot(34)
+        )
 
         // ── Audio ──
         Spacer(modifier = Modifier.height(24.dp))
@@ -5101,6 +5155,108 @@ private fun AiApiKeyDialog(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             color = Pink
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomUserAgentDialog(
+    currentValue: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isMobile = LocalDeviceType.current.isTouchDevice()
+    var value by remember(currentValue) { mutableStateOf(currentValue) }
+    val inputFocusRequester = remember { FocusRequester() }
+    BackHandler { onDismiss() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        inputFocusRequester.requestFocus()
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .then(
+                    if (isMobile) Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                    else Modifier.width(520.dp)
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(BackgroundElevated)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                Text(text = stringResource(R.string.custom_user_agent), style = ArflixTypography.sectionTitle, color = TextPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.custom_user_agent_desc),
+                    style = ArflixTypography.caption,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    placeholder = { Text(OkHttpProvider.DEFAULT_USER_AGENT, color = TextSecondary.copy(alpha = 0.4f)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().focusRequester(inputFocusRequester),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = Pink,
+                        unfocusedBorderColor = TextSecondary.copy(alpha = 0.3f)
+                    )
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val cancelFocus = remember { FocusRequester() }
+                    val saveFocus = remember { FocusRequester() }
+                    Surface(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).focusRequester(cancelFocus),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = BackgroundElevated,
+                            focusedContainerColor = BackgroundElevated.copy(alpha = 0.8f)
+                        ),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        border = ClickableSurfaceDefaults.border(
+                            border = androidx.tv.material3.Border(
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TextSecondary.copy(alpha = 0.3f))
+                            )
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.cancel),
+                            modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = TextSecondary
+                        )
+                    }
+                    Surface(
+                        onClick = { onSave(value) },
+                        modifier = Modifier.weight(1f).focusRequester(saveFocus),
+                        colors = ClickableSurfaceDefaults.colors(
+                            containerColor = Pink.copy(alpha = 0.15f),
+                            focusedContainerColor = Pink.copy(alpha = 0.25f)
+                        ),
+                        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                        border = ClickableSurfaceDefaults.border(
+                            border = androidx.tv.material3.Border(
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Pink.copy(alpha = 0.4f))
+                            )
+                        )
+                    ) {
+                        Text(
+                            text = stringResource(R.string.save),
+                            modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            color = Pink
+                        )
+                    }
+                    LaunchedEffect(Unit) {
+                        kotlinx.coroutines.delay(150)
+                        inputFocusRequester.requestFocus()
                     }
                 }
             }
