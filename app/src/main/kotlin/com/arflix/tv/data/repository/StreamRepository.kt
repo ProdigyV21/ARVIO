@@ -1035,7 +1035,7 @@ class StreamRepository @Inject constructor(
         }
     }
 
-    private fun supportsResourceType(resourceTypes: List<String>, requestedType: String): Boolean {
+    private fun supportsResourceType(resourceTypes: List<String>?, requestedType: String): Boolean {
         if (resourceTypes.isNullOrEmpty()) return true
         val normalized = resourceTypes.map { it.trim().lowercase(Locale.US) }
         val aliases = when (requestedType) {
