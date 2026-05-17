@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -62,7 +64,12 @@ fun ProgramCell(
     isCatchupSupported: Boolean = false,
     onClick: () -> Unit,
     onFocused: () -> Unit = {},
+    onMoveLeft: () -> Boolean = { false },
+    onMoveRight: () -> Boolean = { false },
+    onMoveUp: () -> Boolean = { false },
+    onMoveDown: () -> Boolean = { false },
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -105,6 +112,13 @@ fun ProgramCell(
                 scaleY = scale
             }
             .then(
+                if (focusable && focusRequester != null) {
+                    Modifier.focusRequester(focusRequester)
+                } else {
+                    Modifier
+                }
+            )
+            .then(
                 if (focusable) {
                     Modifier.onFocusChanged {
                         focused = it.hasFocus
@@ -126,10 +140,18 @@ fun ProgramCell(
             .then(
                 if (focusable) {
                     Modifier.onKeyEvent { ev ->
-                        if (ev.type == KeyEventType.KeyDown &&
-                            (ev.key == Key.DirectionCenter || ev.key == Key.Enter)) {
-                            onClick(); true
-                        } else false
+                        if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        when (ev.key) {
+                            Key.DirectionLeft -> onMoveLeft()
+                            Key.DirectionRight -> onMoveRight()
+                            Key.DirectionUp -> onMoveUp()
+                            Key.DirectionDown -> onMoveDown()
+                            Key.DirectionCenter, Key.Enter -> {
+                                onClick()
+                                true
+                            }
+                            else -> false
+                        }
                     }
                 } else {
                     Modifier

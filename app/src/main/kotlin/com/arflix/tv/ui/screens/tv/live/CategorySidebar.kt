@@ -99,6 +99,7 @@ fun CategorySidebar(
     onFocusEnter: () -> Unit = {},
     onMoveRight: () -> Unit = {},
     onTopBoundaryFocusChanged: (Boolean) -> Unit = {},
+    focusSearchSignal: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val targetWidth = if (expanded) LiveDims.SidebarExpanded else LiveDims.SidebarCollapsed
@@ -110,6 +111,16 @@ fun CategorySidebar(
     var expandedCountry by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedAll by rememberSaveable { mutableStateOf(false) }
     var menuForGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(focusSearchSignal) {
+        if (focusSearchSignal > 0) {
+            repeat(3) {
+                runCatching { searchFocusRequester.requestFocus() }
+                delay(50L)
+            }
+        }
+    }
 
     LaunchedEffect(selectedId, tree) {
         val countryId = selectedCountryGroupId(selectedId, tree)
@@ -149,6 +160,7 @@ fun CategorySidebar(
             onClick = onOpenSearch,
             expanded = expanded,
             onFocusChanged = onTopBoundaryFocusChanged,
+            focusRequester = searchFocusRequester,
         )
         Spacer(Modifier.height(8.dp))
         LazyColumn(
@@ -316,6 +328,7 @@ private fun SearchEntry(
     onClick: () -> Unit,
     expanded: Boolean,
     onFocusChanged: (Boolean) -> Unit = {},
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
@@ -326,6 +339,7 @@ private fun SearchEntry(
                 focused = it.isFocused
                 onFocusChanged(it.isFocused)
             }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .border(
                 width = if (focused) 3.dp else 0.dp,
                 color = if (focused) LiveColors.FocusRing else Color.Transparent,
@@ -411,6 +425,7 @@ private fun SidebarRow(
     isOpenGroup: Boolean = false,
     indent: androidx.compose.ui.unit.Dp = 0.dp,
     labelSize: androidx.compose.ui.unit.TextUnit = 11.sp,
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     var consumedLongPress by remember { mutableStateOf(false) }
@@ -446,6 +461,7 @@ private fun SidebarRow(
                     focused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()
                 }
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .border(
                     width = if (focused) 3.dp else 0.dp,
                     color = if (focused) LiveColors.FocusRing else Color.Transparent,

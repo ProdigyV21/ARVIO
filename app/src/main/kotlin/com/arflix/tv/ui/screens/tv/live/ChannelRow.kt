@@ -11,7 +11,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row2
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +40,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,6 +69,7 @@ fun ChannelRow(
     onClick: () -> Unit,
     onFavoriteToggle: () -> Unit,
     onMoveLeft: () -> Unit = {},
+    onMoveRight: () -> Boolean = { false },
     onMoveUp: () -> Boolean = { false },
     onFocused: () -> Unit = {},
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
@@ -111,6 +113,16 @@ fun ChannelRow(
             )
             .background(if (visuallyFocused) LiveColors.PanelRaised else bg)
             .focusable()
+            .onPreviewKeyEvent { ev ->
+                if (ev.type == KeyEventType.KeyDown) {
+                    when (ev.key) {
+                        Key.DirectionLeft -> { onMoveLeft(); return@onPreviewKeyEvent true }
+                        Key.DirectionRight -> if (onMoveRight()) return@onPreviewKeyEvent true
+                        Key.DirectionUp -> if (onMoveUp()) return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            }
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onFavoriteToggle,
@@ -121,12 +133,6 @@ fun ChannelRow(
             // repeatCount == 1) on CENTER / ENTER / MENU triggers favorite
             // toggle, giving the user the "hold OK" gesture everywhere.
             .onKeyEvent { ev ->
-                if (ev.type == KeyEventType.KeyDown) {
-                    when (ev.key) {
-                        Key.DirectionLeft -> { onMoveLeft(); return@onKeyEvent true }
-                        Key.DirectionUp -> if (onMoveUp()) return@onKeyEvent true
-                    }
-                }
                 val isLongHoldCenter = ev.type == KeyEventType.KeyDown &&
                     (ev.key == Key.DirectionCenter || ev.key == Key.Enter) &&
                     ev.nativeKeyEvent.repeatCount == 1
