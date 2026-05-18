@@ -453,6 +453,10 @@ fun EpgGrid(
                                 onMoveVertically = { targetRowIdx, anchorStartMin ->
                                     requestNearestProgramFocus(targetRowIdx, anchorStartMin)
                                 },
+                                onMoveLeftFromStart = {
+                                    onExitEpg(ch)
+                                    true
+                                },
                                 rowIdx = idx,
                                 focusRequesters = programFocusRequesters,
                                 focusTargets = programFocusTargets,
@@ -490,6 +494,7 @@ private fun ProgramsRow(
     onClick: (IptvProgram?) -> Unit,
     onFocused: () -> Unit,
     onMoveVertically: (rowIdx: Int, anchorStartMin: Int) -> Boolean,
+    onMoveLeftFromStart: () -> Boolean,
     rowIdx: Int,
     focusRequesters: MutableMap<String, List<FocusRequester>>,
     focusTargets: MutableMap<String, List<ProgramFocusTarget>>,
@@ -560,7 +565,7 @@ private fun ProgramsRow(
                             rowFocusRequesters[focusableIndex - 1].requestFocus()
                             true
                         } else {
-                            true
+                            onMoveLeftFromStart()
                         }
                     },
                     onMoveRight = {
