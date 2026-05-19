@@ -7,7 +7,7 @@ class AiKeyConfigServer(
     private val onKeyReceived: (String) -> Unit,
     private val logoProvider: (() -> ByteArray?)? = null,
     port: Int = 8095
-) : NanoHTTPD(port) {
+) : NanoHTTPD("127.0.0.1", port) {
 
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri
