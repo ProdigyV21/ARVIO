@@ -1,4 +1,4 @@
-package com.arflix.tv.ui.screens.settings
+﻿package com.arflix.tv.ui.screens.settings
 
 import android.content.Context
 import android.content.Intent
@@ -229,7 +229,7 @@ private fun openExternalUrl(context: Context, url: String) {
  * same [index] the parent uses as its `focusedIndex == N` comparator.
  *
  * Sections that don't adopt this modifier fall back to the legacy ratio
- * scroll â€” this modifier is purely additive, non-regressive.
+ * scroll — this modifier is purely additive, non-regressive.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -488,7 +488,7 @@ fun SettingsScreen(
     // Auto-scroll content to keep focused item visible in all sections.
     //
     // Strategy: prefer the per-row [BringIntoViewRequester] registered via
-    // Modifier.settingsFocusSlot(...) â€” this is Compose's native mechanism
+    // Modifier.settingsFocusSlot(...) — this is Compose's native mechanism
     // for nested-scroll focus-follow and correctly handles variable-height
     // rows and arbitrary nesting depth. Sections that haven't adopted the
     // modifier fall back to the legacy ratio heuristic, which is imprecise
@@ -509,7 +509,7 @@ fun SettingsScreen(
 
         val requester = focusTracker.requesters[contentFocusIndex]
         if (requester != null) {
-            // Native branch â€” handles all geometry correctly.
+            // Native branch — handles all geometry correctly.
             runCatching { requester.bringIntoView() }
             return@LaunchedEffect
         }
@@ -1167,7 +1167,7 @@ fun SettingsScreen(
                             spoilerBlurEnabled = uiState.spoilerBlurEnabled,
                             onSpoilerBlurToggle = { viewModel.setSpoilerBlurEnabled(it) },
                             accentColor = uiState.accentColor,
-                            onAccentColorClick = { viewModel.cycleAccentColor() },
+                            onaccentColorClick = { viewModel.cycleAccentColor() },
                             showLoadingStats = uiState.showLoadingStats,
                             onShowLoadingStatsToggle = { viewModel.setShowLoadingStats(it) },
                             onVolumeBoostClick = { viewModel.cycleVolumeBoost() },
@@ -4169,7 +4169,7 @@ private fun tvSettingsPanelFacts(
         )
         "appearance" -> listOf(
             "OLED" to if (uiState.oledBlackBackground) "On" else "Off",
-            "Accent color" to uiState.accentColor
+            "Focus border" to uiState.accentColor
         )
         "profiles" -> listOf(
             "Startup" to if (uiState.skipProfileSelection) "Skip picker" else "Show picker"
@@ -4308,7 +4308,7 @@ private fun TvGeneralSettingsRows(
     onClockFormatClick: () -> Unit = {},
     onShowBudgetToggle: (Boolean) -> Unit = {},
     onSpoilerBlurToggle: (Boolean) -> Unit = {},
-    onAccentColorClick: () -> Unit = {},
+    onaccentColorClick: () -> Unit = {},
     showLoadingStats: Boolean = true,
     onShowLoadingStatsToggle: (Boolean) -> Unit = {},
     onVolumeBoostClick: () -> Unit = {},
@@ -4411,7 +4411,7 @@ private fun TvGeneralSettingsRows(
                 21 -> SettingsRow(Icons.Default.Schedule, stringResource(R.string.clock_format), stringResource(R.string.clock_format_desc), if (clockFormat == "12h") "12-hour" else "24-hour", focusedIndex == localIndex, onClockFormatClick, Modifier.settingsFocusSlot(localIndex))
                 22 -> SettingsToggleRow(stringResource(R.string.show_budget), stringResource(R.string.show_budget_desc), showBudget, focusedIndex == localIndex, onShowBudgetToggle, Modifier.settingsFocusSlot(localIndex))
                 23 -> SettingsToggleRow(stringResource(R.string.spoiler_blur), stringResource(R.string.spoiler_blur_desc), spoilerBlurEnabled, focusedIndex == localIndex, onSpoilerBlurToggle, Modifier.settingsFocusSlot(localIndex))
-                24 -> SettingsRow(Icons.Default.Palette, stringResource(R.string.accent_color), stringResource(R.string.accent_color_desc), accentColor, focusedIndex == localIndex, onAccentColorClick, Modifier.settingsFocusSlot(localIndex))
+                24 -> SettingsRow(Icons.Default.Palette, stringResource(R.string.accent_color), stringResource(R.string.accent_color_desc), accentColor, focusedIndex == localIndex, onaccentColorClick, Modifier.settingsFocusSlot(localIndex))
                 25 -> SettingsRow(Icons.Default.Language, stringResource(R.string.dns_provider), stringResource(R.string.dns_desc), dnsProvider, focusedIndex == localIndex, onDnsProviderClick, Modifier.settingsFocusSlot(localIndex))
                 26 -> SettingsToggleRow(stringResource(R.string.show_loading_stats), stringResource(R.string.show_loading_stats_desc), showLoadingStats, focusedIndex == localIndex, onShowLoadingStatsToggle, Modifier.settingsFocusSlot(localIndex))
                 27 -> SettingsRow(
@@ -4487,7 +4487,7 @@ private fun GeneralSettings(
     onClockFormatClick: () -> Unit = {},
     onShowBudgetToggle: (Boolean) -> Unit = {},
     onSpoilerBlurToggle: (Boolean) -> Unit = {},
-    onAccentColorClick: () -> Unit = {},
+    onaccentColorClick: () -> Unit = {},
     showLoadingStats: Boolean = true,
     onShowLoadingStatsToggle: (Boolean) -> Unit = {},
     onVolumeBoostClick: () -> Unit = {},
@@ -4518,7 +4518,7 @@ private fun GeneralSettings(
     onSubtitleAiQrClick: () -> Unit = {}
 ) {
     Column {
-        // -- Language & Subtitles --
+        // ── Language & Subtitles ──
         Text(
             text = stringResource(R.string.language_and_subtitles),
             style = ArflixTypography.caption.copy(fontSize = 11.sp, letterSpacing = 0.8.sp),
@@ -4624,7 +4624,7 @@ private fun GeneralSettings(
             modifier = Modifier.settingsFocusSlot(9)
         )
 
-        // -- Playback --
+        // ── Playback ──
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.playback),
@@ -4699,7 +4699,7 @@ private fun GeneralSettings(
             modifier = Modifier.settingsFocusSlot(16)
         )
 
-        // -- Interface --
+        // ── Interface ──
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.interface_label),
@@ -4761,7 +4761,7 @@ private fun GeneralSettings(
             modifier = Modifier.settingsFocusSlot(21)
         )
         Spacer(modifier = Modifier.height(10.dp))
-        // Home hero controls â€” issue #72. The movie Budget line on the hero banner
+        // Home hero controls — issue #72. The movie Budget line on the hero banner
         // makes the metadata row noisy on small screens and some users want to hide it.
         SettingsToggleRow(
             title = stringResource(R.string.show_budget),
@@ -4787,11 +4787,11 @@ private fun GeneralSettings(
             subtitle = stringResource(R.string.accent_color_desc),
             value = accentColor,
             isFocused = focusedIndex == 24,
-            onClick = onAccentColorClick,
+            onClick = onaccentColorClick,
             modifier = Modifier.settingsFocusSlot(24)
         )
 
-        // -- Network --
+        // ── Network ──
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.network),
@@ -4819,7 +4819,7 @@ private fun GeneralSettings(
             modifier = Modifier.settingsFocusSlot(26)
         )
 
-        // -- Audio --
+        // ── Audio ──
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.audio),
@@ -4841,7 +4841,7 @@ private fun GeneralSettings(
             modifier = Modifier.settingsFocusSlot(27)
         )
 
-        // -- AI Subtitles --
+        // ── AI Subtitles ──
         Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = stringResource(R.string.ai_subtitles_section),
@@ -4863,8 +4863,8 @@ private fun GeneralSettings(
             title = stringResource(R.string.ai_model_title),
             subtitle = stringResource(R.string.ai_model_desc),
             value = when (subtitleAiModel) {
-                com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq â€“ Llama 3.3 70B"
-                com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google â€“ Gemini 2.5 Flash"
+                com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq – Llama 3.3 70B"
+                com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google – Gemini 2.5 Flash"
             },
             isFocused = focusedIndex == 29,
             onClick = onSubtitleAiModelClick,
@@ -6883,7 +6883,7 @@ private fun CatalogActionChip(
     val bgColor = when {
         !enabled -> Color.Black.copy(alpha = 0.4f)
         visualActive && isDestructive -> Color(0xFFDC2626)
-        visualActive -> accent  // full fill with accent color
+        visualActive -> accent
         else -> Color.White.copy(alpha = 0.08f)
     }
     // Choose foreground (icon) color based on accent luminance for contrast
