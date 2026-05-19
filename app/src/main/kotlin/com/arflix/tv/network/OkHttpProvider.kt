@@ -51,7 +51,7 @@ object OkHttpProvider {
     private const val ADGUARD_DOH_URL = "https://dns.adguard-dns.com/dns-query"
 
     const val DNS_PROVIDER_PREF_KEY = "dns_provider_global"
-    const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Android TV; ARVIO)"
+    const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     const val USER_AGENT_PREF_KEY = "custom_user_agent_global"
 
     enum class AppDnsProvider {
