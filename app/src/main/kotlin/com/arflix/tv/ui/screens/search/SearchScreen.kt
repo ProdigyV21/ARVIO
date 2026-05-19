@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.screens.search
+package com.arflix.tv.ui.screens.search
 
 import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
@@ -279,7 +279,7 @@ fun SearchScreen(
         // FocusRequester can throw IllegalStateException if the target composable
         // hasn't been placed yet (e.g. zero-sized keyboard on cold start, or when
         // the screen is composed then immediately navigated away). Swallow that
-        // specific case so it doesn't surface to the user as a crash â€” TalkBack
+        // specific case so it doesn't surface to the user as a crash — TalkBack
         // focus will re-claim on next frame.
         if (!isTouchDevice) runCatching { searchFocusRequester.requestFocus() }
         suppressSelectUntilMs = SystemClock.elapsedRealtime() + 150L
@@ -470,7 +470,7 @@ fun SearchScreen(
         if (!isTouchDevice) AppTopBar(selectedItem = SidebarItem.SEARCH, isFocused = focusZone == FocusZone.SIDEBAR, focusedIndex = sidebarFocusIndex, profile = currentProfile)
 
         Column(modifier = Modifier.fillMaxSize().padding(top = if (isTouchDevice) 16.dp else AppTopBarContentTopInset).padding(horizontal = if (isTouchDevice) 12.dp else if (isCompactHeight) 20.dp else 28.dp)) {
-            // â”€â”€ Search Bar â”€â”€
+            // ── Search Bar ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -527,7 +527,7 @@ fun SearchScreen(
                 )
             }
 
-            // â”€â”€ Filter Chips (discover mode) - focusable with D-pad â”€â”€
+            // ── Filter Chips (discover mode) - focusable with D-pad ──
             if (showFilters) {
                 DiscoverFilterStrip(
                     filters = quickFilters,
@@ -567,7 +567,7 @@ fun SearchScreen(
                 )
             }
 
-            // â”€â”€ Content â”€â”€
+            // ── Content ──
             when {
                 uiState.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator(color = Pink, size = 48.dp) }
 
@@ -605,7 +605,7 @@ fun SearchScreen(
     }
 }
 
-// â”€â”€ Glow Chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Glow Chip ───────────────────────────────────────────────────────────────
 
 private data class DiscoverQuickFilter(
     val key: String,
@@ -851,7 +851,7 @@ private fun GlowChip(
     }
 }
 
-// â”€â”€ Rows Layer (HomeScreen pattern - manual focus, smooth scroll) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Rows Layer (HomeScreen pattern - manual focus, smooth scroll) ────────────
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -1033,7 +1033,7 @@ private fun RowsLayer(
     }
 }
 
-// â”€â”€ Content Grid (AI results) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Content Grid (AI results) ───────────────────────────────────────────────
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -1063,7 +1063,7 @@ private fun ContentGrid(items: List<MediaItem>, usePosterCards: Boolean, isLoadi
 }
 
 private fun buildCardTitle(item: MediaItem): String {
-    // Return the clean title â€” year is shown separately in the subtitle
+    // Return the clean title — year is shown separately in the subtitle
     return item.title
 }
 
@@ -1074,7 +1074,7 @@ private fun buildCardSubtitle(item: MediaItem): String {
         MediaType.MOVIE -> stringResource(R.string.movie)
     }
     val year = item.year.takeIf { it.isNotBlank() }
-    return if (year != null) "$mediaLabel Â· $year" else mediaLabel
+    return if (year != null) "$mediaLabel · $year" else mediaLabel
 }
 
 private fun interleaveSearchResults(movies: List<MediaItem>, shows: List<MediaItem>): List<MediaItem> {

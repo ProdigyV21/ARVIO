@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.components
+package com.arflix.tv.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -61,7 +61,7 @@ val MobileContentTopInset = 16.dp
 val AppTopBarHorizontalPadding = 28.dp
 
 // Navigation items that appear CENTERED in the top bar (Search, Home, Watchlist, TV).
-// Settings is NOT in this list â€” it's rendered as a standalone gear icon on the right.
+// Settings is NOT in this list — it's rendered as a standalone gear icon on the right.
 private val NAV_ITEMS = SidebarItem.entries.filter { it != SidebarItem.SETTINGS }
 
 fun topBarMaxIndex(hasProfile: Boolean): Int {
@@ -101,7 +101,7 @@ fun AppTopBar(
     hasUpdateBadge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Always show the profile avatar when a profile exists â€” it's clickable
+    // Always show the profile avatar when a profile exists — it's clickable
     // and opens the profile switcher. The name text was removed per the mockup
     // (avatar-only, no label).
     val showProfile = profile != null
@@ -134,7 +134,7 @@ fun AppTopBar(
                 .padding(start = AppTopBarHorizontalPadding, end = AppTopBarHorizontalPadding, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // â”€â”€ LEFT: Profile avatar (only if multiple profiles) â”€â”€
+            // ── LEFT: Profile avatar (only if multiple profiles) ──
             if (showProfile && profile != null) {
                 TopBarProfileAvatar(
                     profile = profile,
@@ -143,7 +143,7 @@ fun AppTopBar(
                 Spacer(modifier = Modifier.width(16.dp))
             }
 
-            // â”€â”€ CENTER: Navigation chips (Search, Home, Watchlist, TV) â”€â”€
+            // ── CENTER: Navigation chips (Search, Home, Watchlist, TV) ──
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
@@ -164,7 +164,7 @@ fun AppTopBar(
                 }
             }
 
-            // â”€â”€ RIGHT: Settings gear + clock â”€â”€
+            // ── RIGHT: Settings gear + clock ──
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -264,7 +264,7 @@ private fun TopBarNavChip(
 }
 
 /**
- * Settings gear icon â€” no text label, just the icon. Placed on the far right
+ * Settings gear icon — no text label, just the icon. Placed on the far right
  * of the top bar per the mockup. Receives focus/selection state for D-pad nav.
  */
 @Composable
@@ -332,7 +332,7 @@ private fun TopBarSettingsGear(
 }
 
 /**
- * Profile avatar only â€” no name text. Just the circular avatar with gradient/icon.
+ * Profile avatar only — no name text. Just the circular avatar with gradient/icon.
  * Shown only when multiple profiles exist.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)

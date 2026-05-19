@@ -1,4 +1,4 @@
-﻿
+
 @file:Suppress("UnsafeOptInUsageError")
 
 package com.arflix.tv.ui.screens.tv
@@ -1504,8 +1504,8 @@ private fun GroupRailItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(if (isFocused) accent else Color.Transparent)
-            .then(if (isFocused) Modifier.border(1.dp, accent, RoundedCornerShape(6.dp)) else Modifier)
+            .background(if (isFocused) accent.copy(alpha = 0.2f) else Color.Transparent)
+            .then(if (isFocused) Modifier.border(1.5.dp, accent, RoundedCornerShape(6.dp)) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically

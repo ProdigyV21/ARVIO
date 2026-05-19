@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.components
+package com.arflix.tv.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn

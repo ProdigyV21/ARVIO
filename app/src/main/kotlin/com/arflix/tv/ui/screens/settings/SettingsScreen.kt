@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.screens.settings
+package com.arflix.tv.ui.screens.settings
 
 import android.content.Context
 import android.content.Intent
@@ -6886,10 +6886,15 @@ private fun CatalogActionChip(
         visualActive -> accent  // full fill with accent color
         else -> Color.White.copy(alpha = 0.08f)
     }
+    // Choose foreground (icon) color based on accent luminance for contrast
+    val accentFg = if (visualActive) {
+        val l = 0.299f * accent.red + 0.587f * accent.green + 0.114f * accent.blue
+        if (l > 0.5f) Color.Black else Color.White
+    } else Color.White
     val fgColor = when {
         !enabled -> Color.White.copy(alpha = 0.5f)
         visualActive && isDestructive -> Color.White
-        visualActive -> Color.White  // white icon on accent bg
+        visualActive -> accentFg
         else -> Color.White.copy(alpha = 0.7f)
     }
     Box(
@@ -7925,7 +7930,7 @@ private fun InputModal(
             val targetScroll = (focusedIndex * approxFieldHeightPx).coerceAtLeast(0)
             runCatching { formScrollState.animateScrollTo(targetScroll) }
         } else if (focusedIndex >= fields.size) {
-            // Focused on paste/cancel/confirm â€” scroll form to end so it's not blocking
+            // Focused on paste/cancel/confirm — scroll form to end so it's not blocking
             runCatching { formScrollState.animateScrollTo(formScrollState.maxValue) }
         }
     }

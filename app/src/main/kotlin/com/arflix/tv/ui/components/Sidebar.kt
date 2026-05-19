@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.components
+package com.arflix.tv.ui.components
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.unit.sp

@@ -1,4 +1,4 @@
-﻿@file:Suppress("UnsafeOptInUsageError")
+@file:Suppress("UnsafeOptInUsageError")
 
 package com.arflix.tv.ui.screens.player
 
@@ -289,7 +289,7 @@ fun PlayerScreen(
     var showSourceMenu by remember { mutableStateOf(false) }
     // Post-episode "Up Next" prompt (issue #86). Shown on STATE_ENDED for TV shows:
     // a 10-second countdown lets the user Cancel or immediately Continue. On timeout we
-    // advance to the next episode. Gated on the existing autoPlayNext profile setting â€”
+    // advance to the next episode. Gated on the existing autoPlayNext profile setting —
     // when disabled we simply stay on the ended frame rather than advancing silently.
     var showNextEpisodePrompt by remember { mutableStateOf(false) }
     var pendingNextSeason by remember { mutableIntStateOf(0) }
@@ -711,9 +711,9 @@ fun PlayerScreen(
                                 }
                             }
 
-                            // Auto-advance when the startup URL is clearly dead â€” HTTP 4xx/5xx
+                            // Auto-advance when the startup URL is clearly dead — HTTP 4xx/5xx
                             // or DNS/SSL/network failures. Even if the user manually picked this
-                            // source, a dead URL isn't something they "selected" â€” it should
+                            // source, a dead URL isn't something they "selected" — it should
                             // skip to the next one rather than spin on a pulsing logo forever.
                             val isUnrecoverableSource =
                                 error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
@@ -1015,7 +1015,7 @@ fun PlayerScreen(
                 exoPlayer.setMediaSource(mediaSource)
             }
             // Let ExoPlayer's LoadControl handle buffering (bufferForPlaybackMs = 150ms).
-            // No manual startup gate â€” trust the CDN/debrid to deliver fast enough.
+            // No manual startup gate — trust the CDN/debrid to deliver fast enough.
             exoPlayer.playWhenReady = true
             exoPlayer.prepare()
             android.util.Log.i(
@@ -1408,7 +1408,7 @@ fun PlayerScreen(
 
             // Post-episode prompt: when a TV episode ends, show the "Up Next" overlay with a
             // 10-second countdown that auto-advances (or lets the user cancel / continue
-            // immediately). Gated on the profile's autoPlayNext setting â€” when disabled we
+            // immediately). Gated on the profile's autoPlayNext setting — when disabled we
             // stay on the ended frame rather than silently advancing. Only trigger once per
             // session (showNextEpisodePrompt guard) to avoid re-triggering on tick loops.
             if (exoPlayer.playbackState == Player.STATE_ENDED &&
@@ -1464,7 +1464,7 @@ fun PlayerScreen(
             runCatching { exoPlayer.release() }
             // Restore the system stream volume if the player left it at zero.
             // setStreamVolume(STREAM_MUSIC, 0) silences HDMI ARC, optical, and
-            // Bluetooth receivers globally â€” not just this app â€” so we must undo
+            // Bluetooth receivers globally — not just this app — so we must undo
             // it when leaving the player, regardless of whether the user muted
             // intentionally or accidentally scrolled the volume down.
             if (isMuted || currentVolume == 0) {
@@ -1492,7 +1492,7 @@ fun PlayerScreen(
                 } catch (e: Throwable) {
                     // Some Android TV devices route audio through HDMI passthrough and
                     // reject audio-session effects (particularly when passthrough is
-                    // enabled for DTS/AC3). Fail silently â€” user gets unboosted audio
+                    // enabled for DTS/AC3). Fail silently — user gets unboosted audio
                     // but playback still works.
                     android.util.Log.w("PlayerScreen", "LoudnessEnhancer unavailable on this device: ${e.message}")
                     null
@@ -1757,7 +1757,7 @@ fun PlayerScreen(
                         }
                     }
 
-                    // Handle subtitle/audio menu â€” two-panel layout: lang panel | track panel | audio tab
+                    // Handle subtitle/audio menu — two-panel layout: lang panel | track panel | audio tab
                     if (showSubtitleMenu) {
                         return@onKeyEvent when (event.key) {
                         Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
@@ -2109,7 +2109,7 @@ fun PlayerScreen(
             }
         }
 
-        // Skip intro/recap overlay â€” only after playback has started to avoid showing
+        // Skip intro/recap overlay — only after playback has started to avoid showing
         // on the loading screen (background art + pulsing logo).
         if (hasPlaybackStarted) {
             val activeSkip = uiState.activeSkipInterval
@@ -2130,7 +2130,7 @@ fun PlayerScreen(
             )
         }
 
-        // AI Translating badge â€” shown in top-right while subtitle translation is in progress
+        // AI Translating badge — shown in top-right while subtitle translation is in progress
         val isTranslatingLive by viewModel.isTranslatingLive.collectAsStateWithLifecycle()
         AnimatedVisibility(
             visible = hasPlaybackStarted && uiState.isAiTranslating && isTranslatingLive,
@@ -2249,7 +2249,7 @@ fun PlayerScreen(
                                 )
                                 stream.sizeBytes?.let { size ->
                                     Text(
-                                        text = "â€¢",
+                                        text = "•",
                                         style = ArflixTypography.caption,
                                         color = TextSecondary.copy(alpha = 0.5f)
                                     )
@@ -2679,7 +2679,7 @@ fun PlayerScreen(
             showTitle = uiState.title,
             // We only know the current episode's title at this point; fetching the next
             // episode's metadata would require an extra TMDB round-trip during playback.
-            // Fall back to a generic "Episode N" label â€” the show title, S/E number, and
+            // Fall back to a generic "Episode N" label — the show title, S/E number, and
             // backdrop image still give users enough context to decide Continue/Cancel.
             episodeTitle = "Episode $pendingNextEpisode",
             seasonNumber = pendingNextSeason,
@@ -2700,7 +2700,7 @@ fun PlayerScreen(
             },
             onCancel = {
                 showNextEpisodePrompt = false
-                // Stay on the ended frame â€” user can hit Back to leave the player.
+                // Stay on the ended frame — user can hit Back to leave the player.
             }
         )
 
@@ -2773,7 +2773,7 @@ fun PlayerScreen(
             }
         }
 
-        // Skip overlay â€” floats near the bottom while the user spams Â±10s.
+        // Skip overlay — floats near the bottom while the user spams ±10s.
         // Now sits ~48dp from the bottom (was 120dp, which wasted vertical
         // space and felt too detached). Time labels flanking the progress
         // bar show exactly how far along the user is.
@@ -2852,7 +2852,7 @@ fun PlayerScreen(
             }
         }
 
-        // Error modal â€” friendly setup guide for no-addons, red error for actual playback failures
+        // Error modal — friendly setup guide for no-addons, red error for actual playback failures
         AnimatedVisibility(
             visible = uiState.error != null,
             enter = fadeIn(androidx.compose.animation.core.tween(150)),
@@ -3041,7 +3041,7 @@ private fun PulsingLogo(
             contentAlignment = Alignment.Center
         ) {
             if (progress != null) {
-                // Track + arc progress ring â€” renders even at 0% so users see
+                // Track + arc progress ring — renders even at 0% so users see
                 // the loader frame immediately rather than a bare logo.
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val strokeWidthPx = 4.dp.toPx()
@@ -3226,7 +3226,7 @@ private fun applyAudioTrackSelection(
                 )
             }
             // If the group is stale we still fall through and apply the
-            // preferredAudioLanguage hint above â€” Media3 will pick the closest
+            // preferredAudioLanguage hint above — Media3 will pick the closest
             // matching track on its own rather than crashing.
         }
 
@@ -3388,7 +3388,7 @@ private fun SubtitleMenu(
     val audioListState = rememberLazyListState()
 
     if (!isMobile) {
-        // â”€â”€ TV layout: two-panel (language list | track list) + Audio tab â”€
+        // ── TV layout: two-panel (language list | track list) + Audio tab ─
         LaunchedEffect(subtitleLangIndex) {
             langListState.animateScrollToItem(subtitleLangIndex.coerceAtLeast(0))
         }
@@ -3508,7 +3508,7 @@ private fun SubtitleMenu(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "â€”",
+                                        text = "—",
                                         style = ArflixTypography.caption,
                                         color = TextSecondary.copy(alpha = 0.3f)
                                     )
@@ -3593,7 +3593,7 @@ private fun SubtitleMenu(
                                         8 -> "7.1"
                                         else -> if (track.channelCount > 0) "${track.channelCount}ch" else null
                                     }
-                                    val subtitleText = listOfNotNull(codecInfo, channelInfo).joinToString(" â€¢ ")
+                                    val subtitleText = listOfNotNull(codecInfo, channelInfo).joinToString(" • ")
                                     TrackMenuItem(
                                         label = trackLabel,
                                         subtitle = subtitleText.ifEmpty { null },
@@ -3615,7 +3615,7 @@ private fun SubtitleMenu(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${stringResource(R.string.subtitles)} â€¢ ${stringResource(R.string.back)} â€¢ ${stringResource(R.string.close)}",
+                        text = "${stringResource(R.string.subtitles)} • ${stringResource(R.string.back)} • ${stringResource(R.string.close)}",
                         style = ArflixTypography.caption,
                         color = TextSecondary.copy(alpha = 0.5f)
                     )
@@ -3623,7 +3623,7 @@ private fun SubtitleMenu(
             }
         }
     } else {
-        // â”€â”€ Mobile layout (bottom sheet style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Mobile layout (bottom sheet style) ────────────────────────────
         var mobileTab by remember { mutableIntStateOf(activeTab) }
         val mobileListState = rememberLazyListState()
 
@@ -3636,7 +3636,7 @@ private fun SubtitleMenu(
                     interactionSource = remember { MutableInteractionSource() }
                 ) { onClose() }
         ) {
-            // Bottom sheet panel â€“ occupies ~70% of screen height
+            // Bottom sheet panel – occupies ~70% of screen height
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3651,7 +3651,7 @@ private fun SubtitleMenu(
                         interactionSource = remember { MutableInteractionSource() }
                     ) { /* consume clicks so they don't dismiss */ }
             ) {
-                // â”€â”€ Header: title + close button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Header: title + close button ──────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3685,7 +3685,7 @@ private fun SubtitleMenu(
                     }
                 }
 
-                // â”€â”€ Tab row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Tab row ───────────────────────────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3725,7 +3725,7 @@ private fun SubtitleMenu(
                     }
                 }
 
-                // â”€â”€ Thin divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Thin divider ──────────────────────────────────────────
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3734,7 +3734,7 @@ private fun SubtitleMenu(
                         .background(Color.White.copy(alpha = 0.1f))
                 )
 
-                // â”€â”€ Track list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Track list ────────────────────────────────────────────
                 LazyColumn(
                     state = mobileListState,
                     modifier = Modifier
@@ -3843,7 +3843,7 @@ private fun SubtitleMenu(
                                     8 -> "7.1"
                                     else -> if (track.channelCount > 0) "${track.channelCount}ch" else null
                                 }
-                                val description = listOfNotNull(codecInfo, channelInfo).joinToString(" â€¢ ").ifEmpty { null }
+                                val description = listOfNotNull(codecInfo, channelInfo).joinToString(" • ").ifEmpty { null }
 
                                 MobileTrackItem(
                                     name = trackLabel,
