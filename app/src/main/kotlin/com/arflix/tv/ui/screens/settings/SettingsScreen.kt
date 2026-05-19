@@ -73,6 +73,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Speaker
@@ -291,7 +293,7 @@ fun SettingsScreen(
 
     // Sub-focus for addon rows: 0 = toggle, 1 = delete
     var addonActionIndex by remember { mutableIntStateOf(0) }
-    // Sub-focus for catalog rows: 0 = edit, 1 = up, 2 = down, 3 = layout, 4 = delete
+    // Sub-focus for catalog rows: 0 = edit, 1 = to top, 2 = up, 3 = down, 4 = to bottom, 5 = layout, 6 = delete
     var catalogActionIndex by remember { mutableIntStateOf(0) }
     // Sub-focus for IPTV rows: 0 = enable, 1 = edit, 2 = up, 3 = down, 4 = delete
     var iptvActionIndex by remember { mutableIntStateOf(0) }
@@ -683,7 +685,7 @@ fun SettingsScreen(
                                         addonActionIndex = 1
                                     } else if (currentSection == "iptv" && contentFocusIndex in 1..uiState.iptvPlaylists.size && iptvActionIndex < 4) {
                                         iptvActionIndex++
-} else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 4) {
+} else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 6) {
                                         catalogActionIndex++
                                     }
                                 }
@@ -889,9 +891,11 @@ fun SettingsScreen(
                                                             renameCatalogTitle = catalog.title
                                                             showCatalogRename = true
                                                         }
-                                                        1 -> viewModel.moveCatalogUp(catalog.id)
-                                                        2 -> viewModel.moveCatalogDown(catalog.id)
-                                                        3 -> scope.launch {
+                                                        1 -> viewModel.moveCatalogToTop(catalog.id)
+                                                        2 -> viewModel.moveCatalogUp(catalog.id)
+                                                        3 -> viewModel.moveCatalogDown(catalog.id)
+                                                        4 -> viewModel.moveCatalogToBottom(catalog.id)
+                                                        5 -> scope.launch {
                                                             if (catalog.kind != CatalogKind.COLLECTION_RAIL) {
                                                                 toggleCatalogueRowLayoutMode(context, catalogueLayoutRowKey(catalog))
                                                             }
@@ -1303,8 +1307,10 @@ fun SettingsScreen(
                                 renameCatalogTitle = catalog.title
                                 showCatalogRename = true
                             },
+                            onMoveCatalogToTop = { catalog -> viewModel.moveCatalogToTop(catalog.id) },
                             onMoveCatalogUp = { catalog -> viewModel.moveCatalogUp(catalog.id) },
                             onMoveCatalogDown = { catalog -> viewModel.moveCatalogDown(catalog.id) },
+                            onMoveCatalogToBottom = { catalog -> viewModel.moveCatalogToBottom(catalog.id) },
                             onDeleteCatalog = { catalog -> viewModel.removeCatalog(catalog.id) }
                         )
                         "stremio" -> StremioAddonsSettings(
@@ -3511,8 +3517,10 @@ private fun MobileSettingsSubPage(
                     focusedActionIndex = 0,
                     onAddCatalog = onAddCatalogClick,
                     onRenameCatalog = onRenameCatalogClick,
+                    onMoveCatalogToTop = { viewModel.moveCatalogToTop(it.id) },
                     onMoveCatalogUp = { viewModel.moveCatalogUp(it.id) },
                     onMoveCatalogDown = { viewModel.moveCatalogDown(it.id) },
+                    onMoveCatalogToBottom = { viewModel.moveCatalogToBottom(it.id) },
                     onDeleteCatalog = { viewModel.removeCatalog(it.id) }
                 )
             }
@@ -6611,8 +6619,10 @@ private fun CatalogsSettings(
     focusedActionIndex: Int,
     onAddCatalog: () -> Unit,
     onRenameCatalog: (CatalogConfig) -> Unit,
+    onMoveCatalogToTop: (CatalogConfig) -> Unit,
     onMoveCatalogUp: (CatalogConfig) -> Unit,
     onMoveCatalogDown: (CatalogConfig) -> Unit,
+    onMoveCatalogToBottom: (CatalogConfig) -> Unit,
     onDeleteCatalog: (CatalogConfig) -> Unit
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -6828,26 +6838,38 @@ private fun CatalogsSettings(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     CatalogActionChip(
-                        icon = Icons.Default.ArrowUpward,
+                        icon = Icons.Default.SkipPrevious,
                         isFocused = isRowFocused && focusedActionIndex == 1,
+                        onClick = { onMoveCatalogToTop(catalog) }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CatalogActionChip(
+                        icon = Icons.Default.ArrowUpward,
+                        isFocused = isRowFocused && focusedActionIndex == 2,
                         onClick = { onMoveCatalogUp(catalog) }
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     CatalogActionChip(
                         icon = Icons.Default.ArrowDownward,
-                        isFocused = isRowFocused && focusedActionIndex == 2,
+                        isFocused = isRowFocused && focusedActionIndex == 3,
                         onClick = { onMoveCatalogDown(catalog) }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CatalogActionChip(
+                        icon = Icons.Default.SkipNext,
+                        isFocused = isRowFocused && focusedActionIndex == 4,
+                        onClick = { onMoveCatalogToBottom(catalog) }
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     CatalogueRowLayoutToggleButton(
                         rowKey = layoutRowKey,
                         enabled = layoutToggleEnabled,
-                        forceFocused = isRowFocused && focusedActionIndex == 3
+                        forceFocused = isRowFocused && focusedActionIndex == 5
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     CatalogActionChip(
                         icon = Icons.Default.Delete,
-                        isFocused = isRowFocused && focusedActionIndex == 4,
+                        isFocused = isRowFocused && focusedActionIndex == 6,
                         isDestructive = true,
                         enabled = true,
                         onClick = { onDeleteCatalog(catalog) }
