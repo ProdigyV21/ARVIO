@@ -25,6 +25,7 @@ import com.arflix.tv.ui.screens.home.HomeScreen
 import com.arflix.tv.ui.screens.login.LoginScreen
 import com.arflix.tv.ui.screens.player.PlayerScreen
 import com.arflix.tv.ui.screens.collections.CollectionDetailsScreen
+import com.arflix.tv.ui.screens.recommendations.RecommendationsScreen
 import com.arflix.tv.ui.screens.search.SearchScreen
 import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
@@ -95,6 +96,13 @@ sealed class Screen(val route: String) {
             preferredBingeGroup?.let { params.add("preferredBingeGroup=${java.net.URLEncoder.encode(it, "UTF-8")}") }
             startPositionMs?.let { params.add("startPositionMs=$it") }
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
+        }
+    }
+
+    object Recommendations : Screen("recommendations/{mediaType}/{mediaId}/{mediaTitle}") {
+        fun createRoute(mediaType: MediaType, mediaId: Int, mediaTitle: String): String {
+            val encodedTitle = java.net.URLEncoder.encode(mediaTitle, "UTF-8")
+            return "recommendations/${mediaType.name.lowercase()}/$mediaId/$encodedTitle"
         }
     }
 }
@@ -172,6 +180,9 @@ fun AppNavigation(
                 },
                 onNavigateToCollection = { catalogId ->
                     navController.navigate(Screen.CollectionDetails.createRoute(catalogId))
+                },
+                onNavigateToRecommendations = { mediaType, mediaId, mediaTitle ->
+                    navController.navigate(Screen.Recommendations.createRoute(mediaType, mediaId, mediaTitle))
                 },
                 onNavigateToSearch = {
                     navigateTopLevel(Screen.Search.route)
@@ -493,6 +504,36 @@ fun AppNavigation(
                         popUpTo(Screen.Player.route) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        // Recommendations screen
+        composable(
+            route = Screen.Recommendations.route,
+            arguments = listOf(
+                navArgument("mediaType") { type = NavType.StringType },
+                navArgument("mediaId") { type = NavType.IntType },
+                navArgument("mediaTitle") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val mediaTypeStr = backStackEntry.arguments?.getString("mediaType") ?: "movie"
+            val mediaId = backStackEntry.arguments?.getInt("mediaId") ?: 0
+            val mediaTitleEncoded = backStackEntry.arguments?.getString("mediaTitle").orEmpty()
+            val mediaTitle = java.net.URLDecoder.decode(mediaTitleEncoded, "UTF-8")
+            if (mediaId <= 0) {
+                navigateHome()
+                return@composable
+            }
+            val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
+
+            RecommendationsScreen(
+                mediaType = mediaType,
+                mediaId = mediaId,
+                mediaTitle = mediaTitle,
+                onNavigateToDetails = { type, id ->
+                    navController.navigate(Screen.Details.createRoute(type, id))
+                },
+                onBack = { navController.popBackStack() }
             )
         }
     }

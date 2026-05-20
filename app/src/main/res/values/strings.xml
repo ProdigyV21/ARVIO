@@ -241,4 +241,10 @@
     <string name="ai_key_saved_title">API key saved</string>
     <string name="ai_key_saved_subtitle">AI translation is ready to use</string>
     <string name="ai_qr_scan_hint">Scan with your phone — choose Groq or Gemini</string>
+
+    <!-- Recommendations -->
+    <string name="your_watch_history">Your Watch History</string>
+    <string name="no_recommendations_found">No recommendations found for this title</string>
+    <string name="recommendations_network_error">Unable to load recommendations. Check your connection and try again</string>
+    <string name="more_like">More Like %s</string>
 </resources>
