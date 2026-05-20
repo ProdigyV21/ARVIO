@@ -449,6 +449,11 @@ fun LiveTvScreen(
         runCatching { epgFocus.requestFocus() }
     }
 
+    fun exitFullScreenPlayback() {
+        isFullScreen = false
+        focusChannelList(playingChannelId ?: focusedChannelId)
+    }
+
     fun selectChannel(channel: EnrichedChannel) {
         focusedChannelId = channel.id
         rememberedChannelByCategory[selectedCategoryId] = channel.id
@@ -592,8 +597,7 @@ fun LiveTvScreen(
 
     BackHandler(enabled = searchOpen) { searchOpen = false }
     BackHandler(enabled = !searchOpen && isFullScreen) {
-        isFullScreen = false
-        focusChannelList(playingChannelId ?: focusedChannelId)
+        exitFullScreenPlayback()
     }
     BackHandler(enabled = !searchOpen && !isFullScreen) {
         when (focusZone) {
@@ -883,6 +887,7 @@ fun LiveTvScreen(
                     .onPreviewKeyEvent { ev ->
                         if (!isFullScreen || ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (ev.key) {
+                            Key.Back, Key.Escape -> { exitFullScreenPlayback(); true }
                             Key.DirectionUp -> { zap(+1); hudPokeSignal++; true }
                             Key.DirectionDown -> { zap(-1); hudPokeSignal++; true }
                             Key.DirectionCenter, Key.Enter -> { hudPokeSignal++; true }
@@ -919,7 +924,7 @@ fun LiveTvScreen(
                         channel = playingChannel,
                         nowNext = currentNowNext,
                         pokeSignal = hudPokeSignal,
-                        onBackClick = if (isTouchDevice) { { isFullScreen = false } } else null,
+                        onBackClick = if (isTouchDevice) { { exitFullScreenPlayback() } } else null,
                         modifier = Modifier,
                     )
                 }

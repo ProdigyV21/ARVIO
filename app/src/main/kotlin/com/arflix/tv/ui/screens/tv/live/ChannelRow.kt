@@ -71,6 +71,7 @@ fun ChannelRow(
     onMoveLeft: () -> Unit = {},
     onMoveRight: () -> Boolean = { false },
     onMoveUp: () -> Boolean = { false },
+    onMoveDown: () -> Boolean = { false },
     onFocused: () -> Unit = {},
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
     forceFocused: Boolean = false,
@@ -119,6 +120,7 @@ fun ChannelRow(
                         Key.DirectionLeft -> { onMoveLeft(); return@onPreviewKeyEvent true }
                         Key.DirectionRight -> if (onMoveRight()) return@onPreviewKeyEvent true
                         Key.DirectionUp -> if (onMoveUp()) return@onPreviewKeyEvent true
+                        Key.DirectionDown -> if (onMoveDown()) return@onPreviewKeyEvent true
                     }
                 }
                 false
