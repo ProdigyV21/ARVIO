@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.screens.settings
+package com.arflix.tv.ui.screens.settings
 
 import android.content.Context
 import android.content.Intent
@@ -1167,7 +1167,7 @@ fun SettingsScreen(
                             spoilerBlurEnabled = uiState.spoilerBlurEnabled,
                             onSpoilerBlurToggle = { viewModel.setSpoilerBlurEnabled(it) },
                             accentColor = uiState.accentColor,
-                            onaccentColorClick = { viewModel.cycleAccentColor() },
+                            onAccentColorClick = { viewModel.cycleAccentColor() },
                             showLoadingStats = uiState.showLoadingStats,
                             onShowLoadingStatsToggle = { viewModel.setShowLoadingStats(it) },
                             onVolumeBoostClick = { viewModel.cycleVolumeBoost() },
@@ -4169,7 +4169,7 @@ private fun tvSettingsPanelFacts(
         )
         "appearance" -> listOf(
             "OLED" to if (uiState.oledBlackBackground) "On" else "Off",
-            "Focus border" to uiState.accentColor
+            "Accent color" to uiState.accentColor
         )
         "profiles" -> listOf(
             "Startup" to if (uiState.skipProfileSelection) "Skip picker" else "Show picker"
@@ -4308,7 +4308,7 @@ private fun TvGeneralSettingsRows(
     onClockFormatClick: () -> Unit = {},
     onShowBudgetToggle: (Boolean) -> Unit = {},
     onSpoilerBlurToggle: (Boolean) -> Unit = {},
-    onaccentColorClick: () -> Unit = {},
+    onAccentColorClick: () -> Unit = {},
     showLoadingStats: Boolean = true,
     onShowLoadingStatsToggle: (Boolean) -> Unit = {},
     onVolumeBoostClick: () -> Unit = {},
@@ -4411,7 +4411,7 @@ private fun TvGeneralSettingsRows(
                 21 -> SettingsRow(Icons.Default.Schedule, stringResource(R.string.clock_format), stringResource(R.string.clock_format_desc), if (clockFormat == "12h") "12-hour" else "24-hour", focusedIndex == localIndex, onClockFormatClick, Modifier.settingsFocusSlot(localIndex))
                 22 -> SettingsToggleRow(stringResource(R.string.show_budget), stringResource(R.string.show_budget_desc), showBudget, focusedIndex == localIndex, onShowBudgetToggle, Modifier.settingsFocusSlot(localIndex))
                 23 -> SettingsToggleRow(stringResource(R.string.spoiler_blur), stringResource(R.string.spoiler_blur_desc), spoilerBlurEnabled, focusedIndex == localIndex, onSpoilerBlurToggle, Modifier.settingsFocusSlot(localIndex))
-                24 -> SettingsRow(Icons.Default.Palette, stringResource(R.string.accent_color), stringResource(R.string.accent_color_desc), accentColor, focusedIndex == localIndex, onaccentColorClick, Modifier.settingsFocusSlot(localIndex))
+                24 -> SettingsRow(Icons.Default.Palette, stringResource(R.string.accent_color), stringResource(R.string.accent_color_desc), accentColor, focusedIndex == localIndex, onAccentColorClick, Modifier.settingsFocusSlot(localIndex))
                 25 -> SettingsRow(Icons.Default.Language, stringResource(R.string.dns_provider), stringResource(R.string.dns_desc), dnsProvider, focusedIndex == localIndex, onDnsProviderClick, Modifier.settingsFocusSlot(localIndex))
                 26 -> SettingsToggleRow(stringResource(R.string.show_loading_stats), stringResource(R.string.show_loading_stats_desc), showLoadingStats, focusedIndex == localIndex, onShowLoadingStatsToggle, Modifier.settingsFocusSlot(localIndex))
                 27 -> SettingsRow(
@@ -4487,7 +4487,7 @@ private fun GeneralSettings(
     onClockFormatClick: () -> Unit = {},
     onShowBudgetToggle: (Boolean) -> Unit = {},
     onSpoilerBlurToggle: (Boolean) -> Unit = {},
-    onaccentColorClick: () -> Unit = {},
+    onAccentColorClick: () -> Unit = {},
     showLoadingStats: Boolean = true,
     onShowLoadingStatsToggle: (Boolean) -> Unit = {},
     onVolumeBoostClick: () -> Unit = {},
@@ -4787,7 +4787,7 @@ private fun GeneralSettings(
             subtitle = stringResource(R.string.accent_color_desc),
             value = accentColor,
             isFocused = focusedIndex == 24,
-            onClick = onaccentColorClick,
+            onClick = onAccentColorClick,
             modifier = Modifier.settingsFocusSlot(24)
         )
 

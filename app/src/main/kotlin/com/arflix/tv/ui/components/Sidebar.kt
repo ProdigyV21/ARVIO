@@ -214,11 +214,11 @@ private fun SidebarIcon(
 ) {
     val accent = resolveAccentColor(fallback = Color.White)
 
-    // Animated icon color - accent when selected, stays white/light when focused via ring
+    // Animated icon color - white when focused, accent when selected-only
     val iconColor by animateColorAsState(
         targetValue = when {
+            isFocused -> Color.White  // white when D-pad navigating (wins over selected)
             isSelected -> accent  // ROYGBIV accent when selected (current screen)
-            isFocused -> Color.White  // white when D-pad navigating
             else -> Color(0xFF444444)  // Darker grey when unfocused
         },
         animationSpec = tween(

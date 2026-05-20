@@ -207,8 +207,8 @@ private fun TopBarNavChip(
     )
     val iconColor by animateColorAsState(
         targetValue = when {
+            isFocused -> Color.White  // focused icon stays white (wins over selected)
             isSelected -> accent  // selected icon gets accent
-            isFocused -> Color.White  // focused icon stays white
             else -> Color.White.copy(alpha = 0.62f)
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
@@ -216,8 +216,8 @@ private fun TopBarNavChip(
     )
     val textColor by animateColorAsState(
         targetValue = when {
+            isFocused -> Color.White  // focused text stays white (wins over selected)
             isSelected -> accent  // selected text gets accent
-            isFocused -> Color.White  // focused text stays white
             else -> Color.White.copy(alpha = 0.68f)
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
@@ -277,8 +277,8 @@ private fun TopBarSettingsGear(
 
     val iconColor by animateColorAsState(
         targetValue = when {
+            isFocused -> Color.White  // focused stays white (wins over selected)
             isSelected -> accent  // selected settings gear gets accent
-            isFocused -> Color.White  // focused stays white
             else -> Color.White.copy(alpha = 0.5f)
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
