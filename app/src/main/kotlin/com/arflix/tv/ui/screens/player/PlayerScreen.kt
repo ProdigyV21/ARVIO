@@ -144,7 +144,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.weightedSubtitleScore
-import com.arflix.tv.ui.skin.LocalFocusBorderColorOverride
+import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.PurpleDark
@@ -197,7 +197,7 @@ fun PlayerScreen(
     onBack: () -> Unit = {},
     onPlayNext: (Int, Int, String?, String?, String?) -> Unit = { _, _, _, _, _ -> }
 ) {
-    val playerAccent = LocalFocusBorderColorOverride.current ?: Color.White
+    val playerAccent = LocalAccentColorOverride.current ?: Color.White
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -2957,7 +2957,7 @@ private fun PlayerIconButton(
     onUpKey: () -> Unit = {},
     onDownKey: () -> Unit = {}
 ) {
-    val btnAccent = LocalFocusBorderColorOverride.current ?: Color.White
+    val btnAccent = LocalAccentColorOverride.current ?: Color.White
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.15f else 1f, label = "iconScale")
 
@@ -3118,7 +3118,7 @@ private fun ErrorButton(
     isPrimary: Boolean,
     onClick: () -> Unit
 ) {
-    val btnAccent = LocalFocusBorderColorOverride.current ?: Color.White
+    val btnAccent = LocalAccentColorOverride.current ?: Color.White
     val scale by animateFloatAsState(if (isFocused) 1.05f else 1f, label = "scale")
 
     Box(

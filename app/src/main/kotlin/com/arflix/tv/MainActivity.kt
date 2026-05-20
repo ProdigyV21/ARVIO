@@ -65,7 +65,7 @@ import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
 import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
 import com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY
-import com.arflix.tv.util.FOCUS_BORDER_COLOR_KEY
+import com.arflix.tv.util.ACCENT_COLOR_KEY
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.LocalHasTouchScreen
 import com.arflix.tv.util.LocalAppLanguage
@@ -266,8 +266,8 @@ class MainActivity : ComponentActivity() {
             val oledBlackBackground by remember {
                 this@MainActivity.settingsDataStore.data.map { it[OLED_BLACK_BACKGROUND_KEY] ?: false }
             }.collectAsStateWithLifecycle(initialValue = false)
-            val focusBorderColorName by remember {
-                this@MainActivity.settingsDataStore.data.map { it[FOCUS_BORDER_COLOR_KEY] }
+            val accentColorName by remember {
+                this@MainActivity.settingsDataStore.data.map { it[ACCENT_COLOR_KEY] }
             }.collectAsStateWithLifecycle(initialValue = null)
             val activeProfileId by remember {
                 profileRepository.get().activeProfileId
@@ -324,7 +324,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 ArflixTvTheme(
                     oledBlackBackground = oledBlackBackground,
-                    focusBorderColorName = focusBorderColorName
+                    accentColorName = accentColorName
                 ) {
                     val startupState by startupViewModel.state.collectAsStateWithLifecycle()
                     ArflixApp(

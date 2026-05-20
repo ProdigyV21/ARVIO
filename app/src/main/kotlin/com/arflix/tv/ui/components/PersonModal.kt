@@ -47,7 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
-import com.arflix.tv.ui.skin.resolveFocusBorderColor
+import com.arflix.tv.ui.skin.resolveAccentColor
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
@@ -545,7 +545,7 @@ private fun HorizontalKnownForCard(
 ) {
     val cardWidth = 220.dp
     val cardHeight = 124.dp // 16:9 aspect ratio
-    val focusRingColor = resolveFocusBorderColor(fallback = Color.White)
+    val focusRingColor = resolveAccentColor(fallback = Color.White)
 
     Column(
         modifier = Modifier.width(cardWidth),

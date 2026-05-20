@@ -160,6 +160,7 @@ import com.arflix.tv.ui.focus.rememberArvioDpadRepeatGate
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.skin.rememberArvioCardShape
+import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.ui.theme.AnimationConstants
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundCard
@@ -3132,20 +3133,27 @@ private fun PremiumActionButton(
         label = "button_scale"
     )
 
-    // Animated background color - buttons only glow when focused
+    // Resolve accent color for focused button backgrounds
+    val accent = resolveAccentColor(fallback = Color.White)
+
+    // Animated background color - button fills with accent when focused
     val backgroundColor by animateColorAsState(
         targetValue = when {
-            isFocused && isPrimary -> Color.White
-            isFocused -> Color.White.copy(alpha = 0.95f)
+            isFocused && isPrimary -> accent
+            isFocused -> accent
             else -> Color.Transparent
         },
         animationSpec = tween(150),
         label = "button_bg"
     )
 
-    // Animated text/icon color - black when focused (on white bg), white otherwise
+    // Animated text/icon color - white on accent bg when focused, white otherwise
+    // Use dark text for light accent colors (White, Yellow) to ensure contrast
     val contentColor by animateColorAsState(
-        targetValue = if (isFocused) Color.Black else Color.White.copy(alpha = 0.9f),
+        targetValue = if (isFocused) {
+            val l = 0.299f * accent.red + 0.587f * accent.green + 0.114f * accent.blue
+            if (l > 0.5f) Color.Black else Color.White
+        } else Color.White.copy(alpha = 0.9f),
         animationSpec = tween(150),
         label = "button_content"
     )

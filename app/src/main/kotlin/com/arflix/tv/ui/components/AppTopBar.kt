@@ -41,6 +41,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.ui.skin.ArvioSkin
+import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.ui.theme.AnimationConstants
 import com.arflix.tv.ui.theme.ArflixTypography
 import androidx.compose.ui.res.stringResource
@@ -193,6 +194,8 @@ private fun TopBarNavChip(
     isFocused: Boolean,
     isSelected: Boolean
 ) {
+    val accent = resolveAccentColor(fallback = Color.White)
+
     val containerColor by animateColorAsState(
         targetValue = when {
             isFocused -> Color.White.copy(alpha = 0.2f)
@@ -204,8 +207,8 @@ private fun TopBarNavChip(
     )
     val iconColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White
-            isSelected -> Color.White.copy(alpha = 0.92f)
+            isFocused -> Color.White  // focused icon stays white (wins over selected)
+            isSelected -> accent  // selected icon gets accent
             else -> Color.White.copy(alpha = 0.62f)
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
@@ -213,8 +216,8 @@ private fun TopBarNavChip(
     )
     val textColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White
-            isSelected -> Color.White.copy(alpha = 0.92f)
+            isFocused -> Color.White  // focused text stays white (wins over selected)
+            isSelected -> accent  // selected text gets accent
             else -> Color.White.copy(alpha = 0.68f)
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
@@ -270,10 +273,12 @@ private fun TopBarSettingsGear(
     isSelected: Boolean,
     hasBadge: Boolean = false
 ) {
+    val accent = resolveAccentColor(fallback = Color.White)
+
     val iconColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White
-            isSelected -> Color.White.copy(alpha = 0.92f)
+            isFocused -> Color.White  // focused stays white (wins over selected)
+            isSelected -> accent  // selected settings gear gets accent
             else -> Color.White.copy(alpha = 0.5f)
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),

@@ -1,4 +1,4 @@
-﻿
+
 @file:Suppress("UnsafeOptInUsageError")
 
 package com.arflix.tv.ui.screens.tv
@@ -53,6 +53,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
+import com.arflix.tv.ui.skin.resolveAccentColor
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1496,13 +1497,15 @@ private fun GroupRailItem(
 ) {
     var ignoreMenuSelectUntilRelease by remember(showMenu) { mutableStateOf(showMenu) }
 
+    val accent = resolveAccentColor(fallback = Color.White)
+
     Box {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(if (isFocused) Color.White.copy(alpha = 0.07f) else Color.Transparent)
-            .then(if (isFocused) Modifier.border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp)) else Modifier)
+            .background(if (isFocused) accent.copy(alpha = 0.2f) else Color.Transparent)
+            .then(if (isFocused) Modifier.border(1.5.dp, accent, RoundedCornerShape(6.dp)) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically

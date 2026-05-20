@@ -9,14 +9,14 @@ import androidx.compose.ui.graphics.Color
 val LocalArvioSkinTokens = staticCompositionLocalOf { ArvioSkinTokens.defaults() }
 
 /**
- * Optional override for the focus border colour, driven by the user's
- * "Focus border colour" setting. When non-null every [arvioFocusable]
+ * Optional override for the accent colour, driven by the user's
+ * "Accent Color" setting. When non-null every [arvioFocusable]
  * composable uses this colour instead of [ArvioColorTokens.focusOutline].
  */
-val LocalFocusBorderColorOverride = staticCompositionLocalOf<Color?> { null }
+val LocalAccentColorOverride = staticCompositionLocalOf<Color?> { null }
 
 /**
- * Resolves the effective focus border colour for a component that draws its
+ * Resolves the effective accent colour for a component that draws its
  * own focus border (for example, settings rows and glow chips) instead of
  * using the [arvioFocusable] modifier. Returns the user's chosen override
  * when set, otherwise the provided fallback color.
@@ -24,15 +24,15 @@ val LocalFocusBorderColorOverride = staticCompositionLocalOf<Color?> { null }
  * Call this inside a `@Composable` lambda to read the CompositionLocal.
  */
 @Composable
-fun resolveFocusBorderColor(fallback: Color): Color {
-    return LocalFocusBorderColorOverride.current ?: fallback
+fun resolveAccentColor(fallback: Color): Color {
+    return LocalAccentColorOverride.current ?: fallback
 }
 
 /**
  * Maps a user-facing colour name to its [Color] value.
- * Used by the focus border colour setting and the colour picker.
+ * Used by the accent colour setting and the colour picker.
  */
-fun focusBorderColorFromName(name: String): Color = when (name) {
+fun accentColorFromName(name: String): Color = when (name) {
     "Red" -> Color(0xFFFF4444)
     "Orange" -> Color(0xFFFF8800)
     "Yellow" -> Color(0xFFFFDD44)

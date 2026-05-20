@@ -55,8 +55,8 @@ fun Modifier.arvioFocusable(
     onFocusChanged: (Boolean) -> Unit = {},
 ): Modifier = composed {
     val interactionSource = remember { MutableInteractionSource() }
-    // Allow the user's "Focus border colour" setting to override the default
-    val resolvedOutlineColor = LocalFocusBorderColorOverride.current ?: outlineColor
+    // Allow the user's "Accent Color" setting to override the default
+    val resolvedOutlineColor = LocalAccentColorOverride.current ?: outlineColor
     val isPressed by interactionSource.collectIsPressedAsState()
 
     var isFocused by remember { mutableStateOf(false) }

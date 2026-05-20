@@ -179,8 +179,8 @@
     <string name="show_budget_desc">Display the movie budget on the home hero banner</string>
     <string name="spoiler_blur">Spoiler Blur</string>
     <string name="spoiler_blur_desc">Blur unwatched episode cards to avoid spoilers</string>
-    <string name="focus_border_color">Focus Border Color</string>
-    <string name="focus_border_color_desc">Choose the D-pad focus ring color</string>
+    <string name="accent_color">Accent Color</string>
+    <string name="accent_color_desc">Choose the accent color for focus rings, buttons, and selected items</string>
     <string name="show_loading_stats_desc">Display stream resolution progress</string>
     <string name="volume_boost_desc">Amplify quiet sources (via system LoudnessEnhancer)</string>
     <string name="dns_desc">Resolve API and stream requests</string>

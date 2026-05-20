@@ -90,7 +90,7 @@ import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.skin.rememberArvioCardShape
-import com.arflix.tv.ui.skin.resolveFocusBorderColor
+import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundCard
 import com.arflix.tv.ui.theme.appBackgroundDark
@@ -804,14 +804,14 @@ private fun GlowChip(
     val focused = isVisuallyFocused || (useSystemFocusForVisuals && systemFocused)
     val active = focused || isSelected
     val chipShape = RoundedCornerShape(7.dp)
-    val focusBorderColor = resolveFocusBorderColor(fallback = Color.White)
+    val accentColor = resolveAccentColor(fallback = Color.White)
     val backgroundColor = when {
         focused -> Color.White.copy(alpha = 0.12f)
         isSelected -> Color.White.copy(alpha = 0.92f)
         else -> Color.White.copy(alpha = 0.075f)
     }
     val borderColor = when {
-        focused -> focusBorderColor
+        focused -> accentColor
         isSelected -> Color.White.copy(alpha = 0.92f)
         else -> Color.White.copy(alpha = 0.24f)
     }

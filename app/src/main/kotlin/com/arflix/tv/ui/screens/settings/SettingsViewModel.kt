@@ -178,10 +178,10 @@ data class SettingsUiState(
     val oledBlackBackground: Boolean = false,
     val clockFormat: String = "24h",
     val qualityFilters: List<QualityFilterConfig> = emptyList(),
-    // Spoiler blur — blur unwatched episode card images and hide synopsis
+    // Spoiler blur â€” blur unwatched episode card images and hide synopsis
     val spoilerBlurEnabled: Boolean = false,
-    // Focus border color — user-selectable theme colour for the D-pad focus ring
-    val focusBorderColor: String = "White",
+    // Accent color — user-selectable theme colour for focus rings, buttons, and selected items
+    val accentColor: String = "White",
     val qualityFilterPresetLabel: String = "OFF",
     // Toast
     val toastMessage: String? = null,
@@ -272,7 +272,7 @@ class SettingsViewModel @Inject constructor(
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private val qualityFiltersKey = stringPreferencesKey("quality_filters")
 
-    // Global (non-profile-scoped) AI subtitle settings — device-wide, not per-profile
+    // Global (non-profile-scoped) AI subtitle settings â€” device-wide, not per-profile
     private val subtitleAiEnabledKey = booleanPreferencesKey("subtitle_ai_enabled")
     private val subtitleAiAutoSelectKey = booleanPreferencesKey("subtitle_ai_auto_select")
     private val subtitleAiApiKeyKey = stringPreferencesKey("subtitle_ai_api_key")
@@ -417,7 +417,20 @@ class SettingsViewModel @Inject constructor(
             val spoilerBlurEnabled = prefs[spoilerBlurKey()] ?: false
             val showBudget = prefs[showBudgetKey()] ?: true
             val clockFormat = prefs[clockFormatKey()] ?: "24h"
-            val focusBorderColor = prefs[com.arflix.tv.util.FOCUS_BORDER_COLOR_KEY] ?: "White"
+            // One-time migration: read old "focus_border_color" key if new "accent_color" is absent
+            val OLD_FOCUS_BORDER_COLOR_KEY = stringPreferencesKey("focus_border_color")
+            val legacyColor = prefs[OLD_FOCUS_BORDER_COLOR_KEY]
+            val accentColor = prefs[com.arflix.tv.util.ACCENT_COLOR_KEY] ?: legacyColor ?: "White"
+            // Schedule async migration to copy old key → new key and delete old
+            if (legacyColor != null) {
+                viewModelScope.launch {
+                    context.settingsDataStore.edit {
+                        val old = it[OLD_FOCUS_BORDER_COLOR_KEY] ?: return@edit
+                        it[com.arflix.tv.util.ACCENT_COLOR_KEY] = old
+                        it.remove(OLD_FOCUS_BORDER_COLOR_KEY)
+                    }
+                }
+            }
             val volumeBoostDb = prefs[volumeBoostDbKey()]?.toIntOrNull()?.coerceIn(0, 15) ?: 0
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
 
@@ -506,7 +519,7 @@ class SettingsViewModel @Inject constructor(
                 skipProfileSelection = skipProfileSelection,
                 oledBlackBackground = oledBlackBackground,
                 clockFormat = clockFormat,
-                focusBorderColor = focusBorderColor,
+                accentColor = accentColor,
                 qualityFilters = qualityFilters,
                 qualityFilterPresetLabel = detectQualityFilterPreset(qualityFilters).label,
                 subtitleAiEnabled = subtitleAiEnabled,
@@ -1074,17 +1087,17 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Cycle the focus border color through the rainbow palette.
+     * Cycle the accent color through the rainbow palette.
      * Order: White → Red → Orange → Yellow → Green → Blue → Indigo → Violet → White
      */
-    fun cycleFocusBorderColor() {
+    fun cycleAccentColor() {
         val colors = listOf("White", "Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet")
-        val current = _uiState.value.focusBorderColor
+        val current = _uiState.value.accentColor
         val nextIndex = (colors.indexOf(current) + 1) % colors.size
         val next = colors[nextIndex]
         viewModelScope.launch {
-            context.settingsDataStore.edit { it[com.arflix.tv.util.FOCUS_BORDER_COLOR_KEY] = next }
-            _uiState.value = _uiState.value.copy(focusBorderColor = next)
+            context.settingsDataStore.edit { it[com.arflix.tv.util.ACCENT_COLOR_KEY] = next }
+            _uiState.value = _uiState.value.copy(accentColor = next)
             syncLocalStateToCloud(silent = true)
         }
     }
@@ -1141,7 +1154,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // ── AI Subtitles ──────────────────────────────────────────────────────────
+    // -- AI Subtitles ---------------------------------------------------------
 
     fun setSubtitleAiEnabled(enabled: Boolean) {
         viewModelScope.launch {
