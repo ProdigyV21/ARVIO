@@ -1708,6 +1708,20 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun moveCatalogToTop(catalogId: String) {
+        viewModelScope.launch {
+            catalogRepository.moveCatalogToTop(catalogId)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun moveCatalogToBottom(catalogId: String) {
+        viewModelScope.launch {
+            catalogRepository.moveCatalogToBottom(catalogId)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
     fun saveIptvConfig(m3uUrl: String, epgUrl: String) {
         viewModelScope.launch {
             val trimmedM3u = m3uUrl.trim()

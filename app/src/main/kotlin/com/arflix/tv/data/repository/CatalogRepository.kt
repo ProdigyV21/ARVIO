@@ -824,6 +824,36 @@ class CatalogRepository @Inject constructor(
         return true
     }
 
+    suspend fun moveCatalogToTop(catalogId: String): Boolean {
+        val current = getCatalogs().toMutableList()
+        val visible = current.filter { isVisibleCatalogInSettings(it) }
+        val visibleIndex = visible.indexOfFirst { it.id == catalogId }
+        if (visibleIndex <= 0) return false
+        val currentIndex = current.indexOfFirst { it.id == catalogId }
+        if (currentIndex < 0) return false
+        val moved = current.removeAt(currentIndex)
+        val firstVisibleId = visible.first().id
+        val firstIndex = current.indexOfFirst { it.id == firstVisibleId }
+        current.add(firstIndex.coerceAtLeast(0), moved)
+        saveCatalogs(current)
+        return true
+    }
+
+    suspend fun moveCatalogToBottom(catalogId: String): Boolean {
+        val current = getCatalogs().toMutableList()
+        val visible = current.filter { isVisibleCatalogInSettings(it) }
+        val visibleIndex = visible.indexOfFirst { it.id == catalogId }
+        if (visibleIndex < 0 || visibleIndex >= visible.lastIndex) return false
+        val currentIndex = current.indexOfFirst { it.id == catalogId }
+        if (currentIndex < 0) return false
+        val moved = current.removeAt(currentIndex)
+        val lastVisibleId = visible.last().id
+        val lastIndex = current.indexOfFirst { it.id == lastVisibleId }
+        current.add((lastIndex + 1).coerceAtMost(current.size), moved)
+        saveCatalogs(current)
+        return true
+    }
+
     suspend fun replaceCatalogsForActiveProfile(catalogs: List<CatalogConfig>) {
         val sanitized = catalogs
             .distinctBy { it.id }
