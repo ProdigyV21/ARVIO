@@ -26,6 +26,7 @@ import com.arflix.tv.util.Constants
 import com.arflix.tv.util.settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -298,14 +299,31 @@ class DetailsViewModel @Inject constructor(
                     autoPlayMinQuality = autoPlayMinQuality
                 )
 
+                fun logDetailsLoadFailure(label: String, throwable: Throwable) {
+                    if (throwable is CancellationException) throw throwable
+                    Log.w(TAG, "Failed to load details $label", throwable)
+                }
+
+                suspend fun <T> loadDetailsPart(label: String, block: suspend () -> T): T? {
+                    return runCatching { block() }
+                        .onFailure { logDetailsLoadFailure(label, it) }
+                        .getOrNull()
+                }
+
                 val itemDeferred = async {
-                    if (mediaType == MediaType.TV) {
-                        mediaRepository.getTvDetails(mediaId)
-                    } else {
-                        mediaRepository.getMovieDetails(mediaId)
+                    loadDetailsPart("item") {
+                        if (mediaType == MediaType.TV) {
+                            mediaRepository.getTvDetails(mediaId)
+                        } else {
+                            mediaRepository.getMovieDetails(mediaId)
+                        }
                     }
                 }
-                val watchlistDeferred = async { watchlistRepository.isInWatchlist(mediaType, mediaId) }
+                val watchlistDeferred = async {
+                    loadDetailsPart("watchlist") {
+                        watchlistRepository.isInWatchlist(mediaType, mediaId)
+                    } ?: false
+                }
                 // Fetch real IMDB ID and TVDB ID from TMDB external_ids endpoint
                 val externalIdsDeferred = async { resolveExternalIds(mediaType, mediaId) }
                 val resumeDeferred = async { fetchResumeInfo(mediaId, mediaType, initialSeason, initialEpisode) }
@@ -314,7 +332,11 @@ class DetailsViewModel @Inject constructor(
 
                 // For TV shows, also load episodes
                 val episodesDeferred = if (mediaType == MediaType.TV) {
-                    async { mediaRepository.getSeasonEpisodes(mediaId, seasonToLoad) }
+                    async {
+                        loadDetailsPart("season $seasonToLoad episodes") {
+                            mediaRepository.getSeasonEpisodes(mediaId, seasonToLoad)
+                        } ?: emptyList<Episode>()
+                    }
                 } else null
 
                 // For TV shows, fetch season progress (watched/total per season).
@@ -723,17 +745,21 @@ class DetailsViewModel @Inject constructor(
                             return@launch
                         }
                         // Start immediately with TMDB/title so resolver can warm caches ASAP.
-                        streamRepository.prefetchSeriesVodInfo(
-                            imdbId = null,
-                            title = titleForPrefetch,
-                            tmdbId = mediaId
-                        )
+                        runCatching {
+                            streamRepository.prefetchSeriesVodInfo(
+                                imdbId = null,
+                                title = titleForPrefetch,
+                                tmdbId = mediaId
+                            )
+                        }.onFailure { logDetailsLoadFailure("series VOD prefetch", it) }
                         val externalIds = runCatching { externalIdsDeferred.await() }.getOrNull()
-                        streamRepository.prefetchSeriesVodInfo(
-                            imdbId = externalIds?.imdbId,
-                            title = titleForPrefetch,
-                            tmdbId = mediaId
-                        )
+                        runCatching {
+                            streamRepository.prefetchSeriesVodInfo(
+                                imdbId = externalIds?.imdbId,
+                                title = titleForPrefetch,
+                                tmdbId = mediaId
+                            )
+                        }.onFailure { logDetailsLoadFailure("series VOD prefetch with IMDB ID", it) }
                         val resumeInfo = runCatching { resumeDeferred.await() }.getOrNull()
                         val loadedEpisodes = runCatching { episodesDeferred?.await() }.getOrNull().orEmpty()
                         val targetSeason = initialSeason
@@ -744,13 +770,15 @@ class DetailsViewModel @Inject constructor(
                             ?: resumeInfo?.episode
                             ?: loadedEpisodes.firstOrNull()?.episodeNumber
                             ?: 1
-                        streamRepository.prefetchEpisodeVod(
-                            imdbId = externalIds?.imdbId,
-                            season = targetSeason,
-                            episode = targetEpisode,
-                            title = titleForPrefetch,
-                            tmdbId = mediaId
-                        )
+                        runCatching {
+                            streamRepository.prefetchEpisodeVod(
+                                imdbId = externalIds?.imdbId,
+                                season = targetSeason,
+                                episode = targetEpisode,
+                                title = titleForPrefetch,
+                                tmdbId = mediaId
+                            )
+                        }.onFailure { logDetailsLoadFailure("episode VOD prefetch", it) }
                     }
                 }
             } catch (e: Exception) {
