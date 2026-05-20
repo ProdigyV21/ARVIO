@@ -125,6 +125,8 @@ fun EpgGrid(
     // A single LazyListState handles vertical scrolling for both channels and EPG.
     val channelListState = rememberLazyListState()
     var didPositionInitialSelection by remember(channels) { mutableStateOf(false) }
+    var activeChannelFocusId by remember(channels) { mutableStateOf(selectedChannelId) }
+    var pendingChannelFocusId by remember(channels) { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
     fun requestProgramFocus(rowIdx: Int, targetIdx: Int): Boolean {
@@ -156,17 +158,34 @@ fun EpgGrid(
 
     fun keepChannelFocus(rowIdx: Int): Boolean {
         val channel = channels.getOrNull(rowIdx) ?: return true
+        activeChannelFocusId = channel.id
+        pendingChannelFocusId = channel.id
         onChannelFocused(channel)
         scope.launch {
             channelListState.scrollToItem(rowIdx)
-            val requester = channelFocusRequesters[channel.id] ?: when {
-                rowIdx == 0 -> firstChannelFocusRequester
-                channel.id == selectedChannelId -> selectedChannelFocusRequester
-                else -> null
+            delay(16L)
+            repeat(4) { attempt ->
+                val requester = channelFocusRequesters[channel.id] ?: when {
+                    rowIdx == 0 -> firstChannelFocusRequester
+                    channel.id == selectedChannelId -> selectedChannelFocusRequester
+                    else -> null
+                }
+                if (requester != null && runCatching { requester.requestFocus() }.isSuccess) {
+                    return@launch
+                }
+                if (attempt < 3) delay(16L)
             }
-            requester?.let { runCatching { it.requestFocus() } }
         }
         return true
+    }
+
+    fun moveChannelFocus(delta: Int): Boolean {
+        val anchorId = activeChannelFocusId ?: selectedChannelId
+        val anchorIdx = anchorId?.let { id -> channels.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: channels.indexOfFirst { it.id == selectedChannelId }
+        if (anchorIdx < 0) return true
+        return keepChannelFocus(anchorIdx + delta)
     }
 
     // Scroll the grid to the active channel whenever the selection changes
@@ -310,11 +329,16 @@ fun EpgGrid(
                 modifier = Modifier
                     .fillMaxSize()
                     .onKeyEvent { ev ->
-                        if (ev.type == KeyEventType.KeyDown && (ev.key == Key.Back || ev.key == Key.Escape)) {
+                        if (ev.type != KeyEventType.KeyDown || (ev.key != Key.Back && ev.key != Key.Escape)) {
+                            return@onKeyEvent false
+                        }
+                        if (focusMode == EpgGridFocusMode.Epg) {
                             onExitEpg(selectedChannelId?.let { id -> channels.firstOrNull { it.id == id } })
                             selectedChannelFocusRequester.requestFocus()
-                            true
-                        } else false
+                        } else {
+                            onMoveLeftFromChannels()
+                        }
+                        true
                     }
             ) {
                 LazyColumn(
@@ -346,7 +370,15 @@ fun EpgGrid(
                                 isFavorite = ch.id in favorites,
                                 stripe = idx % 2 == 1,
                                 onClick = { onChannelSelect(ch, null) },
-                                onFocused = { onChannelFocused(ch) },
+                                onFocused = {
+                                    val pendingId = pendingChannelFocusId
+                                    if (pendingId != null && pendingId != ch.id) {
+                                        return@ChannelRow
+                                    }
+                                    pendingChannelFocusId = null
+                                    activeChannelFocusId = ch.id
+                                    onChannelFocused(ch)
+                                },
                                 onMoveLeft = onMoveLeftFromChannels,
                                 onMoveRight = {
                                     val nowMin = ((clockTickMillis - windowStartMillis) / 60_000L).toInt()
@@ -358,8 +390,8 @@ fun EpgGrid(
                                     }
                                     true
                                 },
-                                onMoveUp = { keepChannelFocus(idx - 1) },
-                                onMoveDown = { keepChannelFocus(idx + 1) },
+                                onMoveUp = { moveChannelFocus(-1) },
+                                onMoveDown = { moveChannelFocus(+1) },
                                 onFavoriteToggle = { onChannelFavoriteToggle(ch.id) },
                                 rowHeight = rowHeight,
                                 forceFocused = gridFocused &&

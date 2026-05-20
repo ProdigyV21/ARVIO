@@ -609,10 +609,6 @@ fun LiveTvScreen(
             LiveTvFocusZone.CATEGORY_LIST -> {
                 if (isTouchDevice) {
                     onBack()
-                } else {
-                    topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile)
-                        .coerceIn(0, maxTopBarIndex)
-                    focusZone = LiveTvFocusZone.TOPBAR
                 }
             }
             LiveTvFocusZone.TOPBAR -> onBack()
@@ -791,6 +787,11 @@ fun LiveTvScreen(
                             ?: playingChannelId?.takeIf { id -> filteredChannels.any { it.id == id } }
                             ?: filteredChannels.firstOrNull()?.id
                         focusChannelList(target)
+                    },
+                    onMoveUpFromSearch = {
+                        topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile)
+                            .coerceIn(0, maxTopBarIndex)
+                        focusZone = LiveTvFocusZone.TOPBAR
                     },
                     focusSearchSignal = focusSearchCategorySignal,
                     modifier = Modifier
