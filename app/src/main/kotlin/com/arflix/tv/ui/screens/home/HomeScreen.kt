@@ -3266,11 +3266,9 @@ private fun ContentRow(
     // Use smooth scroll (animated) for D-pad moves to avoid abrupt jumps.
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
     var lastScrollOffset by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(isCurrentRow) {
-        if (!isCurrentRow) {
-            lastScrollIndex = -1
-            lastScrollOffset = -1
-        }
+    LaunchedEffect(isCurrentRow, totalItems) {
+        lastScrollIndex = -1
+        lastScrollOffset = -1
     }
     LaunchedEffect(isCurrentRow, focusedItemIndex, totalItems) {
         if (!isCurrentRow || focusedItemIndex < 0 || totalItems == 0) return@LaunchedEffect
