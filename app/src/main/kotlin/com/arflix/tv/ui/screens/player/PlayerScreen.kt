@@ -23,6 +23,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween as animTween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -2192,61 +2194,100 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    // Left side - clearlogo/title and episode info
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (!uiState.logoUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = uiState.logoUrl,
-                                contentDescription = uiState.title,
-                                alignment = Alignment.CenterStart,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .width(240.dp)
-                            )
-                        } else {
+                    // Left side - clearlogo/title, episode info, and source info
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val isPaused = hasPlaybackStarted && !isPlaying
+
+                        // "NOW PLAYING" slides in from the left when paused,
+                        // pushing ALL left-side content (logo, S/E, quality) right as a unit.
+                        // Text is vertically centered against the full block height and sized
+                        // at 22sp to visually balance the 32dp clear logo.
+                        AnimatedVisibility(
+                            visible = isPaused,
+                            enter = slideInHorizontally(
+                                animationSpec = animTween(300, easing = FastOutSlowInEasing)
+                            ) { -it },
+                            exit = slideOutHorizontally(
+                                animationSpec = animTween(250, easing = FastOutSlowInEasing)
+                            ) { -it }
+                        ) {
                             Text(
-                                text = uiState.title,
-                                style = ArflixTypography.sectionTitle.copy(
-                                    fontSize = 24.sp,
+                                text = stringResource(R.string.now_playing),
+                                style = ArflixTypography.body.copy(
+                                    fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = TextPrimary,
+                                color = playerAccent,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(end = 16.dp)
                             )
                         }
-                        if (seasonNumber != null && episodeNumber != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ,
-                                modifier = Modifier.padding(top = 6.dp)
-                            ) {
+
+                        Column {
+                            if (!uiState.logoUrl.isNullOrBlank()) {
+                                Box {
+                                    AsyncImage(
+                                        model = uiState.logoUrl,
+                                        contentDescription = uiState.title,
+                                        alignment = Alignment.CenterStart,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier
+                                            .height(32.dp)
+                                            .width(240.dp)
+                                    )
+                                    // Shimmer effect sweeps over the logo when paused
+                                    if (isPaused) {
+                                        PauseShimmerOverlay(
+                                            modifier = Modifier.matchParentSize()
+                                        )
+                                    }
+                                }
+                            } else {
                                 Text(
-                                    text = "S$seasonNumber E$episodeNumber",
-                                    style = ArflixTypography.body.copy(fontSize = 16.sp),
-                                    color = TextSecondary,
+                                    text = uiState.title,
+                                    style = ArflixTypography.sectionTitle.copy(
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = TextPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                // Episode title would be shown here if available
                             }
-                        }
-                        // Source info
-                        uiState.selectedStream?.let { stream ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(top = 4.dp)
-                            ) {
-                                Text(
-                                    text = stream.quality,
-                                    style = ArflixTypography.caption.copy(fontSize = 12.sp),
-                                    color = playerAccent,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                            if (seasonNumber != null && episodeNumber != null) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "S$seasonNumber E$episodeNumber",
+                                        style = ArflixTypography.body.copy(fontSize = 16.sp),
+                                        color = TextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    // Episode title would be shown here if available
+                                }
+                            }
+                            // Source info
+                            uiState.selectedStream?.let { stream ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 4.dp)
+                                ) {
+                                    Text(
+                                        text = stream.quality,
+                                        style = ArflixTypography.caption.copy(fontSize = 12.sp),
+                                        color = playerAccent,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 stream.sizeBytes?.let { size ->
                                     Text(
                                         text = "•",
@@ -2264,6 +2305,7 @@ fun PlayerScreen(
                             }
                         }
                     }
+                    } // closes inner Row (NOW PLAYING + content column)
 
                     // Right side - Ends At + Clock
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
@@ -4412,6 +4454,58 @@ private class PlaybackCookieJar : CookieJar {
             }
         }
         return valid
+    }
+}
+
+// ── Shimmer constants ──────────────────────────────────────────────────
+private const val SHIMMER_START_OFFSET = -0.5f
+private const val SHIMMER_END_OFFSET = 1.5f
+private const val SHIMMER_DURATION_MS = 1500
+private const val SHIMMER_WIDTH_FRACTION = 0.45f
+
+/**
+ * Animated shimmer overlay that sweeps a glossy highlight across the clear logo
+ * while the player is paused. Uses a linear gradient that translates left-to-right
+ * in an infinite repeat loop. Colors are hoisted with [remember] to avoid
+ * per-frame allocations.
+ */
+@Composable
+private fun PauseShimmerOverlay(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pauseShimmer")
+    val shimmerProgress by infiniteTransition.animateFloat(
+        initialValue = SHIMMER_START_OFFSET,
+        targetValue = SHIMMER_END_OFFSET,
+        animationSpec = infiniteRepeatable(
+            animation = animTween(durationMillis = SHIMMER_DURATION_MS, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+
+    // Hoist gradient colors to avoid per-frame allocations
+    val shimmerColors = remember {
+        listOf(
+            Color.Transparent,
+            Color.White.copy(alpha = 0.10f),
+            Color.White.copy(alpha = 0.30f),
+            Color.White.copy(alpha = 0.10f),
+            Color.Transparent
+        )
+    }
+
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val shimmerWidth = size.width * SHIMMER_WIDTH_FRACTION
+            val offsetX = size.width * shimmerProgress
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = shimmerColors,
+                    start = Offset(offsetX, 0f),
+                    end = Offset(offsetX + shimmerWidth, size.height)
+                ),
+                size = size
+            )
+        }
     }
 }
 

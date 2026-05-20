@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ARVIO</string>
+    <string name="now_playing">NOW PLAYING</string>
 
     <!-- Navigation -->
     <string name="home">Home</string>
