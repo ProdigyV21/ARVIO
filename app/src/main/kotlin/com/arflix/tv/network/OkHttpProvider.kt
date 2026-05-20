@@ -21,10 +21,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 /**
  * Provides a configured OkHttpClient instance.
@@ -146,6 +149,31 @@ object OkHttpProvider {
         }
     }
 
+    // OkHttp's GzipSource (okio) throws "gzip finished without exhausting source" when the
+    // server leaves extra bytes after the gzip trailer (e.g. Content-Length mismatch, HTTP/2
+    // padding, or Supabase proxy artifacts).  Java's GZIPInputStream is lenient: on trailing
+    // bytes it tries to read a concatenated gzip stream, fails silently, and returns.
+    // Adding this as a network interceptor means it runs BEFORE BridgeInterceptor's GzipSource
+    // wrapper; stripping Content-Encoding prevents a second decompression attempt.
+    private val lenientGzipInterceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (!response.header("Content-Encoding").equals("gzip", ignoreCase = true)) {
+            return@Interceptor response
+        }
+        val body = response.body ?: return@Interceptor response
+        val decompressed = try {
+            GZIPInputStream(body.byteStream()).use { it.readBytes() }
+        } catch (_: IOException) {
+            return@Interceptor response
+        }
+        response.newBuilder()
+            .removeHeader("Content-Encoding")
+            .removeHeader("Content-Length")
+            .header("Content-Length", decompressed.size.toString())
+            .body(decompressed.toResponseBody(body.contentType()))
+            .build()
+    }
+
     private val apiDnsLoggingInterceptor = Interceptor { chain ->
         val request = chain.request()
         Log.i(
@@ -188,6 +216,9 @@ object OkHttpProvider {
             // Contributors can still use direct calls with their own local keys.
             .addInterceptor(ApiProxyInterceptor())
             .addInterceptor(loggingInterceptor)
+            // Network interceptor: decompress gzip with Java's lenient GZIPInputStream
+            // before BridgeInterceptor's strict GzipSource can see it.
+            .addNetworkInterceptor(lenientGzipInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
