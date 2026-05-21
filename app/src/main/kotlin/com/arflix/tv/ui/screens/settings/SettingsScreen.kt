@@ -16,6 +16,7 @@ import com.arflix.tv.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -5233,7 +5234,9 @@ private fun CustomUserAgentDialog(
                     val saveFocus = remember { FocusRequester() }
                     Surface(
                         onClick = onDismiss,
-                        modifier = Modifier.weight(1f).focusRequester(cancelFocus),
+                        modifier = Modifier.weight(1f).focusRequester(cancelFocus).pointerInput(Unit) {
+                            detectTapGestures(onTap = { onDismiss() })
+                        },
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = BackgroundElevated,
                             focusedContainerColor = BackgroundElevated.copy(alpha = 0.8f)
@@ -5254,7 +5257,9 @@ private fun CustomUserAgentDialog(
                     }
                     Surface(
                         onClick = { onSave(value) },
-                        modifier = Modifier.weight(1f).focusRequester(saveFocus),
+                        modifier = Modifier.weight(1f).focusRequester(saveFocus).pointerInput(Unit) {
+                            detectTapGestures(onTap = { onSave(value) })
+                        },
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Pink.copy(alpha = 0.15f),
                             focusedContainerColor = Pink.copy(alpha = 0.25f)
