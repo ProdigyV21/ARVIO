@@ -102,7 +102,13 @@ data class PlayerUiState(
     // Language name being translated into (e.g. "Hebrew") when AI is available
     val aiTargetLanguageName: String = "",
     // Non-null while an AI translation API error toast should be visible
-    val aiErrorToast: String? = null
+    val aiErrorToast: String? = null,
+    // Episode title for TV shows (e.g. "The Devil's Verdict"), fetched from TMDB
+    val episodeTitle: String? = null,
+    // Plot synopsis from TMDB, used in pause overlay
+    val overview: String? = null,
+    // Release year extracted from TMDB releaseDate (e.g. "2023")
+    val releaseYear: String? = null
 )
 
 
@@ -876,6 +882,8 @@ class PlayerViewModel @Inject constructor(
             val title: String
             val backdropUrl: String?
             val posterUrl: String?
+            var overview: String? = null
+            var releaseYear: String? = null
 
             if (mediaType == MediaType.TV) {
                 val tvDetails = details as com.arflix.tv.data.api.TmdbTvDetails
@@ -883,6 +891,8 @@ class PlayerViewModel @Inject constructor(
                 backdropUrl = tvDetails.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" }
                 posterUrl = tvDetails.posterPath?.let { "${Constants.IMAGE_BASE}$it" }
                 currentOriginalLanguage = tvDetails.originalLanguage ?: currentOriginalLanguage
+                overview = tvDetails.overview
+                releaseYear = tvDetails.firstAirDate?.take(4)
 
                 // Keep episode title aligned with saved progress rows for TV playback sessions.
                 val season = currentSeason
@@ -899,6 +909,8 @@ class PlayerViewModel @Inject constructor(
                 backdropUrl = movieDetails.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" }
                 posterUrl = movieDetails.posterPath?.let { "${Constants.IMAGE_BASE}$it" }
                 currentOriginalLanguage = movieDetails.originalLanguage ?: currentOriginalLanguage
+                overview = movieDetails.overview
+                releaseYear = movieDetails.releaseDate?.take(4)
             }
 
             // Store info for watch history
@@ -911,6 +923,9 @@ class PlayerViewModel @Inject constructor(
                 title = title,
                 backdropUrl = backdropUrl,
                 logoUrl = logoUrl,
+                episodeTitle = currentEpisodeTitle,
+                overview = overview,
+                releaseYear = releaseYear,
                 preferredAudioLanguage = resolvePreferredAudioLanguage()
             )
         } catch (e: Exception) {
