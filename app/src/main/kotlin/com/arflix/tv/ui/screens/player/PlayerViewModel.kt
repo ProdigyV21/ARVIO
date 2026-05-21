@@ -113,7 +113,9 @@ data class PlayerUiState(
     val aiErrorToast: String? = null,
     // Episode title for TV shows (e.g. "The Devil's Verdict"), populated from TMDB season details
     val episodeTitle: String? = null,
-    // Plot synopsis from TMDB, used in the pause overlay metadata block
+    // Plot synopsis from TMDB, used in the pause overlay metadata block.
+    // For TV shows, the ViewModel populates this from the season episode TMDB details
+    // (episode-specific synopsis) rather than the series-level overview.
     val overview: String? = null,
     // Release year extracted from TMDB releaseDate/firstAirDate (e.g. "2023")
     val releaseYear: String? = null
@@ -927,14 +929,18 @@ class PlayerViewModel @Inject constructor(
                 overview = tvDetails.overview
                 releaseYear = tvDetails.firstAirDate?.take(4)
 
-                // Keep episode title aligned with saved progress rows for TV playback sessions.
+                // Keep episode title and overview aligned with saved progress rows for TV playback sessions.
                 val season = currentSeason
                 val episode = currentEpisode
                 if (season != null && episode != null) {
-                    currentEpisodeTitle = runCatching {
-                        val seasonDetails = tmdbApi.getTvSeason(mediaId, season, Constants.TMDB_API_KEY)
-                        seasonDetails.episodes.firstOrNull { it.episodeNumber == episode }?.name
+                    val seasonDetails = runCatching {
+                        tmdbApi.getTvSeason(mediaId, season, Constants.TMDB_API_KEY)
                     }.getOrNull()
+                    if (seasonDetails != null) {
+                        val matchingEpisode = seasonDetails.episodes.firstOrNull { it.episodeNumber == episode }
+                        currentEpisodeTitle = matchingEpisode?.name
+                        overview = matchingEpisode?.overview?.takeIf { !it.isNullOrBlank() } ?: overview
+                    }
                 }
             } else {
                 val movieDetails = details as com.arflix.tv.data.api.TmdbMovieDetails

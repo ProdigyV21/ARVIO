@@ -4421,6 +4421,9 @@ private fun PlayerMetadataChrome(
         else -> uiState.title
     }
     val metaLine = buildPlaybackMetaLine(uiState, mediaType, seasonNumber, episodeNumber)
+    // `overview` is already resolved by the ViewModel:
+    //   - For TV → populated from the season episode TMDB details (episode-specific synopsis)
+    //   - For movies → populated from the movie TMDB details
     val overview = uiState.overview?.trim().orEmpty()
     val logoHeight = 44.dp
     val logoWidth = 230.dp
@@ -4469,7 +4472,10 @@ private fun PlayerMetadataChrome(
                 )
             }
 
-            if (!uiState.logoUrl.isNullOrBlank() && displayTitle.isNotBlank()) {
+            // For TV, show the episode title under the series clearlogo (useful context).
+            // For movies, the clearlogo itself is the movie title logo, so showing the
+            // text title underneath is redundant.
+            if (mediaType == MediaType.TV && !uiState.logoUrl.isNullOrBlank() && displayTitle.isNotBlank()) {
                 Text(
                     text = displayTitle,
                     style = ArflixTypography.sectionTitle.copy(
