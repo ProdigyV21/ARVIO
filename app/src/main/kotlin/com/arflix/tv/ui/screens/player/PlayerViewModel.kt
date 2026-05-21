@@ -471,6 +471,28 @@ class PlayerViewModel @Inject constructor(
                         playbackUrl = resolvedProvidedUrl
                     )
                 }
+                // Load IPTV and home-server sources from cache in parallel so the
+                // source picker in the player shows alternatives immediately.
+                homeServerAppendJob?.cancel()
+                homeServerAppendJob = launch {
+                    appendHomeServerSourcesInBackground(
+                        mediaType = mediaType,
+                        imdbId = currentImdbId,
+                        seasonNumber = seasonNumber,
+                        episodeNumber = episodeNumber,
+                        timeoutMs = 5_000L
+                    )
+                }
+                vodAppendJob?.cancel()
+                vodAppendJob = launch {
+                    appendVodSourceInBackground(
+                        mediaType = mediaType,
+                        imdbId = currentImdbId,
+                        seasonNumber = seasonNumber,
+                        episodeNumber = episodeNumber,
+                        timeoutMs = 15_000L
+                    )
+                }
                 // Fetch metadata in background
                 launch { fetchMediaMetadata(mediaType, mediaId) }
                 // Fetch skip intervals in background (needs IMDB id)
@@ -2604,7 +2626,7 @@ class PlayerViewModel @Inject constructor(
 
     private suspend fun appendHomeServerSourcesInBackground(
         mediaType: MediaType,
-        imdbId: String,
+        imdbId: String?,
         seasonNumber: Int?,
         episodeNumber: Int?,
         timeoutMs: Long
@@ -2664,7 +2686,7 @@ class PlayerViewModel @Inject constructor(
 
     private suspend fun appendVodSourceInBackground(
         mediaType: MediaType,
-        imdbId: String,
+        imdbId: String?,
         seasonNumber: Int?,
         episodeNumber: Int?,
         timeoutMs: Long
