@@ -2245,6 +2245,7 @@ fun PlayerScreen(
                 ) {
                     // Left side metadata is now handled by the external
                     // PlayingStateMetadataBlock (above the controls scrim).
+                    Spacer(modifier = Modifier.weight(1f))
 
                     // Right side - Ends At + Clock
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
