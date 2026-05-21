@@ -115,7 +115,7 @@ data class PlayerUiState(
     val episodeTitle: String? = null,
     // Plot synopsis from TMDB, used in the pause overlay metadata block
     val overview: String? = null,
-    // Release year extracted from TMDB releaseDate (e.g. "2023")
+    // Release year extracted from TMDB releaseDate/firstAirDate (e.g. "2023")
     val releaseYear: String? = null
 )
 
