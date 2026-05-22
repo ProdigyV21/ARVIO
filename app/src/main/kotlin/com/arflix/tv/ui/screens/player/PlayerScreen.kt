@@ -353,6 +353,9 @@ fun PlayerScreen(
     // Audio tracks from ExoPlayer
     var audioTracks by remember { mutableStateOf<List<AudioTrackInfo>>(emptyList()) }
     var selectedAudioIndex by remember { mutableIntStateOf(0) }
+    // Once the user picks an audio track for the current stream, stop auto-applying
+    // the preferred-language selection so we don't fight their choice.
+    var userPickedAudioForStream by remember { mutableStateOf(false) }
 
     // Error modal focus
     var errorModalFocusIndex by remember { mutableIntStateOf(0) }
@@ -901,6 +904,32 @@ fun PlayerScreen(
                 .setPreferredAudioLanguage(uiState.preferredAudioLanguage)
                 .build()
             trackSelector.parameters = params
+        }
+    }
+
+    // Reset the manual-pick guard whenever the playing stream changes so the
+    // preferred-language auto-selection runs fresh for the new file.
+    LaunchedEffect(uiState.selectedStreamUrl) {
+        userPickedAudioForStream = false
+    }
+
+    // Deterministically apply the preferred audio language once tracks are known.
+    // ExoPlayer's setPreferredAudioLanguage only matches on the container's language
+    // tag, so Polish "Lektor"/"Dubbing" tracks that ship with a missing or non-standard
+    // tag get skipped and playback falls back to the default track (often Russian on
+    // multi-audio releases). We additionally match on the track label here so the user's
+    // chosen language wins regardless of how the track was tagged.
+    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, userPickedAudioForStream) {
+        if (playerReleased || userPickedAudioForStream) return@LaunchedEffect
+        if (audioTracks.size < 2) return@LaunchedEffect
+        val preferred = uiState.preferredAudioLanguage.trim()
+        if (preferred.isBlank()) return@LaunchedEffect
+        val matchIndex = findPreferredAudioTrackIndex(audioTracks, preferred)
+        if (matchIndex == null || matchIndex == selectedAudioIndex) return@LaunchedEffect
+        audioTracks.getOrNull(matchIndex)?.let { track ->
+            applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
+                selectedAudioIndex = it
+            }
         }
     }
 
@@ -1864,6 +1893,7 @@ fun PlayerScreen(
                             Key.Enter, Key.DirectionCenter -> {
                                 if (subtitleMenuTab == 1) {
                                     audioTracks.getOrNull(subtitleMenuIndex)?.let { track ->
+                                        userPickedAudioForStream = true
                                         applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
                                             selectedAudioIndex = it
                                         }
@@ -2587,6 +2617,7 @@ fun PlayerScreen(
                     }
                 },
                 onSelectAudio = { track ->
+                    userPickedAudioForStream = true
                     applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
                         selectedAudioIndex = it
                     }
@@ -3230,6 +3261,53 @@ private fun applyAudioTrackSelection(
     } catch (e: Exception) {
         android.util.Log.e("PlayerScreen", "applyAudioTrackSelection unexpected error", e)
         null
+    }
+}
+
+/**
+ * Find the audio track that best matches the user's preferred audio language.
+ *
+ * Matching is done on the canonical language name (so "pl", "pol" and "polish" all
+ * resolve to the same language) and falls back to the track label, which is where
+ * Polish releases commonly carry the language for tracks that ship with a missing or
+ * non-standard language tag (e.g. "Lektor PL", "Dubbing", "Polski"). Returns the index
+ * into [audioTracks] of the first match, or `null` when no track matches.
+ */
+private fun findPreferredAudioTrackIndex(
+    audioTracks: List<AudioTrackInfo>,
+    preferredCode: String
+): Int? {
+    val prefName = getFullLanguageName(preferredCode)
+    if (prefName == "Unknown") return null
+    val labelHints = nativeAudioLanguageHints(preferredCode) + prefName.lowercase()
+    val index = audioTracks.indexOfFirst { track ->
+        val trackLangName = getFullLanguageName(track.language)
+        if (trackLangName != "Unknown" && trackLangName.equals(prefName, ignoreCase = true)) {
+            return@indexOfFirst true
+        }
+        val label = track.label?.lowercase()?.trim().orEmpty()
+        label.isNotBlank() && labelHints.any { hint -> hint.isNotBlank() && label.contains(hint) }
+    }
+    return index.takeIf { it >= 0 }
+}
+
+/**
+ * Common label hints (native names / colloquial terms) used to recognise an audio
+ * track's language when its language tag is missing or non-standard. Kept conservative
+ * to avoid false positives; covers the languages most affected by untagged tracks.
+ */
+private fun nativeAudioLanguageHints(preferredCode: String): List<String> {
+    return when (getFullLanguageName(preferredCode)) {
+        "Polish" -> listOf("polski", "polskie", "polsku", "lektor", "dubbing pl")
+        "Russian" -> listOf("русский", "русская", "rus")
+        "Ukrainian" -> listOf("українська", "ukr")
+        "German" -> listOf("deutsch")
+        "French" -> listOf("français", "francais")
+        "Spanish" -> listOf("español", "espanol", "castellano")
+        "Italian" -> listOf("italiano")
+        "Portuguese" -> listOf("português", "portugues")
+        "Czech" -> listOf("čeština", "cesky", "dabing")
+        else -> emptyList()
     }
 }
 
