@@ -458,12 +458,11 @@ fun LiveTvScreen(
         focusedChannelId = channel.id
         rememberedChannelByCategory[selectedCategoryId] = channel.id
         if (channel.id == playingChannelId && !isFullScreen) {
-            // Second tap on the already-playing channel → fullscreen
-            playingCatchupProgram = null
+            // Mini player already has the program related to this channel -> go fullscreen
             isFullScreen = true
             hudPokeSignal++
         } else {
-            // First tap or different channel → tune in mini-player
+            // Tuning a completely different channel in the mini player
             playingChannelId = channel.id
             playingCatchupProgram = null
         }
@@ -472,8 +471,26 @@ fun LiveTvScreen(
     fun playProgramInMini(channel: EnrichedChannel, program: IptvProgram?) {
         focusedChannelId = channel.id
         rememberedChannelByCategory[selectedCategoryId] = channel.id
-        playingChannelId = channel.id
-        playingCatchupProgram = program
+        if (channel.id == playingChannelId) {
+            val isAlreadyPlayingThisProgram = if (program == null) {
+                // Clicking live program acts as a fullscreen button when this channel is active (live or catchup)
+                true
+            } else {
+                // Clicking archived program when that specific archived program is playing
+                playingCatchupProgram == program
+            }
+            if (isAlreadyPlayingThisProgram && !isFullScreen) {
+                isFullScreen = true
+                hudPokeSignal++
+            } else if (program != null) {
+                // Different archived program on the same channel -> play in mini-player
+                playingCatchupProgram = program
+            }
+        } else {
+            // Tuning a different channel in the mini-player
+            playingChannelId = channel.id
+            playingCatchupProgram = program
+        }
         focusChannelList(channel.id)
     }
 
