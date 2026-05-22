@@ -1492,13 +1492,29 @@ class PlayerViewModel @Inject constructor(
                 append(it)
             }
         }
-        val codes = extractLanguageCodes(combined)
+        val codes = extractLanguageCodes(combined).toMutableSet()
+        codes.addAll(detectAudioLanguageMarkers(combined.lowercase()))
         val hasMulti = hasMultiLanguageHint(combined)
         return when {
             codes.contains(preferred) -> 2
             codes.isEmpty() || hasMulti -> 1
             else -> 0
         }
+    }
+
+    /**
+     * Detect audio-language markers commonly used in release names that the plain
+     * ISO-code tokenizer in [extractLanguageCodes] misses. Focused on Polish audio
+     * ("Lektor", "Dubbing PL", "PLDUB", ...) which is otherwise invisible to language
+     * scoring and would lose to a larger foreign-language rip.
+     */
+    private fun detectAudioLanguageMarkers(lowerText: String): Set<String> {
+        val out = mutableSetOf<String>()
+        val polishAudio = listOf(
+            "lektor", "dubbing pl", "dub pl", "pl dub", "pldub", "pl-dub", "dubpl", "polski"
+        )
+        if (polishAudio.any { lowerText.contains(it) }) out.add("pl")
+        return out
     }
 
     private fun autoplaySelectBest(streams: List<StreamSource>, preferredLanguage: String) {
@@ -1581,10 +1597,14 @@ class PlayerViewModel @Inject constructor(
         preferredLanguage: String
     ): List<StreamSource> {
         return streams.sortedWith(
-            compareByDescending<StreamSource> { playbackPriorityScore(it) }
+            // Preferred audio language is the primary criterion so a release in the
+            // user's language wins over a larger / higher-quality release in another
+            // language (e.g. Polish over a bigger Russian rip). Quality and size only
+            // decide between sources that match the language preference equally.
+            compareByDescending<StreamSource> { streamLanguageScore(it, preferredLanguage) }
+                .thenByDescending { playbackPriorityScore(it) }
                 .thenBy { streamRepository.getPlaybackHostHealthPenalty(it) }
                 .thenByDescending { parseSize(it.size) }
-                .thenByDescending { streamLanguageScore(it, preferredLanguage) }
                 .thenByDescending { if (it.behaviorHints?.cached == true) 1 else 0 }
                 .thenBy { if (it.behaviorHints?.notWebReady == true) 1 else 0 }
                 .thenByDescending { streamRepository.getAddonHealthBias(it.addonId) }
