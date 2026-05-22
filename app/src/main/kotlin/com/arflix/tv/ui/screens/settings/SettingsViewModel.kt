@@ -789,6 +789,7 @@ class SettingsViewModel @Inject constructor(
     private fun loadAudioLanguageOptions(current: String): List<String> {
         val defaults = listOf(
             "Auto (Original)",
+            "None",
             "English",
             "Arabic",
             "Bengali",

@@ -587,7 +587,7 @@ fun PlayerScreen(
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     parameters = buildUponParameters()
                         // Prefer original audio language when available
-                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage)
+                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
                         // Allow decoder fallback for unsupported codecs
                         .setAllowVideoMixedMimeTypeAdaptiveness(true)
                         .setAllowVideoNonSeamlessAdaptiveness(true)
@@ -901,7 +901,7 @@ fun PlayerScreen(
         val trackSelector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
         if (trackSelector != null) {
             val params = trackSelector.buildUponParameters()
-                .setPreferredAudioLanguage(uiState.preferredAudioLanguage)
+                .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
                 .build()
             trackSelector.parameters = params
         }
@@ -923,7 +923,7 @@ fun PlayerScreen(
         if (playerReleased || userPickedAudioForStream) return@LaunchedEffect
         if (audioTracks.size < 2) return@LaunchedEffect
         val preferred = uiState.preferredAudioLanguage.trim()
-        if (preferred.isBlank()) return@LaunchedEffect
+        if (preferred.isBlank() || preferred.equals("none", ignoreCase = true)) return@LaunchedEffect
         val matchIndex = findPreferredAudioTrackIndex(audioTracks, preferred)
         if (matchIndex == null || matchIndex == selectedAudioIndex) return@LaunchedEffect
         audioTracks.getOrNull(matchIndex)?.let { track ->

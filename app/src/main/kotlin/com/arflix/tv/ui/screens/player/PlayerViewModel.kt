@@ -1467,6 +1467,10 @@ class PlayerViewModel @Inject constructor(
             context.settingsDataStore.data.first()[defaultAudioLanguageKey()]
         }.getOrNull().orEmpty().trim()
 
+        // "None" disables language preference entirely: no forced audio language and
+        // autoplay keeps the scraping addon's own ordering (top result wins).
+        if (setting.equals("None", ignoreCase = true)) return "none"
+
         if (setting.isNotBlank() && !setting.equals("Auto", ignoreCase = true) && !setting.equals("Auto (Original)", ignoreCase = true)) {
             val fromSetting = normalizeLanguage(setting)
             if (fromSetting in knownLanguageCodes) {
@@ -1596,6 +1600,10 @@ class PlayerViewModel @Inject constructor(
         streams: List<StreamSource>,
         preferredLanguage: String
     ): List<StreamSource> {
+        // "None" preference: trust the scraping addon's ordering (like Nuvio) and keep
+        // the list as returned so the addon's top result is the one autoplay picks.
+        if (preferredLanguage.equals("none", ignoreCase = true)) return streams
+
         return streams.sortedWith(
             // Preferred audio language is the primary criterion so a release in the
             // user's language wins over a larger / higher-quality release in another
