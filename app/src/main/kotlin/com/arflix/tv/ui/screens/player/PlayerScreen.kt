@@ -174,10 +174,17 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
+import com.arflix.tv.cast.CastManager
+import com.arflix.tv.cast.CastManagerEntryPoint
+import dagger.hilt.android.EntryPointAccessors
+import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.CastConnected
+import androidx.mediarouter.app.MediaRouteChooserDialog
 
 /**
  * Netflix-style Player UI for Android TV
@@ -209,6 +216,12 @@ fun PlayerScreen(
     val coroutineScope = rememberCoroutineScope()
     val deviceType = LocalDeviceType.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val castManager = remember(context) {
+        EntryPointAccessors.fromApplication(context.applicationContext, CastManagerEntryPoint::class.java).castManager()
+    }
+    val castState by castManager.castState.collectAsStateWithLifecycle()
+    val isCasting = castState is CastManager.CastState.Casting
+    val castAvailable = castState !is CastManager.CastState.NotAvailable
     val isConstrainedPlaybackDevice = remember(context, deviceType) {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         deviceType == com.arflix.tv.util.DeviceType.TV &&
@@ -254,6 +267,12 @@ fun PlayerScreen(
                 controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             }
         }
+    }
+
+    // Initialize Cast SDK once on mobile entry. No-op on TV (CastState.NotAvailable).
+    DisposableEffect(deviceType) {
+        castManager.initialize(isMobile = deviceType.isTouchDevice())
+        onDispose { }
     }
 
     var isPlaying by remember { mutableStateOf(false) }
@@ -971,6 +990,11 @@ fun PlayerScreen(
     }
 
     val queueControlsSeek: (Long) -> Unit = queueSeek@{ deltaMs ->
+        if (isCasting) {
+            if (deltaMs > 0) castManager.skipForward(deltaMs)
+            else castManager.skipBack(-deltaMs)
+            return@queueSeek
+        }
         if (playerReleased) return@queueSeek
         val basePosition = if (isControlScrubbing) {
             scrubPreviewPosition
@@ -992,11 +1016,59 @@ fun PlayerScreen(
     }
 
     val commitControlsSeekNow: () -> Unit = commitSeek@{
+        if (isCasting) {
+            castManager.seekTo(scrubPreviewPosition)
+            isControlScrubbing = false
+            return@commitSeek
+        }
         if (playerReleased) return@commitSeek
         if (isControlScrubbing) {
             controlsSeekJob?.cancel()
             exoPlayer.seekTo(scrubPreviewPosition)
             isControlScrubbing = false
+        }
+    }
+
+    // When cast session starts: pause local ExoPlayer and hand the URL off to Chromecast.
+    // When cast session ends: resume local ExoPlayer from the last reported cast position.
+    LaunchedEffect(castState) {
+        when (castState) {
+            is CastManager.CastState.Casting -> {
+                val url = uiState.selectedStreamUrl ?: return@LaunchedEffect
+                val posMs = if (!playerReleased) exoPlayer.currentPosition else 0L
+                if (!playerReleased) exoPlayer.pause()
+                castManager.loadMedia(
+                    url = url,
+                    title = uiState.title,
+                    imageUrl = uiState.backdropUrl,
+                    mimeType = guessCastMimeType(url),
+                    positionMs = posMs
+                )
+            }
+            is CastManager.CastState.NotConnected -> {
+                val resumePos = castManager.getApproximatePosition()
+                if (!playerReleased && resumePos > 0L && !exoPlayer.isPlaying) {
+                    exoPlayer.seekTo(resumePos)
+                    exoPlayer.play()
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    // Poll RemoteMediaClient state at 500 ms intervals while casting so the
+    // progress bar and play/pause icon reflect what the Chromecast is doing.
+    LaunchedEffect(isCasting) {
+        if (!isCasting) return@LaunchedEffect
+        while (true) {
+            currentPosition = castManager.getApproximatePosition()
+            val remoteDuration = castManager.getApproximateDuration()
+            if (remoteDuration > 0L) duration = remoteDuration
+            progress = if (duration > 0L) {
+                (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+            } else 0f
+            isPlaying = castManager.isRemotePlaying()
+            delay(500)
         }
     }
 
@@ -1330,8 +1402,8 @@ fun PlayerScreen(
     }
 
     // Auto-hide controls and return focus to container
-    LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying && !showSubtitleMenu && !showSourceMenu && !showSubtitleSettings) {
+    LaunchedEffect(showControls, isPlaying, isCasting) {
+        if (showControls && isPlaying && !isCasting && !showSubtitleMenu && !showSourceMenu && !showSubtitleSettings) {
             delay(5000)
             showControls = false
             // Return focus to container so it can receive key events
@@ -1345,6 +1417,11 @@ fun PlayerScreen(
     // Sync in-player subtitle delay with the renderer factory (microseconds = ms * 1000)
     LaunchedEffect(subtitleSyncOffsetMs) {
         aiRenderersFactory.syncOffsetUs.set(subtitleSyncOffsetMs * 1000L)
+    }
+
+    // When cast starts: keep controls permanently visible.
+    LaunchedEffect(isCasting) {
+        if (isCasting) showControls = true
     }
 
     // Request focus on play button when controls are shown.
@@ -1410,9 +1487,10 @@ fun PlayerScreen(
     }
 
     // Update progress periodically
-    LaunchedEffect(exoPlayer) {
+    LaunchedEffect(exoPlayer, isCasting) {
         while (!playerReleasedAtomic.get()) {
             if (playerReleasedAtomic.get()) break
+            if (isCasting) { delay(500); continue }
             currentPosition = runCatching { exoPlayer.currentPosition }.getOrDefault(currentPosition)
             viewModel.onPlaybackPosition(currentPosition)
             val rawDuration = exoPlayer.duration
@@ -2207,9 +2285,12 @@ fun PlayerScreen(
                 } else false
             }
     ) {
+        if (isCasting) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        }
         // Keep PlayerView mounted as soon as we have a stream URL.
         // A real video surface must exist during startup, otherwise some streams never transition out of buffering.
-        if (uiState.selectedStreamUrl != null) {
+        if (uiState.selectedStreamUrl != null && !isCasting) {
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
@@ -2432,7 +2513,7 @@ fun PlayerScreen(
                         modifier = Modifier.weight(1f, fill = false)
                     )
 
-                    // Right side - Ends At + Clock
+                    // Right side - Cast button (mobile) + Ends At + Clock
                     Column(horizontalAlignment = Alignment.End) {
                         val currentTime = remember { mutableStateOf("") }
                         val endsAtTime = remember { mutableStateOf("") }
@@ -2447,6 +2528,52 @@ fun PlayerScreen(
                                 kotlinx.coroutines.delay(1000)
                             }
                         }
+
+                        // Cast button — top-right, mobile/tablet only
+                        if (isTouchDevice && castAvailable) {
+                            val castDeviceName = (castState as? CastManager.CastState.Casting)?.deviceName
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(bottom = if (endsAtTime.value.isNotBlank() || !isTouchDevice) 4.dp else 0.dp)
+                            ) {
+                                if (castDeviceName != null) {
+                                    androidx.tv.material3.Text(
+                                        text = castDeviceName,
+                                        style = ArflixTypography.caption.copy(fontSize = 11.sp),
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        maxLines = 1
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isCasting) Color.White.copy(alpha = 0.2f)
+                                            else Color.Transparent
+                                        )
+                                        .clickable {
+                                            if (isCasting) {
+                                                castManager.disconnect()
+                                            } else {
+                                                val dialog = MediaRouteChooserDialog(context)
+                                                dialog.routeSelector = castManager.getRouteSelector()
+                                                dialog.show()
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
+                                        contentDescription = if (isCasting) "Stop casting" else "Cast to TV",
+                                        tint = if (isCasting) playerAccent else Color.White.copy(alpha = 0.85f),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         if (!isTouchDevice) {
                             Text(
                                 currentTime.value,
@@ -2636,7 +2763,14 @@ fun PlayerScreen(
                             contentDescription = if (isPlaying) "Pause" else "Play",
                             focusRequester = playButtonFocusRequester, size = bigBtn, iconSize = bigIcon,
                             onFocusChanged = { if (it) focusedButton = 0 },
-                            onClick = { if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play() },
+                            onClick = {
+                                if (isCasting) {
+                                    if (castManager.isRemotePlaying()) castManager.pause()
+                                    else castManager.play()
+                                } else {
+                                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                }
+                            },
                             onLeftKey = { if (isTouchDevice) sourceButtonFocusRequester.requestFocus() else rewindButtonFocusRequester.requestFocus() },
                             onRightKey = { if (isTouchDevice) aspectButtonFocusRequester.requestFocus() else forwardButtonFocusRequester.requestFocus() },
                             onDownKey = { trackbarFocusRequester.requestFocus() },
@@ -2715,16 +2849,16 @@ fun PlayerScreen(
                                     if (!state.isFocused && isControlScrubbing) commitControlsSeekNow()
                                 }
                                 .focusable()
-                                .pointerInput(duration) {
+                                .pointerInput(duration, isCasting) {
                                     detectHorizontalDragGestures(
                                         onDragStart = { offset -> if (duration > 0L && trackbarWidthPx > 0) { scrubPreviewPosition = ((offset.x / trackbarWidthPx).coerceIn(0f, 1f) * duration).toLong(); isControlScrubbing = true } },
-                                        onDragEnd = { if (isControlScrubbing && !playerReleased) { exoPlayer.seekTo(scrubPreviewPosition); isControlScrubbing = false } },
-                                        onDragCancel = { if (isControlScrubbing && !playerReleased) { exoPlayer.seekTo(scrubPreviewPosition); isControlScrubbing = false } },
+                                        onDragEnd = { if (isControlScrubbing) { if (isCasting) castManager.seekTo(scrubPreviewPosition) else if (!playerReleased) exoPlayer.seekTo(scrubPreviewPosition); isControlScrubbing = false } },
+                                        onDragCancel = { if (isControlScrubbing) { if (isCasting) castManager.seekTo(scrubPreviewPosition) else if (!playerReleased) exoPlayer.seekTo(scrubPreviewPosition); isControlScrubbing = false } },
                                         onHorizontalDrag = { _, dragAmount -> if (duration > 0L && trackbarWidthPx > 0) { val delta = (dragAmount / trackbarWidthPx * duration).toLong(); scrubPreviewPosition = (scrubPreviewPosition + delta).coerceIn(0L, duration); isControlScrubbing = true } }
                                     )
                                 }
-                                .pointerInput(duration) {
-                                    detectTapGestures { offset -> if (duration > 0L && trackbarWidthPx > 0 && !playerReleased) { exoPlayer.seekTo(((offset.x / trackbarWidthPx).coerceIn(0f, 1f) * duration).toLong()) } }
+                                .pointerInput(duration, isCasting) {
+                                    detectTapGestures { offset -> if (duration > 0L && trackbarWidthPx > 0) { val pos = ((offset.x / trackbarWidthPx).coerceIn(0f, 1f) * duration).toLong(); if (isCasting) castManager.seekTo(pos) else if (!playerReleased) exoPlayer.seekTo(pos) } }
                                 }
                                 .onKeyEvent { event ->
                                     if (event.type == KeyEventType.KeyDown && trackbarFocused) {
@@ -4980,4 +5114,10 @@ private fun PlayerSubtitleSettingRow(
             }
         }
     }
+}
+
+private fun guessCastMimeType(url: String): String = when {
+    url.contains(".m3u8", ignoreCase = true) -> "application/x-mpegURL"
+    url.contains(".mpd", ignoreCase = true)  -> "application/dash+xml"
+    else                                     -> "video/mp4"
 }

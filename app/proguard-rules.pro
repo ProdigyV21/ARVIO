@@ -159,6 +159,14 @@
 -dontwarn io.ktor.**
 
 # ============================================
+# Google Cast SDK
+# ============================================
+-keep class com.google.android.gms.cast.** { *; }
+-keep class com.google.android.gms.cast.framework.** { *; }
+-keep class com.arflix.tv.cast.CastOptionsProvider { *; }
+-dontwarn com.google.android.gms.cast.**
+
+# ============================================
 # Google Sign-In / Credentials
 # ============================================
 -keep class com.google.android.gms.auth.** { *; }

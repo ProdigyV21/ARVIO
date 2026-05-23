@@ -26,16 +26,36 @@
         <item name="android:windowDisablePreview">true</item>
         <item name="android:windowIsTranslucent">false</item>
         <item name="android:backgroundDimEnabled">false</item>
+        <!-- AppCompat attributes (no android: prefix) required by MediaRouterThemeHelper.
+             Theme.Leanback inherits from android:Theme.Material, not AppCompat, so these
+             are undefined by default. Without them colorPrimary resolves to #0 and
+             ColorUtils.calculateContrast crashes when the cast chooser dialog opens. -->
+        <item name="colorPrimary">@color/arctic_white</item>
+        <item name="colorPrimaryDark">@color/background_dark</item>
+        <item name="colorAccent">@color/accent_white</item>
     </style>
 
-    <!-- ARVIO Mobile Theme - Normal app bar behaviour (phones/tablets) -->
-    <style name="Theme.ArflixTV.Mobile" parent="@style/Theme.ArflixTV">
-        <!-- Override the TV fullscreen flag so status bar and nav bar are visible -->
+    <!-- ARVIO Mobile Theme - AppCompat-based so MediaRouteChooserDialog works (phones/tablets).
+         Does NOT extend Theme.ArflixTV/Leanback — AppCompatDialog requires an AppCompat ancestor. -->
+    <style name="Theme.ArflixTV.Mobile" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:colorBackground">@color/background_dark</item>
+        <item name="android:colorPrimary">@color/arctic_white</item>
+        <item name="android:colorAccent">@color/accent_white</item>
+        <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
         <!-- Transparent bars — the dark app background shows through naturally -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <!-- AppCompat attrs required by MediaRouterThemeHelper (colorPrimary must be non-zero) -->
+        <item name="colorPrimary">@color/arctic_white</item>
+        <item name="colorPrimaryDark">@color/background_dark</item>
+        <item name="colorAccent">@color/accent_white</item>
     </style>
 </resources>
 
