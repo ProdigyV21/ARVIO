@@ -1029,6 +1029,10 @@ fun PlayerScreen(
         }
     }
 
+    // Tracks the last confirmed position from the Chromecast so we can resume
+    // ExoPlayer from it after disconnecting (remoteMediaClient is null by then).
+    var lastCastPositionMs by remember { mutableStateOf(0L) }
+
     // When cast session starts: pause local ExoPlayer and hand the URL off to Chromecast.
     // When cast session ends: resume local ExoPlayer from the last reported cast position.
     LaunchedEffect(castState) {
@@ -1046,11 +1050,13 @@ fun PlayerScreen(
                 )
             }
             is CastManager.CastState.NotConnected -> {
-                val resumePos = castManager.getApproximatePosition()
+                // remoteMediaClient is null here — use the position tracked by the poll loop
+                val resumePos = lastCastPositionMs
                 if (!playerReleased && resumePos > 0L && !exoPlayer.isPlaying) {
                     exoPlayer.seekTo(resumePos)
                     exoPlayer.play()
                 }
+                lastCastPositionMs = 0L
             }
             else -> Unit
         }
@@ -1061,7 +1067,9 @@ fun PlayerScreen(
     LaunchedEffect(isCasting) {
         if (!isCasting) return@LaunchedEffect
         while (true) {
-            currentPosition = castManager.getApproximatePosition()
+            val pos = castManager.getApproximatePosition()
+            if (pos > 0L) lastCastPositionMs = pos
+            currentPosition = pos
             val remoteDuration = castManager.getApproximateDuration()
             if (remoteDuration > 0L) duration = remoteDuration
             progress = if (duration > 0L) {
@@ -1844,7 +1852,9 @@ fun PlayerScreen(
             .focusable()
             .then(
                 if (isTouchDevice) {
-                    Modifier.pointerInput(Unit) {
+                    // isCasting is a key so the handler restarts when casting changes,
+                    // picking up the updated queueControlsSeek lambda.
+                    Modifier.pointerInput(isCasting) {
                         detectTapGestures(
                             onTap = {
                                 if (uiState.error == null && !showSubtitleMenu && !showSourceMenu) {
