@@ -34,6 +34,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Deferred
+import com.arflix.tv.data.model.PlaylistGroupKey
 import kotlinx.coroutines.launch
 import com.arflix.tv.network.OkHttpProvider
 import okhttp3.OkHttpClient
@@ -830,9 +831,9 @@ class IptvRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "toggle favorite group")
     }
 
-    suspend fun toggleHiddenGroup(groupName: String) {
-        val trimmed = groupName.trim()
-        if (trimmed.isEmpty()) return
+    suspend fun toggleHiddenGroup(playlistId: String, groupName: String) {
+        val trimmed = PlaylistGroupKey.build(playlistId, groupName.trim())
+        if (groupName.trim().isEmpty()) return
         context.settingsDataStore.edit { prefs ->
             val existing = decodeHiddenGroups(prefs).toMutableList()
             if (existing.contains(trimmed)) {
@@ -845,11 +846,12 @@ class IptvRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "toggle hidden group")
     }
 
-    suspend fun moveGroupUp(groupName: String, currentGroups: List<String> = emptyList()) {
-        val target = groupName.trim()
-        if (target.isEmpty()) return
+    suspend fun moveGroupUp(playlistId: String, groupName: String, currentGroups: List<String> = emptyList()) {
+        val target = PlaylistGroupKey.build(playlistId, groupName.trim())
+        if (groupName.trim().isEmpty()) return
+        val currentKeys = currentGroups.map { PlaylistGroupKey.build(playlistId, it.trim()) }
         context.settingsDataStore.edit { prefs ->
-            val order = mergedGroupOrder(decodeGroupOrder(prefs), currentGroups)
+            val order = mergedGroupOrder(decodeGroupOrder(prefs), currentKeys)
             if (order.isEmpty()) return@edit
             val idx = order.indexOf(target)
             if (idx > 0) { order.removeAt(idx); order.add(idx - 1, target) }
@@ -858,13 +860,14 @@ class IptvRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "move group up")
     }
 
-    suspend fun moveGroupToTop(groupName: String, currentGroups: List<String> = emptyList()) {
-        val target = groupName.trim()
-        if (target.isEmpty()) return
+    suspend fun moveGroupToTop(playlistId: String, groupName: String, currentGroups: List<String> = emptyList()) {
+        val target = PlaylistGroupKey.build(playlistId, groupName.trim())
+        if (groupName.trim().isEmpty()) return
+        val currentKeys = currentGroups.map { PlaylistGroupKey.build(playlistId, it.trim()) }
         context.settingsDataStore.edit { prefs ->
-            val order = mergedGroupOrder(decodeGroupOrder(prefs), currentGroups)
+            val order = mergedGroupOrder(decodeGroupOrder(prefs), currentKeys)
             if (order.isEmpty()) return@edit
-            if (target !in order && currentGroups.map { it.trim() }.contains(target)) order.add(target)
+            if (target !in order && currentKeys.contains(target)) order.add(target)
             order.remove(target)
             order.add(0, target)
             prefs[groupOrderKey()] = gson.toJson(order)
@@ -872,17 +875,27 @@ class IptvRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "move group to top")
     }
 
-    suspend fun moveGroupDown(groupName: String, currentGroups: List<String> = emptyList()) {
-        val target = groupName.trim()
-        if (target.isEmpty()) return
+    suspend fun moveGroupDown(playlistId: String, groupName: String, currentGroups: List<String> = emptyList()) {
+        val target = PlaylistGroupKey.build(playlistId, groupName.trim())
+        if (groupName.trim().isEmpty()) return
+        val currentKeys = currentGroups.map { PlaylistGroupKey.build(playlistId, it.trim()) }
         context.settingsDataStore.edit { prefs ->
-            val order = mergedGroupOrder(decodeGroupOrder(prefs), currentGroups)
+            val order = mergedGroupOrder(decodeGroupOrder(prefs), currentKeys)
             if (order.isEmpty()) return@edit
             val idx = order.indexOf(target)
             if (idx >= 0 && idx < order.size - 1) { order.removeAt(idx); order.add(idx + 1, target) }
             prefs[groupOrderKey()] = gson.toJson(order)
         }
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "move group down")
+    }
+
+    suspend fun resetGroupOrder(playlistId: String) {
+        context.settingsDataStore.edit { prefs ->
+            val existing = decodeGroupOrder(prefs).toMutableList()
+            existing.removeAll { PlaylistGroupKey(it).playlistId == playlistId }
+            prefs[groupOrderKey()] = gson.toJson(existing)
+        }
+        invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "reset group order")
     }
 
     suspend fun toggleFavoriteChannel(channelId: String) {
@@ -1746,7 +1759,19 @@ class IptvRepository @Inject constructor(
         if (raw.isBlank()) return emptyList()
         return runCatching {
             val type = TypeToken.getParameterized(List::class.java, String::class.java).type
-            gson.fromJson<List<String>>(raw, type)?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+            val list = gson.fromJson<List<String>>(raw, type)?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+            if (list.any { !it.contains('|') }) {
+                val playlistsRaw = prefs[playlistsKey()].orEmpty()
+                if (playlistsRaw.isBlank()) {
+                    list
+                } else {
+                    val playlists = decodePlaylists(playlistsRaw)
+                    val firstId = playlists.firstOrNull()?.id
+                    if (firstId != null) {
+                        list.map { if (it.contains('|')) it else "$firstId|$it" }.distinct()
+                    } else list
+                }
+            } else list
         }.getOrDefault(emptyList())
     }
 
@@ -1755,7 +1780,19 @@ class IptvRepository @Inject constructor(
         if (raw.isBlank()) return emptyList()
         return runCatching {
             val type = TypeToken.getParameterized(List::class.java, String::class.java).type
-            gson.fromJson<List<String>>(raw, type)?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+            val list = gson.fromJson<List<String>>(raw, type)?.map { it.trim() }?.filter { it.isNotBlank() }?.distinct() ?: emptyList()
+            if (list.any { !it.contains('|') }) {
+                val playlistsRaw = prefs[playlistsKey()].orEmpty()
+                if (playlistsRaw.isBlank()) {
+                    list
+                } else {
+                    val playlists = decodePlaylists(playlistsRaw)
+                    val firstId = playlists.firstOrNull()?.id
+                    if (firstId != null) {
+                        list.map { if (it.contains('|')) it else "$firstId|$it" }.distinct()
+                    } else list
+                }
+            } else list
         }.getOrDefault(emptyList())
     }
 

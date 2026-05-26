@@ -40,6 +40,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -3144,6 +3146,7 @@ private fun MobileSettingsLayout(
             }
             MobileSettingsSubPage(
                 page = page,
+                onNavigate = onNavigate,
                 uiState = uiState,
                 viewModel = viewModel,
                 stremioAddons = stremioAddons,
@@ -3307,6 +3310,7 @@ private fun MobileSettingsMainPage(
 @Composable
 private fun MobileSettingsSubPage(
     page: String,
+    onNavigate: (String) -> Unit,
     uiState: SettingsUiState,
     viewModel: SettingsViewModel,
     stremioAddons: List<com.arflix.tv.data.model.Addon>,
@@ -3666,7 +3670,25 @@ private fun MobileSettingsSubPage(
                         }
                     },
                     onRefresh = { viewModel.refreshIptv() },
-                    onDelete = { viewModel.clearIptvConfig() }
+                    onDelete = { viewModel.clearIptvConfig() },
+                    onManageCategories = { playlistId ->
+                        viewModel.setIptvSelectedPlaylistId(playlistId)
+                        onNavigate("IPTV_CATEGORIES")
+                    }
+                )
+            }
+            "IPTV_CATEGORIES" -> {
+                IptvCategoriesSettings(
+                    playlistId = uiState.iptvSelectedPlaylistId ?: "",
+                    availableGroups = uiState.iptvAvailableGroups,
+                    hiddenGroups = uiState.iptvHiddenGroups,
+                    groupOrder = uiState.iptvGroupOrder,
+                    focusedIndex = -1,
+                    focusedActionIndex = 0,
+                    onToggleHidden = { viewModel.toggleIptvHiddenGroup(uiState.iptvSelectedPlaylistId ?: "", it) },
+                    onMoveUp = { viewModel.moveIptvGroupUp(uiState.iptvSelectedPlaylistId ?: "", it) },
+                    onMoveDown = { viewModel.moveIptvGroupDown(uiState.iptvSelectedPlaylistId ?: "", it) },
+                    onReset = { viewModel.resetIptvGroupOrder(uiState.iptvSelectedPlaylistId ?: "") }
                 )
             }
             "Home Server" -> {
@@ -5631,7 +5653,8 @@ private fun IptvSettings(
     onMovePlaylistDown: (Int) -> Unit,
     onDeletePlaylist: (Int) -> Unit,
     onRefresh: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onManageCategories: (String) -> Unit = {}
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
     var selectionMode by remember { mutableStateOf(false) }
@@ -5690,6 +5713,16 @@ private fun IptvSettings(
                                     detectVerticalDragGestures(onDragEnd = { dragOffset = 0f }, onDragCancel = { dragOffset = 0f }) { change, dragAmount -> change.consume(); dragOffset += dragAmount; if (dragOffset > itemHeight) { onMovePlaylistDown(index); dragOffset -= itemHeight } else if (dragOffset < -itemHeight) { onMovePlaylistUp(index); dragOffset += itemHeight } }
                                 })
                             } else if (!selectionMode) {
+                                Icon(
+                                    imageVector = Icons.Default.List,
+                                    contentDescription = "Manage Categories",
+                                    tint = TextSecondary,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clickable { onManageCategories(playlist.id) }
+                                        .padding(6.dp)
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
                                 // Toggle chip
                                 Box(modifier = Modifier.width(44.dp).height(24.dp).background(color = if (playlist.enabled) SuccessGreen else Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(13.dp)).clickable { onTogglePlaylist(index) }.padding(3.dp), contentAlignment = if (playlist.enabled) Alignment.CenterEnd else Alignment.CenterStart) {
                                     Box(modifier = Modifier.size(18.dp).background(color = Color.White, shape = RoundedCornerShape(10.dp)))
@@ -5729,15 +5762,42 @@ private fun IptvSettings(
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(buildString { append(playlist.m3uUrl.take(56)); when { epgSourceCount > 1 -> append(" • $epgSourceCount EPGs"); epgSourceCount == 1 -> append(" • EPG") } }, style = ArflixTypography.caption.copy(fontSize = 13.sp), color = TextSecondary.copy(alpha = 0.72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    CatalogActionChip(icon = if (playlist.enabled) Icons.Default.Check else Icons.Default.VisibilityOff, isFocused = focusedIndex == rowIndex && focusedActionIndex == 0, onClick = { onTogglePlaylist(index) })
+                    CatalogActionChip(
+                        icon = Icons.Default.List,
+                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 0,
+                        onClick = { onManageCategories(playlist.id) }
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(icon = Icons.Default.Edit, isFocused = focusedIndex == rowIndex && focusedActionIndex == 1, onClick = { onEditPlaylist(index) })
+                    CatalogActionChip(
+                        icon = if (playlist.enabled) Icons.Default.Check else Icons.Default.VisibilityOff,
+                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 1,
+                        onClick = { onTogglePlaylist(index) }
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(icon = Icons.Default.ArrowUpward, isFocused = focusedIndex == rowIndex && focusedActionIndex == 2, onClick = { onMovePlaylistUp(index) })
+                    CatalogActionChip(
+                        icon = Icons.Default.Edit,
+                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 2,
+                        onClick = { onEditPlaylist(index) }
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(icon = Icons.Default.ArrowDownward, isFocused = focusedIndex == rowIndex && focusedActionIndex == 3, onClick = { onMovePlaylistDown(index) })
+                    CatalogActionChip(
+                        icon = Icons.Default.ArrowUpward,
+                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 3,
+                        onClick = { onMovePlaylistUp(index) }
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(icon = Icons.Default.Delete, isFocused = focusedIndex == rowIndex && focusedActionIndex == 4, isDestructive = true, onClick = { onDeletePlaylist(index) })
+                    CatalogActionChip(
+                        icon = Icons.Default.ArrowDownward,
+                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 4,
+                        onClick = { onMovePlaylistDown(index) }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CatalogActionChip(
+                        icon = Icons.Default.Delete,
+                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 5,
+                        isDestructive = true,
+                        onClick = { onDeletePlaylist(index) }
+                    )
                 }
                 Spacer(modifier = Modifier.height(10.dp))
             }
@@ -8728,3 +8788,128 @@ val TMDB_LANGUAGES = listOf(
     "sw-KE" to "Swahili",
     "sq-AL" to "Albanian (Shqip)"
 )
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun IptvCategoriesSettings(
+    playlistId: String,
+    availableGroups: List<String>,
+    hiddenGroups: List<String>,
+    groupOrder: List<String>,
+    focusedIndex: Int,
+    focusedActionIndex: Int,
+    onToggleHidden: (String) -> Unit,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit,
+    onReset: () -> Unit
+) {
+    val isMobile = LocalDeviceType.current.isTouchDevice()
+    val orderedGroups = remember(groupOrder, availableGroups, playlistId) {
+        val explicitOrder = groupOrder.map { com.arflix.tv.data.model.PlaylistGroupKey(it) }.filter { it.playlistId == playlistId }.map { it.groupName }
+        (explicitOrder + availableGroups).distinct()
+    }
+
+    Column {
+        if (!isMobile) {
+            Text(
+                text = "IPTV CATEGORIES",
+                style = ArflixTypography.sectionTitle,
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
+        
+        SettingsRow(
+            icon = Icons.Default.Refresh,
+            title = "Reset Order",
+            subtitle = "Restore default category order",
+            value = "RESET",
+            isFocused = focusedIndex == 0,
+            onClick = onReset,
+            modifier = Modifier.settingsFocusSlot(0)
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (isMobile) {
+            MobileSettingsCategory(title = "CATEGORIES") {
+                if (orderedGroups.isEmpty()) {
+                    Text(
+                        text = "No categories available",
+                        style = ArflixTypography.body,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    orderedGroups.forEachIndexed { index, group ->
+                        val groupKey = com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group)
+                        val isHidden = hiddenGroups.contains(groupKey)
+                        MobileSettingsRow(
+                            icon = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Check,
+                            title = group,
+                            subtitle = if (isHidden) "Hidden" else "Visible",
+                            value = "",
+                            onClick = { onToggleHidden(group) },
+                            showDivider = index < orderedGroups.lastIndex
+                        )
+                    }
+                }
+            }
+        } else {
+            orderedGroups.forEachIndexed { index, group ->
+                val rowFocusIndex = index + 1
+                val isRowFocused = focusedIndex == rowFocusIndex
+                val groupKey = com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group)
+                val isHidden = hiddenGroups.contains(groupKey)
+                
+                Row(
+                    modifier = Modifier
+                        .settingsFocusSlot(rowFocusIndex)
+                        .fillMaxWidth()
+                        .background(
+                            if (isRowFocused) Color.White.copy(alpha = 0.08f) 
+                            else Color.Transparent,
+                            RoundedCornerShape(12.dp)
+                        )
+                        .clickable { onToggleHidden(group) }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = group,
+                            style = ArflixTypography.body,
+                            color = if (isRowFocused) TextPrimary else TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (isHidden) "Hidden" else "Visible",
+                            style = ArflixTypography.caption,
+                            color = TextSecondary.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    CatalogActionChip(
+                        icon = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Check,
+                        isFocused = isRowFocused && focusedActionIndex == 0,
+                        onClick = { onToggleHidden(group) }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CatalogActionChip(
+                        icon = Icons.Default.ArrowUpward,
+                        isFocused = isRowFocused && focusedActionIndex == 1,
+                        onClick = { onMoveUp(group) }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CatalogActionChip(
+                        icon = Icons.Default.ArrowDownward,
+                        isFocused = isRowFocused && focusedActionIndex == 2,
+                        onClick = { onMoveDown(group) }
+                    )
+                }
+            }
+        }
+    }
+}

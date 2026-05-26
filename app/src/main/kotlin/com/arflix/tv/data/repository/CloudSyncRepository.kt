@@ -195,8 +195,6 @@ class CloudSyncRepository @Inject constructor(
         val dnsProvider: String = "system",
         val subtitleUsageJson: String = "",
         val subtitleSettingsUpdatedAt: Long = 0L,
-        val iptvHiddenGroups: String = "",
-        val iptvGroupOrder: String = "",
         val secondarySubtitle: String = "Off",
         val filterSubtitlesByLanguage: Boolean = true,
         val homeServerConnectionJson: String? = null,
@@ -362,8 +360,6 @@ class CloudSyncRepository @Inject constructor(
                         subtitleOffset = prefs[subtitleOffsetKeyFor(profile.id)] ?: "Bottom",
                         subtitleStyle = prefs[subtitleStyleKeyFor(profile.id)] ?: "Bold",
                         subtitleStylized = prefs[subtitleStylizedKeyFor(profile.id)] ?: true,
-                        iptvHiddenGroups = prefs[iptvHiddenGroupsKeyFor(profile.id)] ?: "",
-                        iptvGroupOrder = prefs[iptvGroupOrderKeyFor(profile.id)] ?: "",
                         secondarySubtitle = prefs[secondarySubtitleKeyFor(profile.id)] ?: "Off",
                         filterSubtitlesByLanguage = prefs[filterSubtitlesByLanguageKeyFor(profile.id)] ?: true,
                         homeServerConnectionJson = homeServerRepository.exportCloudConnectionsJsonForProfile(profile.id),
@@ -811,8 +807,6 @@ class CloudSyncRepository @Inject constructor(
                         prefs[subtitleOffsetKeyFor(profileId)] = state.subtitleOffset
                         prefs[subtitleStyleKeyFor(profileId)] = state.subtitleStyle
                         prefs[subtitleStylizedKeyFor(profileId)] = state.subtitleStylized
-                        if (state.iptvHiddenGroups.isNotBlank()) prefs[iptvHiddenGroupsKeyFor(profileId)] = state.iptvHiddenGroups
-                        if (state.iptvGroupOrder.isNotBlank()) prefs[iptvGroupOrderKeyFor(profileId)] = state.iptvGroupOrder
                         prefs[secondarySubtitleKeyFor(profileId)] = state.secondarySubtitle.ifBlank { "Off" }
                         prefs[filterSubtitlesByLanguageKeyFor(profileId)] = state.filterSubtitlesByLanguage
                         state.homeServerConnectionJson?.let { homeServerConnectionJson ->

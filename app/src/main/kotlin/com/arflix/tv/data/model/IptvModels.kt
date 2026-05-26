@@ -57,3 +57,19 @@ data class IptvSnapshot(
     val epgWarning: String? = null,
     val loadedAt: Instant = Instant.now()
 )
+
+/**
+ * Lightweight helper to handle playlistId|groupName composite keys without
+ * unnecessary string allocations in UI loops.
+ */
+@JvmInline
+value class PlaylistGroupKey(val key: String) {
+    val playlistId: String get() = key.substringBefore('|')
+    val groupName: String get() = key.substringAfter('|', missingDelimiterValue = key)
+
+    companion object {
+        fun build(playlistId: String, groupName: String): String {
+            return "$playlistId|$groupName"
+        }
+    }
+}

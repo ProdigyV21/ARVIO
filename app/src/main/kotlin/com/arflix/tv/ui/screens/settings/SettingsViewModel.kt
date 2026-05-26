@@ -150,6 +150,10 @@ data class SettingsUiState(
     val iptvStatusType: ToastType = ToastType.INFO,
     val iptvProgressText: String? = null,
     val iptvProgressPercent: Int = 0,
+    val iptvSelectedPlaylistId: String? = null,
+    val iptvAvailableGroups: List<String> = emptyList(),
+    val iptvHiddenGroups: List<String> = emptyList(),
+    val iptvGroupOrder: List<String> = emptyList(),
     // App updates
     val isSelfUpdateSupported: Boolean = true,
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
@@ -355,10 +359,26 @@ class SettingsViewModel @Inject constructor(
         observeSyncState()
         observeAuthState()
         observeIptvConfig()
+        observeIptvGroupPrefs()
         initializeCatalogs()
         observeCatalogs()
         initializeUpdaterState()
         checkForAppUpdates(force = false, showNoUpdateFeedback = false)
+    }
+
+    private fun observeIptvGroupPrefs() {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                iptvRepository.observeHiddenGroups(),
+                iptvRepository.observeGroupOrder()
+            ) { hidden, order -> Pair(hidden, order) }
+            .collect { (hidden, order) ->
+                _uiState.value = _uiState.value.copy(
+                    iptvHiddenGroups = hidden,
+                    iptvGroupOrder = order
+                )
+            }
+        }
     }
 
     private fun initializeUpdaterState() {
@@ -626,7 +646,54 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // ========== Trakt Sync ==========
+    fun resetIptvGroupOrder(playlistId: String) {
+        viewModelScope.launch {
+            iptvRepository.resetGroupOrder(playlistId)
+        }
+    }
+
+    fun setIptvSelectedPlaylistId(playlistId: String?) {
+        _uiState.value = _uiState.value.copy(iptvSelectedPlaylistId = playlistId)
+        if (playlistId != null) {
+            viewModelScope.launch {
+                val snapshot = iptvRepository.getMemoryCachedSnapshot()
+                val groups = snapshot?.channels
+                    ?.filter { it.id.startsWith("$playlistId:") }
+                    ?.map { it.group.trim().ifBlank { "Ungrouped" } }
+                    ?.distinct()
+                    .orEmpty()
+                _uiState.value = _uiState.value.copy(iptvAvailableGroups = groups)
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(iptvAvailableGroups = emptyList())
+        }
+    }
+
+    fun toggleIptvHiddenGroup(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.toggleHiddenGroup(playlistId, groupName)
+        }
+    }
+
+    fun moveIptvGroupUp(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.moveGroupUp(playlistId, groupName, _uiState.value.iptvAvailableGroups)
+        }
+    }
+
+    fun moveIptvGroupDown(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.moveGroupDown(playlistId, groupName, _uiState.value.iptvAvailableGroups)
+        }
+    }
+
+    fun moveIptvGroupToTop(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.moveGroupToTop(playlistId, groupName, _uiState.value.iptvAvailableGroups)
+        }
+    }
+
+    // ========== App Updates ==========
 
     fun performFullSync(silent: Boolean = false) {
         viewModelScope.launch {
