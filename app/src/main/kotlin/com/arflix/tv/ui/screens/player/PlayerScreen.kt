@@ -4853,7 +4853,7 @@ private fun PlayerSubtitleSettingsPanel(
     onVerticalDecrease: () -> Unit,
     onVerticalIncrease: () -> Unit
 ) {
-    val accent = LocalFocusBorderColorOverride.current ?: Color.White
+    val accent = LocalAccentColorOverride.current ?: Color.White
 
     val absMs = if (syncOffsetMs < 0) -syncOffsetMs else syncOffsetMs
     val offsetLabel = if (syncOffsetMs == 0L) "0.0s"

@@ -188,8 +188,8 @@
     <string name="custom_user_agent_desc">השאר ריק לשימוש בברירת המחדל של ARVIO. ערכים מותאמים חלים כאשר מקור לא מספק User-Agent משלו.</string>
     <string name="spoiler_blur">טשטוש ספוילרים</string>
     <string name="spoiler_blur_desc">טשטש כרטיסי פרקים שלא נצפו כדי למנוע ספוילרים</string>
-    <string name="focus_border_color">צבע מסגרת הפוקוס</string>
-    <string name="focus_border_color_desc">בחר את צבע טבעת הפוקוס של D-pad</string>
+    <string name="accent_color">צבע הדגשה</string>
+    <string name="accent_color_desc">בחר את צבע ההדגשה לטבעות פוקוס, כפתורים ופריטים נבחרים</string>
     <string name="view_collection">צפה באוסף</string>
 
     <!-- In-player subtitle settings panel -->

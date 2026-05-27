@@ -16,7 +16,7 @@ import com.arflix.tv.ui.components.normalizeCardLayoutMode
 import com.arflix.tv.ui.components.profileCatalogueRowLayoutModeKey
 import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
 import com.arflix.tv.util.AppLogger
-import com.arflix.tv.util.FOCUS_BORDER_COLOR_KEY
+import com.arflix.tv.util.ACCENT_COLOR_KEY
 import com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY
 import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
 import com.arflix.tv.util.settingsDataStore
@@ -396,7 +396,9 @@ class CloudSyncRepository @Inject constructor(
         root.put("dnsProvider", globalDnsProvider)
         root.put("customUserAgent", prefs[customUserAgentKey] ?: "")
         root.put("oledBlackBackground", prefs[OLED_BLACK_BACKGROUND_KEY] ?: false)
-        root.put("focusBorderColor", prefs[FOCUS_BORDER_COLOR_KEY] ?: "White")
+        val accentColor = prefs[ACCENT_COLOR_KEY] ?: "White"
+        root.put("accentColor", accentColor)
+        root.put("focusBorderColor", accentColor)
         root.put("subtitleUsageJson", prefs[subtitleUsageKey()] ?: "")
         root.put("subtitleSettingsUpdatedAt", prefs[subtitleSettingsUpdatedAtKey()]?.toLongOrNull() ?: 0L)
         root.put("skipProfileSelection", prefs[SKIP_PROFILE_SELECTION_KEY] ?: false)
@@ -880,6 +882,7 @@ class CloudSyncRepository @Inject constructor(
             root.has("dnsProvider") ||
             root.has("customUserAgent") ||
             root.has("oledBlackBackground") ||
+            root.has("accentColor") ||
             root.has("focusBorderColor")
         ) {
             context.settingsDataStore.edit { prefs ->
@@ -901,8 +904,11 @@ class CloudSyncRepository @Inject constructor(
                 if (root.has("oledBlackBackground")) {
                     prefs[OLED_BLACK_BACKGROUND_KEY] = root.optBoolean("oledBlackBackground", false)
                 }
-                if (root.has("focusBorderColor")) {
-                    prefs[FOCUS_BORDER_COLOR_KEY] = root.optString("focusBorderColor", "White").ifBlank { "White" }
+                if (root.has("accentColor") || root.has("focusBorderColor")) {
+                    prefs[ACCENT_COLOR_KEY] = root.optString(
+                        "accentColor",
+                        root.optString("focusBorderColor", "White")
+                    ).ifBlank { "White" }
                 }
             }
             restoredDnsProvider?.let { OkHttpProvider.setDnsProvider(OkHttpProvider.parseDnsProvider(it)) }
