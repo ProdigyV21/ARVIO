@@ -18,6 +18,8 @@ class AiSubtitleRenderersFactory(
     private val scope: CoroutineScope
 ) : DefaultRenderersFactory(context) {
 
+    val syncOffsetUs = java.util.concurrent.atomic.AtomicLong(0L)
+
     override fun buildTextRenderers(
         context: Context,
         output: TextOutput,
@@ -38,7 +40,8 @@ class AiSubtitleRenderersFactory(
             val offsetRenderer = SubtitleOffsetRenderer(
                 baseRenderer = out[index],
                 translationManager = translationManager,
-                translationScope = scope
+                translationScope = scope,
+                syncOffsetUs = syncOffsetUs
             )
             offsetRenderers.add(offsetRenderer)
             out[index] = offsetRenderer
@@ -191,7 +194,8 @@ private class TranslatingTextOutput(
 private class SubtitleOffsetRenderer(
     private val baseRenderer: Renderer,
     private val translationManager: SubtitleTranslationManager,
-    private val translationScope: CoroutineScope
+    private val translationScope: CoroutineScope,
+    private val syncOffsetUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0L)
 ) : Renderer by baseRenderer {
 
     companion object {
@@ -211,7 +215,9 @@ private class SubtitleOffsetRenderer(
     override fun render(positionUs: Long, elapsedRealtimeUs: Long) {
         currentPositionUs = positionUs
         val prevPositionUs = lastRenderPositionUs
-        baseRenderer.render(positionUs, elapsedRealtimeUs)
+        val offset = syncOffsetUs.get()
+        val adjustedUs = if (offset != 0L) (positionUs - offset).coerceAtLeast(0L) else positionUs
+        baseRenderer.render(adjustedUs, elapsedRealtimeUs)
 
         // Detect seeks (> 5 s jump) and reset the translation window to the new position
         if (prevPositionUs != Long.MIN_VALUE &&

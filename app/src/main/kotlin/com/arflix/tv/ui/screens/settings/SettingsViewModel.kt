@@ -99,6 +99,7 @@ data class SettingsUiState(
     val autoPlayMinQuality: String = "Any",
     val dnsProvider: String = "System DNS",
     val dnsProviderOptions: List<String> = listOf("System DNS", "Cloudflare", "Google", "AdGuard"),
+    val customUserAgent: String = "",
     val subtitleSize: String = "Medium",
     val subtitleColor: String = "White",
     val subtitleStyle: String = "Bold",
@@ -108,6 +109,7 @@ data class SettingsUiState(
     val secondarySubtitle: String = "Off",
     val trailerAutoPlay: Boolean = false,
     val trailerSoundEnabled: Boolean = false,
+    val trailerDelaySeconds: Int = 2,
     val showBudget: Boolean = true,
     // Volume boost in decibels (0 = off, up to 15 dB). Applied via system LoudnessEnhancer
     // attached to the ExoPlayer audio session. Issue #88.
@@ -148,6 +150,10 @@ data class SettingsUiState(
     val iptvStatusType: ToastType = ToastType.INFO,
     val iptvProgressText: String? = null,
     val iptvProgressPercent: Int = 0,
+    val iptvSelectedPlaylistId: String? = null,
+    val iptvAvailableGroups: List<String> = emptyList(),
+    val iptvHiddenGroups: List<String> = emptyList(),
+    val iptvGroupOrder: List<String> = emptyList(),
     // App updates
     val isSelfUpdateSupported: Boolean = true,
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
@@ -251,6 +257,7 @@ class SettingsViewModel @Inject constructor(
     private fun autoPlayMinQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
     private fun trailerAutoPlayKey() = profileManager.profileBooleanKey("trailer_auto_play")
     private fun trailerSoundEnabledKey() = profileManager.profileBooleanKey("trailer_sound_enabled")
+    private fun trailerDelayKey() = profileManager.profileStringKey("trailer_delay_seconds")
     private fun showBudgetKey() = profileManager.profileBooleanKey("show_budget_on_home")
     private fun clockFormatKey() = profileManager.profileStringKey("clock_format")
     private fun spoilerBlurKey() = profileManager.profileBooleanKey("spoiler_blur")
@@ -267,6 +274,7 @@ class SettingsViewModel @Inject constructor(
     private fun filterSubtitlesByLanguageKey() = profileManager.profileBooleanKey("filter_subtitles_by_lang")
     private fun secondarySubtitleKey() = profileManager.profileStringKey("secondary_subtitle")
     private val dnsProviderKey = stringPreferencesKey(OkHttpProvider.DNS_PROVIDER_PREF_KEY)
+    private val customUserAgentKey = stringPreferencesKey(OkHttpProvider.USER_AGENT_PREF_KEY)
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
     private val qualityFiltersKey = stringPreferencesKey("quality_filters")
 
@@ -351,10 +359,26 @@ class SettingsViewModel @Inject constructor(
         observeSyncState()
         observeAuthState()
         observeIptvConfig()
+        observeIptvGroupPrefs()
         initializeCatalogs()
         observeCatalogs()
         initializeUpdaterState()
         checkForAppUpdates(force = false, showNoUpdateFeedback = false)
+    }
+
+    private fun observeIptvGroupPrefs() {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                iptvRepository.observeHiddenGroups(),
+                iptvRepository.observeGroupOrder()
+            ) { hidden, order -> Pair(hidden, order) }
+            .collect { (hidden, order) ->
+                _uiState.value = _uiState.value.copy(
+                    iptvHiddenGroups = hidden,
+                    iptvGroupOrder = order
+                )
+            }
+        }
     }
 
     private fun initializeUpdaterState() {
@@ -411,6 +435,7 @@ class SettingsViewModel @Inject constructor(
             val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
             val trailerAutoPlay = prefs[trailerAutoPlayKey()] ?: false
             val trailerSoundEnabled = prefs[trailerSoundEnabledKey()] ?: false
+            val trailerDelaySeconds = prefs[trailerDelayKey()]?.toIntOrNull() ?: 2
             val spoilerBlurEnabled = prefs[spoilerBlurKey()] ?: false
             val showBudget = prefs[showBudgetKey()] ?: true
             val clockFormat = prefs[clockFormatKey()] ?: "24h"
@@ -439,6 +464,8 @@ class SettingsViewModel @Inject constructor(
             val filterSubtitlesByLanguage = prefs[filterSubtitlesByLanguageKey()] ?: true
             val secondarySubtitle = prefs[secondarySubtitleKey()]?.trim()?.takeIf { it.isNotBlank() } ?: "Off"
             val dnsProviderValue = normalizeDnsProviderValue(prefs[dnsProviderKey])
+            val customUserAgent = prefs[customUserAgentKey].orEmpty().trim()
+            OkHttpProvider.setCustomUserAgent(customUserAgent)
             val includeSpecials = prefs[includeSpecialsKey()] ?: false
             val qualityFilters = runCatching {
                 val json = prefs[qualityFiltersKey].orEmpty()
@@ -491,6 +518,7 @@ class SettingsViewModel @Inject constructor(
                 autoPlayMinQuality = autoPlayMinQuality,
                 trailerAutoPlay = trailerAutoPlay,
                 trailerSoundEnabled = trailerSoundEnabled,
+                trailerDelaySeconds = trailerDelaySeconds,
                 showBudget = showBudget,
                 volumeBoostDb = volumeBoostDb,
                 showLoadingStats = showLoadingStats,
@@ -503,6 +531,7 @@ class SettingsViewModel @Inject constructor(
                 filterSubtitlesByLanguage = filterSubtitlesByLanguage,
                 secondarySubtitle = secondarySubtitle,
                 dnsProvider = dnsProviderLabel(dnsProviderValue),
+                customUserAgent = customUserAgent,
                 includeSpecials = includeSpecials,
                 spoilerBlurEnabled = spoilerBlurEnabled,
                 isLoggedIn = isLoggedIn,
@@ -630,7 +659,54 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // ========== Trakt Sync ==========
+    fun resetIptvGroupOrder(playlistId: String) {
+        viewModelScope.launch {
+            iptvRepository.resetGroupOrder(playlistId)
+        }
+    }
+
+    fun setIptvSelectedPlaylistId(playlistId: String?) {
+        _uiState.value = _uiState.value.copy(iptvSelectedPlaylistId = playlistId)
+        if (playlistId != null) {
+            viewModelScope.launch {
+                val snapshot = iptvRepository.getMemoryCachedSnapshot()
+                val groups = snapshot?.channels
+                    ?.filter { it.id.startsWith("$playlistId:") }
+                    ?.map { it.group.trim().ifBlank { "Ungrouped" } }
+                    ?.distinct()
+                    .orEmpty()
+                _uiState.value = _uiState.value.copy(iptvAvailableGroups = groups)
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(iptvAvailableGroups = emptyList())
+        }
+    }
+
+    fun toggleIptvHiddenGroup(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.toggleHiddenGroup(playlistId, groupName)
+        }
+    }
+
+    fun moveIptvGroupUp(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.moveGroupUp(playlistId, groupName, _uiState.value.iptvAvailableGroups)
+        }
+    }
+
+    fun moveIptvGroupDown(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.moveGroupDown(playlistId, groupName, _uiState.value.iptvAvailableGroups)
+        }
+    }
+
+    fun moveIptvGroupToTop(playlistId: String, groupName: String) {
+        viewModelScope.launch {
+            iptvRepository.moveGroupToTop(playlistId, groupName, _uiState.value.iptvAvailableGroups)
+        }
+    }
+
+    // ========== App Updates ==========
 
     fun performFullSync(silent: Boolean = false) {
         viewModelScope.launch {
@@ -793,6 +869,7 @@ class SettingsViewModel @Inject constructor(
     private fun loadAudioLanguageOptions(current: String): List<String> {
         val defaults = listOf(
             "Auto (Original)",
+            "None",
             "English",
             "Arabic",
             "Bengali",
@@ -1042,6 +1119,21 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { context.settingsDataStore.edit { it[trailerSoundEnabledKey()] = enabled }; _uiState.value = _uiState.value.copy(trailerSoundEnabled = enabled); syncLocalStateToCloud(silent = true) }
     }
 
+    fun cycleTrailerDelay() {
+        val next = when (_uiState.value.trailerDelaySeconds) {
+            0 -> 1
+            1 -> 2
+            2 -> 3
+            3 -> 5
+            else -> 0
+        }
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[trailerDelayKey()] = next.toString() }
+            _uiState.value = _uiState.value.copy(trailerDelaySeconds = next)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
     fun setShowBudget(enabled: Boolean) {
         viewModelScope.launch {
             context.settingsDataStore.edit { it[showBudgetKey()] = enabled }
@@ -1261,12 +1353,31 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 dnsProvider = dnsProviderLabel(value)
             )
+            syncLocalStateToCloud(silent = true)
 
             // Replace Coil image loader with one using the new DNS
             val imageLoader = withContext(Dispatchers.IO) {
                 OkHttpProvider.createCoilImageLoader(context)
             }
             Coil.setImageLoader(imageLoader)
+        }
+    }
+
+    fun setCustomUserAgent(value: String) {
+        val trimmed = value.trim()
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                if (trimmed.isBlank()) {
+                    prefs.remove(customUserAgentKey)
+                } else {
+                    prefs[customUserAgentKey] = trimmed
+                }
+            }
+            OkHttpProvider.setCustomUserAgent(trimmed)
+            _uiState.value = _uiState.value.copy(
+                customUserAgent = trimmed
+            )
+            syncLocalStateToCloud(silent = true)
         }
     }
 
@@ -1785,6 +1896,14 @@ class SettingsViewModel @Inject constructor(
 
             iptvLoadJob = launch {
             _uiState.value = _uiState.value.copy(isIptvLoading = true, iptvError = null)
+            // When the user explicitly forces a refresh (Settings → Refresh
+            // IPTV), nuke every IPTV-side cache before reloading so the
+            // snapshot + warm-up below go all the way back to the provider.
+            // Auto-triggered refreshes (force=false) keep their soft TTL
+            // behavior.
+            if (force) {
+                runCatching { iptvRepository.purgeAllIptvSourceCaches() }
+            }
             runCatching {
                 val snapshot = iptvRepository.loadSnapshot(
                     forcePlaylistReload = force,
@@ -1877,7 +1996,7 @@ class SettingsViewModel @Inject constructor(
     fun setTorrServerBaseUrl(url: String) {
         viewModelScope.launch {
             streamRepository.setTorrServerBaseUrl(url)
-            // No cloud sync needed; this is a local playback setting.
+            syncLocalStateToCloud(silent = true)
         }
     }
 
@@ -2863,6 +2982,7 @@ private fun IptvConfig.syncSignature(): String {
                 playlist.name,
                 playlist.m3uUrl,
                 playlist.epgUrl,
+                playlist.epgUrls.orEmpty().joinToString(","),
                 playlist.enabled.toString()
             ).joinToString("~")
         }

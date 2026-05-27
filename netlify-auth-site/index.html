@@ -540,9 +540,25 @@
 
     const EMAIL_RE = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,63}$/i;
     const BLOCKED_EMAIL_DOMAINS = new Set([
+      "10minutemail.com",
+      "20minutemail.com",
+      "dispostable.com",
+      "emailondeck.com",
       "example.com",
       "example.net",
       "example.org",
+      "fakeinbox.com",
+      "getnada.com",
+      "grr.la",
+      "guerrillamail.biz",
+      "guerrillamail.de",
+      "guerrillamail.info",
+      "guerrillamail.org",
+      "maildrop.cc",
+      "moakt.com",
+      "sharklasers.com",
+      "tempmailo.com",
+      "trashmail.com",
       "invalid",
       "localhost",
       "mailinator.com",
@@ -553,7 +569,31 @@
       "temp-mail.org",
       "yopmail.com"
     ]);
-    const EMAIL_SEND_COOLDOWN_MS = 60 * 1000;
+    const BLOCKED_EMAIL_DOMAIN_FRAGMENTS = [
+      "10minutemail",
+      "disposable",
+      "fakeinbox",
+      "guerrillamail",
+      "maildrop",
+      "mailinator",
+      "tempmail",
+      "temp-mail",
+      "trashmail",
+      "yopmail"
+    ];
+    const BLOCKED_SIGNUP_LOCAL_PARTS = new Set([
+      "asdf",
+      "example",
+      "fake",
+      "invalid",
+      "no-reply",
+      "none",
+      "noreply",
+      "null",
+      "qwerty",
+      "test"
+    ]);
+    const EMAIL_SEND_COOLDOWN_MS = 5 * 60 * 1000;
 
     function normalizeEmail(value) {
       return String(value || "").trim().toLowerCase();
@@ -563,13 +603,41 @@
       const email = normalizeEmail(value);
       if (!email) return "Email is required.";
       if (email.length > 254 || !EMAIL_RE.test(email)) return "Enter a valid email address.";
+      if ((email.match(/@/g) || []).length !== 1) return "Enter a valid email address.";
+
       const [localPart, domain = ""] = email.split("@");
       if (!localPart || !domain) return "Use a real email address.";
-      if (rejectDisposable && BLOCKED_EMAIL_DOMAINS.has(domain)) return "Use a real email address.";
-      if (rejectDisposable && (domain.endsWith(".invalid") || domain.endsWith(".test") || domain.endsWith(".local"))) {
+      if (localPart.length > 64 || localPart.startsWith(".") || localPart.endsWith(".") || localPart.includes("..")) {
+        return "Enter a valid email address.";
+      }
+
+      const domainLabels = domain.split(".");
+      if (domainLabels.length < 2 || domainLabels.some(part => !part || part.length > 63)) {
+        return "Enter a valid email address.";
+      }
+      if (domainLabels.some(part => part.startsWith("-") || part.endsWith("-"))) {
+        return "Enter a valid email address.";
+      }
+      if (/^\d+$/.test(domainLabels[domainLabels.length - 1])) {
+        return "Enter a valid email address.";
+      }
+
+      const blockedDomain = BLOCKED_EMAIL_DOMAINS.has(domain) ||
+        BLOCKED_EMAIL_DOMAIN_FRAGMENTS.some(fragment => domain.includes(fragment));
+      if (rejectDisposable && BLOCKED_SIGNUP_LOCAL_PARTS.has(localPart)) return "Use a real email address.";
+      if (rejectDisposable && blockedDomain) return "Use a real email address.";
+      if (
+        rejectDisposable &&
+        (
+          domain.endsWith(".example") ||
+          domain.endsWith(".invalid") ||
+          domain.endsWith(".localhost") ||
+          domain.endsWith(".local") ||
+          domain.endsWith(".test")
+        )
+      ) {
         return "Use a real email address.";
       }
-      if (domain.split(".").some(part => !part)) return "Enter a valid email address.";
       return "";
     }
 
@@ -719,8 +787,20 @@
       const email = requireValidEmail(emailEl.value);
       enforceEmailSendCooldown("reset", email);
       const redirectTo = "https://auth.arvio.tv/?mode=recovery";
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-      if (error) throw error;
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/cloud-auth-reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          email,
+          redirect_to: redirectTo
+        })
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || "Password reset failed");
     }
 
     async function saveNewPassword() {

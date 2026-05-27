@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +38,11 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.IptvNowNext
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import kotlinx.coroutines.delay
 
 /**
@@ -49,6 +55,7 @@ fun FullscreenHud(
     channel: EnrichedChannel?,
     nowNext: IptvNowNext?,
     pokeSignal: Int,
+    onBackClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var visible by remember { mutableStateOf(true) }
@@ -94,7 +101,7 @@ fun FullscreenHud(
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(20.dp)
+                        .padding(start = if (onBackClick != null) 80.dp else 20.dp, top = 20.dp, end = 20.dp, bottom = 20.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0x66000000))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -237,6 +244,25 @@ fun FullscreenHud(
                             )
                         }
                     }
+                }
+            }
+            if (onBackClick != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(20.dp)
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.62f))
+                        .clickable { onBackClick() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Go Back",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
                 }
             }
         }

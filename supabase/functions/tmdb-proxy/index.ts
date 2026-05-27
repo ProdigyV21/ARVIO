@@ -73,6 +73,56 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+type TmdbFetchResult = {
+  data: unknown
+  status: number
+  attempts: number
+}
+
+function buildRetryUrl(tmdbUrl: URL, attempt: number): URL {
+  if (attempt === 0) return new URL(tmdbUrl.toString())
+
+  const retryUrl = new URL(tmdbUrl.toString())
+  retryUrl.searchParams.set('_arvio_retry', `${Date.now()}_${attempt}`)
+  return retryUrl
+}
+
+async function fetchTmdbJson(tmdbUrl: URL): Promise<TmdbFetchResult> {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const requestUrl = buildRetryUrl(tmdbUrl, attempt)
+
+    try {
+      const response = await fetch(requestUrl.toString(), {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          // TMDB had bad CloudFront gzip cache entries on 2026-05-20 that
+          // broke strict clients with truncated gzip bodies. Prefer identity
+          // here so the app receives stable JSON through this proxy.
+          'Accept-Encoding': 'identity;q=1, *;q=0',
+          'Cache-Control': attempt === 0 ? 'no-cache' : 'no-store',
+          'Pragma': 'no-cache',
+          'User-Agent': 'ARVIO-TMDB-Proxy/1.0',
+        },
+      })
+
+      const body = await response.text()
+      const data = body.length > 0 ? JSON.parse(body) : null
+      return { data, status: response.status, attempts: attempt + 1 }
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw new Error(`TMDB response could not be decoded after retries: ${errorMessage(lastError)}`)
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -151,29 +201,23 @@ serve(async (req) => {
       }
     })
 
-    // Make request to TMDB
-    const response = await fetch(tmdbUrl.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    const result = await fetchTmdbJson(tmdbUrl)
 
-    const data = await response.json()
-
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify(result.data), {
       headers: {
         ...corsHeaders,
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
         'X-RateLimit-Limit': String(RATE_LIMIT),
         'X-RateLimit-Remaining': String(rateCheck.remaining),
+        'X-TMDB-Proxy-Attempts': String(result.attempts),
       },
-      status: response.status,
+      status: result.status,
     })
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
+    return new Response(JSON.stringify({ error: errorMessage(error) }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      status: 502,
     })
   }
 })

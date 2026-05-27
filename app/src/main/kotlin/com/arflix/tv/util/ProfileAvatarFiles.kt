@@ -26,5 +26,9 @@ object ProfileAvatarFiles {
     }
 
     private fun safeName(value: String): String =
-        value.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        value.replace(ProfileAvatarRegexes.SANITIZATION_REGEX, "_")
+}
+
+private object ProfileAvatarRegexes {
+    val SANITIZATION_REGEX = Regex("[^A-Za-z0-9._-]")
 }

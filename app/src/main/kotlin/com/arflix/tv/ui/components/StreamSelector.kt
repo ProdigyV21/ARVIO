@@ -105,6 +105,7 @@ fun StreamSelector(
     title: String = "",
     subtitle: String = "",
     hasStreamingAddons: Boolean = true,
+    addonOrderedIds: List<String> = emptyList(),
     onFocusedStream: (StreamSource) -> Unit = {},
     onSelect: (StreamSource) -> Unit = {},
     onClose: () -> Unit = {}
@@ -131,7 +132,7 @@ fun StreamSelector(
     data class AddonTab(val id: String, val label: String)
 
     // Build addon tabs using addonId so multiple instances of the same addon are shown separately.
-    val addonTabs = remember(streams) {
+    val addonTabs = remember(streams, addonOrderedIds) {
         val baseNameById = LinkedHashMap<String, String>()
         streams.forEach { stream ->
             val baseName = stream.addonName.split(" - ").firstOrNull()?.trim() ?: stream.addonName
@@ -147,6 +148,12 @@ fun StreamSelector(
                 baseName
             }
             AddonTab(id, label)
+        }.let { tabs ->
+            if (addonOrderedIds.isEmpty()) tabs
+            else tabs.sortedBy { tab ->
+                val pos = addonOrderedIds.indexOfFirst { tab.id.contains(it) || it.contains(tab.id) }
+                if (pos >= 0) pos else Int.MAX_VALUE
+            }
         }
     }
 
@@ -158,10 +165,23 @@ fun StreamSelector(
     val presentations = remember(streams) { streams.map(::presentSource) }
 
     // Sort streams with richer heuristics:
-    // cached/direct first, then resolution, then release type, then size.
-    val sortedStreams = remember(presentations) {
+    // cached/direct first, then resolution, then release type, then addon order, then size.
+    val addonOrder = remember(addonTabs, addonOrderedIds) {
+        if (addonOrderedIds.isNotEmpty()) {
+            // Use the user's configured addon order: map each stream's addonId to its
+            // position in the user's installed-addons list.
+            addonTabs.associate { tab ->
+                val pos = addonOrderedIds.indexOfFirst { tab.id.contains(it) || it.contains(tab.id) }
+                tab.id to if (pos >= 0) pos else Int.MAX_VALUE
+            }
+        } else {
+            addonTabs.mapIndexed { index, tab -> tab.id to index }.toMap()
+        }
+    }
+    val sortedStreams = remember(presentations, addonOrder) {
         presentations.sortedWith(compareByDescending<SourcePresentation> { it.sortCached }
             .thenByDescending { it.sortDirect }
+            .thenBy { addonOrder[sourceTabId(it.stream)] ?: Int.MAX_VALUE }
             .thenByDescending { it.resolutionScore }
             .thenByDescending { it.releaseScore }
             .thenByDescending { it.sizeBytes }

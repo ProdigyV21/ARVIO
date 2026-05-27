@@ -2,10 +2,13 @@ package com.arflix.tv.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.repository.ContinueWatchingItem
+import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.ui.components.CARD_LAYOUT_MODE_LANDSCAPE
 import com.arflix.tv.ui.components.catalogueRowLayoutKeyFromPreferenceName
 import com.arflix.tv.ui.components.catalogueRowLayoutPreferencePrefixFor
@@ -13,16 +16,23 @@ import com.arflix.tv.ui.components.normalizeCardLayoutMode
 import com.arflix.tv.ui.components.profileCatalogueRowLayoutModeKey
 import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
 import com.arflix.tv.util.AppLogger
+import com.arflix.tv.util.FOCUS_BORDER_COLOR_KEY
+import com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY
 import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.max
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +53,7 @@ class CloudSyncRepository @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val iptvRepository: IptvRepository,
     private val streamRepository: StreamRepository,
+    private val homeServerRepository: HomeServerRepository,
     private val traktRepository: TraktRepository,
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
@@ -50,6 +61,14 @@ class CloudSyncRepository @Inject constructor(
     private val invalidationBus: CloudSyncInvalidationBus
 ) {
     private val gson = Gson()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val cloudSyncLocalDirtyAtKey = longPreferencesKey("cloud_sync_local_dirty_at")
+    private val cloudSyncLastPushAtKey = longPreferencesKey("cloud_sync_last_push_at")
+    private val cloudSyncLastAppliedAtKey = longPreferencesKey("cloud_sync_last_applied_at")
+    private val globalDnsProviderKey = stringPreferencesKey(OkHttpProvider.DNS_PROVIDER_PREF_KEY)
+    private val customUserAgentKey = stringPreferencesKey(OkHttpProvider.USER_AGENT_PREF_KEY)
+    @Volatile
+    private var latestLocalDirtyAt: Long = 0L
 
     private fun payloadSizeBucket(payload: String): String = when {
         payload.length < 10_000 -> "lt_10kb"
@@ -91,7 +110,59 @@ class CloudSyncRepository @Inject constructor(
         private set
 
     fun markLocalStateDirty() {
+        val dirtyAt = System.currentTimeMillis()
+        latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
         isPushDirty = true
+        repositoryScope.launch {
+            persistLocalDirty(dirtyAt)
+        }
+    }
+
+    suspend fun markLocalStateDirtyNow() {
+        val dirtyAt = System.currentTimeMillis()
+        latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
+        isPushDirty = true
+        persistLocalDirty(dirtyAt)
+    }
+
+    private suspend fun persistLocalDirty(dirtyAt: Long) {
+        if (dirtyAt <= 0L || latestLocalDirtyAt <= 0L) return
+        context.settingsDataStore.edit { prefs ->
+            if (latestLocalDirtyAt <= 0L) return@edit
+            val existing = prefs[cloudSyncLocalDirtyAtKey] ?: 0L
+            prefs[cloudSyncLocalDirtyAtKey] = max(existing, dirtyAt)
+        }
+    }
+
+    private suspend fun markPushFailedDirty() {
+        val dirtyAt = latestLocalDirtyAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+        latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
+        isPushDirty = true
+        persistLocalDirty(dirtyAt)
+    }
+
+    private suspend fun clearLocalDirtyAfterSuccessfulPush() {
+        latestLocalDirtyAt = 0L
+        isPushDirty = false
+        context.settingsDataStore.edit { prefs ->
+            prefs.remove(cloudSyncLocalDirtyAtKey)
+            prefs[cloudSyncLastPushAtKey] = System.currentTimeMillis()
+        }
+    }
+
+    private suspend fun hasPendingLocalChanges(): Boolean {
+        val storedDirtyAt = context.settingsDataStore.data.first()[cloudSyncLocalDirtyAtKey] ?: 0L
+        if (storedDirtyAt > 0L) {
+            latestLocalDirtyAt = max(latestLocalDirtyAt, storedDirtyAt)
+        }
+        return isPushDirty || latestLocalDirtyAt > 0L || storedDirtyAt > 0L
+    }
+
+    private suspend fun markCloudPayloadApplied(payload: String) {
+        val cloudUpdatedAt = runCatching { JSONObject(payload).optLong("updatedAt", 0L) }.getOrDefault(0L)
+        context.settingsDataStore.edit { prefs ->
+            prefs[cloudSyncLastAppliedAtKey] = cloudUpdatedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+        }
     }
 
     enum class RestoreResult { RESTORED, NO_BACKUP, FAILED }
@@ -114,19 +185,20 @@ class CloudSyncRepository @Inject constructor(
         val autoPlayMinQuality: String = "Any",
         val trailerAutoPlay: Boolean = false,
         val trailerSoundEnabled: Boolean = false,
+        val trailerDelaySeconds: Int = 2,
         val clockFormat: String = "24h",
         val showBudget: Boolean = true,
+        val showLoadingStats: Boolean? = null,
         val spoilerBlurEnabled: Boolean = false,
         val volumeBoostDb: Int = 0,
         val includeSpecials: Boolean = false,
         val dnsProvider: String = "system",
         val subtitleUsageJson: String = "",
         val subtitleSettingsUpdatedAt: Long = 0L,
-        val iptvHiddenGroups: String = "",
-        val iptvGroupOrder: String = "",
         val secondarySubtitle: String = "Off",
         val filterSubtitlesByLanguage: Boolean = true,
         val homeServerConnectionJson: String? = null,
+        val torrServerBaseUrl: String? = null,
         val catalogueRowLayoutModes: Map<String, String> = emptyMap()
     )
 
@@ -138,10 +210,14 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileBooleanKeyFor(profileId, "trailer_auto_play")
     private fun trailerSoundEnabledKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "trailer_sound_enabled")
+    private fun trailerDelayKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "trailer_delay_seconds")
     private fun clockFormatKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "clock_format")
     private fun showBudgetKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "show_budget_on_home")
+    private fun showLoadingStatsKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, "show_loading_stats")
     private fun spoilerBlurKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "spoiler_blur")
     private fun volumeBoostDbKeyFor(profileId: String) =
@@ -171,8 +247,6 @@ class CloudSyncRepository @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "secondary_subtitle")
     private fun filterSubtitlesByLanguageKeyFor(profileId: String) =
         profileManager.profileBooleanKeyFor(profileId, "filter_subtitles_by_lang")
-    private fun homeServerConnectionKeyFor(profileId: String) =
-        profileManager.profileStringKeyFor(profileId, HomeServerRepository.CONNECTION_KEY_NAME)
     private fun defaultSubtitleKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "default_subtitle")
     private fun defaultAudioLanguageKeyFor(profileId: String) =
@@ -258,6 +332,7 @@ class CloudSyncRepository @Inject constructor(
         val prefs = context.settingsDataStore.data.first()
         val root = JSONObject()
         val profiles = profileRepository.getProfiles()
+        val globalDnsProvider = prefs[globalDnsProviderKey] ?: prefs[dnsProviderKey()] ?: "system"
 
         // Per-profile settings
         val profileSettingsById = buildMap<String, CloudProfileSettings> {
@@ -271,11 +346,13 @@ class CloudSyncRepository @Inject constructor(
 
                         trailerAutoPlay = prefs[trailerAutoPlayKeyFor(profile.id)] ?: false,
                         trailerSoundEnabled = prefs[trailerSoundEnabledKeyFor(profile.id)] ?: false,
+                        trailerDelaySeconds = prefs[trailerDelayKeyFor(profile.id)]?.toIntOrNull() ?: 2,
                         clockFormat = prefs[clockFormatKeyFor(profile.id)] ?: "24h",
                         showBudget = prefs[showBudgetKeyFor(profile.id)] ?: true,
+                        showLoadingStats = prefs[showLoadingStatsKeyFor(profile.id)] ?: true,
                         spoilerBlurEnabled = prefs[spoilerBlurKeyFor(profile.id)] ?: false,
                         volumeBoostDb = prefs[volumeBoostDbKeyFor(profile.id)]?.toIntOrNull()?.coerceIn(0, 15) ?: 0,
-                        dnsProvider = prefs[dnsProviderKeyFor(profile.id)] ?: "system",
+                        dnsProvider = prefs[dnsProviderKeyFor(profile.id)] ?: globalDnsProvider,
                         subtitleUsageJson = prefs[subtitleUsageKeyFor(profile.id)] ?: "",
                         subtitleSettingsUpdatedAt = prefs[subtitleSettingsUpdatedAtKeyFor(profile.id)]?.toLongOrNull() ?: 0L,
                         subtitleSize = prefs[subtitleSizeKeyFor(profile.id)] ?: "Medium",
@@ -283,11 +360,10 @@ class CloudSyncRepository @Inject constructor(
                         subtitleOffset = prefs[subtitleOffsetKeyFor(profile.id)] ?: "Bottom",
                         subtitleStyle = prefs[subtitleStyleKeyFor(profile.id)] ?: "Bold",
                         subtitleStylized = prefs[subtitleStylizedKeyFor(profile.id)] ?: true,
-                        iptvHiddenGroups = prefs[iptvHiddenGroupsKeyFor(profile.id)] ?: "",
-                        iptvGroupOrder = prefs[iptvGroupOrderKeyFor(profile.id)] ?: "",
                         secondarySubtitle = prefs[secondarySubtitleKeyFor(profile.id)] ?: "Off",
                         filterSubtitlesByLanguage = prefs[filterSubtitlesByLanguageKeyFor(profile.id)] ?: true,
-                        homeServerConnectionJson = prefs[homeServerConnectionKeyFor(profile.id)] ?: "",
+                        homeServerConnectionJson = homeServerRepository.exportCloudConnectionsJsonForProfile(profile.id),
+                        torrServerBaseUrl = streamRepository.exportTorrServerBaseUrlForProfile(profile.id),
                         catalogueRowLayoutModes = catalogueRowLayoutModesForProfile(prefs, profile.id),
                         cardLayoutMode = normalizeCardLayoutMode(
                             prefs[cardLayoutModeKeyFor(profile.id)] ?: CARD_LAYOUT_MODE_LANDSCAPE
@@ -317,7 +393,10 @@ class CloudSyncRepository @Inject constructor(
         root.put("autoPlaySingleSource", prefs[autoPlaySingleSourceKey()] ?: true)
         root.put("autoPlayMinQuality", normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()] ?: "Any"))
         root.put("includeSpecials", prefs[includeSpecialsKey()] ?: false)
-        root.put("dnsProvider", prefs[dnsProviderKey()] ?: "system")
+        root.put("dnsProvider", globalDnsProvider)
+        root.put("customUserAgent", prefs[customUserAgentKey] ?: "")
+        root.put("oledBlackBackground", prefs[OLED_BLACK_BACKGROUND_KEY] ?: false)
+        root.put("focusBorderColor", prefs[FOCUS_BORDER_COLOR_KEY] ?: "White")
         root.put("subtitleUsageJson", prefs[subtitleUsageKey()] ?: "")
         root.put("subtitleSettingsUpdatedAt", prefs[subtitleSettingsUpdatedAtKey()]?.toLongOrNull() ?: 0L)
         root.put("skipProfileSelection", prefs[SKIP_PROFILE_SELECTION_KEY] ?: false)
@@ -466,16 +545,20 @@ class CloudSyncRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════
 
     suspend fun pushToCloud(): Result<Unit> = cloudSyncMutex.withLock {
+        pushToCloudLocked()
+    }
+
+    private suspend fun pushToCloudLocked(): Result<Unit> {
         if (authRepository.getCurrentUserId().isNullOrBlank()) {
             AppLogger.breadcrumb(
                 tag = "CloudSync",
                 message = "push_skipped_not_logged_in dirty=$isPushDirty",
                 severity = "warning"
             )
-            return@withLock Result.failure(IllegalStateException("Not logged in"))
+            return Result.failure(IllegalStateException("Not logged in"))
         }
         val payload = runCatching { buildCloudSnapshotJson() }.getOrElse {
-            isPushDirty = true
+            markPushFailedDirty()
             AppLogger.recordException(
                 throwable = it,
                 context = mapOf(
@@ -484,11 +567,11 @@ class CloudSyncRepository @Inject constructor(
                     "dirty" to isPushDirty.toString()
                 )
             )
-            return@withLock Result.failure(it)
+            return Result.failure(it)
         }
         val result = authRepository.saveAccountSyncPayload(payload)
         if (result.isSuccess) {
-            isPushDirty = false
+            clearLocalDirtyAfterSuccessfulPush()
             AppLogger.breadcrumb(
                 tag = "CloudSync",
                 message = "push_success size=${payloadSizeBucket(payload)}",
@@ -499,7 +582,7 @@ class CloudSyncRepository @Inject constructor(
             // Mark dirty so the next ON_RESUME or periodic sync retries the push.
             // Without this, a single network hiccup would permanently diverge the
             // cloud state until the user explicitly changes another setting.
-            isPushDirty = true
+            markPushFailedDirty()
             AppLogger.recordException(
                 throwable = result.exceptionOrNull() ?: IllegalStateException("Cloud push failed"),
                 context = mapOf(
@@ -510,7 +593,7 @@ class CloudSyncRepository @Inject constructor(
                 )
             )
         }
-        result
+        return result
     }
 
     // ══════════════════════════════════════════════════════════
@@ -522,6 +605,25 @@ class CloudSyncRepository @Inject constructor(
      * Returns [RestoreResult] indicating what happened.
      */
     suspend fun pullFromCloud(): RestoreResult = cloudSyncMutex.withLock {
+        if (hasPendingLocalChanges()) {
+            AppLogger.breadcrumb(
+                tag = "CloudSync",
+                message = "pull_pushes_pending_local_first",
+                severity = "info"
+            )
+            val pushResult = pushToCloudLocked()
+            if (pushResult.isFailure) {
+                AppLogger.recordException(
+                    throwable = pushResult.exceptionOrNull() ?: IllegalStateException("Pending local cloud push failed"),
+                    context = mapOf(
+                        "error_area" to "CloudSync",
+                        "cloud_flow" to "pull_pre_push_pending_local"
+                    )
+                )
+                return@withLock RestoreResult.FAILED
+            }
+        }
+
         val payloadResult = authRepository.loadAccountSyncPayload()
         if (payloadResult.isFailure) {
             AppLogger.recordException(
@@ -548,6 +650,7 @@ class CloudSyncRepository @Inject constructor(
             invalidationBus.suppressDuringRemoteApply {
                 applyCloudPayload(payload)
             }
+            markCloudPayloadApplied(payload)
         }.fold(
             onSuccess = {
                 AppLogger.breadcrumb(
@@ -592,7 +695,7 @@ class CloudSyncRepository @Inject constructor(
         // ── Profiles ──
         val avatarImagesById = root.optJSONObject("profileAvatarImagesById")
         root.optJSONArray("profiles")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<List<Profile>>() {}.type
+            val type = TypeToken.getParameterized(List::class.java, Profile::class.java).type
             val profiles: List<Profile> = gson.fromJson(json, type) ?: emptyList()
             val activeProfileId = root.optString("activeProfileId").ifBlank { null }
             if (profiles.isNotEmpty()) {
@@ -643,10 +746,12 @@ class CloudSyncRepository @Inject constructor(
         val allProfiles = profileRepository.getProfiles()
         val activeProfileId = profileRepository.getActiveProfileId()
             ?: allProfiles.firstOrNull()?.id ?: "default"
+        val homeServerConnectionsToImport = linkedMapOf<String, String?>()
+        val torrServerUrlsToImport = linkedMapOf<String, String?>()
 
         // ── Per-profile settings ──
         root.optJSONObject("profileSettingsById")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, CloudProfileSettings>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, CloudProfileSettings::class.java).type
             val settingsByProfile: Map<String, CloudProfileSettings> = gson.fromJson(json, type) ?: emptyMap()
             if (settingsByProfile.isNotEmpty()) {
                 context.settingsDataStore.edit { prefs ->
@@ -685,8 +790,10 @@ class CloudSyncRepository @Inject constructor(
 
                         prefs[trailerAutoPlayKeyFor(profileId)] = state.trailerAutoPlay
                         prefs[trailerSoundEnabledKeyFor(profileId)] = state.trailerSoundEnabled
+                        prefs[trailerDelayKeyFor(profileId)] = state.trailerDelaySeconds.toString()
                         prefs[clockFormatKeyFor(profileId)] = state.clockFormat
                         prefs[showBudgetKeyFor(profileId)] = state.showBudget
+                        state.showLoadingStats?.let { prefs[showLoadingStatsKeyFor(profileId)] = it }
                         prefs[spoilerBlurKeyFor(profileId)] = state.spoilerBlurEnabled
                         prefs[volumeBoostDbKeyFor(profileId)] = state.volumeBoostDb.coerceIn(0, 15).toString()
                         prefs[dnsProviderKeyFor(profileId)] = state.dnsProvider.ifBlank { "system" }
@@ -700,16 +807,13 @@ class CloudSyncRepository @Inject constructor(
                         prefs[subtitleOffsetKeyFor(profileId)] = state.subtitleOffset
                         prefs[subtitleStyleKeyFor(profileId)] = state.subtitleStyle
                         prefs[subtitleStylizedKeyFor(profileId)] = state.subtitleStylized
-                        if (state.iptvHiddenGroups.isNotBlank()) prefs[iptvHiddenGroupsKeyFor(profileId)] = state.iptvHiddenGroups
-                        if (state.iptvGroupOrder.isNotBlank()) prefs[iptvGroupOrderKeyFor(profileId)] = state.iptvGroupOrder
                         prefs[secondarySubtitleKeyFor(profileId)] = state.secondarySubtitle.ifBlank { "Off" }
                         prefs[filterSubtitlesByLanguageKeyFor(profileId)] = state.filterSubtitlesByLanguage
                         state.homeServerConnectionJson?.let { homeServerConnectionJson ->
-                            if (homeServerConnectionJson.isBlank()) {
-                                prefs.remove(homeServerConnectionKeyFor(profileId))
-                            } else {
-                                prefs[homeServerConnectionKeyFor(profileId)] = homeServerConnectionJson
-                            }
+                            homeServerConnectionsToImport[profileId] = homeServerConnectionJson
+                        }
+                        state.torrServerBaseUrl?.let { torrServerBaseUrl ->
+                            torrServerUrlsToImport[profileId] = torrServerBaseUrl
                         }
                         val normalizedProfileLayout = normalizeCardLayoutMode(state.cardLayoutMode)
                         prefs[cardLayoutModeKeyFor(profileId)] = normalizedProfileLayout
@@ -763,6 +867,47 @@ class CloudSyncRepository @Inject constructor(
                 }
             }
         }
+        homeServerConnectionsToImport.forEach { (profileId, json) ->
+            homeServerRepository.importCloudConnectionsJsonForProfile(profileId, json)
+        }
+        torrServerUrlsToImport.forEach { (profileId, url) ->
+            streamRepository.importTorrServerBaseUrlForProfile(profileId, url)
+        }
+
+        var restoredDnsProvider: String? = null
+        var restoredCustomUserAgent: String? = null
+        if (
+            root.has("dnsProvider") ||
+            root.has("customUserAgent") ||
+            root.has("oledBlackBackground") ||
+            root.has("focusBorderColor")
+        ) {
+            context.settingsDataStore.edit { prefs ->
+                if (root.has("dnsProvider")) {
+                    val dnsProvider = root.optString("dnsProvider", "system").ifBlank { "system" }
+                    prefs[globalDnsProviderKey] = dnsProvider
+                    prefs[dnsProviderKeyFor(activeProfileId)] = dnsProvider
+                    restoredDnsProvider = dnsProvider
+                }
+                if (root.has("customUserAgent")) {
+                    val userAgent = root.optString("customUserAgent", "").trim()
+                    if (userAgent.isBlank()) {
+                        prefs.remove(customUserAgentKey)
+                    } else {
+                        prefs[customUserAgentKey] = userAgent
+                    }
+                    restoredCustomUserAgent = userAgent
+                }
+                if (root.has("oledBlackBackground")) {
+                    prefs[OLED_BLACK_BACKGROUND_KEY] = root.optBoolean("oledBlackBackground", false)
+                }
+                if (root.has("focusBorderColor")) {
+                    prefs[FOCUS_BORDER_COLOR_KEY] = root.optString("focusBorderColor", "White").ifBlank { "White" }
+                }
+            }
+            restoredDnsProvider?.let { OkHttpProvider.setDnsProvider(OkHttpProvider.parseDnsProvider(it)) }
+            restoredCustomUserAgent?.let { OkHttpProvider.setCustomUserAgent(it) }
+        }
         if (root.has("skipProfileSelection")) {
             context.settingsDataStore.edit { prefs ->
                 prefs[SKIP_PROFILE_SELECTION_KEY] = root.optBoolean("skipProfileSelection", false)
@@ -791,14 +936,14 @@ class CloudSyncRepository @Inject constructor(
 
         // ── Trakt tokens ──
         root.optJSONObject("traktTokens")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, TraktRepository.CloudTraktToken>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TraktRepository.CloudTraktToken::class.java).type
             val tokens: Map<String, TraktRepository.CloudTraktToken> = gson.fromJson(json, type) ?: emptyMap()
             traktRepository.importTokensForProfiles(tokens)
         }
 
         // ── Addons ──
         root.optJSONObject("addonsByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<Addon>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, Addon::class.java).type).type
             val map: Map<String, List<Addon>> = gson.fromJson(json, type) ?: emptyMap()
             val sharedAddons = mergeAddonsForSharedRestore(map.values)
             if (sharedAddons.isNotEmpty()) {
@@ -807,7 +952,7 @@ class CloudSyncRepository @Inject constructor(
         }
         root.optJSONArray("addons")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
             if (!root.has("addonsByProfile")) {
-                val type = object : TypeToken<List<Addon>>() {}.type
+                val type = TypeToken.getParameterized(List::class.java, Addon::class.java).type
                 val addons: List<Addon> = gson.fromJson(json, type) ?: emptyList()
                 if (addons.isNotEmpty()) {
                     streamRepository.replaceSharedAddonsFromCloud(addons)
@@ -817,7 +962,7 @@ class CloudSyncRepository @Inject constructor(
 
         // ── Catalogs ──
         root.optJSONObject("catalogsByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<CatalogConfig>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, CatalogConfig::class.java).type).type
             val map: Map<String, List<CatalogConfig>> = gson.fromJson(json, type) ?: emptyMap()
             map.forEach { (profileId, catalogs) ->
                 catalogRepository.replaceCatalogsForProfile(profileId, catalogs)
@@ -825,7 +970,7 @@ class CloudSyncRepository @Inject constructor(
         }
         root.optJSONArray("catalogs")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
             if (!root.has("catalogsByProfile")) {
-                val type = object : TypeToken<List<CatalogConfig>>() {}.type
+                val type = TypeToken.getParameterized(List::class.java, CatalogConfig::class.java).type
                 val catalogs: List<CatalogConfig> = gson.fromJson(json, type) ?: emptyList()
                 if (catalogs.isNotEmpty()) {
                     catalogRepository.replaceCatalogsForProfile(activeProfileId, catalogs)
@@ -835,7 +980,7 @@ class CloudSyncRepository @Inject constructor(
 
         // ── Hidden preinstalled catalogs ──
         root.optJSONObject("hiddenPreinstalledByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<String>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, String::class.java).type).type
             val map: Map<String, List<String>> = gson.fromJson(json, type) ?: emptyMap()
             map.forEach { (profileId, hidden) ->
                 catalogRepository.setHiddenPreinstalledCatalogIdsForProfile(profileId, hidden)
@@ -855,7 +1000,7 @@ class CloudSyncRepository @Inject constructor(
 
         // ── Hidden addon catalogs ──
         root.optJSONObject("hiddenAddonByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<String>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, String::class.java).type).type
             val map: Map<String, List<String>> = gson.fromJson(json, type) ?: emptyMap()
             map.forEach { (profileId, hidden) ->
                 catalogRepository.setHiddenAddonCatalogIdsForProfile(profileId, hidden)
@@ -864,7 +1009,7 @@ class CloudSyncRepository @Inject constructor(
 
         // ── IPTV config + favorites ──
         root.optJSONObject("hiddenHomeServerByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<String>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, String::class.java).type).type
             val map: Map<String, List<String>> = gson.fromJson(json, type) ?: emptyMap()
             map.forEach { (profileId, hidden) ->
                 catalogRepository.setHiddenHomeServerCatalogIdsForProfile(profileId, hidden)
@@ -873,7 +1018,7 @@ class CloudSyncRepository @Inject constructor(
 
         var importedActiveProfileIptv = false
         root.optJSONObject("iptvByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, IptvCloudProfileState>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, IptvCloudProfileState::class.java).type
             val map: Map<String, IptvCloudProfileState> = gson.fromJson(json, type) ?: emptyMap()
             map.forEach { (profileId, state) ->
                 iptvRepository.importCloudConfigForProfile(profileId, state)
@@ -917,7 +1062,7 @@ class CloudSyncRepository @Inject constructor(
 
         // ── Watchlist ──
         root.optJSONObject("watchlistByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<LocalWatchlistItem>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, LocalWatchlistItem::class.java).type).type
             val map: Map<String, List<LocalWatchlistItem>> = gson.fromJson(json, type) ?: emptyMap()
             map.forEach { (profileId, items) ->
                 // Restore the cloud mirror for every profile, including Trakt profiles.
@@ -930,7 +1075,7 @@ class CloudSyncRepository @Inject constructor(
 
         // ── Dismissed Continue Watching ──
         root.optJSONObject("dismissedContinueWatchingByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, String>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, String::class.java).type
             val map: Map<String, String> = gson.fromJson(json, type) ?: emptyMap()
             traktRepository.importDismissedContinueWatchingForProfiles(map)
         }
@@ -947,11 +1092,11 @@ class CloudSyncRepository @Inject constructor(
         // Only import local CW for profiles that DON'T have Trakt connected.
         // For Trakt profiles, CW is sourced exclusively from Trakt's progress API.
         root.optJSONObject("localContinueWatchingByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<ContinueWatchingItem>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, ContinueWatchingItem::class.java).type).type
             val map: Map<String, List<ContinueWatchingItem>> = gson.fromJson(json, type) ?: emptyMap()
             val traktProfiles = mutableSetOf<String>()
 
-            val traktTokenType = object : TypeToken<Map<String, TraktRepository.CloudTraktToken>>() {}.type
+            val traktTokenType = TypeToken.getParameterized(Map::class.java, String::class.java, TraktRepository.CloudTraktToken::class.java).type
             val traktTokens = root.optJSONObject("traktTokens")
                 ?.toString()
                 ?.takeIf { it.isNotBlank() }
@@ -981,13 +1126,13 @@ class CloudSyncRepository @Inject constructor(
         }
 
         root.optJSONObject("localWatchedMoviesByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<Int>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, Int::class.javaObjectType).type).type
             val map: Map<String, List<Int>> = gson.fromJson(json, type) ?: emptyMap()
             traktRepository.importLocalWatchedMoviesForProfiles(map)
         }
 
         root.optJSONObject("localWatchedEpisodesByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-            val type = object : TypeToken<Map<String, List<String>>>() {}.type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, String::class.java).type).type
             val map: Map<String, List<String>> = gson.fromJson(json, type) ?: emptyMap()
             traktRepository.importLocalWatchedEpisodesForProfiles(map)
         }

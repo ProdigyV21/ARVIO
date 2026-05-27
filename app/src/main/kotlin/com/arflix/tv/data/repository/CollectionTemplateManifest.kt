@@ -1087,8 +1087,11 @@ internal object CollectionTemplateManifest {
             .replace("+", "plus")
             .replace("&", "and")
             .replace("'", "")
-            .replace(Regex("[^a-z0-9]+"), "_")
+            .replace(CollectionManifestRegexes.SLUGIFY_NON_ALPHA_NUM_REGEX, "_")
             .trim('_')
     }
 }
 
+private object CollectionManifestRegexes {
+    val SLUGIFY_NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
+}

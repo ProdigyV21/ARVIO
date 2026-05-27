@@ -98,6 +98,7 @@ fun CategorySidebar(
     onMoveCategoryDown: (String) -> Unit = {},
     onFocusEnter: () -> Unit = {},
     onMoveRight: () -> Unit = {},
+    onMoveUpFromSearch: () -> Unit = {},
     onTopBoundaryFocusChanged: (Boolean) -> Unit = {},
     focusSearchSignal: Int = 0,
     modifier: Modifier = Modifier,
@@ -159,6 +160,7 @@ fun CategorySidebar(
         SearchEntry(
             onClick = onOpenSearch,
             expanded = expanded,
+            onMoveUp = onMoveUpFromSearch,
             onFocusChanged = onTopBoundaryFocusChanged,
             focusRequester = searchFocusRequester,
         )
@@ -327,6 +329,7 @@ fun CategorySidebar(
 private fun SearchEntry(
     onClick: () -> Unit,
     expanded: Boolean,
+    onMoveUp: () -> Unit = {},
     onFocusChanged: (Boolean) -> Unit = {},
     focusRequester: FocusRequester? = null,
 ) {
@@ -349,10 +352,18 @@ private fun SearchEntry(
             .background(if (focused) LiveColors.FocusBg else LiveColors.Panel)
             .focusable()
             .onKeyEvent { ev ->
-                if (ev.type == KeyEventType.KeyDown &&
-                    (ev.key == Key.DirectionCenter || ev.key == Key.Enter)) {
-                    onClick(); true
-                } else false
+                if (ev.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (ev.key) {
+                    Key.DirectionUp -> {
+                        onMoveUp()
+                        true
+                    }
+                    Key.DirectionCenter, Key.Enter -> {
+                        onClick()
+                        true
+                    }
+                    else -> false
+                }
             }
             .pointerInput(Unit) { detectTapGestures(onTap = { onClick() }) }
             .padding(horizontal = 10.dp),

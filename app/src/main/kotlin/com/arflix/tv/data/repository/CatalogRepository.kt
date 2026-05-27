@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import com.arflix.tv.network.OkHttpProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URI
@@ -52,6 +53,12 @@ class CatalogRepository @Inject constructor(
     private val bundledPreinstalledCatalogsById by lazy(LazyThreadSafetyMode.NONE) {
         MediaRepository.buildPreinstalledDefaults().associateBy { it.id }
     }
+
+    // Debounce guard: skip syncAddonCatalogs() when addon list hasn't changed.
+    // syncAddonCatalogs() iterates every addon manifest, flatMaps catalogs, and
+    // diffs against persisted state — all of which is wasted work when the
+    // installed addon list is identical between calls.
+    @Volatile private var lastSyncedAddonFingerprint: String? = null
 
     private val bundledPreinstalledCatalogIds by lazy(LazyThreadSafetyMode.NONE) {
         bundledPreinstalledCatalogsById.keys
@@ -427,6 +434,14 @@ class CatalogRepository @Inject constructor(
 
     suspend fun syncAddonCatalogs(addons: List<Addon>): Boolean {
         val profileId = activeProfileId()
+        // Debounce: skip if addon manifest state hasn't changed since last sync.
+        // Includes profile ID + fields that affect the sync outcome so that
+        // switching profiles, toggling addon enable-state, or manifest catalog
+        // changes always trigger a fresh sync.
+        val fingerprint = buildAddonFingerprint(profileId, addons)
+        if (fingerprint == lastSyncedAddonFingerprint) return false
+        lastSyncedAddonFingerprint = fingerprint
+
         val hiddenAddonIds = context.settingsDataStore.data
             .first()
             .let { prefs -> decodeHiddenAddon(profileId, prefs) }
@@ -492,6 +507,39 @@ class CatalogRepository @Inject constructor(
             saveCatalogs(current)
         }
         return changed
+    }
+
+    /**
+     * Builds a fingerprint for [syncAddonCatalogs] debouncing that captures all fields
+     * affecting the sync outcome. Unlike the previous ID-only fingerprint, this includes:
+     * - Active profile ID (so profile switches always trigger a fresh sync)
+     * - Addon installed/enabled state, type, and URL
+     * - Manifest catalog contents (catalog type + ID per addon)
+     *
+     * This ensures that toggling an addon, switching profiles, or manifest catalog
+     * changes never leave stale/missing catalogs.
+     */
+    private fun buildAddonFingerprint(profileId: String, addons: List<Addon>): String {
+        return buildString {
+            append(profileId)
+            append('|')
+            addons.forEach { addon ->
+                append(addon.id)
+                append(':')
+                append(if (addon.isInstalled) '1' else '0')
+                append(if (addon.isEnabled) '1' else '0')
+                append(addon.type.name)
+                append(addon.url ?: "")
+                addon.manifest?.catalogs?.forEach { catalog ->
+                    append('[')
+                    append(catalog.type)
+                    append(':')
+                    append(catalog.id)
+                    append(']')
+                }
+                append(',')
+            }
+        }
     }
 
     suspend fun syncHomeServerCatalogs(candidates: List<HomeServerCatalogCandidate>): Boolean {
@@ -958,7 +1006,7 @@ class CatalogRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Android TV; ARVIO)")
+                .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
                 .build()
             runCatching {
                 okHttpClient.newCall(request).execute().use { response ->

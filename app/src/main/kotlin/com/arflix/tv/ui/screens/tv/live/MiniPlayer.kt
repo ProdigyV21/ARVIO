@@ -47,6 +47,9 @@ import androidx.tv.material3.Text
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.util.formatGenreName
+import com.arflix.tv.util.DeviceType
+import com.arflix.tv.util.LocalDeviceType
+
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -118,6 +121,9 @@ private fun VideoCard(
     onFullscreenClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val deviceType = LocalDeviceType.current
+    val isTouchDevice = deviceType.isTouchDevice()
+
     Box(
         modifier = modifier
             .then(
@@ -127,7 +133,7 @@ private fun VideoCard(
                     Modifier.size(LiveDims.MiniPlayerWidth, LiveDims.MiniPlayerHeight)
                 }
             )
-            .clickable(enabled = onFullscreenClick != null) {
+            .clickable(enabled = isTouchDevice && onFullscreenClick != null) {
                 onFullscreenClick?.invoke()
             }
             .clip(RoundedCornerShape(LiveDims.VideoRadius))
@@ -168,7 +174,7 @@ private fun VideoCard(
             LiveBug(modifier = Modifier.align(Alignment.TopEnd).padding(10.dp))
         }
 
-        if (onFullscreenClick != null) {
+        if (isTouchDevice && onFullscreenClick != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

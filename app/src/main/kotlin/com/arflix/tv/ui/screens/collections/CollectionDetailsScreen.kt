@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -579,6 +580,7 @@ fun CollectionDetailsScreen(
                     CollectionTab.SERIES -> lastFocusedSeriesIndex = index
                 }
             },
+            onVisibleItemsChanged = { visibleItems -> viewModel.preloadLogos(visibleItems) },
             onNearEnd = { viewModel.loadMoreIfNeeded(activeTab) },
             isLoading = isTabLoading,
             isLoadingMore = isTabLoadingMore,
@@ -756,6 +758,7 @@ private fun CollectionItemsGrid(
     onTabSelected: (CollectionTab) -> Unit,
     onItemClick: (MediaItem) -> Unit,
     onItemFocused: (MediaItem, Int) -> Unit,
+    onVisibleItemsChanged: (List<MediaItem>) -> Unit,
     onNearEnd: () -> Unit,
     isLoading: Boolean,
     isLoadingMore: Boolean,
@@ -764,16 +767,34 @@ private fun CollectionItemsGrid(
 ) {
     val cardContentType = if (usePosterCards) "poster_card" else "landscape_card"
     val focusBleedPadding = if (usePosterCards) 10.dp else 6.dp
+    val latestItems by rememberUpdatedState(items)
+    val latestGridColumns by rememberUpdatedState(gridColumns)
+    val latestOnVisibleItemsChanged by rememberUpdatedState(onVisibleItemsChanged)
+    val latestOnNearEnd by rememberUpdatedState(onNearEnd)
     // Collect scroll position without restarting on page-load-size changes —
     // items.size used to live in the key, which relaunched the snapshotFlow on
     // every page append and caused a stutter frame during scroll.
     LaunchedEffect(gridState) {
-        androidx.compose.runtime.snapshotFlow {
+        snapshotFlow {
             val layout = gridState.layoutInfo
             val last = layout.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last to layout.totalItemsCount
-        }.distinctUntilChanged().collect { (last, total) ->
-            if (total > 12 && last >= total - 3) onNearEnd()
+            val mediaIndexes = layout.visibleItemsInfo
+                .asSequence()
+                .map { it.index - 2 }
+                .filter { it >= 0 }
+                .toList()
+            Triple(last, layout.totalItemsCount, mediaIndexes)
+        }.distinctUntilChanged().collect { (last, total, mediaIndexes) ->
+            if (total > 12 && last >= total - 3) latestOnNearEnd()
+            if (mediaIndexes.isNotEmpty()) {
+                val start = (mediaIndexes.minOrNull() ?: 0).coerceAtLeast(0)
+                val currentItems = latestItems
+                val end = ((mediaIndexes.maxOrNull() ?: start) + latestGridColumns)
+                    .coerceAtMost(currentItems.lastIndex)
+                if (start <= end) {
+                    latestOnVisibleItemsChanged(currentItems.subList(start, end + 1))
+                }
+            }
         }
     }
 

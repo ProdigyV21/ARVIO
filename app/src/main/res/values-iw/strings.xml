@@ -13,7 +13,8 @@
     <string name="all_genres">כל הז\'אנרים</string>
     <string name="any_language">כל שפה</string>
     <string name="app_language">שפת האפליקציה</string>
-    <string name="language_and_subtitles">שפה וכתוביות</string>
+    <string name="language_and_subtitles">שפה</string>
+    <string name="language_and_audio">שפה</string>
     <string name="subtitles">כתוביות</string>
     <string name="audio">אודיו</string>
     <string name="playback">ניגון</string>
@@ -110,6 +111,10 @@
     <string name="autoplay_desc">כיבוי פותח את בורר המקורות בעת הפעלה</string>
     <string name="auto_play_quality_desc">איכות מינימום להפעלה אוטומטית</string>
     <string name="trailer_desc">הפעל טריילרים בבאנר הראשי</string>
+    <string name="trailer_sound">צליל טריילר</string>
+    <string name="trailer_sound_desc">הפעל שמע טריילר בבאנר הראשי</string>
+    <string name="trailer_delay">השהיית טריילר</string>
+    <string name="trailer_delay_desc">שניות לפני שהטריילר מתחיל לנגן</string>
     <string name="frame_rate_desc">כבוי, חלק, או תמיד</string>
     <string name="quality_filters_desc">הוצא רמות איכות במכשיר זה</string>
     <string name="card_layout_desc">כרטיסים לרוחב או לגובה</string>
@@ -158,6 +163,7 @@
     <string name="connected">מחובר</string>
     <string name="connect">התחבר</string>
     <string name="whos_watching">מי צופה?</string>
+    <string name="profiles">פרופילים</string>
     <string name="manage_profiles">ניהול פרופילים</string>
     <string name="add_profile">הוסף פרופיל</string>
     <string name="loading_profile">טוען פרופיל…</string>
@@ -167,8 +173,33 @@
     <string name="save">שמור</string>
     <string name="connect_to_cloud">התחבר ל-ARVIO Cloud</string>
 
+    <!-- Missing settings strings -->
+    <string name="now_playing">מנגן עכשיו</string>
+    <string name="topbar_tv">טלוויזיה</string>
+    <string name="subtitle_style">סגנון כתוביות</string>
+    <string name="subtitle_offset">מיקום כתוביות</string>
+    <string name="subtitle_style_desc">סגנון מודגש, רגיל, או עם רקע לכתוביות</string>
+    <string name="subtitle_offset_desc">מיקום אנכי לכתוביות</string>
+    <string name="subtitle_stylized">כתוביות מעוצבות</string>
+    <string name="subtitle_stylized_desc">שמור על עיצובים מוטמעים מכתוביות ASS/SSA. כאשר כבוי, כל הכתוביות משתמשות בהגדרות הגודל, הצבע והסגנון שלך.</string>
+    <string name="oled_black_background">רקע שחור OLED</string>
+    <string name="oled_black_background_desc">השתמש ברקעי אפליקציה שחורים טהורים למסכי OLED</string>
+    <string name="custom_user_agent">User-Agent מותאם</string>
+    <string name="custom_user_agent_desc">השאר ריק לשימוש בברירת המחדל של ARVIO. ערכים מותאמים חלים כאשר מקור לא מספק User-Agent משלו.</string>
+    <string name="spoiler_blur">טשטוש ספוילרים</string>
+    <string name="spoiler_blur_desc">טשטש כרטיסי פרקים שלא נצפו כדי למנוע ספוילרים</string>
+    <string name="focus_border_color">צבע מסגרת הפוקוס</string>
+    <string name="focus_border_color_desc">בחר את צבע טבעת הפוקוס של D-pad</string>
+    <string name="view_collection">צפה באוסף</string>
+
+    <!-- In-player subtitle settings panel -->
+    <string name="subtitle_settings_title">הגדרות כתוביות</string>
+    <string name="subtitle_delay">השהייה</string>
+    <string name="subtitle_size_label">גודל</string>
+    <string name="subtitle_vertical_position">מיקום אנכי</string>
+
     <!-- AI Subtitles -->
-    <string name="ai_subtitles_section">כתוביות בינה מלאכותית</string>
+    <string name="ai_subtitles_section">כתוביות AI</string>
     <string name="ai_subtitle_translation_title">תרגום כתוביות AI</string>
     <string name="ai_subtitle_translation_desc">תרגם כתוביות בזמן אמת עם גרוק או ג\'מיני</string>
     <string name="ai_model_title">מודל</string>

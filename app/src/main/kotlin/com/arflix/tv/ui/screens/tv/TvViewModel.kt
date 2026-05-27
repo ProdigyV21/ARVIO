@@ -1,4 +1,4 @@
-﻿package com.arflix.tv.ui.screens.tv
+package com.arflix.tv.ui.screens.tv
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -625,7 +625,14 @@ class TvViewModel @Inject constructor(
     }
 
     fun toggleHiddenGroup(groupName: String) {
-        viewModelScope.launch { iptvRepository.toggleHiddenGroup(groupName); scheduleIptvCloudSync() }
+        viewModelScope.launch {
+            val config = iptvRepository.observeConfig().first()
+            val activePlaylists = config.playlists.filter { it.enabled }.map { it.id }
+            activePlaylists.forEach { playlistId ->
+                iptvRepository.toggleHiddenGroup(playlistId, groupName)
+            }
+            scheduleIptvCloudSync()
+        }
     }
 
     fun prefetchVisibleCategoryEpg(
@@ -735,7 +742,11 @@ class TvViewModel @Inject constructor(
     fun moveGroupUp(groupName: String) {
         viewModelScope.launch {
             val current = currentVisiblePlaylistGroups()
-            iptvRepository.moveGroupUp(groupName, current)
+            val config = iptvRepository.observeConfig().first()
+            val activePlaylists = config.playlists.filter { it.enabled }.map { it.id }
+            activePlaylists.forEach { playlistId ->
+                iptvRepository.moveGroupUp(playlistId, groupName, current)
+            }
             scheduleIptvCloudSync()
         }
     }
@@ -743,7 +754,11 @@ class TvViewModel @Inject constructor(
     fun moveGroupToTop(groupName: String) {
         viewModelScope.launch {
             val current = currentVisiblePlaylistGroups()
-            iptvRepository.moveGroupToTop(groupName, current)
+            val config = iptvRepository.observeConfig().first()
+            val activePlaylists = config.playlists.filter { it.enabled }.map { it.id }
+            activePlaylists.forEach { playlistId ->
+                iptvRepository.moveGroupToTop(playlistId, groupName, current)
+            }
             scheduleIptvCloudSync()
         }
     }
@@ -751,7 +766,11 @@ class TvViewModel @Inject constructor(
     fun moveGroupDown(groupName: String) {
         viewModelScope.launch {
             val current = currentVisiblePlaylistGroups()
-            iptvRepository.moveGroupDown(groupName, current)
+            val config = iptvRepository.observeConfig().first()
+            val activePlaylists = config.playlists.filter { it.enabled }.map { it.id }
+            activePlaylists.forEach { playlistId ->
+                iptvRepository.moveGroupDown(playlistId, groupName, current)
+            }
             scheduleIptvCloudSync()
         }
     }

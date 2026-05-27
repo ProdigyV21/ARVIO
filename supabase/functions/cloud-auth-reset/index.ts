@@ -19,21 +19,21 @@ const blockedEmailDomains = new Set([
   "getnada.com",
   "grr.la",
   "guerrillamail.biz",
+  "guerrillamail.com",
+  "guerrillamail.de",
+  "guerrillamail.info",
+  "guerrillamail.net",
+  "guerrillamail.org",
   "invalid",
   "localhost",
   "maildrop.cc",
   "mailinator.com",
   "moakt.com",
   "sharklasers.com",
+  "temp-mail.org",
+  "tempmail.com",
   "tempmailo.com",
   "trashmail.com",
-  "guerrillamail.com",
-  "guerrillamail.de",
-  "guerrillamail.info",
-  "guerrillamail.net",
-  "guerrillamail.org",
-  "tempmail.com",
-  "temp-mail.org",
   "yopmail.com",
 ])
 const blockedEmailDomainFragments = [
@@ -48,7 +48,7 @@ const blockedEmailDomainFragments = [
   "trashmail",
   "yopmail",
 ]
-const blockedSignupLocalParts = new Set([
+const blockedResetLocalParts = new Set([
   "asdf",
   "example",
   "fake",
@@ -61,11 +61,11 @@ const blockedSignupLocalParts = new Set([
   "test",
 ])
 
-const signupWindowMs = 60 * 60 * 1000
-const maxSignupAttemptsPerIp = 4
-const emailSignupCooldownMs = 5 * 60 * 1000
-const ipSignupAttempts = new Map<string, { count: number; resetAt: number }>()
-const emailSignupAttempts = new Map<string, number>()
+const resetWindowMs = 60 * 60 * 1000
+const maxResetAttemptsPerIp = 4
+const emailResetCooldownMs = 10 * 60 * 1000
+const ipResetAttempts = new Map<string, { count: number; resetAt: number }>()
+const emailResetAttempts = new Map<string, number>()
 
 function clientIp(req: Request): string {
   const forwardedFor = req.headers.get("x-forwarded-for")
@@ -75,37 +75,37 @@ function clientIp(req: Request): string {
   return req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || "unknown"
 }
 
-function pruneSignupAttempts(now: number) {
-  for (const [ip, bucket] of ipSignupAttempts.entries()) {
-    if (bucket.resetAt <= now) ipSignupAttempts.delete(ip)
+function pruneResetAttempts(now: number) {
+  for (const [ip, bucket] of ipResetAttempts.entries()) {
+    if (bucket.resetAt <= now) ipResetAttempts.delete(ip)
   }
-  for (const [email, timestamp] of emailSignupAttempts.entries()) {
-    if (now - timestamp > emailSignupCooldownMs) emailSignupAttempts.delete(email)
+  for (const [email, timestamp] of emailResetAttempts.entries()) {
+    if (now - timestamp > emailResetCooldownMs) emailResetAttempts.delete(email)
   }
 }
 
-function enforceSignupRateLimit(req: Request, email: string): string | null {
+function enforceResetRateLimit(req: Request, email: string): string | null {
   const now = Date.now()
-  pruneSignupAttempts(now)
+  pruneResetAttempts(now)
 
-  const lastEmailAttempt = emailSignupAttempts.get(email)
-  if (lastEmailAttempt && now - lastEmailAttempt < emailSignupCooldownMs) {
-    return "Please wait a few minutes before creating this account again"
+  const lastEmailAttempt = emailResetAttempts.get(email)
+  if (lastEmailAttempt && now - lastEmailAttempt < emailResetCooldownMs) {
+    return "Please wait a few minutes before requesting another reset email."
   }
 
   const ip = clientIp(req)
-  const existing = ipSignupAttempts.get(ip)
-  if (existing && existing.resetAt > now && existing.count >= maxSignupAttemptsPerIp) {
-    return "Too many account creation attempts. Try again later."
+  const existing = ipResetAttempts.get(ip)
+  if (existing && existing.resetAt > now && existing.count >= maxResetAttemptsPerIp) {
+    return "Too many password reset attempts. Try again later."
   }
 
   if (!existing || existing.resetAt <= now) {
-    ipSignupAttempts.set(ip, { count: 1, resetAt: now + signupWindowMs })
+    ipResetAttempts.set(ip, { count: 1, resetAt: now + resetWindowMs })
   } else {
     existing.count += 1
-    ipSignupAttempts.set(ip, existing)
+    ipResetAttempts.set(ip, existing)
   }
-  emailSignupAttempts.set(email, now)
+  emailResetAttempts.set(email, now)
   return null
 }
 
@@ -136,7 +136,7 @@ function validateEmail(email: string): string | null {
     return "Enter a valid email address"
   }
 
-  if (blockedSignupLocalParts.has(localPart)) return "Use a real email address"
+  if (blockedResetLocalParts.has(localPart)) return "Use a real email address"
   if (isBlockedEmailDomain(domain)) return "Use a real email address"
   if (
     domain.endsWith(".example") ||
@@ -148,46 +148,6 @@ function validateEmail(email: string): string | null {
     return "Use a real email address"
   }
   return null
-}
-
-async function createConfirmedUser(
-  supabaseUrl: string,
-  serviceRole: string,
-  email: string,
-  password: string,
-): Promise<Response> {
-  return fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-    method: "POST",
-    headers: {
-      apikey: serviceRole,
-      Authorization: `Bearer ${serviceRole}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        provider: "email",
-      },
-    }),
-  })
-}
-
-async function passwordToken(
-  supabaseUrl: string,
-  anonKey: string,
-  email: string,
-  password: string,
-): Promise<Response> {
-  return fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  })
 }
 
 function parseAuthError(raw: string): string {
@@ -228,19 +188,18 @@ serve(async (req) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")
-    const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
     const anonKey = expectedAnon
-    if (!supabaseUrl || !serviceRole || !anonKey) {
+    if (!supabaseUrl || !anonKey) {
       throw new Error("Missing Supabase credentials")
     }
 
     const body = await req.json().catch(() => ({})) as {
       email?: string
-      password?: string
+      redirect_to?: string
     }
 
     const email = body.email?.trim().toLowerCase() || ""
-    const password = body.password || ""
+    const redirectTo = body.redirect_to?.trim() || "https://auth.arvio.tv/?mode=recovery"
 
     const emailError = validateEmail(email)
     if (emailError) {
@@ -250,14 +209,7 @@ serve(async (req) => {
       })
     }
 
-    if (password.length < 6) {
-      return new Response(JSON.stringify({ error: "Password must be at least 6 characters" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    const rateLimitError = enforceSignupRateLimit(req, email)
+    const rateLimitError = enforceResetRateLimit(req, email)
     if (rateLimitError) {
       return new Response(JSON.stringify({ error: rateLimitError }), {
         status: 429,
@@ -265,42 +217,28 @@ serve(async (req) => {
       })
     }
 
-    const createResp = await createConfirmedUser(supabaseUrl, serviceRole, email, password)
-    if (!createResp.ok) {
-      const createText = await createResp.text()
-      const createError = parseAuthError(createText).toLowerCase()
-      const alreadyExists = createResp.status === 422 ||
-        createResp.status === 409 ||
-        createError.includes("already") ||
-        createError.includes("registered") ||
-        createError.includes("exists")
+    const resetResp = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        redirect_to: redirectTo,
+      }),
+    })
 
-      if (!alreadyExists) {
-        return new Response(JSON.stringify({ error: "Unable to create account" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        })
-      }
-    }
-
-    const tokenResp = await passwordToken(supabaseUrl, anonKey, email, password)
-    const tokenText = await tokenResp.text()
-    if (!tokenResp.ok) {
-      const message = createResp.ok
-        ? "Account created but sign-in failed. Try signing in."
-        : "Account already exists. Sign in instead."
-      return new Response(JSON.stringify({ error: message }), {
-        status: tokenResp.status === 400 ? 409 : tokenResp.status,
+    if (!resetResp.ok) {
+      const resetText = await resetResp.text()
+      return new Response(JSON.stringify({ error: parseAuthError(resetText) || "Password reset failed" }), {
+        status: resetResp.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
-    const tokenJson = JSON.parse(tokenText)
-    return new Response(JSON.stringify({
-      access_token: tokenJson.access_token,
-      refresh_token: tokenJson.refresh_token,
-      user: tokenJson.user,
-    }), {
+    return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   } catch (error) {

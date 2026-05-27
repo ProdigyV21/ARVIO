@@ -20,11 +20,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Response
+import okhttp3.ResponseBody
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 /**
  * Provides a configured OkHttpClient instance.
@@ -51,6 +59,8 @@ object OkHttpProvider {
     private const val ADGUARD_DOH_URL = "https://dns.adguard-dns.com/dns-query"
 
     const val DNS_PROVIDER_PREF_KEY = "dns_provider_global"
+    const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    const val USER_AGENT_PREF_KEY = "custom_user_agent_global"
 
     enum class AppDnsProvider {
         SYSTEM,
@@ -73,11 +83,27 @@ object OkHttpProvider {
     @Volatile
     private var selectedDnsProvider: AppDnsProvider = AppDnsProvider.SYSTEM
 
+    @Volatile
+    private var _customUserAgent: String = ""
+
+    val customUserAgent: String get() = _customUserAgent
+    val userAgent: String get() = userAgentOr(DEFAULT_USER_AGENT)
+
+    fun setCustomUserAgent(value: String) {
+        _customUserAgent = value.trim()
+    }
+
+    fun userAgentOr(defaultUserAgent: String): String {
+        return _customUserAgent.ifBlank { defaultUserAgent }
+    }
+
     private val dnsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val clientLock = Any()
 
     private val appConnectionPool = ConnectionPool(32, 5, TimeUnit.MINUTES)
     private val playbackConnectionPool = ConnectionPool(16, 5, TimeUnit.MINUTES)
+    private const val MAX_LENIENT_GZIP_BYTES = 16L * 1024L * 1024L
+    private const val MAX_GZIP_LAYERS = 3
 
     @Volatile
     private var appClient: OkHttpClient? = null
@@ -155,6 +181,84 @@ object OkHttpProvider {
         chain.proceed(request)
     }
 
+    private val lenientJsonGzipInterceptor = Interceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (!shouldDecodeLenientJsonGzip(response)) {
+            return@Interceptor response
+        }
+
+        val body = response.body ?: return@Interceptor response
+        val rawBytes = try {
+            body.readBytesWithLimit(MAX_LENIENT_GZIP_BYTES)
+        } catch (_: IOException) {
+            return@Interceptor gzipErrorResponse(response, "Compressed API response could not be read.")
+        }
+
+        val decodedBytes = decodeGzipLayers(rawBytes)
+            ?: return@Interceptor gzipErrorResponse(response, "Compressed API response could not be decoded.")
+
+        response.newBuilder()
+            .removeHeader("Content-Encoding")
+            .removeHeader("Content-Length")
+            .body(decodedBytes.toResponseBody(body.contentType()))
+            .build()
+    }
+
+    private fun shouldDecodeLenientJsonGzip(response: Response): Boolean {
+        if (!response.header("Content-Encoding").equals("gzip", ignoreCase = true)) return false
+        val contentLength = response.body?.contentLength() ?: -1L
+        if (contentLength > MAX_LENIENT_GZIP_BYTES) return false
+        val contentType = response.header("Content-Type").orEmpty().lowercase()
+        return "json" in contentType
+    }
+
+    private fun ResponseBody.readBytesWithLimit(maxBytes: Long): ByteArray {
+        byteStream().use { input ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var total = 0L
+            while (true) {
+                val read = input.read(buffer)
+                if (read == -1) break
+                total += read.toLong()
+                if (total > maxBytes) {
+                    throw IOException("Compressed API response exceeded $maxBytes bytes")
+                }
+                output.write(buffer, 0, read)
+            }
+            return output.toByteArray()
+        }
+    }
+
+    private fun decodeGzipLayers(rawBytes: ByteArray): ByteArray? {
+        var bytes = rawBytes
+        repeat(MAX_GZIP_LAYERS) {
+            if (!bytes.hasGzipMagic()) return bytes
+            bytes = runCatching {
+                GZIPInputStream(ByteArrayInputStream(bytes)).use { it.readBytes() }
+            }.getOrNull() ?: return null
+        }
+        return bytes.takeUnless { it.hasGzipMagic() }
+    }
+
+    private fun ByteArray.hasGzipMagic(): Boolean {
+        return size >= 2 &&
+            this[0].toInt() and 0xff == 0x1f &&
+            this[1].toInt() and 0xff == 0x8b
+    }
+
+    private fun gzipErrorResponse(response: Response, message: String): Response {
+        val body = """{"success":false,"status_message":"$message"}"""
+            .toResponseBody("application/json; charset=utf-8".toMediaType())
+        return response.newBuilder()
+            .code(502)
+            .message("Invalid compressed API response")
+            .removeHeader("Content-Encoding")
+            .removeHeader("Content-Length")
+            .body(body)
+            .build()
+    }
+
     private fun selectedDns(provider: AppDnsProvider): Dns {
         return when (provider) {
             AppDnsProvider.SYSTEM -> systemDns
@@ -184,10 +288,12 @@ object OkHttpProvider {
         }
 
         val builder = OkHttpClient.Builder()
+            .addInterceptor(customUserAgentInterceptor)
             // TMDB/Trakt calls are proxied when Supabase proxy config is present.
             // Contributors can still use direct calls with their own local keys.
             .addInterceptor(ApiProxyInterceptor())
             .addInterceptor(loggingInterceptor)
+            .addNetworkInterceptor(lenientJsonGzipInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -208,6 +314,7 @@ object OkHttpProvider {
 
     private fun buildPlaybackClient(): OkHttpClient {
         return OkHttpClient.Builder()
+            .addInterceptor(customUserAgentInterceptor)
             .connectionPool(playbackConnectionPool)
             .followRedirects(true)
             .followSslRedirects(true)
@@ -218,6 +325,16 @@ object OkHttpProvider {
             .writeTimeout(20, TimeUnit.SECONDS)
             .cache(null)
             .build()
+    }
+
+    private val customUserAgentInterceptor = Interceptor { chain ->
+        val request = chain.request()
+        val customUserAgent = _customUserAgent
+        if (customUserAgent.isBlank() || request.header("User-Agent") != null) {
+            chain.proceed(request)
+        } else {
+            chain.proceed(request.newBuilder().header("User-Agent", customUserAgent).build())
+        }
     }
 
     private fun getOrCreateHttpCache(context: Context): Cache {

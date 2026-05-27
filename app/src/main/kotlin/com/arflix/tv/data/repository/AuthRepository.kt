@@ -53,6 +53,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -105,6 +106,11 @@ private data class ProfileAccountSyncRow(
 @Serializable
 private data class ProfileAccountSyncUpdate(
     val addons: String
+)
+
+private data class AccountSyncPayloadCandidate(
+    val payload: String,
+    val updatedAtMillis: Long
 )
 
 /**
@@ -962,26 +968,22 @@ class AuthRepository @Inject constructor(
 
     suspend fun loadAccountSyncPayload(): Result<String?> {
         val userId = getCurrentUserId() ?: return Result.failure(Exception("Not logged in"))
-        val accountSyncResult = runCatching {
-            ensureValidSession()
-            val row = supabase.postgrest
-                .from("account_sync_state")
-                .select {
-                    filter { eq("user_id", userId) }
-                }
-                .decodeSingleOrNull<AccountSyncStateRow>()
-            row?.payload
-        }
-        if (!accountSyncResult.getOrNull().isNullOrBlank()) {
-            return Result.success(accountSyncResult.getOrNull())
-        }
-
+        val accountSyncResult = loadAccountSyncPayloadFromAccountSyncState(userId)
         val userSettingsResult = loadAccountSyncPayloadFromUserSettings()
-        if (!userSettingsResult.getOrNull().isNullOrBlank()) return userSettingsResult
-
         val profileResult = loadAccountSyncPayloadFromProfileAddons()
-        if (profileResult.isSuccess) return profileResult
-        if (accountSyncResult.isSuccess || userSettingsResult.isSuccess) return Result.success(null)
+
+        val bestPayload = listOf(accountSyncResult, userSettingsResult, profileResult)
+            .mapNotNull { it.getOrNull() }
+            .filter { it.payload.isNotBlank() }
+            .maxByOrNull { it.updatedAtMillis }
+
+        if (bestPayload != null) {
+            return Result.success(bestPayload.payload)
+        }
+
+        if (accountSyncResult.isSuccess || userSettingsResult.isSuccess || profileResult.isSuccess) {
+            return Result.success(null)
+        }
 
         return Result.failure(
             accountSyncResult.exceptionOrNull()
@@ -989,6 +991,23 @@ class AuthRepository @Inject constructor(
                 ?: profileResult.exceptionOrNull()
                 ?: IllegalStateException("Cloud sync payload unavailable")
         )
+    }
+
+    private suspend fun loadAccountSyncPayloadFromAccountSyncState(userId: String): Result<AccountSyncPayloadCandidate?> {
+        return runCatching {
+            ensureValidSession()
+            val row = supabase.postgrest
+                .from("account_sync_state")
+                .select {
+                    filter { eq("user_id", userId) }
+                }
+                .decodeSingleOrNull<AccountSyncStateRow>()
+            val payload = row?.payload?.takeIf { it.isNotBlank() } ?: return@runCatching null
+            AccountSyncPayloadCandidate(
+                payload = payload,
+                updatedAtMillis = maxOf(payloadUpdatedAtMillis(payload), parseInstantMillis(row.updated_at))
+            )
+        }
     }
 
     suspend fun saveAccountSyncPayload(payload: String): Result<Unit> {
@@ -1018,7 +1037,7 @@ class AuthRepository @Inject constructor(
             }
     }
 
-    private suspend fun loadAccountSyncPayloadFromUserSettings(): Result<String?> {
+    private suspend fun loadAccountSyncPayloadFromUserSettings(): Result<AccountSyncPayloadCandidate?> {
         val userId = getCurrentUserId() ?: return Result.failure(Exception("Not logged in"))
         return try {
             ensureValidSession()
@@ -1028,7 +1047,23 @@ class AuthRepository @Inject constructor(
                     filter { eq("user_id", userId) }
                 }
                 .decodeSingleOrNull<UserSettingsAccountSyncRow>()
-            Result.success(row?.settings?.get(ACCOUNT_SYNC_PAYLOAD_KEY)?.jsonPrimitive?.contentOrNull)
+            val payload = row?.settings
+                ?.get(ACCOUNT_SYNC_PAYLOAD_KEY)
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+            val updatedAt = row?.settings
+                ?.get(ACCOUNT_SYNC_UPDATED_AT_KEY)
+                ?.jsonPrimitive
+                ?.contentOrNull
+            Result.success(
+                payload?.let {
+                    AccountSyncPayloadCandidate(
+                        payload = it,
+                        updatedAtMillis = maxOf(payloadUpdatedAtMillis(it), parseInstantMillis(updatedAt))
+                    )
+                }
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1062,7 +1097,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    private suspend fun loadAccountSyncPayloadFromProfileAddons(): Result<String?> {
+    private suspend fun loadAccountSyncPayloadFromProfileAddons(): Result<AccountSyncPayloadCandidate?> {
         val userId = getCurrentUserId() ?: return Result.failure(Exception("Not logged in"))
         return try {
             ensureValidSession()
@@ -1072,7 +1107,15 @@ class AuthRepository @Inject constructor(
                     filter { eq("id", userId) }
                 }
                 .decodeSingleOrNull<ProfileAccountSyncRow>()
-            Result.success(decodeProfileAccountSyncPayload(row?.addons))
+            val payload = decodeProfileAccountSyncPayload(row?.addons)?.takeIf { it.isNotBlank() }
+            Result.success(
+                payload?.let {
+                    AccountSyncPayloadCandidate(
+                        payload = it,
+                        updatedAtMillis = maxOf(payloadUpdatedAtMillis(it), decodeProfileAccountSyncUpdatedAt(row?.addons))
+                    )
+                }
+            )
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1119,6 +1162,26 @@ class AuthRepository @Inject constructor(
             val obj = JSONObject(raw)
             obj.optString(PROFILE_SYNC_PAYLOAD_KEY).takeIf { it.isNotBlank() }
         }.getOrNull()
+    }
+
+    private fun decodeProfileAccountSyncUpdatedAt(raw: String?): Long {
+        if (raw.isNullOrBlank()) return 0L
+        return runCatching {
+            val obj = JSONObject(raw)
+            parseInstantMillis(obj.optString(PROFILE_SYNC_UPDATED_AT_KEY))
+        }.getOrDefault(0L)
+    }
+
+    private fun payloadUpdatedAtMillis(payload: String?): Long {
+        if (payload.isNullOrBlank()) return 0L
+        return runCatching {
+            JSONObject(payload).optLong("updatedAt", 0L)
+        }.getOrDefault(0L)
+    }
+
+    private fun parseInstantMillis(value: String?): Long {
+        if (value.isNullOrBlank()) return 0L
+        return runCatching { Instant.parse(value).toEpochMilliseconds() }.getOrDefault(0L)
     }
 
     private fun encodeProfileAccountSyncPayload(existingAddons: String?, payload: String): String {

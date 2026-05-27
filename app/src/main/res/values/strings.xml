@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ARVIO</string>
+    <string name="now_playing">NOW PLAYING</string>
 
     <!-- Navigation -->
     <string name="home">Home</string>
@@ -29,6 +30,7 @@
     <!-- Settings sections -->
     <string name="app_language">App Language</string>
     <string name="language_and_subtitles">Language &amp; Subtitles</string>
+    <string name="language_and_audio">Language &amp; Audio</string>
     <string name="audio">Audio</string>
     <string name="playback">Playback</string>
     <string name="interface_label">Interface</string>
@@ -130,9 +132,11 @@
     <string name="show_loading_stats">Show Loading Stats</string>
     <string name="volume_boost">Volume Boost</string>
     <string name="dns_provider">DNS Provider</string>
+    <string name="custom_user_agent">Custom User-Agent</string>
+    <string name="custom_user_agent_desc">Leave blank to use ARVIO defaults. Custom values apply when a source does not provide its own User-Agent.</string>
     <string name="add_playlist">Add Playlist</string>
-    <string name="refresh_iptv">Refresh IPTV Data</string>
-    <string name="delete_iptv">Delete IPTV Playlists</string>
+    <string name="refresh_iptv">Refresh TV Data</string>
+    <string name="delete_iptv">Delete TV Playlists</string>
     <string name="add_catalog">Add Catalog</string>
     <string name="rename_catalog">Rename Catalog</string>
     <string name="addons">Addons</string>
@@ -166,6 +170,8 @@
     <string name="trailer_desc">Play trailers in hero banner</string>
     <string name="trailer_sound">Trailer Sound</string>
     <string name="trailer_sound_desc">Play trailer audio in hero banner</string>
+    <string name="trailer_delay">Trailer Delay</string>
+    <string name="trailer_delay_desc">Seconds before trailer starts playing</string>
     <string name="frame_rate_desc">Off, Seamless, or Always</string>
     <string name="quality_filters_desc">Exclude quality tiers on this device</string>
     <string name="card_layout_desc">Landscape or poster cards</string>
@@ -194,14 +200,15 @@
 
     <!-- Settings labels -->
     <string name="app_update">App Update</string>
-    <string name="iptv">IPTV</string>
-    <string name="iptv_not_configured">IPTV is not configured</string>
+    <string name="iptv">TV</string>
+    <string name="iptv_not_configured">TV is not configured</string>
     <string name="enter_code">Enter code:</string>
     <string name="syncing">Syncing</string>
     <string name="sync">Sync</string>
     <string name="connected">Connected</string>
     <string name="connect">Connect</string>
     <string name="whos_watching">Who\'s watching?</string>
+    <string name="profiles">Profiles</string>
     <string name="manage_profiles">Manage Profiles</string>
     <string name="add_profile">Add Profile</string>
     <string name="loading_profile">Loading profile…</string>
@@ -211,6 +218,12 @@
     <string name="save">Save</string>
     <string name="connect_to_cloud">Connect to ARVIO Cloud</string>
     <string name="view_collection">View Collection</string>
+
+    <!-- In-player subtitle settings panel -->
+    <string name="subtitle_settings_title">Subtitle Settings</string>
+    <string name="subtitle_delay">Delay</string>
+    <string name="subtitle_size_label">Size</string>
+    <string name="subtitle_vertical_position">Vertical Position</string>
 
     <!-- AI Subtitles -->
     <string name="ai_subtitles_section">AI Subtitles</string>

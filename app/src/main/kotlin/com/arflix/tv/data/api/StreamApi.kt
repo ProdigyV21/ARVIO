@@ -225,7 +225,7 @@ data class StremioStream(
                 (firstLine.contains(".mkv", ignoreCase = true) ||
                  firstLine.contains(".mp4", ignoreCase = true) ||
                  firstLine.contains(".avi", ignoreCase = true) ||
-                 firstLine.matches(StreamApiRegexes.QUALITY_TAGS_REGEX))) {  // Contains [quality] tags
+                  firstLine.matches(StreamApiRegexes.QUALITY_TAGS_REGEX))) {  // Contains [quality] tags
                 return firstLine
             }
         }
@@ -473,7 +473,6 @@ data class ArmMappingEntry(
     val themoviedb: Int? = null,
     val thetvdb: Int? = null
 )
-
 
 private object StreamApiRegexes {
     val QUALITY_TAGS_REGEX = Regex(".*\\[.*\\].*")

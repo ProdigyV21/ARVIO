@@ -832,6 +832,18 @@ fun HomeScreen(
         else -> null
     }
 
+    var isTrailerPlaying by remember { mutableStateOf(false) }
+    var trailerSuppressed by remember { mutableStateOf(false) }
+    LaunchedEffect(displayHeroItem?.id) { trailerSuppressed = false }
+    val trailerOverlayAlpha = remember { Animatable(1f) }
+    LaunchedEffect(isTrailerPlaying) {
+        if (isTrailerPlaying) {
+            trailerOverlayAlpha.animateTo(0f, tween(1500, easing = FastOutSlowInEasing))
+        } else {
+            trailerOverlayAlpha.animateTo(1f, tween(500, easing = FastOutSlowInEasing))
+        }
+    }
+
     var heroPlaybackHandles by remember { mutableStateOf<HomeHeroPlaybackHandles?>(null) }
     var preparedHeroVideoUrl by remember { mutableStateOf<String?>(null) }
     val heroExoPlayer = heroPlaybackHandles?.player
@@ -990,10 +1002,12 @@ fun HomeScreen(
                 }
 
                 // YouTube trailer auto-play (sound controlled by trailerSoundEnabled setting)
-                if (heroVideoUrl == null && uiState.trailerAutoPlay && uiState.heroTrailerKey != null) {
+                if (heroVideoUrl == null && uiState.trailerAutoPlay && uiState.heroTrailerKey != null && !trailerSuppressed) {
                     TrailerPlayer(
                         youtubeKey = uiState.heroTrailerKey!!,
+                        delayMs = uiState.trailerDelaySeconds * 1000L,
                         volume = if (uiState.trailerSoundEnabled) 1f else 0f,
+                        onPlayingChanged = { playing -> isTrailerPlaying = playing },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -1060,6 +1074,7 @@ fun HomeScreen(
             }
         } // end if (!isMobile) backdrop
         
+        Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = trailerOverlayAlpha.value }) {
         HomeInputLayer(
             categories = displayCategories,
             cardLogoUrls = cardLogoUrls,
@@ -1070,6 +1085,8 @@ fun HomeScreen(
             fastScrollThresholdMs = fastScrollThresholdMs,
             usePosterCards = usePosterCards,
             isContextMenuOpen = showContextMenu,
+            trailerIsPlaying = isTrailerPlaying,
+            onTrailerStop = { trailerSuppressed = true },
             isMobile = isMobile,
             heroItem = displayHeroItem,
             heroOverviewOverride = displayHeroOverview,
@@ -1101,6 +1118,9 @@ fun HomeScreen(
             syncStatus = uiState.syncStatus,
             hasUpdateBadge = uiState.hasUpdateBadge,
             onItemFocusedPrefetch = {},
+            onMobileCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
+                viewModel.onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
+            },
             onNavigateToDetails = onNavigateToDetails,
             onNavigateToCollection = onNavigateToCollection,
             onNavigateToSearch = onNavigateToSearch,
@@ -1116,8 +1136,10 @@ fun HomeScreen(
                 showContextMenu = true
             }
         )
+        } // end trailer-dim wrapper
 
         if (showCinematicHomeLayer) {
+            Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = trailerOverlayAlpha.value }) {
             HomeHeroLayer(
                 heroItem = displayHeroItem,
                 heroLogoUrl = displayHeroLogo,
@@ -1131,6 +1153,7 @@ fun HomeScreen(
                 getIptvChannelId = { item -> viewModel.getIptvChannelId(item) },
                 getIptvStreamUrl = { itemId -> viewModel.getIptvStreamUrl(itemId) }
             )
+            } // end trailer-dim wrapper
         }
 
         // Error state - show message when loading failed and no content
@@ -1277,6 +1300,7 @@ private fun HeroSection(
     // Use primary shadow for text (Compose only supports one shadow per text)
     // But the frosted pill provides additional protection
     val textShadow = textShadowPrimary
+    val heroTextWidth = 360.dp
 
     Column(
         modifier = modifier,
@@ -1397,158 +1421,172 @@ private fun HeroSection(
                         }
                     }
                 } else {
-                // Get actual genre names from genre IDs (memoized to avoid list allocations per recomposition)
-                val genreText = remember(currentItem.id, currentItem.genreIds) {
-                    val genreMap = if (currentItem.mediaType == MediaType.TV) tvGenres else movieGenres
-                    currentItem.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" / ")
-                }
-                val displayDate = currentItem.releaseDate?.takeIf { it.isNotEmpty() } ?: currentItem.year
-                val hasDuration = currentItem.duration.isNotEmpty() && currentItem.duration != "0m"
-                val hasGenre = genreText.isNotEmpty()
-                val primaryNetworkLogo = currentItem.primaryNetworkLogo?.takeIf { it.isNotBlank() }
-                val budgetText = remember(currentItem.mediaType, currentItem.budget) {
-                    val budgetValue = currentItem.budget
-                    if (currentItem.mediaType == MediaType.MOVIE && budgetValue != null && budgetValue > 0L) {
-                        formatBudgetCompact(budgetValue)
-                    } else {
-                        null
+                    // Get actual genre names from genre IDs (memoized to avoid list allocations per recomposition)
+                    val genreText = remember(currentItem.id, currentItem.genreIds) {
+                        val genreMap = if (currentItem.mediaType == MediaType.TV) tvGenres else movieGenres
+                        currentItem.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" / ")
                     }
-                }
-
-                // Metadata row: Date | Genre | Duration | IMDb rating
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (displayDate.isNotEmpty()) {
-                        Text(
-                            text = displayDate,
-                            style = ArflixTypography.caption.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                shadow = textShadow
-                            ),
-                            color = Color.White
-                        )
-
-                        if (hasGenre) {
-                            Text(
-                                text = "|",
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 13.sp,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
+                    val displayDate = currentItem.releaseDate?.takeIf { it.isNotEmpty() } ?: currentItem.year
+                    val hasDuration = currentItem.duration.isNotEmpty() && currentItem.duration != "0m"
+                    val hasGenre = genreText.isNotEmpty()
+                    val primaryNetworkLogo = currentItem.primaryNetworkLogo?.takeIf { it.isNotBlank() }
+                    val budgetText = remember(currentItem.mediaType, currentItem.budget) {
+                        val budgetValue = currentItem.budget
+                        if (currentItem.mediaType == MediaType.MOVIE && budgetValue != null && budgetValue > 0L) {
+                            formatBudgetCompact(budgetValue)
+                        } else {
+                            null
                         }
                     }
-
-                    if (hasGenre) {
-                        Text(
-                            text = genreText,
-                            style = ArflixTypography.caption.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                shadow = textShadow
-                            ),
-                            color = Color.White
-                        )
-                    }
-
-                    if (hasDuration) {
-                        if (displayDate.isNotEmpty() || hasGenre) {
-                            Text(
-                                text = "|",
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 13.sp,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                        Text(
-                            text = currentItem.duration,
-                            style = ArflixTypography.caption.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                shadow = textShadow
-                            ),
-                            color = Color.White
-                        )
-                    }
-
-                    if (primaryNetworkLogo != null) {
-                        if (displayDate.isNotEmpty() || hasGenre || hasDuration) {
-                            Text(
-                                text = "|",
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 13.sp,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                        AsyncImage(
-                            model = primaryNetworkLogo,
-                            imageLoader = metadataLogoImageLoader,
-                            contentDescription = "Primary streaming provider",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .height(16.dp)
-                                .width(52.dp)
-                        )
-                    }
-
-                    val rating = currentItem.imdbRating.ifEmpty { currentItem.tmdbRating }
+                    val rating = imdbRatingFor(currentItem)
                     val ratingValue = parseRatingValue(rating)
-                    if (ratingValue > 0f) {
-                        if (displayDate.isNotEmpty() || hasGenre || hasDuration || primaryNetworkLogo != null) {
-                            Text(
-                                text = "|",
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 13.sp,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-                        ImdbSvgRatingBadge(
-                            rating = rating,
-                            imageLoader = metadataLogoImageLoader,
-                            ratingFontSize = 13,
-                            logoWidth = 34.dp,
-                            logoHeight = 14.dp,
-                            textShadow = textShadow
-                        )
-                    }
+                    val hasRatingMetadata = ratingValue > 0f
+                    val hasBudgetMetadata = showBudget && !budgetText.isNullOrBlank()
+                    val hasSecondaryMetadata = primaryNetworkLogo != null ||
+                        hasRatingMetadata ||
+                        hasBudgetMetadata
 
-                    // Budget line can be hidden via Settings -> General -> Show Budget on Home.
-                    // Default is shown (showBudget = true) to preserve existing behavior.
-                    // Issue #72.
-                    if (showBudget && !budgetText.isNullOrBlank()) {
-                        if (displayDate.isNotEmpty() || hasGenre || hasDuration || ratingValue > 0f) {
-                            Text(
-                                text = "|",
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 13.sp,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
+                    Column(
+                        modifier = Modifier.width(heroTextWidth),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (displayDate.isNotEmpty()) {
+                                Text(
+                                    text = displayDate,
+                                    style = ArflixTypography.caption.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        shadow = textShadow
+                                    ),
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+
+                                if (hasGenre || hasDuration) {
+                                    Text(
+                                        text = "|",
+                                        style = ArflixTypography.caption.copy(
+                                            fontSize = 13.sp,
+                                            shadow = textShadow
+                                        ),
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            if (hasGenre) {
+                                Text(
+                                    text = genreText,
+                                    style = ArflixTypography.caption.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        shadow = textShadow
+                                    ),
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                            }
+
+                            if (hasDuration) {
+                                if (hasGenre) {
+                                    Text(
+                                        text = "|",
+                                        style = ArflixTypography.caption.copy(
+                                            fontSize = 13.sp,
+                                            shadow = textShadow
+                                        ),
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Text(
+                                    text = currentItem.duration,
+                                    style = ArflixTypography.caption.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        shadow = textShadow
+                                    ),
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                            }
                         }
 
-                        Text(
-                            text = "Budget $budgetText",
-                            style = ArflixTypography.caption.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                shadow = textShadow
-                            ),
-                            color = Color.White
-                        )
+                        if (hasSecondaryMetadata) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (primaryNetworkLogo != null) {
+                                    AsyncImage(
+                                        model = primaryNetworkLogo,
+                                        imageLoader = metadataLogoImageLoader,
+                                        contentDescription = "Primary streaming provider",
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier
+                                            .height(16.dp)
+                                            .width(58.dp)
+                                    )
+
+                                    if (hasRatingMetadata || hasBudgetMetadata) {
+                                        Text(
+                                            text = "|",
+                                            style = ArflixTypography.caption.copy(
+                                                fontSize = 12.sp,
+                                                shadow = textShadow
+                                            ),
+                                            color = Color.White.copy(alpha = 0.58f)
+                                        )
+                                    }
+                                }
+
+                                if (hasRatingMetadata) {
+                                    ImdbSvgRatingBadge(
+                                        rating = rating,
+                                        imageLoader = metadataLogoImageLoader,
+                                        ratingFontSize = 13,
+                                        logoWidth = 36.dp,
+                                        logoHeight = 15.dp,
+                                        textShadow = textShadow
+                                    )
+
+                                    if (hasBudgetMetadata) {
+                                        Text(
+                                            text = "|",
+                                            style = ArflixTypography.caption.copy(
+                                                fontSize = 12.sp,
+                                                shadow = textShadow
+                                            ),
+                                            color = Color.White.copy(alpha = 0.58f)
+                                        )
+                                    }
+                                }
+
+                                if (hasBudgetMetadata) {
+                                    Text(
+                                        text = "Budget $budgetText",
+                                        style = ArflixTypography.caption.copy(
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            shadow = textShadow
+                                        ),
+                                        color = Color.White.copy(alpha = 0.74f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-                } // end else (non-IPTV metadata)
 
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -1588,6 +1626,11 @@ private fun formatBudgetCompact(budget: Long): String {
         budget >= 1_000 -> "$${budget / 1_000}K"
         else -> "$$budget"
     }
+}
+
+private fun imdbRatingFor(item: MediaItem): String {
+    val imdbValue = parseRatingValue(item.imdbRating)
+    return if (imdbValue > 0f) item.imdbRating else ""
 }
 
 @Composable
@@ -1656,7 +1699,7 @@ private fun HomeHeroLayer(
         val contentRowBottomPadding = 12.dp
         val contentRowTopPadding = contentRowHeight + contentRowBottomPadding
         val buttonsBottomPadding = contentRowTopPadding - 10.dp
-        val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 46.dp else 58.dp
+        val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 34.dp else 34.dp
 
         Box(
             modifier = Modifier
@@ -1715,7 +1758,7 @@ private fun MobileHeroOverlay(
         item.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" | ")
     }
     val year = item.releaseDate?.take(4)?.takeIf { it.isNotEmpty() } ?: item.year
-    val rating = item.imdbRating.ifEmpty { item.tmdbRating }
+    val rating = imdbRatingFor(item)
     val ratingValue = parseRatingValue(rating)
     val hasMetadata = genreText.isNotEmpty() || year.isNotEmpty() || ratingValue > 0f
 
@@ -1993,7 +2036,7 @@ private fun MobileHeroCarousel(
                     item.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" | ")
                 }
                 val year = item.releaseDate?.take(4)?.takeIf { it.isNotEmpty() } ?: item.year
-                val rating = item.imdbRating.ifEmpty { item.tmdbRating }
+                val rating = imdbRatingFor(item)
                 val ratingValue = parseRatingValue(rating)
 
                 val displayOverview = remember(item.id, item.overview) {
@@ -2074,7 +2117,7 @@ private fun MobileHeroCarousel(
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Metadata row with IMDb badge
+                        // Metadata row with IMDb rating badge
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -2110,7 +2153,6 @@ private fun MobileHeroCarousel(
                                     maxLines = 1
                                 )
                             }
-                            // IMDb rating badge (yellow rounded box)
                             if (ratingValue > 0f) {
                                 ImdbSvgRatingBadge(
                                     rating = rating,
@@ -2190,6 +2232,8 @@ private fun HomeInputLayer(
     fastScrollThresholdMs: Long,
     usePosterCards: Boolean,
     isContextMenuOpen: Boolean,
+    trailerIsPlaying: Boolean = false,
+    onTrailerStop: () -> Unit = {},
     isMobile: Boolean = false,
     heroItem: MediaItem? = null,
     heroOverviewOverride: String? = null,
@@ -2201,6 +2245,7 @@ private fun HomeInputLayer(
     syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     hasUpdateBadge: Boolean = false,
     onItemFocusedPrefetch: (MediaItem) -> Unit = {},
+    onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
     onNavigateToCollection: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
@@ -2312,6 +2357,12 @@ private fun HomeInputLayer(
         Modifier.onPreviewKeyEvent { event ->
             if (isContextMenuOpen) {
                 return@onPreviewKeyEvent false
+            }
+            if (trailerIsPlaying && event.type == KeyEventType.KeyDown &&
+                (isArvioDpadNavigationKey(event.key) || event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.Back)
+            ) {
+                onTrailerStop()
+                return@onPreviewKeyEvent true
             }
             if (event.type == KeyEventType.KeyUp && isArvioDpadNavigationKey(event.key)) {
                 dpadRepeatGate.reset()
@@ -2549,6 +2600,7 @@ private fun HomeInputLayer(
             onPlay = onPlay,
             onDetails = onDetails,
             onNavigateToDetails = onNavigateToDetails,
+            onMobileCategoryVisiblePosition = onMobileCategoryVisiblePosition,
             onItemClick = { item ->
                 if (!isActionableHomeItem(item)) {
                     return@HomeRowsLayer
@@ -2584,6 +2636,7 @@ private fun HomeRowsLayer(
     onPlay: () -> Unit = {},
     onDetails: () -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
+    onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
     onItemClick: (MediaItem) -> Unit,
     onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null
 ) {
@@ -2595,7 +2648,16 @@ private fun HomeRowsLayer(
             usePosterCards = usePosterCards,
             onNavigateToDetails = onNavigateToDetails,
             onItemClick = onItemClick,
-            onItemLongClick = onItemLongClick
+            onItemLongClick = onItemLongClick,
+            onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
+                onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
+                val rowIndex = categories.indexOfFirst { it.id == categoryId }
+                val visibleItem = categories
+                    .getOrNull(rowIndex)
+                    ?.items
+                    ?.getOrNull(lastVisibleItemIndex)
+                if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+            }
         )
     } else {
         TvHomeRowsLayer(
@@ -2621,7 +2683,8 @@ private fun MobileHomeRowsLayer(
     usePosterCards: Boolean,
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
     onItemClick: (MediaItem) -> Unit,
-    onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null
+    onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null,
+    onCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> }
 ) {
     val mobileItemSpacing = 10.dp
 
@@ -2650,6 +2713,19 @@ private fun MobileHomeRowsLayer(
             val rowKey = remember(category.id) { "home:${category.id}" }
             val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
             val rowMobileItemWidth = if (rowUsePosterCards) 124.dp else 200.dp
+            val rowState = rememberLazyListState()
+
+            LaunchedEffect(rowState, category.id) {
+                snapshotFlow {
+                    rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                }
+                    .distinctUntilChanged()
+                    .collectLatest { lastVisible ->
+                        if (lastVisible >= 0) {
+                            onCategoryVisiblePosition(category.id, lastVisible)
+                        }
+                    }
+            }
 
             Column(modifier = Modifier.padding(bottom = 8.dp)) {
                 // Section title
@@ -2673,6 +2749,7 @@ private fun MobileHomeRowsLayer(
 
                 // Horizontal card row with touch scrolling
                 LazyRow(
+                    state = rowState,
                     modifier = Modifier.arvioDpadFocusGroup(),
                     contentPadding = PaddingValues(
                         start = contentStartPadding,
@@ -3238,11 +3315,9 @@ private fun ContentRow(
     // Use smooth scroll (animated) for D-pad moves to avoid abrupt jumps.
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
     var lastScrollOffset by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(isCurrentRow) {
-        if (!isCurrentRow) {
-            lastScrollIndex = -1
-            lastScrollOffset = -1
-        }
+    LaunchedEffect(isCurrentRow, totalItems) {
+        lastScrollIndex = -1
+        lastScrollOffset = -1
     }
     LaunchedEffect(isCurrentRow, focusedItemIndex, totalItems) {
         if (!isCurrentRow || focusedItemIndex < 0 || totalItems == 0) return@LaunchedEffect

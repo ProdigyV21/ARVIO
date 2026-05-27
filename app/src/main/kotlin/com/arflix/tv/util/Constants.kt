@@ -21,6 +21,7 @@ object Constants {
     val TV_AUTH_POLL_URL: String get() = "${SUPABASE_URL}/functions/v1/tv-auth-poll"
     val TV_AUTH_COMPLETE_URL: String get() = "${SUPABASE_URL}/functions/v1/tv-auth-complete"
     val CLOUD_AUTH_EMAIL_URL: String get() = "${SUPABASE_URL}/functions/v1/cloud-auth-email"
+    val APP_USAGE_EVENT_URL: String get() = "${SUPABASE_URL}/functions/v1/app-usage-event"
 
     // API base URLs.
     const val TMDB_BASE_URL = "https://api.themoviedb.org/3/"

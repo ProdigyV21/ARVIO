@@ -102,7 +102,7 @@ data class CastMember(
 ) : Serializable
 
 /**
- * Review from TMDB
+ * Community review shown on details pages.
  */
 @Immutable
 data class Review(
@@ -197,7 +197,8 @@ data class Subtitle(
     val provider: String = "",
     val isEmbedded: Boolean = false,
     val groupIndex: Int? = null,
-    val trackIndex: Int? = null
+    val trackIndex: Int? = null,
+    val isForced: Boolean = false,
 ) : Serializable
 
 /**

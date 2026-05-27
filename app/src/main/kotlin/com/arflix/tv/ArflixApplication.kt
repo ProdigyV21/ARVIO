@@ -24,6 +24,7 @@ import coil.disk.DiskCache
 import coil.imageLoader
 import coil.memory.MemoryCache
 import com.arflix.tv.network.OkHttpProvider
+import com.arflix.tv.data.repository.AppUsageAnalyticsRepository
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CloudSyncCoordinator
@@ -72,6 +73,8 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     lateinit var realtimeSyncManager: RealtimeSyncManager
     @Inject
     lateinit var watchlistRepository: WatchlistRepository
+    @Inject
+    lateinit var appUsageAnalyticsRepository: AppUsageAnalyticsRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -82,13 +85,17 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         // a single volatile assignment.
         OkHttpProvider.init(this)
 
-        // Initialize global DNS provider from DataStore before network calls.
+        // Initialize global DNS provider and user agent from DataStore before network calls.
         appScope.launch(Dispatchers.IO) {
             val prefs = settingsDataStore.data.first()
             val dnsKey = androidx.datastore.preferences.core.stringPreferencesKey(OkHttpProvider.DNS_PROVIDER_PREF_KEY)
             val dnsPref = prefs[dnsKey]
             val provider = OkHttpProvider.parseDnsProvider(dnsPref)
             OkHttpProvider.setDnsProvider(provider)
+
+            val uaKey = androidx.datastore.preferences.core.stringPreferencesKey(OkHttpProvider.USER_AGENT_PREF_KEY)
+            val savedUserAgent = prefs[uaKey].orEmpty()
+            OkHttpProvider.setCustomUserAgent(savedUserAgent)
 
             runCatching { OkHttpProvider.dns.lookup("image.tmdb.org") }
         }
@@ -116,6 +123,13 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
                 // Start realtime WebSocket listener for instant cross-device sync
                 realtimeSyncManager.start()
             }
+        }
+
+        appScope.launch {
+            // Wait for first navigation/auth restore work to start so the
+            // event can include account context without delaying app launch.
+            delay(3_000L)
+            runCatching { appUsageAnalyticsRepository.recordAppOpen() }
         }
 
         // Observe auth state: start realtime on login, stop on logout

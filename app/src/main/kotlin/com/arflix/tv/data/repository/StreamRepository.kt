@@ -198,7 +198,7 @@ class StreamRepository @Inject constructor(
             } else {
                 val filters = gson.fromJson<List<QualityFilterConfig>>(
                     json,
-                    object : TypeToken<List<QualityFilterConfig>>() {}.type
+                    TypeToken.getParameterized(List::class.java, QualityFilterConfig::class.java).type
                 ).orEmpty()
                     .filter { it.enabled && it.regexPattern.isNotBlank() }
                 val regexes = filters.mapNotNull { filter ->
@@ -233,6 +233,23 @@ class StreamRepository @Inject constructor(
         // Allow blank to reset to default autodetect.
         context.streamDataStore.edit { prefs -> prefs[torrServerBaseUrlKey()] = raw.trim() }
         invalidationBus.markDirty(CloudSyncScope.PROFILE_SETTINGS, profileManager.getProfileIdSync(), "torrserver url")
+    }
+
+    suspend fun exportTorrServerBaseUrlForProfile(profileId: String): String {
+        val key = profileManager.profileStringKeyFor(profileId, "torrserver_base_url_v1")
+        return context.streamDataStore.data.first()[key].orEmpty()
+    }
+
+    suspend fun importTorrServerBaseUrlForProfile(profileId: String, raw: String?) {
+        val key = profileManager.profileStringKeyFor(profileId, "torrserver_base_url_v1")
+        val value = raw.orEmpty().trim()
+        context.streamDataStore.edit { prefs ->
+            if (value.isBlank()) {
+                prefs.remove(key)
+            } else {
+                prefs[key] = value
+            }
+        }
     }
 
     // Default addons - only built-in sources that work without configuration
@@ -1077,7 +1094,7 @@ class StreamRepository @Inject constructor(
             val resources = manifest?.resources.orEmpty().joinToString(";") { resource ->
                 listOf(
                     resource.name,
-                    resource.types.joinToString(","),
+                    resource.types.orEmpty().joinToString(","),
                     resource.idPrefixes.orEmpty().joinToString(",")
                 ).joinToString(":")
             }
@@ -2286,6 +2303,47 @@ class StreamRepository @Inject constructor(
     private val STREAM_PREWARM_NETWORK_TIMEOUT_MS = 700L
     private val STREAM_REDIRECT_RESOLUTION_TIMEOUT_MS = 1_800L
     private val PLAYBACK_HOST_BAD_TTL_MS = 5 * 60_000L
+    private val SIDE_EFFECT_PRONE_PREWARM_HOST_MARKERS = setOf(
+        "torrentio",
+        "torbox",
+        "stremthru",
+        "comet",
+        "mediafusion",
+        "jackettio",
+        "annatar",
+        "knightcrawler",
+        "debrid",
+        "real-debrid",
+        "realdebrid",
+        "rdb.so",
+        "rdeb.io",
+        "alldebrid",
+        "premiumize",
+        "easydebrid",
+        "offcloud"
+    )
+    private val SIDE_EFFECT_PRONE_PREWARM_TEXT_MARKERS = setOf(
+        "torrentio",
+        "torbox",
+        "stremthru",
+        "comet",
+        "mediafusion",
+        "jackettio",
+        "annatar",
+        "knightcrawler",
+        "debrid",
+        "real-debrid",
+        "realdebrid",
+        "all-debrid",
+        "alldebrid",
+        "premiumize",
+        "easydebrid",
+        "offcloud",
+        "rd+",
+        "ad+",
+        "pm+",
+        "tb+"
+    )
 
     private fun playbackHostKey(url: String?): String {
         val host = runCatching { java.net.URI(url?.trim().orEmpty()).host?.lowercase(Locale.US) }
@@ -2405,8 +2463,7 @@ class StreamRepository @Inject constructor(
             withTimeout(STREAM_REDIRECT_RESOLUTION_TIMEOUT_MS) {
                 val requestHeaders = headers.toMutableMap()
                 if (requestHeaders.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-                    requestHeaders["User-Agent"] =
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    requestHeaders["User-Agent"] = OkHttpProvider.userAgent
                 }
                 if (requestHeaders.keys.none { it.equals("Accept", ignoreCase = true) }) {
                     requestHeaders["Accept"] = "*/*"
@@ -2433,6 +2490,46 @@ class StreamRepository @Inject constructor(
         }
     }
 
+    private fun hostContainsAny(host: String, markers: Set<String>): Boolean {
+        val normalized = host.lowercase(Locale.US).removePrefix("www.")
+        return markers.any { marker -> normalized.contains(marker) }
+    }
+
+    private fun textContainsAny(text: String, markers: Set<String>): Boolean {
+        val normalized = text.lowercase(Locale.US)
+        return markers.any { marker -> normalized.contains(marker) }
+    }
+
+    private fun isSideEffectPronePrewarmSource(url: String, stream: StreamSource): Boolean {
+        if (!stream.infoHash.isNullOrBlank()) return true
+        if (stream.behaviorHints?.notWebReady == true) return true
+        if (!stream.behaviorHints?.proxyHeaders?.request.isNullOrEmpty()) return true
+        if (isLikelyEphemeralPlaybackUrl(url, stream)) return true
+        if (shouldResolveRedirectBeforePlayback(url, stream)) return true
+
+        val host = runCatching { java.net.URI(url).host?.lowercase(Locale.US) }.getOrNull().orEmpty()
+        if (host.isBlank()) return true
+        if (hostContainsAny(host, SIDE_EFFECT_PRONE_PREWARM_HOST_MARKERS)) return true
+
+        val descriptor = buildString {
+            append(stream.addonId).append(' ')
+            append(stream.addonName).append(' ')
+            append(stream.source).append(' ')
+            append(url)
+        }
+        return textContainsAny(descriptor, SIDE_EFFECT_PRONE_PREWARM_TEXT_MARKERS)
+    }
+
+    fun canPrewarmWithoutSideEffects(stream: StreamSource): Boolean {
+        val rawUrl = stream.url?.trim().orEmpty()
+        if (rawUrl.isBlank()) return false
+        if (rawUrl.startsWith("magnet:", ignoreCase = true)) return false
+        if (!rawUrl.startsWith("http://", ignoreCase = true) && !rawUrl.startsWith("https://", ignoreCase = true)) {
+            return false
+        }
+        return !isSideEffectPronePrewarmSource(rawUrl, stream)
+    }
+
     private suspend fun warmHttpConnection(stream: StreamSource) {
         val rawUrl = stream.url?.trim().orEmpty()
         if (!rawUrl.startsWith("http://", true) && !rawUrl.startsWith("https://", true)) return
@@ -2443,8 +2540,7 @@ class StreamRepository @Inject constructor(
             extra = emptyMap()
         ).toMutableMap()
         if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-            headers["User-Agent"] =
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            headers["User-Agent"] = OkHttpProvider.userAgent
         }
         if (headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
             headers["Accept"] = "*/*"
@@ -2549,8 +2645,9 @@ class StreamRepository @Inject constructor(
         stream: StreamSource,
         allowNetworkWarmup: Boolean = true
     ): StreamSource? = withContext(Dispatchers.IO) {
+        if (!canPrewarmWithoutSideEffects(stream)) return@withContext null
         val resolved = resolveStreamForPlayback(stream) ?: return@withContext null
-        if (allowNetworkWarmup) {
+        if (allowNetworkWarmup && canPrewarmWithoutSideEffects(resolved)) {
             warmHttpConnection(resolved)
         }
         resolved
@@ -2563,6 +2660,7 @@ class StreamRepository @Inject constructor(
     ) = withContext(Dispatchers.IO) {
         streams.asSequence()
             .filter { !it.url.isNullOrBlank() }
+            .filter { canPrewarmWithoutSideEffects(it) }
             .take(limit.coerceAtLeast(0))
             .map { stream ->
                 async {
@@ -2649,8 +2747,7 @@ class StreamRepository @Inject constructor(
             ).toMutableMap()
 
             if (headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
-                headers["User-Agent"] =
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                headers["User-Agent"] = OkHttpProvider.userAgent
             }
             if (headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
                 headers["Accept"] = "*/*"
@@ -2991,7 +3088,7 @@ class StreamRepository @Inject constructor(
             emptyMap()
         } else {
             runCatching {
-                val type = object : TypeToken<Map<String, AddonRuntimeHealth>>() {}.type
+                val type = TypeToken.getParameterized(Map::class.java, String::class.java, AddonRuntimeHealth::class.java).type
                 gson.fromJson<Map<String, AddonRuntimeHealth>>(raw, type)
             }.getOrNull().orEmpty()
         }

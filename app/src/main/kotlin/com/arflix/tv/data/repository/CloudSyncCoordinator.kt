@@ -31,7 +31,7 @@ class CloudSyncCoordinator @Inject constructor(
             collectorJob = scope.launch {
                 invalidationBus.events.collectLatest { invalidation ->
                     if (authRepository.getCurrentUserId().isNullOrBlank()) return@collectLatest
-                    cloudSyncRepository.markLocalStateDirty()
+                    cloudSyncRepository.markLocalStateDirtyNow()
                     scheduleFlush(invalidation)
                 }
             }

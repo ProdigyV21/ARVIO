@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.IptvProgram
+import com.arflix.tv.util.LocalDeviceType
 
 /**
  * A single EPG program cell placed inside a row with an absolute offset.
@@ -72,6 +73,8 @@ fun ProgramCell(
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
+    val deviceType = LocalDeviceType.current
+    val isTouchDevice = deviceType.isTouchDevice()
     var focused by remember { mutableStateOf(false) }
     val baseBg = when {
         isNow -> LiveColors.FocusBg
@@ -158,7 +161,7 @@ fun ProgramCell(
                 }
             )
             .then(
-                if (focusable) {
+                if (focusable || isTouchDevice) {
                     Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onClick() }) }
                 } else {
                     Modifier

@@ -8,32 +8,102 @@ const corsHeaders = {
 
 const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,63}$/i
 const blockedEmailDomains = new Set([
+  "10minutemail.com",
+  "20minutemail.com",
+  "dispostable.com",
+  "emailondeck.com",
   "example.com",
   "example.net",
   "example.org",
+  "fakeinbox.com",
+  "getnada.com",
+  "grr.la",
+  "guerrillamail.biz",
   "invalid",
   "localhost",
+  "maildrop.cc",
   "mailinator.com",
+  "moakt.com",
+  "sharklasers.com",
+  "tempmailo.com",
+  "trashmail.com",
   "guerrillamail.com",
+  "guerrillamail.de",
+  "guerrillamail.info",
   "guerrillamail.net",
-  "10minutemail.com",
+  "guerrillamail.org",
   "tempmail.com",
   "temp-mail.org",
   "yopmail.com",
 ])
-const emailSendCooldownMs = 60 * 1000
+const blockedEmailDomainFragments = [
+  "10minutemail",
+  "disposable",
+  "fakeinbox",
+  "guerrillamail",
+  "maildrop",
+  "mailinator",
+  "tempmail",
+  "temp-mail",
+  "trashmail",
+  "yopmail",
+]
+const blockedSignupLocalParts = new Set([
+  "asdf",
+  "example",
+  "fake",
+  "invalid",
+  "no-reply",
+  "none",
+  "noreply",
+  "null",
+  "qwerty",
+  "test",
+])
+const emailSendCooldownMs = 5 * 60 * 1000
 const emailSendAttempts = new Map<string, number>()
+
+function isBlockedEmailDomain(domain: string): boolean {
+  return blockedEmailDomains.has(domain) ||
+    blockedEmailDomainFragments.some((fragment) => domain.includes(fragment))
+}
 
 function validateEmail(email: string, rejectDisposable = true): string | null {
   if (!email) return "Email is required"
   if (email.length > 254 || !emailRegex.test(email)) return "Enter a valid email address"
+  if ((email.match(/@/g) ?? []).length !== 1) return "Enter a valid email address"
+
   const [localPart, domain = ""] = email.split("@")
   if (!localPart || !domain) return "Use a real email address"
-  if (rejectDisposable && blockedEmailDomains.has(domain)) return "Use a real email address"
-  if (rejectDisposable && (domain.endsWith(".invalid") || domain.endsWith(".test") || domain.endsWith(".local"))) {
+  if (localPart.length > 64 || localPart.startsWith(".") || localPart.endsWith(".") || localPart.includes("..")) {
+    return "Enter a valid email address"
+  }
+
+  const domainLabels = domain.split(".")
+  if (domainLabels.length < 2 || domainLabels.some((part) => !part || part.length > 63)) {
+    return "Enter a valid email address"
+  }
+  if (domainLabels.some((part) => part.startsWith("-") || part.endsWith("-"))) {
+    return "Enter a valid email address"
+  }
+  if (/^\d+$/.test(domainLabels[domainLabels.length - 1])) {
+    return "Enter a valid email address"
+  }
+
+  if (rejectDisposable && blockedSignupLocalParts.has(localPart)) return "Use a real email address"
+  if (rejectDisposable && isBlockedEmailDomain(domain)) return "Use a real email address"
+  if (
+    rejectDisposable &&
+    (
+      domain.endsWith(".example") ||
+      domain.endsWith(".invalid") ||
+      domain.endsWith(".localhost") ||
+      domain.endsWith(".local") ||
+      domain.endsWith(".test")
+    )
+  ) {
     return "Use a real email address"
   }
-  if (domain.split(".").some((part) => !part)) return "Enter a valid email address"
   return null
 }
 

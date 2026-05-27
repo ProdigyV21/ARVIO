@@ -43,6 +43,9 @@ object SentryCrashReporter : AppLogger.CrashContextProvider {
                 options.setEnableUserInteractionBreadcrumbs(false)
                 options.setTracesSampleRate(0.0)
                 options.setBeforeSend { event, _ ->
+                    if (!CrashReportFilter.shouldSendSentryEvent(event.throwable, event.level)) {
+                        return@setBeforeSend null
+                    }
                     event.setUser(null)
                     event.setServerName(null)
                     event.setRequest(null)
@@ -87,6 +90,7 @@ object SentryCrashReporter : AppLogger.CrashContextProvider {
 
     override fun recordException(throwable: Throwable) {
         if (!isInitialized) return
+        if (!CrashReportFilter.shouldReportHandledException(throwable)) return
         Sentry.captureException(throwable)
     }
 

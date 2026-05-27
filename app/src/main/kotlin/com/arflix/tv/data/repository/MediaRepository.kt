@@ -5,6 +5,7 @@ import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
 import com.arflix.tv.data.api.TmdbCrewMember
 import com.arflix.tv.data.api.TmdbEpisode
+import com.arflix.tv.data.api.TmdbExternalIds
 import com.arflix.tv.data.api.TmdbImage
 import com.arflix.tv.data.api.TmdbListResponse
 import com.arflix.tv.data.api.TmdbMediaItem
@@ -39,8 +40,10 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.arflix.tv.network.OkHttpProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLDecoder
@@ -114,6 +117,7 @@ class MediaRepository @Inject constructor(
     private val reviewsCache = mutableMapOf<String, CacheEntry<List<Review>>>()
     private val watchProvidersCache = mutableMapOf<String, CacheEntry<StreamingServicesResult?>>()
     private val seasonEpisodesCache = mutableMapOf<String, CacheEntry<List<Episode>>>()
+    private val imdbRatingCache = ConcurrentHashMap<String, CacheEntry<String>>()
     private val imdbIdCache = ConcurrentHashMap<String, String>()
     private val addonImdbToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val addonTitleToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
@@ -305,6 +309,54 @@ class MediaRepository @Inject constructor(
     fun getCachedImdbId(mediaType: MediaType, mediaId: Int): String? {
         val cacheKey = detailsCacheKey(mediaType, mediaId)
         return imdbIdCache[cacheKey]
+    }
+
+    suspend fun getImdbRating(mediaType: MediaType, mediaId: Int, imdbId: String? = null): String? {
+        val cacheKey = detailsCacheKey(mediaType, mediaId)
+        getFromCache(imdbRatingCache, cacheKey)?.let { return it }
+
+        val resolvedImdbId = imdbId
+            ?.trim()
+            ?.takeIf { it.startsWith("tt", ignoreCase = true) }
+            ?: getCachedImdbId(mediaType, mediaId)
+            ?: resolveExternalIds(mediaType, mediaId)?.imdbId?.also { cacheImdbId(mediaType, mediaId, it) }
+
+        val rating = resolvedImdbId
+            ?.let { fetchCinemetaImdbRating(mediaType, it) }
+            ?.let { normalizeRating(it) }
+            ?: return null
+
+        imdbRatingCache[cacheKey] = CacheEntry(rating, System.currentTimeMillis())
+        return rating
+    }
+
+    private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): TmdbExternalIds? {
+        return runCatching {
+            when (mediaType) {
+                MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, apiKey)
+                MediaType.TV -> tmdbApi.getTvExternalIds(mediaId, apiKey)
+            }
+        }.getOrNull()
+    }
+
+    private suspend fun fetchCinemetaImdbRating(mediaType: MediaType, imdbId: String): String? = withContext(Dispatchers.IO) {
+        val typePath = if (mediaType == MediaType.TV) "series" else "movie"
+        val request = Request.Builder()
+            .url("https://v3-cinemeta.strem.io/meta/$typePath/$imdbId.json")
+            .header("Accept", "application/json")
+            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
+            .build()
+
+        runCatching {
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use null
+                val body = response.body?.string().orEmpty()
+                JSONObject(body)
+                    .optJSONObject("meta")
+                    ?.optString("imdbRating")
+                    ?.takeIf { it.isNotBlank() && it != "N/A" }
+            }
+        }.getOrNull()
     }
 
     fun cacheItem(item: MediaItem) {
@@ -2517,8 +2569,15 @@ class MediaRepository @Inject constructor(
             if (cacheKey in fullDetailsCacheKeys) return cached
         }
 
-        val details = tmdbApi.getMovieDetails(movieId, apiKey, language = contentLanguage)
-        val item = details.toMediaItem()
+        val item = coroutineScope {
+            val detailsDeferred = async { tmdbApi.getMovieDetails(movieId, apiKey, language = contentLanguage) }
+            val externalIdsDeferred = async { resolveExternalIds(MediaType.MOVIE, movieId) }
+
+            val details = detailsDeferred.await()
+            val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.MOVIE, movieId, it) }
+            val imdbRating = imdbId?.let { getImdbRating(MediaType.MOVIE, movieId, it) }
+            details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+        }
         cacheFullDetailsItem(item)
         return item
     }
@@ -2532,8 +2591,15 @@ class MediaRepository @Inject constructor(
             if (cacheKey in fullDetailsCacheKeys) return cached
         }
 
-        val details = tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage)
-        val item = details.toMediaItem()
+        val item = coroutineScope {
+            val detailsDeferred = async { tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage) }
+            val externalIdsDeferred = async { resolveExternalIds(MediaType.TV, tvId) }
+
+            val details = detailsDeferred.await()
+            val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.TV, tvId, it) }
+            val imdbRating = imdbId?.let { getImdbRating(MediaType.TV, tvId, it) }
+            details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+        }
         cacheFullDetailsItem(item)
         return item
     }
@@ -2721,10 +2787,15 @@ class MediaRepository @Inject constructor(
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         return try {
             val videos = tmdbApi.getVideos(type, mediaId, apiKey, language = contentLanguage)
-            val trailer = videos.results.find { it.type == "Trailer" && it.site == "YouTube" && it.official }
-                ?: videos.results.find { it.type == "Trailer" && it.site == "YouTube" }
-                ?: videos.results.find { it.type == "Teaser" && it.site == "YouTube" }
-                ?: videos.results.find { it.site == "YouTube" }
+            var results = videos.results
+            // If language-specific request returned no YouTube videos, fall back to English
+            if (results.none { it.site == "YouTube" } && !contentLanguage.isNullOrBlank()) {
+                results = tmdbApi.getVideos(type, mediaId, apiKey, language = null).results
+            }
+            val trailer = results.find { it.type == "Trailer" && it.site == "YouTube" && it.official }
+                ?: results.find { it.type == "Trailer" && it.site == "YouTube" }
+                ?: results.find { it.type == "Teaser" && it.site == "YouTube" }
+                ?: results.find { it.site == "YouTube" }
             trailer?.key
         } catch (e: Exception) {
             null
@@ -3243,7 +3314,7 @@ class MediaRepository @Inject constructor(
     }
 
     private fun parseMdblistJson(payload: String): List<Pair<MediaType, Int>> {
-        val type = object : TypeToken<List<Map<String, Any?>>>() {}.type
+        val type = TypeToken.getParameterized(List::class.java, TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type).type
         val rows = runCatching { gson.fromJson<List<Map<String, Any?>>>(payload, type) }.getOrNull()
             ?: return emptyList()
 
@@ -3269,7 +3340,7 @@ class MediaRepository @Inject constructor(
     private fun fetchUrl(url: String): String? {
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android TV; ARVIO)")
+            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
             .build()
         return runCatching {
             okHttpClient.newCall(request).execute().use { response ->
@@ -3286,6 +3357,15 @@ private fun Any?.toIntSafe(): Int? {
         else -> null
     }
 }
+
+private fun normalizeRating(raw: String): String? {
+    val value = raw.trim().replace(',', '.').toFloatOrNull() ?: return null
+    if (value <= 0f || value > 10f) return null
+    return String.format(Locale.US, "%.1f", value)
+}
+
+private fun formatTmdbRating(voteAverage: Float): String =
+    normalizeRating(voteAverage.toString()).orEmpty()
 
 // Extension functions to convert API responses to domain models
 
@@ -3306,8 +3386,8 @@ private fun TmdbMediaItem.toMediaItem(defaultType: MediaType): MediaItem {
         overview = overview ?: "",
         year = year,
         releaseDate = formatDate(dateStr),
-        imdbRating = String.format("%.1f", voteAverage),
-        tmdbRating = String.format("%.1f", voteAverage),
+        imdbRating = "",
+        tmdbRating = formatTmdbRating(voteAverage),
         mediaType = type,
         image = posterPath?.let { "${Constants.IMAGE_BASE}$it" }
             ?: backdropPath?.let { "${Constants.BACKDROP_BASE}$it" }
@@ -3335,8 +3415,8 @@ private fun TmdbMovieDetails.toMediaItem(): MediaItem {
         releaseDate = formatDate(releaseDate ?: ""),
         duration = duration,
         rating = if (adult) "R" else "PG-13",
-        imdbRating = String.format("%.1f", voteAverage),
-        tmdbRating = String.format("%.1f", voteAverage),
+        imdbRating = "",
+        tmdbRating = formatTmdbRating(voteAverage),
         mediaType = MediaType.MOVIE,
         image = posterPath?.let { "${Constants.IMAGE_BASE}$it" }
             ?: backdropPath?.let { "${Constants.BACKDROP_BASE}$it" }
@@ -3369,8 +3449,8 @@ private fun TmdbTvDetails.toMediaItem(): MediaItem {
         year = year,
         releaseDate = formatDate(firstAirDate ?: ""),
         duration = duration,
-        imdbRating = String.format("%.1f", voteAverage),
-        tmdbRating = String.format("%.1f", voteAverage),
+        imdbRating = "",
+        tmdbRating = formatTmdbRating(voteAverage),
         mediaType = MediaType.TV,
         image = posterPath?.let { "${Constants.IMAGE_BASE}$it" }
             ?: backdropPath?.let { "${Constants.BACKDROP_BASE}$it" }
@@ -3449,7 +3529,6 @@ private fun formatDate(dateStr: String): String {
         dateStr
     }
 }
-
 
 private object MediaRegexes {
     val YEAR_SUFFIX_REGEX = Regex("""\s+\(\d{4}\)$""")

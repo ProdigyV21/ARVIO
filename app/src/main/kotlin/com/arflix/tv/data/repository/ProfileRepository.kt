@@ -25,7 +25,7 @@ class ProfileRepository @Inject constructor(
     private val invalidationBus: CloudSyncInvalidationBus
 ) {
     private val gson = Gson()
-    private val profileListType = object : TypeToken<List<Profile>>() {}.type
+    private val profileListType = TypeToken.getParameterized(List::class.java, Profile::class.java).type
 
     companion object {
         private val PROFILES_KEY = stringPreferencesKey("profiles")

@@ -13,6 +13,7 @@ import com.arflix.tv.data.model.Review
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.api.TmdbApi
+import com.arflix.tv.data.api.TraktComment
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
@@ -26,6 +27,7 @@ import com.arflix.tv.util.Constants
 import com.arflix.tv.util.settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -61,6 +63,7 @@ data class DetailsUiState(
     val subtitles: List<Subtitle> = emptyList(),
     val isLoadingStreams: Boolean = false,
     val hasStreamingAddons: Boolean = true,
+    val addonOrderedIds: List<String> = emptyList(),
     val isInWatchlist: Boolean = false,
     // Toast
     val toastMessage: String? = null,
@@ -178,6 +181,10 @@ class DetailsViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "DetailsViewModel"
+        private const val MIN_COMMUNITY_REVIEW_CHARS = 40
+        private const val MAX_COMMUNITY_REVIEW_CHARS = 1400
+        private const val MIN_COMMUNITY_REVIEW_WORDS = 8
+        private const val MIN_COMMUNITY_REVIEW_COUNT = 1
     }
 
     private val _uiState = MutableStateFlow(DetailsUiState())
@@ -201,6 +208,19 @@ class DetailsViewModel @Inject constructor(
     private fun isBlankRating(value: String): Boolean {
         return value.isBlank() || value == "0.0" || value == "0"
     }
+
+    private val reviewWhitespaceRegex = Regex("\\s+")
+    private val reviewMarkdownLinkRegex = Regex("\\[([^\\]]+)]\\([^)]*\\)")
+    private val reviewHtmlTagRegex = Regex("<[^>]*>")
+    private val reviewMarkdownNoiseRegex = Regex("[*_`>#]+")
+    private val reviewSpamRegex = Regex(
+        pattern = "\\b(?:https?://|www\\.|discord\\.gg|t\\.me/|telegram|whatsapp|onlyfans|casino|betting|viagra|loan|crypto|airdrop|promo\\s+code|coupon|download\\s+now|watch\\s+(?:free|online)|free\\s+stream|\\.xyz\\b|\\.top\\b|\\.click\\b|\\.link\\b|\\.site\\b)\\b",
+        option = RegexOption.IGNORE_CASE
+    )
+    private val reviewDomainRegex = Regex(
+        pattern = "\\b[a-z0-9-]+\\.(?:com|net|org|xyz|top|click|link|site|online|shop|info)\\b",
+        option = RegexOption.IGNORE_CASE
+    )
 
     private fun normalizeAutoPlayMinQuality(raw: String?): String {
         return when (raw?.trim()?.lowercase()) {
@@ -298,14 +318,31 @@ class DetailsViewModel @Inject constructor(
                     autoPlayMinQuality = autoPlayMinQuality
                 )
 
+                fun logDetailsLoadFailure(label: String, throwable: Throwable) {
+                    if (throwable is CancellationException) throw throwable
+                    Log.w(TAG, "Failed to load details $label", throwable)
+                }
+
+                suspend fun <T> loadDetailsPart(label: String, block: suspend () -> T): T? {
+                    return runCatching { block() }
+                        .onFailure { logDetailsLoadFailure(label, it) }
+                        .getOrNull()
+                }
+
                 val itemDeferred = async {
-                    if (mediaType == MediaType.TV) {
-                        mediaRepository.getTvDetails(mediaId)
-                    } else {
-                        mediaRepository.getMovieDetails(mediaId)
+                    loadDetailsPart("item") {
+                        if (mediaType == MediaType.TV) {
+                            mediaRepository.getTvDetails(mediaId)
+                        } else {
+                            mediaRepository.getMovieDetails(mediaId)
+                        }
                     }
                 }
-                val watchlistDeferred = async { watchlistRepository.isInWatchlist(mediaType, mediaId) }
+                val watchlistDeferred = async {
+                    loadDetailsPart("watchlist") {
+                        watchlistRepository.isInWatchlist(mediaType, mediaId)
+                    } ?: false
+                }
                 // Fetch real IMDB ID and TVDB ID from TMDB external_ids endpoint
                 val externalIdsDeferred = async { resolveExternalIds(mediaType, mediaId) }
                 val resumeDeferred = async { fetchResumeInfo(mediaId, mediaType, initialSeason, initialEpisode) }
@@ -314,7 +351,11 @@ class DetailsViewModel @Inject constructor(
 
                 // For TV shows, also load episodes
                 val episodesDeferred = if (mediaType == MediaType.TV) {
-                    async { mediaRepository.getSeasonEpisodes(mediaId, seasonToLoad) }
+                    async {
+                        loadDetailsPart("season $seasonToLoad episodes") {
+                            mediaRepository.getSeasonEpisodes(mediaId, seasonToLoad)
+                        } ?: emptyList<Episode>()
+                    }
                 } else null
 
                 // For TV shows, fetch season progress (watched/total per season).
@@ -440,6 +481,17 @@ class DetailsViewModel @Inject constructor(
                         val prefetchEpisode = if (mediaType == MediaType.TV) (initialEpisode ?: 1) else null
                         prefetchStreamsInBackground(imdbId, prefetchSeason, prefetchEpisode)
 
+                        launch {
+                            val imdbRating = runCatching {
+                                mediaRepository.getImdbRating(mediaType, mediaId, imdbId)
+                            }.getOrNull()
+                            if (!imdbRating.isNullOrBlank()) {
+                                updateState { state ->
+                                    state.copy(item = state.item?.copy(imdbRating = imdbRating))
+                                }
+                            }
+                        }
+
                     } else if (tvdbId != null) {
                         updateState { state -> state.copy(tvdbId = tvdbId) }
                     }
@@ -493,7 +545,10 @@ class DetailsViewModel @Inject constructor(
 
                 launch {
                     delay(420L)
-                    val reviews = runCatching { mediaRepository.getReviews(mediaType, mediaId) }.getOrNull()
+                    val externalIds = runCatching { externalIdsDeferred.await() }.getOrNull()
+                    val reviews = runCatching {
+                        loadCommunityReviews(mediaType, mediaId, externalIds?.imdbId)
+                    }.getOrNull()
                     if (!reviews.isNullOrEmpty()) {
                         updateState { state -> state.copy(reviews = reviews) }
                     }
@@ -723,17 +778,21 @@ class DetailsViewModel @Inject constructor(
                             return@launch
                         }
                         // Start immediately with TMDB/title so resolver can warm caches ASAP.
-                        streamRepository.prefetchSeriesVodInfo(
-                            imdbId = null,
-                            title = titleForPrefetch,
-                            tmdbId = mediaId
-                        )
+                        runCatching {
+                            streamRepository.prefetchSeriesVodInfo(
+                                imdbId = null,
+                                title = titleForPrefetch,
+                                tmdbId = mediaId
+                            )
+                        }.onFailure { logDetailsLoadFailure("series VOD prefetch", it) }
                         val externalIds = runCatching { externalIdsDeferred.await() }.getOrNull()
-                        streamRepository.prefetchSeriesVodInfo(
-                            imdbId = externalIds?.imdbId,
-                            title = titleForPrefetch,
-                            tmdbId = mediaId
-                        )
+                        runCatching {
+                            streamRepository.prefetchSeriesVodInfo(
+                                imdbId = externalIds?.imdbId,
+                                title = titleForPrefetch,
+                                tmdbId = mediaId
+                            )
+                        }.onFailure { logDetailsLoadFailure("series VOD prefetch with IMDB ID", it) }
                         val resumeInfo = runCatching { resumeDeferred.await() }.getOrNull()
                         val loadedEpisodes = runCatching { episodesDeferred?.await() }.getOrNull().orEmpty()
                         val targetSeason = initialSeason
@@ -744,13 +803,15 @@ class DetailsViewModel @Inject constructor(
                             ?: resumeInfo?.episode
                             ?: loadedEpisodes.firstOrNull()?.episodeNumber
                             ?: 1
-                        streamRepository.prefetchEpisodeVod(
-                            imdbId = externalIds?.imdbId,
-                            season = targetSeason,
-                            episode = targetEpisode,
-                            title = titleForPrefetch,
-                            tmdbId = mediaId
-                        )
+                        runCatching {
+                            streamRepository.prefetchEpisodeVod(
+                                imdbId = externalIds?.imdbId,
+                                season = targetSeason,
+                                episode = targetEpisode,
+                                title = titleForPrefetch,
+                                tmdbId = mediaId
+                            )
+                        }.onFailure { logDetailsLoadFailure("episode VOD prefetch", it) }
                     }
                 }
             } catch (e: Exception) {
@@ -1304,10 +1365,14 @@ class DetailsViewModel @Inject constructor(
             }
             val resolvedImdbId = currentImdbId
 
+            val orderedAddonIds = streamRepository.installedAddons.first()
+                .filter { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
+                .map { it.id }
             _uiState.value = _uiState.value.copy(
                 isLoadingStreams = true,
                 streams = emptyList(),
-                subtitles = emptyList()
+                subtitles = emptyList(),
+                addonOrderedIds = orderedAddonIds
             )
 
             if (requestMediaType == MediaType.MOVIE) {
@@ -2174,6 +2239,133 @@ class DetailsViewModel @Inject constructor(
         } catch (_: Exception) {
             ExternalIds(null, null)
         }
+    }
+
+    private suspend fun loadCommunityReviews(
+        mediaType: MediaType,
+        mediaId: Int,
+        imdbId: String?
+    ): List<Review> {
+        val traktId = imdbId?.takeIf { it.startsWith("tt", ignoreCase = true) } ?: mediaId.toString()
+        val comments = loadCommunityComments(mediaType, traktId)
+
+        val formalReviews = comments.toFilteredCommunityReviews(requireReview = true)
+        val reviews = if (formalReviews.isNotEmpty()) {
+            formalReviews
+        } else {
+            comments.toFilteredCommunityReviews(requireReview = false)
+        }
+
+        if (reviews.size >= MIN_COMMUNITY_REVIEW_COUNT) return reviews
+
+        return loadFilteredTmdbReviews(mediaType, mediaId)
+    }
+
+    private suspend fun loadCommunityComments(mediaType: MediaType, traktId: String): List<TraktComment> {
+        val liked = if (mediaType == MediaType.TV) {
+            traktRepository.getShowComments(traktId, page = 1, limit = 30, sort = "likes")
+        } else {
+            traktRepository.getMovieComments(traktId, page = 1, limit = 30, sort = "likes")
+        }
+        val newest = if (liked.size < 8) {
+            if (mediaType == MediaType.TV) {
+                traktRepository.getShowComments(traktId, page = 1, limit = 30, sort = "newest")
+            } else {
+                traktRepository.getMovieComments(traktId, page = 1, limit = 30, sort = "newest")
+            }
+        } else {
+            emptyList()
+        }
+        return (liked + newest).distinctBy { it.id }
+    }
+
+    private fun List<TraktComment>.toFilteredCommunityReviews(requireReview: Boolean): List<Review> {
+        return asSequence()
+            .filter { it.parentId == null && !it.spoiler }
+            .filter { !requireReview || it.review }
+            .filterNot { isSpammyReviewText(it.comment) }
+            .sortedWith(
+                compareByDescending<TraktComment> { it.review }
+                    .thenByDescending { it.likes }
+                    .thenByDescending { it.userStats?.rating ?: 0 }
+                    .thenByDescending { it.createdAt }
+            )
+            .mapNotNull { it.toCommunityReview() }
+            .distinctBy { review ->
+                "${review.authorUsername}:${review.content.lowercase(Locale.US).take(140)}"
+            }
+            .take(8)
+            .toList()
+    }
+
+    private suspend fun loadFilteredTmdbReviews(mediaType: MediaType, mediaId: Int): List<Review> {
+        return mediaRepository.getReviews(mediaType, mediaId)
+            .asSequence()
+            .filterNot { isSpammyReviewText(it.content) }
+            .mapNotNull { review ->
+                val cleanedContent = cleanCommunityReviewText(review.content)
+                if (cleanedContent.length !in MIN_COMMUNITY_REVIEW_CHARS..MAX_COMMUNITY_REVIEW_CHARS) {
+                    return@mapNotNull null
+                }
+                val wordCount = cleanedContent.split(reviewWhitespaceRegex).count { it.length > 1 }
+                if (wordCount < MIN_COMMUNITY_REVIEW_WORDS) return@mapNotNull null
+                review.copy(content = cleanedContent)
+            }
+            .distinctBy { review ->
+                "${review.authorUsername.ifBlank { review.author }}:${review.content.lowercase(Locale.US).take(140)}"
+            }
+            .sortedWith(
+                compareByDescending<Review> { it.rating ?: 0f }
+                    .thenByDescending { it.createdAt }
+            )
+            .take(8)
+            .toList()
+    }
+
+    private fun TraktComment.toCommunityReview(): Review? {
+        val cleanedContent = cleanCommunityReviewText(comment)
+        if (cleanedContent.length !in MIN_COMMUNITY_REVIEW_CHARS..MAX_COMMUNITY_REVIEW_CHARS) {
+            return null
+        }
+        val wordCount = cleanedContent.split(reviewWhitespaceRegex).count { it.length > 1 }
+        if (wordCount < MIN_COMMUNITY_REVIEW_WORDS) return null
+
+        val username = user?.username?.trim().orEmpty()
+        val displayName = user?.name
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: username.takeIf { it.isNotBlank() }
+            ?: "Trakt user"
+
+        return Review(
+            id = "trakt_$id",
+            author = displayName,
+            authorUsername = username,
+            authorAvatar = null,
+            content = cleanedContent,
+            rating = userStats?.rating?.takeIf { it > 0 }?.toFloat(),
+            createdAt = createdAt
+        )
+    }
+
+    private fun cleanCommunityReviewText(raw: String): String {
+        return raw
+            .replace(reviewMarkdownLinkRegex, "\$1")
+            .replace(reviewHtmlTagRegex, " ")
+            .replace(reviewMarkdownNoiseRegex, " ")
+            .replace(reviewWhitespaceRegex, " ")
+            .trim()
+    }
+
+    private fun isSpammyReviewText(raw: String): Boolean {
+        val text = raw.trim()
+        if (text.isBlank()) return true
+        if (reviewSpamRegex.containsMatchIn(text) || reviewDomainRegex.containsMatchIn(text)) return true
+        if (text.count { it == '$' } > 2 || text.count { it == '!' } > 6) return true
+
+        val visibleChars = text.count { !it.isWhitespace() }.coerceAtLeast(1)
+        val letters = text.count { it.isLetter() }
+        return letters.toFloat() / visibleChars.toFloat() < 0.45f
     }
 
     private suspend fun appendHomeServerSourcesInBackground(

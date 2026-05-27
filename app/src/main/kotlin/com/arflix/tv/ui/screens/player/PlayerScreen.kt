@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -65,6 +66,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
@@ -212,6 +214,17 @@ fun PlayerScreen(
         deviceType == com.arflix.tv.util.DeviceType.TV &&
             (activityManager?.isLowRamDevice == true || (activityManager?.memoryClass ?: Int.MAX_VALUE) <= 384)
     }
+    val preferExtensionDecoder = remember(deviceType) {
+        deviceType == com.arflix.tv.util.DeviceType.TV &&
+            (
+                Build.HARDWARE.contains("amlogic", ignoreCase = true) ||
+                    Build.MANUFACTURER.contains("sei", ignoreCase = true) ||
+                    Build.MODEL.contains("Box R", ignoreCase = true)
+                )
+    }
+    val allowExceedCodecCapabilities = remember(preferExtensionDecoder) {
+        !preferExtensionDecoder
+    }
 
     // Keep playback in landscape while the player is visible, regardless of the
     // device's auto-rotate lock. Restore the app's prior orientation afterward.
@@ -282,6 +295,7 @@ fun PlayerScreen(
     val nextEpisodeButtonFocusRequester = remember { FocusRequester() }
     val containerFocusRequester = remember { FocusRequester() }
     val skipIntroFocusRequester = remember { FocusRequester() }
+    val subtitleSettingsBtnFocusRequester = remember { FocusRequester() }
 
     // Focus state - 0=Play, 1=Subtitles
     var focusedButton by remember { mutableIntStateOf(0) }
@@ -304,6 +318,16 @@ fun PlayerScreen(
     var subtitleLangIndex by remember { mutableIntStateOf(0) }
     var subtitleTrackIndex by remember { mutableIntStateOf(0) }
     var subtitlePanelFocus by remember { mutableIntStateOf(0) } // 0=lang panel, 1=track panel
+    // In-player subtitle settings panel state
+    var showSubtitleSettings by remember { mutableStateOf(false) }
+    var subtitleSettingsRow by remember { mutableIntStateOf(0) }  // 0=Delay, 1=Size, 2=Vertical
+    var subtitleSyncOffsetMs by remember { mutableLongStateOf(0L) }
+    var subtitleSizePct by remember { mutableIntStateOf(100) }
+    var subtitleVerticalPct by remember {
+        mutableIntStateOf(when (uiState.subtitleOffset) {
+            "Bottom" -> 2; "Low" -> 8; "Medium" -> 15; "High" -> 25; else -> 8
+        })
+    }
     val subtitleGroups = remember(uiState.subtitles, uiState.preferredSubtitleLang, uiState.secondarySubtitleLang, uiState.selectedStream, uiState.isAiAvailable, uiState.aiTargetLanguageName) {
         val streamSource = uiState.selectedStream?.source ?: ""
         val primaryName = getFullLanguageName(uiState.preferredSubtitleLang)
@@ -341,6 +365,9 @@ fun PlayerScreen(
     // Audio tracks from ExoPlayer
     var audioTracks by remember { mutableStateOf<List<AudioTrackInfo>>(emptyList()) }
     var selectedAudioIndex by remember { mutableIntStateOf(0) }
+    // Once the user picks an audio track for the current stream, stop auto-applying
+    // the preferred-language selection so we don't fight their choice.
+    var userPickedAudioForStream by remember { mutableStateOf(false) }
 
     // Error modal focus
     var errorModalFocusIndex by remember { mutableIntStateOf(0) }
@@ -366,6 +393,9 @@ fun PlayerScreen(
     var startupSameSourceRetryCount by remember { mutableIntStateOf(0) }
     var startupSameSourceRefreshAttempted by remember { mutableStateOf(false) }
     var startupUrlLock by remember { mutableStateOf<String?>(null) }
+    var pendingStartupFailover by remember { mutableStateOf(false) }
+    var pendingStartupFailoverMessage by remember { mutableStateOf<String?>(null) }
+    var pendingStartupFailureRecorded by remember { mutableStateOf(false) }
     var dvStartupFallbackStage by remember { mutableIntStateOf(0) } // 0=none, 1=HEVC forced, 2=AVC forced
     var midPlaybackRecoveryAttempts by remember { mutableIntStateOf(0) }
     var blackVideoRecoveryStage by remember { mutableIntStateOf(0) } // 0=none, 1=HEVC forced, 2=AVC forced
@@ -390,6 +420,9 @@ fun PlayerScreen(
         startupSameSourceRetryCount = 0
         startupSameSourceRefreshAttempted = false
         startupUrlLock = null
+        pendingStartupFailover = false
+        pendingStartupFailoverMessage = null
+        pendingStartupFailureRecorded = false
         dvStartupFallbackStage = 0
         rebufferRecoverAttempted = false
         longRebufferCount = 0
@@ -413,7 +446,7 @@ fun PlayerScreen(
 
     // Track current stream index for auto-advancement on error
     var currentStreamIndex by remember { mutableIntStateOf(0) }
-    fun tryAdvanceToNextStream(skipAddonId: String? = null): Boolean {
+    fun tryAdvanceToNextStream(skipAddonId: String? = null, recordCurrentFailure: Boolean = true): Boolean {
         val streams = uiState.streams
         return if (streams.size <= 1) {
             viewModel.onFailoverAttempt(success = false)
@@ -435,6 +468,14 @@ fun PlayerScreen(
             } else {
                 viewModel.onFailoverAttempt(success = true)
                 autoAdvanceAttempts += 1
+                playbackStartupDiag(
+                    "advancing source from index=$currentStreamIndex to index=$nextIndex " +
+                        "from=${uiState.selectedStream?.addonId}/${uiState.selectedStream?.quality}/${uiState.selectedStream?.size} " +
+                        "to=${streams[nextIndex].addonId}/${streams[nextIndex].quality}/${streams[nextIndex].size}"
+                )
+                if (recordCurrentFailure) {
+                    viewModel.onSelectedStreamPlaybackFailure()
+                }
                 currentStreamIndex = nextIndex
                 triedStreamIndexes = triedStreamIndexes + nextIndex
                 userSelectedSourceManually = false
@@ -444,6 +485,9 @@ fun PlayerScreen(
                 startupSameSourceRetryCount = 0
                 startupSameSourceRefreshAttempted = false
                 startupUrlLock = null
+                pendingStartupFailover = false
+                pendingStartupFailoverMessage = null
+                pendingStartupFailureRecorded = false
                 dvStartupFallbackStage = 0
                 rebufferRecoverAttempted = false
                 longRebufferCount = 0
@@ -454,15 +498,43 @@ fun PlayerScreen(
         }
     }
 
+    LaunchedEffect(
+        pendingStartupFailover,
+        uiState.streams,
+        uiState.sourceSearchActive,
+        uiState.streamSelectionNonce
+    ) {
+        if (!pendingStartupFailover || hasPlaybackStarted || userSelectedSourceManually) {
+            return@LaunchedEffect
+        }
+
+        if (tryAdvanceToNextStream(recordCurrentFailure = !pendingStartupFailureRecorded)) {
+            return@LaunchedEffect
+        }
+
+        val sourceSearchStillActive = uiState.sourceSearchActive ||
+            uiState.streamProgress != null ||
+            !uiState.streamLoadPhase.isNullOrBlank()
+        if (!sourceSearchStillActive && !playbackIssueReported) {
+            playbackIssueReported = true
+            pendingStartupFailover = false
+            viewModel.reportPlaybackError(
+                pendingStartupFailoverMessage ?: "Source failed during startup. Try another source."
+            )
+        }
+    }
+
     fun markPlaybackStarted(reason: String) {
         if (hasPlaybackStarted) return
         hasPlaybackStarted = true
+        pendingStartupFailover = false
+        pendingStartupFailoverMessage = null
+        pendingStartupFailureRecorded = false
         midPlaybackRecoveryAttempts = 0
         val startupMs = streamSelectedTime?.let { startedAt ->
             (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
         } ?: 0L
-        android.util.Log.i(
-            "PlaybackStartup",
+        playbackStartupDiag(
             "started reason=$reason startupMs=$startupMs retries=$startupSameSourceRetryCount refresh=$startupSameSourceRefreshAttempted failovers=$autoAdvanceAttempts"
         )
         viewModel.onPlaybackStarted(
@@ -487,7 +559,7 @@ fun PlayerScreen(
     }
     val httpDataSourceFactory = remember(playbackHttpClient) {
         OkHttpDataSource.Factory(playbackHttpClient)
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .setUserAgent(OkHttpProvider.userAgent)
             .setDefaultRequestProperties(baseRequestHeaders)
     }
     val mediaCache = remember(context) { PlaybackCacheSingleton.getInstance(context) }
@@ -518,7 +590,14 @@ fun PlayerScreen(
     // ExoPlayer - tuned for both small and very large (70GB+) files.
     // Byte cap is authoritative (prioritize size over time) so high-bitrate streams
     // cannot exhaust memory on TV devices with limited heap (384-512 MB).
-    val exoPlayer = remember(isConstrainedPlaybackDevice) {
+    val aiRenderersFactory = remember {
+        AiSubtitleRenderersFactory(
+            context = context,
+            translationManager = viewModel.translationManager,
+            scope = coroutineScope
+        )
+    }
+    val exoPlayer = remember(isConstrainedPlaybackDevice, preferExtensionDecoder) {
         val targetBufferBytes = if (isConstrainedPlaybackDevice) {
             48 * 1024 * 1024
         } else {
@@ -539,14 +618,21 @@ fun PlayerScreen(
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
             .setRenderersFactory(
-                AiSubtitleRenderersFactory(
-                    context = context,
-                    translationManager = viewModel.translationManager,
-                    scope = coroutineScope
-                )
+                aiRenderersFactory
                     // Use hardware decoders first; extension decoders only as fallback.
-                    // MODE_PREFER forces software decoding which is slow/jumpy on TV.
-                    .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                    // On this SEI/Amlogic TV the C2 hardware decoder hangs during allocation,
+                    // so prefer the bundled FFmpeg decoder while keeping the selected source.
+                    .setExtensionRendererMode(
+                        if (preferExtensionDecoder) {
+                            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                        } else {
+                            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                        }
+                    )
+                    // Several Android TV firmware builds hang inside CCodec async allocation.
+                    // Keep codec startup on the synchronous path for safer first-frame startup.
+                    .forceDisableMediaCodecAsynchronousQueueing()
+                    .experimentalSetEnableMediaCodecVideoRendererPrewarming(false)
                     // Enable fallback decoders for any format issues
                     .setEnableDecoderFallback(true)
             )
@@ -556,7 +642,7 @@ fun PlayerScreen(
                 androidx.media3.exoplayer.trackselection.DefaultTrackSelector(context).apply {
                     parameters = buildUponParameters()
                         // Prefer original audio language when available
-                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage)
+                        .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
                         // Allow decoder fallback for unsupported codecs
                         .setAllowVideoMixedMimeTypeAdaptiveness(true)
                         .setAllowVideoNonSeamlessAdaptiveness(true)
@@ -564,12 +650,12 @@ fun PlayerScreen(
                         .setAllowAudioMixedMimeTypeAdaptiveness(true)
                         // Disable HDR requirement - play HDR as SDR if needed
                         .setForceLowestBitrate(false)
-                        // DV-first compatibility path:
-                        // allow selector to exceed strict reported caps when needed,
-                        // because many Android TV devices under-report DV profile support.
-                        .setExceedVideoConstraintsIfNecessary(true)
-                        .setExceedAudioConstraintsIfNecessary(true)
-                        .setExceedRendererCapabilitiesIfNecessary(true)
+                        // Keep strict caps only for the Amlogic/SEI TV decoder workaround.
+                        // Phones/tablets and other devices need the older permissive path so
+                        // home-server files with DTS/TrueHD/Atmos/EAC3 tracks still get audio.
+                        .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
+                        .setExceedAudioConstraintsIfNecessary(allowExceedCodecCapabilities)
+                        .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
                         .build()
                 }
             )
@@ -668,8 +754,8 @@ fun PlayerScreen(
                                 selector?.let {
                                     it.parameters = it.buildUponParameters()
                                         .setPreferredVideoMimeType(preferredMime)
-                                        .setExceedRendererCapabilitiesIfNecessary(true)
-                                        .setExceedVideoConstraintsIfNecessary(true)
+                                        .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
+                                        .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
                                         .build()
                                 }
                                 dvStartupFallbackStage += 1
@@ -692,6 +778,13 @@ fun PlayerScreen(
                                     "timed out" in timeoutMessage ||
                                     "sockettimeout" in timeoutMessage ||
                                     "etimedout" in timeoutMessage
+                            val isTransientStartupReadError =
+                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
+                                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                                    error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+                                    isTimeoutError
 
                             // For heavy sources, retry same source first instead of failing immediately.
                             if (!hasPlaybackStarted && heavy && isTimeoutError && startupSameSourceRetryCount < heavyStartupMaxRetries) {
@@ -700,6 +793,26 @@ fun PlayerScreen(
                                 stop()
                                 prepare()
                                 playWhenReady = wasPlaying
+                                return
+                            }
+                            if (!hasPlaybackStarted && isTransientStartupReadError && startupSameSourceRetryCount < 1) {
+                                startupSameSourceRetryCount += 1
+                                val player = this@apply
+                                val wasPlaying = player.playWhenReady
+                                playbackStartupDiag(
+                                    "same-source startup retry code=${error.errorCode} " +
+                                        "streams=${latestUiState.streams.size} sourceSearch=${latestUiState.sourceSearchActive}"
+                                )
+                                coroutineScope.launch {
+                                    delay(650)
+                                    if (!playerReleasedAtomic.get() && !hasPlaybackStarted && latestUiState.selectedStreamUrl != null) {
+                                        runCatching {
+                                            player.stop()
+                                            player.prepare()
+                                            player.playWhenReady = wasPlaying
+                                        }
+                                    }
+                                }
                                 return
                             }
                             if (!hasPlaybackStarted && heavy && isTimeoutError) {
@@ -715,20 +828,36 @@ fun PlayerScreen(
                             // or DNS/SSL/network failures. Even if the user manually picked this
                             // source, a dead URL isn't something they "selected" — it should
                             // skip to the next one rather than spin on a pulsing logo forever.
-                            val isUnrecoverableSource =
-                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
-                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
-                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NO_PERMISSION ||
-                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                            // Guarded below so only autoplay advances; manual selections stay pinned.
                             val isDnsFailure = "unknownhost" in timeoutMessage ||
                                 "unable to resolve host" in timeoutMessage ||
                                 "no address associated with hostname" in timeoutMessage
                             val deadAddonId = if (isDnsFailure) latestUiState.selectedStream?.addonId else null
                             if (!hasPlaybackStarted &&
                                 allowStartupSourceFallback &&
-                                (!userSelectedSourceManually || isUnrecoverableSource) &&
+                                !userSelectedSourceManually &&
                                 tryAdvanceToNextStream(deadAddonId)
                             ) {
+                                return
+                            }
+                            val sourceSearchStillActive = latestUiState.sourceSearchActive ||
+                                latestUiState.streamProgress != null ||
+                                !latestUiState.streamLoadPhase.isNullOrBlank()
+                            if (!hasPlaybackStarted &&
+                                allowStartupSourceFallback &&
+                                !userSelectedSourceManually &&
+                                sourceSearchStillActive
+                            ) {
+                                pendingStartupFailover = true
+                                pendingStartupFailoverMessage = playbackErrorMessageFor(error, hasPlaybackStarted)
+                                if (!pendingStartupFailureRecorded) {
+                                    pendingStartupFailureRecorded = true
+                                    viewModel.onSelectedStreamPlaybackFailure()
+                                }
+                                playbackStartupDiag(
+                                    "waiting for more sources after startup error code=${error.errorCode} " +
+                                        "streams=${latestUiState.streams.size}"
+                                )
                                 return
                             }
                             if (!playbackIssueReported) {
@@ -803,6 +932,7 @@ fun PlayerScreen(
                                     val lang = format.language ?: matched?.lang ?: "und"
                                     val label = format.label ?: matched?.label ?: getFullLanguageName(lang)
                                     val isExternal = matched?.url?.isNotBlank() == true
+                                    val isForced = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0
                                     textTracks.add(Subtitle(
                                         id = matched?.id ?: formatTrackId.ifBlank { "embedded_${groupIndex}_$i" },
                                         url = matched?.url.orEmpty(),
@@ -811,7 +941,8 @@ fun PlayerScreen(
                                         provider = matched?.provider.orEmpty(),
                                         isEmbedded = !isExternal,
                                         groupIndex = groupIndex,
-                                        trackIndex = i
+                                        trackIndex = i,
+                                        isForced = isForced,
                                     ))
                                 }
                             }
@@ -874,9 +1005,35 @@ fun PlayerScreen(
         val trackSelector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
         if (trackSelector != null) {
             val params = trackSelector.buildUponParameters()
-                .setPreferredAudioLanguage(uiState.preferredAudioLanguage)
+                .setPreferredAudioLanguage(uiState.preferredAudioLanguage.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) })
                 .build()
             trackSelector.parameters = params
+        }
+    }
+
+    // Reset the manual-pick guard whenever the playing stream changes so the
+    // preferred-language auto-selection runs fresh for the new file.
+    LaunchedEffect(uiState.selectedStreamUrl) {
+        userPickedAudioForStream = false
+    }
+
+    // Deterministically apply the preferred audio language once tracks are known.
+    // ExoPlayer's setPreferredAudioLanguage only matches on the container's language
+    // tag, so Polish "Lektor"/"Dubbing" tracks that ship with a missing or non-standard
+    // tag get skipped and playback falls back to the default track (often Russian on
+    // multi-audio releases). We additionally match on the track label here so the user's
+    // chosen language wins regardless of how the track was tagged.
+    LaunchedEffect(audioTracks, uiState.preferredAudioLanguage, userPickedAudioForStream) {
+        if (playerReleased || userPickedAudioForStream) return@LaunchedEffect
+        if (audioTracks.size < 2) return@LaunchedEffect
+        val preferred = uiState.preferredAudioLanguage.trim()
+        if (preferred.isBlank() || preferred.equals("none", ignoreCase = true)) return@LaunchedEffect
+        val matchIndex = findPreferredAudioTrackIndex(audioTracks, preferred)
+        if (matchIndex == null || matchIndex == selectedAudioIndex) return@LaunchedEffect
+        audioTracks.getOrNull(matchIndex)?.let { track ->
+            applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
+                selectedAudioIndex = it
+            }
         }
     }
 
@@ -904,7 +1061,18 @@ fun PlayerScreen(
 
     LaunchedEffect(uiState.selectedStreamUrl, uiState.streams) {
         val currentUrl = uiState.selectedStreamUrl ?: return@LaunchedEffect
-        val idx = uiState.streams.indexOfFirst { it.url == currentUrl }
+        val selected = uiState.selectedStream
+        val idxByUrl = uiState.streams.indexOfFirst { it.url == currentUrl }
+        val idx = if (idxByUrl >= 0) {
+            idxByUrl
+        } else {
+            uiState.streams.indexOfFirst { candidate ->
+                selected != null &&
+                    candidate.addonId == selected.addonId &&
+                    candidate.source == selected.source &&
+                    candidate.behaviorHints?.bingeGroup == selected.behaviorHints?.bingeGroup
+            }
+        }
         if (idx >= 0) {
             currentStreamIndex = idx
             if (isAutoAdvancing) {
@@ -970,6 +1138,9 @@ fun PlayerScreen(
                 startupHardFailureReported = false
                 startupSameSourceRetryCount = 0
                 startupSameSourceRefreshAttempted = false
+                pendingStartupFailover = false
+                pendingStartupFailoverMessage = null
+                pendingStartupFailureRecorded = false
                 dvStartupFallbackStage = 0
                 blackVideoRecoveryStage = 0
                 blackVideoReadySinceMs = null
@@ -1018,8 +1189,7 @@ fun PlayerScreen(
             // No manual startup gate — trust the CDN/debrid to deliver fast enough.
             exoPlayer.playWhenReady = true
             exoPlayer.prepare()
-            android.util.Log.i(
-                "PlaybackStartup",
+            playbackStartupDiag(
                 "prepare issued setupMs=${System.currentTimeMillis() - prepareStartMs} source=${uiState.selectedStream?.addonId}/${uiState.selectedStream?.quality}/${uiState.selectedStream?.size} host=${runCatching { Uri.parse(url).host }.getOrNull().orEmpty()}"
             )
 
@@ -1161,7 +1331,7 @@ fun PlayerScreen(
 
     // Auto-hide controls and return focus to container
     LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying && !showSubtitleMenu && !showSourceMenu) {
+        if (showControls && isPlaying && !showSubtitleMenu && !showSourceMenu && !showSubtitleSettings) {
             delay(5000)
             showControls = false
             // Return focus to container so it can receive key events
@@ -1170,6 +1340,11 @@ fun PlayerScreen(
                 containerFocusRequester.requestFocus()
             } catch (_: Exception) {}
         }
+    }
+
+    // Sync in-player subtitle delay with the renderer factory (microseconds = ms * 1000)
+    LaunchedEffect(subtitleSyncOffsetMs) {
+        aiRenderersFactory.syncOffsetUs.set(subtitleSyncOffsetMs * 1000L)
     }
 
     // Request focus on play button when controls are shown.
@@ -1284,52 +1459,43 @@ fun PlayerScreen(
 
             // Initial startup watchdog: while first frame has not really started, enforce bounded startup.
             val startupPending = uiState.selectedStreamUrl != null && !hasPlaybackStarted
-            val startupStalled =
-                (
-                    exoPlayer.playbackState == Player.STATE_BUFFERING ||
-                        (exoPlayer.playbackState == Player.STATE_READY && !exoPlayer.isPlaying) ||
-                        exoPlayer.playbackState == Player.STATE_IDLE
-                )
             if (startupPending) {
                 val selectedAt = streamSelectedTime ?: System.currentTimeMillis()
                 val startupBufferDuration = System.currentTimeMillis() - selectedAt
                 val isHeavyStartupSource = isLikelyHeavyStream(uiState.selectedStream)
-                if (startupStalled && startupBufferDuration > initialBufferingTimeoutMs) {
-                    if (!startupRecoverAttempted) {
-                        startupRecoverAttempted = true
-                        if (allowStartupSourceFallback &&
-                            !userSelectedSourceManually &&
-                            tryAdvanceToNextStream()
-                        ) {
-                            // auto advanced to a fallback stream
-                        } else if (!isHeavyStartupSource) {
-                            exoPlayer.playWhenReady = true
-                        }
+                if (!startupRecoverAttempted && startupBufferDuration > initialBufferingTimeoutMs) {
+                    startupRecoverAttempted = true
+                    playbackStartupDiag(
+                        "startup timeout elapsedMs=$startupBufferDuration state=${exoPlayer.playbackState} " +
+                            "isPlaying=${exoPlayer.isPlaying} heavy=$isHeavyStartupSource manual=$userSelectedSourceManually"
+                    )
+                    if (!isHeavyStartupSource) {
+                        exoPlayer.playWhenReady = true
                     }
                 }
                 val hardTimeoutMs = (initialBufferingTimeoutMs + if (isHeavyStartupSource) 12_000L else 8_000L)
                     .coerceAtMost(45_000L)
                 if (!startupHardFailureReported && startupBufferDuration > hardTimeoutMs) {
+                    playbackStartupDiag(
+                        "hard startup timeout elapsedMs=$startupBufferDuration hardTimeoutMs=$hardTimeoutMs " +
+                            "state=${exoPlayer.playbackState} failovers=$autoAdvanceAttempts"
+                    )
                     if (allowStartupSourceFallback &&
                         !userSelectedSourceManually &&
                         tryAdvanceToNextStream()
                     ) {
-                        // auto advanced to a fallback stream
-                    } else if (!startupSameSourceRefreshAttempted) {
-                        startupSameSourceRefreshAttempted = true
-                        uiState.selectedStream?.let { viewModel.selectStream(it, exoPlayer.currentPosition) }
-                    } else {
-                        startupHardFailureReported = true
-                        playbackIssueReported = true
-                        viewModel.onSelectedStreamPlaybackFailure()
-                        viewModel.reportPlaybackError(
-                            if (autoAdvanceAttempts > 0 || startupSameSourceRetryCount > 0) {
-                                "Source did not start after retries/fallback. Try another source."
-                            } else {
-                                "Source did not start in time. Try another source."
-                            }
-                        )
+                        continue
                     }
+                    startupHardFailureReported = true
+                    playbackIssueReported = true
+                    viewModel.onSelectedStreamPlaybackFailure()
+                    viewModel.reportPlaybackError(
+                        if (autoAdvanceAttempts > 0 || startupSameSourceRetryCount > 0) {
+                            "Source did not start after retries. Try another source."
+                        } else {
+                            "Source did not start in time. Try another source."
+                        }
+                    )
                 }
             }
 
@@ -1362,8 +1528,8 @@ fun PlayerScreen(
                         selector?.let {
                             it.parameters = it.buildUponParameters()
                                 .setPreferredVideoMimeType(preferredMime)
-                                .setExceedRendererCapabilitiesIfNecessary(true)
-                                .setExceedVideoConstraintsIfNecessary(true)
+                                .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
+                                .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
                                 .build()
                         }
                         val resumeAt = exoPlayer.currentPosition.coerceAtLeast(0L)
@@ -1550,8 +1716,17 @@ fun PlayerScreen(
         }
     }
 
+    BackHandler(enabled = showSubtitleSettings) {
+        showSubtitleSettings = false
+        showControls = true
+        coroutineScope.launch {
+            delay(120)
+            runCatching { subtitleSettingsBtnFocusRequester.requestFocus() }
+        }
+    }
+
     BackHandler(
-        enabled = !showSubtitleMenu && !showSourceMenu && !showNextEpisodePrompt && uiState.error == null
+        enabled = !showSubtitleMenu && !showSourceMenu && !showNextEpisodePrompt && !showSubtitleSettings && uiState.error == null
     ) {
         if (showControls) {
             showControls = false
@@ -1719,7 +1894,7 @@ fun PlayerScreen(
                     }
 
                     if ((event.key == Key.Back || event.key == Key.Escape) &&
-                        !showSubtitleMenu && !showSourceMenu && !showNextEpisodePrompt && uiState.error == null
+                        !showSubtitleMenu && !showSourceMenu && !showNextEpisodePrompt && !showSubtitleSettings && uiState.error == null
                     ) {
                         if (showControls) {
                             showControls = false
@@ -1754,6 +1929,46 @@ fun PlayerScreen(
                                 true
                             }
                             else -> false
+                        }
+                    }
+
+                    // Handle subtitle settings panel
+                    if (showSubtitleSettings) {
+                        return@onKeyEvent when (event.key) {
+                            Key.DirectionUp -> {
+                                subtitleSettingsRow = (subtitleSettingsRow - 1).coerceAtLeast(0)
+                                true
+                            }
+                            Key.DirectionDown -> {
+                                subtitleSettingsRow = (subtitleSettingsRow + 1).coerceAtMost(2)
+                                true
+                            }
+                            Key.DirectionLeft -> {
+                                when (subtitleSettingsRow) {
+                                    0 -> subtitleSyncOffsetMs = (subtitleSyncOffsetMs - 100L).coerceAtLeast(-10000L)
+                                    1 -> subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50)
+                                    2 -> subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0)
+                                }
+                                true
+                            }
+                            Key.DirectionRight -> {
+                                when (subtitleSettingsRow) {
+                                    0 -> subtitleSyncOffsetMs = (subtitleSyncOffsetMs + 100L).coerceAtMost(10000L)
+                                    1 -> subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(300)
+                                    2 -> subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50)
+                                }
+                                true
+                            }
+                            Key.Back, Key.Escape -> {
+                                showSubtitleSettings = false
+                                showControls = true
+                                coroutineScope.launch {
+                                    delay(120)
+                                    runCatching { subtitleSettingsBtnFocusRequester.requestFocus() }
+                                }
+                                true
+                            }
+                            else -> true
                         }
                     }
 
@@ -1839,6 +2054,7 @@ fun PlayerScreen(
                             Key.Enter, Key.DirectionCenter -> {
                                 if (subtitleMenuTab == 1) {
                                     audioTracks.getOrNull(subtitleMenuIndex)?.let { track ->
+                                        userPickedAudioForStream = true
                                         applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
                                             selectedAudioIndex = it
                                         }
@@ -2064,6 +2280,13 @@ fun PlayerScreen(
                 update = { playerView ->
                     playerView.player = exoPlayer
                     playerView.resizeMode = playerResizeMode
+                    playerView.subtitleView?.apply {
+                        val baseSizeSp = when (subtitleSizePref) {
+                            "Small" -> 18f; "Large" -> 30f; "Extra Large" -> 36f; else -> 24f
+                        }
+                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, baseSizeSp * (subtitleSizePct / 100f))
+                        setBottomPaddingFraction((subtitleVerticalPct / 100f).coerceIn(0f, 0.5f))
+                    }
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -2188,85 +2411,29 @@ fun PlayerScreen(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
-                        .padding(start = 24.dp, top = 8.dp, end = 24.dp),
+                        .padding(
+                            start = if (isTouchDevice) 20.dp else 28.dp,
+                            top = if (isTouchDevice) 18.dp else 30.dp,
+                            end = if (isTouchDevice) 24.dp else 48.dp
+                        )
+                        .zIndex(4f),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    // Left side - clearlogo/title and episode info
-                    Column(modifier = Modifier.weight(1f)) {
-                        if (!uiState.logoUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = uiState.logoUrl,
-                                contentDescription = uiState.title,
-                                alignment = Alignment.CenterStart,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .width(240.dp)
-                            )
-                        } else {
-                            Text(
-                                text = uiState.title,
-                                style = ArflixTypography.sectionTitle.copy(
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        if (seasonNumber != null && episodeNumber != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ,
-                                modifier = Modifier.padding(top = 6.dp)
-                            ) {
-                                Text(
-                                    text = "S$seasonNumber E$episodeNumber",
-                                    style = ArflixTypography.body.copy(fontSize = 16.sp),
-                                    color = TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                // Episode title would be shown here if available
-                            }
-                        }
-                        // Source info
-                        uiState.selectedStream?.let { stream ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(top = 4.dp)
-                            ) {
-                                Text(
-                                    text = stream.quality,
-                                    style = ArflixTypography.caption.copy(fontSize = 12.sp),
-                                    color = playerAccent,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                stream.sizeBytes?.let { size ->
-                                    Text(
-                                        text = "•",
-                                        style = ArflixTypography.caption,
-                                        color = TextSecondary.copy(alpha = 0.5f)
-                                    )
-                                    Text(
-                                        text = formatFileSize(size),
-                                        style = ArflixTypography.caption.copy(fontSize = 12.sp),
-                                        color = TextSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    val isPaused = hasPlaybackStarted && !isPlaying && !isBuffering
+
+                    PlayerMetadataChrome(
+                        uiState = uiState,
+                        mediaType = mediaType,
+                        seasonNumber = seasonNumber,
+                        episodeNumber = episodeNumber,
+                        isPaused = isPaused,
+                        accentColor = playerAccent,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
 
                     // Right side - Ends At + Clock
-                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
+                    Column(horizontalAlignment = Alignment.End) {
                         val currentTime = remember { mutableStateOf("") }
                         val endsAtTime = remember { mutableStateOf("") }
                         LaunchedEffect(duration, currentPosition, clockFormat) {
@@ -2281,10 +2448,24 @@ fun PlayerScreen(
                             }
                         }
                         if (!isTouchDevice) {
-                            Text(currentTime.value, style = ArflixTypography.body.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium), color = TextSecondary, maxLines = 1)
+                            Text(
+                                currentTime.value,
+                                style = ArflixTypography.sectionTitle.copy(
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = TextPrimary.copy(alpha = 0.92f),
+                                maxLines = 1
+                            )
                         }
                         if (endsAtTime.value.isNotBlank()) {
-                            Text("${stringResource(R.string.ends_at)} ${endsAtTime.value}", style = ArflixTypography.caption.copy(fontSize = 12.sp), color = TextSecondary.copy(alpha = 0.7f), maxLines = 1, modifier = Modifier.padding(top = 2.dp))
+                            Text(
+                                "${stringResource(R.string.ends_at)} ${endsAtTime.value}",
+                                style = ArflixTypography.caption.copy(fontSize = 12.sp),
+                                color = TextPrimary.copy(alpha = 0.72f),
+                                maxLines = 1,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
                         }
                     }
                 }
@@ -2399,6 +2580,26 @@ fun PlayerScreen(
                                 }
                             },
                             onLeftKey = { if (mediaType == MediaType.TV) nextEpisodeButtonFocusRequester.requestFocus() else aspectButtonFocusRequester.requestFocus() },
+                            onRightKey = { subtitleSettingsBtnFocusRequester.requestFocus() },
+                            onDownKey = { trackbarFocusRequester.requestFocus() })
+
+                        Spacer(modifier = Modifier.width(gap))
+
+                        // Subtitle settings (delay, size, vertical position)
+                        PlayerIconButton(icon = Icons.Default.Tune, contentDescription = "Subtitle Settings",
+                            focusRequester = subtitleSettingsBtnFocusRequester, size = smallBtn, iconSize = smallIcon,
+                            onFocusChanged = {},
+                            onClick = {
+                                showSubtitleSettings = !showSubtitleSettings
+                                if (showSubtitleSettings) {
+                                    subtitleSettingsRow = 0
+                                    coroutineScope.launch {
+                                        delay(50)
+                                        runCatching { containerFocusRequester.requestFocus() }
+                                    }
+                                }
+                            },
+                            onLeftKey = { subtitleButtonFocusRequester.requestFocus() },
                             onRightKey = { sourceButtonFocusRequester.requestFocus() },
                             onDownKey = { trackbarFocusRequester.requestFocus() })
 
@@ -2409,7 +2610,7 @@ fun PlayerScreen(
                             focusRequester = sourceButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = { showSourceMenu = true; showControls = true },
-                            onLeftKey = { subtitleButtonFocusRequester.requestFocus() },
+                            onLeftKey = { subtitleSettingsBtnFocusRequester.requestFocus() },
                             onRightKey = { if (isTouchDevice) playButtonFocusRequester.requestFocus() else rewindButtonFocusRequester.requestFocus() },
                             onDownKey = { trackbarFocusRequester.requestFocus() })
 
@@ -2565,6 +2766,28 @@ fun PlayerScreen(
             }
         }
 
+        // In-player subtitle settings panel (Delay, Size, Vertical Position)
+        AnimatedVisibility(
+            visible = showSubtitleSettings && hasPlaybackStarted,
+            enter = fadeIn(animTween(150)),
+            exit = fadeOut(animTween(150)),
+            modifier = Modifier.align(Alignment.Center).zIndex(8f)
+        ) {
+            PlayerSubtitleSettingsPanel(
+                selectedRow = subtitleSettingsRow,
+                syncOffsetMs = subtitleSyncOffsetMs,
+                sizePct = subtitleSizePct,
+                verticalPct = subtitleVerticalPct,
+                onRowSelect = { subtitleSettingsRow = it },
+                onOffsetDecrease = { subtitleSyncOffsetMs = (subtitleSyncOffsetMs - 100L).coerceAtLeast(-10000L) },
+                onOffsetIncrease = { subtitleSyncOffsetMs = (subtitleSyncOffsetMs + 100L).coerceAtMost(10000L) },
+                onSizeDecrease = { subtitleSizePct = (subtitleSizePct - 10).coerceAtLeast(50) },
+                onSizeIncrease = { subtitleSizePct = (subtitleSizePct + 10).coerceAtMost(300) },
+                onVerticalDecrease = { subtitleVerticalPct = (subtitleVerticalPct - 1).coerceAtLeast(0) },
+                onVerticalIncrease = { subtitleVerticalPct = (subtitleVerticalPct + 1).coerceAtMost(50) }
+            )
+        }
+
         // Subtitle/Audio menu
         AnimatedVisibility(
             visible = showSubtitleMenu,
@@ -2604,6 +2827,7 @@ fun PlayerScreen(
                     }
                 },
                 onSelectAudio = { track ->
+                    userPickedAudioForStream = true
                     applyAudioTrackSelection(exoPlayer, track, audioTracks)?.let {
                         selectedAudioIndex = it
                     }
@@ -3251,6 +3475,53 @@ private fun applyAudioTrackSelection(
 }
 
 /**
+ * Find the audio track that best matches the user's preferred audio language.
+ *
+ * Matching is done on the canonical language name (so "pl", "pol" and "polish" all
+ * resolve to the same language) and falls back to the track label, which is where
+ * Polish releases commonly carry the language for tracks that ship with a missing or
+ * non-standard language tag (e.g. "Lektor PL", "Dubbing", "Polski"). Returns the index
+ * into [audioTracks] of the first match, or `null` when no track matches.
+ */
+private fun findPreferredAudioTrackIndex(
+    audioTracks: List<AudioTrackInfo>,
+    preferredCode: String
+): Int? {
+    val prefName = getFullLanguageName(preferredCode)
+    if (prefName == "Unknown") return null
+    val labelHints = nativeAudioLanguageHints(preferredCode) + prefName.lowercase()
+    val index = audioTracks.indexOfFirst { track ->
+        val trackLangName = getFullLanguageName(track.language)
+        if (trackLangName != "Unknown" && trackLangName.equals(prefName, ignoreCase = true)) {
+            return@indexOfFirst true
+        }
+        val label = track.label?.lowercase()?.trim().orEmpty()
+        label.isNotBlank() && labelHints.any { hint -> hint.isNotBlank() && label.contains(hint) }
+    }
+    return index.takeIf { it >= 0 }
+}
+
+/**
+ * Common label hints (native names / colloquial terms) used to recognise an audio
+ * track's language when its language tag is missing or non-standard. Kept conservative
+ * to avoid false positives; covers the languages most affected by untagged tracks.
+ */
+private fun nativeAudioLanguageHints(preferredCode: String): List<String> {
+    return when (getFullLanguageName(preferredCode)) {
+        "Polish" -> listOf("polski", "polskie", "polsku", "lektor", "dubbing pl")
+        "Russian" -> listOf("русский", "русская", "rus")
+        "Ukrainian" -> listOf("українська", "ukr")
+        "German" -> listOf("deutsch")
+        "French" -> listOf("français", "francais")
+        "Spanish" -> listOf("español", "espanol", "castellano")
+        "Italian" -> listOf("italiano")
+        "Portuguese" -> listOf("português", "portugues")
+        "Czech" -> listOf("čeština", "cesky", "dabing")
+        else -> emptyList()
+    }
+}
+
+/**
  * Language code to full name mapping
  */
 private fun getFullLanguageName(code: String?): String {
@@ -3543,12 +3814,15 @@ private fun SubtitleMenu(
                                         val badge: String?
                                         val detail: String?
                                         if (subtitle.isEmbedded && subtitle.url.isBlank()) {
-                                            badge = "Built-in"
+                                            val langFullName = getFullLanguageName(subtitle.lang)
+                                            val trackLabel = subtitle.label.takeIf { it.isNotBlank() &&
+                                                !it.equals(langFullName, ignoreCase = true) }
+                                            badge = if (trackLabel != null) "Built-in · $trackLabel" else "Built-in"
                                             detail = null
                                         } else {
                                             badge = subtitle.provider.ifBlank { null }
                                             detail = subtitle.id
-                                                .replace(Regex("^\\[[^]]+]"), "").trim()
+                                                .replace(PlayerScreenRegexes.BRACKET_REGEX, "").trim()
                                                 .ifBlank { subtitle.id }
                                                 .ifBlank { null }
                                         }
@@ -3800,7 +4074,11 @@ private fun SubtitleMenu(
                                     val langFullName = getFullLanguageName(sub.lang)
                                     val displayName = if (score > 0) "$langFullName ($score%)" else langFullName
                                     val description = when {
-                                        sub.isEmbedded && sub.url.isBlank() -> "Built-in"
+                                        sub.isEmbedded && sub.url.isBlank() -> {
+                                            val trackLabel = sub.label.takeIf { it.isNotBlank() &&
+                                                !it.equals(langFullName, ignoreCase = true) }
+                                            if (trackLabel != null) "Built-in · $trackLabel" else "Built-in"
+                                        }
                                         sub.provider.isNotBlank() -> sub.provider
                                         else -> null
                                     }
@@ -4281,11 +4559,10 @@ private fun parseSizeToBytes(sizeStr: String): Long {
 
     val normalized = sizeStr.uppercase()
         .replace(",", ".")
-        .replace(Regex("\\s+"), " ")
+        .replace(PlayerScreenRegexes.MULTI_SPACE_REGEX, " ")
         .trim()
 
-    val pattern = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
-    val match = pattern.find(normalized) ?: return 0L
+    val match = PlayerScreenRegexes.SIZE_REGEX.find(normalized) ?: return 0L
     val number = match.groupValues[1].toDoubleOrNull() ?: return 0L
 
     val multiplier = when (match.groupValues[2]) {
@@ -4338,6 +4615,14 @@ private fun isLikelyDolbyVisionStream(stream: StreamSource?): Boolean {
         text.contains(" dv ") ||
         text.contains(" dvp") ||
         text.contains("hdr10+dv")
+}
+
+private const val PLAYER_SCREEN_DIAGNOSTICS = true
+
+private fun playbackStartupDiag(message: String) {
+    if (PLAYER_SCREEN_DIAGNOSTICS) {
+        System.err.println("[PlaybackStartup] $message")
+    }
 }
 
 private fun resolveFrameRateOffStrategy(): Int {
@@ -4415,7 +4700,284 @@ private class PlaybackCookieJar : CookieJar {
     }
 }
 
+@Composable
+private fun PlayerMetadataChrome(
+    uiState: PlayerUiState,
+    mediaType: MediaType,
+    seasonNumber: Int?,
+    episodeNumber: Int?,
+    isPaused: Boolean,
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val displayTitle = when {
+        mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank() -> uiState.episodeTitle
+        else -> uiState.title
+    }
+    val metaLine = buildPlaybackMetaLine(uiState, mediaType, seasonNumber, episodeNumber)
+    val overview = uiState.overview?.trim().orEmpty()
+    val logoHeight = 44.dp
+    val logoWidth = 230.dp
+    val chromeHeight = when {
+        isPaused && overview.isNotBlank() -> 138.dp
+        isPaused -> 104.dp
+        else -> 86.dp
+    }
+
+    Row(
+        modifier = modifier.widthIn(max = if (isPaused) 620.dp else 520.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .width(2.dp)
+                .height(chromeHeight)
+                .background(accentColor.copy(alpha = if (isPaused) 0.78f else 0.46f))
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(
+            modifier = Modifier.widthIn(max = if (isPaused) 560.dp else 470.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isPaused) 5.dp else 4.dp)
+        ) {
+            if (!uiState.logoUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = uiState.logoUrl,
+                    contentDescription = uiState.title,
+                    alignment = Alignment.CenterStart,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .width(logoWidth)
+                        .height(logoHeight)
+                )
+            } else if (displayTitle.isNotBlank()) {
+                Text(
+                    text = displayTitle,
+                    style = ArflixTypography.sectionTitle.copy(
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (!uiState.logoUrl.isNullOrBlank() && displayTitle.isNotBlank()) {
+                Text(
+                    text = displayTitle,
+                    style = ArflixTypography.sectionTitle.copy(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (metaLine.isNotBlank()) {
+                Text(
+                    text = metaLine,
+                    style = ArflixTypography.caption.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = TextPrimary.copy(alpha = 0.78f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (isPaused && overview.isNotBlank()) {
+                Text(
+                    text = overview,
+                    style = ArflixTypography.body.copy(fontSize = 13.sp),
+                    color = TextPrimary.copy(alpha = 0.76f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 540.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun buildPlaybackMetaLine(
+    uiState: PlayerUiState,
+    mediaType: MediaType,
+    seasonNumber: Int?,
+    episodeNumber: Int?
+): String {
+    val parts = mutableListOf<String>()
+    if (mediaType == MediaType.TV) {
+        seasonNumber?.let { parts.add("Season $it") }
+        episodeNumber?.let { parts.add("Episode $it") }
+    } else {
+        uiState.releaseYear?.trim()?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+    }
+
+    uiState.selectedStream?.let { stream ->
+        stream.quality.trim().takeIf { it.isNotBlank() }?.let { parts.add(it) }
+        val size = stream.size.trim().takeIf { it.isNotBlank() }
+            ?: stream.sizeBytes?.let { formatFileSize(it) }
+        size?.let { parts.add(it) }
+    }
+
+    return parts.distinct().joinToString(" | ")
+}
+
 private fun subtitleMatchScore(streamSource: String, subtitle: Subtitle): Int {
     if (subtitle.isEmbedded) return 100
     return weightedSubtitleScore(streamSource, subtitle.id)
+}
+
+private object PlayerScreenRegexes {
+    val BRACKET_REGEX = Regex("^\\[[^]]+]")
+    val MULTI_SPACE_REGEX = Regex("\\s+")
+    val SIZE_REGEX = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlayerSubtitleSettingsPanel(
+    selectedRow: Int,
+    syncOffsetMs: Long,
+    sizePct: Int,
+    verticalPct: Int,
+    onRowSelect: (Int) -> Unit,
+    onOffsetDecrease: () -> Unit,
+    onOffsetIncrease: () -> Unit,
+    onSizeDecrease: () -> Unit,
+    onSizeIncrease: () -> Unit,
+    onVerticalDecrease: () -> Unit,
+    onVerticalIncrease: () -> Unit
+) {
+    val accent = LocalFocusBorderColorOverride.current ?: Color.White
+
+    val absMs = if (syncOffsetMs < 0) -syncOffsetMs else syncOffsetMs
+    val offsetLabel = if (syncOffsetMs == 0L) "0.0s"
+    else "${if (syncOffsetMs > 0) "+" else "-"}${absMs / 1000}.${(absMs % 1000) / 100}s"
+
+    Column(
+        modifier = Modifier
+            .width(280.dp)
+            .background(Color.Black.copy(alpha = 0.92f), RoundedCornerShape(16.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.subtitle_settings_title),
+            style = ArflixTypography.sectionTitle.copy(fontSize = 16.sp),
+            color = Color.White,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        PlayerSubtitleSettingRow(
+            label = stringResource(R.string.subtitle_delay),
+            value = offsetLabel,
+            selected = selectedRow == 0,
+            accent = accent,
+            onClick = { onRowSelect(0) },
+            onDecrease = onOffsetDecrease,
+            onIncrease = onOffsetIncrease
+        )
+        PlayerSubtitleSettingRow(
+            label = stringResource(R.string.subtitle_size_label),
+            value = "${sizePct}%",
+            selected = selectedRow == 1,
+            accent = accent,
+            onClick = { onRowSelect(1) },
+            onDecrease = onSizeDecrease,
+            onIncrease = onSizeIncrease
+        )
+        PlayerSubtitleSettingRow(
+            label = stringResource(R.string.subtitle_vertical_position),
+            value = "${verticalPct}%",
+            selected = selectedRow == 2,
+            accent = accent,
+            onClick = { onRowSelect(2) },
+            onDecrease = onVerticalDecrease,
+            onIncrease = onVerticalIncrease
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlayerSubtitleSettingRow(
+    label: String,
+    value: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit
+) {
+    val rowBg = if (selected) Color.White.copy(alpha = 0.08f) else Color.Transparent
+    val valueColor = if (selected) accent else Color.White
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg, RoundedCornerShape(10.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = ArflixTypography.label.copy(fontWeight = FontWeight.Normal),
+            color = Color.White.copy(alpha = 0.55f)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDecrease
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "−",
+                    style = ArflixTypography.body.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
+            Text(
+                text = value,
+                style = ArflixTypography.body.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp),
+                color = valueColor
+            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onIncrease
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "+",
+                    style = ArflixTypography.body.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
+        }
+    }
 }

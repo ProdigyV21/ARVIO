@@ -49,8 +49,12 @@ private val FILE_EXT_RE = Regex("\\.(mkv|mp4|avi|mov|wmv|flv|m4v|ts|m2ts)$", Reg
 // Merge "S06 E01" written as separate tokens back into "S06E01"
 private val SPLIT_SEASON_RE = Regex("(s\\d{1,2})\\s+(e\\d{1,2})", RegexOption.IGNORE_CASE)
 
+private val PURE_NUMBERS_RE = Regex("\\d+")
+private val SUBTITLE_BRACKET_RE = Regex("^\\[[^]]+]")
+private val SEPARATOR_RE = Regex("[.\\-_\\s]+")
+
 private fun tokenWeight(token: String): Int = when {
-    token.matches(Regex("\\d+")) -> 0               // pure numbers: noise
+    token.matches(PURE_NUMBERS_RE) -> 0               // pure numbers: noise
     EPISODE_RE.matches(token) -> 8                  // S01E01
     token in RESOLUTIONS -> 3
     token in SOURCES -> 4
@@ -77,7 +81,7 @@ private fun tokenWeight(token: String): Int = when {
 fun weightedSubtitleScore(streamSource: String, subtitleId: String): Int {
     if (streamSource.isBlank() || subtitleId.isBlank()) return 0
 
-    val cleanId = subtitleId.replace(Regex("^\\[[^]]+]"), "").trim()
+    val cleanId = subtitleId.replace(SUBTITLE_BRACKET_RE, "").trim()
 
     // Normalise "S06 E01" → "S06E01" so space-separated season/episode merges with combined form
     fun normalise(s: String) = SPLIT_SEASON_RE.replace(s) { it.groupValues[1] + it.groupValues[2] }
@@ -98,9 +102,8 @@ fun weightedSubtitleScore(streamSource: String, subtitleId: String): Int {
     val (streamBody, streamGroup) = bodyAndGroup(normalise(streamSource))
     val (subBody, subGroup)       = bodyAndGroup(normalise(cleanId))
 
-    val sep = Regex("[.\\-_\\s]+")
-    val streamTokens = streamBody.lowercase().split(sep).filter { it.length > 1 }
-    val subTokenSet  = subBody.lowercase().split(sep).filter { it.length > 1 }.toSet()
+    val streamTokens = streamBody.lowercase().split(SEPARATOR_RE).filter { it.length > 1 }
+    val subTokenSet  = subBody.lowercase().split(SEPARATOR_RE).filter { it.length > 1 }.toSet()
 
     var totalWeight   = 0
     var matchedWeight = 0

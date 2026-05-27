@@ -223,47 +223,47 @@ interface TraktApi {
 
     // ========== Comments ==========
 
-    @GET("movies/{id}/comments")
+    @GET("movies/{id}/comments/{sort}")
     suspend fun getMovieComments(
         @Header("trakt-api-key") clientId: String,
         @Header("trakt-api-version") version: String = "2",
         @Path("id") movieId: String,
+        @Path("sort") sort: String = "newest",
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 10,
-        @Query("sort") sort: String = "newest"
+        @Query("limit") limit: Int = 10
     ): List<TraktComment>
 
-    @GET("shows/{id}/comments")
+    @GET("shows/{id}/comments/{sort}")
     suspend fun getShowComments(
         @Header("trakt-api-key") clientId: String,
         @Header("trakt-api-version") version: String = "2",
         @Path("id") showId: String,
+        @Path("sort") sort: String = "newest",
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 10,
-        @Query("sort") sort: String = "newest"
+        @Query("limit") limit: Int = 10
     ): List<TraktComment>
 
-    @GET("shows/{id}/seasons/{season}/comments")
+    @GET("shows/{id}/seasons/{season}/comments/{sort}")
     suspend fun getSeasonComments(
         @Header("trakt-api-key") clientId: String,
         @Header("trakt-api-version") version: String = "2",
         @Path("id") showId: String,
         @Path("season") season: Int,
+        @Path("sort") sort: String = "newest",
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 10,
-        @Query("sort") sort: String = "newest"
+        @Query("limit") limit: Int = 10
     ): List<TraktComment>
 
-    @GET("shows/{id}/seasons/{season}/episodes/{episode}/comments")
+    @GET("shows/{id}/seasons/{season}/episodes/{episode}/comments/{sort}")
     suspend fun getEpisodeComments(
         @Header("trakt-api-key") clientId: String,
         @Header("trakt-api-version") version: String = "2",
         @Path("id") showId: String,
         @Path("season") season: Int,
         @Path("episode") episode: Int,
+        @Path("sort") sort: String = "newest",
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 10,
-        @Query("sort") sort: String = "newest"
+        @Query("limit") limit: Int = 10
     ): List<TraktComment>
 
     // ========== History ==========

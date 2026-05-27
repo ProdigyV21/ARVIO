@@ -1630,7 +1630,7 @@ class TraktRepository @Inject constructor(
                             backdropPath = details.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" },
                             posterPath = details.posterPath?.let { "${Constants.IMAGE_BASE}$it" },
                             overview = details.overview ?: "",
-                            imdbRating = String.format("%.1f", details.voteAverage),
+                            tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
                             duration = details.runtime?.let { formatRuntime(it) } ?: item.duration,
                             durationSeconds = maxOf(item.durationSeconds, runtimeMinutesToSeconds(details.runtime))
                         )
@@ -1651,7 +1651,7 @@ class TraktRepository @Inject constructor(
                             backdropPath = details.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" },
                             posterPath = details.posterPath?.let { "${Constants.IMAGE_BASE}$it" },
                             overview = details.overview ?: "",
-                            imdbRating = String.format("%.1f", details.voteAverage),
+                            tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
                             duration = details.episodeRunTime.firstOrNull()?.let { "${it}m" } ?: item.duration,
                             durationSeconds = maxOf(item.durationSeconds, runtimeMinutesToSeconds(details.episodeRunTime.firstOrNull())),
                             totalEpisodes = item.totalEpisodes,
@@ -2183,7 +2183,7 @@ class TraktRepository @Inject constructor(
                     backdropPath = backdropUrl ?: item.backdropPath,  // Show backdrop, not episode still
                     posterPath = posterUrl ?: item.posterPath,
                     year = details?.firstAirDate?.take(4) ?: item.year,
-                    imdbRating = details?.voteAverage?.let { String.format("%.1f", it) } ?: item.imdbRating,
+                    tmdbRating = details?.voteAverage?.let { String.format(Locale.US, "%.1f", it) } ?: item.tmdbRating.orEmpty(),
                     duration = runtimeMinutes?.let { "${it}m" } ?: item.duration,
                     durationSeconds = maxOf(item.durationSeconds, runtimeMinutesToSeconds(runtimeMinutes)),
                     episodeTitle = item.episodeTitle ?: episodeInfo?.name,
@@ -2204,7 +2204,7 @@ class TraktRepository @Inject constructor(
                     backdropPath = backdropUrl ?: item.backdropPath,
                     posterPath = posterUrl ?: item.posterPath,
                     year = details?.releaseDate?.take(4) ?: item.year,
-                    imdbRating = details?.voteAverage?.let { String.format("%.1f", it) } ?: item.imdbRating,
+                    tmdbRating = details?.voteAverage?.let { String.format(Locale.US, "%.1f", it) } ?: item.tmdbRating.orEmpty(),
                     duration = details?.runtime?.let { formatRuntime(it) } ?: item.duration,
                     durationSeconds = maxOf(item.durationSeconds, runtimeMinutesToSeconds(details?.runtime))
                 )
@@ -2612,7 +2612,7 @@ class TraktRepository @Inject constructor(
                 return@withContext WatchlistPageResult(emptyList(), totalPages = null, complete = false)
             }
             val body = response.body?.string().orEmpty()
-            val listType = object : TypeToken<List<TraktWatchlistItem>>() {}.type
+            val listType = TypeToken.getParameterized(List::class.java, TraktWatchlistItem::class.java).type
             val items: List<TraktWatchlistItem> = runCatching {
                 gson.fromJson<List<TraktWatchlistItem>>(body, listType)
             }.getOrNull().orEmpty()
@@ -2701,7 +2701,7 @@ class TraktRepository @Inject constructor(
                         subtitle = "Movie",
                         overview = details.overview ?: "",
                         year = details.releaseDate?.take(4) ?: "",
-                        imdbRating = String.format("%.1f", details.voteAverage),
+                        tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
                         mediaType = MediaType.MOVIE,
                         image = details.posterPath?.let { "${Constants.IMAGE_BASE}$it" }
                             ?: details.backdropPath?.let { "${Constants.BACKDROP_BASE}$it" } ?: "",
@@ -2722,7 +2722,7 @@ class TraktRepository @Inject constructor(
                         subtitle = "TV Series",
                         overview = details.overview ?: "",
                         year = details.firstAirDate?.take(4) ?: "",
-                        imdbRating = String.format("%.1f", details.voteAverage),
+                        tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
                         mediaType = MediaType.TV,
                         image = details.posterPath?.let { "${Constants.IMAGE_BASE}$it" }
                             ?: details.backdropPath?.let { "${Constants.BACKDROP_BASE}$it" } ?: "",
@@ -3306,9 +3306,13 @@ class TraktRepository @Inject constructor(
     /**
      * Get movie comments
      */
-    suspend fun getMovieComments(tmdbId: Int, page: Int = 1, limit: Int = 10): List<TraktComment> {
+    suspend fun getMovieComments(tmdbId: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
+        return getMovieComments(tmdbId.toString(), page, limit, sort)
+    }
+
+    suspend fun getMovieComments(mediaId: String, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
-            traktApi.getMovieComments(clientId, "2", tmdbId.toString(), page, limit)
+            traktApi.getMovieComments(clientId, "2", mediaId, sort, page, limit)
         } catch (e: Exception) {
             emptyList()
         }
@@ -3317,9 +3321,13 @@ class TraktRepository @Inject constructor(
     /**
      * Get show comments
      */
-    suspend fun getShowComments(tmdbId: Int, page: Int = 1, limit: Int = 10): List<TraktComment> {
+    suspend fun getShowComments(tmdbId: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
+        return getShowComments(tmdbId.toString(), page, limit, sort)
+    }
+
+    suspend fun getShowComments(mediaId: String, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
-            traktApi.getShowComments(clientId, "2", tmdbId.toString(), page, limit)
+            traktApi.getShowComments(clientId, "2", mediaId, sort, page, limit)
         } catch (e: Exception) {
             emptyList()
         }
@@ -3328,9 +3336,13 @@ class TraktRepository @Inject constructor(
     /**
      * Get season comments
      */
-    suspend fun getSeasonComments(showTmdbId: Int, season: Int, page: Int = 1, limit: Int = 10): List<TraktComment> {
+    suspend fun getSeasonComments(showTmdbId: Int, season: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
+        return getSeasonComments(showTmdbId.toString(), season, page, limit, sort)
+    }
+
+    suspend fun getSeasonComments(showId: String, season: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
-            traktApi.getSeasonComments(clientId, "2", showTmdbId.toString(), season, page, limit)
+            traktApi.getSeasonComments(clientId, "2", showId, season, sort, page, limit)
         } catch (e: Exception) {
             emptyList()
         }
@@ -3339,9 +3351,13 @@ class TraktRepository @Inject constructor(
     /**
      * Get episode comments
      */
-    suspend fun getEpisodeComments(showTmdbId: Int, season: Int, episode: Int, page: Int = 1, limit: Int = 10): List<TraktComment> {
+    suspend fun getEpisodeComments(showTmdbId: Int, season: Int, episode: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
+        return getEpisodeComments(showTmdbId.toString(), season, episode, page, limit, sort)
+    }
+
+    suspend fun getEpisodeComments(showId: String, season: Int, episode: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
-            traktApi.getEpisodeComments(clientId, "2", showTmdbId.toString(), season, episode, page, limit)
+            traktApi.getEpisodeComments(clientId, "2", showId, season, episode, sort, page, limit)
         } catch (e: Exception) {
             emptyList()
         }
@@ -3733,6 +3749,7 @@ data class ContinueWatchingItem(
     val isUpNext: Boolean = false,
     val overview: String = "",
     val imdbRating: String = "",
+    val tmdbRating: String = "",
     val duration: String = "",
     val budget: Long? = null,
     val updatedAtMs: Long = 0L,
@@ -3799,7 +3816,8 @@ data class ContinueWatchingItem(
             overview = overview,
             year = year,
             releaseDate = releaseDate,
-            imdbRating = imdbRating,
+            imdbRating = "",
+            tmdbRating = tmdbRating.orEmpty().ifBlank { imdbRating.orEmpty() },
             duration = duration,
             mediaType = mediaType,
             progress = progress,
