@@ -304,8 +304,10 @@ fun SettingsScreen(
     var addonActionIndex by remember { mutableIntStateOf(0) }
     // Sub-focus for catalog rows: 0 = edit, 1 = up, 2 = down, 3 = layout, 4 = delete
     var catalogActionIndex by remember { mutableIntStateOf(0) }
-    // Sub-focus for IPTV rows: 0 = enable, 1 = edit, 2 = up, 3 = down, 4 = delete
+    // Sub-focus for IPTV playlist rows: 0 = categories, 1 = enable, 2 = edit, 3 = up, 4 = down, 5 = delete
+    // For IPTV category rows: 0 = visibility, 1 = up, 2 = down
     var iptvActionIndex by remember { mutableIntStateOf(0) }
+    var showIptvCategoriesSettings by remember { mutableStateOf(false) }
     // Rename dialog state
     var showCatalogRename by remember { mutableStateOf(false) }
     var renameCatalogId by remember { mutableStateOf("") }
@@ -375,7 +377,11 @@ fun SettingsScreen(
     val sectionMaxIndex: (String) -> Int = { section ->
         when (section) {
             in tvGeneralSectionIds -> (tvGeneralRowsForSection(section).size - 1).coerceAtLeast(0)
-            "iptv" -> 2 + uiState.iptvPlaylists.size // Add + rows + refresh + clear
+            "iptv" -> if (showIptvCategoriesSettings) {
+                uiState.iptvAvailableGroups.size // Reset row + category rows
+            } else {
+                2 + uiState.iptvPlaylists.size // Add + rows + refresh + clear
+            }
             "home_server" -> uiState.homeServerConnections.size + 3
             "catalogs" -> uiState.catalogs.size // Add + rows
             "stremio" -> stremioAddons.size // rows + add button
@@ -414,6 +420,13 @@ fun SettingsScreen(
         dnsProviderPickerIndex = options.indexOfFirst { it.equals(uiState.dnsProvider, ignoreCase = true) }
             .coerceAtLeast(0)
         showDnsProviderPicker = true
+    }
+    val openIptvCategories: (String) -> Unit = { playlistId ->
+        viewModel.setIptvSelectedPlaylistId(playlistId)
+        showIptvCategoriesSettings = true
+        activeZone = Zone.CONTENT
+        contentFocusIndex = 0
+        iptvActionIndex = 0
     }
     val openContentLanguagePicker = {
         contentLanguagePickerIndex = TMDB_LANGUAGES.indexOfFirst { it.first == uiState.contentLanguage }.coerceAtLeast(0)
@@ -642,7 +655,13 @@ fun SettingsScreen(
                                     isSidebarFocused = true
                                 }
                                 Zone.CONTENT -> {
-                                    activeZone = Zone.SECTION
+                                    if (currentSection == "iptv" && showIptvCategoriesSettings) {
+                                        showIptvCategoriesSettings = false
+                                        contentFocusIndex = 0
+                                        iptvActionIndex = 0
+                                    } else {
+                                        activeZone = Zone.SECTION
+                                    }
                                 }
                             }
                             true
@@ -652,7 +671,13 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     if (currentSection == "stremio" && contentFocusIndex < stremioAddons.size && addonActionIndex > 0) {
                                         addonActionIndex = 0
-                                    } else if (currentSection == "iptv" && contentFocusIndex in 1..uiState.iptvPlaylists.size && iptvActionIndex > 0) {
+                                    } else if (currentSection == "iptv" &&
+                                        iptvActionIndex > 0 &&
+                                        (
+                                            showIptvCategoriesSettings && contentFocusIndex > 0 ||
+                                                !showIptvCategoriesSettings && contentFocusIndex in 1..uiState.iptvPlaylists.size
+                                            )
+                                    ) {
                                         iptvActionIndex--
                                     } else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex > 0) {
                                         catalogActionIndex--
@@ -694,9 +719,11 @@ fun SettingsScreen(
                                         focusedStremioAddonCanDelete
                                     ) {
                                         addonActionIndex = 1
-                                    } else if (currentSection == "iptv" && contentFocusIndex in 1..uiState.iptvPlaylists.size && iptvActionIndex < 4) {
+                                    } else if (currentSection == "iptv" && showIptvCategoriesSettings && contentFocusIndex > 0 && iptvActionIndex < 2) {
                                         iptvActionIndex++
-} else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 4) {
+                                    } else if (currentSection == "iptv" && !showIptvCategoriesSettings && contentFocusIndex in 1..uiState.iptvPlaylists.size && iptvActionIndex < 5) {
+                                        iptvActionIndex++
+                                    } else if (currentSection == "catalogs" && contentFocusIndex > 0 && catalogActionIndex < 4) {
                                         catalogActionIndex++
                                     }
                                 }
@@ -713,6 +740,7 @@ fun SettingsScreen(
                                         addonActionIndex = 0
                                         iptvActionIndex = 0
                                         catalogActionIndex = 0
+                                        showIptvCategoriesSettings = false
                                     } else {
                                         activeZone = Zone.SIDEBAR
                                         isSidebarFocused = true
@@ -744,6 +772,7 @@ fun SettingsScreen(
                                         addonActionIndex = 0
                                         iptvActionIndex = 0
                                         catalogActionIndex = 0
+                                        showIptvCategoriesSettings = false
                                     }
                                 }
                                 Zone.CONTENT -> {
@@ -818,7 +847,30 @@ fun SettingsScreen(
                                             }
                                         }
                                         "iptv" -> {
-                                            when {
+                                            if (showIptvCategoriesSettings) {
+                                                val playlistId = uiState.iptvSelectedPlaylistId.orEmpty()
+                                                val orderedGroups = (
+                                                    uiState.iptvGroupOrder
+                                                        .map { com.arflix.tv.data.model.PlaylistGroupKey(it) }
+                                                        .filter { it.playlistId == playlistId }
+                                                        .map { it.groupName } + uiState.iptvAvailableGroups
+                                                ).distinct()
+                                                when {
+                                                    contentFocusIndex == 0 -> {
+                                                        viewModel.resetIptvGroupOrder(playlistId)
+                                                    }
+                                                    contentFocusIndex in 1..orderedGroups.size -> {
+                                                        val group = orderedGroups.getOrNull(contentFocusIndex - 1)
+                                                        if (!group.isNullOrBlank()) {
+                                                            when (iptvActionIndex) {
+                                                                0 -> viewModel.toggleIptvHiddenGroup(playlistId, group)
+                                                                1 -> viewModel.moveIptvGroupUp(playlistId, group)
+                                                                2 -> viewModel.moveIptvGroupDown(playlistId, group)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } else when {
                                                 contentFocusIndex == 0 -> {
                                                     editingIptvIndex = -1
                                                     showIptvInput = true
@@ -830,21 +882,24 @@ fun SettingsScreen(
                                                     if (playlist != null) {
                                                         when (iptvActionIndex) {
                                                             0 -> {
+                                                                openIptvCategories(playlist.id)
+                                                            }
+                                                            1 -> {
                                                                 updated[idx] = playlist.copy(enabled = !playlist.enabled)
                                                                 viewModel.saveIptvPlaylists(updated)
                                                             }
-                                                            1 -> {
+                                                            2 -> {
                                                                 editingIptvIndex = idx
                                                                 showIptvInput = true
                                                             }
-                                                            2 -> {
+                                                            3 -> {
                                                                 if (idx > 0) {
                                                                     val item = updated.removeAt(idx)
                                                                     updated.add(idx - 1, item)
                                                                     viewModel.saveIptvPlaylists(updated)
                                                                 }
                                                             }
-                                                            3 -> {
+                                                            4 -> {
                                                                 if (idx < updated.lastIndex) {
                                                                     val item = updated.removeAt(idx)
                                                                     updated.add(idx + 1, item)
@@ -1102,6 +1157,8 @@ fun SettingsScreen(
                                 onClick = {
                                     sectionIndex = index
                                     contentFocusIndex = 0
+                                    iptvActionIndex = 0
+                                    showIptvCategoriesSettings = false
                                     activeZone = Zone.SECTION
                                 }
                             )
@@ -1252,7 +1309,20 @@ fun SettingsScreen(
                             )
                         }
                         } // end "general" block
-                        "iptv" -> IptvSettings(
+                        "iptv" -> if (showIptvCategoriesSettings) {
+                            IptvCategoriesSettings(
+                                playlistId = uiState.iptvSelectedPlaylistId ?: "",
+                                availableGroups = uiState.iptvAvailableGroups,
+                                hiddenGroups = uiState.iptvHiddenGroups,
+                                groupOrder = uiState.iptvGroupOrder,
+                                focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                                focusedActionIndex = iptvActionIndex,
+                                onToggleHidden = { viewModel.toggleIptvHiddenGroup(uiState.iptvSelectedPlaylistId ?: "", it) },
+                                onMoveUp = { viewModel.moveIptvGroupUp(uiState.iptvSelectedPlaylistId ?: "", it) },
+                                onMoveDown = { viewModel.moveIptvGroupDown(uiState.iptvSelectedPlaylistId ?: "", it) },
+                                onReset = { viewModel.resetIptvGroupOrder(uiState.iptvSelectedPlaylistId ?: "") }
+                            )
+                        } else IptvSettings(
                             playlists = uiState.iptvPlaylists,
                             channelCount = uiState.iptvChannelCount,
                             isLoading = uiState.isIptvLoading,
@@ -1293,7 +1363,8 @@ fun SettingsScreen(
                                 }
                             },
                             onRefresh = { viewModel.refreshIptv() },
-                            onDelete = { viewModel.clearIptvConfig() }
+                            onDelete = { viewModel.clearIptvConfig() },
+                            onManageCategories = openIptvCategories
                         )
                         "TV" -> IptvSettings(
                             playlists = uiState.iptvPlaylists,
@@ -1336,7 +1407,8 @@ fun SettingsScreen(
                                 }
                             },
                             onRefresh = { viewModel.refreshIptv() },
-                            onDelete = { viewModel.clearIptvConfig() }
+                            onDelete = { viewModel.clearIptvConfig() },
+                            onManageCategories = openIptvCategories
                         )
                         "home_server" -> HomeServerSettings(
                             connections = uiState.homeServerConnections,
