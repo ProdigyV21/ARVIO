@@ -68,9 +68,18 @@ setInterval(() => {
   }
 }, 60000)
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// CORS: restrict origins using env `CORS_ALLOWED_ORIGINS` (comma-separated).
+// If not set, default to common safe origins used by the app.
+const DEFAULT_ALLOWED_ORIGINS = (Deno.env.get('CORS_ALLOWED_ORIGINS') || 'https://auth.arvio.tv,https://arvio.tv').split(',').map(s => s.trim()).filter(Boolean)
+
+function corsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowed = DEFAULT_ALLOWED_ORIGINS
+  const allowOrigin = allowed.includes(origin) ? origin : 'null'
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -126,7 +135,7 @@ async function fetchTmdbJson(tmdbUrl: URL): Promise<TmdbFetchResult> {
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders(req) })
   }
 
   try {
@@ -140,7 +149,7 @@ serve(async (req) => {
         retryAfter: Math.ceil(rateCheck.resetIn / 1000)
       }), {
         headers: {
-          ...corsHeaders,
+          ...corsHeaders(req),
           'Content-Type': 'application/json',
           'Retry-After': String(Math.ceil(rateCheck.resetIn / 1000)),
           'X-RateLimit-Limit': String(RATE_LIMIT),
@@ -164,7 +173,7 @@ serve(async (req) => {
 
     if (!hasValidApiKey && !hasValidAuth) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         status: 401,
       })
     }
@@ -185,7 +194,7 @@ serve(async (req) => {
     // Validate path against allowlist
     if (!isPathAllowed(path)) {
       return new Response(JSON.stringify({ error: 'Path not allowed' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         status: 403,
       })
     }
@@ -205,7 +214,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify(result.data), {
       headers: {
-        ...corsHeaders,
+        ...corsHeaders(req),
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',
         'X-RateLimit-Limit': String(RATE_LIMIT),
@@ -216,7 +225,7 @@ serve(async (req) => {
     })
   } catch (error) {
     return new Response(JSON.stringify({ error: errorMessage(error) }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
       status: 502,
     })
   }

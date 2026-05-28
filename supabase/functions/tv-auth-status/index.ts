@@ -1,13 +1,21 @@
 ﻿import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
+// CORS: restrict origins using env `CORS_ALLOWED_ORIGINS` (comma-separated).
+const DEFAULT_ALLOWED_ORIGINS = (Deno.env.get('CORS_ALLOWED_ORIGINS') || 'https://auth.arvio.tv,https://arvio.tv').split(',').map(s => s.trim()).filter(Boolean)
+
+function corsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || ''
+  const allowed = DEFAULT_ALLOWED_ORIGINS
+  const allowOrigin = allowed.includes(origin) ? origin : 'null'
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, apikey, x-client-info, content-type',
+  }
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
+    return new Response("ok", { headers: corsHeaders(req) })
   }
 
   try {
@@ -21,7 +29,7 @@ serve(async (req) => {
     if (!hasValidApiKey && !hasValidBearer) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       })
     }
 
@@ -36,7 +44,7 @@ serve(async (req) => {
     if (!deviceCode) {
       return new Response(JSON.stringify({ error: "device_code is required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       })
     }
 
@@ -60,7 +68,7 @@ serve(async (req) => {
     const row = rows[0]
     if (!row) {
       return new Response(JSON.stringify({ status: "expired", message: "Session not found" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       })
     }
 
@@ -77,7 +85,7 @@ serve(async (req) => {
         body: JSON.stringify({ status: "expired" }),
       })
       return new Response(JSON.stringify({ status: "expired", message: "Code expired" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       })
     }
 
@@ -104,23 +112,23 @@ serve(async (req) => {
           refresh_token: row.refresh_token,
           email: row.user_email,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { headers: { ...corsHeaders(req), "Content-Type": "application/json" } },
       )
     }
 
     if (row.status === "expired" || row.status === "consumed") {
       return new Response(JSON.stringify({ status: "expired", message: "Code expired" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       })
     }
 
     return new Response(JSON.stringify({ status: "pending" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     })
   } catch (error) {
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unexpected error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } },
     )
   }
 })
