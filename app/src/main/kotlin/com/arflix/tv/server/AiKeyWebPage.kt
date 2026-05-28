@@ -128,7 +128,11 @@ async function saveKey() {
   btn.disabled = true;
   status.className = 'status';
   try {
-    var res = await fetch('/api/key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: key}) });
+    // Read pairing token from query param (encoded in the QR URL). The server
+    // validates this token before accepting the key to reduce accidental/remote
+    // submissions from other devices on the local network.
+    var token = new URLSearchParams(window.location.search).get('t') || '';
+    var res = await fetch('/api/key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: key, token: token}) });
     var data = await res.json();
     if (data.status === 'saved') {
       status.className = 'status success';
@@ -191,7 +195,8 @@ async function saveKey() {
   btn.disabled = true;
   status.className = 'status';
   try {
-    var res = await fetch('/api/key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: key}) });
+    var token = new URLSearchParams(window.location.search).get('t') || '';
+    var res = await fetch('/api/key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: key, token: token}) });
     var data = await res.json();
     if (data.status === 'saved') {
       status.className = 'status success';

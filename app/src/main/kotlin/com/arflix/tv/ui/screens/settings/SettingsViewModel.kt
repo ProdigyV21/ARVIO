@@ -1287,7 +1287,9 @@ class SettingsViewModel @Inject constructor(
             ) ?: return@launch
             aiKeyServer = server
             val ip = DeviceIpAddress.get(context) ?: "device-ip"
-            val url = "http://$ip:${server.listeningPort}"
+            // Include the one-time pairing token as query param so the QR (scanned
+            // by a phone) encodes the token and the server can validate it.
+            val url = "http://$ip:${server.listeningPort}?t=${server.currentPairingToken}"
             val qr = runCatching { QrCodeGenerator.generate(url, 512) }.getOrNull()
             _uiState.value = _uiState.value.copy(
                 aiKeyServerState = AiKeyServerState(isActive = true, serverUrl = url, qrBitmap = qr)
