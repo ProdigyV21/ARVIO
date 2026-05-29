@@ -485,6 +485,7 @@ fun MediaCard(
  * Placeholder card shown while Continue Watching data loads.
  * Displays a skeleton animation to indicate loading state.
  */
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PlaceholderCard(
     width: Dp,
@@ -548,6 +549,15 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     useWhiteBorder: Boolean = true,
 ) {
+    if (item.isPlaceholder) {
+        PlaceholderCard(
+            width = width,
+            isLandscape = false,
+            modifier = modifier
+        )
+        return
+    }
+
     var isFocused by remember { mutableStateOf(false) }
     val visualFocused = isFocusedOverride || isFocused
 

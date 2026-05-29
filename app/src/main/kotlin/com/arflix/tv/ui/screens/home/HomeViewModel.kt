@@ -99,7 +99,8 @@ data class HomeUiState(
     // App Updates
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
     val showAppUpdateDialog: Boolean = false,
-    val hasUpdateBadge: Boolean = false
+    val hasUpdateBadge: Boolean = false,
+    val categoryHasMoreMap: Map<String, Boolean> = emptyMap()
 )
 
 data class HomeCollectionRow(
@@ -2272,7 +2273,8 @@ class HomeViewModel @Inject constructor(
                             categories = categories,
                             collectionRows = collectionRows,
                             heroItem = heroItem,
-                            heroLogoUrl = heroLogoFromCache ?: _uiState.value.heroLogoUrl
+                            heroLogoUrl = heroLogoFromCache ?: _uiState.value.heroLogoUrl,
+                            categoryHasMoreMap = categoryPaginationStates.mapValues { it.value.hasMore }
                         )
                         heroItem?.let { item ->
                             if (isStartupSettling()) {
@@ -2339,6 +2341,7 @@ class HomeViewModel @Inject constructor(
                     heroItem = heroItem,
                     heroLogoUrl = heroLogoUrl,
                     isAuthenticated = traktRepository.isAuthenticated.first(),
+                    categoryHasMoreMap = categoryPaginationStates.mapValues { it.value.hasMore },
                     error = null
                 )
                 heroItem?.let { item ->
@@ -2533,7 +2536,10 @@ class HomeViewModel @Inject constructor(
                 }
 
                 if (!anyChange) return
-                _uiState.value = latestState.copy(categories = currentCategories)
+                _uiState.value = latestState.copy(
+                    categories = currentCategories,
+                    categoryHasMoreMap = categoryPaginationStates.mapValues { it.value.hasMore }
+                )
             }
             suspend fun publishMergedThrottled(force: Boolean = false) {
                 if (!force) {
@@ -2649,7 +2655,7 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun loadNextPageForCategory(categoryId: String) {
+    fun loadNextPageForCategory(categoryId: String) {
         if (isHardCappedTop10Catalog(categoryId)) return
         val pagination = categoryPaginationStates.getOrPut(categoryId) {
             CategoryPaginationState(
@@ -2668,7 +2674,7 @@ class HomeViewModel @Inject constructor(
                 val pageSize = getCategoryPageSize(categoryId)
                 val result = if (catalog?.isPreinstalled == true && catalog.sourceUrl.isNullOrBlank()) {
                     // Pure TMDB preinstalled catalog (no MDBList source)
-                    val nextPage = (currentCategory.items.size / pageSize) + 1
+                    val nextPage = (currentCategory.items.size / 20) + 1
                     mediaRepository.loadHomeCategoryPage(categoryId, nextPage)
                 } else {
                     // MDBList/custom catalog (including preinstalled MDBList ones)
@@ -2732,13 +2738,22 @@ class HomeViewModel @Inject constructor(
                     ?: pagination.loadedCount
                 pagination.hasMore = result.hasMore
 
-                _uiState.value = _uiState.value.copy(categories = updatedCategories)
+                _uiState.value = _uiState.value.copy(
+                    categories = updatedCategories,
+                    categoryHasMoreMap = _uiState.value.categoryHasMoreMap + (categoryId to result.hasMore)
+                )
             } catch (_: Exception) {
                 // Keep UI stable; user can retry naturally by continuing to browse the row.
             } finally {
                 pagination.isLoading = false
+                updatePaginationStatesInUiState()
             }
         }
+    }
+
+    private fun updatePaginationStatesInUiState() {
+        val hasMoreMap = categoryPaginationStates.mapValues { it.value.hasMore }
+        _uiState.value = _uiState.value.copy(categoryHasMoreMap = hasMoreMap)
     }
 
     private fun buildProfileSkeletonCategories(
