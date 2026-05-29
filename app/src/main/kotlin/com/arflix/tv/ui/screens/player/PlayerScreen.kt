@@ -222,6 +222,10 @@ fun PlayerScreen(
     val castState by castManager.castState.collectAsStateWithLifecycle()
     val isCasting = castState is CastManager.CastState.Casting
     val castAvailable = castState !is CastManager.CastState.NotAvailable
+    // Hide cast button for streams that require custom request headers (Authorization, Referer, etc.)
+    // since the Chromecast default receiver fetches the URL directly without those headers.
+    val streamNeedsHeaders = uiState.selectedStream
+        ?.behaviorHints?.proxyHeaders?.request?.isNotEmpty() == true
     val isConstrainedPlaybackDevice = remember(context, deviceType) {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         deviceType == com.arflix.tv.util.DeviceType.TV &&
@@ -2539,8 +2543,8 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Cast button — top-right, mobile/tablet only
-                        if (isTouchDevice && castAvailable) {
+                        // Cast button — mobile/tablet only; hidden when stream requires custom headers
+                        if (isTouchDevice && castAvailable && !streamNeedsHeaders) {
                             val castDeviceName = (castState as? CastManager.CastState.Casting)?.deviceName
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
