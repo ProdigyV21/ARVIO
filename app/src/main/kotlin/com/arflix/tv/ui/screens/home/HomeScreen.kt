@@ -10,6 +10,8 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -393,7 +395,10 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.animateHomeSc
         animate(
             initialValue = 0f,
             targetValue = deltaPx,
-            animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
+            animationSpec = spring(
+                dampingRatio = 0.85f,
+                stiffness = 200f
+            )
         ) { value, _ ->
             val step = value - previousValue
             if (abs(step) > 0.01f) {

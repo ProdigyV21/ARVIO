@@ -859,7 +859,7 @@ class HomeViewModel @Inject constructor(
         }.getOrDefault(emptyList())
     }
     // IO concurrency for network requests (logo fetches, catalog loads, etc.)
-    private val networkParallelism = if (isLowRamDevice) 1 else 2
+    private val networkParallelism = if (isLowRamDevice) 4 else 8
     private val networkDispatcher = Dispatchers.IO.limitedParallelism(networkParallelism)
     private var lastContinueWatchingItems: List<MediaItem> = emptyList()
     private var lastContinueWatchingUpdateMs: Long = 0L
@@ -2665,7 +2665,7 @@ class HomeViewModel @Inject constructor(
         if (!pagination.hasMore || pagination.isLoading) return
 
         pagination.isLoading = true
-        viewModelScope.launch(networkDispatcher) {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val currentCategories = _uiState.value.categories
                 val currentCategory = currentCategories.firstOrNull { it.id == categoryId } ?: return@launch
