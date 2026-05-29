@@ -5,6 +5,7 @@ import android.content.Context
 import com.arflix.tv.util.settingsDataStore
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -213,8 +214,80 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun catalogInitialLimit(catalog: CatalogConfig): Int {
-        return if (isHardCappedTop10Catalog(catalog.id)) TOP_10_ITEM_LIMIT else initialCategoryItemCap
+    private suspend fun isCatalogPosterMode(catalogId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val prefs = context.settingsDataStore.data.first()
+                val profileId = profileManager.getProfileIdSync().ifBlank { "default" }
+                
+                // 1. Check specific row layout mode
+                val rowKey = "home:$catalogId"
+                val normalizedRowKey = com.arflix.tv.ui.components.normalizeCatalogueRowLayoutKey(rowKey)
+                val rowPrefKey = stringPreferencesKey(
+                    "profile_${profileId}_catalogue_row_layout_${normalizedRowKey}"
+                )
+                val rowValue = prefs[rowPrefKey]
+                if (rowValue != null) {
+                    return@withContext rowValue.trim().equals("Poster", ignoreCase = true)
+                }
+                
+                // 2. Check profile global default card layout mode
+                val profilePrefKey = stringPreferencesKey("profile_${profileId}_card_layout_mode")
+                val profileValue = prefs[profilePrefKey]
+                if (profileValue != null) {
+                    return@withContext profileValue.trim().equals("Poster", ignoreCase = true)
+                }
+                
+                // 3. Check legacy global default card layout mode
+                val legacyPrefKey = stringPreferencesKey("card_layout_mode")
+                val legacyValue = prefs[legacyPrefKey]
+                if (legacyValue != null) {
+                    return@withContext legacyValue.trim().equals("Poster", ignoreCase = true)
+                }
+                
+                // Default fallback
+                false
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    private suspend fun catalogInitialLimit(catalog: CatalogConfig): Int {
+        if (isHardCappedTop10Catalog(catalog.id)) return TOP_10_ITEM_LIMIT
+        
+        if (isCatalogPosterMode(catalog.id)) {
+            // Dynamic limit calculation for portrait (poster) catalogs
+            val screenWidthDp = context.resources.configuration.screenWidthDp
+            val posterWidth = if (isTvDevice) 119 else 124
+            val posterSpacing = if (isTvDevice) 14 else 10
+            val padding = 16
+            
+            // Calculate how many items fit on the screen
+            val fitCount = (screenWidthDp - padding) / (posterWidth + posterSpacing)
+            
+            // We want to load at least 12 items, or fitCount + 2 (comfort items), whichever is larger
+            return maxOf(12, fitCount + 2)
+        }
+        
+        return initialCategoryItemCap
+    }
+
+    private suspend fun getCategoryPageSize(categoryId: String): Int {
+        if (isCatalogPosterMode(categoryId)) {
+            // Dynamic limit calculation for portrait (poster) catalogs
+            val screenWidthDp = context.resources.configuration.screenWidthDp
+            val posterWidth = if (isTvDevice) 119 else 124
+            val posterSpacing = if (isTvDevice) 14 else 10
+            val padding = 16
+            
+            // Calculate how many items fit on the screen
+            val fitCount = (screenWidthDp - padding) / (posterWidth + posterSpacing)
+            
+            // We want to load at least 12 items, or fitCount + 2 (comfort items), whichever is larger
+            return maxOf(12, fitCount + 2)
+        }
+        return categoryPageSize
     }
 
     private fun continueWatchingShowKey(item: ContinueWatchingItem): String {
@@ -2098,7 +2171,7 @@ class HomeViewModel @Inject constructor(
                     if (category.id != "continue_watching" && !category.id.startsWith("collection_row_")) {
                         categoryPaginationStates[category.id] = CategoryPaginationState(
                             loadedCount = category.items.size,
-                            hasMore = category.items.size >= categoryPageSize && !isHardCappedTop10Catalog(category.id)
+                            hasMore = category.items.size >= getCategoryPageSize(category.id) && !isHardCappedTop10Catalog(category.id)
                         )
                     }
                 }
@@ -2592,9 +2665,10 @@ class HomeViewModel @Inject constructor(
                 val currentCategory = currentCategories.firstOrNull { it.id == categoryId } ?: return@launch
 
                 val catalog = savedCatalogById[categoryId]
+                val pageSize = getCategoryPageSize(categoryId)
                 val result = if (catalog?.isPreinstalled == true && catalog.sourceUrl.isNullOrBlank()) {
                     // Pure TMDB preinstalled catalog (no MDBList source)
-                    val nextPage = (currentCategory.items.size / categoryPageSize) + 1
+                    val nextPage = (currentCategory.items.size / pageSize) + 1
                     mediaRepository.loadHomeCategoryPage(categoryId, nextPage)
                 } else {
                     // MDBList/custom catalog (including preinstalled MDBList ones)
@@ -2602,7 +2676,7 @@ class HomeViewModel @Inject constructor(
                     mediaRepository.loadCustomCatalogPage(
                         catalog = cfg,
                         offset = currentCategory.items.size,
-                        limit = categoryPageSize
+                        limit = pageSize
                     )
                 }
 
