@@ -100,7 +100,8 @@ data class HomeUiState(
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
     val showAppUpdateDialog: Boolean = false,
     val hasUpdateBadge: Boolean = false,
-    val categoryHasMoreMap: Map<String, Boolean> = emptyMap()
+    val categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
+    val smoothScrolling: Boolean = false
 )
 
 data class HomeCollectionRow(
@@ -1287,12 +1288,17 @@ class HomeViewModel @Inject constructor(
                 val trailerDelaySeconds = (prefs.asMap().entries
                     .firstOrNull { (key, _) -> key.name.endsWith("_trailer_delay_seconds") }
                     ?.value as? String)?.toIntOrNull() ?: 2
+                val smoothScrollingExplicit = prefs.asMap().entries
+                    .firstOrNull { (key, _) -> key.name.endsWith("_smooth_scrolling") }
+                    ?.value as? Boolean
+                val smoothScrolling = smoothScrollingExplicit ?: false
                 _uiState.value = _uiState.value.copy(
                     trailerAutoPlay = trailerEnabled,
                     trailerSoundEnabled = trailerSoundEnabled,
                     trailerDelaySeconds = trailerDelaySeconds,
                     showBudget = showBudget,
-                    clockFormat = clockFormat
+                    clockFormat = clockFormat,
+                    smoothScrolling = smoothScrolling
                 )
             } catch (_: Exception) {}
         }

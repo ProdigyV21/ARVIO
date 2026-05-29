@@ -250,4 +250,6 @@
     <string name="ai_key_saved_title">API key saved</string>
     <string name="ai_key_saved_subtitle">AI translation is ready to use</string>
     <string name="ai_qr_scan_hint">Scan with your phone — choose Groq or Gemini</string>
+    <string name="smooth_scrolling">Smoother Scrolling</string>
+    <string name="smooth_scrolling_desc">Use premium smooth transitions when navigating poster rows</string>
 </resources>

@@ -197,7 +197,8 @@ data class SettingsUiState(
     val subtitleAiApiKey: String = "",
     val subtitleAiModel: SubtitleAiModel = SubtitleAiModel.GROQ_LLAMA_70B,
     val subtitleRemoveHearingImpaired: Boolean = true,
-    val aiKeyServerState: AiKeyServerState = AiKeyServerState()
+    val aiKeyServerState: AiKeyServerState = AiKeyServerState(),
+    val smoothScrolling: Boolean = true
 )
 
 @HiltViewModel
@@ -260,6 +261,7 @@ class SettingsViewModel @Inject constructor(
     private fun trailerDelayKey() = profileManager.profileStringKey("trailer_delay_seconds")
     private fun showBudgetKey() = profileManager.profileBooleanKey("show_budget_on_home")
     private fun clockFormatKey() = profileManager.profileStringKey("clock_format")
+    private fun smoothScrollingKey() = profileManager.profileBooleanKey("smooth_scrolling")
     private fun spoilerBlurKey() = profileManager.profileBooleanKey("spoiler_blur")
     // Stored as a string because ProfileManager has no int helper and we only persist
     // a handful of discrete dB values. Parsed back to Int on read.
@@ -455,6 +457,7 @@ class SettingsViewModel @Inject constructor(
             }
             val volumeBoostDb = prefs[volumeBoostDbKey()]?.toIntOrNull()?.coerceIn(0, 15) ?: 0
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
+            val smoothScrolling = prefs[smoothScrollingKey()] ?: true
 
             val subtitleSize = prefs[subtitleSizeKey()] ?: "Medium"
             val subtitleColor = prefs[subtitleColorKey()] ?: "White"
@@ -551,7 +554,8 @@ class SettingsViewModel @Inject constructor(
                 subtitleAiAutoSelect = subtitleAiAutoSelect,
                 subtitleAiApiKey = subtitleAiApiKey,
                 subtitleAiModel = subtitleAiModel,
-                subtitleRemoveHearingImpaired = subtitleRemoveHearingImpaired
+                subtitleRemoveHearingImpaired = subtitleRemoveHearingImpaired,
+                smoothScrolling = smoothScrolling
             )
         }
     }
@@ -1138,6 +1142,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             context.settingsDataStore.edit { it[showBudgetKey()] = enabled }
             _uiState.value = _uiState.value.copy(showBudget = enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun setSmoothScrolling(enabled: Boolean) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[smoothScrollingKey()] = enabled }
+            _uiState.value = _uiState.value.copy(smoothScrolling = enabled)
             syncLocalStateToCloud(silent = true)
         }
     }

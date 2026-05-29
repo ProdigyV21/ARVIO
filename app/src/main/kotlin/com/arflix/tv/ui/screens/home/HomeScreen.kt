@@ -1125,6 +1125,7 @@ fun HomeScreen(
             syncStatus = uiState.syncStatus,
             hasUpdateBadge = uiState.hasUpdateBadge,
             categoryHasMoreMap = uiState.categoryHasMoreMap,
+            smoothScrolling = uiState.smoothScrolling,
             onLoadMoreCategory = { viewModel.loadNextPageForCategory(it) },
             onItemFocusedPrefetch = {},
             onMobileCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
@@ -2254,6 +2255,7 @@ private fun HomeInputLayer(
     syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     hasUpdateBadge: Boolean = false,
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
+    smoothScrolling: Boolean = true,
     onLoadMoreCategory: (String) -> Unit = {},
     onItemFocusedPrefetch: (MediaItem) -> Unit = {},
     onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
@@ -2607,6 +2609,7 @@ private fun HomeInputLayer(
             usePosterCards = usePosterCards,
             isMobile = isMobile,
             categoryHasMoreMap = categoryHasMoreMap,
+            smoothScrolling = smoothScrolling,
             onLoadMoreCategory = onLoadMoreCategory,
             onItemFocusedPrefetch = onItemFocusedPrefetch,
             heroItem = heroItem,
@@ -2645,6 +2648,7 @@ private fun HomeRowsLayer(
     usePosterCards: Boolean,
     isMobile: Boolean = false,
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
+    smoothScrolling: Boolean = true,
     onLoadMoreCategory: (String) -> Unit = {},
     onItemFocusedPrefetch: (MediaItem) -> Unit = {},
     heroItem: MediaItem? = null,
@@ -2687,6 +2691,7 @@ private fun HomeRowsLayer(
             fastScrollThresholdMs = fastScrollThresholdMs,
             usePosterCards = usePosterCards,
             categoryHasMoreMap = categoryHasMoreMap,
+            smoothScrolling = smoothScrolling,
             onLoadMoreCategory = onLoadMoreCategory,
             onItemFocusedPrefetch = onItemFocusedPrefetch,
             onItemClick = onItemClick
@@ -2886,6 +2891,7 @@ private fun TvHomeRowsLayer(
     fastScrollThresholdMs: Long,
     usePosterCards: Boolean,
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
+    smoothScrolling: Boolean = true,
     onLoadMoreCategory: (String) -> Unit = {},
     onItemFocusedPrefetch: (MediaItem) -> Unit = {},
     onItemClick: (MediaItem) -> Unit
@@ -2936,6 +2942,18 @@ private fun TvHomeRowsLayer(
     val localCurrentRowIndex = (currentRowIndex - rowWindowStart)
         .coerceIn(0, (renderedCategories.size - 1).coerceAtLeast(0))
 
+    val density = LocalDensity.current
+    val rowLayoutModes = renderedCategories.map { category ->
+        rememberCatalogueRowLayoutMode("home:${category.id}") == CardLayoutMode.POSTER
+    }
+    val categoryHeightsPx = remember(renderedCategories, rowLayoutModes, density) {
+        renderedCategories.mapIndexed { idx, category ->
+            val usePoster = rowLayoutModes.getOrNull(idx) ?: false
+            val heightDp = if (usePoster) 252.dp else 202.dp
+            with(density) { heightDp.toPx() }
+        }
+    }
+
     var isFastScrolling by remember { mutableStateOf(false) }
     LaunchedEffect(focusState) {
         snapshotFlow { focusState.lastNavEventTime }
@@ -2979,11 +2997,26 @@ private fun TvHomeRowsLayer(
             if (initialPlacement || jumpDistance > 7) {
                 listState.scrollToItem(index = targetIndex, scrollOffset = 0)
             } else {
-                val visibleTarget = listState.layoutInfo.visibleItemsInfo
-                    .firstOrNull { it.index == targetIndex }
-                if (visibleTarget != null) {
+                if (smoothScrolling) {
+                    val visibleTarget = listState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.index == targetIndex }
+                    val deltaPx = if (visibleTarget != null) {
+                        visibleTarget.offset.toFloat()
+                    } else {
+                        if (targetIndex < currentIndex) {
+                            val intermediateSum = (targetIndex until currentIndex).sumOf { idx ->
+                                categoryHeightsPx.getOrNull(idx)?.toDouble() ?: (202.0 * density.density)
+                            }.toFloat()
+                            -(intermediateSum + currentOffset)
+                        } else {
+                            val intermediateSum = (currentIndex until targetIndex).sumOf { idx ->
+                                categoryHeightsPx.getOrNull(idx)?.toDouble() ?: (202.0 * density.density)
+                            }.toFloat()
+                            intermediateSum - currentOffset
+                        }
+                    }
                     listState.animateHomeScrollDelta(
-                        deltaPx = visibleTarget.offset.toFloat(),
+                        deltaPx = deltaPx,
                         durationMillis = if (jumpDistance >= 3) 180 else 150
                     )
                     if (
@@ -3047,14 +3080,10 @@ private fun TvHomeRowsLayer(
                             usePosterCards = rowUsePosterCards,
                             startPadding = contentStartPadding,
                             categoryHasMore = categoryHasMoreMap[category.id] == true,
+                            smoothScrolling = smoothScrolling,
                             onLoadMore = { onLoadMoreCategory(category.id) },
                             focusedItemIndex = if (rowIsFocused) focusState.currentItemIndex else -1,
                             isFastScrolling = rowIsFocused && isFastScrolling,
-                            useViewportFocusOverlay = rowIsFocused && homeViewportFocusOverlayActive(
-                                category = category,
-                                focusedItemIndex = focusState.currentItemIndex,
-                                usePosterCards = rowUsePosterCards
-                            ),
                             onItemClick = onItemClick,
                             onItemFocused = { item, itemIdx ->
                                 focusState.currentRowIndex = actualRowIndex
@@ -3066,38 +3095,8 @@ private fun TvHomeRowsLayer(
                     }
                 }
             }
-            val focusedCategory = categories.getOrNull(focusState.currentRowIndex)
-            if (
-                !focusState.isSidebarFocused &&
-                focusedCategory != null
-            ) {
-                val focusedRowKey = remember(focusedCategory.id) { "home:${focusedCategory.id}" }
-                val focusedRowUsePosterCards = rememberCatalogueRowLayoutMode(focusedRowKey) == CardLayoutMode.POSTER
-                
-                if (homeViewportFocusOverlayActive(
-                    category = focusedCategory,
-                    focusedItemIndex = focusState.currentItemIndex,
-                    usePosterCards = focusedRowUsePosterCards
-                )) {
-                    HomeViewportRailFocusOverlay(
-                        category = focusedCategory,
-                        usePosterCards = focusedRowUsePosterCards,
-                        startPadding = contentStartPadding
-                    )
-                }
-            }
         }
     }
-}
-
-@Composable
-private fun homeViewportFocusOverlayActive(
-    category: Category,
-    focusedItemIndex: Int,
-    usePosterCards: Boolean
-): Boolean {
-    if (focusedItemIndex < 0 || category.items.isEmpty()) return false
-    return category.items.size > 1 && focusedItemIndex <= category.items.lastIndex
 }
 
 @Composable
@@ -3109,40 +3108,6 @@ private fun lockedHomeRailEndPadding(
     val configuration = LocalConfiguration.current
     return (configuration.screenWidthDp.dp - startPadding - itemWidth)
         .coerceAtLeast(minimum)
-}
-
-@Composable
-private fun HomeViewportRailFocusOverlay(
-    category: Category,
-    usePosterCards: Boolean,
-    startPadding: androidx.compose.ui.unit.Dp
-) {
-    val isCollectionRow = category.id.startsWith("collection_row_")
-    val effectivePosterMode = if (isCollectionRow) {
-        category.items.firstOrNull()?.collectionTileShape == CollectionTileShape.POSTER
-    } else {
-        usePosterCards
-    }
-    val targetWidth = if (effectivePosterMode) 119.dp else 210.dp
-    val targetHeight = if (effectivePosterMode) 119.dp * (3f/2f) else 210.dp * (9f/16f)
-
-    ArvioFocusableSurface(
-        modifier = Modifier
-            .padding(start = startPadding, top = 48.dp)
-            .size(width = targetWidth, height = targetHeight)
-            .zIndex(8f),
-        shape = rememberArvioCardShape(ArvioSkin.radius.md),
-        backgroundColor = Color.Transparent,
-        outlineColor = ArvioSkin.colors.focusOutline,
-        outlineWidth = 2.5.dp,
-        focusedScale = 1f,
-        pressedScale = 0.97f,
-        animateFocus = false,
-        enableSystemFocus = false,
-        isFocusedOverride = true
-    ) {
-        // Viewport-level focus lane: rows and cards move under this ring.
-    }
 }
 
 @Composable
@@ -3325,10 +3290,10 @@ private fun ContentRow(
     usePosterCards: Boolean = false,
     startPadding: androidx.compose.ui.unit.Dp = 12.dp,
     categoryHasMore: Boolean = false,
+    smoothScrolling: Boolean = true,
     onLoadMore: () -> Unit = {},
     focusedItemIndex: Int,
     isFastScrolling: Boolean,
-    useViewportFocusOverlay: Boolean = false,
     onItemClick: (MediaItem) -> Unit,
     onItemFocused: (MediaItem, Int) -> Unit
 ) {
@@ -3356,10 +3321,11 @@ private fun ContentRow(
     val itemSpanPx = remember(density, itemWidth, itemSpacing) {
         with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
     }
-    val railFocusOverlayActive = !useViewportFocusOverlay &&
-        isCurrentRow && isScrollable && focusedItemIndex >= 0 && totalItems > 0 &&
-        focusedItemIndex <= maxFirstIndex
-    val focusedCardIndex = if (railFocusOverlayActive || useViewportFocusOverlay) {
+    val railFocusOverlayActive = isCurrentRow && isScrollable && focusedItemIndex >= 0 && totalItems > 0 &&
+        focusedItemIndex <= maxFirstIndex &&
+        focusedItemIndex == rowState.firstVisibleItemIndex &&
+        rowState.firstVisibleItemScrollOffset == 0
+    val focusedCardIndex = if (railFocusOverlayActive) {
         -1
     } else {
         focusedItemIndex
@@ -3397,11 +3363,13 @@ private fun ContentRow(
         val extraOffset = 0
 
         if (lastScrollIndex == scrollTargetIndex && lastScrollOffset == extraOffset) return@LaunchedEffect
-        if (lastScrollIndex == -1) {
+        val isFirstScroll = lastScrollIndex == -1
+        lastScrollIndex = scrollTargetIndex
+        lastScrollOffset = extraOffset
+
+        if (isFirstScroll) {
             // First time we jump directly to the correct position (no animation)
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-            lastScrollIndex = scrollTargetIndex
-            lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
 
@@ -3416,28 +3384,30 @@ private fun ContentRow(
             targetOutsideViewport ||
             offsetDelta > 1
         ) {
-            val deltaPx = ((scrollTargetIndex - currentFirstIndex) * itemSpanPx) + (extraOffset - currentFirstOffset)
-            rowState.animateHomeScrollDelta(
-                deltaPx = deltaPx,
-                durationMillis = when {
-                    isFastScrolling -> 115
-                    jumpDistance >= 3 -> 180
-                    else -> 150
+            if (smoothScrolling) {
+                val deltaPx = ((scrollTargetIndex - currentFirstIndex) * itemSpanPx) + (extraOffset - currentFirstOffset)
+                rowState.animateHomeScrollDelta(
+                    deltaPx = deltaPx,
+                    durationMillis = when {
+                        isFastScrolling -> 115
+                        jumpDistance >= 3 -> 180
+                        else -> 150
+                    }
+                )
+                if (
+                    !isFastScrolling && (
+                        rowState.firstVisibleItemIndex != scrollTargetIndex ||
+                            abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 6
+                        )
+                ) {
+                    rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
                 }
-            )
-            if (
-                !isFastScrolling && (
-                    rowState.firstVisibleItemIndex != scrollTargetIndex ||
-                        abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 6
-                    )
-            ) {
-                rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+            } else {
+                rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             }
         } else {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
-        lastScrollIndex = scrollTargetIndex
-        lastScrollOffset = extraOffset
     }
 
     Column(
@@ -3542,7 +3512,7 @@ private fun ContentRow(
                             raiseOnFocus = !isFastScrolling,
                             showProgress = false,
                             showTitle = isCollectionRow && !item.collectionHideTitle,
-                            isFocusedOverride = itemIsFocused && !railFocusOverlayActive && !useViewportFocusOverlay,
+                            isFocusedOverride = itemIsFocused && !railFocusOverlayActive,
                             focusedScale = 1f,
                             enableFocusedImageSwap = !isCollectionRow && !isFastScrolling,
                             animateFocus = false,
@@ -3573,7 +3543,7 @@ private fun ContentRow(
                         raiseOnFocus = !isFastScrolling,
                         showProgress = isContinueWatching,
                         showTitle = isCollectionRow && !item.collectionHideTitle,
-                        isFocusedOverride = itemIsFocused && !railFocusOverlayActive && !useViewportFocusOverlay,
+                        isFocusedOverride = itemIsFocused && !railFocusOverlayActive,
                         focusedScale = 1f,
                         enableFocusedImageSwap = !isCollectionRow && !isFastScrolling,
                         animateFocus = false,
