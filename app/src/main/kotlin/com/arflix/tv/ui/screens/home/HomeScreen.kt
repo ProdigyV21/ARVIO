@@ -71,6 +71,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -182,6 +183,7 @@ import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.max
@@ -843,9 +845,13 @@ fun HomeScreen(
         else -> null
     }
 
+    val scope = rememberCoroutineScope()
     var isTrailerPlaying by remember { mutableStateOf(false) }
     var trailerSuppressed by remember { mutableStateOf(false) }
-    LaunchedEffect(displayHeroItem?.id) { trailerSuppressed = false }
+    LaunchedEffect(displayHeroItem?.id) {
+        trailerSuppressed = false
+        isTrailerPlaying = false
+    }
     val heroRowIsContinueWatching = latestDisplayCategories
         .getOrNull(focusState.currentRowIndex)?.id == "continue_watching"
     val trailerOverlayAlpha = remember { Animatable(1f) }
@@ -1020,7 +1026,19 @@ fun HomeScreen(
                         youtubeKey = uiState.heroTrailerKey!!,
                         delayMs = uiState.trailerDelaySeconds * 1000L,
                         volume = if (uiState.trailerSoundEnabled) 1f else 0f,
-                        onPlayingChanged = { playing -> isTrailerPlaying = playing },
+                        onFirstFrameRendered = {
+                            scope.launch {
+                                delay(500)
+                                isTrailerPlaying = true
+                            }
+                        },
+                        onEnded = {
+                            isTrailerPlaying = false
+                            scope.launch {
+                                delay(500)
+                                trailerSuppressed = true
+                            }
+                        },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -1099,7 +1117,17 @@ fun HomeScreen(
             usePosterCards = usePosterCards,
             isContextMenuOpen = showContextMenu,
             trailerIsPlaying = isTrailerPlaying,
-            onTrailerStop = { trailerSuppressed = true },
+            onTrailerStop = {
+                if (isTrailerPlaying) {
+                    isTrailerPlaying = false
+                    scope.launch {
+                        delay(500)
+                        trailerSuppressed = true
+                    }
+                } else {
+                    trailerSuppressed = true
+                }
+            },
             isMobile = isMobile,
             heroItem = displayHeroItem,
             heroOverviewOverride = displayHeroOverview,
