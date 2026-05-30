@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -133,6 +135,8 @@ import com.arflix.tv.ui.components.TrailerPlayer
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
+import com.arflix.tv.ui.components.MobileHeroBanner
+import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.ui.components.MediaContextMenu
 import com.arflix.tv.ui.components.rememberCardLayoutMode
@@ -1945,288 +1949,178 @@ private fun MobileHeroOverlay(
     }
 }
 
-/** Swipeable hero carousel for mobile: HorizontalPager with backdrop, gradient, title/meta/description, page dots, and auto-scroll. */
+/** Netflix-style mobile hero carousel: card-based banner pager with profile/search overlay. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MobileHeroCarousel(
     categories: List<Category>,
-    cardLogoUrls: Map<String, String>,
+    cardLogoUrls: Map<String, String> = emptyMap(),
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
+    onNavigateToSearch: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit
 ) {
-    val context = LocalContext.current
-    val metadataLogoImageLoader = rememberMetadataLogoImageLoader(context)
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-    // Hero area height: 40% of screen
-    val heroHeight = (configuration.screenHeightDp * 0.40f).dp
-
-    // Build hero items: Continue Watching first, then first catalog, up to 5 items
     val heroItems = remember(categories) {
-        val cwItems = categories
-            .firstOrNull { it.id == "continue_watching" }
-            ?.items
-            ?.filter { it.id > 0 && !it.isPlaceholder }
+        val nonCwCats = categories.filter { it.id != "continue_watching" }
+        val firstCat = nonCwCats.getOrNull(0)
+            ?.items?.filter { it.id > 0 && !it.isPlaceholder }?.take(5)
             .orEmpty()
-        val catalogItems = categories
-            .firstOrNull { it.id != "continue_watching" }
-            ?.items
-            ?.filter { it.id > 0 && !it.isPlaceholder }
+        val secondCat = nonCwCats.getOrNull(1)
+            ?.items?.filter { it.id > 0 && !it.isPlaceholder }?.take(5)
             .orEmpty()
-        (cwItems + catalogItems).distinctBy { "${it.mediaType}_${it.id}" }.take(5)
+        // Interleave: first[0], second[0], first[1], second[1], …
+        buildList {
+            val maxLen = maxOf(firstCat.size, secondCat.size)
+            for (i in 0 until maxLen) {
+                if (i < firstCat.size) add(firstCat[i])
+                if (i < secondCat.size) add(secondCat[i])
+            }
+        }.distinctBy { "${it.mediaType}_${it.id}" }
     }
 
     if (heroItems.isEmpty()) return
 
-    val pagerState = rememberPagerState(pageCount = { heroItems.size })
+    // Circular paging: use a large virtual page count that's a multiple of heroItems.size
+    // so page % heroItems.size always maps correctly and starts at item[0].
+    val virtualPageCount = heroItems.size * 1000
+    val initialPage = heroItems.size * 500
+    val pagerState = rememberPagerState(
+        initialPage = initialPage,
+        pageCount = { virtualPageCount }
+    )
 
-    // Auto-scroll every 5 seconds
-    LaunchedEffect(pagerState, heroItems.size) {
+    // Restart the 10s countdown whenever the pager settles on a new page,
+    // whether from a user swipe or the previous auto-advance. This gives
+    // the user a full 10s after any manual interaction before the next advance.
+    LaunchedEffect(pagerState.settledPage, heroItems.size) {
         if (heroItems.size <= 1) return@LaunchedEffect
-        while (true) {
-            delay(5000L)
-            val nextPage = (pagerState.currentPage + 1) % heroItems.size
-            pagerState.animateScrollToPage(nextPage)
-        }
-    }
-
-    // Strong gradient covering bottom 70% for smooth fade to black
-    val mobileHeroGradient = remember {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.0f to Color.Transparent,
-                0.30f to Color.Transparent,
-                0.50f to Color.Black.copy(alpha = 0.4f),
-                0.75f to Color.Black.copy(alpha = 0.85f),
-                1.0f to Color.Black
-            )
+        delay(10000L)
+        pagerState.animateScrollToPage(
+            pagerState.currentPage + 1,
+            animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
         )
     }
 
-    // Extra thin gradient at the very bottom edge for seamless transition to card rows
-    val bottomEdgeFade = remember {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.0f to Color.Transparent,
-                0.7f to Color.Transparent,
-                1.0f to Color.Black
-            )
-        )
-    }
-
-    val textShadow = remember {
-        Shadow(
-            color = Color.Black.copy(alpha = 0.9f),
-            offset = Offset(0f, 2f),
-            blurRadius = 8f
-        )
-    }
-
-    Column {
-        // Pager
-        Box {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(heroHeight)
-            ) { page ->
-                val item = heroItems[page]
-                val backdropUrl = item.backdrop ?: item.image
-
-                val backdropSizePx = remember(configuration, density, heroHeight) {
-                    val widthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
-                    val heightPx = with(density) { heroHeight.roundToPx() }
-                    widthPx.coerceAtMost(3840).coerceAtLeast(1) to heightPx.coerceAtMost(2160).coerceAtLeast(1)
-                }
-
-                val heroLogoUrl = cardLogoUrls["${item.mediaType}_${item.id}"]
-
-                val genreText = remember(item.id, item.genreIds) {
-                    val genreMap = if (item.mediaType == MediaType.TV) tvGenres else movieGenres
-                    item.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" | ")
-                }
-                val year = item.releaseDate?.take(4)?.takeIf { it.isNotEmpty() } ?: item.year
-                val rating = imdbRatingFor(item)
-                val ratingValue = parseRatingValue(rating)
-
-                val displayOverview = remember(item.id, item.overview) {
-                    cleanOverviewText(item.overview)
-                }
-
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Profile avatar + search icon row — above the pager, respects status bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 26.dp, end = 26.dp, top = 12.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (currentProfile != null) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clickable {
-                            onNavigateToDetails(item.mediaType, item.id, null, null)
-                        }
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .clickable { onSwitchProfile() }
                 ) {
-                    // Backdrop image - Crop to fill without letterboxing
-                    backdropUrl?.let { mobileBackdropUrl ->
-                        val (bw, bh) = backdropSizePx
-                        val request = remember(mobileBackdropUrl, bw, bh) {
-                            ImageRequest.Builder(context)
-                                .data(mobileBackdropUrl)
-                                .size(bw, bh)
-                                .precision(Precision.INEXACT)
-                                .allowHardware(true)
-                                .crossfade(false)
-                                .build()
-                        }
-                        AsyncImage(
-                            model = request,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    // Strong bottom gradient covering bottom 70%
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(0.70f)
-                            .align(Alignment.BottomCenter)
-                            .background(mobileHeroGradient)
+                    ProfileAvatarVisual(
+                        profile = currentProfile,
+                        letterFontSize = 15.sp,
+                        iconPadding = 5.dp
                     )
+                }
+            } else {
+                Spacer(modifier = Modifier.size(38.dp))
+            }
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = "Search",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(26.dp)
+                    .clickable { onNavigateToSearch() }
+            )
+        }
 
-                    // Text content at bottom-left
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
-                    ) {
-                        // Clearlogo image or fallback title text
-                        if (heroLogoUrl != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(heroLogoUrl)
-                                    .precision(Precision.INEXACT)
-                                    .allowHardware(true)
-                                    .crossfade(false)
-                                    .build(),
-                                contentDescription = item.title,
-                                contentScale = ContentScale.Fit,
-                                alignment = Alignment.CenterStart,
-                                modifier = Modifier
-                                    .height(44.dp)
-                                    .width(200.dp)
-                            )
-                        } else {
-                            Text(
-                                text = item.title,
-                                style = ArflixTypography.heroTitle.copy(
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+        // Banner card pager — circular, peeks at adjacent cards on both sides
+        HorizontalPager(
+            state = pagerState,
+            contentPadding = PaddingValues(horizontal = 64.dp),
+            pageSpacing = 18.dp,
+            beyondBoundsPageCount = 1,
+            modifier = Modifier.fillMaxWidth()
+        ) { page ->
+            val item = heroItems[page % heroItems.size]
+            val genres = remember(item.id, item.genreIds) {
+                val genreMap = if (item.mediaType == MediaType.TV) tvGenres else movieGenres
+                item.genreIds.mapNotNull { genreMap[it] }.take(3)
+            }
+            // releaseDate is stored as "d MMM yyyy" by MediaRepository.formatDate()
+            val year = remember(item.id, item.releaseDate, item.year) {
+                val rd = item.releaseDate
+                if (!rd.isNullOrBlank()) {
+                    runCatching {
+                        val parsed = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.ENGLISH).parse(rd)
+                        parsed?.let { java.text.SimpleDateFormat("d MMM", java.util.Locale.ENGLISH).format(it) }
+                    }.getOrNull() ?: item.year
+                } else {
+                    item.year
+                }
+            }
+            val rating = remember(item.id) {
+                imdbRatingFor(item).ifEmpty { item.tmdbRating.takeIf { parseRatingValue(it) > 0f }.orEmpty() }
+            }
+            val logoUrl = remember(item.id) { cardLogoUrls["${item.mediaType}_${item.id}"] }
 
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Metadata row with IMDb rating badge
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (genreText.isNotEmpty()) {
-                                Text(
-                                    text = genreText,
-                                    style = ArflixTypography.caption.copy(
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        shadow = textShadow
-                                    ),
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    maxLines = 1
-                                )
-                            }
-                            if (year.isNotEmpty()) {
-                                if (genreText.isNotEmpty()) {
-                                    Text(
-                                        text = "|",
-                                        style = ArflixTypography.caption.copy(fontSize = 11.sp, shadow = textShadow),
-                                        color = Color.White.copy(alpha = 0.5f)
-                                    )
-                                }
-                                Text(
-                                    text = year,
-                                    style = ArflixTypography.caption.copy(
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        shadow = textShadow
-                                    ),
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    maxLines = 1
-                                )
-                            }
-                            if (ratingValue > 0f) {
-                                ImdbSvgRatingBadge(
-                                    rating = rating,
-                                    imageLoader = metadataLogoImageLoader,
-                                    ratingFontSize = 11,
-                                    logoWidth = 30.dp,
-                                    logoHeight = 12.dp,
-                                    textShadow = textShadow
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(5.dp))
-
-                        // Description with lighter alpha and text shadow
-                        Text(
-                            text = displayOverview,
-                            style = ArflixTypography.body.copy(
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                shadow = textShadow
-                            ),
-                            color = Color.White.copy(alpha = 0.7f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        // Bottom padding above page indicators
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Page indicator dots inside the carousel page area
-                        if (heroItems.size > 1) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                heroItems.forEachIndexed { index, _ ->
-                                    val isSelected = pagerState.currentPage == index
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(horizontal = 3.dp)
-                                            .size(if (isSelected) 8.dp else 6.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                if (isSelected) Color.White
-                                                else Color.White.copy(alpha = 0.30f)
-                                            )
-                                    )
-                                }
-                            }
-                        }
-                    }
+            // Scale down cards that aren't in the center; animate smoothly as they scroll in/out
+            val scale by remember(page) {
+                derivedStateOf {
+                    val offset = abs(
+                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                    )
+                    (1f - offset * 0.13f).coerceIn(0.87f, 1f)
                 }
             }
 
-            // Smooth fade-to-black at the very bottom edge (overlays the pager)
-            Box(
+            MobileHeroBanner(
+                imageUrl = item.backdrop ?: item.image ?: "",
+                title = item.title,
+                genres = genres,
+                year = year,
+                rating = rating,
+                logoUrl = logoUrl,
+                onClick = { onNavigateToDetails(item.mediaType, item.id, null, null) },
+                modifier = Modifier.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+            )
+        }
+
+        // Animated pill indicators — centered below the pager
+        if (heroItems.size > 1) {
+            val currentIndex = pagerState.currentPage % heroItems.size
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(bottomEdgeFade)
-            )
+                    .padding(top = 10.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                heroItems.forEachIndexed { index, _ ->
+                    if (index > 0) Spacer(modifier = Modifier.width(5.dp))
+                    val isSelected = currentIndex == index
+                    val expandFraction by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0f,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "pill_$index"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .height(4.dp)
+                            .width(6.dp + 18.dp * expandFraction)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                if (isSelected) Color.White else Color.White.copy(alpha = 0.30f)
+                            )
+                    )
+                }
+            }
         }
     }
 }
@@ -2616,6 +2510,9 @@ private fun HomeInputLayer(
             heroOverviewOverride = heroOverviewOverride,
             onPlay = onPlay,
             onDetails = onDetails,
+            currentProfile = currentProfile,
+            onNavigateToSearch = onNavigateToSearch,
+            onSwitchProfile = onSwitchProfile,
             onNavigateToDetails = onNavigateToDetails,
             onMobileCategoryVisiblePosition = onMobileCategoryVisiblePosition,
             onItemClick = { item ->
@@ -2655,6 +2552,9 @@ private fun HomeRowsLayer(
     heroOverviewOverride: String? = null,
     onPlay: () -> Unit = {},
     onDetails: () -> Unit = {},
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
+    onNavigateToSearch: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
     onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
     onItemClick: (MediaItem) -> Unit,
@@ -2665,6 +2565,9 @@ private fun HomeRowsLayer(
             categories = categories,
             cardLogoUrls = cardLogoUrls,
             contentStartPadding = contentStartPadding,
+            currentProfile = currentProfile,
+            onNavigateToSearch = onNavigateToSearch,
+            onSwitchProfile = onSwitchProfile,
             usePosterCards = usePosterCards,
             categoryHasMoreMap = categoryHasMoreMap,
             onLoadMoreCategory = onLoadMoreCategory,
@@ -2706,6 +2609,9 @@ private fun MobileHomeRowsLayer(
     cardLogoUrls: Map<String, String>,
     contentStartPadding: androidx.compose.ui.unit.Dp,
     usePosterCards: Boolean,
+    currentProfile: com.arflix.tv.data.model.Profile? = null,
+    onNavigateToSearch: () -> Unit = {},
+    onSwitchProfile: () -> Unit = {},
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
     onLoadMoreCategory: (String) -> Unit = {},
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
@@ -2718,13 +2624,16 @@ private fun MobileHomeRowsLayer(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Swipeable hero carousel as the first scrollable item
+        // Hero carousel — profile/search row + banner card pager
         item(key = "mobile_hero", contentType = "mobile_hero") {
             MobileHeroCarousel(
                 categories = categories,
                 cardLogoUrls = cardLogoUrls,
+                currentProfile = currentProfile,
+                onNavigateToSearch = onNavigateToSearch,
+                onSwitchProfile = onSwitchProfile,
                 onNavigateToDetails = onNavigateToDetails
             )
         }
