@@ -102,6 +102,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -184,7 +185,29 @@ import com.arflix.tv.cast.CastManagerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
+import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.mediarouter.app.MediaRouteChooserDialog
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.drawable.Icon as DrawableIcon
+import android.util.Rational
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.graphics.Canvas as ComposeCanvas
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.core.content.ContextCompat
+
+private const val PIP_ACTION_REWIND = "com.arflix.tv.pip.REWIND"
+private const val PIP_ACTION_PLAY_PAUSE = "com.arflix.tv.pip.PLAY_PAUSE"
+private const val PIP_ACTION_FORWARD = "com.arflix.tv.pip.FORWARD"
 
 /**
  * Netflix-style Player UI for Android TV
@@ -319,6 +342,7 @@ fun PlayerScreen(
     val containerFocusRequester = remember { FocusRequester() }
     val skipIntroFocusRequester = remember { FocusRequester() }
     val subtitleSettingsBtnFocusRequester = remember { FocusRequester() }
+    val pipButtonFocusRequester = remember { FocusRequester() }
 
     // Focus state - 0=Play, 1=Subtitles
     var focusedButton by remember { mutableIntStateOf(0) }
@@ -434,6 +458,101 @@ fun PlayerScreen(
     // AtomicBoolean gives cross-thread visibility; Compose state drives recomposition.
     val playerReleasedAtomic = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     var playerReleased by remember { mutableStateOf(false) }
+
+    // Picture-in-Picture state
+    var isInPipMode by remember { mutableStateOf(false) }
+
+    // Render Material ImageVectors into bitmaps for PiP RemoteActions — same icon pack, no XML files.
+    val pipDensity = LocalDensity.current
+    val pipRewindPainter  = rememberVectorPainter(Icons.Default.Replay10)
+    val pipPlayPainter    = rememberVectorPainter(Icons.Default.PlayArrow)
+    val pipPausePainter   = rememberVectorPainter(Icons.Default.Pause)
+    val pipForwardPainter = rememberVectorPainter(Icons.Default.Forward10)
+
+    fun vectorToDrawableIcon(painter: androidx.compose.ui.graphics.painter.Painter): DrawableIcon {
+        // Scale icon proportionally to the PiP window size.
+        // PiP is typically ~35% of screen width at 16:9; action buttons fill ~30% of window height.
+        val metrics = context.resources.displayMetrics
+        val pipWindowHeightPx = (metrics.widthPixels * 0.35f * 9f / 16f).toInt()
+        val proportionalSizePx = (pipWindowHeightPx * 0.30f).toInt()
+        val minSizePx = with(pipDensity) { 48.dp.roundToPx() }
+        val sizePx = proportionalSizePx.coerceAtLeast(minSizePx)
+
+        val imageBitmap = ImageBitmap(sizePx, sizePx)
+        val scope = CanvasDrawScope()
+        val drawSize = androidx.compose.ui.geometry.Size(sizePx.toFloat(), sizePx.toFloat())
+        scope.draw(pipDensity, LayoutDirection.Ltr, ComposeCanvas(imageBitmap), drawSize) {
+            with(painter) { draw(drawSize, colorFilter = ColorFilter.tint(androidx.compose.ui.graphics.Color.White)) }
+        }
+        return DrawableIcon.createWithBitmap(imageBitmap.asAndroidBitmap())
+    }
+
+    // Helper to build PiP params with current playback state
+    fun buildPipParams(): PictureInPictureParams? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        val makeIntent = { action: String, code: Int ->
+            PendingIntent.getBroadcast(
+                context, code,
+                Intent(action).apply { `package` = context.packageName },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+        val actions = listOf(
+            RemoteAction(
+                vectorToDrawableIcon(pipRewindPainter),
+                "Rewind 10s", "Rewind 10s", makeIntent(PIP_ACTION_REWIND, 10)
+            ),
+            RemoteAction(
+                vectorToDrawableIcon(if (isPlaying) pipPausePainter else pipPlayPainter),
+                if (isPlaying) "Pause" else "Play",
+                if (isPlaying) "Pause" else "Play",
+                makeIntent(PIP_ACTION_PLAY_PAUSE, 11)
+            ),
+            RemoteAction(
+                vectorToDrawableIcon(pipForwardPainter),
+                "Forward 10s", "Forward 10s", makeIntent(PIP_ACTION_FORWARD, 12)
+            )
+        )
+        return PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+            .setActions(actions)
+            .build()
+    }
+
+    // Enter PiP mode
+    val enterPipMode: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            buildPipParams()?.let { params -> activity?.enterPictureInPictureMode(params) }
+        }
+    }
+
+    // Detect PiP mode changes via lifecycle — touch devices only (ON_PAUSE = entering PiP, ON_RESUME = exiting)
+    DisposableEffect(lifecycleOwner, activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !deviceType.isTouchDevice()) {
+            return@DisposableEffect onDispose {}
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (activity?.isInPictureInPictureMode == true) {
+                        isInPipMode = true
+                        showControls = false
+                    }
+                }
+                Lifecycle.Event.ON_RESUME -> isInPipMode = false
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Update PiP params when play/pause changes so the PiP overlay button stays in sync — touch only
+    LaunchedEffect(isInPipMode, isPlaying) {
+        if (isInPipMode && deviceType.isTouchDevice() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            buildPipParams()?.let { params -> activity?.setPictureInPictureParams(params) }
+        }
+    }
 
     // Load media
     LaunchedEffect(mediaType, mediaId, seasonNumber, episodeNumber, imdbId, preferredAddonId, preferredSourceName, preferredBingeGroup, startPositionMs) {
@@ -979,10 +1098,16 @@ fun PlayerScreen(
     DisposableEffect(lifecycleOwner, exoPlayer) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                    if (exoPlayer.isPlaying) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    // Don't pause when entering PiP — video should keep playing in the window.
+                    val inPip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                        activity?.isInPictureInPictureMode == true
+                    if (!inPip && exoPlayer.isPlaying) {
                         exoPlayer.pause()
                     }
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    if (exoPlayer.isPlaying) exoPlayer.pause()
                 }
                 else -> Unit
             }
@@ -991,6 +1116,36 @@ fun PlayerScreen(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+
+    // BroadcastReceiver for PiP control actions (rewind, play/pause, forward) — touch devices only
+    DisposableEffect(exoPlayer) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !deviceType.isTouchDevice()) return@DisposableEffect onDispose {}
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: android.content.Context, intent: Intent) {
+                if (playerReleased) return
+                when (intent.action) {
+                    PIP_ACTION_REWIND ->
+                        exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L))
+                    PIP_ACTION_PLAY_PAUSE ->
+                        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                    PIP_ACTION_FORWARD -> {
+                        val dur = exoPlayer.duration
+                        exoPlayer.seekTo(
+                            (exoPlayer.currentPosition + 10_000L)
+                                .coerceAtMost(if (dur > 0L) dur else Long.MAX_VALUE)
+                        )
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(PIP_ACTION_REWIND)
+            addAction(PIP_ACTION_PLAY_PAUSE)
+            addAction(PIP_ACTION_FORWARD)
+        }
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose { context.unregisterReceiver(receiver) }
     }
 
     val queueControlsSeek: (Long) -> Unit = queueSeek@{ deltaMs ->
@@ -2348,7 +2503,8 @@ fun PlayerScreen(
                                     subTypeface
                                 )
                             )
-                            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subSizeSp)
+                            val pipSubScale = if (isInPipMode) 0.4f else 1f
+                            setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subSizeSp * pipSubScale)
                             val bottomPaddingFraction = when (subtitleOffsetPref) {
                                 "Bottom" -> 0.02f
                                 "Low" -> 0.08f
@@ -2379,7 +2535,8 @@ fun PlayerScreen(
                         val baseSizeSp = when (subtitleSizePref) {
                             "Small" -> 18f; "Large" -> 30f; "Extra Large" -> 36f; else -> 24f
                         }
-                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, baseSizeSp * (subtitleSizePct / 100f))
+                        val pipSubScale = if (isInPipMode) 0.4f else 1f
+                        setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, baseSizeSp * (subtitleSizePct / 100f) * pipSubScale)
                         setBottomPaddingFraction((subtitleVerticalPct / 100f).coerceIn(0f, 0.5f))
                     }
                 },
@@ -2496,7 +2653,7 @@ fun PlayerScreen(
 
         // Netflix-style Controls Overlay
         AnimatedVisibility(
-            visible = hasPlaybackStarted && showControls && !showSubtitleMenu && !showSourceMenu,
+            visible = hasPlaybackStarted && showControls && !showSubtitleMenu && !showSourceMenu && !isInPipMode,
             enter = fadeIn(androidx.compose.animation.core.tween(150)),
             exit = fadeOut(androidx.compose.animation.core.tween(200))
         ) {
@@ -2813,7 +2970,13 @@ fun PlayerScreen(
                             onFocusChanged = {},
                             onClick = cycleAspectRatio,
                             onLeftKey = { if (isTouchDevice) playButtonFocusRequester.requestFocus() else forwardButtonFocusRequester.requestFocus() },
-                            onRightKey = { if (mediaType == MediaType.TV) nextEpisodeButtonFocusRequester.requestFocus() else subtitleButtonFocusRequester.requestFocus() },
+                            onRightKey = {
+                                when {
+                                    mediaType == MediaType.TV -> nextEpisodeButtonFocusRequester.requestFocus()
+                                    isTouchDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> pipButtonFocusRequester.requestFocus()
+                                    else -> subtitleButtonFocusRequester.requestFocus()
+                                }
+                            },
                             onDownKey = { trackbarFocusRequester.requestFocus() })
 
                         if (mediaType == MediaType.TV) {
@@ -2830,6 +2993,22 @@ fun PlayerScreen(
                                 onLeftKey = { aspectButtonFocusRequester.requestFocus() },
                                 onRightKey = { subtitleButtonFocusRequester.requestFocus() },
                                 onDownKey = { trackbarFocusRequester.requestFocus() })
+                        }
+
+                        // PiP button — touch devices only, just right of other buttons, Android 8+
+                        if (isTouchDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            Spacer(modifier = Modifier.width(gap))
+                            PlayerIconButton(
+                                icon = Icons.Default.PictureInPicture,
+                                contentDescription = "Picture in Picture",
+                                focusRequester = pipButtonFocusRequester,
+                                size = smallBtn, iconSize = smallIcon,
+                                onFocusChanged = {},
+                                onClick = { enterPipMode() },
+                                onLeftKey = { if (mediaType == MediaType.TV) nextEpisodeButtonFocusRequester.requestFocus() else aspectButtonFocusRequester.requestFocus() },
+                                onRightKey = { subtitleButtonFocusRequester.requestFocus() },
+                                onDownKey = { trackbarFocusRequester.requestFocus() }
+                            )
                         }
                     }
 
