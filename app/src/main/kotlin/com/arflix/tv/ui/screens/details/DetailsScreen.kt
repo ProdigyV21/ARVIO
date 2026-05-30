@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed as standardItemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -1838,7 +1839,7 @@ private fun DetailsContent(
                 val ratingValue = parseRatingValue(rating)
                 val primaryNetworkLogo = item.primaryNetworkLogo?.takeIf { it.isNotBlank() }
                 val budgetText = budget?.trim()?.takeIf { it.isNotEmpty() && item.mediaType == MediaType.MOVIE }
-                val overviewMaxHeight = if (isCompactHeight) 68.dp else 72.dp
+                val overviewMaxHeight = if (isCompactHeight) 96.dp else 104.dp
 
                 val separatorStyle = ArflixTypography.caption.copy(
                     fontSize = 13.sp,
@@ -1846,7 +1847,7 @@ private fun DetailsContent(
                 )
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -1860,7 +1861,7 @@ private fun DetailsContent(
                     )
 
                     if (displayDate.isNotEmpty()) {
-                        Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                        Text(text = "•", style = separatorStyle, color = Color.White.copy(alpha = 0.5f))
                         Text(
                             text = displayDate,
                             style = ArflixTypography.caption.copy(
@@ -1873,7 +1874,7 @@ private fun DetailsContent(
                     }
 
                     if (hasDuration) {
-                        Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                        Text(text = "•", style = separatorStyle, color = Color.White.copy(alpha = 0.5f))
                         Text(
                             text = item.duration,
                             style = ArflixTypography.caption.copy(
@@ -1886,32 +1887,32 @@ private fun DetailsContent(
                     }
 
                     if (primaryNetworkLogo != null) {
-                        Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                        Box(modifier = Modifier.height(14.dp).width(1.dp).background(Color.White.copy(alpha = 0.3f)))
                         AsyncImage(
                             model = primaryNetworkLogo,
                             imageLoader = metadataLogoImageLoader,
                             contentDescription = "Primary streaming provider",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
-                                .height(16.dp)
-                                .width(52.dp)
+                                .height(20.dp)
+                                .widthIn(max = 64.dp)
                         )
                     }
 
                     if (ratingValue > 0f) {
-                        Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                        Box(modifier = Modifier.height(14.dp).width(1.dp).background(Color.White.copy(alpha = 0.3f)))
                         DetailsImdbSvgRatingBadge(
                             rating = rating,
                             imageLoader = metadataLogoImageLoader,
                             ratingFontSize = 13,
-                            logoWidth = 34.dp,
-                            logoHeight = 14.dp,
+                            logoWidth = 48.dp,
+                            logoHeight = 20.dp,
                             textShadow = textShadow
                         )
                     }
 
                     if (!budgetText.isNullOrBlank()) {
-                        Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                        Box(modifier = Modifier.height(14.dp).width(1.dp).background(Color.White.copy(alpha = 0.3f)))
                         Text(
                             text = "${stringResource(R.string.budget)} $budgetText",
                             style = ArflixTypography.caption.copy(
@@ -1924,24 +1925,24 @@ private fun DetailsContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 val displayOverview = item.overview
 
                 Box(
                     modifier = Modifier
-                        .width(360.dp)
+                        .widthIn(max = 560.dp)
                         .height(overviewMaxHeight)
                 ) {
                     Text(
                         text = displayOverview,
                         style = ArflixTypography.body.copy(
-                            fontSize = 12.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Normal,
-                            lineHeight = 16.sp,
+                            lineHeight = 23.sp,
                             shadow = textShadow
                         ),
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = Color(0xDFFFFFFF),
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
