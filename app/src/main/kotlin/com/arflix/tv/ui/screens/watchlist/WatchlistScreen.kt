@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.watchlist
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material3.Icon
@@ -21,63 +25,50 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.content.res.Configuration
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.grid.TvGridCells
-import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
-import androidx.tv.foundation.lazy.grid.itemsIndexed
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.CardLayoutMode
-import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
-import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
+import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
-import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.theme.ArflixTypography
-import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.Pink
-import com.arflix.tv.ui.theme.TextSecondary
+import com.arflix.tv.ui.theme.TextPrimary
+import com.arflix.tv.ui.theme.appBackgroundDark
+import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.tr
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlin.math.abs
 
-/**
- * Watchlist screen - matches webapp design with grid layout
- */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun WatchlistScreen(
@@ -93,167 +84,135 @@ fun WatchlistScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val logoUrls by viewModel.logoUrls.collectAsStateWithLifecycle()
-    val rowKey = "watchlist"
-    val usePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
-    val configuration = LocalConfiguration.current
     val isMobile = LocalDeviceType.current.isTouchDevice()
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val gridColumns = if (isMobile) {
-        if (isLandscape) { if (usePosterCards) 3 else 2 } else 2
-    } else if (usePosterCards) {
-        when {
-            configuration.screenWidthDp >= 2200 -> 8
-            configuration.screenWidthDp >= 1600 -> 7
-            else -> 6
-        }
-    } else when {
-        configuration.screenWidthDp >= 2200 -> 5
-        configuration.screenWidthDp >= 1600 -> 4
-        else -> 3
+    val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
+    val cardWidth: Dp = if (usePosterCards) {
+        if (isMobile) 120.dp else 110.dp
+    } else {
+        if (isMobile) 200.dp else 230.dp
     }
-    val cardWidth = if (usePosterCards) {
-        if (isMobile) 124.dp else 125.dp
-    } else if (isMobile) 160.dp else when (gridColumns) {
-        5 -> 240.dp
-        4 -> 250.dp
-        else -> 230.dp
-    }
-    
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
-    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 3 else 2) } // WATCHLIST
+    var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 3 else 2) }
     val rootFocusRequester = remember { FocusRequester() }
-    val gridFocusRequester = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
-    val gridState = rememberTvLazyGridState()
-    var focusedGridIndex by remember { mutableIntStateOf(0) }
-    var gridHasFocus by remember { mutableStateOf(false) }
+    var focusedSectionIndex by remember { mutableIntStateOf(0) }
+    var focusedItemIndex by remember { mutableIntStateOf(0) }
+    var enterKeyDownTimeMs by remember { mutableLongStateOf(-1L) }
+    val longPressThresholdMs = 500L
+    val lazyColumnState = rememberLazyListState()
 
-    // Keep the focused card in view with smooth animated scrolling.
-    LaunchedEffect(focusedGridIndex, uiState.items.size) {
-        if (uiState.items.isEmpty()) return@LaunchedEffect
-        val safe = focusedGridIndex.coerceIn(0, uiState.items.lastIndex)
-        val firstVisible = gridState.firstVisibleItemIndex
-        val distance = abs(firstVisible - safe)
-        if (distance > gridColumns * 4) {
-            gridState.scrollToItem(safe)
-        } else {
-            gridState.animateScrollToItem(safe)
-        }
+    val sections = listOf(
+        Pair("movies", uiState.movies),
+        Pair("series", uiState.series)
+    ).filter { it.second.isNotEmpty() }
+
+    val getFocusedItem: () -> MediaItem? = {
+        sections.getOrNull(focusedSectionIndex)?.second?.getOrNull(focusedItemIndex)
     }
 
-    // Refresh watchlist when screen resumes (e.g. after removing from detail screen)
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refresh()
-            }
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(Unit) {
         rootFocusRequester.requestFocus()
     }
 
-    LaunchedEffect(uiState.isLoading, uiState.items.isEmpty()) {
-        if (!uiState.isLoading && uiState.items.isEmpty()) {
-            // Empty screen must always have a deterministic focus target.
-            isSidebarFocused = true
-            sidebarFocusIndex = if (hasProfile) 3 else SidebarItem.WATCHLIST.ordinal
-        } else if (!uiState.isLoading && uiState.items.isNotEmpty() && !isSidebarFocused) {
-            // Ensure first card can receive focus when content becomes available.
-            delay(80)
-            runCatching { gridFocusRequester.requestFocus() }
+    LaunchedEffect(sections.size, uiState.movies.size, uiState.series.size) {
+        if (sections.isNotEmpty() && !isSidebarFocused) {
+            if (focusedSectionIndex >= sections.size) {
+                focusedSectionIndex = 0
+                focusedItemIndex = 0
+            }
         }
     }
-    
+
+    LaunchedEffect(sections.size) {
+        if (sections.isNotEmpty()) lazyColumnState.scrollToItem(0)
+    }
+
+    LaunchedEffect(focusedSectionIndex, sections.size) {
+        if (!isSidebarFocused && sections.isNotEmpty() && focusedSectionIndex < sections.size) {
+            lazyColumnState.animateScrollToItem(focusedSectionIndex)
+        }
+    }
+
+    val totalItems = uiState.movies.size + uiState.series.size
+    LaunchedEffect(uiState.isLoading, totalItems) {
+        if (!uiState.isLoading && totalItems == 0) {
+            isSidebarFocused = true
+            sidebarFocusIndex = if (hasProfile) 3 else SidebarItem.WATCHLIST.ordinal
+        } else if (!uiState.isLoading && totalItems > 0 && !isSidebarFocused) {
+            delay(80)
+            runCatching { rootFocusRequester.requestFocus() }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(appBackgroundDark())
             .focusRequester(rootFocusRequester)
-            .onFocusChanged {
-                if (it.isFocused) {
-                    isSidebarFocused = true
-                }
-            }
             .focusable()
-            .onPreviewKeyEvent { event ->
+            .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
-                    // Helper: transition focus from grid to sidebar
-                    fun moveToSidebar() {
-                        isSidebarFocused = true
-                        // Immediately steal focus from grid card to prevent card click on next Enter
-                        runCatching { rootFocusRequester.requestFocus() }
-                    }
-
                     when (event.key) {
                         Key.Back, Key.Escape -> {
-                            if (isSidebarFocused) {
-                                onBack()
-                            } else {
-                                moveToSidebar()
-                            }
+                            if (isSidebarFocused) onBack() else isSidebarFocused = true
                             true
                         }
                         Key.DirectionLeft -> {
                             if (!isSidebarFocused) {
-                                if (focusedGridIndex % gridColumns == 0) {
-                                    moveToSidebar()
-                                    true
+                                if (focusedItemIndex > 0) {
+                                    focusedItemIndex--
                                 } else {
-                                    false
+                                    isSidebarFocused = true
                                 }
-                            } else {
-                                if (sidebarFocusIndex > 0) {
-                                    sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
-                                }
-                                true
+                            } else if (sidebarFocusIndex > 0) {
+                                sidebarFocusIndex = (sidebarFocusIndex - 1).coerceIn(0, maxSidebarIndex)
                             }
+                            true
                         }
                         Key.DirectionRight -> {
-                            if (isSidebarFocused) {
-                                if (sidebarFocusIndex < maxSidebarIndex) {
-                                    sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
+                            if (!isSidebarFocused) {
+                                val currentSection = sections.getOrNull(focusedSectionIndex)
+                                if (currentSection != null && focusedItemIndex < currentSection.second.size - 1) {
+                                    focusedItemIndex++
                                 }
-                                true
-                            } else {
-                                false
+                            } else if (sidebarFocusIndex < maxSidebarIndex) {
+                                sidebarFocusIndex = (sidebarFocusIndex + 1).coerceIn(0, maxSidebarIndex)
                             }
+                            true
                         }
                         Key.DirectionUp -> {
                             if (isSidebarFocused) {
-                                true
+                                // stay in sidebar
+                            } else if (focusedSectionIndex > 0) {
+                                focusedSectionIndex--
+                                focusedItemIndex = 0
                             } else {
-                                val firstVisibleIndex = gridState.firstVisibleItemIndex
-                                if (firstVisibleIndex == 0 && focusedGridIndex < gridColumns) {
-                                    moveToSidebar()
-                                    true
-                                } else {
-                                    false
-                                }
+                                isSidebarFocused = true
                             }
+                            true
                         }
                         Key.DirectionDown -> {
                             if (isSidebarFocused) {
-                                if (uiState.items.isNotEmpty()) {
+                                if (totalItems > 0) {
                                     isSidebarFocused = false
-                                    runCatching { gridFocusRequester.requestFocus() }
+                                    focusedSectionIndex = 0
+                                    focusedItemIndex = 0
                                 }
-                                true
-                            } else {
-                                if (focusedGridIndex >= uiState.items.size - 1) {
-                                    true
-                                } else {
-                                    false
-                                }
+                            } else if (focusedSectionIndex < sections.size - 1) {
+                                focusedSectionIndex++
+                                focusedItemIndex = 0
                             }
+                            true
                         }
                         Key.Enter, Key.DirectionCenter -> {
                             if (isSidebarFocused) {
@@ -263,21 +222,42 @@ fun WatchlistScreen(
                                     when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
                                         SidebarItem.SEARCH -> onNavigateToSearch()
                                         SidebarItem.HOME -> onNavigateToHome()
-                                        SidebarItem.WATCHLIST -> { }
+                                        SidebarItem.WATCHLIST -> {}
                                         SidebarItem.TV -> onNavigateToTv()
                                         SidebarItem.SETTINGS -> onNavigateToSettings()
                                         null -> Unit
                                     }
                                 }
-                                true
-                            } else false
+                            } else {
+                                enterKeyDownTimeMs = SystemClock.elapsedRealtime()
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                } else if (event.type == KeyEventType.KeyUp) {
+                    when (event.key) {
+                        Key.Enter, Key.DirectionCenter -> {
+                            if (!isSidebarFocused && enterKeyDownTimeMs >= 0L) {
+                                val holdMs = SystemClock.elapsedRealtime() - enterKeyDownTimeMs
+                                val focusedItem = getFocusedItem()
+                                if (focusedItem != null) {
+                                    if (holdMs >= longPressThresholdMs) {
+                                        viewModel.removeFromWatchlist(focusedItem)
+                                    } else {
+                                        onNavigateToDetails(focusedItem.mediaType, focusedItem.id)
+                                    }
+                                }
+                                enterKeyDownTimeMs = -1L
+                            }
+                            true
                         }
                         else -> false
                     }
                 } else false
             }
     ) {
-        if (!LocalDeviceType.current.isTouchDevice()) {
+        if (!isMobile) {
             AppTopBar(
                 selectedItem = SidebarItem.WATCHLIST,
                 isFocused = isSidebarFocused,
@@ -290,103 +270,84 @@ fun WatchlistScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = if (isMobile) 0.dp else AppTopBarContentTopInset)
-                .padding(start = 24.dp, top = if (isMobile) 16.dp else 4.dp, end = 48.dp)
+                .padding(start = 24.dp, top = 4.dp, end = 48.dp)
         ) {
-                when {
-                    uiState.isLoading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingIndicator(color = Pink, size = 64.dp)
+            when {
+                uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator(color = Pink, size = 64.dp)
+                    }
+                }
+                totalItems == 0 -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Outlined.Bookmark,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.2f),
+                                modifier = Modifier.size(80.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = tr("Your watchlist is empty"),
+                                style = ArflixTypography.body,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = tr("Add movies and shows for later"),
+                                style = ArflixTypography.caption,
+                                color = Color.White.copy(alpha = 0.3f)
+                            )
                         }
                     }
-                    uiState.items.isEmpty() -> {
-                        // fillMaxSize ensures proper centering within the available space
-                        // for both mobile and TV layouts (Bug 12 & 24).
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Bookmark,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.2f),
-                                    modifier = Modifier.size(80.dp)
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = tr("Your watchlist is empty"),
-                                    style = ArflixTypography.body,
-                                    color = Color.White.copy(alpha = 0.5f)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = tr("Add movies and shows for later"),
-                                    style = ArflixTypography.caption,
-                                    color = Color.White.copy(alpha = 0.3f)
-                                )
+                }
+                else -> {
+                    LazyColumn(
+                        state = lazyColumnState,
+                        modifier = Modifier.weight(1f).fillMaxWidth().focusable(false),
+                        contentPadding = PaddingValues(top = if (isMobile) 48.dp else 0.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (isMobile) 24.dp else 16.dp),
+                        userScrollEnabled = isMobile
+                    ) {
+                        itemsIndexed(
+                            items = sections,
+                            key = { _, (type, _) -> type },
+                            contentType = { _, _ -> "watchlist_section" }
+                        ) { sectionIdx, (sectionType, items) ->
+                            val title = when (sectionType) {
+                                "movies" -> tr("Movies")
+                                "series" -> tr("Series")
+                                else -> sectionType.replaceFirstChar { it.uppercase() }
                             }
-                        }
-                    }
-                    else -> {
-                        // Grid of items - 4 columns like screenshot
-                        TvLazyVerticalGrid(
-                            columns = TvGridCells.Fixed(gridColumns),
-                            state = gridState,
-                            contentPadding = PaddingValues(top = 18.dp, bottom = 56.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(24.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(gridFocusRequester)
-                                .arvioDpadFocusGroup()
-                                .onFocusChanged { 
-                                    gridHasFocus = it.hasFocus
-                                    if (it.hasFocus) {
-                                        isSidebarFocused = false
+                            WatchlistItemsSection(
+                                title = title,
+                                items = items,
+                                logoUrls = logoUrls,
+                                cardWidth = cardWidth,
+                                isLandscape = !usePosterCards,
+                                isMobile = isMobile,
+                                focusedItemIndex = if (!isMobile && focusedSectionIndex == sectionIdx && !isSidebarFocused) focusedItemIndex else -1,
+                                onItemFocused = { index ->
+                                    if (!isSidebarFocused && focusedSectionIndex == sectionIdx) {
+                                        focusedItemIndex = index
                                     }
-                                }
-                                .onKeyEvent { event ->
-                                    if (event.type == KeyEventType.KeyDown) {
-                                        when (event.key) {
-                                            Key.Back, Key.Escape -> {
-                                                isSidebarFocused = true
-                                                scope.launch {
-                                                    delay(40)
-                                                    runCatching { rootFocusRequester.requestFocus() }
-                                                }
-                                                true
-                                            }
-                                            else -> false
-                                        }
-                                    } else false
-                                }
-                        ) {
-                            itemsIndexed(uiState.items) { index, item ->
-                                val logoUrl = logoUrls["${item.mediaType}_${item.id}"]
-                                MediaCard(
-                                    item = item,
-                                    width = cardWidth,
-                                    isLandscape = !usePosterCards,
-                                    logoImageUrl = logoUrl,
-                                    focusedScale = 1f,
-                                    onFocused = { focusedGridIndex = index },
-                                    onClick = { onNavigateToDetails(item.mediaType, item.id) },
-                                    onLongClick = { viewModel.removeFromWatchlist(item) }
-                                )
-                            }
+                                },
+                                onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id) },
+                                onItemLongPress = { item -> viewModel.removeFromWatchlist(item) }
+                            )
                         }
                     }
                 }
             }
+        }
 
-        // Toast notification
         uiState.toastMessage?.let { message ->
             Toast(
                 message = message,
@@ -399,6 +360,69 @@ fun WatchlistScreen(
                 onDismiss = { viewModel.dismissToast() }
             )
         }
+    }
+}
 
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun WatchlistItemsSection(
+    title: String,
+    items: List<MediaItem>,
+    logoUrls: Map<String, String>,
+    cardWidth: Dp,
+    isLandscape: Boolean,
+    isMobile: Boolean = false,
+    focusedItemIndex: Int = -1,
+    onItemFocused: (Int) -> Unit = {},
+    onItemClick: (MediaItem) -> Unit,
+    onItemLongPress: (MediaItem) -> Unit = {}
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            style = ArflixTypography.sectionTitle,
+            color = TextPrimary,
+            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+        )
+
+        val lazyListState = rememberLazyListState()
+        LaunchedEffect(focusedItemIndex) {
+            if (focusedItemIndex < 0) return@LaunchedEffect
+            val safe = focusedItemIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+            val first = lazyListState.firstVisibleItemIndex
+            val last = lazyListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: first
+            if (safe < first || safe > last) {
+                lazyListState.scrollToItem(safe)
+            } else if (safe != first) {
+                lazyListState.animateScrollToItem(safe)
+            }
+        }
+
+        LazyRow(
+            state = lazyListState,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(
+                items = items,
+                key = { _, item -> "${item.mediaType.name}-${item.id}" },
+                contentType = { _, item -> "${item.mediaType.name}_card" }
+            ) { index, item ->
+                val logoUrl = logoUrls["${item.mediaType}_${item.id}"]
+                MediaCard(
+                    item = item,
+                    width = cardWidth,
+                    isLandscape = isLandscape,
+                    logoImageUrl = logoUrl,
+                    showTitle = true,
+                    isFocusedOverride = index == focusedItemIndex && focusedItemIndex >= 0,
+                    enableSystemFocus = false,
+                    onFocused = { onItemFocused(index) },
+                    onClick = { onItemClick(item) },
+                    onLongClick = { onItemLongPress(item) }
+                )
+            }
+        }
     }
 }

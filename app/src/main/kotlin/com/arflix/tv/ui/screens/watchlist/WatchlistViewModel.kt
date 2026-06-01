@@ -3,7 +3,8 @@ package com.arflix.tv.ui.screens.watchlist
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.model.MediaItem
-import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.MediaType.MOVIE
+import com.arflix.tv.data.model.MediaType.TV
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.TraktRepository
@@ -13,7 +14,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -23,12 +23,15 @@ enum class ToastType {
 
 data class WatchlistUiState(
     val isLoading: Boolean = true,
-    val items: List<MediaItem> = emptyList(),
+    val movies: List<MediaItem> = emptyList(),
+    val series: List<MediaItem> = emptyList(),
     val error: String? = null,
-    // Toast
     val toastMessage: String? = null,
     val toastType: ToastType = ToastType.INFO
-)
+) {
+    val isEmpty: Boolean get() = movies.isEmpty() && series.isEmpty()
+    val allItems: List<MediaItem> get() = movies + series
+}
 
 @HiltViewModel
 class WatchlistViewModel @Inject constructor(
@@ -50,7 +53,7 @@ class WatchlistViewModel @Inject constructor(
     ): Map<String, String> = mutableMapOf(
         "error_area" to "Watchlist",
         "watchlist_phase" to phase,
-        "visible_count" to _uiState.value.items.size.toString()
+        "visible_count" to _uiState.value.allItems.size.toString()
     ).apply { putAll(extra) }
 
     private fun List<MediaItem>.watchlistDisplayOrder(): List<MediaItem> {
@@ -59,6 +62,20 @@ class WatchlistViewModel @Inject constructor(
                 .thenByDescending { it.addedAt }
         )
     }
+
+    private fun List<MediaItem>.toSplitState(
+        isLoading: Boolean = false,
+        error: String? = null,
+        toastMessage: String? = null,
+        toastType: ToastType = ToastType.INFO
+    ): WatchlistUiState = WatchlistUiState(
+        isLoading = isLoading,
+        movies = filter { it.mediaType == MOVIE },
+        series = filter { it.mediaType == TV },
+        error = error,
+        toastMessage = toastMessage,
+        toastType = toastType
+    )
 
     init {
         observeWatchlistChanges()
@@ -70,12 +87,9 @@ class WatchlistViewModel @Inject constructor(
             watchlistRepository.watchlistItems.collect { items ->
                 if (traktSyncInFlight) return@collect
                 val current = _uiState.value
-                if (items.isNotEmpty() || (!current.isLoading && current.items.isEmpty())) {
+                if (items.isNotEmpty() || (!current.isLoading && current.isEmpty)) {
                     val orderedItems = items.watchlistDisplayOrder()
-                    _uiState.value = current.copy(
-                        items = orderedItems,
-                        isLoading = false
-                    )
+                    _uiState.value = orderedItems.toSplitState(isLoading = false)
                     fetchLogos(orderedItems)
                 }
             }
@@ -113,18 +127,12 @@ class WatchlistViewModel @Inject constructor(
                 val cachedItems = (watchlistRepository.getCachedItems().ifEmpty {
                     watchlistRepository.getWatchlistItems()
                 }).watchlistDisplayOrder()
-                _uiState.value = WatchlistUiState(
-                    isLoading = cachedItems.isEmpty(),
-                    items = cachedItems
-                )
+                _uiState.value = cachedItems.toSplitState(isLoading = cachedItems.isEmpty())
                 if (cachedItems.isNotEmpty()) fetchLogos(cachedItems)
             } else {
                 val cachedItems = watchlistRepository.getCachedItems()
                 if (cachedItems.isNotEmpty()) {
-                    _uiState.value = WatchlistUiState(
-                        isLoading = false,
-                        items = cachedItems
-                    )
+                    _uiState.value = cachedItems.toSplitState(isLoading = false)
                 } else {
                     _uiState.value = WatchlistUiState(isLoading = true)
                 }
@@ -135,10 +143,7 @@ class WatchlistViewModel @Inject constructor(
                 val syncedFromTrakt = syncTraktWatchlistSuspend()
                 if (!syncedFromTrakt && !traktConnected) {
                     val items = watchlistRepository.getWatchlistItems().watchlistDisplayOrder()
-                    _uiState.value = WatchlistUiState(
-                        isLoading = false,
-                        items = items
-                    )
+                    _uiState.value = items.toSplitState(isLoading = false)
                 } else if (!syncedFromTrakt) {
                     showLocalWatchlistOrError("Failed to load Trakt watchlist")
                 }
@@ -152,7 +157,7 @@ class WatchlistViewModel @Inject constructor(
                 )
                 if (traktConnected) {
                     showLocalWatchlistOrError(e.message ?: "Failed to load Trakt watchlist")
-                } else if (_uiState.value.items.isEmpty()) {
+                } else if (_uiState.value.isEmpty) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = e.message
@@ -172,10 +177,7 @@ class WatchlistViewModel @Inject constructor(
                 val traktConnected = runCatching { traktRepository.hasTrakt() }.getOrDefault(false)
                 if (!syncedFromTrakt && !traktConnected) {
                     val items = watchlistRepository.refreshWatchlistItems().watchlistDisplayOrder()
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        items = items
-                    )
+                    _uiState.value = items.toSplitState(isLoading = false)
                 } else if (!syncedFromTrakt) {
                     showLocalWatchlistOrError("Failed to load Trakt watchlist")
                 }
@@ -196,7 +198,7 @@ class WatchlistViewModel @Inject constructor(
     private suspend fun showLocalWatchlistOrError(message: String) {
         val cachedItems = watchlistRepository.getWatchlistItems().watchlistDisplayOrder()
         if (cachedItems.isNotEmpty()) {
-            _uiState.value = WatchlistUiState(isLoading = false, items = cachedItems)
+            _uiState.value = cachedItems.toSplitState(isLoading = false)
             fetchLogos(cachedItems)
         } else {
             _uiState.value = WatchlistUiState(isLoading = false, error = message)
@@ -214,9 +216,10 @@ class WatchlistViewModel @Inject constructor(
                 watchlistRepository.removeFromWatchlist(item.mediaType, item.id)
 
                 // Optimistic update - remove from local state immediately
-                val updatedItems = _uiState.value.items.filter { it.id != item.id || it.mediaType != item.mediaType }
-                _uiState.value = _uiState.value.copy(
-                    items = updatedItems,
+                val current = _uiState.value
+                _uiState.value = current.copy(
+                    movies = current.movies.filter { it.id != item.id || it.mediaType != item.mediaType },
+                    series = current.series.filter { it.id != item.id || it.mediaType != item.mediaType },
                     toastMessage = "Removed from watchlist",
                     toastType = ToastType.SUCCESS
                 )
@@ -270,11 +273,11 @@ class WatchlistViewModel @Inject constructor(
                 if (traktItems.isNotEmpty()) {
                     watchlistRepository.clearWatchlistCache()
                     val orderedTraktItems = traktItems.watchlistDisplayOrder()
-                    _uiState.value = WatchlistUiState(isLoading = false, items = orderedTraktItems)
+                    _uiState.value = orderedTraktItems.toSplitState(isLoading = false)
                     fetchLogos(orderedTraktItems)
 
                     watchlistRepository.syncFromTraktOrder(orderedTraktItems)
-                    _uiState.value = WatchlistUiState(isLoading = false, items = orderedTraktItems)
+                    _uiState.value = orderedTraktItems.toSplitState(isLoading = false)
                     runCatching { cloudSyncRepository.pushToCloud() }
                         .onFailure { error ->
                             AppLogger.recordException(
@@ -292,11 +295,11 @@ class WatchlistViewModel @Inject constructor(
                     val cachedItems = (watchlistRepository.getCachedItems().ifEmpty {
                         watchlistRepository.getWatchlistItems()
                     }).watchlistDisplayOrder()
-                    _uiState.value = WatchlistUiState(isLoading = false, items = cachedItems)
+                    _uiState.value = cachedItems.toSplitState(isLoading = false)
                     if (cachedItems.isNotEmpty()) {
                         fetchLogos(cachedItems)
                     } else {
-                        _uiState.value = WatchlistUiState(isLoading = false, items = emptyList())
+                        _uiState.value = WatchlistUiState(isLoading = false)
                     }
                 } else {
                     AppLogger.recordException(
@@ -310,7 +313,7 @@ class WatchlistViewModel @Inject constructor(
                         )
                     )
                     val cachedItems = watchlistRepository.getWatchlistItems().watchlistDisplayOrder()
-                    _uiState.value = WatchlistUiState(isLoading = false, items = cachedItems)
+                    _uiState.value = cachedItems.toSplitState(isLoading = false)
                     fetchLogos(cachedItems)
                 }
                 true
