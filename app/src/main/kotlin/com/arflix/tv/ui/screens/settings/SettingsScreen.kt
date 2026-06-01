@@ -198,29 +198,6 @@ private val LocalSettingsFocusTracker = compositionLocalOf<SettingsFocusTracker?
 
 private const val ACCOUNT_DELETION_URL = "https://auth.arvio.tv/delete"
 
-private val tvGeneralSectionIds = setOf(
-    "language",
-    "subtitles",
-    "ai_subtitles",
-    "playback",
-    "appearance",
-    "profiles",
-    "network"
-)
-
-private fun tvGeneralRowsForSection(section: String): List<Int> {
-    return when (section) {
-        "language" -> listOf(0, 3)
-        "subtitles" -> listOf(1, 2, 4, 5, 6, 7, 8, 9)
-        "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 13, 14, 34, 16, 15, 27)
-        "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22)
-        "profiles" -> listOf(19)
-        "network" -> listOf(25, 26, 35)
-        else -> emptyList()
-    }
-}
-
 private fun openExternalUrl(context: Context, url: String) {
     runCatching {
         context.startActivity(
@@ -377,17 +354,18 @@ fun SettingsScreen(
         }
     }
     val sectionMaxIndex: (String) -> Int = { section ->
-        when (section) {
-            in tvGeneralSectionIds -> (tvGeneralRowsForSection(section).size - 1).coerceAtLeast(0)
-            "iptv" -> if (showIptvCategoriesSettings) {
+        val generalRows = tvGeneralRowsForSection(section)
+        when {
+            generalRows.isNotEmpty() -> (generalRows.size - 1).coerceAtLeast(0)
+            section == "iptv" -> if (showIptvCategoriesSettings) {
                 uiState.iptvAvailableGroups.size // Reset row + category rows
             } else {
                 2 + uiState.iptvPlaylists.size // Add + rows + refresh + clear
             }
-            "home_server" -> uiState.homeServerConnections.size + 3
-            "catalogs" -> uiState.catalogs.size // Add + rows
-            "stremio" -> stremioAddons.size // rows + add button
-            "accounts" -> 4 // Cloud + Trakt + Force Sync + App Update + Privacy/Data
+            section == "home_server" -> uiState.homeServerConnections.size + 3
+            section == "catalogs" -> uiState.catalogs.size // Add + rows
+            section == "stremio" -> stremioAddons.size // rows + add button
+            section == "accounts" -> 4 // Cloud + Trakt + Force Sync + App Update + Privacy/Data
             else -> 0
         }
     }
@@ -807,48 +785,52 @@ fun SettingsScreen(
                                 }
                                 Zone.SECTION -> activeZone = Zone.CONTENT
                                 Zone.CONTENT -> {
-                                    when (currentSection) {
-                                        in tvGeneralSectionIds -> {
-                                            when (tvGeneralRowsForSection(currentSection).getOrNull(contentFocusIndex)) {
-                                                0 -> openContentLanguagePicker()
-                                                1 -> openSubtitlePicker()
-                                                2 -> openSecondarySubtitlePicker()
-                                                3 -> openAudioLanguagePicker()
-                                                4 -> viewModel.cycleSubtitleSize()
-                                                5 -> viewModel.cycleSubtitleColor()
-                                                6 -> viewModel.cycleSubtitleOffset()
-                                                7 -> viewModel.cycleSubtitleStyle()
-                                                8 -> viewModel.toggleSubtitleStylized()
-                                                9 -> viewModel.setFilterSubtitlesByLanguage(!uiState.filterSubtitlesByLanguage)
-                                                10 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
-                                                11 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
-                                                12 -> viewModel.cycleAutoPlayMinQuality()
-                                                13 -> viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay)
-                                                14 -> viewModel.setTrailerSoundEnabled(!uiState.trailerSoundEnabled)
-                                                15 -> viewModel.cycleFrameRateMatchingMode()
-                                                16 -> showQualityFiltersModal = true
-                                                17 -> viewModel.toggleCardLayoutMode()
-                                                18 -> openUiModeWarningDialog()
-                                                19 -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
-                                                20 -> viewModel.setOledBlackBackground(!uiState.oledBlackBackground)
-                                                21 -> viewModel.cycleClockFormat()
-                                                22 -> viewModel.setShowBudget(!uiState.showBudget)
-                                                23 -> viewModel.setSpoilerBlurEnabled(!uiState.spoilerBlurEnabled)
-                                                24 -> viewModel.cycleAccentColor()
-                                                25 -> openDnsProviderPicker()
-                                                26 -> viewModel.setShowLoadingStats(!uiState.showLoadingStats)
-                                                35 -> showCustomUserAgentDialog = true
-                                                27 -> viewModel.cycleVolumeBoost()
-                                                28 -> viewModel.setSubtitleAiEnabled(!uiState.subtitleAiEnabled)
-                                                29 -> showAiModelDialog = true
-                                                30 -> viewModel.setSubtitleAiAutoSelect(!uiState.subtitleAiAutoSelect)
-                                                31 -> viewModel.setSubtitleRemoveHearingImpaired(!uiState.subtitleRemoveHearingImpaired)
-                                                32 -> showAiApiKeyDialog = true
-                                                33 -> viewModel.startAiKeyServer()
-                                                34 -> viewModel.cycleTrailerDelay()
-                                            }
+                                    val generalRows = tvGeneralRowsForSection(currentSection)
+                                    if (generalRows.isNotEmpty()) {
+                                        // Row behavior follows the symbolic metadata order so later inserts only
+                                        // require updates in SettingsSectionMetadata.kt.
+                                        when (generalRows.getOrNull(contentFocusIndex)) {
+                                            TvGeneralSettingRow.CONTENT_LANGUAGE -> openContentLanguagePicker()
+                                            TvGeneralSettingRow.DEFAULT_SUBTITLE -> openSubtitlePicker()
+                                            TvGeneralSettingRow.SECONDARY_SUBTITLE -> openSecondarySubtitlePicker()
+                                            TvGeneralSettingRow.AUDIO_LANGUAGE -> openAudioLanguagePicker()
+                                            TvGeneralSettingRow.SUBTITLE_SIZE -> viewModel.cycleSubtitleSize()
+                                            TvGeneralSettingRow.SUBTITLE_COLOR -> viewModel.cycleSubtitleColor()
+                                            TvGeneralSettingRow.SUBTITLE_OFFSET -> viewModel.cycleSubtitleOffset()
+                                            TvGeneralSettingRow.SUBTITLE_STYLE -> viewModel.cycleSubtitleStyle()
+                                            TvGeneralSettingRow.SUBTITLE_STYLIZED -> viewModel.toggleSubtitleStylized()
+                                            TvGeneralSettingRow.FILTER_SUBTITLES_BY_LANGUAGE -> viewModel.setFilterSubtitlesByLanguage(!uiState.filterSubtitlesByLanguage)
+                                            TvGeneralSettingRow.AUTO_PLAY_NEXT -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
+                                            TvGeneralSettingRow.AUTO_PLAY_SINGLE_SOURCE -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
+                                            TvGeneralSettingRow.AUTO_PLAY_MIN_QUALITY -> viewModel.cycleAutoPlayMinQuality()
+                                            TvGeneralSettingRow.TRAILER_AUTO_PLAY -> viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay)
+                                            TvGeneralSettingRow.TRAILER_SOUND_ENABLED -> viewModel.setTrailerSoundEnabled(!uiState.trailerSoundEnabled)
+                                            TvGeneralSettingRow.FRAME_RATE_MATCHING_MODE -> viewModel.cycleFrameRateMatchingMode()
+                                            TvGeneralSettingRow.QUALITY_FILTERS -> showQualityFiltersModal = true
+                                            TvGeneralSettingRow.CARD_LAYOUT_MODE -> viewModel.toggleCardLayoutMode()
+                                            TvGeneralSettingRow.UI_MODE -> openUiModeWarningDialog()
+                                            TvGeneralSettingRow.SKIP_PROFILE_SELECTION -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
+                                            TvGeneralSettingRow.OLED_BLACK_BACKGROUND -> viewModel.setOledBlackBackground(!uiState.oledBlackBackground)
+                                            TvGeneralSettingRow.CLOCK_FORMAT -> viewModel.cycleClockFormat()
+                                            TvGeneralSettingRow.SHOW_BUDGET -> viewModel.setShowBudget(!uiState.showBudget)
+                                            TvGeneralSettingRow.SPOILER_BLUR -> viewModel.setSpoilerBlurEnabled(!uiState.spoilerBlurEnabled)
+                                            TvGeneralSettingRow.ACCENT_COLOR -> viewModel.cycleAccentColor()
+                                            TvGeneralSettingRow.DNS_PROVIDER -> openDnsProviderPicker()
+                                            TvGeneralSettingRow.SHOW_LOADING_STATS -> viewModel.setShowLoadingStats(!uiState.showLoadingStats)
+                                            TvGeneralSettingRow.VOLUME_BOOST -> viewModel.cycleVolumeBoost()
+                                            TvGeneralSettingRow.SUBTITLE_AI_ENABLED -> viewModel.setSubtitleAiEnabled(!uiState.subtitleAiEnabled)
+                                            TvGeneralSettingRow.SUBTITLE_AI_MODEL -> showAiModelDialog = true
+                                            TvGeneralSettingRow.SUBTITLE_AI_AUTO_SELECT -> viewModel.setSubtitleAiAutoSelect(!uiState.subtitleAiAutoSelect)
+                                            TvGeneralSettingRow.SUBTITLE_REMOVE_HEARING_IMPAIRED -> viewModel.setSubtitleRemoveHearingImpaired(!uiState.subtitleRemoveHearingImpaired)
+                                            TvGeneralSettingRow.SUBTITLE_AI_API_KEY -> showAiApiKeyDialog = true
+                                            TvGeneralSettingRow.SUBTITLE_AI_SERVER -> viewModel.startAiKeyServer()
+                                            TvGeneralSettingRow.TRAILER_DELAY -> viewModel.cycleTrailerDelay()
+                                            TvGeneralSettingRow.CUSTOM_USER_AGENT -> showCustomUserAgentDialog = true
+                                            null -> Unit
                                         }
-                                        "iptv" -> {
+                                    } else {
+                                        when (currentSection) {
+                                            "iptv" -> {
                                             if (showIptvCategoriesSettings) {
                                                 val playlistId = uiState.iptvSelectedPlaylistId.orEmpty()
                                                 val orderedGroups = (
@@ -922,8 +904,8 @@ fun SettingsScreen(
                                                     viewModel.clearIptvConfig()
                                                 }
                                             }
-                                        }
-                                        "home_server" -> {
+                                            }
+                                            "home_server" -> {
                                             when (contentFocusIndex) {
                                        0 -> {
                                            homeServerUrl = ""
@@ -948,8 +930,8 @@ fun SettingsScreen(
                                                 uiState.homeServerConnections.size + 2 -> viewModel.testHomeServerConnection()
                                                 uiState.homeServerConnections.size + 3 -> viewModel.disconnectHomeServer()
                                             }
-                                        }
-                                        "catalogs" -> {
+                                            }
+                                            "catalogs" -> {
                                             if (contentFocusIndex == 0) {
                                                 showCatalogInput = true
                                             } else {
@@ -972,8 +954,8 @@ fun SettingsScreen(
                                                     }
                                                 }
                                             }
-                                        }
-                                        "stremio" -> {
+                                            }
+                                            "stremio" -> {
                                             when {
                                                 contentFocusIndex in 0 until stremioAddons.size -> {
                                                     val addon = stremioAddons[contentFocusIndex]
@@ -992,8 +974,8 @@ fun SettingsScreen(
                                                     showCustomAddonInput = true
                                                 }
                                             }
-                                        }
-                                        "accounts" -> {
+                                            }
+                                            "accounts" -> {
                                             when (contentFocusIndex) {
                                                 0 -> {
                                                     if (uiState.isLoggedIn) {
@@ -1022,8 +1004,8 @@ fun SettingsScreen(
                                                     }
                                                 }
                                             }
+                                            else -> Unit
                                         }
-                                        else -> Unit
                                     }
                                 }
                                 else -> {}
