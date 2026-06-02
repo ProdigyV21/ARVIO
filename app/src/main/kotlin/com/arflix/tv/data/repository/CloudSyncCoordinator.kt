@@ -30,7 +30,8 @@ class CloudSyncCoordinator @Inject constructor(
             if (!started.compareAndSet(false, true)) return
             collectorJob = scope.launch {
                 invalidationBus.events.collectLatest { invalidation ->
-                    if (authRepository.getCurrentUserId().isNullOrBlank()) return@collectLatest
+                    val userId = runCatching { authRepository.getCurrentUserId() }.getOrNull()
+                    if (userId.isNullOrBlank()) return@collectLatest
                     cloudSyncRepository.markLocalStateDirtyNow()
                     scheduleFlush(invalidation)
                 }
@@ -54,7 +55,8 @@ class CloudSyncCoordinator @Inject constructor(
             flushJob?.cancel()
             flushJob = scope.launch {
                 delay(debounceMsFor(invalidation.scope))
-                if (authRepository.getCurrentUserId().isNullOrBlank()) return@launch
+                val userId = runCatching { authRepository.getCurrentUserId() }.getOrNull()
+                if (userId.isNullOrBlank()) return@launch
                 runCatching { cloudSyncRepository.pushToCloud() }
                     .onFailure { error ->
                         Log.w("CloudSyncCoordinator", "Cloud push failed after ${invalidation.scope}: ${error.message}")

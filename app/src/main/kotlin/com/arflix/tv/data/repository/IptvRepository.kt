@@ -1068,9 +1068,9 @@ class IptvRepository @Inject constructor(
     }
 
     private fun redactIptvUrl(url: String): String {
-        val withoutQuerySecrets = QUERY_SECRETS_REGEX.replace(url) { match -> "${match.groupValues[1]}***" }
+        val withoutQuerySecrets = URL_QUERY_SECRETS_REGEX.replace(url) { match -> "${match.groupValues[1]}***" }
 
-        return IPTV_CREDENTIALS_URL_REGEX
+        return URL_PATH_SECRETS_REGEX
             .replace(withoutQuerySecrets) { match ->
                 "${match.groupValues[1]}***/***${match.groupValues[4]}"
             }
@@ -7530,8 +7530,8 @@ class IptvRepository @Inject constructor(
 
     private companion object {
         private val DURATION_SCALE_REGEX = Regex("""\$\{duration:(\d+)\}|\{duration:(\d+)\}""")
-        private val QUERY_SECRETS_REGEX = Regex("""(?i)([?&](?:username|user|uname|password|pass|pwd)=)[^&]+""")
-        private val IPTV_CREDENTIALS_URL_REGEX = Regex("""(?i)(/(?:live|movie|series|timeshift)/)([^/]+)/([^/]+)(/)""")
+        private val URL_QUERY_SECRETS_REGEX = Regex("""(?i)([?&](?:username|user|uname|password|pass|pwd)=)[^&]+""")
+        private val URL_PATH_SECRETS_REGEX = Regex("""(?i)(/(?:live|movie|series|timeshift)/)([^/]+)/([^/]+)(/)""")
         private val QUALITY_WORDS_REGEX = Regex("""\b(4K|UHD|FHD|HD|SD|2160P?|1080P?|720P?|576P?|480P?)\b""", RegexOption.IGNORE_CASE)
         private val BRACKET_PAREN_REGEX = Regex("""\[[^\]]*]|\([^)]*\)""")
 
