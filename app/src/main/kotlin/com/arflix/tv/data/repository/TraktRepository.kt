@@ -2971,10 +2971,10 @@ class TraktRepository @Inject constructor(
 
     private fun normalizeWatchlistTitle(title: String): String {
         return Normalizer.normalize(title, Normalizer.Form.NFD)
-            .replace(DIACRITICS_REGEX, "")
+            .replace(TraktRepoRegexes.DIACRITICS_REGEX, "")
             .lowercase(Locale.US)
             .replace("&", "and")
-            .replace(NON_ALPHA_NUM_REGEX, " ")
+            .replace(TraktRepoRegexes.NON_ALPHA_NUM_REGEX, " ")
             .trim()
             .removePrefix("the ")
             .removePrefix("a ")
@@ -4011,10 +4011,10 @@ private fun parseRuntimeLabelSeconds(label: String): Long {
     if (normalized.isBlank()) return 0L
 
     var minutes = 0L
-    HOURS_REGEX.find(normalized)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { hours ->
+    TraktRepoRegexes.HOURS_REGEX.find(normalized)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { hours ->
         minutes += hours * 60L
     }
-    MINS_REGEX.find(normalized)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { mins ->
+    TraktRepoRegexes.MINS_REGEX.find(normalized)?.groupValues?.getOrNull(1)?.toLongOrNull()?.let { mins ->
         minutes += mins
     }
 
@@ -4057,7 +4057,9 @@ private fun buildEpisodeKey(
 
 }
 
-private val DIACRITICS_REGEX = Regex("\\p{Mn}+")
-private val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
-private val HOURS_REGEX = Regex("""(\d+)\s*h""")
-private val MINS_REGEX = Regex("""(\d+)\s*m""")
+private object TraktRepoRegexes {
+    val DIACRITICS_REGEX = Regex("\\p{Mn}+")
+    val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
+    val HOURS_REGEX = Regex("""(\d+)\s*h""")
+    val MINS_REGEX = Regex("""(\d+)\s*m""")
+}

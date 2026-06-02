@@ -973,9 +973,9 @@ class CatalogRepository @Inject constructor(
             }
         }
 
-        val titleFromMeta = TITLE_FROM_META_REGEX.find(html)?.groupValues?.getOrNull(1)
+        val titleFromMeta = CatalogRepoRegexes.TITLE_FROM_META_REGEX.find(html)?.groupValues?.getOrNull(1)
 
-        val titleFromTag = TITLE_FROM_TAG_REGEX.find(html)?.groupValues?.getOrNull(1)
+        val titleFromTag = CatalogRepoRegexes.TITLE_FROM_TAG_REGEX.find(html)?.groupValues?.getOrNull(1)
             ?.replace(" - MDBList", "", ignoreCase = true)
 
         val titleFromSlug = extractMdblistSlugTitle(url)
@@ -999,7 +999,7 @@ class CatalogRepository @Inject constructor(
     }
 
     private fun extractTraktUrl(html: String): String? {
-        return TRAKT_URL_REGEX.find(html)?.value
+        return CatalogRepoRegexes.TRAKT_URL_REGEX.find(html)?.value
     }
 
     private suspend fun fetchUrl(url: String): String? {
@@ -1291,18 +1291,6 @@ class CatalogRepository @Inject constructor(
     private companion object {
         private const val ADDON_SOURCE_REF_PREFIX = "addon_catalog|"
 
-        private val TITLE_FROM_META_REGEX = Regex(
-            """<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']""",
-            RegexOption.IGNORE_CASE
-        )
-        private val TITLE_FROM_TAG_REGEX = Regex(
-            """<title>([^<]+)</title>""",
-            RegexOption.IGNORE_CASE
-        )
-        private val TRAKT_URL_REGEX = Regex(
-            """https?://(?:www\.)?trakt\.tv/users/[^"'\s<]+/lists/[^"'\s<]+""",
-            RegexOption.IGNORE_CASE
-        )
     }
 }
 
@@ -1314,4 +1302,19 @@ private fun String.toDisplayTitle(): String {
             token.replaceFirstChar { ch -> ch.uppercase() }
         }
         .ifBlank { "Custom Catalog" }
+}
+
+private object CatalogRepoRegexes {
+    val TITLE_FROM_META_REGEX = Regex(
+        """<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']""",
+        RegexOption.IGNORE_CASE
+    )
+    val TITLE_FROM_TAG_REGEX = Regex(
+        """<title>([^<]+)</title>""",
+        RegexOption.IGNORE_CASE
+    )
+    val TRAKT_URL_REGEX = Regex(
+        """https?://(?:www\.)?trakt\.tv/users/[^"'\s<]+/lists/[^"'\s<]+""",
+        RegexOption.IGNORE_CASE
+    )
 }

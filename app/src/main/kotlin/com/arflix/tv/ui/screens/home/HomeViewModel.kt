@@ -114,9 +114,6 @@ enum class ToastType {
     SUCCESS, ERROR, INFO
 }
 
-private val ALPHANUMERIC_REGEX = Regex("[^A-Za-z0-9_.-]")
-private val FILE_NAME_REGEX = Regex("[^a-zA-Z0-9._-]")
-
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel @Inject constructor(
@@ -816,9 +813,9 @@ class HomeViewModel @Inject constructor(
     private fun categoriesCacheFile(): java.io.File {
         val profileId = profileManager.getProfileIdSync()
             .ifBlank { "default" }
-            .replace(ALPHANUMERIC_REGEX, "_")
+            .replace(HomeVMRegexes.ALPHANUMERIC_REGEX, "_")
         val language = (mediaRepository.contentLanguage ?: "en-US")
-            .replace(ALPHANUMERIC_REGEX, "_")
+            .replace(HomeVMRegexes.ALPHANUMERIC_REGEX, "_")
         return java.io.File(context.cacheDir, "home_categories_cache_${profileId}_$language.json")
     }
 
@@ -4229,7 +4226,7 @@ class HomeViewModel @Inject constructor(
         downloadJob = viewModelScope.launch {
             updateStatusManager.updateStatus(com.arflix.tv.updater.UpdateStatus.Downloading(0f, update))
 
-            val safeName = update.assetName.replace(FILE_NAME_REGEX, "_")
+            val safeName = update.assetName.replace(HomeVMRegexes.FILE_NAME_REGEX, "_")
             val dest = java.io.File(java.io.File(context.cacheDir, "updates"), safeName)
 
             val result = kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -4312,4 +4309,9 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(showAppUpdateDialog = false, hasUpdateBadge = false)
         updateStatusManager.reset()
     }
+}
+
+private object HomeVMRegexes {
+    val ALPHANUMERIC_REGEX = Regex("[^A-Za-z0-9_.-]")
+    val FILE_NAME_REGEX = Regex("[^a-zA-Z0-9._-]")
 }

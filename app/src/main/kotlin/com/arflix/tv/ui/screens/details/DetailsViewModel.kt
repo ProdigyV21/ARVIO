@@ -211,19 +211,6 @@ class DetailsViewModel @Inject constructor(
         return value.isBlank() || value == "0.0" || value == "0"
     }
 
-    private val reviewWhitespaceRegex = Regex("\\s+")
-    private val reviewMarkdownLinkRegex = Regex("\\[([^\\]]+)]\\([^)]*\\)")
-    private val reviewHtmlTagRegex = Regex("<[^>]*>")
-    private val reviewMarkdownNoiseRegex = Regex("[*_`>#]+")
-    private val reviewSpamRegex = Regex(
-        pattern = "\\b(?:https?://|www\\.|discord\\.gg|t\\.me/|telegram|whatsapp|onlyfans|casino|betting|viagra|loan|crypto|airdrop|promo\\s+code|coupon|download\\s+now|watch\\s+(?:free|online)|free\\s+stream|\\.xyz\\b|\\.top\\b|\\.click\\b|\\.link\\b|\\.site\\b)\\b",
-        option = RegexOption.IGNORE_CASE
-    )
-    private val reviewDomainRegex = Regex(
-        pattern = "\\b[a-z0-9-]+\\.(?:com|net|org|xyz|top|click|link|site|online|shop|info)\\b",
-        option = RegexOption.IGNORE_CASE
-    )
-
     private fun normalizeAutoPlayMinQuality(raw: String?): String {
         return when (raw?.trim()?.lowercase()) {
             "any" -> "Any"
@@ -2329,7 +2316,7 @@ class DetailsViewModel @Inject constructor(
                 if (cleanedContent.length !in MIN_COMMUNITY_REVIEW_CHARS..MAX_COMMUNITY_REVIEW_CHARS) {
                     return@mapNotNull null
                 }
-                val wordCount = cleanedContent.split(reviewWhitespaceRegex).count { it.length > 1 }
+                val wordCount = cleanedContent.split(DetailsVMRegexes.reviewWhitespaceRegex).count { it.length > 1 }
                 if (wordCount < MIN_COMMUNITY_REVIEW_WORDS) return@mapNotNull null
                 review.copy(content = cleanedContent)
             }
@@ -2349,7 +2336,7 @@ class DetailsViewModel @Inject constructor(
         if (cleanedContent.length !in MIN_COMMUNITY_REVIEW_CHARS..MAX_COMMUNITY_REVIEW_CHARS) {
             return null
         }
-        val wordCount = cleanedContent.split(reviewWhitespaceRegex).count { it.length > 1 }
+        val wordCount = cleanedContent.split(DetailsVMRegexes.reviewWhitespaceRegex).count { it.length > 1 }
         if (wordCount < MIN_COMMUNITY_REVIEW_WORDS) return null
 
         val username = user?.username?.trim().orEmpty()
@@ -2372,17 +2359,17 @@ class DetailsViewModel @Inject constructor(
 
     private fun cleanCommunityReviewText(raw: String): String {
         return raw
-            .replace(reviewMarkdownLinkRegex, "\$1")
-            .replace(reviewHtmlTagRegex, " ")
-            .replace(reviewMarkdownNoiseRegex, " ")
-            .replace(reviewWhitespaceRegex, " ")
+            .replace(DetailsVMRegexes.reviewMarkdownLinkRegex, "\$1")
+            .replace(DetailsVMRegexes.reviewHtmlTagRegex, " ")
+            .replace(DetailsVMRegexes.reviewMarkdownNoiseRegex, " ")
+            .replace(DetailsVMRegexes.reviewWhitespaceRegex, " ")
             .trim()
     }
 
     private fun isSpammyReviewText(raw: String): Boolean {
         val text = raw.trim()
         if (text.isBlank()) return true
-        if (reviewSpamRegex.containsMatchIn(text) || reviewDomainRegex.containsMatchIn(text)) return true
+        if (DetailsVMRegexes.reviewSpamRegex.containsMatchIn(text) || DetailsVMRegexes.reviewDomainRegex.containsMatchIn(text)) return true
         if (text.count { it == '$' } > 2 || text.count { it == '!' } > 6) return true
 
         val visibleChars = text.count { !it.isWhitespace() }.coerceAtLeast(1)
@@ -2508,4 +2495,19 @@ class DetailsViewModel @Inject constructor(
         )
         prewarmVisibleStreams(mergedStreams)
     }
+}
+
+private object DetailsVMRegexes {
+    val reviewWhitespaceRegex = Regex("\\s+")
+    val reviewMarkdownLinkRegex = Regex("\\[([^\\]]+)]\\([^)]*\\)")
+    val reviewHtmlTagRegex = Regex("<[^>]*>")
+    val reviewMarkdownNoiseRegex = Regex("[*_`>#]+")
+    val reviewSpamRegex = Regex(
+        pattern = "\\b(?:https?://|www\\.|discord\\.gg|t\\.me/|telegram|whatsapp|onlyfans|casino|betting|viagra|loan|crypto|airdrop|promo\\s+code|coupon|download\\s+now|watch\\s+(?:free|online)|free\\s+stream|\\.xyz\\b|\\.top\\b|\\.click\\b|\\.link\\b|\\.site\\b)\\b",
+        option = RegexOption.IGNORE_CASE
+    )
+    val reviewDomainRegex = Regex(
+        pattern = "\\b[a-z0-9-]+\\.(?:com|net|org|xyz|top|click|link|site|online|shop|info)\\b",
+        option = RegexOption.IGNORE_CASE
+    )
 }

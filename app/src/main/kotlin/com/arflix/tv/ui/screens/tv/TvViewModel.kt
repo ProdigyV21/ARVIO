@@ -1537,7 +1537,7 @@ private fun buildPreparedChannelsByGroup(
 
 private fun String.isNetherlandsGroup(): Boolean {
     val tokens = lowercase()
-        .split(TvViewModelRegexes.NON_ALPHANUMERIC_REGEX)
+        .split(TvVMRegexes.NON_ALPHA_NUM)
         .filter { it.isNotBlank() }
         .toSet()
     return "netherlands" in tokens || "nederland" in tokens || "nl" in tokens
@@ -1635,4 +1635,8 @@ private fun IptvConfig.syncSignature(): String {
         stalkerMacAddress,
         playlistsSignature
     ).joinToString("||")
+}
+
+private object TvVMRegexes {
+    val NON_ALPHA_NUM = Regex("[^a-z0-9]+")
 }
