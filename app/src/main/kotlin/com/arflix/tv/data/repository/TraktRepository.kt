@@ -566,7 +566,14 @@ class TraktRepository @Inject constructor(
         return try {
             val watched = traktApi.getWatchedMovies(auth, clientId)
             watched.mapNotNull { it.movie.ids.tmdb }.toSet()
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptySet()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptySet()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptySet()
         }
     }
@@ -591,7 +598,14 @@ class TraktRepository @Inject constructor(
                 }
             }
             episodes
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptySet()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptySet()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptySet()
         }
     }
@@ -3071,7 +3085,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getCollectionMovies(auth, clientId)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3083,7 +3104,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getCollectionShows(auth, clientId)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3177,7 +3205,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getRatingsMovies(auth, clientId)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3189,7 +3224,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getRatingsShows(auth, clientId)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3201,7 +3243,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getRatingsEpisodes(auth, clientId)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3313,7 +3362,14 @@ class TraktRepository @Inject constructor(
     suspend fun getMovieComments(mediaId: String, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
             traktApi.getMovieComments(clientId, "2", mediaId, sort, page, limit)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3328,7 +3384,14 @@ class TraktRepository @Inject constructor(
     suspend fun getShowComments(mediaId: String, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
             traktApi.getShowComments(clientId, "2", mediaId, sort, page, limit)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3343,7 +3406,14 @@ class TraktRepository @Inject constructor(
     suspend fun getSeasonComments(showId: String, season: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
             traktApi.getSeasonComments(clientId, "2", showId, season, sort, page, limit)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3358,7 +3428,14 @@ class TraktRepository @Inject constructor(
     suspend fun getEpisodeComments(showId: String, season: Int, episode: Int, page: Int = 1, limit: Int = 10, sort: String = "newest"): List<TraktComment> {
         return try {
             traktApi.getEpisodeComments(clientId, "2", showId, season, episode, sort, page, limit)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3516,7 +3593,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getHistoryMovies(auth, clientId, "2", page, limit)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
@@ -3528,7 +3612,14 @@ class TraktRepository @Inject constructor(
         val auth = getAuthHeader() ?: return emptyList()
         return try {
             traktApi.getHistoryEpisodes(auth, clientId, "2", page, limit)
+        } catch (e: java.io.IOException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Network or IO error, returning default", e)
+            emptyList()
+        } catch (e: retrofit2.HttpException) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "HTTP error fetching data, returning default", e)
+            emptyList()
         } catch (e: Exception) {
+            com.arflix.tv.util.AppLogger.e("TraktRepository", "Unknown error fetching data, returning default", e)
             emptyList()
         }
     }
