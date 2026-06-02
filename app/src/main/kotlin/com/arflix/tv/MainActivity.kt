@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,8 +54,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.arflix.tv.ui.components.AppBottomBar
 import androidx.core.view.WindowCompat
@@ -105,6 +104,8 @@ import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
+import com.arflix.tv.data.db.DownloadStatus
+import com.arflix.tv.ui.screens.downloads.DownloadsViewModel
 import com.arflix.tv.ui.screens.login.LoginScreen
 import com.arflix.tv.ui.startup.StartupViewModel
 import com.arflix.tv.ui.theme.ArflixTvTheme
@@ -575,6 +576,26 @@ fun ArflixApp(
         Screen.ProfileSelection.route
     }
 
+    val downloadsViewModel: DownloadsViewModel = hiltViewModel()
+    val downloadsState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+    val hasAnyDownloads: Boolean by remember {
+        derivedStateOf {
+            downloadsState.movieDownloads.isNotEmpty() ||
+                downloadsState.seriesDownloads.values.any { it.isNotEmpty() }
+        }
+    }
+    val activeDownloadProgress: Float? by remember {
+        derivedStateOf {
+            val all = downloadsState.movieDownloads +
+                downloadsState.seriesDownloads.values.flatten()
+            val active = all.filter {
+                it.status == DownloadStatus.DOWNLOADING.name || it.status == DownloadStatus.QUEUED.name
+            }
+            if (active.isEmpty()) null
+            else active.map { it.progress }.average().toFloat() / 100f
+        }
+    }
+
     val deviceType = LocalDeviceType.current
     val isMobile = deviceType.isTouchDevice()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
@@ -654,6 +675,8 @@ fun ArflixApp(
                         launchSingleTop = true
                     }
                 },
+                activeDownloadProgress = activeDownloadProgress,
+                hasAnyDownloads = hasAnyDownloads,
                 modifier = Modifier.fillMaxWidth()
             )
         }

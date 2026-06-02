@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
@@ -86,6 +88,8 @@ object ContextActions {
     val viewDetails = ContextAction("view_details", "View Details", Icons.Default.Info, TextPrimary)
     val markSeasonWatched = ContextAction("mark_season_watched", "Mark Season Watched", Icons.Default.Check, Color(0xFF22C55E))
     val markSeasonUnwatched = ContextAction("mark_season_unwatched", "Mark Season Unwatched", Icons.Default.Clear, TextSecondary)
+    val download = ContextAction("download", "Download", Icons.Default.Download, Pink)
+    val removeDownload = ContextAction("remove_download", "Remove Download", Icons.Default.Delete, Color(0xFFEF4444))
 }
 
 /**
@@ -422,13 +426,19 @@ fun EpisodeContextMenu(
     onPlay: () -> Unit,
     onSelectSource: () -> Unit,
     onToggleWatched: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isDownloaded: Boolean = false,
+    onDownload: (() -> Unit)? = null,
+    onRemoveDownload: (() -> Unit)? = null
 ) {
-    val actions = listOf(
-        ContextActions.play,
-        ContextActions.selectSource,
-        if (isWatched) ContextActions.markUnwatched else ContextActions.markWatched
-    )
+    val isMobile = LocalDeviceType.current.isTouchDevice()
+    val actions = buildList {
+        add(ContextActions.play)
+        add(ContextActions.selectSource)
+        add(if (isWatched) ContextActions.markUnwatched else ContextActions.markWatched)
+        if (isMobile && onDownload != null && !isDownloaded) add(ContextActions.download)
+        if (isMobile && onRemoveDownload != null && isDownloaded) add(ContextActions.removeDownload)
+    }
 
     ContextMenu(
         isVisible = isVisible,
@@ -440,6 +450,8 @@ fun EpisodeContextMenu(
                 "play" -> onPlay()
                 "sources" -> onSelectSource()
                 "mark_watched", "mark_unwatched" -> onToggleWatched()
+                "download" -> onDownload?.invoke()
+                "remove_download" -> onRemoveDownload?.invoke()
             }
             onDismiss()
         },

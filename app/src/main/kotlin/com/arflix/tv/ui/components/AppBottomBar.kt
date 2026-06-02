@@ -18,10 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +72,8 @@ val bottomBarItems = listOf(
 fun AppBottomBar(
     currentRoute: String?,
     onNavigate: (String) -> Unit,
+    activeDownloadProgress: Float? = null,
+    hasAnyDownloads: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -89,9 +93,21 @@ fun AppBottomBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             bottomBarItems.forEach { item ->
+                val isWatchlist = item.route == "watchlist"
+                val showAsDownloads = isWatchlist && hasAnyDownloads
+                val isDownloading = showAsDownloads && activeDownloadProgress != null
+                val navRoute = if (showAsDownloads) "watchlist?tab=1" else item.route
                 val isSelected = currentRoute?.contains(item.route, ignoreCase = true) == true
                 var isFocused by remember { mutableStateOf(false) }
-                val label = stringResource(item.labelRes)
+                val label = when {
+                    showAsDownloads -> "Downloads"
+                    else -> stringResource(item.labelRes)
+                }
+                val iconTint = when {
+                    isFocused -> Color.White
+                    isSelected -> TextPrimary
+                    else -> TextSecondary.copy(alpha = 0.6f)
+                }
 
                 Column(
                     modifier = Modifier
@@ -106,11 +122,11 @@ fun AppBottomBar(
                         .onFocusChanged { isFocused = it.isFocused }
                         .onKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.DirectionCenter)) {
-                                onNavigate(item.route)
+                                onNavigate(navRoute)
                                 true
                             } else false
                         }
-                        .clickable { onNavigate(item.route) }
+                        .clickable { onNavigate(navRoute) }
                         .padding(vertical = 2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -128,16 +144,46 @@ fun AppBottomBar(
                             .padding(horizontal = 14.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = label,
-                            tint = when {
-                                isFocused -> Color.White
-                                isSelected -> TextPrimary
-                                else -> TextSecondary.copy(alpha = 0.6f)
-                            },
-                            modifier = Modifier.size(24.dp)
-                        )
+                        if (isDownloading) {
+                            Box(contentAlignment = Alignment.Center) {
+                                if (activeDownloadProgress!! > 0f) {
+                                    CircularProgressIndicator(
+                                        progress = { activeDownloadProgress },
+                                        modifier = Modifier.size(32.dp),
+                                        color = iconTint,
+                                        strokeWidth = 2.dp,
+                                        trackColor = Color.White.copy(alpha = 0.15f)
+                                    )
+                                } else {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = iconTint,
+                                        strokeWidth = 2.dp,
+                                        trackColor = Color.White.copy(alpha = 0.15f)
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = label,
+                                    tint = iconTint,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else if (showAsDownloads) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = label,
+                                tint = iconTint,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = item.icon,
+                                contentDescription = label,
+                                tint = iconTint,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                     if (isSelected) {
                         Box(

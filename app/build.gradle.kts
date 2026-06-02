@@ -324,6 +324,11 @@ dependencies {
     implementation("androidx.hilt:hilt-work:1.1.0")
     ksp("androidx.hilt:hilt-compiler:1.1.0")
 
+    // Room for download persistence
+    implementation("androidx.room:room-runtime:2.7.1")
+    implementation("androidx.room:room-ktx:2.7.1")
+    ksp("androidx.room:room-compiler:2.7.1")
+
     // Profile installer for baseline profiles
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 

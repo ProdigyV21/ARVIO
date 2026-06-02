@@ -80,6 +80,16 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         super.onCreate()
         instance = this
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                com.arflix.tv.worker.DownloadWorker.NOTIFICATION_CHANNEL_ID,
+                "Downloads",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            )
+            getSystemService(android.app.NotificationManager::class.java)
+                .createNotificationChannel(channel)
+        }
+
         // OkHttpProvider.init(context) just stashes the app context; it does
         // not build the OkHttpClient. Safe to keep on the main thread — it's
         // a single volatile assignment.

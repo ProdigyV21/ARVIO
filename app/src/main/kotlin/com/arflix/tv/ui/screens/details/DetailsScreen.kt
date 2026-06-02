@@ -56,6 +56,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -63,6 +65,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -134,6 +137,7 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.network.OkHttpProvider
+import com.arflix.tv.ui.components.DownloadSheet
 import com.arflix.tv.ui.components.EpisodeContextMenu
 import com.arflix.tv.ui.components.KeepScreenOn
 import com.arflix.tv.ui.components.SeasonContextMenu
@@ -245,6 +249,12 @@ fun DetailsScreen(
     var contextMenuEpisode by remember { mutableStateOf<Episode?>(null) }
     var showSeasonContextMenu by remember { mutableStateOf(false) }
     var contextMenuSeason by remember { mutableIntStateOf(1) }
+
+    // Download sheet state (mobile only)
+    var showDownloadSheet by remember { mutableStateOf(false) }
+    var downloadSheetSeason by remember { mutableStateOf<Int?>(null) }
+    var downloadSheetEpisode by remember { mutableStateOf<Int?>(null) }
+    var downloadSheetEpisodeTitle by remember { mutableStateOf<String?>(null) }
     var seasonSelectDownAtMs by remember { mutableLongStateOf(0L) }
     var ignoreFirstResumeRefresh by remember(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(true) }
 
@@ -272,6 +282,7 @@ fun DetailsScreen(
         similarIndex = 0
         isSidebarFocused = false
         viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
+        if (isMobile) viewModel.startObservingDownloads(mediaId, mediaType)
     }
 
     LaunchedEffect(uiState.episodes.size, uiState.totalSeasons, uiState.cast.size, uiState.reviews.size, uiState.similar.size) {
@@ -875,9 +886,69 @@ fun DetailsScreen(
                     onSeasonClick = onSeasonClickRemembered,
                     onSeasonLongClick = onSeasonLongClickRemembered,
                     onEpisodeClick = onEpisodeClickRemembered,
+                    onEpisodeLongClick = if (isMobile) { idx ->
+                        val ep = uiState.episodes.getOrNull(idx)
+                        if (ep != null) {
+                            episodeIndex = idx
+                            contextMenuEpisode = ep
+                            showEpisodeContextMenu = true
+                        }
+                    } else null,
                     onCastClick = onCastClickRemembered,
                     onSimilarClick = onSimilarClickRemembered,
-                    onCollectionClick = onCollectionClickRemembered
+                    onCollectionClick = onCollectionClickRemembered,
+                    movieDownload = if (isMobile) uiState.movieDownload else null,
+                    onMovieDownloadClick = if (isMobile && mediaType == MediaType.MOVIE) ({
+                        val dl = uiState.movieDownload
+                        when (dl?.status) {
+                            com.arflix.tv.data.db.DownloadStatus.COMPLETED.name -> {
+                                viewModel.deleteEpisodeDownload(dl.id)
+                            }
+                            com.arflix.tv.data.db.DownloadStatus.FAILED.name -> {
+                                viewModel.retryEpisodeDownload(dl.id)
+                            }
+                            null -> {
+                                viewModel.loadStreams(uiState.imdbId, null, null)
+                                downloadSheetSeason = null
+                                downloadSheetEpisode = null
+                                downloadSheetEpisodeTitle = null
+                                showDownloadSheet = true
+                            }
+                            else -> Unit
+                        }
+                    }) else null,
+                    episodeDownload = if (isMobile && mediaType == MediaType.TV) {
+                        val s = uiState.playSeason
+                        val e = uiState.playEpisode
+                        if (s != null && e != null) uiState.episodeDownloads["${s}_${e}"] else null
+                    } else null,
+                    tvDownloadLabel = if (mediaType == MediaType.TV && uiState.playSeason != null && uiState.playEpisode != null) {
+                        "S${uiState.playSeason}E${uiState.playEpisode}"
+                    } else null,
+                    onEpisodeDownloadClick = if (isMobile && mediaType == MediaType.TV) ({
+                        val s = uiState.playSeason
+                        val e = uiState.playEpisode
+                        val dl = if (s != null && e != null) uiState.episodeDownloads["${s}_${e}"] else null
+                        when (dl?.status) {
+                            com.arflix.tv.data.db.DownloadStatus.COMPLETED.name -> {
+                                viewModel.deleteEpisodeDownload(dl.id)
+                            }
+                            com.arflix.tv.data.db.DownloadStatus.FAILED.name -> {
+                                viewModel.retryEpisodeDownload(dl.id)
+                            }
+                            null -> {
+                                val ep = uiState.episodes.firstOrNull {
+                                    it.seasonNumber == s && it.episodeNumber == e
+                                }
+                                viewModel.loadStreams(uiState.imdbId, s, e)
+                                downloadSheetSeason = s
+                                downloadSheetEpisode = e
+                                downloadSheetEpisodeTitle = ep?.name
+                                showDownloadSheet = true
+                            }
+                            else -> Unit
+                        }
+                    }) else null
                 )
             }
         }
@@ -940,6 +1011,33 @@ fun DetailsScreen(
             }
         }
 
+        // Download Sheet (mobile only)
+        if (isMobile) {
+            DownloadSheet(
+                isVisible = showDownloadSheet,
+                title = downloadSheetEpisodeTitle ?: uiState.item?.title ?: "",
+                streams = uiState.streams,
+                subtitles = (uiState.subtitles + uiState.openSubtitles)
+                    .filter { it.url.isNotBlank() }
+                    .distinctBy { it.url },
+                isLoadingStreams = uiState.isLoadingStreams,
+                isLoadingSubtitles = uiState.isLoadingSubtitles,
+                preferredSubtitleLang = uiState.preferredSubtitleLang,
+                secondarySubtitleLang = uiState.secondarySubtitleLang,
+                onConfirm = { stream, subtitle ->
+                    showDownloadSheet = false
+                    viewModel.enqueueDownload(
+                        stream = stream,
+                        season = downloadSheetSeason,
+                        episode = downloadSheetEpisode,
+                        episodeTitle = downloadSheetEpisodeTitle,
+                        subtitle = subtitle
+                    )
+                },
+                onDismiss = { showDownloadSheet = false }
+            )
+        }
+
         // Stream Selector Modal
         StreamSelector(
             isVisible = showStreamSelector,
@@ -978,6 +1076,9 @@ fun DetailsScreen(
 
         // Episode Context Menu
         contextMenuEpisode?.let { episode ->
+            val epDownloadKey = "${episode.seasonNumber}_${episode.episodeNumber}"
+            val existingDownload = uiState.episodeDownloads[epDownloadKey]
+            val isEpDownloaded = existingDownload?.status == com.arflix.tv.data.db.DownloadStatus.COMPLETED.name
             EpisodeContextMenu(
                 isVisible = showEpisodeContextMenu,
                 episodeName = episode.name,
@@ -1005,7 +1106,20 @@ fun DetailsScreen(
                 onDismiss = {
                     showEpisodeContextMenu = false
                     contextMenuEpisode = null
-                }
+                },
+                isDownloaded = isEpDownloaded,
+                onDownload = if (isMobile && existingDownload == null) ({
+                    showEpisodeContextMenu = false
+                    downloadSheetSeason = episode.seasonNumber
+                    downloadSheetEpisode = episode.episodeNumber
+                    downloadSheetEpisodeTitle = episode.name
+                    viewModel.loadStreams(uiState.imdbId, episode.seasonNumber, episode.episodeNumber)
+                    showDownloadSheet = true
+                }) else null,
+                onRemoveDownload = if (isMobile && existingDownload != null) ({
+                    showEpisodeContextMenu = false
+                    viewModel.deleteEpisodeDownload(existingDownload.id)
+                }) else null
             )
         }
 
@@ -1189,14 +1303,81 @@ private fun DetailsContent(
     onSeasonClick: (Int) -> Unit = {},
     onSeasonLongClick: ((Int) -> Unit)? = null,
     onEpisodeClick: (Int) -> Unit = {},
+    onEpisodeLongClick: ((Int) -> Unit)? = null,
     onCastClick: (Int) -> Unit = {},
     spoilerBlurEnabled: Boolean = false,
     onSimilarClick: (Int) -> Unit = {},
-    onCollectionClick: (Int) -> Unit = {}
+    onCollectionClick: (Int) -> Unit = {},
+    movieDownload: com.arflix.tv.data.db.DownloadEntity? = null,
+    onMovieDownloadClick: (() -> Unit)? = null,
+    episodeDownload: com.arflix.tv.data.db.DownloadEntity? = null,
+    tvDownloadLabel: String? = null,
+    onEpisodeDownloadClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val metadataLogoImageLoader = context.imageLoader
     val focusSectionForUi = if (contentHasFocus) focusedSection else null
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var pendingDeleteAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    if (showDeleteConfirm) {
+        Dialog(onDismissRequest = { showDeleteConfirm = false; pendingDeleteAction = null }) {
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF1A1A1A))
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                androidx.tv.material3.Text(
+                    text = "Delete download?",
+                    style = ArflixTypography.sectionTitle,
+                    color = Color.White
+                )
+                androidx.tv.material3.Text(
+                    text = "This will remove the downloaded file from your device.",
+                    style = ArflixTypography.body,
+                    color = com.arflix.tv.ui.theme.TextSecondary
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showDeleteConfirm = false; pendingDeleteAction = null }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        androidx.tv.material3.Text(
+                            text = "Cancel",
+                            style = ArflixTypography.body,
+                            color = com.arflix.tv.ui.theme.TextSecondary
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFFF5252).copy(alpha = 0.15f))
+                            .clickable {
+                                showDeleteConfirm = false
+                                pendingDeleteAction?.invoke()
+                                pendingDeleteAction = null
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        androidx.tv.material3.Text(
+                            text = "Delete",
+                            style = ArflixTypography.body,
+                            color = Color(0xFFFF5252)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     // === PREMIUM LAYERED TEXT SHADOWS ===
     val textShadow = Shadow(
         color = Color.Black.copy(alpha = 0.9f),
@@ -1420,17 +1601,59 @@ private fun DetailsContent(
                 ) {
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Primary mobile actions
+                    // Play + Download in the same row
                     val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else "Play"
+                    val downloadHandler: (() -> Unit)? = when (item.mediaType) {
+                        MediaType.MOVIE -> onMovieDownloadClick
+                        MediaType.TV -> onEpisodeDownloadClick
+                        else -> null
+                    }
+                    val activeDownload = when (item.mediaType) {
+                        MediaType.MOVIE -> movieDownload
+                        MediaType.TV -> episodeDownload
+                        else -> null
+                    }
+                    val activeDlStatus = activeDownload?.status?.let {
+                        runCatching { com.arflix.tv.data.db.DownloadStatus.valueOf(it) }.getOrNull()
+                    }
+                    val dlSuffix = tvDownloadLabel?.let { " $it" } ?: ""
+
                     MobileActionButton(
                         icon = Icons.Default.PlayArrow,
                         text = playButtonLabel,
                         isPrimary = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(58.dp),
+                        modifier = Modifier.fillMaxWidth().height(58.dp),
                         onClick = { onButtonClick(0) }
                     )
+                    if (downloadHandler != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        MobileActionButton(
+                            icon = when (activeDlStatus) {
+                                com.arflix.tv.data.db.DownloadStatus.COMPLETED -> Icons.Default.CheckCircle
+                                else -> Icons.Default.Download
+                            },
+                            text = when (activeDlStatus) {
+                                com.arflix.tv.data.db.DownloadStatus.COMPLETED -> "Downloaded$dlSuffix"
+                                com.arflix.tv.data.db.DownloadStatus.DOWNLOADING -> "Downloading ${activeDownload?.progress ?: 0}%"
+                                com.arflix.tv.data.db.DownloadStatus.QUEUED -> "Queued"
+                                com.arflix.tv.data.db.DownloadStatus.PAUSED -> "Paused"
+                                com.arflix.tv.data.db.DownloadStatus.FAILED -> "Retry$dlSuffix"
+                                null -> "Download$dlSuffix"
+                            },
+                            isPrimary = false,
+                            isOutlined = true,
+                            isActive = activeDlStatus == com.arflix.tv.data.db.DownloadStatus.COMPLETED,
+                            modifier = Modifier.fillMaxWidth().height(58.dp),
+                            onClick = {
+                                if (activeDlStatus == com.arflix.tv.data.db.DownloadStatus.COMPLETED) {
+                                    pendingDeleteAction = downloadHandler
+                                    showDeleteConfirm = true
+                                } else {
+                                    downloadHandler()
+                                }
+                            }
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -1555,7 +1778,8 @@ private fun DetailsContent(
                                 episode = episode,
                                 isFocused = false,
                                 spoilerBlurEnabled = spoilerBlurEnabled,
-                                onClick = { onEpisodeClick(index) }
+                                onClick = { onEpisodeClick(index) },
+                                onLongClick = onEpisodeLongClick?.let { cb -> { cb(index) } }
                             )
                         }
                     }
@@ -3054,7 +3278,7 @@ private fun MobileActionButton(
     val shape = RoundedCornerShape(percent = 50)
     val bgColor = when {
         isPrimary -> Color.White
-        isOutlined -> Color.Transparent
+        isOutlined -> Color.White.copy(alpha = 0.06f)
         isActive -> Color.White.copy(alpha = 0.15f)
         else -> Color.White.copy(alpha = 0.08f)
     }
@@ -3297,7 +3521,8 @@ private fun EpisodeCard(
     cardWidth: androidx.compose.ui.unit.Dp = 300.dp,
     isFocused: Boolean,
     spoilerBlurEnabled: Boolean = false,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onLongClick: (() -> Unit)? = null
 ) {
     val aspectRatio = 16f / 9f
     val context = LocalContext.current
@@ -3361,6 +3586,7 @@ private fun EpisodeCard(
         enableSystemFocus = false,
         isFocusedOverride = isFocused,
         onClick = onClick,
+        onLongClick = onLongClick,
     ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(

@@ -2,6 +2,7 @@ package com.arflix.tv.di
 
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.repository.CloudSyncInvalidationBus
+import com.arflix.tv.data.repository.DownloadsRepository
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.ProfileRepository
@@ -19,4 +20,5 @@ interface RepositoryAccessEntryPoint {
     fun profileManager(): ProfileManager
     fun cloudSyncInvalidationBus(): CloudSyncInvalidationBus
     fun tmdbApi(): TmdbApi
+    fun downloadsRepository(): DownloadsRepository
 }
