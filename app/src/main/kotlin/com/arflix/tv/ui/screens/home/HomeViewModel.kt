@@ -1494,6 +1494,7 @@ class HomeViewModel @Inject constructor(
                 try {
                     iptvRepository.warmXtreamVodCachesIfPossible()
                 } catch (e: Exception) {
+                    AppLogger.e("HomeVM", "warmXtreamVodCachesIfPossible failed", e)
                 }
             }
         }
@@ -3084,6 +3085,7 @@ class HomeViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 // Silently fail - don't clear existing data on error
+                AppLogger.e("HomeVM", "launchContinueWatchingFetch failed", e)
             }
         }
     }
@@ -3527,6 +3529,7 @@ class HomeViewModel @Inject constructor(
                     }
                 } catch (e: Exception) {
                     // Logo fetch failed
+                    AppLogger.e("HomeVM", "Hero logo fetch failed", e)
                 }
             }
         }

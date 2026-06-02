@@ -24,6 +24,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+
+private object TvViewModelRegexes {
+    val NON_ALPHANUMERIC_REGEX = Regex("""[^a-z0-9]+""")
+}
+
 internal const val FAVORITES_GROUP_NAME = "My Favorites"
 private const val EpgLoadingStateLimit = 800
 private const val EpgAttemptedStateLimit = 2_400
@@ -1532,7 +1537,7 @@ private fun buildPreparedChannelsByGroup(
 
 private fun String.isNetherlandsGroup(): Boolean {
     val tokens = lowercase()
-        .split(Regex("[^a-z0-9]+"))
+        .split(TvViewModelRegexes.NON_ALPHANUMERIC_REGEX)
         .filter { it.isNotBlank() }
         .toSet()
     return "netherlands" in tokens || "nederland" in tokens || "nl" in tokens

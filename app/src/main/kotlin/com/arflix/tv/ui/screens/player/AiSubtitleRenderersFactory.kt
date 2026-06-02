@@ -11,6 +11,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+
+private object AiSubtitleRegexes {
+    val BRACKET_REGEX = Regex("""\[.*?\]""")
+    val MUSIC_REGEX = Regex("[♪♫]+")
+}
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class AiSubtitleRenderersFactory(
     context: Context,
@@ -145,8 +151,8 @@ private class TranslatingTextOutput(
     }
 
     private fun stripHearingImpaired(text: String): String =
-        text.replace(Regex("\\[.*?]"), "")
-            .replace(Regex("[♪♫]+"), "")
+        text.replace(AiSubtitleRegexes.BRACKET_REGEX, "")
+            .replace(AiSubtitleRegexes.MUSIC_REGEX, "")
             .trim()
 
     private fun buildTranslated(group: CueGroup, originalCues: List<Cue>, translatedText: String): CueGroup =
@@ -385,8 +391,8 @@ private class SubtitleOffsetRenderer(
             .let { if (removeHI) stripHI(it) else it }
 
     private fun stripHI(text: String): String =
-        text.replace(Regex("\\[.*?]"), "")
-            .replace(Regex("[♪♫]+"), "")
+        text.replace(AiSubtitleRegexes.BRACKET_REGEX, "")
+            .replace(AiSubtitleRegexes.MUSIC_REGEX, "")
             .trim()
 
     private fun findField(startClass: Class<*>, name: String): java.lang.reflect.Field? {

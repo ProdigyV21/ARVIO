@@ -138,6 +138,11 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
+
+private object TvScreenRegexes {
+    val NON_ALPHANUMERIC_REGEX = Regex("""[^a-z0-9]+""")
+}
+
 private enum class TvFocusZone {
     SIDEBAR,
     GROUPS,
@@ -169,7 +174,7 @@ private fun preferredStartupGroup(
 private fun String.isPriorityGuideGroup(): Boolean {
     if (this == FAVORITES_GROUP_NAME) return true
     val tokens = lowercase()
-        .split(Regex("[^a-z0-9]+"))
+        .split(TvScreenRegexes.NON_ALPHANUMERIC_REGEX)
         .filter { it.isNotBlank() }
         .toSet()
     return "netherlands" in tokens || "nederland" in tokens || "nl" in tokens

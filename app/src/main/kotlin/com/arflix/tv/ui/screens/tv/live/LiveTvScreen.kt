@@ -98,6 +98,11 @@ import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
+
+private object LiveTvScreenRegexes {
+    val IPTV_URL_REDACT_REGEX = Regex("""(?i)(/(?:live|movie|series|timeshift)/)([^/]+)/([^/]+)(/)""")
+}
+
 private enum class LiveTvFocusZone {
     TOPBAR,
     PROVIDER_SWITCHER,
@@ -1909,7 +1914,7 @@ private fun redactPlaybackUrl(url: String): String {
         pattern = """(?i)([?&](?:username|user|uname|password|pass|pwd)=)[^&]+"""
     ).replace(url) { match -> "${match.groupValues[1]}***" }
 
-    return Regex("""(?i)(/(?:live|movie|series|timeshift)/)([^/]+)/([^/]+)(/)""")
+    return LiveTvScreenRegexes.IPTV_URL_REDACT_REGEX
         .replace(withoutQuerySecrets) { match ->
             "${match.groupValues[1]}***/***${match.groupValues[4]}"
         }
