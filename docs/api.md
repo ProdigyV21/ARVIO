@@ -31,7 +31,6 @@ sequenceDiagram
     participant TV as Android TV Client
     participant API as Supabase Functions
     participant Web as Phone / Web Client
-    
     TV->>API: POST /tv-auth-start (Device UUID)
     API-->>TV: Return Pairing Code (e.g. 556677) & Expire Time
     TV->>API: GET /tv-auth-status (Device UUID) - Polls every 5s
@@ -148,14 +147,14 @@ Provides simple analytics to help prioritize developer effort on popular device 
 
 ## 📖 Documentation Navigation
 
-- [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md) - Main repository overview.
-- [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) - Guidelines for contributing code.
-- [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md) - Behavior and community guidelines.
-- [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) - System architecture and dependency dataflows.
-- [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) - Environment installation checklist.
-- [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md) - Development commands and workflows.
-- [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) - App parameters and credentials reference.
-- [docs/api.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/api.md) - Edge Function API proxies documentation (this document).
-- [docs/deployment.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
-- [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md) - Common problems and resolution guide.
-- [docs/ios-testflight.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
+- [README.md](../README.md) - Main repository overview.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Guidelines for contributing code.
+- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./setup.md) - Environment installation checklist.
+- [docs/development.md](./development.md) - Development commands and workflows.
+- [docs/configuration.md](./docs/configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./api.md) - Edge Function API proxies documentation (this document).
+- [docs/deployment.md](./deployment.md) - CI/CD pipeline automation and TestFlight uploads.
+- [docs/troubleshooting.md](./troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./ios-testflight.md) - iOS App Store/TestFlight packaging instructions.

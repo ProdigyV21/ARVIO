@@ -369,6 +369,7 @@ class MainActivity : ComponentActivity() {
                 authRepository.get().checkAuthState()
             }
             ArflixApplication.instance.scheduleTraktSyncIfNeeded()
+            ArflixApplication.instance.scheduleCacheRefresh()
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val repo = iptvRepository.get()
                 runCatching { repo.warmupFromCacheOnly() }

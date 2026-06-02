@@ -1,11 +1,11 @@
 # ARVIO — Multi-Platform Media Hub & Browser
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/ProdigyV21/ARVIO/build-check.yml?branch=main&label=Build%20Check&style=flat-square)](https://github.com/ProdigyV21/ARVIO/actions)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](file:///Users/durgaprasadml/Documents/ARVIO/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](./LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-purple?style=flat-square&logo=kotlin)](https://kotlinlang.org/)
 [![Swift](https://img.shields.io/badge/Swift-5.10-orange?style=flat-square&logo=swift)](https://swift.org/)
 
-ARVIO is a production-grade media hub designed for Android (TV, Fire TV, phone, and tablet form factors) and iOS (SwiftUI shell). It provides unified media browsing, catalog configuration, IPTV playlist loading, and home-server integrations. 
+ARVIO is a production-grade media hub designed for Android (TV, Fire TV, phone, and tablet form factors) and iOS (SwiftUI shell). It provides unified media browsing, catalog configuration, IPTV playlist loading, and home-server integrations.
 
 > [!IMPORTANT]
 > **Content & Source Policy:** ARVIO is a media browser and player interface for user-configured sources. It functions like a web browser: users must configure their own services, playlists, addons, or URLs. This repository does not host, store, sell, or distribute movies, series, live TV channels, playlists, or other copyrighted media.
@@ -44,7 +44,7 @@ ARVIO follows a clean architectural pattern:
 - **Worker Layer:** Android WorkManager coordinates periodic background tasks (e.g. Trakt syncing).
 - **Backend Layer:** Supabase Edge Functions act as secure proxies to hide client credentials for TMDB/Trakt and perform TV auth pairing.
 
-For details, refer to the [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) guide.
+For details, refer to the [docs/architecture.md](./docs/architecture.md) guide.
 
 ---
 
@@ -72,7 +72,7 @@ ARVIO/
 
 ## 5. Installation/Setup
 
-Detailed local setup instructions can be found in the [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) guide.
+Detailed local setup instructions can be found in the [docs/setup.md](./docs/setup.md) guide.
 
 ### Quick Prerequisites
 - **Android:** Android Studio Jellyfish+, JDK 17, Android SDK 35.
@@ -120,7 +120,7 @@ To build and run debug variants locally:
   open iosApp/ARVIO.xcodeproj
   ```
 
-For more info, see [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md).
+For more info, see [docs/development.md](./docs/development.md).
 
 ---
 
@@ -162,7 +162,7 @@ Key parameters are read by Gradle from `secrets.properties` or environment varia
 - **`supabase/config.toml`:** Controls local Supabase emulation and proxy settings.
 - **`netlify-auth-site/netlify.toml`:** Specifies redirection rules and headers for the Netlify static site.
 
-See [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) for details.
+See [docs/configuration.md](./docs/configuration.md) for details.
 
 ---
 
@@ -182,8 +182,8 @@ See [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/con
 ## 11. Contribution Guide References
 
 We welcome developer contributions! Before submitting code:
-1. Review the [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) guide.
-2. Comply with the [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md).
+1. Review the [CONTRIBUTING.md](./CONTRIBUTING.md) guide.
+2. Comply with the [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 3. Ensure all code tests pass and comply with Detekt styling format.
 
 ---
@@ -192,17 +192,17 @@ We welcome developer contributions! Before submitting code:
 
 To read more about specific parts of the codebase:
 
-- [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md) - Main repository overview (this document).
-- [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) - Guidelines for contributing code.
-- [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md) - Behavior and community guidelines.
-- [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) - System architecture and dependency dataflows.
-- [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) - Environment installation checklist.
-- [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md) - Development commands and workflows.
-- [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) - App parameters and credentials reference.
-- [docs/api.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/api.md) - Edge Function API proxies documentation.
-- [docs/deployment.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
-- [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md) - Common problems and resolution guide.
-- [docs/ios-testflight.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
+- [README.md](./README.md) - Main repository overview (this document).
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines for contributing code.
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./docs/architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./docs/setup.md) - Environment installation checklist.
+- [docs/development.md](./docs/development.md) - Development commands and workflows.
+- [docs/configuration.md](./docs/configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./docs/api.md) - Edge Function API proxies documentation.
+- [docs/deployment.md](./docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
+- [docs/troubleshooting.md](./docs/troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
 
 ---
 
@@ -212,7 +212,7 @@ Common development issues:
 - **Unable to locate a Java Runtime:** Ensure JDK 17 is installed. Run `export JAVA_HOME=/path/to/jdk` in your terminal shell.
 - **Supabase Invalid JWT Signature:** Check that your local `secrets.properties` contains matching `SUPABASE_ANON_KEY` credentials matching your Supabase project.
 
-For exhaustive answers, refer to [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md).
+For exhaustive answers, refer to [docs/troubleshooting.md](./docs/troubleshooting.md).
 
 ---
 
@@ -228,6 +228,6 @@ Deploy local Supabase edge functions or use Supabase emulation via the CLI. Conf
 
 ## 15. License and Acknowledgements
 
-This project is licensed under the **Apache License 2.0**. See the [LICENSE](file:///Users/durgaprasadml/Documents/ARVIO/LICENSE) file for the full text.
+This project is licensed under the **Apache License 2.0**. See the [LICENSE](./LICENSE) file for the full text.
 
 Developed with AI assistance. Contribution reviews and commits undergo normal engineering code standards.

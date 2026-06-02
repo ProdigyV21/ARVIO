@@ -6,11 +6,11 @@ This document describes the automated CI/CD pipelines, TestFlight release steps,
 
 ## 1. Automated GitHub Actions Workflows
 
-We maintain three GitHub Actions workflows in [.github/workflows/](file:///Users/durgaprasadml/Documents/ARVIO/.github/workflows):
+We maintain three GitHub Actions workflows in [.github/workflows/](../.github/workflows):
 
 ### A. Build Check (`build-check.yml`)
 - **Trigger:** Pull Requests targeting the `main` branch.
-- **Action:** 
+- **Action:**
   1. Sets up JDK 17 (Temurin).
   2. Generates a temporary Android signing keystore locally.
   3. Builds the sideload debug variant using Gradle: `./gradlew assembleSideloadDebug --no-daemon`.
@@ -25,6 +25,13 @@ We maintain three GitHub Actions workflows in [.github/workflows/](file:///Users
   5. Decodes and unlocks distribution signing certificates.
   6. Archives the app and exports the `.ipa` package.
   7. Uploads the final bundle to Apple TestFlight.
+
+### C. iOS Upload Existing IPA (`ios-upload-existing-ipa.yml`)
+- **Trigger:** Manual (`workflow_dispatch`) with `ipa_run_id` input.
+- **Action:**
+  1. Injects App Store Connect credentials on a macOS runner.
+  2. Downloads the pre-built `ARVIO-iOS-IPA` artifact from the specified GitHub Actions run.
+  3. Uploads the downloaded `.ipa` package to Apple TestFlight.
 
 ---
 
@@ -52,7 +59,7 @@ Before publishing:
 
 ## 3. Netlify Auth Site Deployment
 
-The web auth pairing portal resides in the [netlify-auth-site/](file:///Users/durgaprasadml/Documents/ARVIO/netlify-auth-site/) directory.
+The web auth pairing portal resides in the [netlify-auth-site/](../netlify-auth-site/) directory.
 
 - **Files:**
   - `index.html`: Portal landing and pairing forms.
@@ -68,14 +75,14 @@ The web auth pairing portal resides in the [netlify-auth-site/](file:///Users/du
 
 ## 📖 Documentation Navigation
 
-- [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md) - Main repository overview.
-- [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) - Guidelines for contributing code.
-- [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md) - Behavior and community guidelines.
-- [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) - System architecture and dependency dataflows.
-- [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) - Environment installation checklist.
-- [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md) - Development commands and workflows.
-- [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) - App parameters and credentials reference.
-- [docs/api.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/api.md) - Edge Function API proxies documentation.
-- [docs/deployment.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads (this document).
-- [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md) - Common problems and resolution guide.
-- [docs/ios-testflight.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
+- [README.md](../README.md) - Main repository overview.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Guidelines for contributing code.
+- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./setup.md) - Environment installation checklist.
+- [docs/development.md](./development.md) - Development commands and workflows.
+- [docs/configuration.md](./docs/configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./api.md) - Edge Function API proxies documentation.
+- [docs/deployment.md](./deployment.md) - CI/CD pipeline automation and TestFlight uploads (this document).
+- [docs/troubleshooting.md](./troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./ios-testflight.md) - iOS App Store/TestFlight packaging instructions.

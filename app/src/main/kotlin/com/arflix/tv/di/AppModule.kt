@@ -150,4 +150,16 @@ object AppModule {
     fun provideJikanApi(@Named("jikan") retrofit: Retrofit): com.arflix.tv.data.api.JikanApi {
         return retrofit.create(com.arflix.tv.data.api.JikanApi::class.java)
     }
+
+    @Provides
+    @Singleton
+    fun provideAppDatabase(@ApplicationContext context: Context): com.arflix.tv.data.local.AppDatabase {
+        return com.arflix.tv.data.local.AppDatabase.getDatabase(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCacheDao(appDatabase: com.arflix.tv.data.local.AppDatabase): com.arflix.tv.data.local.CacheDao {
+        return appDatabase.cacheDao()
+    }
 }

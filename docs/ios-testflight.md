@@ -12,8 +12,7 @@ The Android TV APK remains in `app/` and is not coupled to the iOS target.
 - `APPLE_TEAM_ID`
 - `IOS_BUNDLE_ID`
 
-The current workflow uses GitHub's macOS runner and Xcode automatic signing with the App Store Connect API key.
-If Apple refuses automatic signing in CI, the workflow will need manual distribution certificate and provisioning profile secrets.
+The workflow runs on GitHub's macOS runner. It dynamically generates an App Store distribution certificate and provisioning profile on the fly via the App Store Connect API, installs them to the runner's keychain, and signs the archive manually using those assets.
 
 ## Running
 
@@ -23,7 +22,7 @@ The workflow:
 
 1. Installs XcodeGen.
 2. Generates `iosApp/ARVIO.xcodeproj`.
-3. Archives the app with automatic signing.
+3. Archives the app using the dynamically generated manual signing assets.
 4. Exports an App Store IPA.
 5. Uploads the IPA to TestFlight.
 
@@ -31,14 +30,14 @@ The workflow:
 
 ## 📖 Documentation Navigation
 
-- [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md) - Main repository overview.
-- [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) - Guidelines for contributing code.
-- [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md) - Behavior and community guidelines.
-- [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) - System architecture and dependency dataflows.
-- [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) - Environment installation checklist.
-- [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md) - Development commands and workflows.
-- [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) - App parameters and credentials reference.
-- [docs/api.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/api.md) - Edge Function API proxies documentation.
-- [docs/deployment.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
-- [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md) - Common problems and resolution guide.
-- [docs/ios-testflight.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions (this document).
+- [README.md](../README.md) - Main repository overview.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Guidelines for contributing code.
+- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./setup.md) - Environment installation checklist.
+- [docs/development.md](./development.md) - Development commands and workflows.
+- [docs/configuration.md](./configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./api.md) - Edge Function API proxies documentation.
+- [docs/deployment.md](./deployment.md) - CI/CD pipeline automation and TestFlight uploads.
+- [docs/troubleshooting.md](./troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./ios-testflight.md) - iOS App Store/TestFlight packaging instructions (this document).

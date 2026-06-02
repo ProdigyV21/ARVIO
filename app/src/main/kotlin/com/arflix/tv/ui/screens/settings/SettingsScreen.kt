@@ -374,6 +374,7 @@ fun SettingsScreen(
             add("home_server")
             add("appearance")
             add("network")
+            add("storage")
         }
     }
     val sectionMaxIndex: (String) -> Int = { section ->
@@ -388,6 +389,7 @@ fun SettingsScreen(
             "catalogs" -> uiState.catalogs.size // Add + rows
             "stremio" -> stremioAddons.size // rows + add button
             "accounts" -> 4 // Cloud + Trakt + Force Sync + App Update + Privacy/Data
+            "storage" -> 2 // Clear metadata, Clear artwork, Clear all
             else -> 0
         }
     }
@@ -1138,6 +1140,7 @@ fun SettingsScreen(
                                     "catalogs" -> Icons.Default.Widgets
                                     "stremio" -> Icons.Default.Extension
                                     "accounts" -> Icons.Default.Person
+                                    "storage" -> Icons.Default.Delete
                                     else -> Icons.Default.Settings
                                 },
                                 title = when (section) {
@@ -1153,6 +1156,7 @@ fun SettingsScreen(
                                     "catalogs" -> stringResource(R.string.catalogs)
                                     "stremio" -> stringResource(R.string.addons)
                                     "accounts" -> stringResource(R.string.accounts)
+                                    "storage" -> "Storage"
                                     else -> section.replaceFirstChar { it.uppercase() }
                                 },
                                 isSelected = sectionIndex == index,
@@ -1494,6 +1498,15 @@ fun SettingsScreen(
                             onCheckUpdates = { viewModel.checkForAppUpdates(force = true, showNoUpdateFeedback = true) },
                             onInstallUpdate = { viewModel.installAppUpdateOrRequestPermission() },
                             onOpenDataDeletion = { openExternalUrl(context, ACCOUNT_DELETION_URL) }
+                        )
+                        "storage" -> StorageSettings(
+                            metadataSize = uiState.metadataCacheSize,
+                            artworkSize = uiState.artworkCacheSize,
+                            isClearing = uiState.isClearingCache,
+                            focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
+                            onClearMetadata = { viewModel.clearMetadataCache() },
+                            onClearArtwork = { viewModel.clearArtworkCache() },
+                            onClearAll = { viewModel.clearAllStorage() }
                         )
                     }
                   }
@@ -4319,6 +4332,7 @@ private fun tvSettingsSectionTitle(section: String): String {
         "catalogs" -> stringResource(R.string.catalogs)
         "stremio" -> stringResource(R.string.addons)
         "accounts" -> stringResource(R.string.accounts)
+        "storage" -> "Storage"
         else -> section.replaceFirstChar { it.uppercase() }
     }
 }
@@ -4337,6 +4351,7 @@ private fun tvSettingsSectionDescription(section: String): String {
         "catalogs" -> "Discover, rename, order and remove home rows and list catalogs."
         "stremio" -> "Manage third-party addons used for catalog and source discovery."
         "accounts" -> "Cloud sync, Trakt connection, app updates and account controls."
+        "storage" -> "Manage local database cache, artwork assets, and application storage."
         else -> "Configure ARVIO for this profile."
     }
 }
@@ -4384,6 +4399,10 @@ private fun tvSettingsSectionPills(
             if (uiState.isLoggedIn) "Cloud connected" else "Cloud off",
             if (uiState.isTraktAuthenticated) "Trakt connected" else "Trakt off",
             if (uiState.isForceCloudSyncing) "Syncing" else "Ready"
+        )
+        "storage" -> listOf(
+            "DB ${uiState.metadataCacheSize}",
+            "Art ${uiState.artworkCacheSize}"
         )
         else -> emptyList()
     }
@@ -7323,6 +7342,81 @@ private fun AccountsSettings(
         )
     }
 }
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun StorageSettings(
+    metadataSize: String,
+    artworkSize: String,
+    isClearing: Boolean,
+    focusedIndex: Int,
+    onClearMetadata: () -> Unit,
+    onClearArtwork: () -> Unit,
+    onClearAll: () -> Unit
+) {
+    Column {
+        if (LocalDeviceType.current.isTouchDevice()) {
+            Text(
+                text = "Storage",
+                style = ArflixTypography.sectionTitle,
+                color = TextPrimary,
+                modifier = Modifier.padding(bottom = 24.dp)
+            )
+        }
+
+        SettingsRow(
+            icon = Icons.Default.Delete,
+            title = "Clear Database Metadata",
+            subtitle = "Remove cached movies, series, episodes, cast, and reviews.",
+            value = metadataSize,
+            isFocused = focusedIndex == 0,
+            onClick = onClearMetadata,
+            modifier = Modifier.settingsFocusSlot(0)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsRow(
+            icon = Icons.Default.Delete,
+            title = "Clear Cached Artwork",
+            subtitle = "Delete cached images, posters, and backdrops from disk.",
+            value = artworkSize,
+            isFocused = focusedIndex == 1,
+            onClick = onClearArtwork,
+            modifier = Modifier.settingsFocusSlot(1)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsRow(
+            icon = Icons.Default.Delete,
+            title = "Clear All Cached Data",
+            subtitle = "Wipe the entire metadata database and all cached image assets.",
+            value = "",
+            isFocused = focusedIndex == 2,
+            onClick = onClearAll,
+            modifier = Modifier.settingsFocusSlot(2)
+        )
+
+        if (isClearing) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                LoadingIndicator(modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Clearing cache...",
+                    style = ArflixTypography.body.copy(fontSize = 14.sp),
+                    color = TextSecondary
+                )
+            }
+        }
+    }
+}
+
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

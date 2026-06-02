@@ -6,7 +6,7 @@ This document describes build variants, testing procedures, and deployment workf
 
 ## 1. Android Build Flavors & Types
 
-ARVIO utilizes two product flavors and three build types configured in [build.gradle.kts](file:///Users/durgaprasadml/Documents/ARVIO/app/build.gradle.kts).
+ARVIO utilizes two product flavors and three build types configured in [build.gradle.kts](../app/build.gradle.kts).
 
 ### Product Flavors (`flavorDimensions = "distribution"`)
 - **`play`:** Targets Google Play. In-app updater checks are disabled. Excludes FFmpeg software decoding libraries to ensure compliance with 16KB system memory alignment constraints in modern Android releases.
@@ -116,14 +116,14 @@ Verify that your changes match coding styling and static analysis parameters:
 
 ## 📖 Documentation Navigation
 
-- [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md) - Main repository overview.
-- [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) - Guidelines for contributing code.
-- [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md) - Behavior and community guidelines.
-- [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) - System architecture and dependency dataflows.
-- [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) - Environment installation checklist.
-- [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md) - Development commands and workflows (this document).
-- [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) - App parameters and credentials reference.
-- [docs/api.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/api.md) - Edge Function API proxies documentation.
-- [docs/deployment.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
-- [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md) - Common problems and resolution guide.
-- [docs/ios-testflight.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
+- [README.md](../README.md) - Main repository overview.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Guidelines for contributing code.
+- [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./setup.md) - Environment installation checklist.
+- [docs/development.md](./development.md) - Development commands and workflows (this document).
+- [docs/configuration.md](./configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./api.md) - Edge Function API proxies documentation.
+- [docs/deployment.md](./deployment.md) - CI/CD pipeline automation and TestFlight uploads.
+- [docs/troubleshooting.md](./troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./ios-testflight.md) - iOS App Store/TestFlight packaging instructions.

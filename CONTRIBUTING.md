@@ -1,6 +1,6 @@
 # Contributing to ARVIO
 
-Thank you for your interest in contributing to ARVIO! We welcome bug fixes, documentation, feature requests, and code improvements. 
+Thank you for your interest in contributing to ARVIO! We welcome bug fixes, documentation, feature requests, and code improvements.
 
 ---
 
@@ -45,9 +45,9 @@ Before you start contributing, ensure you have the following installed:
    ```
 3. Sync Gradle dependencies:
    - On Android Studio, click **File > Sync Project with Gradle Files**.
-   - Or run from command line:
+   - Or compile the project from the command line:
      ```bash
-     ./gradlew --sync-dev
+     ./gradlew assemblePlayDebug
      ```
 
 ---
@@ -133,7 +133,7 @@ We follow the Conventional Commits specification. Commit messages should be stru
 ## 8. Pull Request Process
 
 1. Ensure all local unit tests pass before submitting.
-2. Update the [CHANGELOG.md](file:///Users/durgaprasadml/Documents/ARVIO/CHANGELOG.md) with your changes under the `[Unreleased]` section.
+2. Update the [CHANGELOG.md](./CHANGELOG.md) with your changes under the `[Unreleased]` section.
 3. Open a Pull Request on GitHub.
 4. Link the PR to the relevant issue in the description (e.g. `Closes #123`).
 5. Ensure the CI build check passes. If it fails, fix the issues in your branch and push updates.
@@ -162,7 +162,7 @@ Ensure your code does not introduce new lint violations. If necessary, you can r
 
 ## 11. Documentation Contribution Standards
 
-- Every new feature should be accompanied by relevant documentation in `docs/` or an update to [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md).
+- Every new feature should be accompanied by relevant documentation in `docs/` or an update to [README.md](./README.md).
 - Keep explanations clear and concise.
 - Use relative Markdown paths with absolute links for repository resources to maintain interlinking consistency.
 - Maintain the navigation index at the bottom of all refactored markdown documents.
@@ -185,14 +185,14 @@ If you find a bug, please open an issue containing:
 If this is your first time contributing to an open-source project:
 1. Search for issues labeled `good first issue`.
 2. Do not hesitate to ask questions in the issue discussion thread if you need help.
-3. Check the [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) guide for help setting up your machine.
+3. Check the [docs/setup.md](./docs/setup.md) guide for help setting up your machine.
 
 ---
 
 ## 14. Debugging Tips
 
-- **Logcat Logs:** Filter Logcat in Android Studio with `package:mine` or tag `ARVIO` to see output from [AppLogger.kt](file:///Users/durgaprasadml/Documents/ARVIO/app/src/main/kotlin/com/arflix/tv/util/AppLogger.kt).
-- **Network Inspector:** Use the Network Profiler in Android Studio to monitor OkHttp requests routed through [OkHttpProvider.kt](file:///Users/durgaprasadml/Documents/ARVIO/app/src/main/kotlin/com/arflix/tv/network/OkHttpProvider.kt).
+- **Logcat Logs:** Filter Logcat in Android Studio with `package:mine` or tag `ARVIO` to see output from [AppLogger.kt](./app/src/main/kotlin/com/arflix/tv/util/AppLogger.kt).
+- **Network Inspector:** Use the Network Profiler in Android Studio to monitor OkHttp requests routed through [OkHttpProvider.kt](./app/src/main/kotlin/com/arflix/tv/network/OkHttpProvider.kt).
 - **Supabase Logs:** If debugging cloud sync, check the Supabase CLI logs:
   ```bash
   supabase functions serve
@@ -218,14 +218,14 @@ If this is your first time contributing to an open-source project:
 
 ## 📖 Documentation Navigation
 
-- [README.md](file:///Users/durgaprasadml/Documents/ARVIO/README.md) - Main repository overview.
-- [CONTRIBUTING.md](file:///Users/durgaprasadml/Documents/ARVIO/CONTRIBUTING.md) - Guidelines for contributing code (this document).
-- [CODE_OF_CONDUCT.md](file:///Users/durgaprasadml/Documents/ARVIO/CODE_OF_CONDUCT.md) - Behavior and community guidelines.
-- [docs/architecture.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/architecture.md) - System architecture and dependency dataflows.
-- [docs/setup.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/setup.md) - Environment installation checklist.
-- [docs/development.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/development.md) - Development commands and workflows.
-- [docs/configuration.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/configuration.md) - App parameters and credentials reference.
-- [docs/api.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/api.md) - Edge Function API proxies documentation.
-- [docs/deployment.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
-- [docs/troubleshooting.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/troubleshooting.md) - Common problems and resolution guide.
-- [docs/ios-testflight.md](file:///Users/durgaprasadml/Documents/ARVIO/docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
+- [README.md](./README.md) - Main repository overview.
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines for contributing code (this document).
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./docs/architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./docs/setup.md) - Environment installation checklist.
+- [docs/development.md](./docs/development.md) - Development commands and workflows.
+- [docs/configuration.md](./docs/configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./docs/api.md) - Edge Function API proxies documentation.
+- [docs/deployment.md](./docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
+- [docs/troubleshooting.md](./docs/troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
