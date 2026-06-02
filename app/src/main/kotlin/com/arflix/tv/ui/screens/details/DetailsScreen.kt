@@ -282,7 +282,10 @@ fun DetailsScreen(
         similarIndex = 0
         isSidebarFocused = false
         viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
-        if (isMobile) viewModel.startObservingDownloads(mediaId, mediaType)
+        if (isMobile) {
+            viewModel.startObservingDownloads(mediaId, mediaType)
+            viewModel.startObservingHomeServer()
+        }
     }
 
     LaunchedEffect(uiState.episodes.size, uiState.totalSeasons, uiState.cast.size, uiState.reviews.size, uiState.similar.size) {
@@ -897,8 +900,8 @@ fun DetailsScreen(
                     onCastClick = onCastClickRemembered,
                     onSimilarClick = onSimilarClickRemembered,
                     onCollectionClick = onCollectionClickRemembered,
-                    movieDownload = if (isMobile) uiState.movieDownload else null,
-                    onMovieDownloadClick = if (isMobile && mediaType == MediaType.MOVIE) ({
+                    movieDownload = if (isMobile && uiState.hasHomeServer) uiState.movieDownload else null,
+                    onMovieDownloadClick = if (isMobile && uiState.hasHomeServer && mediaType == MediaType.MOVIE) ({
                         val dl = uiState.movieDownload
                         when (dl?.status) {
                             com.arflix.tv.data.db.DownloadStatus.COMPLETED.name -> {
@@ -917,7 +920,7 @@ fun DetailsScreen(
                             else -> Unit
                         }
                     }) else null,
-                    episodeDownload = if (isMobile && mediaType == MediaType.TV) {
+                    episodeDownload = if (isMobile && uiState.hasHomeServer && mediaType == MediaType.TV) {
                         val s = uiState.playSeason
                         val e = uiState.playEpisode
                         if (s != null && e != null) uiState.episodeDownloads["${s}_${e}"] else null
@@ -925,7 +928,7 @@ fun DetailsScreen(
                     tvDownloadLabel = if (mediaType == MediaType.TV && uiState.playSeason != null && uiState.playEpisode != null) {
                         "S${uiState.playSeason}E${uiState.playEpisode}"
                     } else null,
-                    onEpisodeDownloadClick = if (isMobile && mediaType == MediaType.TV) ({
+                    onEpisodeDownloadClick = if (isMobile && uiState.hasHomeServer && mediaType == MediaType.TV) ({
                         val s = uiState.playSeason
                         val e = uiState.playEpisode
                         val dl = if (s != null && e != null) uiState.episodeDownloads["${s}_${e}"] else null
@@ -1108,7 +1111,7 @@ fun DetailsScreen(
                     contextMenuEpisode = null
                 },
                 isDownloaded = isEpDownloaded,
-                onDownload = if (isMobile && existingDownload == null) ({
+                onDownload = if (isMobile && uiState.hasHomeServer && existingDownload == null) ({
                     showEpisodeContextMenu = false
                     downloadSheetSeason = episode.seasonNumber
                     downloadSheetEpisode = episode.episodeNumber
@@ -1116,7 +1119,7 @@ fun DetailsScreen(
                     viewModel.loadStreams(uiState.imdbId, episode.seasonNumber, episode.episodeNumber)
                     showDownloadSheet = true
                 }) else null,
-                onRemoveDownload = if (isMobile && existingDownload != null) ({
+                onRemoveDownload = if (isMobile && uiState.hasHomeServer && existingDownload != null) ({
                     showEpisodeContextMenu = false
                     viewModel.deleteEpisodeDownload(existingDownload.id)
                 }) else null
