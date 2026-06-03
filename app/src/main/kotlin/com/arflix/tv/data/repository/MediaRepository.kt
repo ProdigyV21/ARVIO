@@ -53,6 +53,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import android.util.LruCache
 import com.arflix.tv.util.ParsedCatalogUrl
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -105,21 +106,25 @@ class MediaRepository @Inject constructor(
     private data class CacheEntry<T>(val data: T, val timestamp: Long)
     private val CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
 
+    private operator fun <K : Any, V : Any> LruCache<K, V>.set(key: K, value: V) {
+        put(key, value)
+    }
+
     // Home categories cache - survives ViewModel recreation
     @Volatile var cachedHomeCategories: List<Category> = emptyList()
         private set
     @Volatile private var homeCategoriesFetchedAt = 0L
     private val HOME_CATEGORIES_CACHE_MS = 120_000L // 2 minutes
 
-    private val detailsCache = mutableMapOf<String, CacheEntry<MediaItem>>()
+    private val detailsCache = LruCache<String, CacheEntry<MediaItem>>(200)
     private val fullDetailsCacheKeys = mutableSetOf<String>()
-    private val castCache = mutableMapOf<String, CacheEntry<List<CastMember>>>()
-    private val similarCache = mutableMapOf<String, CacheEntry<List<MediaItem>>>()
-    private val logoCache = mutableMapOf<String, CacheEntry<String?>>()
-    private val reviewsCache = mutableMapOf<String, CacheEntry<List<Review>>>()
-    private val watchProvidersCache = mutableMapOf<String, CacheEntry<StreamingServicesResult?>>()
-    private val seasonEpisodesCache = mutableMapOf<String, CacheEntry<List<Episode>>>()
-    private val imdbRatingCache = ConcurrentHashMap<String, CacheEntry<String>>()
+    private val castCache = LruCache<String, CacheEntry<List<Cast>>>(150)
+    private val similarCache = LruCache<String, CacheEntry<List<MediaItem>>>(150)
+    private val logoCache = LruCache<String, CacheEntry<String>>(300)
+    private val reviewsCache = LruCache<String, CacheEntry<List<Review>>>(100)
+    private val watchProvidersCache = LruCache<String, CacheEntry<List<WatchProvider>>>(150)
+    private val seasonEpisodesCache = LruCache<String, CacheEntry<List<Episode>>>(200)
+    private val imdbRatingCache = LruCache<String, CacheEntry<String>>(500)
     private val imdbEpisodeRatingsCache = ConcurrentHashMap<String, CacheEntry<Map<Pair<Int, Int>, String>>>()
     private val imdbRatingsByIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
     private val episodeImdbIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
