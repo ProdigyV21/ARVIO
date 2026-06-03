@@ -913,16 +913,16 @@ private fun RowsLayer(
                 val itemWidth = if (isTouchDevice) {
                     if (rowUsePosterCards) 110.dp else 170.dp
                 } else {
-                    if (rowUsePosterCards) 134.dp else 260.dp
+                    if (rowUsePosterCards) 105.dp else 210.dp
                 }
                 val baseRowHeight = if (isTouchDevice) {
                     if (rowUsePosterCards) 260.dp else 190.dp
                 } else if (rowUsePosterCards) {
                     // Poster cards (2:3) need extra vertical room for title + date below the image
-                    if (screenHeight <= 640) 314.dp else 352.dp
+                    if (screenHeight <= 640) 271.dp else 309.dp
                 } else {
                     // Landscape cards still render title + subtitle below artwork.
-                    if (screenHeight <= 640) 238.dp else 302.dp
+                    if (screenHeight <= 640) 210.dp else 274.dp
                 }
                 val rowHeight = baseRowHeight + focusBleedPadding
                 // Fade non-current rows
@@ -934,7 +934,7 @@ private fun RowsLayer(
                 Box(modifier = Modifier.fillMaxWidth().height(rowHeight).graphicsLayer { alpha = rowAlpha }) {
                     Column {
                         Row(
-                            modifier = Modifier.padding(start = focusBleedPadding, bottom = 8.dp, top = 4.dp),
+                            modifier = Modifier.padding(start = focusBleedPadding, bottom = 4.dp, top = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -998,7 +998,7 @@ private fun RowsLayer(
                             contentPadding = PaddingValues(
                                 start = focusBleedPadding,
                                 end = itemWidth + 56.dp,
-                                top = focusBleedPadding,
+                                top = 8.dp,
                                 bottom = focusBleedPadding + 12.dp
                             ),
                             horizontalArrangement = Arrangement.spacedBy(18.dp)
@@ -1039,7 +1039,7 @@ private fun RowsLayer(
 @Composable
 private fun ContentGrid(items: List<MediaItem>, usePosterCards: Boolean, isLoading: Boolean, isTouchDevice: Boolean, onItemClick: (MediaItem) -> Unit, onLoadMore: () -> Unit) {
     val screenHeight = LocalConfiguration.current.screenHeightDp
-    val itemWidth = if (usePosterCards) 134.dp else 260.dp
+    val itemWidth = if (usePosterCards) 105.dp else 210.dp
     val gridState = rememberLazyGridState()
     LaunchedEffect(gridState.firstVisibleItemIndex, items.size) { val lv = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0; if (items.isNotEmpty() && lv >= items.size - 8) onLoadMore() }
 

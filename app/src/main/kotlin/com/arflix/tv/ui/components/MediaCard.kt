@@ -43,6 +43,7 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.skin.rememberArvioCardShape
+import com.arflix.tv.util.LocalDeviceType
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
@@ -102,6 +103,7 @@ fun MediaCard(
 
     var isFocused by remember { mutableStateOf(false) }
     val visualFocused = isFocusedOverride || isFocused
+    val isMobile = LocalDeviceType.current.isTouchDevice()
 
     val aspectRatio = if (isLandscape) 16f / 9f else 2f / 3f
     // Landscape cards should prefer wide artwork/backdrops.
@@ -136,8 +138,7 @@ fun MediaCard(
     }
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
 
-    val showFocusOutline = visualFocused
-    val jumpBorderWidth = if (showFocusOutline) 2.5.dp else 0.dp
+    val jumpBorderWidth = 2.5.dp
 
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -192,6 +193,7 @@ fun MediaCard(
             backgroundColor = ArvioSkin.colors.surface,
             outlineColor = ArvioSkin.colors.focusOutline,
             outlineWidth = jumpBorderWidth,
+            showRestBorder = true,
             focusedScale = focusedScale,
             pressedScale = 0.97f,
             focusedTransformOriginX = 0.5f,
@@ -446,7 +448,8 @@ fun MediaCard(
 
             Text(
                 text = item.title,
-                style = ArvioSkin.typography.cardTitle,
+                style = if (isMobile) ArvioSkin.typography.cardTitle.copy(fontSize = 14.sp)
+                        else ArvioSkin.typography.cardTitle,
                 color = if (visualFocused) {
                     ArvioSkin.colors.textPrimary
                 } else {

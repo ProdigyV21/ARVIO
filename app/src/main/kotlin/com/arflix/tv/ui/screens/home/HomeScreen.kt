@@ -2617,12 +2617,12 @@ private fun MobileHomeRowsLayer(
     onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null,
     onCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> }
 ) {
-    val mobileItemSpacing = 10.dp
+    val mobileItemSpacing = 14.dp
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 80.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // Hero carousel — profile/search row + banner card pager
         item(key = "mobile_hero", contentType = "mobile_hero") {
@@ -2646,7 +2646,7 @@ private fun MobileHomeRowsLayer(
             val isCollectionRow = category.id.startsWith("collection_row_")
             val rowKey = remember(category.id) { "home:${category.id}" }
             val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
-            val rowMobileItemWidth = if (rowUsePosterCards) 124.dp else 200.dp
+            val rowMobileItemWidth = if (rowUsePosterCards) 120.dp else 200.dp
             val rowState = rememberLazyListState()
 
             LaunchedEffect(rowState, category.id) {
@@ -2661,12 +2661,12 @@ private fun MobileHomeRowsLayer(
                     }
             }
 
-            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+            Column(modifier = Modifier.padding(bottom = 0.dp)) {
                 // Section title
                 Row(
                     modifier = Modifier.padding(
                         start = contentStartPadding,
-                        bottom = 8.dp
+                        bottom = 4.dp
                     ),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2854,9 +2854,9 @@ private fun TvHomeRowsLayer(
         rememberCatalogueRowLayoutMode("home:${category.id}") == CardLayoutMode.POSTER
     }
     val categoryHeightsPx = remember(renderedCategories, rowLayoutModes, density) {
-        renderedCategories.mapIndexed { idx, category ->
+        renderedCategories.mapIndexed { idx, _ ->
             val usePoster = rowLayoutModes.getOrNull(idx) ?: false
-            val heightDp = if (usePoster) 252.dp else 202.dp
+            val heightDp = if (usePoster) 245.dp else 202.dp
             with(density) { heightDp.toPx() }
         }
     }
@@ -2972,7 +2972,7 @@ private fun TvHomeRowsLayer(
                     val rowIsFocused = !focusState.isSidebarFocused && actualRowIndex == focusState.currentRowIndex
                     val rowKey = remember(category.id) { "home:${category.id}" }
                     val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
-                    val rowHeight = if (rowUsePosterCards) 252.dp else 202.dp
+                    val rowHeight = if (rowUsePosterCards) 245.dp else 202.dp
                     Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3218,7 +3218,7 @@ private fun ContentRow(
         usePosterCards
     }
     val cardAspectRatio = if (effectivePosterMode) 2f / 3f else 16f / 9f
-    val itemWidth = if (effectivePosterMode) 119.dp else 210.dp
+    val itemWidth = if (effectivePosterMode) 105.dp else 210.dp
     val itemSpacing = 14.dp
     val totalItems = category.items.size
     val maxFirstIndex = remember(totalItems) {
@@ -3323,7 +3323,7 @@ private fun ContentRow(
     ) {
         // Section title - clean white text, aligned with cards
         Row(
-            modifier = Modifier.padding(start = startPadding, bottom = 12.dp),
+            modifier = Modifier.padding(start = startPadding, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -3363,8 +3363,8 @@ private fun ContentRow(
                 contentPadding = PaddingValues(
                     start = startPadding,
                     end = railEndPadding,
-                    top = 14.dp,
-                    bottom = 14.dp
+                    top = 8.dp,
+                    bottom = 8.dp
                 ),
                 horizontalArrangement = Arrangement.spacedBy(itemSpacing),
                 userScrollEnabled = false
@@ -3464,7 +3464,7 @@ private fun ContentRow(
             if (railFocusOverlayActive) {
                 ArvioFocusableSurface(
                     modifier = Modifier
-                        .padding(start = startPadding, top = 14.dp)
+                        .padding(start = startPadding, top = 8.dp)
                         .width(itemWidth)
                         .aspectRatio(cardAspectRatio)
                         .zIndex(4f),

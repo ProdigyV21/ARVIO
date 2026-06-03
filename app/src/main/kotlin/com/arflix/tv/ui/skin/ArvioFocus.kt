@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -49,6 +50,7 @@ fun Modifier.arvioFocusable(
     useGradientBorder: Boolean = false,  // Arctic Fuse 2: SOLID border, not gradient
     gradientStartColor: Color = Color(0xFFFF00FF),  // Magenta (unused when solid)
     gradientEndColor: Color = Color(0xFF00D4FF),    // Cyan (unused when solid)
+    showRestBorder: Boolean = false,
     animateFocus: Boolean = true,
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
@@ -91,6 +93,13 @@ fun Modifier.arvioFocusable(
         if (visualFocused) 1f else 0f
     }
     val highlightAlpha = if (visualFocused) 1f else animatedHighlightAlpha
+
+    // Subtle luminous edge always visible on cards that opt in (glass morphism).
+    val restBorderAlpha by animateFloatAsState(
+        targetValue = if (showRestBorder && !visualFocused) 0.4f else 0f,
+        animationSpec = tween(durationMillis = 150, easing = tokens.easing),
+        label = "arvio_rest_border",
+    )
 
     val originX = if (visualFocused) focusedTransformOriginX.coerceIn(0f, 1f) else 0.5f
     val focusTransformOrigin = TransformOrigin(originX, 0.5f)
@@ -146,13 +155,14 @@ fun Modifier.arvioFocusable(
         Modifier
     }
 
-    val borderModifier = if (highlightAlpha > 0.01f) {
+    val borderModifier = if (highlightAlpha > 0.01f || restBorderAlpha > 0.01f) {
         Modifier.drawWithCache {
             val outline = shape.createOutline(size, layoutDirection, this)
-            val borderWidth = outlineWidth.toPx()
-            val ringColor = resolvedOutlineColor.copy(alpha = highlightAlpha)
+            val borderWidth = if (highlightAlpha > 0f) outlineWidth.toPx() else 0.5.dp.toPx()
+            val ringAlpha = if (highlightAlpha > 0f) highlightAlpha else restBorderAlpha * 0.5f
+            val ringColor = resolvedOutlineColor.copy(alpha = ringAlpha)
             val glowStrokeWidth = glowWidth.toPx()
-            val drawGlow = glowStrokeWidth > 0.01f && glowAlpha > 0.01f
+            val drawGlow = highlightAlpha > 0.3f && glowStrokeWidth > 0.01f && glowAlpha > 0.01f
             val glowColor = resolvedOutlineColor.copy(alpha = highlightAlpha * glowAlpha)
 
             onDrawWithContent {
@@ -181,7 +191,8 @@ fun Modifier.arvioFocusable(
                     }
                     is Outline.Generic -> {
                         if (drawGlow) {
-                            drawPath(path = outline.path, color = glowColor, style = Stroke(width = borderWidth + glowStrokeWidth))
+                            val path = Path().apply { addPath(outline.path) }
+                            drawPath(path = path, color = glowColor, style = Stroke(width = borderWidth + glowStrokeWidth))
                         }
                         drawPath(path = outline.path, color = ringColor, style = Stroke(width = borderWidth))
                     }
@@ -215,6 +226,7 @@ fun ArvioFocusableSurface(
     useGradientBorder: Boolean = false,  // Arctic Fuse 2: SOLID border, not gradient
     gradientStartColor: Color = ArvioSkin.colors.focusGradientStart,
     gradientEndColor: Color = ArvioSkin.colors.focusGradientEnd,
+    showRestBorder: Boolean = false,
     animateFocus: Boolean = true,
     enabled: Boolean = true,
     enableSystemFocus: Boolean = true,
@@ -246,6 +258,7 @@ fun ArvioFocusableSurface(
                 useGradientBorder = useGradientBorder,
                 gradientStartColor = gradientStartColor,
                 gradientEndColor = gradientEndColor,
+                showRestBorder = showRestBorder,
                 animateFocus = animateFocus,
                 onClick = onClick,
                 onLongClick = onLongClick,
