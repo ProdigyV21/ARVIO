@@ -37,6 +37,7 @@ import com.arflix.tv.util.CrashlyticsProvider
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.SentryCrashReporter
 import com.arflix.tv.util.detectDeviceType
+import com.arflix.tv.worker.MediaMetadataRefreshWorker
 import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -131,6 +132,8 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             delay(3_000L)
             runCatching { appUsageAnalyticsRepository.recordAppOpen() }
         }
+
+        scheduleMediaMetadataRefreshIfNeeded()
 
         // Observe auth state: start realtime on login, stop on logout
         appScope.launch {
@@ -271,6 +274,23 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             TraktSyncWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP,
             syncRequest
+        )
+    }
+
+    fun scheduleMediaMetadataRefreshIfNeeded() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val refreshRequest = PeriodicWorkRequestBuilder<MediaMetadataRefreshWorker>(24, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            MediaMetadataRefreshWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            refreshRequest
         )
     }
 

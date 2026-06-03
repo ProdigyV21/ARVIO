@@ -260,6 +260,11 @@ dependencies {
     implementation("io.coil-kt:coil-svg:2.5.0")
     implementation("com.google.zxing:core:3.5.3")
 
+    // Local metadata persistence
+    implementation("androidx.room:room-runtime:2.6.0")
+    implementation("androidx.room:room-ktx:2.6.0")
+    ksp("androidx.room:room-compiler:2.6.0")
+
     // Supabase (optional - for cloud sync)
     implementation("io.github.jan-tennert.supabase:postgrest-kt:2.0.4")
     implementation("io.github.jan-tennert.supabase:gotrue-kt:2.0.4")

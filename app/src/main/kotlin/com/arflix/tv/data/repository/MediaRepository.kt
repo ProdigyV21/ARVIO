@@ -29,6 +29,7 @@ import com.arflix.tv.data.model.CollectionTileShape
 import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.local.OfflineMetadataCache
 import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.util.CatalogUrlParser
@@ -86,7 +87,8 @@ class MediaRepository @Inject constructor(
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient,
     private val streamRepository: StreamRepository,
-    private val homeServerRepository: HomeServerRepository
+    private val homeServerRepository: HomeServerRepository,
+    private val offlineMetadataCache: OfflineMetadataCache
 ) {
 
     data class CategoryPageResult(
@@ -119,6 +121,10 @@ class MediaRepository @Inject constructor(
     private val reviewsCache = mutableMapOf<String, CacheEntry<List<Review>>>()
     private val watchProvidersCache = mutableMapOf<String, CacheEntry<StreamingServicesResult?>>()
     private val seasonEpisodesCache = mutableMapOf<String, CacheEntry<List<Episode>>>()
+
+    private val DETAILS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000L
+    private val CAST_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000L
+    private val SEARCH_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000L
     private val imdbRatingCache = ConcurrentHashMap<String, CacheEntry<String>>()
     private val imdbEpisodeRatingsCache = ConcurrentHashMap<String, CacheEntry<Map<Pair<Int, Int>, String>>>()
     private val imdbRatingsByIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
@@ -2760,17 +2766,31 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        val item = coroutineScope {
-            val detailsDeferred = async { tmdbApi.getMovieDetails(movieId, apiKey, language = contentLanguage) }
-            val externalIdsDeferred = async { resolveExternalIds(MediaType.MOVIE, movieId) }
-
-            val details = detailsDeferred.await()
-            val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.MOVIE, movieId, it) }
-            val imdbRating = imdbId?.let { getImdbRating(MediaType.MOVIE, movieId, it) }
-            details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+        offlineMetadataCache.getCachedMediaDetails(MediaType.MOVIE, movieId, DETAILS_CACHE_TTL_MS)?.let {
+            detailsCache[cacheKey] = CacheEntry(it, System.currentTimeMillis())
+            fullDetailsCacheKeys.add(cacheKey)
+            return it
         }
-        cacheFullDetailsItem(item)
-        return item
+
+        return try {
+            val item = coroutineScope {
+                val detailsDeferred = async { tmdbApi.getMovieDetails(movieId, apiKey, language = contentLanguage) }
+                val externalIdsDeferred = async { resolveExternalIds(MediaType.MOVIE, movieId) }
+
+                val details = detailsDeferred.await()
+                val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.MOVIE, movieId, it) }
+                val imdbRating = imdbId?.let { getImdbRating(MediaType.MOVIE, movieId, it) }
+                details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+            }
+            cacheFullDetailsItem(item)
+            offlineMetadataCache.putCachedMediaDetails(MediaType.MOVIE, movieId, item)
+            item
+        } catch (error: Throwable) {
+            offlineMetadataCache.getCachedMediaDetailsStale(MediaType.MOVIE, movieId)?.also {
+                detailsCache[cacheKey] = CacheEntry(it, System.currentTimeMillis())
+                fullDetailsCacheKeys.add(cacheKey)
+            } ?: throw error
+        }
     }
 
     /**
@@ -2789,17 +2809,31 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        val item = coroutineScope {
-            val detailsDeferred = async { tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage) }
-            val externalIdsDeferred = async { resolveExternalIds(MediaType.TV, tvId) }
-
-            val details = detailsDeferred.await()
-            val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.TV, tvId, it) }
-            val imdbRating = imdbId?.let { getImdbRating(MediaType.TV, tvId, it) }
-            details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+        offlineMetadataCache.getCachedMediaDetails(MediaType.TV, tvId, DETAILS_CACHE_TTL_MS)?.let {
+            detailsCache[cacheKey] = CacheEntry(it, System.currentTimeMillis())
+            fullDetailsCacheKeys.add(cacheKey)
+            return it
         }
-        cacheFullDetailsItem(item)
-        return item
+
+        return try {
+            val item = coroutineScope {
+                val detailsDeferred = async { tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage) }
+                val externalIdsDeferred = async { resolveExternalIds(MediaType.TV, tvId) }
+
+                val details = detailsDeferred.await()
+                val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.TV, tvId, it) }
+                val imdbRating = imdbId?.let { getImdbRating(MediaType.TV, tvId, it) }
+                details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+            }
+            cacheFullDetailsItem(item)
+            offlineMetadataCache.putCachedMediaDetails(MediaType.TV, tvId, item)
+            item
+        } catch (error: Throwable) {
+            offlineMetadataCache.getCachedMediaDetailsStale(MediaType.TV, tvId)?.also {
+                detailsCache[cacheKey] = CacheEntry(it, System.currentTimeMillis())
+                fullDetailsCacheKeys.add(cacheKey)
+            } ?: throw error
+        }
     }
 
     /**
@@ -2897,6 +2931,11 @@ class MediaRepository @Inject constructor(
         val cacheKey = "${mediaType}_cast_$mediaId"
         getFromCache(castCache, cacheKey)?.let { return it }
 
+        offlineMetadataCache.getCachedCast(mediaType, mediaId, CAST_CACHE_TTL_MS)?.let {
+            castCache[cacheKey] = CacheEntry(it, System.currentTimeMillis())
+            return it
+        }
+
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         val credits = tmdbApi.getCredits(type, mediaId, apiKey, language = contentLanguage)
 
@@ -2914,6 +2953,7 @@ class MediaRepository @Inject constructor(
             castMembers
         }
         castCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
+        offlineMetadataCache.putCachedCast(mediaType, mediaId, result)
         return result
     }
 
@@ -3030,6 +3070,11 @@ class MediaRepository @Inject constructor(
      * Search media
      */
     suspend fun search(query: String): List<MediaItem> {
+        offlineMetadataCache.getCachedSearchResults(query, SEARCH_CACHE_TTL_MS)?.let {
+            cacheItems(it)
+            return it
+        }
+
         val results = tmdbApi.searchMulti(apiKey, query, language = contentLanguage)
         val items = results.results
             .filter { it.mediaType == "movie" || it.mediaType == "tv" }
@@ -3039,6 +3084,7 @@ class MediaRepository @Inject constructor(
                 )
             }
         cacheItems(items)
+        offlineMetadataCache.putCachedSearchResults(query, items)
         return items
     }
 

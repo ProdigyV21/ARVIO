@@ -4,10 +4,13 @@ import android.content.Context
 import com.arflix.tv.data.api.AniSkipApi
 import com.arflix.tv.data.api.ArmApi
 import com.arflix.tv.data.api.IntroDbApi
-import com.arflix.tv.data.api.StreamApi
-import com.arflix.tv.data.api.SupabaseApi
+import android.content.Context
+import androidx.room.Room
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TraktApi
+import com.arflix.tv.data.api.SupabaseApi
+import com.arflix.tv.data.api.StreamApi
+import com.arflix.tv.data.local.OfflineMetadataDatabase
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.util.Constants
 import dagger.Module
@@ -79,6 +82,18 @@ object AppModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(StreamApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflineMetadataDatabase(@ApplicationContext context: Context): OfflineMetadataDatabase {
+        return Room.databaseBuilder(
+            context,
+            OfflineMetadataDatabase::class.java,
+            "offline_metadata.db"
+        )
+            .fallbackToDestructiveMigration()
+            .build()
     }
 
     // Skip intro providers (IntroDB + AniSkip + ARM).
