@@ -198,7 +198,10 @@ data class SettingsUiState(
     val subtitleAiModel: SubtitleAiModel = SubtitleAiModel.GROQ_LLAMA_70B,
     val subtitleRemoveHearingImpaired: Boolean = true,
     val aiKeyServerState: AiKeyServerState = AiKeyServerState(),
-    val smoothScrolling: Boolean = true
+    val smoothScrolling: Boolean = true,
+    val metadataCacheSize: String = "0 B",
+    val artworkCacheSize: String = "0 B",
+    val isClearingCache: Boolean = false
 )
 
 @HiltViewModel
@@ -354,6 +357,7 @@ class SettingsViewModel @Inject constructor(
 
     init {
         loadSettings()
+        loadStorageSizes()
         observeProfileChanges()
         observeAddons()
         observeTorrServer()
@@ -2990,6 +2994,73 @@ class SettingsViewModel @Inject constructor(
             authRepository.signOut()
             _uiState.value = _uiState.value.copy(
                 toastMessage = "Signed out",
+                toastType = ToastType.SUCCESS
+            )
+        }
+    }
+
+    fun loadStorageSizes() {
+        viewModelScope.launch {
+            val metaSize = mediaRepository.getMetadataCacheSizeAsync()
+            val artSize = mediaRepository.getArtworkCacheSizeAsync()
+            _uiState.value = _uiState.value.copy(
+                metadataCacheSize = formatBytes(metaSize),
+                artworkCacheSize = formatBytes(artSize)
+            )
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes <= 0) return "0 B"
+        val units = arrayOf("B", "KB", "MB", "GB")
+        val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
+        val num = bytes / Math.pow(1024.0, digitGroups.toDouble())
+        return String.format(Locale.US, "%.1f %s", num, units[digitGroups])
+    }
+
+    fun clearMetadataCache() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isClearingCache = true)
+            runCatching {
+                mediaRepository.clearMetadataCache()
+            }
+            loadStorageSizes()
+            _uiState.value = _uiState.value.copy(
+                isClearingCache = false,
+                toastMessage = "Metadata cache cleared successfully",
+                toastType = ToastType.SUCCESS
+            )
+        }
+    }
+
+    fun clearArtworkCache() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isClearingCache = true)
+            runCatching {
+                mediaRepository.clearArtworkCacheAsync()
+            }
+            loadStorageSizes()
+            _uiState.value = _uiState.value.copy(
+                isClearingCache = false,
+                toastMessage = "Artwork cache cleared successfully",
+                toastType = ToastType.SUCCESS
+            )
+        }
+    }
+
+    fun clearAllStorage() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isClearingCache = true)
+            runCatching {
+                mediaRepository.clearMetadataCache()
+            }
+            runCatching {
+                mediaRepository.clearArtworkCacheAsync()
+            }
+            loadStorageSizes()
+            _uiState.value = _uiState.value.copy(
+                isClearingCache = false,
+                toastMessage = "All cached data cleared successfully",
                 toastType = ToastType.SUCCESS
             )
         }

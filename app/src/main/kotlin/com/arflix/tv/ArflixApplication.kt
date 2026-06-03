@@ -274,6 +274,26 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         )
     }
 
+    fun scheduleCacheRefresh() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresCharging(true)
+            .build()
+
+        val syncRequest = PeriodicWorkRequestBuilder<com.arflix.tv.worker.CacheRefreshWorker>(
+            com.arflix.tv.worker.CacheRefreshWorker.REFRESH_INTERVAL_HOURS, TimeUnit.HOURS
+        )
+            .setConstraints(constraints)
+            .addTag(com.arflix.tv.worker.CacheRefreshWorker.TAG)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            com.arflix.tv.worker.CacheRefreshWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncRequest
+        )
+    }
+
     companion object {
         lateinit var instance: ArflixApplication
             private set

@@ -1,162 +1,233 @@
-# ARVIO
+# ARVIO — Multi-Platform Media Hub & Browser
 
-ARVIO is an Android media hub for TV, phone, and tablet form factors. This repository is maintained as a source-code and development mirror for the Android application.
+[![Build Status](https://img.shields.io/github/actions/workflow/status/ProdigyV21/ARVIO/build-check.yml?branch=main&label=Build%20Check&style=flat-square)](https://github.com/ProdigyV21/ARVIO/actions)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](./LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-purple?style=flat-square&logo=kotlin)](https://kotlinlang.org/)
+[![Swift](https://img.shields.io/badge/Swift-5.10-orange?style=flat-square&logo=swift)](https://swift.org/)
 
-The app provides a media browser, player shell, profile support, optional cloud sync, IPTV playlist support, catalog configuration, home-server integrations, and integrations with user-configured sources. ARVIO does not host, store, sell, or distribute movies, series, live TV channels, playlists, streams, or other third-party media.
+ARVIO is a production-grade media hub designed for Android (TV, Fire TV, phone, and tablet form factors) and iOS (SwiftUI shell). It provides unified media browsing, catalog configuration, IPTV playlist loading, and home-server integrations.
 
-## Repository Purpose
+> [!IMPORTANT]
+> **Content & Source Policy:** ARVIO is a media browser and player interface for user-configured sources. It functions like a web browser: users must configure their own services, playlists, addons, or URLs. This repository does not host, store, sell, or distribute movies, series, live TV channels, playlists, or other copyrighted media.
 
-This GitHub repository is for:
+---
 
-- Source code review and development
-- Issue investigation and technical discussion
-- Build documentation
-- License and privacy documentation
-- Contribution review
+## 1. Project Overview
 
-It is not intended as an advertising page, download landing page, or content distribution repository.
+ARVIO consists of:
+- **Android App (`app`):** Written in Kotlin using Jetpack Compose, Compose for TV, and Media3/ExoPlayer. It supports TV remotes and touchscreen controls.
+- **iOS App (`iosApp`):** Written in Swift and SwiftUI, serving as an additive native shell.
+- **Backend Services (`supabase`):** Supabase database, authentication, and Edge Functions for proxying external APIs (TMDB, Trakt) and supporting TV code pairing.
+- **Auth Page (`netlify-auth-site`):** A static HTML site deployed on Netlify that manages web-based user logins, pairing links, and cloud account management.
 
-## Features
+---
 
-- Android TV, Fire TV, phone, and tablet UI
-- TMDB-powered movie, series, cast, collection, franchise, and metadata browsing
-- IPTV M3U/Xtream playlist support with provider categories, favorites, hidden categories, EPG, and mobile/tablet fullscreen playback
-- Optional ARVIO Cloud sync for profiles, settings, catalogs, IPTV state, watch state, and custom profile avatars
-- Optional per-profile Trakt.tv integration for watchlist, history, progress, and continue watching
-- Catalog management with manual URLs and public Trakt/MDBList list discovery
-- Home-server source and catalog support for user-owned Jellyfin, Emby, and Plex libraries
-- Third-party addon support for user-configured sources
-- Watchlist and continue-watching state with profile isolation
-- Subtitle and audio track selection, subtitle language filtering, and AI subtitle tools
-- Profile PINs and custom profile avatars
-- ExoPlayer/Media3 playback with TV remote, mobile, and tablet controls
+## 2. Key Features
 
+- **Multi-Form Factor UI:** Native layouts optimized for Android TV/Fire TV D-pad navigation, as well as adaptive layouts for iOS/Android phones and tablets.
+- **Metadata Indexing:** TMDB-powered movie, series, cast, collection, and franchise browsing.
+- **IPTV Integration:** Support for M3U and Xtream Playlists with custom category ordering, hiding, favorites, and Electronic Program Guide (EPG) backfill.
+- **ARVIO Cloud Sync:** Optional Cloud synchronization backed by Supabase for profiles, settings, catalogs, IPTV preferences, and profile avatars.
+- **Trakt.tv Sync:** Profile-isolated Trakt integration for watched history, progress sync, and watchlists.
+- **Home Server Support:** Source and catalog support for user-owned Jellyfin, Emby, and Plex libraries.
+- **Addon Ecosystem:** Extensible source scraping using Stremio-compatible addons.
+- **Player Enhancements:** Frame-rate matching, subtitle language filters, subtitle offset adjustments, audio track selection, and AI-powered subtitle tools.
 
-## Availability
+---
 
-ARVIO is available on Google Play:
+## 3. Architecture Summary
 
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" width="160">](https://play.google.com/store/apps/details?id=com.arvio.tv)
+ARVIO follows a clean architectural pattern:
+- **UI Layer:** Jetpack Compose (Android) and SwiftUI (iOS) driving reactive state using ViewModels.
+- **Repository Layer:** Encapsulates business logic, orchestrating database transactions, API requests, and data caching.
+- **Data Source Layer:** Uses Retrofit/OkHttp for external APIs, Room/SQLite (Android) or local structures (iOS) for storage, and Datastore for settings.
+- **Worker Layer:** Android WorkManager coordinates periodic background tasks (e.g. Trakt syncing).
+- **Backend Layer:** Supabase Edge Functions act as secure proxies to hide client credentials for TMDB/Trakt and perform TV auth pairing.
 
-## Screenshots
+For details, refer to the [docs/architecture.md](./docs/architecture.md) guide.
 
-| Home | Details |
-|------|---------|
-| ![Home screen](screenshots/home_v190.png) | ![Details screen](screenshots/details_v190.png) |
+---
 
-| Live TV | Collections |
-|---------|-------------|
-| ![Live TV screen](screenshots/live_tv_v1991.png) | ![Collections screen](screenshots/collections_v1991.png) |
+## 4. Folder Structure Overview
 
-| Mobile | Profiles |
-|--------|----------|
-| ![Mobile screen](screenshots/mobile_home.webp) | ![Profiles screen](screenshots/profiles_v1991.png) |
-
-## Content And Source Policy
-
-ARVIO is a media browser and player interface for user-configured sources. It works like a media player or browser: users provide their own services, playlists, addons, and URLs.
-
-This repository does not include hosted media content, bundled playlists, IPTV credentials, debrid accounts, third-party streaming catalogs, or links intended to enable unauthorized access to content. No movies, series, live TV channels, playlists, or other third-party media are hosted by this repository or by ARVIO.
-
-Users are solely responsible for their usage and must comply with applicable local laws. If you believe content accessed through an external source violates copyright law, contact the actual file host, service provider, or source maintainer. The ARVIO repository and developers cannot remove content hosted by third parties.
-
-Contributors should not submit copyrighted media, credentials, private keys, access tokens, or links intended to enable unauthorized access to content.
-
-## Cloud Sync
-
-ARVIO Cloud is optional. When enabled, it can sync profiles, settings, catalogs, IPTV state, watch progress, watchlist state, and profile avatars across devices. See [PRIVACY.md](PRIVACY.md) for details and account deletion instructions.
-
-## Build And Run
-
-Requirements:
-
-- Android Studio or Android SDK command-line tools
-- JDK 17
-- Android SDK 35
-
-Use the tracked Gradle wrapper:
-
-```bash
-./gradlew :app:assemblePlayDebug
-./gradlew :app:assembleSideloadDebug
+```directory
+ARVIO/
+├── app/                      # Android Application Module (Kotlin)
+│   ├── src/main/kotlin/      # Android source package com.arflix.tv
+│   └── src/test/kotlin/      # Android local unit tests
+├── benchmark/                # Android Macrobenchmark Module
+├── iosApp/                   # iOS Application Shell (Swift/SwiftUI)
+│   ├── ARVIO/                # Xcode project source code
+│   └── ci/                   # Code signing & CI automation scripts
+├── supabase/                 # Supabase Edge Functions & DB Migrations
+│   ├── functions/            # Deno/TypeScript serverless functions
+│   └── migrations/           # Database schema migrations
+├── netlify-auth-site/        # HTML/JS Landing & Account Deletion page
+├── docs/                     # Detailed developer and deploy guides
+├── screenshots/              # Visual assets for README/Store listings
+└── releases/                 # Release notes history
 ```
 
-On Windows PowerShell or Command Prompt:
+---
 
-```powershell
-.\gradlew.bat :app:assemblePlayDebug
-.\gradlew.bat :app:assembleSideloadDebug
-```
+## 5. Installation/Setup
 
-Install a debug build on a connected Android TV, Fire TV, emulator, phone, or tablet:
+Detailed local setup instructions can be found in the [docs/setup.md](./docs/setup.md) guide.
 
-```bash
-./gradlew :app:installPlayDebug
-./gradlew :app:installSideloadDebug
-```
+### Quick Prerequisites
+- **Android:** Android Studio Jellyfish+, JDK 17, Android SDK 35.
+- **iOS:** macOS, Xcode 15+, XcodeGen `2.40.0+`.
+- **Backend:** Node.js 18+, Supabase CLI.
 
-For network ADB devices:
+### Quick Start
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/ProdigyV21/ARVIO.git
+   cd ARVIO
+   ```
+2. Copy default secrets:
+   ```bash
+   cp secrets.defaults.properties secrets.properties
+   ```
+3. Open the project in **Android Studio** or generate the Xcode project:
+   ```bash
+   xcodegen generate --spec iosApp/project.yml --project iosApp
+   ```
 
-```bash
-adb connect <device-ip>:5555
-adb install -r app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
-```
+---
 
-Build variants:
+## 6. Local Development Workflow
 
-- `play`: Play Store build, self-update disabled.
-- `sideload`: Direct APK build, self-update enabled.
-- `debug`: development build.
-- `staging`: release-like build signed with the debug keystore for upgrade testing.
-- `release`: production build. Use a private release keystore for distribution.
+To build and run debug variants locally:
 
-## Local Configuration
+### Android (CLI)
+- **Compile Play Store Debug APK:**
+  ```bash
+  ./gradlew :app:assemblePlayDebug
+  ```
+- **Install Play Store Debug to Connected Device/Emulator:**
+  ```bash
+  ./gradlew :app:installPlayDebug
+  ```
 
-Cloud sync, Google sign-in, and Supabase-backed auth require local secrets. Copy the defaults file and fill in real values:
+### iOS (CLI)
+- **Generate Xcode project:**
+  ```bash
+  xcodegen generate --spec iosApp/project.yml --project iosApp
+  ```
+- **Open Xcode:**
+  ```bash
+  open iosApp/ARVIO.xcodeproj
+  ```
 
-```bash
-cp secrets.defaults.properties secrets.properties
-```
+For more info, see [docs/development.md](./docs/development.md).
 
-`secrets.properties` is ignored and must not be committed.
+---
 
-TMDB and Trakt credentials are not committed to the repository. When a valid
-Supabase config is present, app requests are routed through the tracked
-`tmdb-proxy` and `trakt-proxy` Edge Functions, where those credentials should be
-stored as Supabase function secrets. Forks that do not use those proxy functions
-can still add their own local `TMDB_API_KEY`, `TRAKT_CLIENT_ID`, and
-`TRAKT_CLIENT_SECRET` values in `secrets.properties` for direct local testing.
+## 7. Environment Variables
 
-For signed release builds, copy the keystore template and fill in local signing values:
+Key parameters are read by Gradle from `secrets.properties` or environment variables in CI/CD. The default keys include:
 
-```bash
-cp keystore.properties.template keystore.properties
-```
+| Secret Key | Purpose | Default Value |
+|------------|---------|---------------|
+| `SUPABASE_URL` | Cloud Sync & Auth API Endpoint | `https://your-project.supabase.co` |
+| `SUPABASE_ANON_KEY` | Supabase Public JWT Key | `your-supabase-anon-key` |
+| `GOOGLE_WEB_CLIENT_ID` | OAuth Client ID for Google Auth | `your-google-web-client-id...` |
+| `SENTRY_DSN` | Sentry crash tracking URL (optional) | `disabled` |
+| `TMDB_API_KEY` | TMDB API Key (direct fallback) | `your-tmdb-api-key` |
+| `TRAKT_CLIENT_ID` | Trakt Client ID (direct fallback) | `your-trakt-client-id` |
+| `TRAKT_CLIENT_SECRET` | Trakt Client Secret (direct fallback) | `your-trakt-client-secret` |
 
-`keystore.properties` and keystore files are ignored and must stay private.
+---
 
-## Release Checks
+## 8. Usage Examples
 
-Before publishing a build, run:
+### Configuring a Custom IPTV Playlist
+1. Navigate to **Settings > IPTV Configurations**.
+2. Select **Add M3U Playlist**.
+3. Input your M3U URL and (optional) XMLTV EPG URL.
+4. Save to start loading the channel list.
 
-```bash
-./gradlew :app:compilePlayDebugKotlin
-./gradlew :app:assemblePlayRelease
-./gradlew :app:assembleSideloadRelease
-```
+### Syncing Profiles
+1. Go to the profile selection screen.
+2. Select **Cloud Connect**.
+3. If on TV, scan the QR code to pair your device. If on mobile, log in with your email/password.
 
-Smoke-test startup, profile switching, playback, stream fallback, subtitle/audio switching, IPTV/EPG loading, addon add/remove, search, settings navigation, background sync, and repeated player open/close on the supported device classes.
+---
 
-## Privacy
+## 9. Configuration Explanation
 
-See [PRIVACY.md](PRIVACY.md) for the privacy policy. Cloud account and synced data deletion is available at [auth.arvio.tv/delete-account](https://auth.arvio.tv/delete-account).
+- **`secrets.properties`:** Stores local API credentials and dev keys. (Ignored by Git).
+- **`keystore.properties`:** Holds details of the signing certificate (`storeFile`, `storePassword`, etc.) used to sign releases. (Ignored by Git).
+- **`supabase/config.toml`:** Controls local Supabase emulation and proxy settings.
+- **`netlify-auth-site/netlify.toml`:** Specifies redirection rules and headers for the Netlify static site.
 
-## License
+See [docs/configuration.md](./docs/configuration.md) for details.
 
-This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+---
 
-## AI Disclosure
+## 10. Scripts/Commands Reference
 
-This application was developed with significant AI assistance. Contributions should still be reviewed, tested, and treated as normal source code changes.
+| Command | Action |
+|---------|--------|
+| `./gradlew :app:assemblePlayDebug` | Builds Android Play Store Debug APK |
+| `./gradlew :app:assembleSideloadDebug` | Builds Android Sideload Debug APK |
+| `./gradlew :app:installPlayDebug` | Installs Play Store Debug APK on connected device |
+| `./gradlew :app:testPlayDebugUnitTest` | Runs all local JUnit tests for Play Debug |
+| `./gradlew detekt` | Runs Detekt static analysis checks |
+| `xcodegen generate --spec iosApp/project.yml --project iosApp` | Regenerates the Xcode project files |
 
-If you have concerns about using AI-generated software, please do not use this application.
+---
+
+## 11. Contribution Guide References
+
+We welcome developer contributions! Before submitting code:
+1. Review the [CONTRIBUTING.md](./CONTRIBUTING.md) guide.
+2. Comply with the [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+3. Ensure all code tests pass and comply with Detekt styling format.
+
+---
+
+## 12. Documentation Navigation Section
+
+To read more about specific parts of the codebase:
+
+- [README.md](./README.md) - Main repository overview (this document).
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Guidelines for contributing code.
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) - Behavior and community guidelines.
+- [docs/architecture.md](./docs/architecture.md) - System architecture and dependency dataflows.
+- [docs/setup.md](./docs/setup.md) - Environment installation checklist.
+- [docs/development.md](./docs/development.md) - Development commands and workflows.
+- [docs/configuration.md](./docs/configuration.md) - App parameters and credentials reference.
+- [docs/api.md](./docs/api.md) - Edge Function API proxies documentation.
+- [docs/deployment.md](./docs/deployment.md) - CI/CD pipeline automation and TestFlight uploads.
+- [docs/troubleshooting.md](./docs/troubleshooting.md) - Common problems and resolution guide.
+- [docs/ios-testflight.md](./docs/ios-testflight.md) - iOS App Store/TestFlight packaging instructions.
+
+---
+
+## 13. Troubleshooting Section
+
+Common development issues:
+- **Unable to locate a Java Runtime:** Ensure JDK 17 is installed. Run `export JAVA_HOME=/path/to/jdk` in your terminal shell.
+- **Supabase Invalid JWT Signature:** Check that your local `secrets.properties` contains matching `SUPABASE_ANON_KEY` credentials matching your Supabase project.
+
+For exhaustive answers, refer to [docs/troubleshooting.md](./docs/troubleshooting.md).
+
+---
+
+## 14. FAQ Section
+
+#### Q: Does ARVIO host or stream content directly?
+No. ARVIO is a player shell and metadata browser. Users must supply their own content sources, playlists, or IPTV providers.
+
+#### Q: How do I test cloud synchronization locally?
+Deploy local Supabase edge functions or use Supabase emulation via the CLI. Configure your `secrets.properties` to target the local emulator port.
+
+---
+
+## 15. License and Acknowledgements
+
+This project is licensed under the **Apache License 2.0**. See the [LICENSE](./LICENSE) file for the full text.
+
+Developed with AI assistance. Contribution reviews and commits undergo normal engineering code standards.

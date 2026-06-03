@@ -54,6 +54,18 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import com.arflix.tv.util.ParsedCatalogUrl
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import java.io.File
+import coil.imageLoader
+import com.arflix.tv.data.local.CachePolicyManager
+import com.arflix.tv.data.local.CachedMediaItem
+import com.arflix.tv.data.local.CachedCastMember
+import com.arflix.tv.data.local.CachedEpisode
+import com.arflix.tv.data.local.CachedSimilarItem
+import com.arflix.tv.data.local.CachedReview
+import com.arflix.tv.data.local.CachedCollectionRef
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -86,7 +98,9 @@ class MediaRepository @Inject constructor(
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient,
     private val streamRepository: StreamRepository,
-    private val homeServerRepository: HomeServerRepository
+    private val homeServerRepository: HomeServerRepository,
+    private val cacheDao: com.arflix.tv.data.local.CacheDao,
+    @ApplicationContext private val context: android.content.Context
 ) {
 
     data class CategoryPageResult(
@@ -226,16 +240,21 @@ class MediaRepository @Inject constructor(
             return cached
         }
 
+        // 2. Check Database Cache
+        val dbItems = cacheDao.getCollectionItems(catalog.id)
+        if (dbItems.isNotEmpty()) {
+            val isFresh = CachePolicyManager.isCollectionFresh(dbItems.first().updatedAt)
+            if (isFresh && dbItems.size >= requiredCount.coerceAtLeast(1)) {
+                val refs = dbItems.map { MediaType.valueOf(it.mediaType) to it.id }
+                collectionRefsCache[cacheKey] = CacheEntry(refs, System.currentTimeMillis())
+                return refs
+            }
+        }
+
         val targetCount = requiredCount.coerceAtLeast(1)
-        // SERVICE and GENRE rails page through TMDB/addon catalogs on demand,
-        // so let the per-source budget grow with the user's scroll position
-        // instead of clamping at the default 72/96/120 ceiling. FRANCHISE and
-        // other fixed groups keep the small cap.
         val unlimitedGroup = catalog.collectionGroup == CollectionGroupKind.SERVICE ||
             catalog.collectionGroup == CollectionGroupKind.GENRE
 
-        // Resolve all sources in parallel so a slow/failed source never blocks the
-        // others — this alone fixes "empty" genre collections where one source 404s.
         val sourceBudgets = catalog.collectionSources.map { source ->
             if (unlimitedGroup) {
                 (targetCount + 20).coerceAtLeast(40)
@@ -245,48 +264,58 @@ class MediaRepository @Inject constructor(
                 else -> (targetCount + 8).coerceAtLeast(24).coerceAtMost(72)
             }
         }
-        val perSourceRefs: List<List<Pair<MediaType, Int>>> = coroutineScope {
-            catalog.collectionSources.mapIndexed { index, source ->
-                async {
-                    runCatching {
-                        resolveCollectionSourceRefs(
-                            source,
-                            offset = 0,
-                            limit = sourceBudgets[index]
-                        )
-                    }.getOrDefault(emptyList())
+
+        val resolved = try {
+            val perSourceRefs: List<List<Pair<MediaType, Int>>> = coroutineScope {
+                catalog.collectionSources.mapIndexed { index, source ->
+                    async {
+                        runCatching {
+                            resolveCollectionSourceRefs(
+                                source,
+                                offset = 0,
+                                limit = sourceBudgets[index]
+                            )
+                        }.getOrDefault(emptyList())
+                    }
+                }.map { it.await() }
+            }
+
+            val refs = LinkedHashSet<Pair<MediaType, Int>>()
+            cached?.forEach { refs.add(it) }
+
+            if (catalog.collectionGroup == CollectionGroupKind.GENRE) {
+                val movieQueue = ArrayDeque<Pair<MediaType, Int>>()
+                val tvQueue = ArrayDeque<Pair<MediaType, Int>>()
+                perSourceRefs.flatten().forEach { ref ->
+                    if (ref.first == MediaType.MOVIE) movieQueue.addLast(ref) else tvQueue.addLast(ref)
                 }
-            }.map { it.await() }
+                while ((movieQueue.isNotEmpty() || tvQueue.isNotEmpty()) && refs.size < targetCount) {
+                    if (movieQueue.isNotEmpty()) refs.add(movieQueue.removeFirst())
+                    if (tvQueue.isNotEmpty() && refs.size < targetCount) refs.add(tvQueue.removeFirst())
+                }
+                movieQueue.forEach { refs.add(it) }
+                tvQueue.forEach { refs.add(it) }
+            } else {
+                perSourceRefs.forEach { sourceRefs ->
+                    sourceRefs.forEach { refs.add(it) }
+                }
+            }
+
+            val result = refs.toList()
+            if (result.isNotEmpty()) {
+                collectionRefsCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
+            }
+            result
+        } catch (e: Exception) {
+            if (dbItems.isNotEmpty()) {
+                val result = dbItems.map { MediaType.valueOf(it.mediaType) to it.id }
+                collectionRefsCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
+                result
+            } else {
+                throw e
+            }
         }
 
-        val refs = LinkedHashSet<Pair<MediaType, Int>>()
-        cached?.forEach { refs.add(it) }
-
-        // For GENRE collections, interleave movie and series refs so the
-        // first page always shows a mix rather than "all movies, then TV".
-        if (catalog.collectionGroup == CollectionGroupKind.GENRE) {
-            val movieQueue = ArrayDeque<Pair<MediaType, Int>>()
-            val tvQueue = ArrayDeque<Pair<MediaType, Int>>()
-            perSourceRefs.flatten().forEach { ref ->
-                if (ref.first == MediaType.MOVIE) movieQueue.addLast(ref) else tvQueue.addLast(ref)
-            }
-            while ((movieQueue.isNotEmpty() || tvQueue.isNotEmpty()) && refs.size < targetCount) {
-                if (movieQueue.isNotEmpty()) refs.add(movieQueue.removeFirst())
-                if (tvQueue.isNotEmpty() && refs.size < targetCount) refs.add(tvQueue.removeFirst())
-            }
-            // Drain any remaining so pagination beyond the first page still has items.
-            movieQueue.forEach { refs.add(it) }
-            tvQueue.forEach { refs.add(it) }
-        } else {
-            perSourceRefs.forEach { sourceRefs ->
-                sourceRefs.forEach { refs.add(it) }
-            }
-        }
-
-        val resolved = refs.toList()
-        if (resolved.isNotEmpty()) {
-            collectionRefsCache[cacheKey] = CacheEntry(resolved, System.currentTimeMillis())
-        }
         return resolved
     }
 
@@ -1956,7 +1985,7 @@ class MediaRepository @Inject constructor(
         val itemsByRef = LinkedHashMap<Pair<MediaType, Int>, MediaItem>()
         val missingRefs = mutableListOf<Pair<MediaType, Int>>()
         pageRefs.forEach { (type, tmdbId) ->
-            val cachedItem = getCachedItem(type, tmdbId)
+            val cachedItem = getCachedItem(type, tmdbId) ?: cacheDao.getMediaItem(tmdbId, type.name)?.toDomain(gson)
             if (cachedItem != null) {
                 itemsByRef[type to tmdbId] = cachedItem
             } else {
@@ -1981,7 +2010,24 @@ class MediaRepository @Inject constructor(
         }
         jobs.forEach { it.await() }
         val items = pageRefs.mapNotNull { itemsByRef[it] }
-        if (items.isNotEmpty()) cacheItems(items)
+        if (items.isNotEmpty()) {
+            cacheItems(items)
+            val cachedItems = items.map { CachedMediaItem.fromDomain(it, gson).copy(updatedAt = System.currentTimeMillis()) }
+            val colRefs = items.mapIndexed { index, item ->
+                CachedCollectionRef(
+                    catalogId = catalog.id,
+                    mediaId = item.id,
+                    mediaType = item.mediaType.name,
+                    position = offset + index
+                )
+            }
+            if (offset == 0) {
+                cacheDao.saveCollectionItems(catalog.id, cachedItems, colRefs)
+            } else {
+                cacheDao.insertMediaItems(cachedItems)
+                cacheDao.insertCollectionRefs(colRefs)
+            }
+        }
         CategoryPageResult(items = items, hasMore = offset + pageRefs.size < refs.size)
     }
 
@@ -2747,7 +2793,7 @@ class MediaRepository @Inject constructor(
     /**
      * Get movie details (cached)
      */
-    suspend fun getMovieDetails(movieId: Int): MediaItem {
+    suspend fun getMovieDetails(movieId: Int, forceRefresh: Boolean = false): MediaItem {
         val cacheKey = "movie_$movieId"
         getFromCache(detailsCache, cacheKey)?.let { cached ->
             if (cacheKey in fullDetailsCacheKeys) {
@@ -2760,23 +2806,55 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        val item = coroutineScope {
-            val detailsDeferred = async { tmdbApi.getMovieDetails(movieId, apiKey, language = contentLanguage) }
-            val externalIdsDeferred = async { resolveExternalIds(MediaType.MOVIE, movieId) }
-
-            val details = detailsDeferred.await()
-            val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.MOVIE, movieId, it) }
-            val imdbRating = imdbId?.let { getImdbRating(MediaType.MOVIE, movieId, it) }
-            details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+        // 2. Check Database Cache
+        val cachedEntity = cacheDao.getMediaItem(movieId, MediaType.MOVIE.name)
+        if (cachedEntity != null) {
+            cacheDao.updateMediaItemLastAccessed(movieId, MediaType.MOVIE.name)
+            val isFresh = CachePolicyManager.isMediaItemFresh(cachedEntity, forceRefresh)
+            if (isFresh) {
+                val domainItem = cachedEntity.toDomain(gson)
+                cacheFullDetailsItem(domainItem)
+                prefetchDetailsDependencies(MediaType.MOVIE, movieId, domainItem)
+                return domainItem
+            }
         }
-        cacheFullDetailsItem(item)
-        return item
+
+        // 3. Network Fetch
+        return try {
+            val item = coroutineScope {
+                val detailsDeferred = async { tmdbApi.getMovieDetails(movieId, apiKey, language = contentLanguage) }
+                val externalIdsDeferred = async { resolveExternalIds(MediaType.MOVIE, movieId) }
+
+                val details = detailsDeferred.await()
+                val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.MOVIE, movieId, it) }
+                val imdbRating = imdbId?.let { getImdbRating(MediaType.MOVIE, movieId, it) }
+                details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+            }
+            // Save to DB
+            val cachedItem = CachedMediaItem.fromDomain(item, gson).copy(
+                updatedAt = System.currentTimeMillis(),
+                lastAccessed = System.currentTimeMillis()
+            )
+            cacheDao.insertMediaItem(cachedItem)
+            cacheFullDetailsItem(item)
+            prefetchDetailsDependencies(MediaType.MOVIE, movieId, item)
+            item
+        } catch (e: Exception) {
+            // Fallback to stale DB cache if network failed
+            if (cachedEntity != null) {
+                val domainItem = cachedEntity.toDomain(gson)
+                cacheFullDetailsItem(domainItem)
+                domainItem
+            } else {
+                throw e
+            }
+        }
     }
 
     /**
      * Get TV show details (cached)
      */
-    suspend fun getTvDetails(tvId: Int): MediaItem {
+    suspend fun getTvDetails(tvId: Int, forceRefresh: Boolean = false): MediaItem {
         val cacheKey = "tv_$tvId"
         getFromCache(detailsCache, cacheKey)?.let { cached ->
             if (cacheKey in fullDetailsCacheKeys) {
@@ -2789,17 +2867,123 @@ class MediaRepository @Inject constructor(
             }
         }
 
-        val item = coroutineScope {
-            val detailsDeferred = async { tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage) }
-            val externalIdsDeferred = async { resolveExternalIds(MediaType.TV, tvId) }
-
-            val details = detailsDeferred.await()
-            val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.TV, tvId, it) }
-            val imdbRating = imdbId?.let { getImdbRating(MediaType.TV, tvId, it) }
-            details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+        // 2. Check Database Cache
+        val cachedEntity = cacheDao.getMediaItem(tvId, MediaType.TV.name)
+        if (cachedEntity != null) {
+            cacheDao.updateMediaItemLastAccessed(tvId, MediaType.TV.name)
+            val isFresh = CachePolicyManager.isMediaItemFresh(cachedEntity, forceRefresh)
+            if (isFresh) {
+                val domainItem = cachedEntity.toDomain(gson)
+                cacheFullDetailsItem(domainItem)
+                prefetchDetailsDependencies(MediaType.TV, tvId, domainItem)
+                return domainItem
+            }
         }
-        cacheFullDetailsItem(item)
-        return item
+
+        // 3. Network Fetch
+        return try {
+            val item = coroutineScope {
+                val detailsDeferred = async { tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage) }
+                val externalIdsDeferred = async { resolveExternalIds(MediaType.TV, tvId) }
+
+                val details = detailsDeferred.await()
+                val imdbId = externalIdsDeferred.await()?.imdbId?.also { cacheImdbId(MediaType.TV, tvId, it) }
+                val imdbRating = imdbId?.let { getImdbRating(MediaType.TV, tvId, it) }
+                details.toMediaItem().copy(imdbRating = imdbRating.orEmpty())
+            }
+            // Save to DB
+            val cachedItem = CachedMediaItem.fromDomain(item, gson).copy(
+                updatedAt = System.currentTimeMillis(),
+                lastAccessed = System.currentTimeMillis()
+            )
+            cacheDao.insertMediaItem(cachedItem)
+            cacheFullDetailsItem(item)
+            prefetchDetailsDependencies(MediaType.TV, tvId, item)
+            item
+        } catch (e: Exception) {
+            // Fallback to stale DB cache if network failed
+            if (cachedEntity != null) {
+                val domainItem = cachedEntity.toDomain(gson)
+                cacheFullDetailsItem(domainItem)
+                domainItem
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private fun prefetchDetailsDependencies(mediaType: MediaType, mediaId: Int, item: MediaItem) {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { getCast(mediaType, mediaId) }
+            runCatching { getSimilar(mediaType, mediaId) }
+            runCatching { getReviews(mediaType, mediaId) }
+            runCatching {
+                if (item.image.isNotBlank()) {
+                    val request = coil.request.ImageRequest.Builder(context)
+                        .data(item.image)
+                        .build()
+                    context.imageLoader.enqueue(request)
+                }
+                item.backdrop?.let { backdrop ->
+                    if (backdrop.isNotBlank()) {
+                        val request = coil.request.ImageRequest.Builder(context)
+                            .data(backdrop)
+                            .build()
+                        context.imageLoader.enqueue(request)
+                    }
+                }
+            }
+        }
+    }
+
+    // === STORAGE / CACHE CONTROL ===
+    
+    fun getMetadataCacheSize(): Long {
+        var size = 0L
+        val dbFile = context.getDatabasePath("arvio_cache.db")
+        if (dbFile.exists()) size += dbFile.length()
+        val walFile = File(dbFile.absolutePath + "-wal")
+        if (walFile.exists()) size += walFile.length()
+        val shmFile = File(dbFile.absolutePath + "-shm")
+        if (shmFile.exists()) size += shmFile.length()
+        return size
+    }
+
+    suspend fun clearMetadataCache() {
+        cacheDao.clearAllMetadata()
+    }
+
+    fun getArtworkCacheSize(): Long {
+        val cacheDir = context.cacheDir.resolve("image_cache")
+        return getFolderSize(cacheDir)
+    }
+
+    private fun getFolderSize(file: File): Long {
+        if (!file.exists()) return 0L
+        if (file.isFile) return file.length()
+        var size = 0L
+        val files = file.listFiles() ?: return 0L
+        for (f in files) {
+            size += getFolderSize(f)
+        }
+        return size
+    }
+
+    fun clearArtworkCache() {
+        context.imageLoader.diskCache?.clear()
+        context.imageLoader.memoryCache?.clear()
+    }
+
+    suspend fun getMetadataCacheSizeAsync(): Long = withContext(Dispatchers.IO) {
+        getMetadataCacheSize()
+    }
+
+    suspend fun getArtworkCacheSizeAsync(): Long = withContext(Dispatchers.IO) {
+        getArtworkCacheSize()
+    }
+
+    suspend fun clearArtworkCacheAsync() = withContext(Dispatchers.IO) {
+        clearArtworkCache()
     }
 
     /**
@@ -2831,14 +3015,8 @@ class MediaRepository @Inject constructor(
     /**
      * Get season episodes with Trakt watched status
      */
-    suspend fun getSeasonEpisodes(tvId: Int, seasonNumber: Int): List<Episode> {
-        val cacheKey = "tv_${tvId}_season_$seasonNumber"
-        val cachedEpisodes = getFromCache(seasonEpisodesCache, cacheKey)
-
-        // First ensure the global watched cache is initialized.
+    private suspend fun applyWatchedStatusToEpisodes(tvId: Int, seasonNumber: Int, episodes: List<Episode>): List<Episode> {
         traktRepository.initializeWatchedCache()
-
-        // Get watched episodes - try global cache first (faster, more reliable).
         val watchedEpisodes = if (traktRepository.hasWatchedEpisodes(tvId)) {
             traktRepository.getWatchedEpisodesFromCache()
         } else {
@@ -2849,6 +3027,13 @@ class MediaRepository @Inject constructor(
             }
         }
         val hasShowWatchedData = watchedEpisodes.any { it.startsWith("show_tmdb:$tvId:") }
+        return episodes.map { episode ->
+            val episodeKey = "show_tmdb:$tvId:${episode.seasonNumber}:${episode.episodeNumber}"
+            episode.copy(
+                isWatched = if (hasShowWatchedData) episodeKey in watchedEpisodes else episode.isWatched
+            )
+        }
+    }
 
         // Re-apply watched status on cached episodes so stale season cache doesn't hide badges.
         if (cachedEpisodes != null) {
@@ -2886,67 +3071,140 @@ class MediaRepository @Inject constructor(
                 isWatched = episodeKey in watchedEpisodes
             )
         }
-        seasonEpisodesCache[cacheKey] = CacheEntry(episodes, System.currentTimeMillis())
-        return episodes
     }
     
     /**
      * Get cast members (cached)
      */
-    suspend fun getCast(mediaType: MediaType, mediaId: Int): List<CastMember> {
+    suspend fun getCast(mediaType: MediaType, mediaId: Int, forceRefresh: Boolean = false): List<CastMember> {
         val cacheKey = "${mediaType}_cast_$mediaId"
-        getFromCache(castCache, cacheKey)?.let { return it }
-
-        val type = if (mediaType == MediaType.TV) "tv" else "movie"
-        val credits = tmdbApi.getCredits(type, mediaId, apiKey, language = contentLanguage)
-
-        // Find the director from crew and prepend as the first cast member
-        val director = credits.crew.firstOrNull { it.job == "Director" }
-
-        val castMembers = credits.cast
-            .distinctBy { it.id } // TMDB can occasionally return duplicate cast IDs.
-            .take(15)
-            .map { it.toCastMember() }
-
-        val result = if (director != null) {
-            listOf(director.toDirectorCastMember()) + castMembers
-        } else {
-            castMembers
+        
+        // 1. Check Memory Cache first
+        if (!forceRefresh) {
+            getFromCache(castCache, cacheKey)?.let { return it }
         }
-        castCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
-        return result
+
+        // 2. Check Database Cache
+        val dbCast = cacheDao.getCastMembers(mediaId, mediaType.name)
+        if (dbCast.isNotEmpty()) {
+            val isFresh = CachePolicyManager.isCastFresh(dbCast.first().updatedAt, forceRefresh)
+            if (isFresh) {
+                val domainCast = dbCast.map { it.toDomain() }
+                castCache[cacheKey] = CacheEntry(domainCast, System.currentTimeMillis())
+                return domainCast
+            }
+        }
+
+        // 3. Network Fetch
+        val type = if (mediaType == MediaType.TV) "tv" else "movie"
+        return try {
+            val credits = tmdbApi.getCredits(type, mediaId, apiKey, language = contentLanguage)
+
+            // Find the director from crew and prepend as the first cast member
+            val director = credits.crew.firstOrNull { it.job == "Director" }
+
+            val castMembers = credits.cast
+                .distinctBy { it.id } // TMDB can occasionally return duplicate cast IDs.
+                .take(15)
+                .map { it.toCastMember() }
+
+            val result = if (director != null) {
+                listOf(director.toDirectorCastMember()) + castMembers
+            } else {
+                castMembers
+            }
+
+            // Save to DB
+            val cachedCast = result.map { CachedCastMember.fromDomain(it, mediaId, mediaType) }
+            cacheDao.saveCredits(mediaId, mediaType.name, cachedCast)
+
+            // Update memory cache
+            castCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
+            result
+        } catch (e: Exception) {
+            // Fallback to stale DB cache
+            if (dbCast.isNotEmpty()) {
+                val domainCast = dbCast.map { it.toDomain() }
+                castCache[cacheKey] = CacheEntry(domainCast, System.currentTimeMillis())
+                domainCast
+            } else {
+                throw e
+            }
+        }
     }
 
     /**
      * Get recommended content (cached)
      * Falls back to similar if recommendations are empty
      */
-    suspend fun getSimilar(mediaType: MediaType, mediaId: Int): List<MediaItem> {
+    suspend fun getSimilar(mediaType: MediaType, mediaId: Int, forceRefresh: Boolean = false): List<MediaItem> {
         val cacheKey = "${mediaType}_similar_$mediaId"
-        getFromCache(similarCache, cacheKey)?.let { return it }
+        
+        // 1. Check Memory Cache first
+        if (!forceRefresh) {
+            getFromCache(similarCache, cacheKey)?.let { return it }
+        }
 
+        // 2. Check Database Cache
+        val dbSimilar = cacheDao.getSimilarItems(mediaId, mediaType.name)
+        if (dbSimilar.isNotEmpty()) {
+            val isFresh = CachePolicyManager.isMediaItemFresh(dbSimilar.first(), forceRefresh)
+            if (isFresh) {
+                val domainSimilar = dbSimilar.map { it.toDomain(gson) }
+                similarCache[cacheKey] = CacheEntry(domainSimilar, System.currentTimeMillis())
+                return domainSimilar
+            }
+        }
+
+        // 3. Network Fetch
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
-        val recommendations = try {
-            tmdbApi.getRecommendations(type, mediaId, apiKey, language = contentLanguage)
-        } catch (e: Exception) {
-            null
-        }
+        return try {
+            val recommendations = try {
+                tmdbApi.getRecommendations(type, mediaId, apiKey, language = contentLanguage)
+            } catch (e: Exception) {
+                null
+            }
 
-        val result = if (recommendations != null && recommendations.results.isNotEmpty()) {
-            recommendations.results
-                .map { it.toMediaItem(mediaType) }
-                .distinctBy { it.id }
-                .take(12)
-        } else {
-            val similar = tmdbApi.getSimilar(type, mediaId, apiKey, language = contentLanguage)
-            similar.results
-                .map { it.toMediaItem(mediaType) }
-                .distinctBy { it.id }
-                .take(12)
+            val result = if (recommendations != null && recommendations.results.isNotEmpty()) {
+                recommendations.results
+                    .map { it.toMediaItem(mediaType) }
+                    .distinctBy { it.id }
+                    .take(12)
+            } else {
+                val similar = tmdbApi.getSimilar(type, mediaId, apiKey, language = contentLanguage)
+                similar.results
+                    .map { it.toMediaItem(mediaType) }
+                    .distinctBy { it.id }
+                    .take(12)
+            }
+
+            // Save to DB
+            val cachedItems = result.map { CachedMediaItem.fromDomain(it, gson).copy(updatedAt = System.currentTimeMillis()) }
+            val relations = result.mapIndexed { index, item ->
+                CachedSimilarItem(
+                    mediaId = mediaId,
+                    mediaType = mediaType.name,
+                    similarId = item.id,
+                    similarType = item.mediaType.name,
+                    position = index
+                )
+            }
+            cacheDao.saveSimilarItems(mediaId, mediaType.name, cachedItems, relations)
+
+            // Update memory cache and return
+            similarCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
+            cacheItems(result)
+            result
+        } catch (e: Exception) {
+            // Fallback to stale DB cache
+            if (dbSimilar.isNotEmpty()) {
+                val domainSimilar = dbSimilar.map { it.toDomain(gson) }
+                similarCache[cacheKey] = CacheEntry(domainSimilar, System.currentTimeMillis())
+                domainSimilar
+            } else {
+                throw e
+            }
         }
-        similarCache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
-        cacheItems(result)
-        return result
     }
 
     /**
@@ -3183,10 +3441,26 @@ class MediaRepository @Inject constructor(
     /**
      * Get reviews for a movie or TV show from TMDB (cached)
      */
-    suspend fun getReviews(mediaType: MediaType, mediaId: Int): List<Review> {
+    suspend fun getReviews(mediaType: MediaType, mediaId: Int, forceRefresh: Boolean = false): List<Review> {
         val cacheKey = "${mediaType}_reviews_$mediaId"
-        getFromCache(reviewsCache, cacheKey)?.let { return it }
+        
+        // 1. Check Memory Cache first
+        if (!forceRefresh) {
+            getFromCache(reviewsCache, cacheKey)?.let { return it }
+        }
 
+        // 2. Check Database Cache
+        val dbReviews = cacheDao.getReviews(mediaId, mediaType.name)
+        if (dbReviews.isNotEmpty()) {
+            val isFresh = CachePolicyManager.isReviewsFresh(dbReviews.first().createdAt, forceRefresh)
+            if (isFresh) {
+                val domainReviews = dbReviews.map { it.toDomain() }
+                reviewsCache[cacheKey] = CacheEntry(domainReviews, System.currentTimeMillis())
+                return domainReviews
+            }
+        }
+
+        // 3. Network Fetch
         val type = if (mediaType == MediaType.TV) "tv" else "movie"
         return try {
             val response = tmdbApi.getReviews(type, mediaId, apiKey, language = contentLanguage)
@@ -3207,10 +3481,23 @@ class MediaRepository @Inject constructor(
                     createdAt = review.createdAt
                 )
             }
+
+            // Save to DB
+            val cachedReviews = reviews.map { CachedReview.fromDomain(it, mediaId, mediaType) }
+            cacheDao.saveReviews(mediaId, mediaType.name, cachedReviews)
+
+            // Update memory cache
             reviewsCache[cacheKey] = CacheEntry(reviews, System.currentTimeMillis())
             reviews
         } catch (e: Exception) {
-            emptyList()
+            // Fallback to stale DB cache
+            if (dbReviews.isNotEmpty()) {
+                val domainReviews = dbReviews.map { it.toDomain() }
+                reviewsCache[cacheKey] = CacheEntry(domainReviews, System.currentTimeMillis())
+                domainReviews
+            } else {
+                emptyList()
+            }
         }
     }
 
