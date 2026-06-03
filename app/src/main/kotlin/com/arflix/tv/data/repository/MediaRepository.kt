@@ -116,15 +116,20 @@ class MediaRepository @Inject constructor(
     @Volatile private var homeCategoriesFetchedAt = 0L
     private val HOME_CATEGORIES_CACHE_MS = 120_000L // 2 minutes
 
-    private val detailsCache = LruCache<String, CacheEntry<MediaItem>>(200)
+    private fun <K, V> createBoundedCache(maxSize: Int): MutableMap<K, V> {
+        return object : java.util.LinkedHashMap<K, V>(maxSize, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?): Boolean = size > maxSize
+        }
+    }
+    private val detailsCache = createBoundedCache<String, CacheEntry<MediaItem>>(200)
     private val fullDetailsCacheKeys = mutableSetOf<String>()
-    private val castCache = LruCache<String, CacheEntry<List<Cast>>>(150)
-    private val similarCache = LruCache<String, CacheEntry<List<MediaItem>>>(150)
-    private val logoCache = LruCache<String, CacheEntry<String>>(300)
-    private val reviewsCache = LruCache<String, CacheEntry<List<Review>>>(100)
-    private val watchProvidersCache = LruCache<String, CacheEntry<List<WatchProvider>>>(150)
-    private val seasonEpisodesCache = LruCache<String, CacheEntry<List<Episode>>>(200)
-    private val imdbRatingCache = LruCache<String, CacheEntry<String>>(500)
+    private val castCache = createBoundedCache<String, CacheEntry<List<CastMember>>>(150)
+    private val similarCache = createBoundedCache<String, CacheEntry<List<MediaItem>>>(150)
+    private val logoCache = createBoundedCache<String, CacheEntry<String?>>(300)
+    private val reviewsCache = createBoundedCache<String, CacheEntry<List<Review>>>(100)
+    private val watchProvidersCache = createBoundedCache<String, CacheEntry<StreamingServicesResult?>>(150)
+    private val seasonEpisodesCache = createBoundedCache<String, CacheEntry<List<Episode>>>(200)
+    private val imdbRatingCache = java.util.Collections.synchronizedMap(createBoundedCache<String, CacheEntry<String>>(500))
     private val imdbEpisodeRatingsCache = ConcurrentHashMap<String, CacheEntry<Map<Pair<Int, Int>, String>>>()
     private val imdbRatingsByIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
     private val episodeImdbIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
