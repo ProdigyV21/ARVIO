@@ -197,42 +197,43 @@ class AuthRepository @Inject constructor(
             val hasRefreshToken = !refreshToken.isNullOrBlank()
             var session: UserSession? = null
 
-            // Supabase SDK requires main thread for initialization (lifecycle observers)
-            // First try: Load from SessionManager via Supabase SDK
-            try {
-                session = withTimeoutOrNull(2_500L) {
-                    withContext(Dispatchers.Main) {
+            for (attempt in 1..3) {
+                // First try: Load from SessionManager via Supabase SDK
+                try {
+                    session = withContext(Dispatchers.IO) {
                         supabase.auth.loadFromStorage(true)
                         supabase.auth.currentSessionOrNull()
                     }
+                } catch (e: Exception) {
                 }
-            } catch (e: Exception) {
-            }
 
-            // Second try: Import from cached tokens
-            if (session == null && hasAccessToken && hasRefreshToken) {
-                try {
-                    session = withTimeoutOrNull(2_500L) {
-                        withContext(Dispatchers.Main) {
+                // Second try: Import from cached tokens
+                if (session == null && hasAccessToken && hasRefreshToken) {
+                    try {
+                        session = withContext(Dispatchers.IO) {
                             supabase.auth.importAuthToken(accessToken ?: "", refreshToken ?: "", false, true)
                             supabase.auth.currentSessionOrNull()
                         }
+                        if (session != null) {
+                            // Save the imported session to SessionManager
+                            storeSession(session)
+                        }
+                    } catch (e: Exception) {
                     }
-                    if (session != null) {
-                        // Save the imported session to SessionManager
-                        storeSession(session)
-                    }
-                } catch (e: Exception) {
                 }
-            }
 
-            // Third try: Refresh the session
-            if (session == null && hasRefreshToken) {
-                session = withTimeoutOrNull(3_000L) {
-                    withContext(Dispatchers.Main) {
-                        ensureValidSession()
+                // Third try: Refresh the session
+                if (session == null && hasRefreshToken) {
+                    try {
+                        session = withContext(Dispatchers.IO) {
+                            ensureValidSession()
+                        }
+                    } catch (e: Exception) {
                     }
                 }
+
+                if (session != null) break
+                if (attempt < 3) kotlinx.coroutines.delay(500L)
             }
             if (hasAccessToken || hasRefreshToken || session != null || !cachedUserId.isNullOrBlank()) {
                 val userId = session?.user?.id ?: cachedUserId
