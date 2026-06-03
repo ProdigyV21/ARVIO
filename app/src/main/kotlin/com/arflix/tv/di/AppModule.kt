@@ -4,10 +4,13 @@ import android.content.Context
 import com.arflix.tv.data.api.AniSkipApi
 import com.arflix.tv.data.api.ArmApi
 import com.arflix.tv.data.api.IntroDbApi
+import androidx.room.Room
 import com.arflix.tv.data.api.StreamApi
 import com.arflix.tv.data.api.SupabaseApi
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TraktApi
+import com.arflix.tv.data.local.IptvHealthDatabase
+import com.arflix.tv.data.local.IptvStreamHealthDao
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.util.Constants
 import dagger.Module
@@ -29,6 +32,20 @@ object AppModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         return OkHttpProvider.client
+    }
+
+    @Provides
+    @Singleton
+    fun provideIptvHealthDatabase(@ApplicationContext context: Context): IptvHealthDatabase {
+        return Room.databaseBuilder(context, IptvHealthDatabase::class.java, "iptv_health.db")
+            .fallbackToDestructiveMigration()
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideIptvStreamHealthDao(database: IptvHealthDatabase): IptvStreamHealthDao {
+        return database.streamHealthDao()
     }
 
     @Provides

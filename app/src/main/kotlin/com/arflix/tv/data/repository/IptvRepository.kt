@@ -6,7 +6,12 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import com.arflix.tv.data.local.IptvStreamHealthDao
+import com.arflix.tv.data.local.IptvStreamHealthEntity
 import com.arflix.tv.data.model.IptvChannel
+import com.arflix.tv.data.model.IptvChannelHealth
+import com.arflix.tv.data.model.IptvChannelHealthStatus
+import com.arflix.tv.data.model.IptvHealthSummary
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
@@ -158,7 +163,8 @@ class IptvRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
     private val profileManager: ProfileManager,
-    private val invalidationBus: CloudSyncInvalidationBus
+    private val invalidationBus: CloudSyncInvalidationBus,
+    private val streamHealthDao: IptvStreamHealthDao
 ) {
     private val gson = Gson()
     private val loadMutex = Mutex()
@@ -323,6 +329,172 @@ class IptvRepository @Inject constructor(
             .writeTimeout(12, TimeUnit.SECONDS)
             .callTimeout(120, TimeUnit.SECONDS)
             .build()
+    }
+
+    private val iptvHealthHttpClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(25, TimeUnit.SECONDS)
+            .build()
+    }
+
+    private val maxHealthCheckChannels = 60
+
+    private suspend fun mergeHealthIntoChannels(channels: List<IptvChannel>): List<IptvChannel> {
+        if (channels.isEmpty()) return channels
+        val healthMap = streamHealthDao.loadByChannelIds(channels.map { it.id }).associateBy { it.channelId }
+        return channels.map { channel ->
+            val health = healthMap[channel.id]?.let { entity ->
+                IptvChannelHealth(
+                    httpStatusCode = entity.httpStatusCode,
+                    latencyMs = entity.latencyMs,
+                    consecutiveFailureCount = entity.consecutiveFailureCount,
+                    lastSuccessfulAtMs = entity.lastSuccessfulAtMs,
+                    lastCheckedAtMs = entity.lastCheckedAtMs
+                )
+            } ?: IptvChannelHealth()
+            channel.copy(health = health)
+        }
+    }
+
+    fun observeIptvHealthSummary(): Flow<IptvHealthSummary> {
+        return streamHealthDao.observeAll().map { entries ->
+            val mapped = entries.map { entity ->
+                val health = IptvChannelHealth(
+                    httpStatusCode = entity.httpStatusCode,
+                    latencyMs = entity.latencyMs,
+                    consecutiveFailureCount = entity.consecutiveFailureCount,
+                    lastSuccessfulAtMs = entity.lastSuccessfulAtMs,
+                    lastCheckedAtMs = entity.lastCheckedAtMs
+                )
+                health.status
+            }
+            val healthy = mapped.count { it == IptvChannelHealthStatus.HEALTHY }
+            val degraded = mapped.count { it == IptvChannelHealthStatus.DEGRADED }
+            val offline = mapped.count { it == IptvChannelHealthStatus.OFFLINE }
+            val unknown = mapped.count { it == IptvChannelHealthStatus.UNKNOWN }
+            val lastCheckedAtMs = entries.maxOfOrNull { it.lastCheckedAtMs } ?: 0L
+            IptvHealthSummary(
+                total = entries.size,
+                healthy = healthy,
+                degraded = degraded,
+                offline = offline,
+                unknown = unknown,
+                lastCheckedAtMs = lastCheckedAtMs
+            )
+        }
+    }
+
+    suspend fun recordIptvPlaybackFailure(channelId: String, errorMessage: String?) {
+        val existing = streamHealthDao.loadByChannelIds(listOf(channelId)).firstOrNull()
+        val updated = IptvStreamHealthEntity(
+            channelId = channelId,
+            httpStatusCode = null,
+            latencyMs = null,
+            consecutiveFailureCount = (existing?.consecutiveFailureCount ?: 0) + 1,
+            lastSuccessfulAtMs = existing?.lastSuccessfulAtMs,
+            lastCheckedAtMs = System.currentTimeMillis()
+        )
+        streamHealthDao.upsert(updated)
+    }
+
+    suspend fun runIptvHealthChecks(onProgress: (IptvLoadProgress) -> Unit = {}) {
+        val config = observeConfig().first()
+        val playlists = activePlaylists(config)
+        val channels = mutableListOf<IptvChannel>()
+        if (config.m3uUrl.isBlank() && config.stalkerPortalUrl.isNotBlank()) {
+            onProgress(IptvLoadProgress("Connecting to Stalker portal...", null))
+            val stalker = com.arflix.tv.data.api.StalkerApi(config.stalkerPortalUrl, config.stalkerMacAddress)
+            if (stalker.handshake()) {
+                onProgress(IptvLoadProgress("Loading channels from Stalker portal...", null))
+                channels += stalker.getChannels()
+                cachedStalkerApi = stalker
+            }
+        } else {
+            playlists.forEachIndexed { index, playlist ->
+                val label = "Loading playlist ${index + 1}/${playlists.size}"
+                onProgress(IptvLoadProgress(label, null))
+                val playlistChannels = runCatching {
+                    fetchAndParseM3uWithRetries(playlist.m3uUrl, playlist.id, playlist.epgUrls)
+                }.getOrElse {
+                    emptyList()
+                }
+                channels += playlistChannels
+            }
+        }
+
+        val uniqueChannels = channels.distinctBy { it.id }
+        val toCheck = uniqueChannels.take(maxHealthCheckChannels)
+        val semaphore = Semaphore(4)
+        coroutineScope {
+            toCheck.mapIndexed { index, channel ->
+                async {
+                    semaphore.withPermit {
+                        onProgress(IptvLoadProgress("Checking ${index + 1}/${toCheck.size} ${channel.name}", null))
+                        val streamUrl = resolveHealthCheckUrl(channel)
+                        val now = System.currentTimeMillis()
+                        val healthResult = runCatching {
+                            val request = Request.Builder().url(streamUrl).head().build()
+                            val started = System.currentTimeMillis()
+                            iptvHealthHttpClient.newCall(request).execute().use { response ->
+                                val latency = System.currentTimeMillis() - started
+                                IptvStreamHealthEntity(
+                                    channelId = channel.id,
+                                    httpStatusCode = response.code,
+                                    latencyMs = latency,
+                                    consecutiveFailureCount = 0,
+                                    lastSuccessfulAtMs = now,
+                                    lastCheckedAtMs = now
+                                )
+                            }
+                        }.getOrElse { error ->
+                            val existing = streamHealthDao.loadByChannelIds(listOf(channel.id)).firstOrNull()
+                            IptvStreamHealthEntity(
+                                channelId = channel.id,
+                                httpStatusCode = null,
+                                latencyMs = null,
+                                consecutiveFailureCount = (existing?.consecutiveFailureCount ?: 0) + 1,
+                                lastSuccessfulAtMs = existing?.lastSuccessfulAtMs,
+                                lastCheckedAtMs = now
+                            )
+                        }
+                        streamHealthDao.upsert(healthResult)
+                    }
+                }
+            }.awaitAll()
+        }
+        if (uniqueChannels.isNotEmpty()) {
+            streamHealthDao.deleteStaleHealthEntries(uniqueChannels.map { it.id })
+        } else {
+            streamHealthDao.clearAll()
+        }
+    }
+
+    private fun resolveHealthCheckUrl(channel: IptvChannel): String {
+        val stream = channel.streamUrl
+        if (stream.startsWith("ffmpeg") || (stream.startsWith("/") && !stream.startsWith("//"))) {
+            val stalker = cachedStalkerApi
+            if (stalker != null) {
+                val resolved = stalker.resolveStreamUrl(stream)
+                if (!resolved.isNullOrBlank()) {
+                    return resolved
+                }
+            }
+        }
+        return stream
+    }
+
+    private fun findOrCreateStalkerApi(config: IptvConfig): com.arflix.tv.data.api.StalkerApi? {
+        val existing = cachedStalkerApi
+        if (existing != null) return existing
+        return if (config.stalkerPortalUrl.isNotBlank() && config.stalkerMacAddress.isNotBlank()) {
+            com.arflix.tv.data.api.StalkerApi(config.stalkerPortalUrl, config.stalkerMacAddress)
+                .also { cachedStalkerApi = it }
+        } else {
+            null
+        }
     }
 
     private data class IptvCachePayload(

@@ -29,6 +29,7 @@ import com.arflix.tv.data.repository.HomeServerConnection
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlexPinAuthSession
 import com.arflix.tv.data.repository.IptvConfig
+import com.arflix.tv.data.repository.IptvLoadProgress
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.IptvPlaylistEntry
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
@@ -148,6 +149,9 @@ data class SettingsUiState(
     val iptvError: String? = null,
     val iptvStatusMessage: String? = null,
     val iptvStatusType: ToastType = ToastType.INFO,
+    val iptvHealthSummary: com.arflix.tv.data.model.IptvHealthSummary = com.arflix.tv.data.model.IptvHealthSummary(),
+    val isIptvHealthChecking: Boolean = false,
+    val iptvHealthStatusMessage: String? = null,
     val iptvProgressText: String? = null,
     val iptvProgressPercent: Int = 0,
     val iptvSelectedPlaylistId: String? = null,
@@ -360,6 +364,7 @@ class SettingsViewModel @Inject constructor(
         observeSyncState()
         observeAuthState()
         observeIptvConfig()
+        observeIptvHealthSummary()
         observeIptvGroupPrefs()
         initializeCatalogs()
         observeCatalogs()
@@ -1639,6 +1644,16 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private fun observeIptvHealthSummary() {
+        viewModelScope.launch {
+            iptvRepository.observeIptvHealthSummary().collect { summary ->
+                _uiState.value = _uiState.value.copy(
+                    iptvHealthSummary = summary
+                )
+            }
+        }
+    }
+
     private fun observeCatalogs() {
         viewModelScope.launch {
             catalogRepository.observeCatalogs().collect { catalogs ->
@@ -1988,6 +2003,43 @@ class SettingsViewModel @Inject constructor(
                         iptvLoadJob = null
                     }
                 }
+            }
+        }
+    }
+
+    fun refreshIptvHealth() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isIptvHealthChecking = true,
+                iptvHealthStatusMessage = "Starting IPTV health check..."
+            )
+            runCatching {
+                iptvRepository.runIptvHealthChecks { progress ->
+                    _uiState.value = _uiState.value.copy(
+                        iptvHealthStatusMessage = progress.message
+                    )
+                }
+            }.onSuccess {
+                _uiState.value = _uiState.value.copy(
+                    isIptvHealthChecking = false,
+                    iptvHealthStatusMessage = "IPTV health check complete",
+                    toastMessage = "IPTV health scan complete",
+                    toastType = ToastType.SUCCESS
+                )
+            }.onFailure { error ->
+                if (error is CancellationException) {
+                    _uiState.value = _uiState.value.copy(
+                        isIptvHealthChecking = false,
+                        iptvHealthStatusMessage = "IPTV health check cancelled"
+                    )
+                    return@onFailure
+                }
+                _uiState.value = _uiState.value.copy(
+                    isIptvHealthChecking = false,
+                    iptvHealthStatusMessage = error.message ?: "IPTV health check failed",
+                    toastMessage = error.message ?: "IPTV health check failed",
+                    toastType = ToastType.ERROR
+                )
             }
         }
     }

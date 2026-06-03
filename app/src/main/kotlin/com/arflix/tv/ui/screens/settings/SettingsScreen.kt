@@ -383,7 +383,7 @@ fun SettingsScreen(
             "iptv" -> if (showIptvCategoriesSettings) {
                 uiState.iptvAvailableGroups.size // Reset row + category rows
             } else {
-                2 + uiState.iptvPlaylists.size // Add + rows + refresh + clear
+                3 + uiState.iptvPlaylists.size // Add + rows + refresh + health + clear
             }
             "home_server" -> uiState.homeServerConnections.size + 3
             "catalogs" -> uiState.catalogs.size // Add + rows
@@ -921,6 +921,9 @@ fun SettingsScreen(
                                                     viewModel.refreshIptv(force = true)
                                                 }
                                                 contentFocusIndex == uiState.iptvPlaylists.size + 2 -> {
+                                                    viewModel.refreshIptvHealth()
+                                                }
+                                                contentFocusIndex == uiState.iptvPlaylists.size + 3 -> {
                                                     viewModel.clearIptvConfig()
                                                 }
                                             }
@@ -1369,7 +1372,11 @@ fun SettingsScreen(
                                 }
                             },
                             onRefresh = { viewModel.refreshIptv() },
+                            onRefreshHealth = { viewModel.refreshIptvHealth() },
                             onDelete = { viewModel.clearIptvConfig() },
+                            healthSummary = uiState.iptvHealthSummary,
+                            isHealthChecking = uiState.isIptvHealthChecking,
+                            healthStatusMessage = uiState.iptvHealthStatusMessage,
                             onManageCategories = openIptvCategories
                         )
                         "TV" -> IptvSettings(
@@ -1413,7 +1420,11 @@ fun SettingsScreen(
                                 }
                             },
                             onRefresh = { viewModel.refreshIptv() },
+                            onRefreshHealth = { viewModel.refreshIptvHealth() },
                             onDelete = { viewModel.clearIptvConfig() },
+                            healthSummary = uiState.iptvHealthSummary,
+                            isHealthChecking = uiState.isIptvHealthChecking,
+                            healthStatusMessage = uiState.iptvHealthStatusMessage,
                             onManageCategories = openIptvCategories
                         )
                         "home_server" -> HomeServerSettings(
@@ -3760,7 +3771,11 @@ private fun MobileSettingsSubPage(
                         }
                     },
                     onRefresh = { viewModel.refreshIptv() },
+                    onRefreshHealth = { viewModel.refreshIptvHealth() },
                     onDelete = { viewModel.clearIptvConfig() },
+                    healthSummary = uiState.iptvHealthSummary,
+                    isHealthChecking = uiState.isIptvHealthChecking,
+                    healthStatusMessage = uiState.iptvHealthStatusMessage,
                     onManageCategories = { playlistId ->
                         viewModel.setIptvSelectedPlaylistId(playlistId)
                         onNavigate("IPTV_CATEGORIES")
@@ -5746,7 +5761,11 @@ private fun IptvSettings(
     onMovePlaylistDown: (Int) -> Unit,
     onDeletePlaylist: (Int) -> Unit,
     onRefresh: () -> Unit,
+    onRefreshHealth: () -> Unit,
     onDelete: () -> Unit,
+    healthSummary: com.arflix.tv.data.model.IptvHealthSummary,
+    isHealthChecking: Boolean,
+    healthStatusMessage: String?,
     onManageCategories: (String) -> Unit = {}
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -5831,6 +5850,7 @@ private fun IptvSettings(
             MobileSettingsCategory(title = "ACTIONS") {
                 val refreshSubtitle = when { isLoading -> "Refreshing channels and EPG..."; error != null -> error; playlists.none { it.epgUrl.isNotBlank() || it.epgUrls.orEmpty().isNotEmpty() } -> "Reload playlists now"; else -> "Reload playlist and EPG now" }
                 MobileSettingsRow(icon = Icons.Default.Link, title = stringResource(R.string.refresh_iptv), subtitle = refreshSubtitle, value = if (isLoading) "Loading" else "", isFocused = false, onClick = onRefresh)
+                MobileSettingsRow(icon = Icons.Default.Check, title = "Run IPTV health check", subtitle = healthStatusMessage ?: healthSummary.summaryText, value = if (isHealthChecking) "CHECKING" else "RUN", isFocused = false, onClick = onRefreshHealth)
                 MobileSettingsRow(icon = Icons.Default.Delete, title = stringResource(R.string.delete_iptv), subtitle = if (playlists.isEmpty()) "No playlists configured" else "Remove playlists, EPG and favorites", value = "", isFocused = false, showDivider = false, onClick = onDelete)
             }
             if (isLoading && !progressText.isNullOrBlank()) {
@@ -5898,7 +5918,9 @@ private fun IptvSettings(
             val refreshSubtitle = when { isLoading -> "Refreshing channels and EPG..."; error != null -> error; playlists.none { it.epgUrl.isNotBlank() || it.epgUrls.orEmpty().isNotEmpty() } -> "Reload playlists now"; else -> "Reload playlist and EPG now" }
             SettingsRow(icon = Icons.Default.Link, title = stringResource(R.string.refresh_iptv), subtitle = refreshSubtitle, value = if (isLoading) "LOADING" else "REFRESH", isFocused = focusedIndex == playlists.size + 1, onClick = onRefresh, modifier = Modifier.settingsFocusSlot(playlists.size + 1))
             Spacer(modifier = Modifier.height(16.dp))
-            SettingsRow(icon = Icons.Default.Delete, title = stringResource(R.string.delete_iptv), subtitle = if (playlists.isEmpty()) "No playlists configured" else "Remove playlists, EPG and favorites", value = if (playlists.isEmpty()) "EMPTY" else "DELETE", isFocused = focusedIndex == playlists.size + 2, onClick = onDelete, modifier = Modifier.settingsFocusSlot(playlists.size + 2))
+            SettingsRow(icon = Icons.Default.Check, title = "Run IPTV health check", subtitle = healthStatusMessage ?: healthSummary.summaryText, value = if (isHealthChecking) "CHECKING" else "RUN", isFocused = focusedIndex == playlists.size + 2, onClick = onRefreshHealth, modifier = Modifier.settingsFocusSlot(playlists.size + 2))
+            Spacer(modifier = Modifier.height(16.dp))
+            SettingsRow(icon = Icons.Default.Delete, title = stringResource(R.string.delete_iptv), subtitle = if (playlists.isEmpty()) "No playlists configured" else "Remove playlists, EPG and favorites", value = if (playlists.isEmpty()) "EMPTY" else "DELETE", isFocused = focusedIndex == playlists.size + 3, onClick = onDelete, modifier = Modifier.settingsFocusSlot(playlists.size + 3))
             if (isLoading && !progressText.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("$progressText (${progressPercent.coerceIn(0, 100)}%)", style = ArflixTypography.caption, color = TextSecondary)

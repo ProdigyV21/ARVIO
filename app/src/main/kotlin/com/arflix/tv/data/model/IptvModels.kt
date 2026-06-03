@@ -23,11 +23,47 @@ data class IptvChannel(
     val language: String? = null,
     val country: String? = null,
     val qualityLabel: String? = null,
-    val variantKey: String? = null
+    val variantKey: String? = null,
+    val health: IptvChannelHealth = IptvChannelHealth()
 )
 
 /**
- * Compact now/next program slice for a channel.
+ * Status of the last known health check for an IPTV stream.
+ */
+enum class IptvChannelHealthStatus {
+    UNKNOWN,
+    HEALTHY,
+    DEGRADED,
+    OFFLINE
+}
+
+data class IptvChannelHealth(
+    val httpStatusCode: Int? = null,
+    val latencyMs: Long? = null,
+    val consecutiveFailureCount: Int = 0,
+    val lastSuccessfulAtMs: Long? = null,
+    val lastCheckedAtMs: Long = 0L
+) {
+    val status: IptvChannelHealthStatus
+        get() = when {
+            lastCheckedAtMs == 0L -> IptvChannelHealthStatus.UNKNOWN
+            consecutiveFailureCount >= 3 -> IptvChannelHealthStatus.OFFLINE
+            consecutiveFailureCount > 0 -> IptvChannelHealthStatus.DEGRADED
+            httpStatusCode != null && httpStatusCode in 200..299 -> IptvChannelHealthStatus.HEALTHY
+            else -> IptvChannelHealthStatus.UNKNOWN
+        }
+
+    val summaryText: String
+        get() = when (status) {
+            IptvChannelHealthStatus.HEALTHY -> "Healthy"
+            IptvChannelHealthStatus.DEGRADED -> "Degraded"
+            IptvChannelHealthStatus.OFFLINE -> "Offline"
+            IptvChannelHealthStatus.UNKNOWN -> "Unknown"
+        }
+}
+
+/**
+ * Loaded IPTV snapshot used by UI.
  */
 data class IptvNowNext(
     val now: IptvProgram? = null,
@@ -65,6 +101,29 @@ data class IptvSnapshot(
     val epgWarning: String? = null,
     val loadedAt: Instant = Instant.now()
 )
+
+data class IptvHealthSummary(
+    val total: Int = 0,
+    val healthy: Int = 0,
+    val degraded: Int = 0,
+    val offline: Int = 0,
+    val unknown: Int = 0,
+    val lastCheckedAtMs: Long = 0L
+) {
+    val summaryText: String
+        get() = when {
+            total == 0 -> "No health checks yet"
+            else -> listOfNotNull(
+                healthy.takeIf { it > 0 }?.let { "$it healthy" },
+                degraded.takeIf { it > 0 }?.let { "$it degraded" },
+                offline.takeIf { it > 0 }?.let { "$it offline" },
+                unknown.takeIf { it > 0 }?.let { "$it unknown" }
+            ).joinToString(" • ")
+        }
+
+    val lastCheckedText: String
+        get() = if (lastCheckedAtMs == 0L) "" else "Last checked ${java.time.Duration.between(java.time.Instant.ofEpochMilli(lastCheckedAtMs), java.time.Instant.now()).abs().toMinutes()}m ago"
+}
 
 /**
  * Lightweight helper to handle playlistId|groupName composite keys without

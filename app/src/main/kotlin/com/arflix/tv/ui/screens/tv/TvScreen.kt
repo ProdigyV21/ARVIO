@@ -137,6 +137,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlin.math.abs
 
 
@@ -574,6 +576,7 @@ fun TvScreen(
 
     // Keep an always-current reference to the playing channel's stream URL
     // so the error listener never captures a stale closure.
+    val playbackHealthScope = rememberCoroutineScope()
     val currentStreamUrl by rememberUpdatedState(playingChannel?.streamUrl)
 
     DisposableEffect(Unit) {
@@ -702,6 +705,12 @@ fun TvScreen(
                 if (playerRetryCount > 3) {
                     // Stop retrying after 3 attempts
                     System.err.println("[IPTV] Playback failed after 3 retries: ${error.message} URL=$stream")
+                    val channelId = playingChannelId
+                    if (!channelId.isNullOrBlank()) {
+                        playbackHealthScope.launch {
+                            viewModel.iptvRepository.recordIptvPlaybackFailure(channelId, error.message)
+                        }
+                    }
                     return
                 }
                 player.clearMediaItems()
