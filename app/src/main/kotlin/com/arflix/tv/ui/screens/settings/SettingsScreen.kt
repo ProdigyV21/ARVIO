@@ -118,6 +118,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
@@ -7925,11 +7926,8 @@ private fun InputModal(
     var lastFocusedFieldIndex by remember(title, fields.size) { mutableStateOf<Int?>(null) }
     val totalItems = fields.size + 3 // inputs + paste + cancel + confirm
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
-    val formMaxHeight = when {
-        fields.size >= 5 -> if (isTouchDevice) 360.dp else 390.dp
-        fields.size >= 4 -> if (isTouchDevice) 330.dp else 350.dp
-        else -> 290.dp
-    }
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    val maxDialogHeight = (screenHeightDp * 0.88f).coerceAtMost(if (isTouchDevice) 620.dp else 660.dp)
 
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -7993,13 +7991,16 @@ private fun InputModal(
 
     // Auto-scroll the form so the focused field stays in view when D-pad navigates.
     // Each field is ~86dp tall (label 22dp + spacer 6dp + edittext 48dp + spacing 12dp).
-    // Scroll proportionally so the active field sits roughly in the middle of the viewport.
+    // Scroll so the focused field stays in view. Distribute proportionally across the actual
+    // scroll range so the calculation works at any screen density and form height.
     LaunchedEffect(focusedIndex) {
         if (focusedIndex in 0 until fields.size) {
             lastFocusedFieldIndex = focusedIndex
-            val approxFieldHeightPx = 260 // rough pixels per field at typical density
-            val targetScroll = (focusedIndex * approxFieldHeightPx).coerceAtLeast(0)
-            runCatching { formScrollState.animateScrollTo(targetScroll) }
+            val maxScroll = formScrollState.maxValue
+            if (maxScroll > 0 && fields.size > 1) {
+                val targetScroll = (focusedIndex.toFloat() / (fields.size - 1) * maxScroll).toInt()
+                runCatching { formScrollState.animateScrollTo(targetScroll) }
+            }
         } else if (focusedIndex >= fields.size) {
             // Focused on paste/cancel/confirm — scroll form to end so it's not blocking
             runCatching { formScrollState.animateScrollTo(formScrollState.maxValue) }
@@ -8031,7 +8032,7 @@ private fun InputModal(
                     )
                     .navigationBarsPadding()
                     .imePadding()
-                    .heightIn(max = if (isTouchDevice) 620.dp else 660.dp)
+                    .heightIn(max = maxDialogHeight)
                     .background(BackgroundElevated, RoundedCornerShape(14.dp))
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
                     .padding(horizontal = if (isTouchDevice) 16.dp else 20.dp, vertical = 18.dp)
@@ -8128,7 +8129,7 @@ private fun InputModal(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = formMaxHeight)
+                        .weight(1f, fill = false)
                         .verticalScroll(formScrollState)
                 ) {
                     fields.forEachIndexed { index, field ->
@@ -8343,7 +8344,9 @@ private fun InputModal(
                     Text(
                         text = "Paste into $pasteTargetLabel",
                         style = ArflixTypography.button,
-                        color = if (isPasteFocused) Color.Black else Color.White
+                        color = if (isPasteFocused) Color.Black else Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
