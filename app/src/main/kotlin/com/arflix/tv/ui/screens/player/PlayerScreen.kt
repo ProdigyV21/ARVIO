@@ -137,6 +137,7 @@ import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
+import com.arflix.tv.ui.components.KeepScreenOn
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType
@@ -302,6 +303,7 @@ fun PlayerScreen(
         onDispose { }
     }
 
+    KeepScreenOn()
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(true) }
     var hasPlaybackStarted by remember { mutableStateOf(false) }  // Track if playback has actually started

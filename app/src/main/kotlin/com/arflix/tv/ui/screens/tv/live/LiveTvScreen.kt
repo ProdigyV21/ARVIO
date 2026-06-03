@@ -82,6 +82,7 @@ import com.arflix.tv.ui.screens.tv.TvUiState
 import com.arflix.tv.ui.screens.tv.TvViewModel
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.KeepScreenOn
 import com.arflix.tv.ui.components.AppTopBarHeight
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.topBarFocusedItem
@@ -519,6 +520,7 @@ fun LiveTvScreen(
     // channel of the first non-empty category.
     val rememberedChannelByCategory = remember { mutableMapOf<String, String>() }
     var playingChannelId by rememberSaveable { mutableStateOf<String?>(initialChannelId) }
+    KeepScreenOn(active = playingChannelId != null)
     var focusedChannelId by rememberSaveable { mutableStateOf<String?>(initialChannelId) }
     var epgPrefetchAnchorId by rememberSaveable { mutableStateOf<String?>(initialChannelId) }
     var startupChannelApplied by rememberSaveable(selectedProviderId) { mutableStateOf(false) }

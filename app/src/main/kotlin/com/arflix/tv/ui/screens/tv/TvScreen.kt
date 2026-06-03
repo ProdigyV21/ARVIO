@@ -119,6 +119,7 @@ import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.KeepScreenOn
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.ui.components.SidebarItem
@@ -240,6 +241,7 @@ fun TvScreen(
     var channelIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedChannelId by rememberSaveable { mutableStateOf<String?>(null) }
     var playingChannelId by rememberSaveable { mutableStateOf<String?>(null) }
+    KeepScreenOn(active = playingChannelId != null)
     var showGroupContextMenu by remember { mutableStateOf(false) }
     // When launched from Home with a stream URL, start in fullscreen immediately
     // to avoid a flash of the TV page channel list.

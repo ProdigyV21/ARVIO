@@ -212,9 +212,6 @@ class MainActivity : ComponentActivity() {
             DeviceType.PHONE -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         }
 
-        // Keep screen on during playback
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         // All devices use edge-to-edge (setDecorFitsSystemWindows=false).
         // TV hides the bars; mobile keeps them visible and Compose handles
         // insets via systemBarsPadding() in the root layout.
