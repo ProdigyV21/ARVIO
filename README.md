@@ -88,6 +88,17 @@ On Windows PowerShell or Command Prompt:
 .\gradlew.bat :app:assembleSideloadDebug
 ```
 
+### Gradle Wrapper Security & Verification
+
+#### Why Wrapper Verification Matters
+Executing an untrusted or compromised `gradle-wrapper.jar` can lead to arbitrary code execution, introducing severe supply-chain security risks into the project.
+
+#### Verifying Wrapper Authenticity
+Before running the wrapper, verify its authenticity by checking the `gradle-wrapper.jar` SHA-256 checksum against the official Gradle release hashes.
+
+#### CI/CD Best Practices
+It is highly recommended to include the official Gradle Wrapper Validation Action (`gradle/wrapper-validation-action@v3`) in your GitHub Actions workflows. This automatically verifies the wrapper jar and blocks malicious PRs.
+
 Install a debug build on a connected Android TV, Fire TV, emulator, phone, or tablet:
 
 ```bash
