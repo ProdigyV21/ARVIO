@@ -4996,14 +4996,17 @@ private class PlaybackCookieJar : CookieJar {
         val current = cookiesByHost[host]?.toMutableList() ?: mutableListOf()
         val now = System.currentTimeMillis()
 
+        current.removeAll { it.expiresAt <= now }
+
         cookies.forEach { cookie ->
-            if (cookie.expiresAt <= now) return@forEach
-            current.removeAll { existing ->
-                existing.name == cookie.name &&
-                    existing.domain == cookie.domain &&
-                    existing.path == cookie.path
+            if (cookie.expiresAt > now) {
+                current.removeAll { existing ->
+                    existing.name == cookie.name &&
+                        existing.domain == cookie.domain &&
+                        existing.path == cookie.path
+                }
+                current.add(cookie)
             }
-            current.add(cookie)
         }
 
         if (current.isEmpty()) {
@@ -5017,15 +5020,17 @@ private class PlaybackCookieJar : CookieJar {
         val host = url.host
         val now = System.currentTimeMillis()
         val list = cookiesByHost[host]?.toMutableList() ?: return emptyList()
-        val valid = list.filter { cookie -> cookie.expiresAt > now && cookie.matches(url) }
-        if (valid.size != list.size) {
-            if (valid.isEmpty()) {
+
+        val unexpired = list.filter { it.expiresAt > now }
+        if (unexpired.size != list.size) {
+            if (unexpired.isEmpty()) {
                 cookiesByHost.remove(host)
             } else {
-                cookiesByHost[host] = valid.toMutableList()
+                cookiesByHost[host] = unexpired.toMutableList()
             }
         }
-        return valid
+
+        return unexpired.filter { it.matches(url) }
     }
 }
 
