@@ -1,151 +1,162 @@
-# ARVIO
+# 🚀 ARVIO
 
-ARVIO is an Android media hub for TV, phone, and tablet form factors. This repository is maintained as a source-code and development mirror for the Android application.
+ARVIO is an Android media hub designed for TV, phone, and tablet form factors.
+This repository serves as a source-code and development mirror for the Android application.
 
-The app provides a media browser, player shell, profile support, optional cloud sync, IPTV playlist support, catalog configuration, home-server integrations, and integrations with user-configured sources. ARVIO does not host, store, sell, or distribute movies, series, live TV channels, playlists, streams, or other third-party media.
+---
 
-## Repository Purpose
+## 📌 Repository Purpose
 
-This GitHub repository is for:
+This repository is intended for:
 
-- Source code review and development
-- Issue investigation and technical discussion
-- Build documentation
-- License and privacy documentation
-- Contribution review
+* Source code review and development
+* Issue tracking and technical discussions
+* Build documentation
+* License and privacy documentation
+* Contribution review
 
-It is not intended as an advertising page, download landing page, or content distribution repository.
+❗ It is **not** a media distribution, streaming, or content hosting platform.
 
-## Features
+---
 
-- Android TV, Fire TV, phone, and tablet UI
-- TMDB-powered movie, series, cast, collection, franchise, and metadata browsing
-- IPTV M3U/Xtream playlist support with provider categories, favorites, hidden categories, EPG, and mobile/tablet fullscreen playback
-- Optional ARVIO Cloud sync for profiles, settings, catalogs, IPTV state, watch state, and custom profile avatars
-- Optional per-profile Trakt.tv integration for watchlist, history, progress, and continue watching
-- Catalog management with manual URLs and public Trakt/MDBList list discovery
-- Home-server source and catalog support for user-owned Jellyfin, Emby, and Plex libraries
-- Third-party addon support for user-configured sources
-- Watchlist and continue-watching state with profile isolation
-- Subtitle and audio track selection, subtitle language filtering, and AI subtitle tools
-- Profile PINs and custom profile avatars
-- ExoPlayer/Media3 playback with TV remote, mobile, and tablet controls
+## ✨ Features
 
+* Android TV, Fire TV, phone, and tablet UI support
+* TMDB-powered browsing for movies, series, cast, collections, and franchises
+* IPTV M3U/Xtream support with categories, favorites, EPG, and fullscreen playback
+* Optional ARVIO Cloud sync for profiles, settings, catalogs, IPTV state, and watch progress
+* Optional Trakt.tv integration (watchlist, history, continue watching)
+* Catalog management with manual URLs and external list support
+* Home-server integration (Jellyfin, Emby, Plex)
+* Third-party addon support for user-configured sources
+* Profile-based watch history and state isolation
+* Subtitle and audio track selection with filtering tools
+* Profile PIN protection and custom avatars
+* Media playback via ExoPlayer / Media3 with multi-device controls
 
-## Availability
+---
+
+## 📱 Availability
 
 ARVIO is available on Google Play:
 
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" width="160">](https://play.google.com/store/apps/details?id=com.arvio.tv)
+[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" width="160">](https://play.google.com/store/apps/details?id=com.arvio.tv)
 
-## Support ARVIO
+---
 
-ARVIO is a free hobby project built and maintained with a lot of time, testing, hosting, and service costs. The goal is to keep ARVIO free as it grows, but running and improving it still costs money every month.
+## 💖 Support ARVIO
 
-If ARVIO helps you and you want to support development, donations are appreciated:
+ARVIO is a free hobby project maintained with ongoing development and infrastructure costs.
 
-[Support ARVIO on Ko-fi](https://ko-fi.com/arvio)
+If you find it useful, support is appreciated:
 
-## Screenshots
+👉 https://ko-fi.com/arvio
 
-| Home | Details |
-|------|---------|
-| ![Home screen](screenshots/home_v190.png) | ![Details screen](screenshots/details_v190.png) |
+---
 
-| Live TV | Collections |
-|---------|-------------|
-| ![Live TV screen](screenshots/live_tv_v1991.png) | ![Collections screen](screenshots/collections_v1991.png) |
+## 📸 Screenshots
 
-| Mobile | Profiles |
-|--------|----------|
-| ![Mobile screen](screenshots/mobile_home.webp) | ![Profiles screen](screenshots/profiles_v1991.png) |
+| Home                               | Details                                  |
+| ---------------------------------- | ---------------------------------------- |
+| ![Home](screenshots/home_v190.png) | ![Details](screenshots/details_v190.png) |
 
-## Content And Source Policy
+| Live TV                                   | Collections                                       |
+| ----------------------------------------- | ------------------------------------------------- |
+| ![Live TV](screenshots/live_tv_v1991.png) | ![Collections](screenshots/collections_v1991.png) |
 
-ARVIO is a media browser and player interface for user-configured sources. It works like a media player or browser: users provide their own services, playlists, addons, and URLs.
+| Mobile                                  | Profiles                                    |
+| --------------------------------------- | ------------------------------------------- |
+| ![Mobile](screenshots/mobile_home.webp) | ![Profiles](screenshots/profiles_v1991.png) |
 
-This repository does not include hosted media content, bundled playlists, IPTV credentials, debrid accounts, third-party streaming catalogs, or links intended to enable unauthorized access to content. No movies, series, live TV channels, playlists, or other third-party media are hosted by this repository or by ARVIO.
+---
 
-Users are solely responsible for their usage and must comply with applicable local laws. If you believe content accessed through an external source violates copyright law, contact the actual file host, service provider, or source maintainer. The ARVIO repository and developers cannot remove content hosted by third parties.
+## 📡 Content & Source Policy
 
-Contributors should not submit copyrighted media, credentials, private keys, access tokens, or links intended to enable unauthorized access to content.
+ARVIO is a media browser/player interface for user-configured sources.
 
-## Cloud Sync
+* Users provide their own playlists, services, addons, and URLs
+* No media content is hosted, bundled, or distributed by this repository
+* No IPTV playlists, credentials, or third-party streaming content are included
 
-ARVIO Cloud is optional. When enabled, it can sync profiles, settings, catalogs, IPTV state, watch progress, watchlist state, and profile avatars across devices. See [PRIVACY.md](PRIVACY.md) for details and account deletion instructions.
+Users are responsible for compliance with local laws and regulations.
 
-## Build And Run
+If external content violates copyright law, contact the actual source provider.
 
-Requirements:
+---
 
-- Android Studio or Android SDK command-line tools
-- JDK 17
-- Android SDK 35
+## ☁️ Cloud Sync
 
-Use the tracked Gradle wrapper:
+ARVIO Cloud is optional and supports syncing:
+
+* Profiles and settings
+* Catalogs and IPTV state
+* Watch history and progress
+* Profile avatars
+
+See [PRIVACY.md](PRIVACY.md) for full details.
+
+---
+
+## ⚙️ Build & Run
+
+### Requirements
+
+* Android Studio / SDK tools
+* JDK 17
+* Android SDK 35
+
+### Build
 
 ```bash
 ./gradlew :app:assemblePlayDebug
 ./gradlew :app:assembleSideloadDebug
 ```
 
-On Windows PowerShell or Command Prompt:
-
-```powershell
-.\gradlew.bat :app:assemblePlayDebug
-.\gradlew.bat :app:assembleSideloadDebug
-```
-
-Install a debug build on a connected Android TV, Fire TV, emulator, phone, or tablet:
+### Install
 
 ```bash
 ./gradlew :app:installPlayDebug
 ./gradlew :app:installSideloadDebug
 ```
 
-For network ADB devices:
+### Windows
 
-```bash
-adb connect <device-ip>:5555
-adb install -r app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
+```powershell
+.\gradlew.bat :app:assemblePlayDebug
+.\gradlew.bat :app:assembleSideloadDebug
 ```
 
-Build variants:
+---
 
-- `play`: Play Store build, self-update disabled.
-- `sideload`: Direct APK build, self-update enabled.
-- `debug`: development build.
-- `staging`: release-like build signed with the debug keystore for upgrade testing.
-- `release`: production build. Use a private release keystore for distribution.
+## 🔧 Build Variants
 
-## Local Configuration
+* **play** → Play Store build (no self-update)
+* **sideload** → APK build (self-update enabled)
+* **debug** → Development build
+* **staging** → Release-like test build
+* **release** → Production build
 
-Cloud sync, Google sign-in, and Supabase-backed auth require local secrets. Copy the defaults file and fill in real values:
+---
+
+## 🔐 Local Configuration
+
+Copy and configure secrets:
 
 ```bash
 cp secrets.defaults.properties secrets.properties
 ```
 
-`secrets.properties` is ignored and must not be committed.
-
-TMDB and Trakt credentials are not committed to the repository. When a valid
-Supabase config is present, app requests are routed through the tracked
-`tmdb-proxy` and `trakt-proxy` Edge Functions, where those credentials should be
-stored as Supabase function secrets. Forks that do not use those proxy functions
-can still add their own local `TMDB_API_KEY`, `TRAKT_CLIENT_ID`, and
-`TRAKT_CLIENT_SECRET` values in `secrets.properties` for direct local testing.
-
-For signed release builds, copy the keystore template and fill in local signing values:
+For signing:
 
 ```bash
 cp keystore.properties.template keystore.properties
 ```
 
-`keystore.properties` and keystore files are ignored and must stay private.
+---
 
-## Release Checks
+## 🚀 Release Checks
 
-Before publishing a build, run:
+Before release:
 
 ```bash
 ./gradlew :app:compilePlayDebugKotlin
@@ -153,18 +164,24 @@ Before publishing a build, run:
 ./gradlew :app:assembleSideloadRelease
 ```
 
-Smoke-test startup, profile switching, playback, stream fallback, subtitle/audio switching, IPTV/EPG loading, addon add/remove, search, settings navigation, background sync, and repeated player open/close on the supported device classes.
+---
 
-## Privacy
+## 🔒 Privacy
 
-See [PRIVACY.md](PRIVACY.md) for the privacy policy. Cloud account and synced data deletion is available at [auth.arvio.tv/delete-account](https://auth.arvio.tv/delete-account).
+See [PRIVACY.md](PRIVACY.md)
 
-## License
+Account deletion:
+https://auth.arvio.tv/delete-account
 
-This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+---
 
-## AI Disclosure
+## 📄 License
 
-This application was developed with significant AI assistance. Contributions should still be reviewed, tested, and treated as normal source code changes.
+Apache License 2.0 — see [LICENSE](LICENSE)
 
-If you have concerns about using AI-generated software, please do not use this application.
+---
+
+## 🤖 AI Disclosure
+
+This application was developed with significant AI assistance.
+All contributions should still be reviewed and tested like normal production code.
