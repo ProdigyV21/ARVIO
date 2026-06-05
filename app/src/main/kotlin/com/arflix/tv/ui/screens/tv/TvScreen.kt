@@ -100,6 +100,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import com.arflix.tv.playback.NetworkAdaptiveLoadControl
+import com.arflix.tv.playback.PlaybackHealthIndicator
+import com.arflix.tv.playback.PlaybackMetricsAnalyzer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -196,23 +200,14 @@ private fun String.toTvFocusZone(
 
 private fun createTvExoPlayer(
     context: Context,
-    mediaSourceFactory: DefaultMediaSourceFactory
+    mediaSourceFactory: DefaultMediaSourceFactory,
+    trackSelector: DefaultTrackSelector,
+    loadControl: LoadControl
 ): ExoPlayer {
-    val loadControl = DefaultLoadControl.Builder()
-        .setBufferDurationsMs(
-            20_000,
-            120_000,
-            1_000,
-            3_000
-        )
-        .setTargetBufferBytes(80 * 1024 * 1024)
-        .setPrioritizeTimeOverSizeThresholds(true)
-        .setBackBuffer(10_000, true)
-        .build()
-
     return ExoPlayer.Builder(context)
         .setMediaSourceFactory(mediaSourceFactory)
         .setLoadControl(loadControl)
+        .setTrackSelector(trackSelector)
         .build()
         .apply {
             playWhenReady = true
@@ -567,6 +562,10 @@ fun TvScreen(
     // Track whether ExoPlayer has been released to guard against post-dispose calls
     var isPlayerReleased by remember { mutableStateOf(false) }
 
+    val trackSelector = remember { DefaultTrackSelector(context) }
+    val loadControl = remember { NetworkAdaptiveLoadControl() }
+    val coroutineScope = rememberCoroutineScope()
+    var metricsAnalyzer by remember { mutableStateOf<PlaybackMetricsAnalyzer?>(null) }
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
 
     var miniPlayerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -579,6 +578,8 @@ fun TvScreen(
     DisposableEffect(Unit) {
         onDispose {
             isPlayerReleased = true
+            metricsAnalyzer?.release()
+            metricsAnalyzer = null
             exoPlayer?.release()
             exoPlayer = null
         }
@@ -635,7 +636,9 @@ fun TvScreen(
             isFullScreen = true
             lastPreparedStreamUrl = initialStreamUrl
             if (exoPlayer == null) {
-                exoPlayer = createTvExoPlayer(context, iptvDefaultFactory)
+                exoPlayer = createTvExoPlayer(context, iptvDefaultFactory, trackSelector, loadControl).also { player ->
+                    metricsAnalyzer = PlaybackMetricsAnalyzer(player, trackSelector, loadControl, coroutineScope)
+                }
             }
             prepareStream(initialStreamUrl)
         }
@@ -656,7 +659,9 @@ fun TvScreen(
         }
         if (stream == lastPreparedStreamUrl) return@LaunchedEffect
         if (exoPlayer == null) {
-            exoPlayer = createTvExoPlayer(context, iptvDefaultFactory)
+            exoPlayer = createTvExoPlayer(context, iptvDefaultFactory, trackSelector, loadControl).also { player ->
+                metricsAnalyzer = PlaybackMetricsAnalyzer(player, trackSelector, loadControl, coroutineScope)
+            }
         }
         lastPreparedStreamUrl = stream
         playerRetryCount = 0
@@ -1317,6 +1322,15 @@ fun TvScreen(
                             nowProgram = fsNow,
                             nextProgram = fsNext,
                             isMobile = isMobile
+                        )
+                    }
+
+                    metricsAnalyzer?.let { analyzer ->
+                        PlaybackHealthIndicator(
+                            metricsFlow = analyzer.metrics,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 24.dp, end = 24.dp)
                         )
                     }
 

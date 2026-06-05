@@ -123,6 +123,9 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import com.arflix.tv.playback.NetworkAdaptiveLoadControl
+import com.arflix.tv.playback.PlaybackHealthIndicator
+import com.arflix.tv.playback.PlaybackMetricsAnalyzer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
