@@ -50,6 +50,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
@@ -274,13 +275,13 @@ fun WatchlistScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = if (isMobile) 0.dp else AppTopBarContentTopInset)
-                .padding(start = 24.dp, top = 4.dp, end = 48.dp)
+                .padding(top = 4.dp)
         ) {
             if (isMobile) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
+                        .padding(start = 24.dp, end = 48.dp, top = 16.dp, bottom = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -316,13 +317,15 @@ fun WatchlistScreen(
                             Text(
                                 text = tr("Your watchlist is empty"),
                                 style = ArflixTypography.body,
-                                color = Color.White.copy(alpha = 0.5f)
+                                color = Color.White.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = tr("Add movies and shows for later"),
                                 style = ArflixTypography.caption,
-                                color = Color.White.copy(alpha = 0.3f)
+                                color = Color.White.copy(alpha = 0.3f),
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -330,7 +333,11 @@ fun WatchlistScreen(
                 else -> {
                     LazyColumn(
                         state = lazyColumnState,
-                        modifier = Modifier.weight(1f).fillMaxWidth().focusable(false),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, end = 48.dp)
+                            .focusable(false),
                         contentPadding = PaddingValues(top = if (isMobile) 8.dp else 0.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(if (isMobile) 24.dp else 16.dp),
                         userScrollEnabled = isMobile
