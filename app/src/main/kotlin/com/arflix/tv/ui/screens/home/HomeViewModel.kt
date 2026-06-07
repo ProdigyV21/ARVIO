@@ -2794,6 +2794,29 @@ class HomeViewModel @Inject constructor(
 
         savedCatalogs.forEach { cfg ->
             if (isCollectionTileConfig(cfg)) return@forEach
+            val rowItems = if (isCollectionRailConfig(cfg)) {
+                val group = cfg.collectionGroup
+                val matchingConfigs = savedCatalogs.filter {
+                    isCollectionTileConfig(it) && it.collectionGroup == group
+                }
+                if (matchingConfigs.isNotEmpty()) {
+                    matchingConfigs.mapIndexed { idx, itemCfg ->
+                        MediaItem(
+                            id = -100 - idx,
+                            title = "",
+                            mediaType = MediaType.MOVIE,
+                            isPlaceholder = true,
+                            collectionTileShape = itemCfg.collectionTileShape,
+                            collectionHideTitle = itemCfg.collectionHideTitle
+                        )
+                    }
+                } else {
+                    placeholderItems
+                }
+            } else {
+                placeholderItems
+            }
+
             rows.add(
                 Category(
                     id = if (isCollectionRailConfig(cfg)) {
@@ -2802,7 +2825,7 @@ class HomeViewModel @Inject constructor(
                         cfg.id
                     },
                     title = cfg.title,
-                    items = placeholderItems
+                    items = rowItems
                 )
             )
         }
