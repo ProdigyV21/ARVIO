@@ -1330,6 +1330,7 @@ fun LiveTvScreen(
         headers: Map<String, String>,
         resetRetry: Boolean,
         initialPositionMs: Long = 0L,
+        drmInfo: com.arflix.tv.data.model.DrmInfo? = null,
     ) {
         val mergedHeaders = (baseRequestHeaders + headers).filterValues { it.isNotBlank() }
         iptvDataSourceFactory.setDefaultRequestProperties(mergedHeaders)
@@ -1347,6 +1348,20 @@ fun LiveTvScreen(
                             .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
                             .setTargetOffsetMs(8_000).build()
                     )
+                }
+                // DRM configuration from #KODIPROP directives
+                drmInfo?.let { drm ->
+                    val schemeUuid = com.arflix.tv.util.ClearKeyUtil.drmSchemeToUuid(drm.scheme)
+                    val drmBuilder = MediaItem.DrmConfiguration.Builder(schemeUuid)
+                    if (drm.scheme == "clearkey" && !drm.licenseUrl.isNullOrBlank()) {
+                        // ClearKey: build inline JWKS data URI from kid:key hex pair
+                        com.arflix.tv.util.ClearKeyUtil.buildClearKeyLicenseUri(drm.licenseUrl)
+                            ?.let { dataUri -> drmBuilder.setLicenseUri(dataUri) }
+                    } else if (!drm.licenseUrl.isNullOrBlank()) {
+                        // Widevine / PlayReady: strip Kodi pipe syntax, use clean URL
+                        drmBuilder.setLicenseUri(drm.licenseUrl.substringBefore("|"))
+                    }
+                    setDrmConfiguration(drmBuilder.build())
                 }
             }
             .build()
@@ -1492,6 +1507,7 @@ fun LiveTvScreen(
             headers = headers,
             resetRetry = true,
             initialPositionMs = if (playingCatchupProgram != null) catchupInSegmentSeekMs else 0L,
+            drmInfo = playingChannel?.source?.drmInfo,
         )
         // Persist "recent" as soon as playback starts.
         playingChannelId?.let { id ->
@@ -1598,6 +1614,7 @@ fun LiveTvScreen(
                         headers = retryHeaders,
                         resetRetry = false,
                         initialPositionMs = if (retryProgram != null) catchupInSegmentSeekMs else 0L,
+                        drmInfo = retryChannel?.drmInfo,
                     )
                 }
             }

@@ -7,6 +7,7 @@ import android.util.Base64
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import com.arflix.tv.data.model.IptvChannel
+import com.arflix.tv.data.model.DrmInfo
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
@@ -6180,6 +6181,7 @@ class IptvRepository @Inject constructor(
         val seenChannelIds = HashSet<String>()
         var pendingMetadata: String? = null
         val pendingHeaders = linkedMapOf<String, String>()
+        val pendingDrmProps = linkedMapOf<String, String>()
         var parsedCount = 0
 
         BufferedReader(InputStreamReader(input, StandardCharsets.UTF_8), 256 * 1024).use { reader ->
@@ -6197,12 +6199,13 @@ class IptvRepository @Inject constructor(
                 if (line.startsWith("#EXTINF", ignoreCase = true)) {
                     pendingMetadata = line
                     pendingHeaders.clear()
-                    mergeM3uHeaderOptions(pendingHeaders, line)
+                    pendingDrmProps.clear()
+                    mergeM3uHeaderOptions(pendingHeaders, pendingDrmProps, line)
                     continue
                 }
 
                 if (line.startsWith("#EXTVLCOPT", ignoreCase = true) || line.startsWith("#KODIPROP", ignoreCase = true)) {
-                    mergeM3uHeaderOptions(pendingHeaders, line)
+                    mergeM3uHeaderOptions(pendingHeaders, pendingDrmProps, line)
                     continue
                 }
 
@@ -6269,9 +6272,11 @@ class IptvRepository @Inject constructor(
                     language = language,
                     country = country,
                     qualityLabel = qualityLabel,
-                    variantKey = buildChannelVariantKey(tvgName ?: channelName, groupTitle, epgId)
+                    variantKey = buildChannelVariantKey(tvgName ?: channelName, groupTitle, epgId),
+                    drmInfo = buildDrmInfo(pendingDrmProps)
                 )
                 pendingHeaders.clear()
+                pendingDrmProps.clear()
                 parsedCount++
                 if (parsedCount % 5000 == 0) {
                     onProgress(IptvLoadProgress("Parsing channels... $parsedCount found", 85))
@@ -6908,11 +6913,24 @@ class IptvRepository @Inject constructor(
         return null
     }
 
-    private fun mergeM3uHeaderOptions(target: MutableMap<String, String>, line: String) {
+    private fun mergeM3uHeaderOptions(
+        target: MutableMap<String, String>,
+        drmProps: MutableMap<String, String>,
+        line: String
+    ) {
         val value = line.substringAfter(':', missingDelimiterValue = "").trim()
         if (value.isBlank()) return
 
         when {
+            // ── DRM properties (routed to drmProps, not HTTP headers) ────
+            value.startsWith("inputstream.adaptive.license_type=", ignoreCase = true) ->
+                drmProps["license_type"] = value.substringAfter('=').trim()
+            value.startsWith("inputstream.adaptive.license_key=", ignoreCase = true) ->
+                drmProps["license_key"] = value.substringAfter('=').trim()
+            value.startsWith("inputstream.adaptive.license_data=", ignoreCase = true) ->
+                drmProps["license_data"] = value.substringAfter('=').trim()
+
+            // ── HTTP headers ────────────────────────────────────────────
             value.startsWith("http-user-agent=", ignoreCase = true) ->
                 target["User-Agent"] = value.substringAfter('=').trim()
             value.startsWith("user-agent=", ignoreCase = true) ->
@@ -6930,6 +6948,19 @@ class IptvRepository @Inject constructor(
             value.startsWith("inputstream.adaptive.manifest_headers=", ignoreCase = true) ->
                 target.putAll(parseHeaderPairs(value.substringAfter('=')))
         }
+    }
+
+    /**
+     * Builds a [DrmInfo] from accumulated `#KODIPROP` DRM properties, or returns
+     * `null` if no `license_type` was declared.
+     */
+    private fun buildDrmInfo(props: Map<String, String>): DrmInfo? {
+        val rawScheme = props["license_type"] ?: return null
+        return DrmInfo(
+            scheme = com.arflix.tv.util.ClearKeyUtil.normalizeScheme(rawScheme),
+            licenseUrl = props["license_key"],
+            licenseData = props["license_data"]
+        )
     }
 
     private fun extractInlineRequestHeaders(metadata: String?): Map<String, String> {

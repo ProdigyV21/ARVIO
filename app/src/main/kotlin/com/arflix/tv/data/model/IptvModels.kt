@@ -3,6 +3,22 @@ package com.arflix.tv.data.model
 import java.time.Instant
 
 /**
+ * DRM configuration parsed from `#KODIPROP` directives in an M3U playlist.
+ *
+ * @property scheme Canonical DRM scheme name: `"clearkey"`, `"widevine"`, `"playready"`,
+ *   or the raw value if unrecognised.
+ * @property licenseUrl For Widevine: the license server URL.
+ *   For ClearKey: the `kid:key` hex pair (e.g. `9eb4…:166…`).
+ * @property licenseData Optional PSSH override (base64). Most MPD manifests declare
+ *   PSSH inline or in the init segment; ExoPlayer handles both automatically.
+ */
+data class DrmInfo(
+    val scheme: String,
+    val licenseUrl: String? = null,
+    val licenseData: String? = null,
+)
+
+/**
  * IPTV channel parsed from an M3U playlist.
  */
 data class IptvChannel(
@@ -23,7 +39,8 @@ data class IptvChannel(
     val language: String? = null,
     val country: String? = null,
     val qualityLabel: String? = null,
-    val variantKey: String? = null
+    val variantKey: String? = null,
+    val drmInfo: DrmInfo? = null,
 )
 
 /**
