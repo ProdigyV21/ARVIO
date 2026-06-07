@@ -48,6 +48,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.sp
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.AppTopBar
@@ -272,6 +276,21 @@ fun WatchlistScreen(
                 .padding(top = if (isMobile) 0.dp else AppTopBarContentTopInset)
                 .padding(start = 24.dp, top = 4.dp, end = 48.dp)
         ) {
+            if (isMobile) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.watchlist),
+                        style = ArflixTypography.heroTitle.copy(fontSize = 28.sp),
+                        color = TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             when {
                 uiState.isLoading -> {
                     Box(
@@ -283,7 +302,7 @@ fun WatchlistScreen(
                 }
                 totalItems == 0 -> {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -312,7 +331,7 @@ fun WatchlistScreen(
                     LazyColumn(
                         state = lazyColumnState,
                         modifier = Modifier.weight(1f).fillMaxWidth().focusable(false),
-                        contentPadding = PaddingValues(top = if (isMobile) 48.dp else 0.dp, bottom = 16.dp),
+                        contentPadding = PaddingValues(top = if (isMobile) 8.dp else 0.dp, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(if (isMobile) 24.dp else 16.dp),
                         userScrollEnabled = isMobile
                     ) {
