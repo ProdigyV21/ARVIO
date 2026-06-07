@@ -129,6 +129,13 @@
             </intent-filter>
         </receiver>
 
+        <!-- Global Error Boundary Crash UI -->
+        <activity
+            android:name=".ui.activity.CrashActivity"
+            android:exported="false"
+            android:process=":crash"
+            android:theme="@style/Theme.ArflixTV" />
+
     </application>
 
 </manifest>

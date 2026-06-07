@@ -78,6 +78,25 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         super.onCreate()
         instance = this
 
+        // Setup Global Error Boundary
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, exception ->
+            AppLogger.e("ArflixApplication", "Uncaught exception crashed the app: ${exception.message}", exception)
+            
+            val intent = android.content.Intent(this, com.arflix.tv.ui.activity.CrashActivity::class.java).apply {
+                putExtra(com.arflix.tv.ui.activity.CrashActivity.EXTRA_ERROR_DETAILS, android.util.Log.getStackTraceString(exception))
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            startActivity(intent)
+            
+            // Allow default crash reporters (Sentry/Crashlytics) to still process it if they wrapped it
+            defaultHandler?.uncaughtException(thread, exception)
+            
+            // We exit immediately to prevent the OS from showing the standard "App has stopped" dialog
+            // since we've already launched our isolated CrashActivity in a different process.
+            kotlin.system.exitProcess(1)
+        }
+
         // OkHttpProvider.init(context) just stashes the app context; it does
         // not build the OkHttpClient. Safe to keep on the main thread — it's
         // a single volatile assignment.
