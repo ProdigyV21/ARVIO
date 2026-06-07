@@ -4,6 +4,25 @@ ARVIO is an Android media hub for TV, phone, and tablet form factors. This repos
 
 The app provides a media browser, player shell, profile support, optional cloud sync, IPTV playlist support, catalog configuration, home-server integrations, and integrations with user-configured sources. ARVIO does not host, store, sell, or distribute movies, series, live TV channels, playlists, streams, or other third-party media.
 
+## Table of Contents
+
+- [Repository Purpose](#repository-purpose)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Availability](#availability)
+- [Support ARVIO](#support-arvio)
+- [Screenshots](#screenshots)
+- [Content And Source Policy](#content-and-source-policy)
+- [Cloud Sync](#cloud-sync)
+- [Build And Run](#build-and-run)
+- [Local Configuration](#local-configuration)
+- [Release Checks](#release-checks)
+- [Contributing](#contributing)
+- [Privacy](#privacy)
+- [License](#license)
+- [AI Disclosure](#ai-disclosure)
+
+
 ## Repository Purpose
 
 This GitHub repository is for:
@@ -31,6 +50,45 @@ It is not intended as an advertising page, download landing page, or content dis
 - Profile PINs and custom profile avatars
 - ExoPlayer/Media3 playback with TV remote, mobile, and tablet controls
 
+## Quick Start
+
+Clone the repository and build a debug version:
+
+```bash
+git clone <repository-url>
+cd ARVIO
+
+cp secrets.defaults.properties secrets.properties
+
+./gradlew :app:assemblePlayDebug
+```
+
+Install the generated APK on a connected Android device, Android TV, Fire TV, or emulator.
+
+For detailed setup instructions, see the Build And Run section below.
+
+## Project Status
+
+ARVIO is actively maintained and under continuous development.
+
+Bug reports, feature requests, and pull requests are welcome.
+
+## Tech Stack
+
+ARVIO is built using modern Android technologies and media frameworks:
+
+| Technology | Purpose |
+|------------|---------|
+| Kotlin | Primary programming language |
+| Android SDK 35 | Android platform support |
+| Jetpack Libraries | Android architecture and UI components |
+| Media3 / ExoPlayer | Media playback engine |
+| Supabase | Authentication and cloud synchronization |
+| TMDB | Movie and TV metadata integration |
+| Trakt.tv | Watch history, progress, and watchlist synchronization |
+| IPTV (M3U/Xtream) | Live TV and playlist support |
+| Jellyfin, Emby, Plex | Home-server media integrations |
+
 
 ## Availability
 
@@ -48,17 +106,20 @@ If ARVIO helps you and you want to support development, donations are appreciate
 
 ## Screenshots
 
-| Home | Details |
-|------|---------|
-| ![Home screen](screenshots/home_v190.png) | ![Details screen](screenshots/details_v190.png) |
+<p align="center">
+  <img src="screenshots/home_v190.png" width="45%">
+  <img src="screenshots/details_v190.png" width="45%">
+</p>
 
-| Live TV | Collections |
-|---------|-------------|
-| ![Live TV screen](screenshots/live_tv_v1991.png) | ![Collections screen](screenshots/collections_v1991.png) |
+<p align="center">
+  <img src="screenshots/live_tv_v1991.png" width="45%">
+  <img src="screenshots/collections_v1991.png" width="45%">
+</p>
 
-| Mobile | Profiles |
-|--------|----------|
-| ![Mobile screen](screenshots/mobile_home.webp) | ![Profiles screen](screenshots/profiles_v1991.png) |
+<p align="center">
+  <img src="screenshots/mobile_home.webp" width="45%">
+  <img src="screenshots/profiles_v1991.png" width="45%">
+</p>
 
 ## Content And Source Policy
 
@@ -154,6 +215,26 @@ Before publishing a build, run:
 ```
 
 Smoke-test startup, profile switching, playback, stream fallback, subtitle/audio switching, IPTV/EPG loading, addon add/remove, search, settings navigation, background sync, and repeated player open/close on the supported device classes.
+
+## Contributing
+
+Contributions are welcome.
+
+### Contribution Workflow
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test locally
+5. Commit your changes
+6. Open a Pull Request
+
+### Before Submitting
+
+- Verify the project builds successfully
+- Follow existing code style
+- Test affected functionality
+- Include screenshots for UI changes when applicable
 
 ## Privacy
 
