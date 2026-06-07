@@ -209,7 +209,27 @@ data class StremioStream(
 
     fun getSourceName(): String {
         val titleParts = (title ?: name ?: "").split("\n")
-        return titleParts.getOrNull(0)?.trim() ?: "Unknown"
+        val baseName = titleParts.getOrNull(0)?.trim() ?: ""
+        if (baseName.isNotBlank()) return baseName
+        val ext = externalUrl?.trim().orEmpty()
+        if (ext.isNotBlank()) {
+            return try {
+                val host = java.net.URI(ext).host?.removePrefix("www.") ?: ""
+                when {
+                    host.contains("amazon") || host.contains("primevideo") -> "Amazon Prime Video"
+                    host.contains("netflix") -> "Netflix"
+                    host.contains("disneyplus") || host.contains("disney") -> "Disney+"
+                    host.contains("hbomax") || host.contains("max.com") -> "Max"
+                    host.contains("hulu") -> "Hulu"
+                    host.contains("appletv") || host.contains("apple.com") -> "Apple TV+"
+                    host.contains("paramountplus") -> "Paramount+"
+                    host.contains("peacocktv") -> "Peacock"
+                    host.isNotBlank() -> host.replaceFirstChar { it.uppercase() }
+                    else -> "External Link"
+                }
+            } catch (e: Exception) { "External Link" }
+        }
+        return "Unknown"
     }
 
     fun getTorrentName(): String {
