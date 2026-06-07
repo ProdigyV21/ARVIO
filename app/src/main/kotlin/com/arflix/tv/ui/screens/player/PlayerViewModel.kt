@@ -24,8 +24,12 @@ import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchHistoryEntry
 import com.arflix.tv.data.repository.WatchHistoryRepository
+import com.arflix.tv.data.db.DownloadStatus
+import com.arflix.tv.data.repository.DownloadsRepository
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
+import com.arflix.tv.util.isSubtitleLangDisabled
+import com.arflix.tv.util.normalizeSubtitleLang
 import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.weightedSubtitleScore
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -119,7 +123,9 @@ data class PlayerUiState(
     // Plot synopsis from TMDB, used in the pause overlay metadata block
     val overview: String? = null,
     // Release year extracted from TMDB releaseDate/firstAirDate (e.g. "2023")
-    val releaseYear: String? = null
+    val releaseYear: String? = null,
+    // True when playing a locally downloaded file (no network required)
+    val isOffline: Boolean = false
 )
 
 
@@ -144,7 +150,8 @@ class PlayerViewModel @Inject constructor(
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val tmdbApi: TmdbApi,
     private val skipIntroRepository: SkipIntroRepository,
-    private val playbackTelemetryRepository: PlaybackTelemetryRepository
+    private val playbackTelemetryRepository: PlaybackTelemetryRepository,
+    private val downloadsRepository: DownloadsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -414,6 +421,44 @@ class PlayerViewModel @Inject constructor(
                 volumeBoostDb = volumeBoostDb
             )
 
+            // Check for a completed local download before hitting the network.
+            val localDownload = downloadsRepository.getDownloadForEpisode(
+                tmdbId = mediaId,
+                mediaType = mediaType.name.lowercase(),
+                season = seasonNumber,
+                episode = episodeNumber
+            )
+            if (localDownload?.status == DownloadStatus.COMPLETED.name && localDownload.localUri != null) {
+                val localSubtitle = if (!localDownload.subtitleLocalUri.isNullOrBlank()) {
+                    Subtitle(
+                        id = "local_subtitle_${localDownload.id}",
+                        url = "file://${localDownload.subtitleLocalUri}",
+                        lang = localDownload.subtitleLang ?: "und",
+                        label = localDownload.subtitleLang?.uppercase() ?: "Downloaded",
+                        provider = "Downloaded"
+                    )
+                } else null
+                val resumeData = resolveResumeData(
+                    mediaType = mediaType,
+                    mediaId = mediaId,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    navigationStartPositionMs = startPositionMs
+                )
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isLoadingStreams = false,
+                    sourceSearchActive = false,
+                    selectedStreamUrl = "file://${localDownload.localUri}",
+                    isOffline = true,
+                    subtitles = listOfNotNull(localSubtitle),
+                    selectedSubtitle = localSubtitle,
+                    savedPosition = resumeData.positionMs
+                )
+                launch { fetchMediaMetadata(mediaType, mediaId) }
+                return@launch
+            }
+
             // If stream URL provided, use it directly (except magnet links, which require resolution).
             if (providedStreamUrl != null) {
                 val resumeData = resolveResumeData(
@@ -467,13 +512,31 @@ class PlayerViewModel @Inject constructor(
                     return@launch
                 }
 
+                // For local file downloads, look up the subtitle from the DB by file path.
+                val localSubtitleForProvided = if (resolvedProvidedUrl?.startsWith("file://") == true) {
+                    val localPath = resolvedProvidedUrl.removePrefix("file://")
+                    val download = downloadsRepository.getDownloadByLocalUri(localPath)
+                    if (download != null && !download.subtitleLocalUri.isNullOrBlank()) {
+                        Subtitle(
+                            id = "local_subtitle_${download.id}",
+                            url = "file://${download.subtitleLocalUri}",
+                            lang = download.subtitleLang ?: "und",
+                            label = download.subtitleLang?.uppercase() ?: "Downloaded",
+                            provider = "Downloaded"
+                        )
+                    } else null
+                } else null
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isLoadingStreams = false,
                     sourceSearchActive = true,
                     selectedStream = resolvedProvidedStream,
                     selectedStreamUrl = resolvedProvidedUrl,
-                    savedPosition = resumeData.positionMs
+                    savedPosition = resumeData.positionMs,
+                    isOffline = resolvedProvidedUrl?.startsWith("file://") == true,
+                    subtitles = listOfNotNull(localSubtitleForProvided),
+                    selectedSubtitle = localSubtitleForProvided
                 )
                 launch {
                     kotlinx.coroutines.delay(1_500L)
@@ -1338,15 +1401,7 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private fun isSubtitleDisabledPreference(value: String?): Boolean {
-        val normalized = value?.trim()?.lowercase().orEmpty()
-        return normalized.isBlank() ||
-            normalized == "off" ||
-            normalized == "none" ||
-            normalized == "no subtitles" ||
-            normalized == "disabled" ||
-            normalized == "disable"
-    }
+    private fun isSubtitleDisabledPreference(value: String?): Boolean = isSubtitleLangDisabled(value)
 
     private fun qualityScore(quality: String): Int {
         return when {
@@ -1782,102 +1837,7 @@ class PlayerViewModel @Inject constructor(
             lower.contains("multi-audio")
     }
 
-    /**
-     * Normalize language codes to a standard format for matching
-     * Maps: "English" -> "en", "eng" -> "en", "Spanish" -> "es", etc.
-     */
-    private fun normalizeLanguage(lang: String): String {
-        val lowerLang = lang.lowercase().trim()
-        return when {
-            // Full names
-            lowerLang == "english" || lowerLang.startsWith("english") -> "en"
-            lowerLang == "spanish" || lowerLang.startsWith("spanish") || lowerLang == "espanol" -> "es"
-            lowerLang == "french" || lowerLang.startsWith("french") || lowerLang == "francais" -> "fr"
-            lowerLang == "german" || lowerLang.startsWith("german") || lowerLang == "deutsch" -> "de"
-            lowerLang == "italian" || lowerLang.startsWith("italian") -> "it"
-            lowerLang == "portuguese" -> "pt"
-            lowerLang == "portuguese (brazil)" ||
-                lowerLang == "portuguese-brazil" ||
-                lowerLang == "brazilian portuguese" ||
-                lowerLang == "brazil portuguese" ||
-                lowerLang == "pt-br" ||
-                lowerLang == "ptbr" -> "pt-br"
-            lowerLang.startsWith("portuguese") -> "pt"
-            lowerLang == "dutch" || lowerLang.startsWith("dutch") -> "nl"
-            lowerLang == "russian" || lowerLang.startsWith("russian") -> "ru"
-            lowerLang == "chinese" || lowerLang.startsWith("chinese") -> "zh"
-            lowerLang == "japanese" || lowerLang.startsWith("japanese") || lowerLang == "jp" || lowerLang == "jap" -> "ja"
-            lowerLang == "korean" || lowerLang.startsWith("korean") -> "ko"
-            lowerLang == "arabic" || lowerLang.startsWith("arabic") -> "ar"
-            lowerLang == "hindi" || lowerLang.startsWith("hindi") -> "hi"
-            lowerLang == "turkish" || lowerLang.startsWith("turkish") -> "tr"
-            lowerLang == "polish" || lowerLang.startsWith("polish") -> "pl"
-            lowerLang == "swedish" || lowerLang.startsWith("swedish") -> "sv"
-            lowerLang == "norwegian" || lowerLang.startsWith("norwegian") -> "no"
-            lowerLang == "danish" || lowerLang.startsWith("danish") -> "da"
-            lowerLang == "finnish" || lowerLang.startsWith("finnish") -> "fi"
-            lowerLang == "greek" || lowerLang.startsWith("greek") -> "el"
-            lowerLang == "czech" || lowerLang.startsWith("czech") -> "cs"
-            lowerLang == "hungarian" || lowerLang.startsWith("hungarian") -> "hu"
-            lowerLang == "romanian" || lowerLang.startsWith("romanian") -> "ro"
-            lowerLang == "thai" || lowerLang.startsWith("thai") -> "th"
-            lowerLang == "vietnamese" || lowerLang.startsWith("vietnamese") -> "vi"
-            lowerLang == "indonesian" || lowerLang.startsWith("indonesian") -> "id"
-            lowerLang == "hebrew" || lowerLang.startsWith("hebrew") -> "he"
-            lowerLang == "persian" || lowerLang.startsWith("persian") || lowerLang == "farsi" -> "fa"
-            lowerLang == "ukrainian" || lowerLang.startsWith("ukrainian") -> "uk"
-            lowerLang == "bengali" || lowerLang.startsWith("bengali") -> "bn"
-            lowerLang == "bulgarian" || lowerLang.startsWith("bulgarian") -> "bg"
-            lowerLang == "croatian" || lowerLang.startsWith("croatian") -> "hr"
-            lowerLang == "serbian" || lowerLang.startsWith("serbian") -> "sr"
-            lowerLang == "slovak" || lowerLang.startsWith("slovak") -> "sk"
-            lowerLang == "slovenian" || lowerLang.startsWith("slovenian") -> "sl"
-            lowerLang == "lithuanian" || lowerLang.startsWith("lithuanian") -> "lt"
-            lowerLang == "estonian" || lowerLang.startsWith("estonian") -> "et"
-            // ISO 639-1 codes (2 letter)
-            lowerLang.length == 2 -> lowerLang
-            // ISO 639-2 codes (3 letter)
-            lowerLang == "eng" -> "en"
-            lowerLang == "spa" -> "es"
-            lowerLang == "fra" || lowerLang == "fre" -> "fr"
-            lowerLang == "deu" || lowerLang == "ger" -> "de"
-            lowerLang == "ita" -> "it"
-            lowerLang == "por" -> "pt"
-            lowerLang == "pob" || lowerLang == "pobr" -> "pt-br"
-            lowerLang == "nld" || lowerLang == "dut" -> "nl"
-            lowerLang == "rus" -> "ru"
-            lowerLang == "zho" || lowerLang == "chi" -> "zh"
-            lowerLang == "jpn" -> "ja"
-            lowerLang == "kor" -> "ko"
-            lowerLang == "ara" -> "ar"
-            lowerLang == "hin" -> "hi"
-            lowerLang == "tur" -> "tr"
-            lowerLang == "pol" -> "pl"
-            lowerLang == "swe" -> "sv"
-            lowerLang == "nor" -> "no"
-            lowerLang == "dan" -> "da"
-            lowerLang == "fin" -> "fi"
-            lowerLang == "ell" || lowerLang == "gre" -> "el"
-            lowerLang == "ces" || lowerLang == "cze" -> "cs"
-            lowerLang == "hun" -> "hu"
-            lowerLang == "ron" || lowerLang == "rum" -> "ro"
-            lowerLang == "tha" -> "th"
-            lowerLang == "vie" -> "vi"
-            lowerLang == "ind" -> "id"
-            lowerLang == "heb" || lowerLang == "iw" -> "he"
-            lowerLang == "fas" || lowerLang == "per" -> "fa"
-            lowerLang == "ukr" -> "uk"
-            lowerLang == "ben" -> "bn"
-            lowerLang == "bul" -> "bg"
-            lowerLang == "hrv" -> "hr"
-            lowerLang == "srp" -> "sr"
-            lowerLang == "slk" || lowerLang == "slo" -> "sk"
-            lowerLang == "slv" -> "sl"
-            lowerLang == "lit" -> "lt"
-            lowerLang == "est" -> "et"
-            else -> lowerLang
-        }
-    }
+    private fun normalizeLanguage(lang: String): String = normalizeSubtitleLang(lang)
 
     // Track current stream index for auto-retry
     private var currentStreamIndex = 0

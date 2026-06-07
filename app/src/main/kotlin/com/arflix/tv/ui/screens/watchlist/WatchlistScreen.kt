@@ -1,12 +1,16 @@
 package com.arflix.tv.ui.screens.watchlist
 
 import android.os.SystemClock
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,9 +21,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +35,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +56,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.data.db.DownloadEntity
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.components.AppTopBar
@@ -61,6 +70,8 @@ import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
+import com.arflix.tv.ui.screens.downloads.DownloadsTab
+import com.arflix.tv.ui.screens.downloads.DownloadsViewModel
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
@@ -73,17 +84,23 @@ import kotlinx.coroutines.delay
 @Composable
 fun WatchlistScreen(
     viewModel: WatchlistViewModel = hiltViewModel(),
+    downloadsViewModel: DownloadsViewModel = hiltViewModel(),
+    initialTab: Int = 0,
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToDownloadedEpisodes: (tmdbId: Int, title: String) -> Unit = { _, _ -> },
+    onNavigateToPlayer: (DownloadEntity) -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val logoUrls by viewModel.logoUrls.collectAsStateWithLifecycle()
+    val downloadsUiState by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val cardWidth: Dp = if (usePosterCards) {
@@ -270,78 +287,144 @@ fun WatchlistScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = if (isMobile) 0.dp else AppTopBarContentTopInset)
-                .padding(start = 24.dp, top = 4.dp, end = 48.dp)
         ) {
-            when {
-                uiState.isLoading -> {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator(color = Pink, size = 64.dp)
-                    }
-                }
-                totalItems == 0 -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Outlined.Bookmark,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.2f),
-                                modifier = Modifier.size(80.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
+            // Mobile-only animated pill segmented control
+            if (isMobile) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 14.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.1f))
+                        .padding(4.dp)
+                ) {
+                    listOf(tr("Watchlist"), tr("Downloads")).forEachIndexed { index, label ->
+                        val isSelected = selectedTab == index
+                        val bgColor by animateColorAsState(
+                            targetValue = if (isSelected) Color.White else Color.Transparent,
+                            animationSpec = tween(durationMillis = 180),
+                            label = "tabBg$index"
+                        )
+                        val textColor by animateColorAsState(
+                            targetValue = if (isSelected) Color(0xFF111111) else Color.White.copy(alpha = 0.45f),
+                            animationSpec = tween(durationMillis = 180),
+                            label = "tabText$index"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .background(bgColor)
+                                .clickable { selectedTab = index }
+                                .padding(vertical = 9.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = tr("Your watchlist is empty"),
-                                style = ArflixTypography.body,
-                                color = Color.White.copy(alpha = 0.5f)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = tr("Add movies and shows for later"),
-                                style = ArflixTypography.caption,
-                                color = Color.White.copy(alpha = 0.3f)
+                                text = label,
+                                style = ArflixTypography.label.copy(
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                                ),
+                                color = textColor
                             )
                         }
                     }
                 }
-                else -> {
-                    LazyColumn(
-                        state = lazyColumnState,
-                        modifier = Modifier.weight(1f).fillMaxWidth().focusable(false),
-                        contentPadding = PaddingValues(top = if (isMobile) 48.dp else 0.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(if (isMobile) 24.dp else 16.dp),
-                        userScrollEnabled = isMobile
-                    ) {
-                        itemsIndexed(
-                            items = sections,
-                            key = { _, (type, _) -> type },
-                            contentType = { _, _ -> "watchlist_section" }
-                        ) { sectionIdx, (sectionType, items) ->
-                            val title = when (sectionType) {
-                                "movies" -> tr("Movies")
-                                "series" -> tr("Series")
-                                else -> sectionType.replaceFirstChar { it.uppercase() }
+            }
+
+            if (isMobile && selectedTab == 1) {
+                DownloadsTab(
+                    uiState = downloadsUiState,
+                    onPlayMovie = { onNavigateToPlayer(it) },
+                    onSeriesClick = { tmdbId, title -> onNavigateToDownloadedEpisodes(tmdbId, title) },
+                    onPause = { downloadsViewModel.pause(it) },
+                    onResume = { downloadsViewModel.resume(it) },
+                    onCancel = { downloadsViewModel.cancel(it) },
+                    onDelete = { downloadsViewModel.delete(it) },
+                    onRetry = { downloadsViewModel.retry(it) },
+                    onDeleteAllSeries = { downloadsViewModel.deleteAllForSeries(it) }
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = 24.dp,
+                            top = if (!isMobile) 4.dp else 0.dp,
+                            end = 48.dp
+                        )
+                ) {
+                    when {
+                        uiState.isLoading -> {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                LoadingIndicator(color = Pink, size = 64.dp)
                             }
-                            WatchlistItemsSection(
-                                title = title,
-                                items = items,
-                                logoUrls = logoUrls,
-                                cardWidth = cardWidth,
-                                isLandscape = !usePosterCards,
-                                isMobile = isMobile,
-                                focusedItemIndex = if (!isMobile && focusedSectionIndex == sectionIdx && !isSidebarFocused) focusedItemIndex else -1,
-                                onItemFocused = { index ->
-                                    if (!isSidebarFocused && focusedSectionIndex == sectionIdx) {
-                                        focusedItemIndex = index
+                        }
+                        totalItems == 0 -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Bookmark,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.2f),
+                                        modifier = Modifier.size(80.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = tr("Your watchlist is empty"),
+                                        style = ArflixTypography.body,
+                                        color = Color.White.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = tr("Add movies and shows for later"),
+                                        style = ArflixTypography.caption,
+                                        color = Color.White.copy(alpha = 0.3f)
+                                    )
+                                }
+                            }
+                        }
+                        else -> {
+                            LazyColumn(
+                                state = lazyColumnState,
+                                modifier = Modifier.weight(1f).fillMaxWidth().focusable(false),
+                                contentPadding = PaddingValues(top = if (isMobile) 48.dp else 0.dp, bottom = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(if (isMobile) 24.dp else 16.dp),
+                                userScrollEnabled = isMobile
+                            ) {
+                                itemsIndexed(
+                                    items = sections,
+                                    key = { _, (type, _) -> type },
+                                    contentType = { _, _ -> "watchlist_section" }
+                                ) { sectionIdx, (sectionType, items) ->
+                                    val title = when (sectionType) {
+                                        "movies" -> tr("Movies")
+                                        "series" -> tr("Series")
+                                        else -> sectionType.replaceFirstChar { it.uppercase() }
                                     }
-                                },
-                                onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id) },
-                                onItemLongPress = { item -> viewModel.removeFromWatchlist(item) }
-                            )
+                                    WatchlistItemsSection(
+                                        title = title,
+                                        items = items,
+                                        logoUrls = logoUrls,
+                                        cardWidth = cardWidth,
+                                        isLandscape = !usePosterCards,
+                                        isMobile = isMobile,
+                                        focusedItemIndex = if (!isMobile && focusedSectionIndex == sectionIdx && !isSidebarFocused) focusedItemIndex else -1,
+                                        onItemFocused = { index ->
+                                            if (!isSidebarFocused && focusedSectionIndex == sectionIdx) {
+                                                focusedItemIndex = index
+                                            }
+                                        },
+                                        onItemClick = { item -> onNavigateToDetails(item.mediaType, item.id) },
+                                        onItemLongPress = { item -> viewModel.removeFromWatchlist(item) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -15,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.arflix.tv.data.db.DownloadEntity
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
@@ -29,6 +30,7 @@ import com.arflix.tv.ui.screens.search.SearchScreen
 import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
+import com.arflix.tv.ui.screens.downloads.DownloadedEpisodesScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
@@ -40,7 +42,9 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Home : Screen("home")
     object Search : Screen("search")
-    object Watchlist : Screen("watchlist")
+    object Watchlist : Screen("watchlist") {
+        fun downloadsRoute() = "watchlist?tab=1"
+    }
     object CollectionDetails : Screen("collections/{catalogId}") {
         fun createRoute(catalogId: String): String {
             return "collections/${android.net.Uri.encode(catalogId)}"
@@ -65,6 +69,11 @@ sealed class Screen(val route: String) {
     }
     object TelegramSettings : Screen("telegram_settings")
     object ProfileSelection : Screen("profile_selection")
+
+    object DownloadedEpisodes : Screen("downloaded_episodes/{tmdbId}?title={title}") {
+        fun createRoute(tmdbId: Int, title: String) =
+            "downloaded_episodes/$tmdbId?title=${android.net.Uri.encode(title)}"
+    }
 
     object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}") {
         fun createRoute(
@@ -226,9 +235,14 @@ fun AppNavigation(
             )
         }
 
-        // Watchlist screen
-        composable(Screen.Watchlist.route) {
+        // Watchlist screen (optional ?tab=1 opens Downloads tab directly)
+        composable(
+            route = "watchlist?tab={tab}",
+            arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })
+        ) { backStackEntry ->
+            val initialTab = backStackEntry.arguments?.getInt("tab") ?: 0
             WatchlistScreen(
+                initialTab = initialTab,
                 currentProfile = currentProfile,
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
@@ -237,6 +251,23 @@ fun AppNavigation(
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
                 onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                onNavigateToDownloadedEpisodes = { tmdbId, title ->
+                    navController.navigate(Screen.DownloadedEpisodes.createRoute(tmdbId, title))
+                },
+                onNavigateToPlayer = { download ->
+                    val mediaType = runCatching {
+                        MediaType.valueOf(download.mediaType.uppercase())
+                    }.getOrDefault(MediaType.MOVIE)
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            mediaType = mediaType,
+                            mediaId = download.tmdbId,
+                            seasonNumber = download.season,
+                            episodeNumber = download.episode,
+                            streamUrl = download.localUri?.let { "file://$it" }
+                        )
+                    )
+                },
                 onSwitchProfile = {
                     onSwitchProfile()
                     navController.navigate(Screen.ProfileSelection.route) {
@@ -244,6 +275,41 @@ fun AppNavigation(
                     }
                 },
                 onBack = { navigateHome() }
+            )
+        }
+
+        // Downloaded episodes for a TV series
+        composable(
+            route = Screen.DownloadedEpisodes.route,
+            arguments = listOf(
+                navArgument("tmdbId") { type = NavType.IntType },
+                navArgument("title") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val tmdbId = backStackEntry.arguments?.getInt("tmdbId") ?: return@composable
+            val title = android.net.Uri.decode(backStackEntry.arguments?.getString("title") ?: "")
+            DownloadedEpisodesScreen(
+                tmdbId = tmdbId,
+                title = title,
+                onPlayEpisode = { download ->
+                    val mediaType = runCatching {
+                        MediaType.valueOf(download.mediaType.uppercase())
+                    }.getOrDefault(MediaType.TV)
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            mediaType = mediaType,
+                            mediaId = download.tmdbId,
+                            seasonNumber = download.season,
+                            episodeNumber = download.episode,
+                            streamUrl = download.localUri?.let { "file://$it" }
+                        )
+                    )
+                },
+                onBack = { navController.popBackStack() }
             )
         }
 

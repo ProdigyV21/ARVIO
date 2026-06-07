@@ -119,6 +119,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -248,8 +249,10 @@ fun PlayerScreen(
     val castAvailable = castState !is CastManager.CastState.NotAvailable
     // Hide cast button for streams that require custom request headers (Authorization, Referer, etc.)
     // since the Chromecast default receiver fetches the URL directly without those headers.
+    // Also hide for offline (local file://) playback — Chromecast cannot reach device-local files.
     val streamNeedsHeaders = uiState.selectedStream
         ?.behaviorHints?.proxyHeaders?.request?.isNotEmpty() == true
+    val castBlocked = streamNeedsHeaders || uiState.isOffline
     val isConstrainedPlaybackDevice = remember(context, deviceType) {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         deviceType == com.arflix.tv.util.DeviceType.TV &&
@@ -716,6 +719,10 @@ fun PlayerScreen(
     // Non-cached factory for heavy/debrid progressive streams to avoid disk I/O bottleneck
     val directProgressiveFactory = remember(httpDataSourceFactory) {
         ProgressiveMediaSource.Factory(httpDataSourceFactory)
+    }
+    // File-based factory for local downloads — uses FileDataSource, not OkHttp
+    val localFileFactory = remember(context) {
+        ProgressiveMediaSource.Factory(DefaultDataSource.Factory(context))
     }
 
     // Protocol-specific media source factories for faster startup
@@ -1200,6 +1207,7 @@ fun PlayerScreen(
         when (castState) {
             is CastManager.CastState.Casting -> {
                 val url = uiState.selectedStreamUrl ?: return@LaunchedEffect
+                if (uiState.isOffline) return@LaunchedEffect  // local file:// unreachable by Chromecast
                 val posMs = if (!playerReleased) exoPlayer.currentPosition else 0L
                 if (!playerReleased) exoPlayer.pause()
                 castManager.loadMedia(
@@ -1403,6 +1411,8 @@ fun PlayerScreen(
             val isHeavy = isLikelyHeavyStream(latestUiState.selectedStream)
             val isRemoteHttp = urlLower.startsWith("http://") || urlLower.startsWith("https://")
             val mediaSource: MediaSource = when {
+                urlLower.startsWith("file://") ->
+                    localFileFactory.createMediaSource(mediaItem)
                 urlLower.contains(".m3u8") || urlLower.contains("/hls") || urlLower.contains("format=hls") ->
                     hlsFactory.createMediaSource(mediaItem)
                 urlLower.contains(".mpd") || urlLower.contains("/dash") || urlLower.contains("format=dash") ->
@@ -1511,16 +1521,32 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
 
-        // External subtitle: rebuild MediaItem with just this one subtitle
+        // External subtitle: rebuild media source with just this one subtitle
         if (subtitle.url.isNotBlank() && exoPlayer.playbackState != Player.STATE_IDLE) {
             val currentPosition = exoPlayer.currentPosition
             val wasPlaying = exoPlayer.isPlaying
             val subtitleConfigs = buildExternalSubtitleConfigurations(listOf(subtitle))
-            val mediaItem = MediaItem.Builder()
-                .setUri(Uri.parse(url))
-                .setSubtitleConfigurations(subtitleConfigs)
-                .build()
-            exoPlayer.setMediaItem(mediaItem, currentPosition)
+
+            if (url.lowercase().startsWith("file://")) {
+                // OkHttp cannot load file:// URIs. Use DefaultMediaSourceFactory backed by
+                // DefaultDataSource.Factory (supports file://) so the subtitle goes through
+                // the proper SRT→cues decoding pipeline instead of SingleSampleMediaSource
+                // which delivers raw bytes and crashes with legacy-decoding-disabled renderers.
+                val localMediaSourceFactory = DefaultMediaSourceFactory(
+                    DefaultDataSource.Factory(context)
+                )
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setSubtitleConfigurations(subtitleConfigs)
+                    .build()
+                exoPlayer.setMediaSource(localMediaSourceFactory.createMediaSource(mediaItem), currentPosition)
+            } else {
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(url))
+                    .setSubtitleConfigurations(subtitleConfigs)
+                    .build()
+                exoPlayer.setMediaItem(mediaItem, currentPosition)
+            }
             exoPlayer.prepare()
             if (wasPlaying) exoPlayer.play()
 
@@ -2705,8 +2731,8 @@ fun PlayerScreen(
                             }
                         }
 
-                        // Cast button — mobile/tablet only; hidden when stream requires custom headers
-                        if (isTouchDevice && castAvailable && !streamNeedsHeaders) {
+                        // Cast button — mobile/tablet only; hidden when stream requires custom headers or is offline
+                        if (isTouchDevice && castAvailable && !castBlocked) {
                             val castDeviceName = (castState as? CastManager.CastState.Casting)?.deviceName
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,

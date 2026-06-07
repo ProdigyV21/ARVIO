@@ -21,6 +21,8 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.TraktRepository
+import com.arflix.tv.data.db.DownloadEntity
+import com.arflix.tv.data.repository.DownloadsRepository
 import com.arflix.tv.data.repository.WatchHistoryRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.util.Constants
@@ -61,9 +63,11 @@ data class DetailsUiState(
     // Streams
     val streams: List<StreamSource> = emptyList(),
     val subtitles: List<Subtitle> = emptyList(),
+    val openSubtitles: List<Subtitle> = emptyList(),
     val isLoadingStreams: Boolean = false,
     val completedAddons: Int = 0,
     val totalAddons: Int = 0,
+    val isLoadingSubtitles: Boolean = false,
     val hasStreamingAddons: Boolean = true,
     val addonOrderedIds: List<String> = emptyList(),
     val isInWatchlist: Boolean = false,
@@ -91,11 +95,17 @@ data class DetailsUiState(
     val playPositionMs: Long? = null,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
+    val preferredSubtitleLang: String = "",
+    val secondarySubtitleLang: String = "",
     // TMDB collection (franchise) info — populated for movies that belong to a collection
     val collectionId: Int? = null,
     val collectionName: String? = null,
     val collectionItems: List<MediaItem> = emptyList(),
-    val collectionPosterPath: String? = null
+    val collectionPosterPath: String? = null,
+    // Downloads (mobile only)
+    val episodeDownloads: Map<String, DownloadEntity> = emptyMap(),
+    val movieDownload: DownloadEntity? = null,
+    val hasHomeServer: Boolean = false
 )
 
 data class StreamingServiceUi(
@@ -178,7 +188,9 @@ class DetailsViewModel @Inject constructor(
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
     private val cloudSyncRepository: CloudSyncRepository,
-    private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository
+    private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
+    private val downloadsRepository: DownloadsRepository,
+    private val homeServerRepository: HomeServerRepository
 ) : ViewModel() {
 
     companion object {
@@ -197,6 +209,7 @@ class DetailsViewModel @Inject constructor(
     private var vodAppendJob: kotlinx.coroutines.Job? = null
     private var homeServerAppendJob: kotlinx.coroutines.Job? = null
     private var loadStreamsJob: kotlinx.coroutines.Job? = null
+    private var subtitleFetchJob: kotlinx.coroutines.Job? = null
     private var loadStreamsRequestId: Long = 0L
     private var focusedStreamPrewarmJob: kotlinx.coroutines.Job? = null
     private var streamListPrewarmJob: kotlinx.coroutines.Job? = null
@@ -206,6 +219,8 @@ class DetailsViewModel @Inject constructor(
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
     private fun showBudgetKey() = profileManager.profileBooleanKey("show_budget_on_home")
+    private fun defaultSubtitleKey() = profileManager.profileStringKey("default_subtitle")
+    private fun secondarySubtitleKey() = profileManager.profileStringKey("secondary_subtitle")
 
     private fun isBlankRating(value: String): Boolean {
         return value.isBlank() || value == "0.0" || value == "0"
@@ -263,6 +278,8 @@ class DetailsViewModel @Inject constructor(
                 val autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
                 val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
                 val showBudget = prefs[showBudgetKey()] ?: true
+                val preferredSubtitleLang = prefs[defaultSubtitleKey()]?.trim().orEmpty()
+                val secondarySubtitleLang = prefs[secondarySubtitleKey()]?.trim().orEmpty()
 
                 val previousState = _uiState.value
                 val previousMatches = previousState.item?.id == mediaId &&
@@ -304,7 +321,9 @@ class DetailsViewModel @Inject constructor(
                         null
                     },
                     autoPlaySingleSource = autoPlaySingleSource,
-                    autoPlayMinQuality = autoPlayMinQuality
+                    autoPlayMinQuality = autoPlayMinQuality,
+                    preferredSubtitleLang = preferredSubtitleLang,
+                    secondarySubtitleLang = secondarySubtitleLang
                 )
 
                 fun logDetailsLoadFailure(label: String, throwable: Throwable) {
@@ -1322,6 +1341,7 @@ class DetailsViewModel @Inject constructor(
 
     fun loadStreams(imdbId: String?, season: Int? = null, episode: Int? = null) {
         loadStreamsJob?.cancel()
+        subtitleFetchJob?.cancel()
         focusedStreamPrewarmJob?.cancel()
         streamListPrewarmJob?.cancel()
         homeServerAppendJob?.cancel()
@@ -1377,8 +1397,28 @@ class DetailsViewModel @Inject constructor(
                 totalAddons = 0,
                 streams = emptyList(),
                 subtitles = emptyList(),
+                openSubtitles = emptyList(),
+                isLoadingSubtitles = !resolvedImdbId.isNullOrBlank(),
                 addonOrderedIds = orderedAddonIds
             )
+
+            if (!resolvedImdbId.isNullOrBlank()) {
+                subtitleFetchJob = viewModelScope.launch {
+                    val fetched = runCatching {
+                        streamRepository.fetchSubtitlesForSelectedStream(
+                            mediaType = requestMediaType,
+                            imdbId = resolvedImdbId,
+                            season = season,
+                            episode = episode,
+                            stream = null
+                        )
+                    }.getOrDefault(emptyList())
+                    _uiState.value = _uiState.value.copy(
+                        openSubtitles = fetched.filter { it.url.isNotBlank() },
+                        isLoadingSubtitles = false
+                    )
+                }
+            }
 
             if (requestMediaType == MediaType.MOVIE) {
                 val title = _uiState.value.item?.title.orEmpty()
@@ -2495,6 +2535,77 @@ class DetailsViewModel @Inject constructor(
         )
         prewarmVisibleStreams(mergedStreams)
     }
+
+    // ── Downloads ─────────────────────────────────────────────────────────────
+
+    private var downloadObserveJob: kotlinx.coroutines.Job? = null
+    private var homeServerObserveJob: kotlinx.coroutines.Job? = null
+
+    fun startObservingHomeServer() {
+        if (homeServerObserveJob?.isActive == true) return
+        homeServerObserveJob = viewModelScope.launch {
+            homeServerRepository.connections.collect { connections ->
+                _uiState.value = _uiState.value.copy(
+                    hasHomeServer = connections.any { it.isUsable }
+                )
+            }
+        }
+    }
+
+    fun startObservingDownloads(tmdbId: Int, mediaType: MediaType) {
+        downloadObserveJob?.cancel()
+        downloadObserveJob = viewModelScope.launch {
+            downloadsRepository.observeDownloadsForMedia(tmdbId).collect { downloads ->
+                val episodeMap = downloads
+                    .filter { it.season != null && it.episode != null }
+                    .associateBy { "${it.season}_${it.episode}" }
+                val movieDl = downloads.firstOrNull { it.mediaType == "movie" }
+                _uiState.value = _uiState.value.copy(
+                    episodeDownloads = episodeMap,
+                    movieDownload = movieDl
+                )
+            }
+        }
+    }
+
+    fun enqueueDownload(
+        stream: com.arflix.tv.data.model.StreamSource,
+        season: Int?,
+        episode: Int?,
+        episodeTitle: String?,
+        subtitle: com.arflix.tv.data.model.Subtitle?
+    ) {
+        val item = _uiState.value.item ?: return
+        val mediaTypeStr = currentMediaType.name.lowercase()
+        viewModelScope.launch {
+            downloadsRepository.enqueueDownload(
+                tmdbId = currentMediaId,
+                mediaType = mediaTypeStr,
+                season = season,
+                episode = episode,
+                title = item.title,
+                episodeTitle = episodeTitle,
+                posterPath = item.image,
+                backdropPath = item.backdrop,
+                streamUrl = stream.url ?: return@launch,
+                addonId = stream.addonId,
+                addonName = stream.addonName,
+                quality = stream.quality,
+                subtitleUrl = subtitle?.url,
+                subtitleLang = subtitle?.lang,
+                headers = stream.behaviorHints?.proxyHeaders?.request
+                    ?.filterKeys { it.isNotBlank() }
+                    ?.takeIf { it.isNotEmpty() }
+            )
+            showToast("Download started", ToastType.SUCCESS)
+        }
+    }
+
+    fun deleteEpisodeDownload(id: Long) = viewModelScope.launch { downloadsRepository.deleteDownload(id) }
+    fun pauseEpisodeDownload(id: Long) = viewModelScope.launch { downloadsRepository.pauseDownload(id) }
+    fun resumeEpisodeDownload(id: Long) = viewModelScope.launch { downloadsRepository.resumeDownload(id) }
+    fun cancelEpisodeDownload(id: Long) = viewModelScope.launch { downloadsRepository.cancelDownload(id) }
+    fun retryEpisodeDownload(id: Long) = viewModelScope.launch { downloadsRepository.retryDownload(id) }
 }
 
 private object DetailsVMRegexes {
