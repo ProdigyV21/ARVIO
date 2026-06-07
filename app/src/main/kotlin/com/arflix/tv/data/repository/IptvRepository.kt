@@ -99,7 +99,7 @@ private object IptvRepoDateRegexes {
     val HOUR_PATTERN: DateTimeFormatter = DateTimeFormatter.ofPattern("HH")
     val MIN_PATTERN: DateTimeFormatter = DateTimeFormatter.ofPattern("mm")
     val SEC_PATTERN: DateTimeFormatter = DateTimeFormatter.ofPattern("ss")
-    
+
     private const val MAX_DYNAMIC_FORMATTERS = 256
     val formatterCache = java.util.concurrent.ConcurrentHashMap<String, DateTimeFormatter>()
 
