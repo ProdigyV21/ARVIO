@@ -280,4 +280,9 @@
     <string name="plugin_risky_enable_message">This plugin may be risky.</string>
     <string name="plugin_risky_enable_cancel">Cancel</string>
     <string name="plugin_risky_enable_confirm">Enable</string>
+
+    <!-- IPTV / Live TV Quick Zap Navigation -->
+    <string name="select_category">Select Category</string>
+    <string name="channel_categories">Channel Categories</string>
+    <string name="channel_guide">Channel Guide</string>
 </resources>

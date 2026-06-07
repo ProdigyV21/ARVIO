@@ -61,4 +61,7 @@
     <string name="add_later">Přidejte filmy a seriály na později</string>
     <string name="sources_available">zdrojů dostupných</string>
     <string name="ends_at">Končí v</string>
+    <string name="select_category">Vybrat skupinu</string>
+    <string name="channel_categories">Skupiny kanálů</string>
+    <string name="channel_guide">Program stanice</string>
 </resources>

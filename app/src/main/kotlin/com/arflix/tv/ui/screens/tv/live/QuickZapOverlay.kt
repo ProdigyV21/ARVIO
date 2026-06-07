@@ -51,9 +51,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 
 /**
@@ -232,7 +234,11 @@ fun QuickZapOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (categoryListFocused) "VYBRAT SKUPINU" else "< SKUPINY KANÁLŮ",
+                    text = if (categoryListFocused) {
+                        stringResource(R.string.select_category).uppercase()
+                    } else {
+                        "< ${stringResource(R.string.channel_categories).uppercase()}"
+                    },
                     style = LiveType.SectionTag.copy(
                         color = if (categoryListFocused) LiveColors.Accent else LiveColors.FgMute,
                         fontSize = 11.sp,
@@ -251,7 +257,7 @@ fun QuickZapOverlay(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "PROGRAM STANICE >",
+                    text = "${stringResource(R.string.channel_guide).uppercase()} >",
                     style = LiveType.SectionTag.copy(
                         color = LiveColors.FgMute,
                         fontSize = 11.sp,
