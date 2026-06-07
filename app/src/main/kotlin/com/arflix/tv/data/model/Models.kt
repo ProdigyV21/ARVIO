@@ -140,6 +140,15 @@ data class Category(
     val items: List<MediaItem>
 ) : Serializable
 
+fun Category.isPortrait(globalPosterMode: Boolean): Boolean {
+    val isCollectionRow = id.startsWith("collection_row_")
+    return if (isCollectionRow) {
+        items.firstOrNull()?.collectionTileShape == CollectionTileShape.POSTER
+    } else {
+        globalPosterMode
+    }
+}
+
 /**
  * Stream source from addons - enhanced with behavior hints.
  *

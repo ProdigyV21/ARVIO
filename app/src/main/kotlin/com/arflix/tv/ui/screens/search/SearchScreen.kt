@@ -77,6 +77,7 @@ import androidx.tv.material3.Text
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
+import com.arflix.tv.data.model.isPortrait
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.AppTopBar
@@ -910,14 +911,15 @@ private fun RowsLayer(
                 val isCurrentRow = isFocused && index == currentRowIndex
                 val rowKey = remember(category.id) { "search:${category.id}" }
                 val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
+                val isPortrait = category.isPortrait(rowUsePosterCards)
                 val itemWidth = if (isTouchDevice) {
-                    if (rowUsePosterCards) 110.dp else 170.dp
+                    if (isPortrait) 110.dp else 170.dp
                 } else {
-                    if (rowUsePosterCards) 105.dp else 210.dp
+                    if (isPortrait) 105.dp else 210.dp
                 }
                 val baseRowHeight = if (isTouchDevice) {
-                    if (rowUsePosterCards) 260.dp else 190.dp
-                } else if (rowUsePosterCards) {
+                    if (isPortrait) 260.dp else 190.dp
+                } else if (isPortrait) {
                     // Poster cards (2:3) need extra vertical room for title + date below the image
                     if (screenHeight <= 640) 271.dp else 309.dp
                 } else {
@@ -1013,7 +1015,7 @@ private fun RowsLayer(
                                         year = ""
                                     ),
                                     width = itemWidth,
-                                    isLandscape = !rowUsePosterCards,
+                                    isLandscape = !isPortrait,
                                     logoImageUrl = cardLogoUrls["${item.mediaType}_${item.id}"],
                                     showProgress = false,
                                     titleMaxLines = 2,
