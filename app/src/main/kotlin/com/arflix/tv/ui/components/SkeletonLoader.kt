@@ -228,7 +228,8 @@ fun SkeletonCategoryRow(
         SkeletonBox(
             modifier = Modifier
                 .width(150.dp)
-                .height(20.dp),
+                .height(20.dp)
+                .padding(start = if (isMobile) 16.dp else 0.dp),
             shape = RoundedCornerShape(4.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -236,7 +237,7 @@ fun SkeletonCategoryRow(
         // Cards row
         if (isMobile) {
             androidx.compose.foundation.lazy.LazyRow(
-                contentPadding = PaddingValues(end = 48.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 48.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(cardCount) {
@@ -326,10 +327,9 @@ fun SkeletonDetailsHero(
 @Composable
 fun SkeletonDetailsPage(
     isTV: Boolean = false,
+    isMobile: Boolean = LocalDeviceType.current.isTouchDevice(),
     modifier: Modifier = Modifier
 ) {
-    val isMobile = LocalDeviceType.current.isTouchDevice()
-
     if (isMobile) {
         val configuration = LocalConfiguration.current
         val screenHeightDp = configuration.screenHeightDp.dp
@@ -346,12 +346,6 @@ fun SkeletonDetailsPage(
                     .fillMaxWidth()
                     .height(backdropHeight)
             ) {
-                // Background shimmer image representation
-                SkeletonBox(
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(0.dp)
-                )
-
                 // Title, metadata, genre overlay at the bottom
                 Column(
                     modifier = Modifier
@@ -447,13 +441,17 @@ fun SkeletonDetailsPage(
                             )
                         }
                     }
-
-                    // Episodes row
-                    SkeletonCategoryRow(cardCount = 3, cardType = SkeletonCardType.EPISODE, isMobile = true)
-                } else {
-                    // Cast row
-                    SkeletonCategoryRow(cardCount = 4, cardType = SkeletonCardType.CAST, isMobile = true)
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (isTV) {
+                // Episodes row
+                SkeletonCategoryRow(cardCount = 3, cardType = SkeletonCardType.EPISODE, isMobile = true)
+            } else {
+                // Cast row
+                SkeletonCategoryRow(cardCount = 4, cardType = SkeletonCardType.CAST, isMobile = true)
             }
         }
     } else {
