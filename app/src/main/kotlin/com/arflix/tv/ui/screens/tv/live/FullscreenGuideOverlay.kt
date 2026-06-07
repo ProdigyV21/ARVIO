@@ -62,6 +62,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -98,6 +99,7 @@ internal fun FullscreenGuideOverlay(
     isTouchDevice: Boolean,
     onDismiss: () -> Unit,
     onProgramSelect: (IptvProgram?) -> Unit,
+    onLeftClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (channel == null) return
@@ -224,6 +226,14 @@ internal fun FullscreenGuideOverlay(
                                 .padding(top = 24.dp, end = 24.dp, bottom = 24.dp)
                         }
                     )
+                    .onPreviewKeyEvent { ev ->
+                        if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionLeft) {
+                            onLeftClick?.invoke()
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     .clip(panelShape)
                     .border(
                         BorderStroke(1.dp, Color.White.copy(alpha = if (isTouchDevice) 0.16f else 0.12f)),

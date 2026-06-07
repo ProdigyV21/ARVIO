@@ -67,17 +67,26 @@ fun FullscreenHud(
     onGuideClick: (() -> Unit)? = null,
     onPlayPauseClick: (() -> Unit)? = null,
     onGoLiveClick: (() -> Unit)? = null,
+    onVisibilityChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var visible by remember { mutableStateOf(true) }
     var lastPoke by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
+    androidx.compose.runtime.DisposableEffect(onVisibilityChanged) {
+        onDispose {
+            onVisibilityChanged?.invoke(false)
+        }
+    }
+
     LaunchedEffect(pokeSignal) {
         visible = true
+        onVisibilityChanged?.invoke(true)
         lastPoke = System.currentTimeMillis()
         delay(5_000)
         if (System.currentTimeMillis() - lastPoke >= 5_000) {
             visible = false
+            onVisibilityChanged?.invoke(false)
         }
     }
 

@@ -924,11 +924,56 @@ fun LiveTvScreen(
     val epgFocus = remember { FocusRequester() }
     val fsFocus = remember { FocusRequester() }
 
-    // Monotonic counter bumped on every DPAD key while in fullscreen —
-    // the HUD observes this to re-show and reset its auto-hide timer.
     var hudPokeSignal by remember { mutableStateOf(0) }
+    var quickZapOpen by remember { mutableStateOf(false) }
+    var isHudVisible by remember { mutableStateOf(false) }
+    var guideOpenedFromQuickZap by remember { mutableStateOf(false) }
+    var guideChannel by remember { mutableStateOf<EnrichedChannel?>(null) }
+
+    fun getAvailableCategoryIds(tree: LiveCategoryTree): List<String> {
+        val list = mutableListOf<String>()
+        tree.top.forEach { cat ->
+            if (cat.count > 0 || cat.id == "all") {
+                list.add(cat.id)
+                if (cat.id == "all") {
+                    cat.children.forEach { child ->
+                        if (child.count > 0) list.add(child.id)
+                    }
+                }
+            }
+        }
+        tree.global.categories.forEach { cat ->
+            if (cat.count > 0) list.add(cat.id)
+        }
+        tree.countries.categories.forEach { country ->
+            if (country.count > 0) {
+                list.add(country.id)
+                country.children.forEach { child ->
+                    if (child.count > 0) list.add(child.id)
+                }
+            }
+        }
+        tree.adult.categories.forEach { cat ->
+            if (cat.count > 0) list.add(cat.id)
+        }
+        return list.distinct()
+    }
+
+    fun cycleCategory(forward: Boolean) {
+        val tree = visibleEnrichedState.value.tree
+        val ids = getAvailableCategoryIds(tree)
+        if (ids.isEmpty()) return
+        val currentIndex = ids.indexOf(selectedCategoryId)
+        val nextIndex = if (forward) {
+            (currentIndex + 1) % ids.size
+        } else {
+            (currentIndex - 1 + ids.size) % ids.size
+        }
+        selectedCategoryId = ids.getOrNull(nextIndex) ?: "all"
+    }
 
     fun openFullscreenGuide() {
+        guideChannel = playingChannel
         viewModel.refreshCatchupHistoryForChannel(playingChannelId)
         fullscreenGuideOpen = true
         hudPokeSignal++
@@ -1105,23 +1150,22 @@ fun LiveTvScreen(
         focusChannelList(playbackChannel.id)
     }
 
-    fun playProgramInFullscreen(program: IptvProgram?) {
+    fun playProgramInFullscreen(program: IptvProgram?, targetChannel: EnrichedChannel? = null) {
+        val channel = targetChannel ?: playingChannel
         if (program != playingCatchupProgram) {
             catchupPlaybackOffsetMs = 0L
         }
-        if (program != null) {
-            playingChannel?.let { channel ->
-                val playbackChannel = catchupPlaybackVariant(channel, visibleChannels)
-                if (playbackChannel.id != channel.id) {
-                    System.err.println(
-                        "[IPTV-Catchup] using fullscreen archive variant source=${channel.id} " +
-                            "playback=${playbackChannel.id} quality=${playbackChannel.quality.label} " +
-                            "days=${playbackChannel.catchupDays}"
-                    )
-                    playingChannelId = playbackChannel.id
-                    focusedChannelId = playbackChannel.id
-                    epgPrefetchAnchorId = playbackChannel.id
-                }
+        if (channel != null) {
+            val playbackChannel = catchupPlaybackVariant(channel, visibleChannels)
+            if (playbackChannel.id != playingChannelId) {
+                System.err.println(
+                    "[IPTV-Catchup] using fullscreen archive variant source=${channel.id} " +
+                        "playback=${playbackChannel.id} quality=${playbackChannel.quality.label} " +
+                        "days=${playbackChannel.catchupDays}"
+                )
+                playingChannelId = playbackChannel.id
+                focusedChannelId = playbackChannel.id
+                epgPrefetchAnchorId = playbackChannel.id
             }
         }
         playingCatchupProgram = program
@@ -1957,6 +2001,8 @@ fun LiveTvScreen(
                                 }
                                 else -> false
                             }
+                        } else if (quickZapOpen) {
+                            false
                         } else {
                             val firstPress = ev.nativeKeyEvent.repeatCount == 0
                             if (playingCatchupProgram != null) {
@@ -2012,6 +2058,25 @@ fun LiveTvScreen(
                                     hudPokeSignal++
                                     return@onPreviewKeyEvent handleChannelNumberDigit(digit)
                                 }
+                                if (!isHudVisible) {
+                                    if (ev.key in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter, Key.Enter)) {
+                                        hudPokeSignal++
+                                        return@onPreviewKeyEvent true
+                                    }
+                                } else {
+                                    when (ev.key) {
+                                        Key.DirectionUp, Key.DirectionDown -> {
+                                            quickZapOpen = true
+                                            isHudVisible = false
+                                            return@onPreviewKeyEvent true
+                                        }
+                                        Key.DirectionCenter, Key.Enter -> {
+                                            openFullscreenGuide()
+                                            return@onPreviewKeyEvent true
+                                        }
+                                        else -> Unit
+                                    }
+                                }
                             }
                             when (ev.key) {
                                 Key.Back, Key.Escape -> { exitFullScreenPlayback(); true }
@@ -2054,7 +2119,7 @@ fun LiveTvScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (isFullScreen && !fullscreenGuideOpen) {
+                if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen) {
                     FullscreenHud(
                         channel = playingChannel,
                         nowNext = currentNowNext,
@@ -2077,27 +2142,70 @@ fun LiveTvScreen(
                         onGuideClick = { openFullscreenGuide() },
                         onPlayPauseClick = { toggleCatchupPlayback() },
                         onGoLiveClick = { returnCatchupToLive() },
+                        onVisibilityChanged = { isHudVisible = it },
                         modifier = Modifier,
                     )
                 }
                 FullscreenGuideOverlay(
                     visible = isFullScreen && fullscreenGuideOpen,
-                    channel = playingChannel,
-                    guide = guideForChannel(playingChannel),
+                    channel = guideChannel ?: playingChannel,
+                    guide = guideForChannel(guideChannel ?: playingChannel),
                     selectedProgram = playingCatchupProgram,
                     isTouchDevice = isTouchDevice,
                     onDismiss = {
                         fullscreenGuideOpen = false
+                        if (guideOpenedFromQuickZap) {
+                            guideOpenedFromQuickZap = false
+                            quickZapOpen = true
+                        } else {
+                            hudPokeSignal++
+                        }
+                    },
+                    onProgramSelect = { program ->
+                        val target = guideChannel ?: playingChannel
+                        guideOpenedFromQuickZap = false
+                        playProgramInFullscreen(program, target)
+                    },
+                    onLeftClick = {
+                        fullscreenGuideOpen = false
+                        quickZapOpen = true
+                    },
+                    modifier = Modifier,
+                )
+                QuickZapOverlay(
+                    visible = isFullScreen && quickZapOpen,
+                    currentChannel = playingChannel,
+                    channels = filteredChannels,
+                    nowNextMap = state.snapshot.nowNext,
+                    categoriesTree = visibleEnrichedState.value.tree,
+                    selectedCategoryId = selectedCategoryId,
+                    onCategorySelected = { selectedCategoryId = it },
+                    onDismiss = {
+                        quickZapOpen = false
                         hudPokeSignal++
                     },
-                    onProgramSelect = { program -> playProgramInFullscreen(program) },
-                    modifier = Modifier,
+                    onChannelSelect = { channel ->
+                        playingChannelId = channel.id
+                        focusedChannelId = channel.id
+                        epgPrefetchAnchorId = channel.id
+                        playingCatchupProgram = null
+                        catchupPlaybackOffsetMs = 0L
+                        quickZapOpen = false
+                        rememberedChannelByCategory[selectedCategoryId] = channel.id
+                        hudPokeSignal++
+                    },
+                    onRightClick = { channel ->
+                        guideChannel = channel
+                        quickZapOpen = false
+                        guideOpenedFromQuickZap = true
+                        fullscreenGuideOpen = true
+                    }
                 )
             }
         }
 
-        LaunchedEffect(isFullScreen, fullscreenGuideOpen, playingCatchupProgram) {
-            if (isFullScreen && !fullscreenGuideOpen) {
+        LaunchedEffect(isFullScreen, fullscreenGuideOpen, quickZapOpen, playingCatchupProgram) {
+            if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen) {
                 delay(50L)
                 runCatching { fsFocus.requestFocus() }
             }
