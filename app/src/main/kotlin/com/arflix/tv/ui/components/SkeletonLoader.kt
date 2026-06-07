@@ -30,6 +30,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.sp
+import com.arflix.tv.util.LocalDeviceType
 import androidx.tv.foundation.lazy.list.TvLazyRow
 
 /**
@@ -216,6 +220,7 @@ fun SkeletonEpisodeCard(
 fun SkeletonCategoryRow(
     cardCount: Int = 6,
     cardType: SkeletonCardType = SkeletonCardType.POSTER,
+    isMobile: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -229,16 +234,32 @@ fun SkeletonCategoryRow(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Cards row
-        TvLazyRow(
-            contentPadding = PaddingValues(end = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items(cardCount) {
-                when (cardType) {
-                    SkeletonCardType.POSTER -> SkeletonPosterCard()
-                    SkeletonCardType.MEDIA -> SkeletonMediaCard()
-                    SkeletonCardType.EPISODE -> SkeletonEpisodeCard()
-                    SkeletonCardType.CAST -> SkeletonCastCard()
+        if (isMobile) {
+            androidx.compose.foundation.lazy.LazyRow(
+                contentPadding = PaddingValues(end = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(cardCount) {
+                    when (cardType) {
+                        SkeletonCardType.POSTER -> SkeletonPosterCard()
+                        SkeletonCardType.MEDIA -> SkeletonMediaCard()
+                        SkeletonCardType.EPISODE -> SkeletonEpisodeCard()
+                        SkeletonCardType.CAST -> SkeletonCastCard()
+                    }
+                }
+            }
+        } else {
+            TvLazyRow(
+                contentPadding = PaddingValues(end = 48.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(cardCount) {
+                    when (cardType) {
+                        SkeletonCardType.POSTER -> SkeletonPosterCard()
+                        SkeletonCardType.MEDIA -> SkeletonMediaCard()
+                        SkeletonCardType.EPISODE -> SkeletonEpisodeCard()
+                        SkeletonCardType.CAST -> SkeletonCastCard()
+                    }
                 }
             }
         }
@@ -307,22 +328,148 @@ fun SkeletonDetailsPage(
     isTV: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.padding(start = 24.dp)) {
-        SkeletonDetailsHero()
-        Spacer(modifier = Modifier.height(32.dp))
+    val isMobile = LocalDeviceType.current.isTouchDevice()
 
-        if (isTV) {
-            // Episodes section
-            SkeletonCategoryRow(cardCount = 6, cardType = SkeletonCardType.EPISODE)
-            Spacer(modifier = Modifier.height(24.dp))
+    if (isMobile) {
+        val configuration = LocalConfiguration.current
+        val screenHeightDp = configuration.screenHeightDp.dp
+        val backdropHeight = (screenHeightDp * 0.53f).coerceAtLeast(400.dp)
+
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // Backdrop representation
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(backdropHeight)
+            ) {
+                // Background shimmer image representation
+                SkeletonBox(
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(0.dp)
+                )
+
+                // Title, metadata, genre overlay at the bottom
+                Column(
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, end = 24.dp, bottom = 18.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                ) {
+                    // Logo/Title skeleton
+                    SkeletonBox(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(64.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Metadata Row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        repeat(3) {
+                            SkeletonBox(
+                                modifier = Modifier
+                                    .width(70.dp)
+                                    .height(20.dp),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Genre skeleton
+                    SkeletonBox(
+                        modifier = Modifier
+                            .width(160.dp)
+                            .height(14.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                }
+            }
+
+            // Below the backdrop details
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Play Button
+                SkeletonBox(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                // Row of 4 icon buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    repeat(4) {
+                        SkeletonBox(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(54.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                // Description overview (3 lines)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SkeletonBox(modifier = Modifier.fillMaxWidth().height(12.dp), shape = RoundedCornerShape(2.dp))
+                    SkeletonBox(modifier = Modifier.fillMaxWidth(0.95f).height(12.dp), shape = RoundedCornerShape(2.dp))
+                    SkeletonBox(modifier = Modifier.fillMaxWidth(0.6f).height(12.dp), shape = RoundedCornerShape(2.dp))
+                }
+
+                if (isTV) {
+                    // Seasons row
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(3) {
+                            SkeletonBox(
+                                modifier = Modifier
+                                    .width(85.dp)
+                                    .height(36.dp),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                        }
+                    }
+
+                    // Episodes row
+                    SkeletonCategoryRow(cardCount = 3, cardType = SkeletonCardType.EPISODE, isMobile = true)
+                } else {
+                    // Cast row
+                    SkeletonCategoryRow(cardCount = 4, cardType = SkeletonCardType.CAST, isMobile = true)
+                }
+            }
         }
+    } else {
+        Column(modifier = modifier.padding(start = 24.dp)) {
+            SkeletonDetailsHero()
+            Spacer(modifier = Modifier.height(32.dp))
 
-        // Cast section
-        SkeletonCategoryRow(cardCount = 8, cardType = SkeletonCardType.CAST)
-        Spacer(modifier = Modifier.height(32.dp))
+            if (isTV) {
+                // Episodes section
+                SkeletonCategoryRow(cardCount = 6, cardType = SkeletonCardType.EPISODE)
+                Spacer(modifier = Modifier.height(24.dp))
+            }
 
-        // Similar section
-        SkeletonCategoryRow(cardCount = 6, cardType = SkeletonCardType.POSTER)
+            // Cast section
+            SkeletonCategoryRow(cardCount = 8, cardType = SkeletonCardType.CAST)
+        }
     }
 }
 
