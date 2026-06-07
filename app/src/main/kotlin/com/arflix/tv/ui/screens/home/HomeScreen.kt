@@ -2680,7 +2680,7 @@ private fun MobileHomeRowsLayer(
                     )
                 }
 
-                val rowHasMore = categoryHasMoreMap[category.id] == true
+                val rowHasMore = !isCollectionRow && categoryHasMoreMap[category.id] == true
                 val skeletonCount = if (isPortrait) 12 else 7
                 val itemsToRender = remember(category.items, rowHasMore, isPortrait) {
                     if (rowHasMore) {
@@ -3220,6 +3220,7 @@ private fun ContentRow(
     onItemFocused: (MediaItem, Int) -> Unit
 ) {
     val isCollectionRow = category.id.startsWith("collection_row_")
+    val effectiveCategoryHasMore = !isCollectionRow && categoryHasMore
     val rowState = rememberLazyListState()
     val density = LocalDensity.current
     val isContinueWatching = category.id == "continue_watching"
@@ -3350,8 +3351,8 @@ private fun ContentRow(
         }
 
         val skeletonCount = if (effectivePosterMode) 12 else 7
-        val itemsToRender = remember(category.items, categoryHasMore, effectivePosterMode) {
-            if (categoryHasMore) {
+        val itemsToRender = remember(category.items, effectiveCategoryHasMore, effectivePosterMode) {
+            if (effectiveCategoryHasMore) {
                 category.items + List(skeletonCount) { idx ->
                     MediaItem(
                         id = -1000 - idx,
@@ -3403,7 +3404,7 @@ private fun ContentRow(
                     LaunchedEffect(item.id) {
                         onLoadMore()
                     }
-                } else if (categoryHasMore && index >= category.items.size - 5) {
+                } else if (effectiveCategoryHasMore && index >= category.items.size - 5) {
                     LaunchedEffect(category.items.size) {
                         onLoadMore()
                     }
