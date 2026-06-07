@@ -358,6 +358,7 @@ fun LiveTvScreen(
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToIptvSettings: (() -> Unit)? = null,
     onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
@@ -923,6 +924,7 @@ fun LiveTvScreen(
     val providerFocus = remember { FocusRequester() }
     val epgFocus = remember { FocusRequester() }
     val fsFocus = remember { FocusRequester() }
+    val emptyStateButtonFocus = remember { FocusRequester() }
 
     // Monotonic counter bumped on every DPAD key while in fullscreen —
     // the HUD observes this to re-show and reset its auto-hide timer.
@@ -1568,6 +1570,13 @@ fun LiveTvScreen(
         }
     }
 
+    LaunchedEffect(state.isConfigured, visibleEnrichedState.value) {
+        if (!isTouchDevice && !state.isConfigured && visibleEnrichedState.value === EnrichedChannels.Empty) {
+            delay(100L)
+            runCatching { emptyStateButtonFocus.requestFocus() }
+        }
+    }
+
     BackHandler(enabled = searchOpen) { searchOpen = false }
     BackHandler(enabled = !searchOpen && variantPickerChannel != null) { variantPickerChannel = null }
     BackHandler(enabled = !searchOpen && isFullScreen && fullscreenGuideOpen) {
@@ -1627,7 +1636,12 @@ fun LiveTvScreen(
                                         true
                                     }
                                     Key.DirectionDown -> {
-                                        focusProviderSwitcher()
+                                        if (!state.isConfigured && state.snapshot.channels.isEmpty()) {
+                                            focusZone = LiveTvFocusZone.CATEGORY_LIST
+                                            runCatching { emptyStateButtonFocus.requestFocus() }
+                                        } else {
+                                            focusProviderSwitcher()
+                                        }
                                         true
                                     }
                                     Key.DirectionCenter, Key.Enter -> {
@@ -1668,7 +1682,13 @@ fun LiveTvScreen(
             EmptyStatePane(
                 message = "No IPTV playlist configured.",
                 actionLabel = "Open settings",
-                onAction = onNavigateToSettings,
+                onAction = onNavigateToIptvSettings ?: onNavigateToSettings,
+                isFocused = focusZone != LiveTvFocusZone.TOPBAR,
+                focusRequester = emptyStateButtonFocus,
+                onMoveUp = {
+                    focusZone = LiveTvFocusZone.TOPBAR
+                    topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile).coerceIn(0, maxTopBarIndex)
+                }
             )
         } else {
             // Content starts right under the pill row — 52 dp puts the first

@@ -54,7 +54,15 @@ sealed class Screen(val route: String) {
             return if (streamEnc != null) "tv?channelId=$enc&streamUrl=$streamEnc" else "tv?channelId=$enc"
         }
     }
-    object Settings : Screen("settings")
+    object Settings : Screen("settings") {
+        fun createRoute(autoCloudAuth: Boolean = false, initialSection: String? = null): String {
+            val base = "settings"
+            val params = mutableListOf<String>()
+            if (autoCloudAuth) params.add("autoCloudAuth=true")
+            initialSection?.let { params.add("initialSection=$it") }
+            return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
+        }
+    }
     object TelegramSettings : Screen("telegram_settings")
     object ProfileSelection : Screen("profile_selection")
 
@@ -258,6 +266,7 @@ fun AppNavigation(
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
+                onNavigateToIptvSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "iptv")) },
                 onSwitchProfile = {
                     onSwitchProfile()
                     navController.navigate(Screen.ProfileSelection.route) {
@@ -270,18 +279,25 @@ fun AppNavigation(
 
         // Settings screen
         composable(
-            route = "settings?autoCloudAuth={autoCloudAuth}",
+            route = "settings?autoCloudAuth={autoCloudAuth}&initialSection={initialSection}",
             arguments = listOf(
                 navArgument("autoCloudAuth") {
                     type = NavType.BoolType
                     defaultValue = false
+                },
+                navArgument("initialSection") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             )
         ) { backStackEntry ->
             val autoCloudAuth = backStackEntry.arguments?.getBoolean("autoCloudAuth") ?: false
+            val initialSection = backStackEntry.arguments?.getString("initialSection")
             SettingsScreen(
                 currentProfile = currentProfile,
                 autoStartCloudAuth = autoCloudAuth,
+                initialSection = initialSection,
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
                 onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
