@@ -165,19 +165,39 @@ fun CategorySidebar(
             focusRequester = searchFocusRequester,
         )
         Spacer(Modifier.height(8.dp))
-        LazyColumn(
+         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            items(tree.top, key = { it.id }) { cat ->
-                val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
-                val isOpen = isAllGroup && expandedAll
-                SidebarRow(
-                    label = cat.label,
-                    count = cat.count,
-                    icon = iconFor(cat),
-                    active = selectedId == cat.id,
-                    expanded = expanded,
-                    hasChildren = isAllGroup,
+            if (tree.top.isEmpty()) {
+                // Display 5 lightweight animated skeleton rows while loading
+                items(5) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp) // Matches the spec height noted on line 83!
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .background(
+                                color = androidx.compose.ui.graphics.Color.Gray.copy(alpha = 0.2f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                            )
+                    )
+                }
+            } else {
+                items(tree.top, key = { it.id }) { cat ->
+                    val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
+                    val isOpen = isAllGroup && expandedAll
+                    SidebarRow(
+                        label = cat.label,
+                        count = cat.count,
+                        icon = iconFor(cat),
+                        active = selectedId == cat.id,
+                        expanded = expanded,
+                        hasChildren = isAllGroup,
+                        // Make sure to match the rest of your original arguments closing here...
+                    )
+                }
+            }
+        }up,
                     isOpenGroup = isOpen,
                     onFocused = { onTopBoundaryFocusChanged(false) },
                     onClick = {
