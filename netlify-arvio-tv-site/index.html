@@ -591,7 +591,7 @@
 .nav-donate:hover::before { transform: translateY(-50%) scale(1.15); }
 </style>
 <style>
-  :root {
+  :root, [data-theme="dark"] {
     --bg: oklch(0.16 0.008 60);
     --bg-2: oklch(0.20 0.010 60);
     --bg-3: oklch(0.25 0.012 60);
@@ -607,23 +607,35 @@
     --mono: "JetBrains Mono", ui-monospace, monospace;
   }
 
-  html.light {
-    --bg: oklch(0.98 0.006 80);
-    --bg-2: oklch(0.95 0.008 80);
-    --bg-3: oklch(0.90 0.010 80);
-    --line: oklch(0.85 0.010 80);
-    --line-soft: oklch(0.88 0.010 80 / 0.8);
-    --ink: oklch(0.16 0.008 60);
-    --ink-2: oklch(0.36 0.010 60);
-    --ink-3: oklch(0.52 0.012 60);
+  [data-theme="light"] {
+    --bg: #F8FAFC;
+    --bg-2: #FFFFFF;
+    --bg-3: #F1F5F9;
+    --line: #CBD5E1;
+    --line-soft: #E2E8F0;
+    --ink: #0F172A;
+    --ink-2: #475569;
+    --ink-3: #64748B;
     --accent: oklch(0.62 0.17 280);
     --accent-2: oklch(0.58 0.18 240);
     --accent-soft: oklch(0.62 0.17 280 / 0.14);
+    --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
   }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  html { background: #0a0710; }
+  html { background: var(--bg); scroll-behavior: smooth; }
+  
+  html.theme-transitioning,
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition-property: background-color, color, border-color, box-shadow, fill, stroke !important;
+    transition-duration: 0.35s !important;
+    transition-timing-function: ease !important;
+  }
+  
   body {
     color: var(--ink);
     font-family: var(--sans);
@@ -819,7 +831,7 @@
     min-height: 34px;
     padding: 8px 12px;
     border-radius: 999px;
-    transition: color .2s, background .2s, box-shadow .2s, transform .2s;
+    transition: color .3s ease, background .3s ease, box-shadow .3s ease, transform .3s ease;
   }
   .nav-links a::after {
     content: "";
@@ -832,15 +844,22 @@
     background: linear-gradient(90deg, var(--accent), var(--accent-2));
     opacity: 0;
     transform: scaleX(0.45);
-    transition: opacity .2s, transform .25s cubic-bezier(.2,.9,.2,1);
+    transition: opacity .3s ease, transform .3s cubic-bezier(.2,.9,.2,1);
   }
-  .nav-links a:hover {
+  .nav-links a:hover,
+  .nav-links a.active {
     color: var(--ink);
     background: color-mix(in oklch, var(--ink) 7%, transparent);
     box-shadow: 0 0 0 1px color-mix(in oklch, var(--ink) 7%, transparent) inset;
     transform: translateY(-1px);
   }
-  .nav-links a:hover::after { opacity: 1; transform: scaleX(1); }
+  .nav-links a.active {
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 15%, transparent);
+    box-shadow: 0 0 18px color-mix(in oklch, var(--accent) 25%, transparent), 0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent) inset;
+  }
+  .nav-links a:hover::after,
+  .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
   .nav-links .nav-donate {
     padding-left: 28px !important;
     color: color-mix(in oklch, #ff7eb8 58%, var(--ink));
@@ -852,6 +871,25 @@
     align-items: center;
     gap: 12px;
     margin-left: 0;
+  }
+  .theme-toggle {
+    background: transparent;
+    border: none;
+    color: var(--ink-2);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, background 0.2s, transform 0.2s;
+  }
+  .theme-toggle:hover {
+    color: var(--ink);
+    background: color-mix(in oklch, var(--ink) 8%, transparent);
+  }
+  .theme-toggle:active {
+    transform: scale(0.9);
   }
   .nav-web {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -915,9 +953,10 @@
 
   .hero-h1 {
     font-weight: 800;
-    font-size: clamp(52px, 9.5vw, 156px);
-    line-height: 0.92;
-    letter-spacing: -0.045em;
+    font-size: clamp(48px, 7vw, 110px);
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+    max-width: 11ch;
     margin: 28px 0 0;
     text-wrap: balance;
   }
@@ -2007,6 +2046,163 @@
     .compare-cell:nth-child(5)::before { content: "Tivimate"; }
   }
 
+  /* ============ CINEMATIC SHOWCASE ============ */
+  .hero-content-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
+    position: relative;
+    z-index: 10;
+  }
+  .hero-left {
+    flex: 1;
+    max-width: 640px;
+    position: relative;
+    z-index: 2;
+  }
+  .hero-right {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 500px;
+    perspective: 1200px;
+    z-index: 1;
+  }
+
+  .cinematic-showcase {
+    position: relative;
+    width: 280px;
+    height: 420px;
+    transform-style: preserve-3d;
+    transform: rotateX(8deg) rotateY(-16deg);
+    transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.2, 1);
+  }
+  
+  .cinematic-showcase:hover {
+    transform: rotateX(2deg) rotateY(-5deg);
+  }
+
+  .ambient-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 400px;
+    height: 400px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, color-mix(in oklch, var(--accent) 60%, transparent), color-mix(in oklch, var(--accent-2) 30%, transparent), transparent 70%);
+    filter: blur(60px);
+    opacity: 0.5;
+    animation: pulseGlow 6s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  @keyframes pulseGlow {
+    0% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.9); }
+    100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.1); }
+  }
+
+  .carousel-track {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    animation: rotateCarousel 24s linear infinite;
+  }
+
+  @keyframes rotateCarousel {
+    from { transform: rotateY(0deg); }
+    to { transform: rotateY(-360deg); }
+  }
+
+  .card-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+  }
+
+  .movie-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    background: oklch(0.2 0.01 60 / 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid oklch(1 1 1 / 0.15);
+    box-shadow: 0 30px 60px -15px oklch(0 0 0 / 0.8), 0 0 20px oklch(0 0 0 / 0.4) inset;
+    overflow: hidden;
+    transform-style: preserve-3d;
+    transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1), box-shadow 0.4s ease, filter 0.4s ease;
+    filter: brightness(0.85);
+  }
+
+  .card-wrapper:hover .movie-card {
+    transform: translateY(-20px) scale(1.08);
+    box-shadow: 0 40px 80px -10px oklch(0 0 0 / 0.9), 0 0 30px color-mix(in oklch, var(--accent) 50%, transparent);
+    filter: brightness(1.1);
+    border-color: color-mix(in oklch, var(--accent) 60%, transparent);
+  }
+
+  .movie-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+  }
+
+  .movie-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, oklch(1 1 1 / 0.3) 0%, transparent 40%, transparent 100%);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .particles-container {
+    position: absolute;
+    inset: -100px;
+    pointer-events: none;
+    transform-style: preserve-3d;
+  }
+
+  .light-streak {
+    position: absolute;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    height: 2px;
+    width: 120px;
+    opacity: 0;
+    filter: blur(2px);
+  }
+  
+  .streak-1 { top: 20%; left: -20%; animation: flyStreak 8s linear infinite 1s; }
+  .streak-2 { top: 60%; right: -20%; width: 200px; animation: flyStreak 6s linear infinite 3s; background: linear-gradient(90deg, transparent, var(--accent-2), transparent); }
+  .streak-3 { top: 80%; left: -10%; animation: flyStreak 10s linear infinite 0s; }
+
+  @keyframes flyStreak {
+    0% { transform: translateX(0) translateZ(-200px); opacity: 0; }
+    20% { opacity: 0.6; }
+    80% { opacity: 0.6; }
+    100% { transform: translateX(800px) translateZ(100px); opacity: 0; }
+  }
+
+  @media (max-width: 900px) {
+    .hero-content-split { flex-direction: column; text-align: center; gap: 60px; }
+    .hero-left { max-width: 100%; }
+    .hero-right { min-height: 400px; }
+    .hero-h1 { margin-left: auto; margin-right: auto; }
+    .hero-sub { margin-left: auto; margin-right: auto; }
+    .hero-ctas { justify-content: center; }
+    .cinematic-showcase { width: 220px; height: 330px; }
+  }
 </style>
 </head>
 <body>
@@ -2029,6 +2225,10 @@
       <a class="nav-donate" href="https://ko-fi.com/arvio" target="_blank" rel="noopener">Donate</a>
     </div>
     <div class="nav-actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+        <svg id="theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        <svg id="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
       <a class="nav-web" href="/web/">Web app</a>
       <a class="nav-cta" href="https://play.google.com/store/apps/details?id=com.arvio.tv" target="_blank" rel="noopener">Get ARVIO
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
@@ -2040,28 +2240,59 @@
 <!-- HERO -->
 <header class="hero" id="top">
   <div class="wrap">
-    <div class="reveal in"><span class="eyebrow">Media hub · Android TV · Open source</span></div>
-    <h1 class="hero-h1 reveal in" data-delay="1" id="hero-h1">
-      ARVIO for Android TV,<br><span class="accent">without the clutter.</span>
-    </h1>
-    <p class="hero-sub reveal in" data-delay="2">Live TV, Plex, Emby, Jellyfin, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for the remote.</p>
-    <div class="hero-ctas reveal in" data-delay="3">
-      <a class="btn btn-play" href="https://play.google.com/store/apps/details?id=com.arvio.tv" target="_blank" rel="noopener">
-        <span class="play-ico">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M8 5v14l11-7z"></path></svg>
-        </span>
-        <span>
-          <small>Install</small>
-          <strong>Get ARVIO</strong>
-        </span>
-      </a>
-      <a class="btn btn-ghost" href="#screens">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M10 8l6 4-6 4V8z"></path></svg>
-        View screenshots
-      </a>
-    </div>
-    <div class="hero-sideload reveal in" data-delay="4">
-      APK available on <a href="https://github.com/ProdigyV21/ARVIO/releases">GitHub</a> - Play Store recommended for auto-updates
+    <div class="hero-content-split">
+      <div class="hero-left">
+        <div class="reveal in"><span class="eyebrow">Media hub · Android TV · Open source</span></div>
+        <h1 class="hero-h1 reveal in" data-delay="1" id="hero-h1">
+          ARVIO for Android TV,<br><span class="accent">without the clutter.</span>
+        </h1>
+        <p class="hero-sub reveal in" data-delay="2">Live TV, Plex, Emby, Jellyfin, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for the remote.</p>
+        <div class="hero-ctas reveal in" data-delay="3">
+          <a class="btn btn-play" href="https://play.google.com/store/apps/details?id=com.arvio.tv" target="_blank" rel="noopener">
+            <span class="play-ico">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M8 5v14l11-7z"></path></svg>
+            </span>
+            <span>
+              <small>Install</small>
+              <strong>Get ARVIO</strong>
+            </span>
+          </a>
+          <a class="btn btn-ghost" href="#screens">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M10 8l6 4-6 4V8z"></path></svg>
+            View screenshots
+          </a>
+        </div>
+        <div class="hero-sideload reveal in" data-delay="4">
+          APK available on <a href="https://github.com/ProdigyV21/ARVIO/releases">GitHub</a> - Play Store recommended for auto-updates
+        </div>
+      </div>
+      <div class="hero-right reveal in" data-delay="4">
+        <div class="ambient-glow"></div>
+        <div class="particles-container">
+          <div class="light-streak streak-1"></div>
+          <div class="light-streak streak-2"></div>
+          <div class="light-streak streak-3"></div>
+        </div>
+        <div class="cinematic-showcase">
+          <div class="carousel-track">
+            <div class="card-wrapper" style="transform: rotateY(0deg) translateZ(260px);">
+              <div class="movie-card"><img src="1.jpg" alt="Sci-Fi"></div>
+            </div>
+            <div class="card-wrapper" style="transform: rotateY(72deg) translateZ(260px);">
+              <div class="movie-card"><img src="2.jpg" alt="Action"></div>
+            </div>
+            <div class="card-wrapper" style="transform: rotateY(144deg) translateZ(260px);">
+              <div class="movie-card"><img src="3.jpg" alt="Fantasy"></div>
+            </div>
+            <div class="card-wrapper" style="transform: rotateY(216deg) translateZ(260px);">
+              <div class="movie-card"><img src="4.jpg" alt="Cyberpunk"></div>
+            </div>
+            <div class="card-wrapper" style="transform: rotateY(288deg) translateZ(260px);">
+              <div class="movie-card"><img src="5.jpg" alt="Space"></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="hero-meta">
@@ -2727,5 +2958,68 @@
   document.querySelectorAll('.reveal:not(.in)').forEach(el => io.observe(el));
 </script>
 
+<script>
+  // Theme Toggle Logic
+  const themeToggle = document.getElementById('theme-toggle');
+  const iconLight = document.getElementById('theme-icon-light');
+  const iconDark = document.getElementById('theme-icon-dark');
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('arvio-theme', theme);
+    if (theme === 'light') {
+      iconLight.style.display = 'none';
+      iconDark.style.display = 'block';
+    } else {
+      iconLight.style.display = 'block';
+      iconDark.style.display = 'none';
+    }
+  }
+
+  // Initialize Theme
+  const savedTheme = localStorage.getItem('arvio-theme');
+  const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+
+  if (savedTheme) {
+    setTheme(savedTheme);
+  } else if (systemPrefersLight) {
+    setTheme('light');
+  } else {
+    setTheme('dark');
+  }
+
+  // Toggle Theme on Click
+  themeToggle.addEventListener('click', () => {
+    document.documentElement.classList.add('theme-transitioning');
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+    
+    // Remove transition class after animation completes
+    setTimeout(() => {
+      document.documentElement.classList.remove('theme-transitioning');
+    }, 350);
+  });
+
+  // Scroll Spy Logic
+  const spySections = document.querySelectorAll('header[id], section[id]');
+  const spyNavLinks = document.querySelectorAll('.nav-links a[href^="#"]');
+
+  const spyObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        spyNavLinks.forEach(link => {
+          link.classList.remove('active');
+          link.removeAttribute('aria-current');
+          if (link.getAttribute('href') === `#${entry.target.id}`) {
+            link.classList.add('active');
+            link.setAttribute('aria-current', 'page');
+          }
+        });
+      }
+    });
+  }, { rootMargin: '-100px 0px -60% 0px' });
+
+  spySections.forEach(sec => spyObserver.observe(sec));
+</script>
 
 </body></html>
