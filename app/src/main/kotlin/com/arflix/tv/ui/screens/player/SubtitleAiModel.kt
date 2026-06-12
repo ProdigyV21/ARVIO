@@ -9,6 +9,6 @@ enum class SubtitleAiModel {
         get() = when (this) {
             GROQ_LLAMA_70B -> null
             GEMINI_FLASH_25 -> "gemini-2.5-flash"
-            GEMINI_FLASH_LITE -> "gemini-flash-lite-latest"
+            GEMINI_FLASH_LITE -> "gemini-2.5-flash-lite"
         }
 }

@@ -16,7 +16,7 @@ class SubtitleAiModelTest {
     @Test
     fun `Gemini models map to Gemini API model ids`() {
         assertEquals("gemini-2.5-flash", SubtitleAiModel.GEMINI_FLASH_25.geminiModelId)
-        assertEquals("gemini-flash-lite-latest", SubtitleAiModel.GEMINI_FLASH_LITE.geminiModelId)
+        assertEquals("gemini-2.5-flash-lite", SubtitleAiModel.GEMINI_FLASH_LITE.geminiModelId)
     }
 
     @Test
