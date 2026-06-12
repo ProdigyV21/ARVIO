@@ -23,8 +23,7 @@ data class TranslationResult(
 
 private const val GROQ_MODEL_ID = "llama-3.3-70b-versatile"
 private const val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-private const val GEMINI_MODEL_ID = "gemini-2.5-flash"
-private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL_ID:generateContent"
+private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
@@ -70,9 +69,14 @@ class SubtitleTranslationService(
             return TranslationResult(lines, false, "API key missing")
         }
 
-        return when (modelProvider()) {
+        return when (val model = modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
-            SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
+            SubtitleAiModel.GEMINI_FLASH_25,
+            SubtitleAiModel.GEMINI_FLASH_LITE -> {
+                val geminiModelId = model.geminiModelId
+                    ?: error("${model.name} is missing a Gemini model id")
+                translateGemini(lines, targetLanguage, apiKey, geminiModelId)
+            }
         }
     }
 
@@ -132,7 +136,12 @@ class SubtitleTranslationService(
         }
     }
 
-    private suspend fun translateGemini(lines: List<String>, targetLanguage: String, apiKey: String): TranslationResult {
+    private suspend fun translateGemini(
+        lines: List<String>,
+        targetLanguage: String,
+        apiKey: String,
+        modelId: String
+    ): TranslationResult {
         val NL = "⏎"
         val encoded = lines.map { it.replace("\n", NL) }
         val inputArray = JSONArray(encoded)
@@ -162,7 +171,7 @@ class SubtitleTranslationService(
             })
         }
 
-        val url = "$GEMINI_BASE_URL?key=$apiKey"
+        val url = "$GEMINI_BASE_URL/$modelId:generateContent?key=$apiKey"
         val request = Request.Builder()
             .url(url)
             .header("Content-Type", "application/json")

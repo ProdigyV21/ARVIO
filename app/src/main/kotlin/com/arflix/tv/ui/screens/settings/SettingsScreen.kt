@@ -3655,6 +3655,7 @@ private fun MobileSettingsSubPage(
                         value = when (uiState.subtitleAiModel) {
                             com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - Llama 3.3 70B"
                             com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 2.5 Flash"
+                            com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE -> "Google - Gemini Flash-Lite"
                         },
                         isFocused = false,
                         onClick = onSubtitleAiModelClick
@@ -3698,6 +3699,8 @@ private fun MobileSettingsSubPage(
                                 com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B ->
                                     stringResource(R.string.ai_groq_disclaimer)
                                 com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 ->
+                                    stringResource(R.string.ai_gemini_disclaimer)
+                                com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE ->
                                     stringResource(R.string.ai_gemini_disclaimer)
                             },
                             style = ArflixTypography.caption.copy(fontSize = 11.sp),
@@ -4777,6 +4780,7 @@ private fun TvGeneralSettingsRows(
                     value = when (subtitleAiModel) {
                         com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - Llama 3.3 70B"
                         com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 2.5 Flash"
+                        com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE -> "Google - Gemini Flash-Lite"
                     },
                     isFocused = focusedIndex == localIndex,
                     onClick = onSubtitleAiModelClick,
@@ -5226,6 +5230,7 @@ private fun GeneralSettings(
             value = when (subtitleAiModel) {
                 com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq – Llama 3.3 70B"
                 com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google – Gemini 2.5 Flash"
+                com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE -> "Google – Gemini Flash-Lite"
             },
             isFocused = focusedIndex == 29,
             onClick = onSubtitleAiModelClick,
@@ -5277,6 +5282,8 @@ private fun GeneralSettings(
                         stringResource(R.string.ai_groq_disclaimer)
                     com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 ->
                         stringResource(R.string.ai_gemini_disclaimer)
+                    com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE ->
+                        stringResource(R.string.ai_gemini_disclaimer)
                 },
                 style = ArflixTypography.caption.copy(fontSize = 11.sp),
                 color = TextSecondary.copy(alpha = 0.4f),
@@ -5307,7 +5314,8 @@ private fun AiModelDialog(
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val options = listOf(
         Triple(com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B, "Groq – Llama 3.3 70B", stringResource(R.string.ai_groq_model_note)),
-        Triple(com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 2.5 Flash", stringResource(R.string.ai_gemini_model_note))
+        Triple(com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 2.5 Flash", stringResource(R.string.ai_gemini_model_note)),
+        Triple(com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE, "Google – Gemini Flash-Lite", "Always uses the latest Flash-Lite model")
     )
     BackHandler { onDismiss() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -5384,6 +5392,7 @@ private fun AiApiKeyDialog(
     val placeholder = when (model) {
         com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "gsk_..."
         com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "AIzaSy..."
+        com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_LITE -> "AIzaSy..."
     }
     BackHandler { onDismiss() }
     LaunchedEffect(Unit) {
