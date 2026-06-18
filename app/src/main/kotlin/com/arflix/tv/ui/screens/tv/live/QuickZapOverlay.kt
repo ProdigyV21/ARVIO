@@ -247,7 +247,7 @@ fun QuickZapOverlay(
                     )
                 )
                 Text(
-                    text = (categories.getOrNull(selectedCategoryIndex)?.label ?: "All Channels").uppercase(),
+                    text = (categories.getOrNull(selectedCategoryIndex)?.label?.let { liveCategoryLabel(it) } ?: stringResource(R.string.live_label_all_channels)).uppercase(),
                     style = LiveType.ChannelName.copy(
                         color = LiveColors.Fg,
                         fontSize = 16.sp,
@@ -320,20 +320,20 @@ private fun CategorySidebarPanel(
             for (offset in -3..-1) {
                 val index = (selectedIndex + offset + categories.size * 10) % categories.size
                 categories.getOrNull(index)?.let { cat ->
-                    NonFocusedCategoryRow(label = cat.label)
+                    NonFocusedCategoryRow(label = liveCategoryLabel(cat.label))
                 }
             }
 
             // Centered Focused Category
             categories.getOrNull(selectedIndex)?.let { cat ->
-                FocusedCategoryRow(label = cat.label, isFocused = isFocused)
+                FocusedCategoryRow(label = liveCategoryLabel(cat.label), isFocused = isFocused)
             }
 
             // Render 3 slots below focused category
             for (offset in 1..3) {
                 val index = (selectedIndex + offset) % categories.size
                 categories.getOrNull(index)?.let { cat ->
-                    NonFocusedCategoryRow(label = cat.label)
+                    NonFocusedCategoryRow(label = liveCategoryLabel(cat.label))
                 }
             }
         }
@@ -462,7 +462,7 @@ private fun ChannelColumnPanel(
             }
         } else {
             Text(
-                text = "No channels in this category",
+                text = stringResource(R.string.live_empty_no_channels_category),
                 style = LiveType.CellTitle.copy(color = LiveColors.FgMute),
                 modifier = Modifier.padding(vertical = 48.dp)
             )

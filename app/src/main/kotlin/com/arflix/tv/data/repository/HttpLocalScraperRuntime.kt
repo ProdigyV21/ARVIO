@@ -1,5 +1,7 @@
 package com.arflix.tv.data.repository
 
+import android.content.Context
+import com.arflix.tv.R
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.AddonBehaviorHints
@@ -13,6 +15,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
@@ -40,6 +43,7 @@ data class HttpLocalScraperInstallCandidate(
 
 @Singleton
 class HttpLocalScraperRuntime @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
     private val tmdbApi: TmdbApi
 ) {
@@ -67,7 +71,7 @@ class HttpLocalScraperRuntime @Inject constructor(
             id = stableId,
             name = sanitizeProviderLabel(customName?.trim()?.takeIf { it.isNotBlank() } ?: manifest.name),
             version = manifest.version,
-            description = "HTTP local scraper bundle (${httpScrapers.size} HTTP providers)",
+            description = context.getString(R.string.addon_http_local_scraper_description, httpScrapers.size),
             types = listOf("movie", "series"),
             resources = listOf(
                 AddonResource(

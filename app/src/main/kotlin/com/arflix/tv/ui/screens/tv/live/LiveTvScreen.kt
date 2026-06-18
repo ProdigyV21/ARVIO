@@ -63,6 +63,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -78,6 +79,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
@@ -1856,8 +1858,8 @@ fun LiveTvScreen(
         if (resetRetry) playerRetryCount = 0
         if (resetRetry) {
             playbackDiagnostic = PlaybackDiagnostic(
-                title = if (playingCatchupProgram != null && initialPositionMs > 0L) "Seeking catch-up" else "Starting live stream",
-                detail = playingChannel?.name ?: "Preparing source",
+                title = if (playingCatchupProgram != null && initialPositionMs > 0L) context.getString(R.string.live_diag_seeking_catchup) else context.getString(R.string.live_diag_starting_stream),
+                detail = playingChannel?.name ?: context.getString(R.string.live_diag_preparing_source),
                 severity = PlaybackDiagnosticSeverity.Info,
             )
         }
@@ -1960,8 +1962,8 @@ fun LiveTvScreen(
             }
         }.getOrElse { error ->
             playbackDiagnostic = PlaybackDiagnostic(
-                title = if (playingCatchupProgram != null) "Catch-up unavailable" else "Playback failed",
-                detail = error.message ?: "Provider did not return a playable stream.",
+                title = if (playingCatchupProgram != null) context.getString(R.string.live_diag_catchup_unavailable) else context.getString(R.string.live_diag_playback_failed),
+                detail = error.message ?: context.getString(R.string.live_diag_no_playable_stream),
                 severity = PlaybackDiagnosticSeverity.Error,
             )
             System.err.println(
@@ -2038,7 +2040,7 @@ fun LiveTvScreen(
                 }
                 if (nextAttempt > maxRetryCount) {
                     playbackDiagnostic = PlaybackDiagnostic(
-                        title = "Playback failed",
+                        title = context.getString(R.string.live_diag_playback_failed),
                         detail = "${error.errorCodeName}: ${classifyPlaybackError(error)}",
                         severity = PlaybackDiagnosticSeverity.Error,
                     )
@@ -2066,7 +2068,7 @@ fun LiveTvScreen(
                         }
                     }.getOrElse { resolveError ->
                         playbackDiagnostic = PlaybackDiagnostic(
-                            title = if (retryProgram != null) "Catch-up unavailable" else "Playback failed",
+                            title = if (retryProgram != null) context.getString(R.string.live_diag_catchup_unavailable) else context.getString(R.string.live_diag_playback_failed),
                             detail = resolveError.message ?: classifyPlaybackError(error),
                             severity = PlaybackDiagnosticSeverity.Error,
                         )
@@ -2082,7 +2084,7 @@ fun LiveTvScreen(
                             "candidates=$catchupCandidateCount url=${redactPlaybackUrl(retryStream)}"
                     )
                     playbackDiagnostic = PlaybackDiagnostic(
-                        title = "Retrying source",
+                        title = context.getString(R.string.live_diag_retrying_source),
                         detail = "Attempt $nextAttempt/$maxRetryCount after ${classifyPlaybackError(error)}",
                         severity = PlaybackDiagnosticSeverity.Warning,
                     )
@@ -2218,8 +2220,8 @@ fun LiveTvScreen(
             // PlayerView owns ExoPlayer.
         } else if (!state.isConfigured && state.snapshot.channels.isEmpty()) {
             EmptyStatePane(
-                message = "No IPTV playlist configured.",
-                actionLabel = "Open settings",
+                message = stringResource(R.string.live_empty_no_playlist),
+                actionLabel = stringResource(R.string.live_btn_open_settings),
                 onAction = onNavigateToIptvSettings ?: onNavigateToSettings,
                 isFocused = focusZone != LiveTvFocusZone.TOPBAR,
                 focusRequester = emptyStateButtonFocus,

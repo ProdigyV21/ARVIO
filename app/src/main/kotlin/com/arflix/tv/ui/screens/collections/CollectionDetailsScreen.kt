@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +58,7 @@ import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
 import androidx.tv.foundation.lazy.grid.itemsIndexed
 import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
 import com.arflix.tv.data.model.CatalogSourceType
@@ -89,6 +91,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class CollectionTab { MOVIES, SERIES }
+
+/**
+ * Sentinel stored in [CollectionDetailsUiState.error] when a collection page fails to load.
+ * The ViewModel has no Context, so the human-readable message is resolved with
+ * [stringResource] at the @Composable display point (see CollectionDetailsScreen).
+ */
+private const val COLLECTION_LOAD_FAILED_ERROR = "__collection_load_failed__"
 
 data class CollectionDetailsUiState(
     val catalog: CatalogConfig? = null,
@@ -229,14 +238,14 @@ class CollectionDetailsViewModel @Inject constructor(
                 isLoadingMovies = false,
                 hasMoreMovies = page?.hasMore == true,
                 loadedMovieOffset = pageItems.size,
-                error = _uiState.value.error ?: if (page == null) "Failed to load collection" else null
+                error = _uiState.value.error ?: if (page == null) COLLECTION_LOAD_FAILED_ERROR else null
             )
             CollectionTab.SERIES -> _uiState.value.copy(
                 seriesItems = pageItems,
                 isLoadingSeries = false,
                 hasMoreSeries = page?.hasMore == true,
                 loadedSeriesOffset = pageItems.size,
-                error = _uiState.value.error ?: if (page == null) "Failed to load collection" else null
+                error = _uiState.value.error ?: if (page == null) COLLECTION_LOAD_FAILED_ERROR else null
             )
         }
         preloadLogos(pageItems.take(2))
@@ -584,7 +593,11 @@ fun CollectionDetailsScreen(
             onNearEnd = { viewModel.loadMoreIfNeeded(activeTab) },
             isLoading = isTabLoading,
             isLoadingMore = isTabLoadingMore,
-            emptyMessage = uiState.error ?: "Nothing to show here yet.",
+            emptyMessage = when (uiState.error) {
+                null -> stringResource(R.string.collection_empty)
+                COLLECTION_LOAD_FAILED_ERROR -> stringResource(R.string.collection_failed_load)
+                else -> uiState.error!!
+            },
             topContentPadding = if (isMobile) 18.dp else if (usePosterCards) 22.dp else 10.dp
         )
     }
@@ -668,7 +681,7 @@ private fun CollectionTabBar(
     ) {
         if (showMovies) {
             CollectionTabChip(
-                label = "Movies",
+                label = stringResource(R.string.movies),
                 isSelected = selectedTab == CollectionTab.MOVIES || onlyOne,
                 focusRequester = moviesTabFocusRequester,
                 onClick = { onTabSelected(CollectionTab.MOVIES) }
@@ -676,7 +689,7 @@ private fun CollectionTabBar(
         }
         if (showSeries) {
             CollectionTabChip(
-                label = "Series",
+                label = stringResource(R.string.series),
                 isSelected = selectedTab == CollectionTab.SERIES || onlyOne,
                 focusRequester = seriesTabFocusRequester,
                 onClick = { onTabSelected(CollectionTab.SERIES) }

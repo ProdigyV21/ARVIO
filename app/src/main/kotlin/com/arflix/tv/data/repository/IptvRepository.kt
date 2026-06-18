@@ -12,6 +12,7 @@ import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
 import com.arflix.tv.data.model.StreamSource
+import com.arflix.tv.R
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -925,7 +926,7 @@ class IptvRepository @Inject constructor(
                     )
                 }
             }
-            throw IOException("No playable catchup stream returned by provider")
+            throw IOException(context.getString(R.string.iptv_no_catchup))
         }
     }
 
@@ -1467,7 +1468,7 @@ class IptvRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             loadMutex.withLock {
             cleanupStaleEpgTempFiles()
-            onProgress(IptvLoadProgress("Starting IPTV load...", 2))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_starting_load), 2))
             val now = System.currentTimeMillis()
             val config = observeConfig().first()
             val profileId = profileManager.getProfileIdSync()
@@ -1487,15 +1488,15 @@ class IptvRepository @Inject constructor(
 
             // ── Stalker Portal path ──
             if (config.m3uUrl.isBlank() && config.stalkerPortalUrl.isNotBlank()) {
-                onProgress(IptvLoadProgress("Connecting to Stalker portal...", 10))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_connecting_stalker), 10))
                 val stalker = com.arflix.tv.data.api.StalkerApi(config.stalkerPortalUrl, config.stalkerMacAddress)
                 if (!stalker.handshake()) {
                     return@withContext IptvSnapshot(epgWarning = "Stalker handshake failed. Check Portal URL and MAC.", loadedAt = Instant.now())
                 }
-                onProgress(IptvLoadProgress("Loading channels from portal...", 30))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_channels), 30))
                 stalker.getProfile()
                 val channels = stalker.getChannels()
-                onProgress(IptvLoadProgress("Loaded ${channels.size} channels", 80))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_loaded_channels, channels.size), 80))
                 val grouped = buildGroupedChannels(channels)
                 val favGroups = observeFavoriteGroups().first()
                 val favChannels = observeFavoriteChannels().first()
@@ -1514,7 +1515,7 @@ class IptvRepository @Inject constructor(
                     groupOrder = groupOrder,
                     loadedAt = Instant.now()
                 )
-                onProgress(IptvLoadProgress("Done", 100))
+                onProgress(IptvLoadProgress(context.getString(R.string.done), 100))
                 return@withContext snapshot
             }
 
@@ -1619,12 +1620,12 @@ class IptvRepository @Inject constructor(
                 reDeriveCachedNowNext(channels.asSequence().map { it.id }.toSet()) ?: cachedNowNext
             }
             val nowNext = if (shouldUseCachedEpg) {
-                onProgress(IptvLoadProgress("Using cached EPG", 92))
+                onProgress(IptvLoadProgress(context.getString(R.string.epg_using_cached), 92))
                 System.err.println("[EPG] Using cached EPG (${cachedNowNext.size} channels, age=${(now - cachedEpgAt)/1000}s)")
                 cachedFallbackNowNext
             } else if (!allowNetworkEpgFetch) {
                 if (cachedFallbackNowNext.isNotEmpty()) {
-                    onProgress(IptvLoadProgress("Using cached EPG", 92))
+                    onProgress(IptvLoadProgress(context.getString(R.string.epg_using_cached), 92))
                     System.err.println("[EPG] Skipping broad network EPG fetch and using cached fallback (${cachedFallbackNowNext.size} channels)")
                     cachedFallbackNowNext
                 } else {
@@ -1633,11 +1634,11 @@ class IptvRepository @Inject constructor(
                 }
             } else if (epgCandidates.isEmpty() && !hasXtreamChannels) {
                 if (cachedFallbackNowNext.isNotEmpty()) {
-                    onProgress(IptvLoadProgress("Using cached EPG", 92))
+                    onProgress(IptvLoadProgress(context.getString(R.string.epg_using_cached), 92))
                     System.err.println("[EPG] No active EPG source, keeping cached EPG fallback (${cachedFallbackNowNext.size} channels)")
                     cachedFallbackNowNext
                 } else {
-                    onProgress(IptvLoadProgress("No EPG URL configured", 90))
+                    onProgress(IptvLoadProgress(context.getString(R.string.epg_no_url), 90))
                     System.err.println("[EPG] No EPG URL and no Xtream creds - skipping EPG")
                     emptyMap()
                 }
@@ -1700,13 +1701,13 @@ class IptvRepository @Inject constructor(
                         val candidateChannels = channelsForScopedEpgCandidate(candidate, channels)
                         if (candidateChannels.isEmpty()) continue
                         val pct = (90 + ((index * 8) / epgCandidatesToTry.size.coerceAtLeast(1))).coerceIn(90, 98)
-                        onProgress(IptvLoadProgress("Loading full EPG (${index + 1}/${epgCandidatesToTry.size})...", pct))
+                        onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_full_epg, index + 1, epgCandidatesToTry.size), pct))
                         val attempt = runCatching {
                             // 300 s: some providers (like TX-4K) serve a 100 MB
                             // XMLTV dump that needs 2-3 min on a TV's WiFi.
                             // 90 s was aborting before the file finished.
                             withTimeoutOrNull(300_000L) { fetchAndParseEpg(epgUrl, candidateChannels) }
-                                ?: throw java.util.concurrent.TimeoutException("EPG download timed out for ${epgUrl.take(80)}")
+                                ?: throw java.util.concurrent.TimeoutException(context.getString(R.string.epg_timeout, epgUrl.take(80)))
                         }
                         if (attempt.isSuccess) {
                             val parsed = attempt.getOrDefault(emptyMap())
@@ -1911,7 +1912,7 @@ class IptvRepository @Inject constructor(
                         loadedAtMs = System.currentTimeMillis()
                     )
                 }
-                onProgress(IptvLoadProgress("Loaded ${channels.size} channels", 100))
+                onProgress(IptvLoadProgress(context.getString(R.string.iptv_loaded_channels, channels.size), 100))
             }
             }
         }
@@ -2966,15 +2967,15 @@ class IptvRepository @Inject constructor(
         onProgress: (IptvLoadProgress) -> Unit
     ): List<IptvChannel> {
         resolveXtreamCredentials(playlist)?.let { creds ->
-            onProgress(IptvLoadProgress("Detected Xtream provider. Loading live channels...", 6))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_xtream_detected), 6))
             runCatching {
                 withTimeoutOrNull(120_000L) {
                     fetchXtreamLiveChannels(creds, onProgress)
-                } ?: throw IllegalStateException("Xtream provider timed out while loading live channels.")
+                } ?: throw IllegalStateException(context.getString(R.string.iptv_xtream_timeout))
             }
                 .onSuccess { channels ->
                     if (channels.isNotEmpty()) {
-                        onProgress(IptvLoadProgress("Loaded ${channels.size} live channels from provider API", 95))
+                        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loaded_api, channels.size), 95))
                         return channels
                     }
                 }
@@ -2988,15 +2989,15 @@ class IptvRepository @Inject constructor(
     ): List<IptvChannel> {
         val normalizedUrl = normalizeStoredIptvUrl(url)
         resolveXtreamCredentials(normalizedUrl)?.let { creds ->
-            onProgress(IptvLoadProgress("Detected Xtream provider. Loading live channels...", 6))
+            onProgress(IptvLoadProgress(context.getString(R.string.iptv_xtream_detected), 6))
             runCatching {
                 withTimeoutOrNull(120_000L) {
                     fetchXtreamLiveChannels(creds, onProgress)
-                } ?: throw IllegalStateException("Xtream provider timed out while loading live channels.")
+                } ?: throw IllegalStateException(context.getString(R.string.iptv_xtream_timeout))
             }
                 .onSuccess { channels ->
                     if (channels.isNotEmpty()) {
-                        onProgress(IptvLoadProgress("Loaded ${channels.size} live channels from provider API", 95))
+                        onProgress(IptvLoadProgress(context.getString(R.string.iptv_loaded_api, channels.size), 95))
                         return channels
                     }
                 }
@@ -3009,10 +3010,10 @@ class IptvRepository @Inject constructor(
             runCatching {
                 withTimeoutOrNull(90_000L) {
                     fetchAndParseM3uOnce(normalizedUrl, onProgress)
-                } ?: throw IllegalStateException("Playlist loading timed out. Try refreshing or using the provider's Xtream credentials.")
+                } ?: throw IllegalStateException(context.getString(R.string.iptv_playlist_timeout))
             }.onSuccess { channels ->
                 if (channels.isNotEmpty()) return channels
-                lastError = IllegalStateException("Playlist loaded but contains no channels.")
+                lastError = IllegalStateException(context.getString(R.string.iptv_no_channels))
             }.onFailure { error ->
                 lastError = error
             }
@@ -3023,7 +3024,7 @@ class IptvRepository @Inject constructor(
                 delay(backoffMs)
             }
         }
-        throw (lastError ?: IllegalStateException("Failed to load M3U playlist."))
+        throw (lastError ?: IllegalStateException(context.getString(R.string.iptv_failed_load_m3u)))
     }
 
     private data class XtreamCredentials(
@@ -5233,7 +5234,7 @@ class IptvRepository @Inject constructor(
         val categoryMap = categories
             .associate { it.categoryId.orEmpty() to (it.categoryName?.trim().orEmpty().ifBlank { "Uncategorized" }) }
 
-        onProgress(IptvLoadProgress("Loading live streams...", 35))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_live), 35))
         val streams: List<XtreamLiveStream> =
             requestJson(
                 streamsUrl,
@@ -5332,7 +5333,7 @@ class IptvRepository @Inject constructor(
             .get()
             .build()
         iptvHttpClient.newCall(request).execute().use { response ->
-            val raw = response.body?.byteStream() ?: throw IllegalStateException("M3U response was empty.")
+            val raw = response.body?.byteStream() ?: throw IllegalStateException(context.getString(R.string.iptv_m3u_empty))
             val contentLength = response.body?.contentLength()?.takeIf { it > 0L }
             val progressStream = ProgressInputStream(raw) { bytesRead ->
                 if (contentLength != null) {
@@ -5361,7 +5362,7 @@ class IptvRepository @Inject constructor(
                     cleanPreview.isBlank() -> "HTTP ${response.code}"
                     else -> cleanPreview
                 }
-                throw IllegalStateException("M3U request failed (HTTP ${response.code}). $detail")
+                throw IllegalStateException(context.getString(R.string.iptv_m3u_failed, response.code) + " " + detail)
             }
             onProgress(IptvLoadProgress("Parsing channels...", 78))
             return parseM3u(stream, onProgress)
@@ -5418,12 +5419,12 @@ class IptvRepository @Inject constructor(
                     saveEpgHttpCacheHeaders(url, etag, lastModified)
                 }
             }
-            val stream = safeResponse.body?.byteStream() ?: throw IllegalStateException("Empty EPG response")
+            val stream = safeResponse.body?.byteStream() ?: throw IllegalStateException(context.getString(R.string.epg_empty))
             val prepared = BufferedInputStream(prepareInputStream(stream, url))
             if (!safeResponse.isSuccessful && !looksLikeXmlTv(prepared)) {
                 val preview = safeResponse.peekBody(220).string().replace('\n', ' ').trim()
                 val detail = if (preview.isBlank()) "No response body." else preview
-                throw IllegalStateException("EPG request failed (HTTP ${safeResponse.code}). $detail")
+                throw IllegalStateException(context.getString(R.string.epg_failed, safeResponse.code) + " " + detail)
             }
 
             // Try streaming parse first (avoids disk I/O for the common case).
@@ -5443,7 +5444,7 @@ class IptvRepository @Inject constructor(
                     ).execute()
                     retryResponse.use { rr ->
                         val retryStream = rr.body?.byteStream()
-                            ?: throw IllegalStateException("Empty EPG retry response")
+                            ?: throw IllegalStateException(context.getString(R.string.epg_retry_empty))
                         BufferedInputStream(prepareInputStream(retryStream, url)).use { input ->
                             BufferedOutputStream(tmpFile.outputStream()).use { output ->
                                 input.copyTo(output, DEFAULT_BUFFER_SIZE)
@@ -5605,7 +5606,7 @@ class IptvRepository @Inject constructor(
             if (providerChannels.isEmpty()) return@forEachIndexed
             onProgress(
                 IptvLoadProgress(
-                    "Loading EPG provider ${index + 1}/${groups.size}...",
+                    context.getString(R.string.iptv_progress_loading_epg_provider, index + 1, groups.size),
                     90 + ((index * 6) / groups.size.coerceAtLeast(1))
                 )
             )
@@ -5630,7 +5631,7 @@ class IptvRepository @Inject constructor(
             if (providerChannels.isEmpty()) return@forEachIndexed
             onProgress(
                 IptvLoadProgress(
-                    "Loading full Xtream guide ${index + 1}/${groups.size}...",
+                    context.getString(R.string.iptv_progress_loading_xtream_guide, index + 1, groups.size),
                     90 + ((index * 6) / groups.size.coerceAtLeast(1))
                 )
             )
@@ -5808,7 +5809,7 @@ class IptvRepository @Inject constructor(
         val streamIds = representatives.streamIds
         if (streamIds.isEmpty()) return null
 
-        onProgress(IptvLoadProgress("Loading full Xtream EPG...", 90))
+        onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_xtream_epg), 90))
         System.err.println(
             "[EPG] Xtream full EPG: fetching ${streamIds.size} representative streams " +
                 "for ${xtreamChannels.size}/${channels.size} channels skippedNoGuide=${representatives.skippedWithoutGuideKey}"
@@ -5840,7 +5841,7 @@ class IptvRepository @Inject constructor(
                 if (hadError) errors++
                 if (fetched % 50 == 0) {
                     val pct = (90 + ((fetched.toLong() * 8L) / total.toLong())).toInt().coerceIn(90, 98)
-                    onProgress(IptvLoadProgress("Loading full EPG... $fetched/$total streams", pct))
+                    onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_full_epg_streams, fetched, total), pct))
                 }
             }
             if (batchListings.isEmpty()) continue
@@ -6157,7 +6158,7 @@ class IptvRepository @Inject constructor(
             // Skip programs that ended before the oldest possible catchup window.
             if (stopMs < oldestRecentCutoff) continue
 
-            val title = decodeBase64Field(listing.title).ifBlank { "No Title" }
+            val title = decodeBase64Field(listing.title).ifBlank { context.getString(R.string.program_no_title) }
             val description = decodeBase64Field(listing.description).takeIf { it.isNotBlank() }
 
             val program = IptvProgram(
@@ -6602,7 +6603,7 @@ class IptvRepository @Inject constructor(
                         }.orEmpty()
                         if (resolvedChannels.isNotEmpty() && currentStop > currentStart) {
                             val program = IptvProgram(
-                                title = currentTitle ?: "Unknown program",
+                                title = currentTitle ?: context.getString(R.string.program_unknown),
                                 description = currentDesc,
                                 startUtcMillis = currentStart,
                                 endUtcMillis = currentStop
@@ -6763,7 +6764,7 @@ class IptvRepository @Inject constructor(
                         }.orEmpty()
                         if (resolvedChannels.isNotEmpty() && currentStop > currentStart) {
                             val program = IptvProgram(
-                                title = currentTitle ?: "Unknown program",
+                                title = currentTitle ?: context.getString(R.string.program_unknown),
                                 description = currentDesc,
                                 startUtcMillis = currentStart,
                                 endUtcMillis = currentStop

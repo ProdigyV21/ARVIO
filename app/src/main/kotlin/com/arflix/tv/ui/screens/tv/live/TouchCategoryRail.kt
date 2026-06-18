@@ -21,9 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 
 private data class TouchCategoryRailItem(
     val id: String,
@@ -60,11 +62,11 @@ fun TouchCategoryRail(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
-                    contentDescription = "Search",
+                    contentDescription = stringResource(R.string.search),
                     tint = LiveColors.FgDim,
                 )
                 Text(
-                    text = "Search channels",
+                    text = stringResource(R.string.live_label_search_channels),
                     style = LiveType.CatLabel.copy(color = LiveColors.Fg),
                 )
             }
@@ -112,15 +114,15 @@ private fun rememberTouchRailItems(
     selectedId: String,
 ): List<TouchCategoryRailItem> {
     val base = buildList {
-        tree.top.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
-        tree.global.categories.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
-        tree.countries.categories.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
-        tree.adult.categories.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
+        tree.top.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        tree.global.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        tree.countries.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        tree.adult.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
     }.distinctBy { it.id }.toMutableList()
 
     val selected = tree.byId(selectedId)
     if (selected != null && base.none { it.id == selectedId }) {
-        base.add(0, TouchCategoryRailItem(selected.id, selected.label, selected.count))
+        base.add(0, TouchCategoryRailItem(selected.id, liveCategoryLabel(selected.label), selected.count))
     }
 
     return base

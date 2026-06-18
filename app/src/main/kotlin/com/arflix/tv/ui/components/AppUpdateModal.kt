@@ -70,31 +70,44 @@ fun AppUpdateModal(
     onDismiss: () -> Unit,
     onIgnore: () -> Unit
 ) {
-    val buttons = remember(status) {
+    val labelClose = stringResource(R.string.close)
+    val labelIgnore = stringResource(R.string.update_btn_ignore)
+    val labelDownload = stringResource(R.string.update_btn_download)
+    val labelInstall = stringResource(R.string.update_btn_install)
+    val labelHide = stringResource(R.string.update_btn_hide)
+    val labelRetryInstall = stringResource(R.string.update_btn_retry_install)
+    val labelCancel = stringResource(R.string.cancel)
+    val labelRetry = stringResource(R.string.retry)
+
+    val buttons = remember(
+        status,
+        labelClose, labelIgnore, labelDownload, labelInstall,
+        labelHide, labelRetryInstall, labelCancel, labelRetry
+    ) {
         when (status) {
             is UpdateStatus.UpdateAvailable -> listOf(
-                ActionButtonConfig("Close", onDismiss),
-                ActionButtonConfig("Ignore", onIgnore),
-                ActionButtonConfig("Download", onDownload, highlighted = true)
+                ActionButtonConfig(labelClose, onDismiss),
+                ActionButtonConfig(labelIgnore, onIgnore),
+                ActionButtonConfig(labelDownload, onDownload, highlighted = true)
             )
             is UpdateStatus.ReadyToInstall -> listOf(
-                ActionButtonConfig("Close", onDismiss),
-                ActionButtonConfig("Install", onInstall, highlighted = true)
+                ActionButtonConfig(labelClose, onDismiss),
+                ActionButtonConfig(labelInstall, onInstall, highlighted = true)
             )
             is UpdateStatus.Installing -> listOf(
-                ActionButtonConfig("Hide", onDismiss),
-                ActionButtonConfig("Retry Install", onInstall, highlighted = true)
+                ActionButtonConfig(labelHide, onDismiss),
+                ActionButtonConfig(labelRetryInstall, onInstall, highlighted = true)
             )
             is UpdateStatus.Downloading -> listOf(
-                ActionButtonConfig("Hide", onDismiss),
-                ActionButtonConfig("Cancel", onCancelDownload)
+                ActionButtonConfig(labelHide, onDismiss),
+                ActionButtonConfig(labelCancel, onCancelDownload)
             )
             is UpdateStatus.Failure -> listOf(
-                ActionButtonConfig("Close", onDismiss),
-                ActionButtonConfig("Retry", onDownload, highlighted = true)
+                ActionButtonConfig(labelClose, onDismiss),
+                ActionButtonConfig(labelRetry, onDownload, highlighted = true)
             )
             else -> listOf(
-                ActionButtonConfig("Close", onDismiss)
+                ActionButtonConfig(labelClose, onDismiss)
             )
         }
     }
@@ -153,28 +166,28 @@ fun AppUpdateModal(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 val subtitle = when (status) {
-                    is UpdateStatus.Checking -> "Checking GitHub Releases..."
-                    is UpdateStatus.UpdateAvailable -> "Update available: ${status.update.title} (${status.update.tag})"
-                    is UpdateStatus.Downloading -> "Downloading update..."
-                    is UpdateStatus.ReadyToInstall -> "${status.update.title} is ready to install."
-                    is UpdateStatus.Installing -> "Installing update... Please follow the system prompt."
-                    is UpdateStatus.Failure -> "Update failed."
-                    is UpdateStatus.Success -> "You already have the latest version installed."
-                    is UpdateStatus.Idle -> "No release information available."
+                    is UpdateStatus.Checking -> stringResource(R.string.update_msg_checking)
+                    is UpdateStatus.UpdateAvailable -> stringResource(R.string.update_msg_available, status.update.title, status.update.tag)
+                    is UpdateStatus.Downloading -> stringResource(R.string.update_msg_downloading)
+                    is UpdateStatus.ReadyToInstall -> stringResource(R.string.update_msg_ready_subtitle, status.update.title)
+                    is UpdateStatus.Installing -> stringResource(R.string.update_msg_installing)
+                    is UpdateStatus.Failure -> stringResource(R.string.update_msg_failed)
+                    is UpdateStatus.Success -> stringResource(R.string.update_msg_uptodate)
+                    is UpdateStatus.Idle -> stringResource(R.string.update_msg_no_info)
                 }
                 androidx.compose.material3.Text(subtitle, style = ArflixTypography.body, color = TextSecondary)
 
                 if (status is UpdateStatus.UpdateAvailable) {
                     Spacer(modifier = Modifier.height(8.dp))
                     androidx.compose.material3.Text(
-                        text = "Current version ${BuildConfig.VERSION_NAME} -> latest ${status.update.tag}",
+                        text = stringResource(R.string.update_msg_current_to_latest, BuildConfig.VERSION_NAME, status.update.tag),
                         style = ArflixTypography.caption,
                         color = TextSecondary.copy(alpha = 0.78f)
                     )
                 } else if (status is UpdateStatus.Success) {
                     Spacer(modifier = Modifier.height(8.dp))
                     androidx.compose.material3.Text(
-                        text = "Current version ${BuildConfig.VERSION_NAME} is up to date",
+                        text = stringResource(R.string.update_msg_current_uptodate, BuildConfig.VERSION_NAME),
                         style = ArflixTypography.caption,
                         color = TextSecondary.copy(alpha = 0.78f)
                     )
@@ -197,16 +210,16 @@ fun AppUpdateModal(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         androidx.compose.material3.Text(
-                            text = status.progress?.let { "${(it * 100).toInt()}%" } ?: "Preparing...",
+                            text = status.progress?.let { "${(it * 100).toInt()}%" } ?: stringResource(R.string.update_msg_preparing),
                             style = ArflixTypography.caption,
                             color = TextSecondary
                         )
                     }
                     is UpdateStatus.ReadyToInstall -> {
-                        androidx.compose.material3.Text("The latest ARVIO update has been downloaded and is ready to install.", style = ArflixTypography.body, color = TextPrimary)
+                        androidx.compose.material3.Text(stringResource(R.string.update_msg_ready), style = ArflixTypography.body, color = TextPrimary)
                     }
                     is UpdateStatus.Installing -> {
-                        androidx.compose.material3.Text("The Android package installer should appear. If it does not, you can try pressing Install again.", style = ArflixTypography.body, color = TextPrimary)
+                        androidx.compose.material3.Text(stringResource(R.string.update_msg_installer_hint), style = ArflixTypography.body, color = TextPrimary)
                     }
                     is UpdateStatus.UpdateAvailable -> {
                         if (status.update.notes.isNotBlank()) {

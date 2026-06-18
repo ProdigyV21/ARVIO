@@ -2,6 +2,7 @@ package com.arflix.tv.ui.screens.details
 
 import android.content.Context
 import android.util.Log
+import com.arflix.tv.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.model.CastMember
@@ -305,7 +306,7 @@ class DetailsViewModel @Inject constructor(
                     playSeason = initialSeason,
                     playEpisode = initialEpisode,
                     playLabel = if (mediaType == MediaType.TV && initialSeason != null && initialEpisode != null) {
-                        "Continue S${initialSeason}E${initialEpisode}"
+                        context.getString(R.string.continue_season_episode, initialSeason, initialEpisode)
                     } else {
                         null
                     },
@@ -400,7 +401,7 @@ class DetailsViewModel @Inject constructor(
                 if (item == null) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Failed to load details"
+                        error = context.getString(R.string.details_error_load_failed)
                     )
                     return@launch
                 }
@@ -656,7 +657,7 @@ class DetailsViewModel @Inject constructor(
                         val hasWatchedEpisodes = decoratedEpisodes.any { it.isWatched }
                         updateState { state ->
                             val shouldUseEpisodeTarget = !hasExplicitEpisodeTarget &&
-                                (state.playLabel.isNullOrBlank() || state.playLabel == "Start S1E1")
+                                (state.playLabel.isNullOrBlank() || state.playLabel == context.getString(R.string.play_start_s1e1))
                             state.copy(
                                 episodes = decoratedEpisodes,
                                 initialEpisodeIndex = initialEpisodeIndex,
@@ -668,9 +669,9 @@ class DetailsViewModel @Inject constructor(
                                 } else state.playEpisode,
                                 playLabel = if (shouldUseEpisodeTarget) {
                                     if (nextUnwatchedEpisode != null) {
-                                        "Continue S${nextUnwatchedEpisode.seasonNumber}E${nextUnwatchedEpisode.episodeNumber}"
+                                        context.getString(R.string.continue_season_episode, nextUnwatchedEpisode.seasonNumber, nextUnwatchedEpisode.episodeNumber)
                                     } else if (hasWatchedEpisodes) {
-                                        "Start S1E1"
+                                        context.getString(R.string.play_start_s1e1)
                                     } else {
                                         state.playLabel
                                     }
@@ -735,7 +736,7 @@ class DetailsViewModel @Inject constructor(
                             state.copy(
                                 playSeason = initialSeason,
                                 playEpisode = initialEpisode,
-                                playLabel = matchedResume?.label ?: "Continue S${initialSeason}E${initialEpisode}",
+                                playLabel = matchedResume?.label ?: context.getString(R.string.continue_season_episode, initialSeason, initialEpisode),
                                 playPositionMs = matchedResume?.positionMs
                             )
                         }
@@ -856,14 +857,14 @@ class DetailsViewModel @Inject constructor(
                 } else {
                     // If no episodes returned, keep current and show error
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $seasonNumber",
+                        toastMessage = context.getString(R.string.details_no_episodes_season, seasonNumber),
                         toastType = ToastType.ERROR
                     )
                 }
             } catch (e: Exception) {
                 // On error, keep showing current episodes
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to load Season $seasonNumber",
+                    toastMessage = context.getString(R.string.details_failed_load_season, seasonNumber),
                     toastType = ToastType.ERROR
                 )
             }
@@ -884,7 +885,7 @@ class DetailsViewModel @Inject constructor(
                     }
                     _uiState.value = _uiState.value.copy(
                         item = currentItem.copy(isWatched = newWatched),
-                        toastMessage = if (newWatched) "Marked as watched" else "Marked as unwatched",
+                        toastMessage = if (newWatched) context.getString(R.string.details_marked_watched) else context.getString(R.string.details_marked_unwatched),
                         toastType = ToastType.SUCCESS
                     )
                     runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
@@ -892,7 +893,7 @@ class DetailsViewModel @Inject constructor(
                     val targetEpisode = _uiState.value.episodes.getOrNull(episodeIndex ?: 0)
                     if (targetEpisode == null) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode selected",
+                            toastMessage = context.getString(R.string.details_no_episode_selected),
                             toastType = ToastType.ERROR
                         )
                         return@launch
@@ -965,9 +966,9 @@ class DetailsViewModel @Inject constructor(
                         item = currentItem.copy(isWatched = anyWatched),
                         episodes = updatedEpisodes,
                         toastMessage = if (episodeWatched) {
-                            "S${targetEpisode.seasonNumber}E${targetEpisode.episodeNumber} marked as watched"
+                            context.getString(R.string.details_episode_marked_watched, targetEpisode.seasonNumber, targetEpisode.episodeNumber)
                         } else {
-                            "S${targetEpisode.seasonNumber}E${targetEpisode.episodeNumber} marked as unwatched"
+                            context.getString(R.string.details_episode_marked_unwatched, targetEpisode.seasonNumber, targetEpisode.episodeNumber)
                         },
                         toastType = ToastType.SUCCESS
                     )
@@ -976,7 +977,7 @@ class DetailsViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.details_failed_update_watched),
                     toastType = ToastType.ERROR
                 )
             }
@@ -992,13 +993,13 @@ class DetailsViewModel @Inject constructor(
                 val traktConnected = runCatching { traktRepository.hasTrakt() }.getOrDefault(false)
                 if (newInWatchlist) {
                     if (traktConnected && !traktRepository.addToWatchlist(currentMediaType, currentMediaId)) {
-                        throw IllegalStateException("Failed to add to Trakt watchlist")
+                        throw IllegalStateException(context.getString(R.string.details_failed_trakt_watchlist_add))
                     }
                     // Pass the full MediaItem so it appears instantly in watchlist
                     watchlistRepository.addToWatchlist(currentMediaType, currentMediaId, currentItem)
                 } else {
                     if (traktConnected && !traktRepository.removeFromWatchlist(currentMediaType, currentMediaId)) {
-                        throw IllegalStateException("Failed to remove from Trakt watchlist")
+                        throw IllegalStateException(context.getString(R.string.details_failed_trakt_watchlist_remove))
                     }
                     watchlistRepository.removeFromWatchlist(currentMediaType, currentMediaId)
                 }
@@ -1006,12 +1007,12 @@ class DetailsViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     isInWatchlist = newInWatchlist,
-                    toastMessage = if (newInWatchlist) "Added to watchlist" else "Removed from watchlist",
+                    toastMessage = if (newInWatchlist) context.getString(R.string.added_to_watchlist) else context.getString(R.string.watchlist_toast_removed),
                     toastType = ToastType.SUCCESS
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watchlist",
+                    toastMessage = context.getString(R.string.details_failed_update_watchlist),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1159,12 +1160,12 @@ class DetailsViewModel @Inject constructor(
                     return PlayTarget(
                         season = seasonNum,
                         episode = firstUnwatched.episodeNumber,
-                        label = "Continue S${seasonNum}E${firstUnwatched.episodeNumber}"
+                        label = context.getString(R.string.continue_season_episode, seasonNum, firstUnwatched.episodeNumber)
                     )
                 }
             }
             // All episodes watched — offer restart
-            PlayTarget(season = 1, episode = 1, label = "Start S1E1")
+            PlayTarget(season = 1, episode = 1, label = context.getString(R.string.play_start_s1e1))
         } catch (_: Exception) {
             null
         }
@@ -1708,7 +1709,7 @@ class DetailsViewModel @Inject constructor(
 
                 if (seasonEpisodes.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $season",
+                        toastMessage = context.getString(R.string.details_no_episodes_season, season),
                         toastType = ToastType.ERROR
                     )
                     return@launch
@@ -1808,7 +1809,7 @@ class DetailsViewModel @Inject constructor(
                     playEpisode = playTarget?.episode ?: _uiState.value.playEpisode,
                     playLabel = playTarget?.label ?: _uiState.value.playLabel,
                     playPositionMs = playTarget?.positionMs ?: _uiState.value.playPositionMs,
-                    toastMessage = "Season $season marked as watched",
+                    toastMessage = context.getString(R.string.details_season_marked_watched, season),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
@@ -1817,7 +1818,7 @@ class DetailsViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to mark season as watched",
+                    toastMessage = context.getString(R.string.details_failed_mark_season_watched),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1838,7 +1839,7 @@ class DetailsViewModel @Inject constructor(
 
                 if (seasonEpisodes.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "No episodes found for Season $season",
+                        toastMessage = context.getString(R.string.details_no_episodes_season, season),
                         toastType = ToastType.ERROR
                     )
                     return@launch
@@ -1887,7 +1888,7 @@ class DetailsViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         episodes = updatedEpisodes,
                         seasonProgress = optimisticProgress,
-                        toastMessage = "Failed to sync Season $season as unwatched with Trakt",
+                        toastMessage = context.getString(R.string.details_failed_sync_season_unwatched, season),
                         toastType = ToastType.ERROR
                     )
                     return@launch
@@ -1899,14 +1900,14 @@ class DetailsViewModel @Inject constructor(
                     item = currentItem.copy(isWatched = false),
                     episodes = updatedEpisodes,
                     seasonProgress = refreshedProgress?.progress ?: optimisticProgress,
-                    toastMessage = "Season $season marked as unwatched",
+                    toastMessage = context.getString(R.string.details_season_marked_unwatched, season),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to mark season as unwatched",
+                    toastMessage = context.getString(R.string.details_failed_mark_season_unwatched),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2210,7 +2211,7 @@ class DetailsViewModel @Inject constructor(
 
         return if (mediaType == MediaType.MOVIE) {
             ResumeInfo(
-                label = "Continue at $timeLabel",
+                label = context.getString(R.string.continue_at, timeLabel),
                 positionMs = seconds * 1000L
             )
         } else {
@@ -2219,7 +2220,7 @@ class DetailsViewModel @Inject constructor(
             ResumeInfo(
                 season = s,
                 episode = e,
-                label = "Continue S${s}E${e} at $timeLabel",
+                label = context.getString(R.string.continue_season_episode_at, s, e, timeLabel),
                 positionMs = seconds * 1000L
             )
         }
@@ -2286,7 +2287,7 @@ class DetailsViewModel @Inject constructor(
             PlayTarget(
                 season = 1,
                 episode = 1,
-                label = "Start S1E1"
+                label = context.getString(R.string.play_start_s1e1)
             )
         } else {
             val next = result.nextUnwatched
@@ -2294,13 +2295,13 @@ class DetailsViewModel @Inject constructor(
                 PlayTarget(
                     season = next.first,
                     episode = next.second,
-                    label = "Continue S${next.first}E${next.second}"
+                    label = context.getString(R.string.continue_season_episode, next.first, next.second)
                 )
             } else {
                 PlayTarget(
                     season = 1,
                     episode = 1,
-                    label = "Start S1E1"
+                    label = context.getString(R.string.play_start_s1e1)
                 )
             }
         }

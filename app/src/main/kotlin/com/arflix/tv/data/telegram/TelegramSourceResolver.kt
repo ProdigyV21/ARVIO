@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import com.arflix.tv.R
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.util.Constants
@@ -71,7 +72,7 @@ class TelegramSourceResolver @Inject constructor(
                 resolveInternal(title, year, season, episode, imdbId, isMovie)
             } ?: emptyList<StreamSource>().also {
                 Log.w(TAG, "Telegram search timed out for '$title'")
-                showToast("Telegram search timed out")
+                showToast(context.getString(R.string.telegram_search_timed_out))
             }
 
             cache[key] = CacheEntry(results, System.currentTimeMillis() + cacheTtl(year, isMovie))
@@ -175,12 +176,12 @@ class TelegramSourceResolver @Inject constructor(
     }
 
     private fun friendlyError(raw: String?): String {
-        if (raw == null) return "Telegram search failed"
+        if (raw == null) return context.getString(R.string.telegram_search_failed)
         val waitSeconds = raw.removePrefix("FLOOD_WAIT_").toIntOrNull()
         return if (waitSeconds != null)
-            "Too many searches — please wait ${waitSeconds}s before retrying"
+            context.getString(R.string.telegram_too_many_searches, waitSeconds)
         else
-            "Telegram: $raw"
+            context.getString(R.string.telegram_error_raw, raw)
     }
 
     private fun showToast(message: String) {

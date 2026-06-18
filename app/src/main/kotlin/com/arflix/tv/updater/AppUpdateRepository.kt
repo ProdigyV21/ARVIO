@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import com.arflix.tv.BuildConfig
+import com.arflix.tv.R
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -63,21 +64,21 @@ class AppUpdateRepository @Inject constructor(
 
                 okHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
-                        error("GitHub API error: ${response.code}")
+                        error(context.getString(R.string.update_error_github_api, response.code))
                     }
                     val body = response.body?.string().orEmpty()
                     val dto = gson.fromJson(body, GitHubReleaseDto::class.java)
-                        ?: error("Empty GitHub release response")
+                        ?: error(context.getString(R.string.update_error_empty_release_response))
 
                     if (dto.draft || dto.prerelease) {
-                        error("Latest release is draft/prerelease")
+                        error(context.getString(R.string.update_error_draft_prerelease))
                     }
 
                     val tag = dto.tagName?.takeIf { it.isNotBlank() }
                         ?: dto.name?.takeIf { it.isNotBlank() }
-                        ?: error("Release has no tag/name")
+                        ?: error(context.getString(R.string.update_error_missing_release_tag))
                     val asset = AbiSelector.chooseBestApkAsset(dto.assets)
-                        ?: error("No APK asset found in release")
+                        ?: error(context.getString(R.string.update_error_no_apk_asset))
 
                     AppUpdate(
                         tag = tag,

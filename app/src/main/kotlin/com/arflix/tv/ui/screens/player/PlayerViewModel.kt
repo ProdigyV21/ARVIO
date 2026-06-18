@@ -2,6 +2,7 @@ package com.arflix.tv.ui.screens.player
 
 import android.content.Context
 import android.util.Log
+import com.arflix.tv.R
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
@@ -214,10 +215,10 @@ class PlayerViewModel @Inject constructor(
             if (!success && !aiErrorToastShown) {
                 aiErrorToastShown = true
                 val msg = when {
-                    errorMessage == "API key missing" -> "AI subtitles: no API key set. Add it in Settings → General."
-                    errorMessage == "RATE_LIMITED"    -> "AI subtitles: rate limit hit — translation paused."
-                    errorMessage?.startsWith("HTTP 401") == true -> "AI subtitles: invalid API key."
-                    else -> "AI subtitles: translation error — ${errorMessage.orEmpty()}"
+                    errorMessage == "API key missing" -> context.getString(R.string.player_ai_no_key)
+                    errorMessage == "RATE_LIMITED"    -> context.getString(R.string.player_ai_rate_limited)
+                    errorMessage?.startsWith("HTTP 401") == true -> context.getString(R.string.player_ai_invalid_key)
+                    else -> context.getString(R.string.player_ai_translation_error, errorMessage.orEmpty())
                 }
                 _uiState.value = _uiState.value.copy(aiErrorToast = msg)
             }
@@ -622,7 +623,7 @@ class PlayerViewModel @Inject constructor(
                             isLoading = false,
                             isLoadingStreams = false,
                             sourceSearchActive = false,
-                            error = "Unable to resolve IMDB ID. Try again."
+                            error = context.getString(R.string.player_error_imdb_resolve)
                         )
                         return@launch
                     }

@@ -17,6 +17,7 @@ import com.arflix.tv.data.model.CatalogSourceType
 import com.arflix.tv.data.model.CatalogValidationResult
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.repository.HomeServerCatalogCandidate
+import com.arflix.tv.R
 import com.arflix.tv.util.CatalogUrlParser
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.ParsedCatalogUrl
@@ -709,11 +710,11 @@ class CatalogRepository @Inject constructor(
         val sourceType = validation.sourceType
         val resolved = resolveMetadata(normalizedUrl, sourceType)
             ?: fallbackMetadata(normalizedUrl, sourceType)
-            ?: return Result.failure(IllegalArgumentException("Failed to read catalog metadata"))
+            ?: return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_failed_read_metadata)))
 
         val current = getCatalogs().toMutableList()
         if (current.any { it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
-            return Result.failure(IllegalArgumentException("Catalog already added"))
+            return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_already_added)))
         }
 
         val newCatalog = CatalogConfig(
@@ -732,10 +733,10 @@ class CatalogRepository @Inject constructor(
     suspend fun updateCustomCatalog(catalogId: String, rawUrl: String): Result<CatalogConfig> {
         val current = getCatalogs().toMutableList()
         val index = current.indexOfFirst { it.id == catalogId }
-        if (index < 0) return Result.failure(IllegalArgumentException("Catalog not found"))
+        if (index < 0) return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_not_found)))
         val existing = current[index]
         if (existing.isPreinstalled) {
-            return Result.failure(IllegalArgumentException("Preinstalled catalogs cannot be edited"))
+            return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_preinstalled_no_edit)))
         }
 
         val validation = validateCatalogUrl(rawUrl)
@@ -745,12 +746,12 @@ class CatalogRepository @Inject constructor(
 
         val normalizedUrl = validation.normalizedUrl
         if (current.any { it.id != catalogId && it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
-            return Result.failure(IllegalArgumentException("Catalog already added"))
+            return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_already_added)))
         }
 
         val resolved = resolveMetadata(normalizedUrl, validation.sourceType)
             ?: fallbackMetadata(normalizedUrl, validation.sourceType)
-            ?: return Result.failure(IllegalArgumentException("Failed to read catalog metadata"))
+            ?: return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_failed_read_metadata)))
         val updated = existing.copy(
             title = resolved.title,
             sourceType = validation.sourceType,
@@ -765,7 +766,7 @@ class CatalogRepository @Inject constructor(
     suspend fun removeCustomCatalog(catalogId: String): Result<Unit> {
         val current = getCatalogs().toMutableList()
         val target = current.firstOrNull { it.id == catalogId }
-            ?: return Result.failure(IllegalArgumentException("Catalog not found"))
+            ?: return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_not_found)))
         val profileId = activeProfileId()
         if (isPreinstalledCatalog(target)) {
             hidePreinstalledCatalog(profileId, catalogId)
@@ -910,7 +911,7 @@ class CatalogRepository @Inject constructor(
                 }
             }
             CatalogSourceType.MDBLIST -> ResolvedCatalog(
-                title = "MDBList Catalog",
+                title = context.getString(R.string.catalog_mdblist_title),
                 sourceRef = "mdblist:$url"
             )
             CatalogSourceType.PREINSTALLED -> null
@@ -979,9 +980,10 @@ class CatalogRepository @Inject constructor(
             ?.replace(" - MDBList", "", ignoreCase = true)
 
         val titleFromSlug = extractMdblistSlugTitle(url)
-        val finalTitle = (titleFromMeta ?: titleFromTag ?: titleFromSlug ?: "MDBList Catalog").trim()
+        val mdblistFallbackTitle = context.getString(R.string.catalog_mdblist_title)
+        val finalTitle = (titleFromMeta ?: titleFromTag ?: titleFromSlug ?: mdblistFallbackTitle).trim()
         return ResolvedCatalog(
-            title = finalTitle.ifBlank { "MDBList Catalog" },
+            title = finalTitle.ifBlank { mdblistFallbackTitle },
             sourceRef = "mdblist:$url"
         )
     }

@@ -40,11 +40,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.util.LocalDeviceType
 
@@ -205,16 +207,16 @@ fun ProgramCell(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val nowMs = clockTickMillis
                 if (isNow) {
-                    Badge("LIVE", Color.White, LiveColors.LiveRed)
+                    Badge(stringResource(R.string.live_badge_live), Color.White, LiveColors.LiveRed)
                     Spacer(Modifier.size(6.dp))
                 } else if (isPast && isCatchupSupported) {
-                    Badge("ARCHIVE", LiveColors.Bg, LiveColors.Accent)
+                    Badge(stringResource(R.string.live_badge_archive), LiveColors.Bg, LiveColors.Accent)
                     Spacer(Modifier.size(6.dp))
                 } else if (!isPast) {
                     val isNewTag = (nowMs - program.startUtcMillis) in 0..24L * 60 * 60 * 1000L &&
                         !program.isLive(nowMs)
                     if (isNewTag) {
-                        Badge("NEW", LiveColors.Bg, LiveColors.Accent)
+                        Badge(stringResource(R.string.live_badge_new), LiveColors.Bg, LiveColors.Accent)
                         Spacer(Modifier.size(6.dp))
                     }
                 }
@@ -246,7 +248,7 @@ fun ProgramCell(
                     .coerceAtLeast(0L)
                 if (mins > 0) {
                     Text(
-                        text = "·  ${mins}min",
+                        text = stringResource(R.string.live_label_duration_min, mins),
                         style = LiveType.TimeMono.copy(color = LiveColors.FgMute, fontSize = 9.sp),
                     )
                 }

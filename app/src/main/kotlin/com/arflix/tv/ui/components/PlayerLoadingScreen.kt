@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.BackgroundGlass
@@ -54,8 +56,9 @@ fun PlayerLoadingScreen(
     backdropUrl: String? = null,
     title: String = "",
     subtitle: String? = null,
-    loadingMessage: String = "Loading sources..."
+    loadingMessage: String = ""
 ) {
+    val resolvedLoadingMessage = loadingMessage.ifEmpty { stringResource(R.string.loading_sources) }
     val infiniteTransition = rememberInfiniteTransition(label = "playerLoading")
 
     // Pulsing play icon
@@ -215,7 +218,7 @@ fun PlayerLoadingScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Loading",
+                        contentDescription = stringResource(R.string.loading_label),
                         tint = Color.White,
                         modifier = Modifier.size(40.dp)
                     )
@@ -261,7 +264,7 @@ fun PlayerLoadingScreen(
 
             // Loading message
             Text(
-                text = loadingMessage,
+                text = resolvedLoadingMessage,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = TextSecondary,
@@ -423,7 +426,7 @@ fun SourceLoadingScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "Resolving from $sourceName",
+                    text = stringResource(R.string.loading_resolving_from, sourceName),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextPrimary
@@ -432,7 +435,7 @@ fun SourceLoadingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Finding best quality stream...",
+                    text = stringResource(R.string.loading_finding_best_quality),
                     fontSize = 13.sp,
                     color = TextSecondary
                 )

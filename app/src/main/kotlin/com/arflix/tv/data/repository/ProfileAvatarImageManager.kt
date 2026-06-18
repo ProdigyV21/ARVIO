@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.ProfileAvatarFiles
@@ -43,7 +44,7 @@ class ProfileAvatarImageManager @Inject constructor(
                     bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out)
                 }
                 bitmap.recycle()
-            } ?: throw IllegalArgumentException("Could not decode selected avatar image")
+            } ?: throw IllegalArgumentException(context.getString(R.string.avatar_decode_failed))
 
             ProfileAvatarFiles.cleanupProfile(context, profileId, keepVersion = version)
             ImportedProfileAvatar(
@@ -157,7 +158,7 @@ class ProfileAvatarImageManager @Inject constructor(
                 }
                 val userId = authRepository.getCurrentUserId().orEmpty()
                 val token = authRepository.getAccessToken().orEmpty()
-                if (userId.isBlank() || token.isBlank()) error("Not logged in")
+                if (userId.isBlank() || token.isBlank()) error(context.getString(R.string.error_not_logged_in))
 
                 val path = "$userId/$profileId/$version.jpg"
                 val request = Request.Builder()
@@ -170,7 +171,7 @@ class ProfileAvatarImageManager @Inject constructor(
                     .post(file.asRequestBody("image/jpeg".toMediaType()))
                     .build()
                 httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("Avatar upload failed: HTTP ${response.code}")
+                    if (!response.isSuccessful) error(context.getString(R.string.avatar_upload_failed, response.code))
                 }
                 path
             }
@@ -183,7 +184,7 @@ class ProfileAvatarImageManager @Inject constructor(
                     error("Remote avatar storage is handled by account sync")
                 }
                 val token = authRepository.getAccessToken().orEmpty()
-                if (token.isBlank()) error("Not logged in")
+                if (token.isBlank()) error(context.getString(R.string.error_not_logged_in))
                 val request = Request.Builder()
                     .url("${Constants.SUPABASE_URL.trimEnd('/')}/storage/v1/object/$BUCKET/$storagePath")
                     .header("apikey", Constants.SUPABASE_ANON_KEY)
@@ -191,8 +192,8 @@ class ProfileAvatarImageManager @Inject constructor(
                     .get()
                     .build()
                 httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("Avatar download failed: HTTP ${response.code}")
-                    val bytes = response.body?.bytes() ?: error("Empty avatar response")
+                    if (!response.isSuccessful) error(context.getString(R.string.avatar_download_failed, response.code))
+                    val bytes = response.body?.bytes() ?: error(context.getString(R.string.avatar_response_empty))
                     destination.writeBytes(bytes)
                 }
             }

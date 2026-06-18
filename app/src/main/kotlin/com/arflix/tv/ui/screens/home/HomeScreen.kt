@@ -293,8 +293,8 @@ private fun localizedCategoryTitle(category: Category): String = when (category.
     "collection_row_franchise" -> stringResource(R.string.franchises)
     "collection_row_network"   -> stringResource(R.string.networks)
     "collection_row_featured"  -> stringResource(R.string.featured)
-    "top10_movies_today"       -> if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) "10 הסרטים הנצפים היום" else "Top 10 Movies Today"
-    "top10_shows_today"        -> if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) "10 הסדרות הנצפות היום" else "Top 10 Shows Today"
+    "top10_movies_today"       -> if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) "10 הסרטים הנצפים היום" else stringResource(R.string.home_top10_movies_today)
+    "top10_shows_today"        -> if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) "10 הסדרות הנצפות היום" else stringResource(R.string.home_top10_shows_today)
     else                       -> category.title
 }
 
@@ -1190,7 +1190,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = uiState.error ?: "Please check your connection",
+                        text = uiState.error ?: stringResource(R.string.home_please_check_connection),
                         style = ArflixTypography.body,
                         color = TextSecondary
                     )
@@ -1552,7 +1552,7 @@ private fun HeroSection(
                                     AsyncImage(
                                         model = networkLogoRequest,
                                         imageLoader = metadataLogoImageLoader,
-                                        contentDescription = "Primary streaming provider",
+                                        contentDescription = stringResource(R.string.home_cd_primary_provider),
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier
                                             .height(16.dp)
@@ -1595,7 +1595,7 @@ private fun HeroSection(
 
                                 if (hasBudgetMetadata) {
                                     Text(
-                                        text = "Budget $budgetText",
+                                        text = "${stringResource(R.string.budget)} $budgetText",
                                         style = ArflixTypography.caption.copy(
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Medium,
@@ -1692,7 +1692,7 @@ private fun TopRankRibbon(
             .size(targetPx, targetPx)
             .allowHardware(true)
             .build(),
-        contentDescription = "Rank #$clamped",
+        contentDescription = stringResource(R.string.home_cd_rank, clamped),
         contentScale = ContentScale.Fit,
         modifier = modifier
             .width(width)
@@ -2043,7 +2043,7 @@ private fun MobileHeroCarousel(
             }
             Icon(
                 imageVector = Icons.Filled.Search,
-                contentDescription = "Search",
+                contentDescription = stringResource(R.string.search),
                 tint = Color.White,
                 modifier = Modifier
                     .size(26.dp)

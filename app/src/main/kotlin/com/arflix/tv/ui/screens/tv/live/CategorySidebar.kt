@@ -71,6 +71,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,6 +80,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -264,7 +266,7 @@ fun CategorySidebar(
                 val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
                 val isOpen = isAllGroup && expandedAll
                 SidebarRow(
-                    label = cat.label,
+                    label = liveCategoryLabel(cat.label),
                     count = cat.count,
                     icon = iconFor(cat),
                     active = selectedId == cat.id,
@@ -283,7 +285,7 @@ fun CategorySidebar(
                 if (isOpen && expanded) {
                     cat.children.forEach { child ->
                         SidebarRow(
-                            label = child.label,
+                            label = liveCategoryLabel(child.label),
                             count = child.count,
                             icon = iconFor(child),
                             flagEmoji = child.flagEmoji,
@@ -300,7 +302,7 @@ fun CategorySidebar(
                         if (child.containsId(selectedId)) {
                             child.children.forEach { grandchild ->
                                 SidebarRow(
-                                    label = grandchild.label,
+                                    label = liveCategoryLabel(grandchild.label),
                                     count = grandchild.count,
                                     icon = iconFor(grandchild),
                                     active = selectedId == grandchild.id,
@@ -317,10 +319,10 @@ fun CategorySidebar(
                 }
             }
             if (tree.global.categories.isNotEmpty()) {
-                item { SectionHeader(tree.global.label, expanded) }
+                item { SectionHeader(liveSectionLabel(tree.global.label), expanded) }
                 itemsIndexed(tree.global.categories, key = { index, cat -> "global:${cat.id}:$index" }) { _, cat ->
                     SidebarRow(
-                        label = cat.label,
+                        label = liveCategoryLabel(cat.label),
                         count = cat.count,
                         icon = iconFor(cat),
                         active = selectedId == cat.id,
@@ -335,10 +337,10 @@ fun CategorySidebar(
                 }
             }
             if (tree.hidden.categories.isNotEmpty()) {
-                item { SectionHeader(tree.hidden.label, expanded) }
+                item { SectionHeader(liveSectionLabel(tree.hidden.label), expanded) }
                 itemsIndexed(tree.hidden.categories, key = { index, cat -> "hidden:${cat.id}:$index" }) { _, cat ->
                     SidebarRow(
-                        label = cat.label,
+                        label = liveCategoryLabel(cat.label),
                         count = cat.count,
                         icon = Icons.Filled.VisibilityOff,
                         active = false,
@@ -356,11 +358,11 @@ fun CategorySidebar(
                 }
             }
             if (tree.countries.categories.isNotEmpty()) {
-                item { SectionHeader(tree.countries.label, expanded) }
+                item { SectionHeader(liveSectionLabel(tree.countries.label), expanded) }
                 itemsIndexed(tree.countries.categories, key = { index, country -> "country:${country.id}:$index" }) { _, country ->
                     val isExpanded = expandedCountry == country.id
                     SidebarRow(
-                        label = country.label,
+                        label = liveCategoryLabel(country.label),
                         count = country.count,
                         icon = null,
                         leadingCode = country.id,
@@ -386,7 +388,7 @@ fun CategorySidebar(
                     if (isExpanded && expanded) {
                         country.children.forEach { child ->
                             SidebarRow(
-                                label = child.label,
+                                label = liveCategoryLabel(child.label),
                                 count = child.count,
                                 icon = null,
                                 active = selectedId == child.id,
@@ -402,10 +404,10 @@ fun CategorySidebar(
                 }
             }
             if (tree.adult.categories.isNotEmpty()) {
-                item { SectionHeader(tree.adult.label, expanded) }
+                item { SectionHeader(liveSectionLabel(tree.adult.label), expanded) }
                 itemsIndexed(tree.adult.categories, key = { index, cat -> "adult:${cat.id}:$index" }) { _, cat ->
                     SidebarRow(
-                        label = cat.label,
+                        label = liveCategoryLabel(cat.label),
                         count = cat.count,
                         icon = Icons.Filled.Lock,
                         active = selectedId == cat.id,
@@ -506,13 +508,13 @@ private fun SearchEntry(
     ) {
         Icon(
             imageVector = Icons.Filled.Search,
-            contentDescription = "Search",
+            contentDescription = stringResource(R.string.search),
             tint = LiveColors.FgDim,
             modifier = Modifier.size(14.dp),
         )
         if (expanded) {
             Text(
-                text = "Search",
+                text = stringResource(R.string.search),
                 style = LiveType.CatLabel.copy(color = LiveColors.FgDim),
             )
             Spacer(Modifier.weight(1f))
@@ -766,20 +768,20 @@ private fun buildCategoryMenuActions(
     onMoveDown: () -> Unit,
 ): List<CategoryMenuAction> = buildList {
     if (canMove) {
-        add(CategoryMenuAction("Move to top", Icons.Filled.KeyboardArrowUp, onMoveToTop))
-        add(CategoryMenuAction("Move up", Icons.Filled.KeyboardArrowUp, onMoveUp))
-        add(CategoryMenuAction("Move down", Icons.Filled.KeyboardArrowDown, onMoveDown))
+        add(CategoryMenuAction(R.string.live_menu_move_top, Icons.Filled.KeyboardArrowUp, onMoveToTop))
+        add(CategoryMenuAction(R.string.live_menu_move_up, Icons.Filled.KeyboardArrowUp, onMoveUp))
+        add(CategoryMenuAction(R.string.live_menu_move_down, Icons.Filled.KeyboardArrowDown, onMoveDown))
     }
     if (canHide) {
-        add(CategoryMenuAction("Hide category", Icons.Filled.VisibilityOff, onHide))
+        add(CategoryMenuAction(R.string.live_menu_hide_category, Icons.Filled.VisibilityOff, onHide))
     }
     if (canUnhide) {
-        add(CategoryMenuAction("Unhide category", Icons.Filled.Visibility, onUnhide))
+        add(CategoryMenuAction(R.string.live_menu_unhide_category, Icons.Filled.Visibility, onUnhide))
     }
 }
 
 private data class CategoryMenuAction(
-    val label: String,
+    val labelRes: Int,
     val icon: ImageVector,
     val onClick: () -> Unit,
 )
@@ -820,7 +822,7 @@ private fun CategoryMenuItem(
             modifier = Modifier.size(16.dp),
         )
         Text(
-            text = action.label,
+            text = stringResource(action.labelRes),
             style = LiveType.CatLabel.copy(
                 color = if (focused) Color.Black else LiveColors.Fg,
                 fontSize = 11.sp,

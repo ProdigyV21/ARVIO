@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.telegram.TelegramAuthState
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.theme.ArflixTypography
@@ -102,7 +104,7 @@ fun TelegramSettingsScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.back),
                         tint = TextPrimary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -119,13 +121,13 @@ fun TelegramSettingsScreen(
 
             when (val state = authState) {
                 is TelegramAuthState.Idle -> IdleContent(onConnect = { viewModel.startAuth() })
-                is TelegramAuthState.Initializing -> LoadingContent("Connecting...")
+                is TelegramAuthState.Initializing -> LoadingContent(stringResource(R.string.telegram_connecting))
                 is TelegramAuthState.WaitPhone -> {
                     if (isMobile) {
                         PhoneContent(onSubmit = { viewModel.submitPhone(it) })
                     } else {
                         LaunchedEffect(Unit) { viewModel.startQrAuth() }
-                        LoadingContent("Preparing QR code...")
+                        LoadingContent(stringResource(R.string.telegram_preparing_qr))
                     }
                 }
                 is TelegramAuthState.WaitQr -> QrContent(link = state.link)
@@ -171,13 +173,13 @@ private fun IdleContent(onConnect: () -> Unit) {
     ) {
         Spacer(modifier = Modifier.height(40.dp))
         Text(
-            text = "Connect Telegram",
+            text = stringResource(R.string.telegram_connect_title),
             style = ArflixTypography.cardTitle.copy(fontSize = 22.sp),
             color = TextPrimary
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Search your channels and groups for video files whenever you open a movie or show.",
+            text = stringResource(R.string.telegram_connect_desc),
             style = ArflixTypography.caption.copy(fontSize = 14.sp),
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -192,15 +194,14 @@ private fun IdleContent(onConnect: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text(
-                text = "Arvio is not responsible for the content streamed through this feature. " +
-                    "Only connect your own account and use it fairly — respect copyright and applicable laws.",
+                text = stringResource(R.string.telegram_disclaimer),
                 style = ArflixTypography.caption.copy(fontSize = 11.sp),
                 color = TextSecondary.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
-        ActionButton(label = "CONNECT", onClick = onConnect)
+        ActionButton(label = stringResource(R.string.connect).uppercase(), onClick = onConnect)
     }
 }
 
@@ -228,13 +229,13 @@ private fun QrContent(link: String) {
     ) {
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "Scan with Telegram",
+            text = stringResource(R.string.telegram_scan_title),
             style = ArflixTypography.cardTitle.copy(fontSize = 20.sp),
             color = TextPrimary
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Open Telegram on your phone → Settings → Devices → Link Desktop Device",
+            text = stringResource(R.string.telegram_scan_instructions),
             style = ArflixTypography.caption.copy(fontSize = 13.sp),
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -250,7 +251,7 @@ private fun QrContent(link: String) {
             ) {
                 Image(
                     bitmap = qrBitmap.asImageBitmap(),
-                    contentDescription = "Telegram QR code",
+                    contentDescription = stringResource(R.string.telegram_qr_code_desc),
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -259,7 +260,7 @@ private fun QrContent(link: String) {
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "QR code expires in 30 seconds — refreshes automatically",
+            text = stringResource(R.string.telegram_qr_expires),
             style = ArflixTypography.caption.copy(fontSize = 11.sp),
             color = TextSecondary.copy(alpha = 0.6f)
         )
@@ -304,13 +305,13 @@ private fun PhoneContent(onSubmit: (String) -> Unit) {
     ) {
         Spacer(modifier = Modifier.height(40.dp))
         Text(
-            text = "Enter Phone Number",
+            text = stringResource(R.string.telegram_phone_title),
             style = ArflixTypography.cardTitle.copy(fontSize = 22.sp),
             color = TextPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Use the same number registered with your Telegram account.",
+            text = stringResource(R.string.telegram_phone_desc),
             style = ArflixTypography.caption.copy(fontSize = 13.sp),
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -320,13 +321,13 @@ private fun PhoneContent(onSubmit: (String) -> Unit) {
         TextField(
             value = phone,
             onValueChange = { phone = it },
-            label = { Text("Phone number") },
+            label = { Text(stringResource(R.string.telegram_phone_label)) },
             placeholder = { Text("+1 650 555 1234", color = TextSecondary.copy(alpha = 0.35f)) },
             supportingText = {
                 if (showError) {
-                    Text("Must start with + and include country code, e.g. +1 for US, +44 for UK", color = Pink)
+                    Text(stringResource(R.string.telegram_phone_error), color = Pink)
                 } else {
-                    Text("International format: +[country code][number]", color = TextSecondary.copy(alpha = 0.5f))
+                    Text(stringResource(R.string.telegram_phone_format), color = TextSecondary.copy(alpha = 0.5f))
                 }
             },
             isError = showError,
@@ -344,12 +345,12 @@ private fun PhoneContent(onSubmit: (String) -> Unit) {
             LoadingIndicator(color = Pink, size = 32.dp, strokeWidth = 2.5.dp)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Sending code...",
+                text = stringResource(R.string.telegram_sending_code),
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
                 color = TextSecondary
             )
         } else {
-            ActionButton(label = "SEND CODE", onClick = ::trySubmit)
+            ActionButton(label = stringResource(R.string.telegram_send_code), onClick = ::trySubmit)
         }
     }
 }
@@ -373,20 +374,20 @@ private fun CodeContent(codeLength: Int, onSubmit: (String) -> Unit) {
         ) {
             Text(text = "✓  ", style = ArflixTypography.caption.copy(fontSize = 14.sp), color = SuccessGreen)
             Text(
-                text = "Code sent to your Telegram app",
+                text = stringResource(R.string.telegram_code_sent),
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
                 color = SuccessGreen
             )
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = "Enter Code",
+            text = stringResource(R.string.telegram_code_title),
             style = ArflixTypography.cardTitle.copy(fontSize = 22.sp),
             color = TextPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Check your Telegram app for a $codeLength-digit code.",
+            text = stringResource(R.string.telegram_code_desc, codeLength),
             style = ArflixTypography.caption.copy(fontSize = 13.sp),
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -396,7 +397,7 @@ private fun CodeContent(codeLength: Int, onSubmit: (String) -> Unit) {
         TextField(
             value = code,
             onValueChange = { if (it.length <= codeLength) code = it },
-            label = { Text("Verification code") },
+            label = { Text(stringResource(R.string.telegram_code_label)) },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Done
@@ -407,7 +408,7 @@ private fun CodeContent(codeLength: Int, onSubmit: (String) -> Unit) {
             modifier = Modifier.fillMaxWidth(0.55f)
         )
         Spacer(modifier = Modifier.height(20.dp))
-        ActionButton(label = "CONFIRM") { if (code.isNotBlank()) onSubmit(code) }
+        ActionButton(label = stringResource(R.string.confirm).uppercase()) { if (code.isNotBlank()) onSubmit(code) }
     }
 }
 
@@ -421,13 +422,13 @@ private fun PasswordContent(onSubmit: (String) -> Unit) {
     ) {
         Spacer(modifier = Modifier.height(40.dp))
         Text(
-            text = "Two-Step Verification",
+            text = stringResource(R.string.telegram_2fa_title),
             style = ArflixTypography.cardTitle.copy(fontSize = 20.sp),
             color = TextPrimary
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Your account has an additional password.",
+            text = stringResource(R.string.telegram_2fa_desc),
             style = ArflixTypography.caption.copy(fontSize = 13.sp),
             color = TextSecondary
         )
@@ -435,7 +436,7 @@ private fun PasswordContent(onSubmit: (String) -> Unit) {
         TextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") },
+            label = { Text(stringResource(R.string.telegram_password_label)) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
@@ -447,7 +448,7 @@ private fun PasswordContent(onSubmit: (String) -> Unit) {
             modifier = Modifier.fillMaxWidth(0.55f)
         )
         Spacer(modifier = Modifier.height(20.dp))
-        ActionButton(label = "CONFIRM", onClick = { onSubmit(password) })
+        ActionButton(label = stringResource(R.string.confirm).uppercase(), onClick = { onSubmit(password) })
     }
 }
 
@@ -475,12 +476,12 @@ private fun ConnectedContent(
         ) {
             Column {
                 Text(
-                    text = "Connected",
+                    text = stringResource(R.string.connected),
                     style = ArflixTypography.cardTitle.copy(fontSize = 15.sp),
                     color = SuccessGreen
                 )
                 Text(
-                    text = "Signed in as $firstName",
+                    text = stringResource(R.string.telegram_signed_in_as, firstName),
                     style = ArflixTypography.caption.copy(fontSize = 13.sp),
                     color = TextSecondary
                 )
@@ -492,7 +493,7 @@ private fun ConnectedContent(
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "DISCONNECT",
+                    text = stringResource(R.string.telegram_disconnect_btn),
                     style = ArflixTypography.label.copy(fontSize = 11.sp),
                     color = TextSecondary
                 )
@@ -522,7 +523,7 @@ private fun ConnectedContent(
         ) {
             Column {
                 Text(
-                    text = "Video Cache",
+                    text = stringResource(R.string.telegram_video_cache),
                     style = ArflixTypography.cardTitle.copy(fontSize = 14.sp),
                     color = if (cacheFocused) Pink else TextPrimary
                 )
@@ -534,7 +535,7 @@ private fun ConnectedContent(
             }
             if (cacheSizeBytes > 0L) {
                 Text(
-                    text = "CLEAR",
+                    text = stringResource(R.string.telegram_clear_cache_btn),
                     style = ArflixTypography.label.copy(fontSize = 11.sp),
                     color = Pink
                 )
@@ -553,11 +554,11 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
         Spacer(modifier = Modifier.height(40.dp))
         Icon(imageVector = Icons.Default.Close, contentDescription = null, tint = Pink, modifier = Modifier.size(40.dp))
         Spacer(modifier = Modifier.height(12.dp))
-        Text(text = "Connection Failed", style = ArflixTypography.cardTitle.copy(fontSize = 18.sp), color = TextPrimary)
+        Text(text = stringResource(R.string.telegram_connection_failed), style = ArflixTypography.cardTitle.copy(fontSize = 18.sp), color = TextPrimary)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = message, style = ArflixTypography.caption.copy(fontSize = 13.sp), color = TextSecondary)
         Spacer(modifier = Modifier.height(24.dp))
-        ActionButton(label = "TRY AGAIN", onClick = onRetry)
+        ActionButton(label = stringResource(R.string.telegram_try_again), onClick = onRetry)
     }
 }
 
@@ -620,13 +621,13 @@ private fun DisconnectConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Disconnect Telegram?",
+                text = stringResource(R.string.telegram_disconnect_confirm_title),
                 style = ArflixTypography.cardTitle.copy(fontSize = 18.sp),
                 color = TextPrimary
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "You'll need to sign in again to use Telegram as a source.",
+                text = stringResource(R.string.telegram_disconnect_confirm_desc),
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
                 color = TextSecondary,
                 textAlign = TextAlign.Center
@@ -650,7 +651,7 @@ private fun DisconnectConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "CANCEL",
+                        text = stringResource(R.string.cancel).uppercase(),
                         style = ArflixTypography.label.copy(fontSize = 12.sp),
                         color = TextPrimary
                     )
@@ -672,7 +673,7 @@ private fun DisconnectConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "DISCONNECT",
+                        text = stringResource(R.string.telegram_disconnect_btn),
                         style = ArflixTypography.label.copy(fontSize = 12.sp),
                         color = Pink
                     )

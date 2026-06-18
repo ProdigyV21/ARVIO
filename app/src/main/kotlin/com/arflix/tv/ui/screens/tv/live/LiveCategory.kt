@@ -1,6 +1,9 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvChannel
 
 /** Broad channel genre derived from M3U group name. */
@@ -312,6 +315,30 @@ data class LiveCategory(
 }
 
 enum class CategoryIcon { Favorite, Recent, All, Grid, Sport, Movie, News, Kids, Docs, Music, Lock, Country, SubEntry }
+
+/**
+ * Display-localization for category labels. The stored [LiveCategory.label] stays in English
+ * so grouping/comparison logic keeps working; only the rendered text is localized here.
+ * Dynamic labels (country names, "4K | Ultra HD", playlist group names, …) pass through.
+ */
+@Composable
+fun liveCategoryLabel(raw: String): String = when (raw) {
+    "Favorites" -> stringResource(R.string.live_cat_favorites)
+    "Recently Watched" -> stringResource(R.string.live_cat_recently_watched)
+    "All Channels" -> stringResource(R.string.live_label_all_channels)
+    "Adult" -> stringResource(R.string.live_cat_adult)
+    "Ungrouped" -> stringResource(R.string.live_cat_ungrouped)
+    else -> raw
+}
+
+/** Display-localization for [LiveSection.label] section headers. Unknown headers pass through. */
+@Composable
+fun liveSectionLabel(raw: String): String = when (raw) {
+    "PLAYLIST" -> stringResource(R.string.live_section_playlist)
+    "ADULT" -> stringResource(R.string.live_section_adult)
+    "HIDDEN" -> stringResource(R.string.live_section_hidden)
+    else -> raw
+}
 
 data class LiveSection(val id: String, val label: String, val categories: List<LiveCategory>)
 

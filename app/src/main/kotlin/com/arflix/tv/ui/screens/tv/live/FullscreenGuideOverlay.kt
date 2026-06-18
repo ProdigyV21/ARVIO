@@ -64,11 +64,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import kotlinx.coroutines.delay
@@ -305,7 +307,7 @@ private fun FullscreenGuideContent(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Close guide",
+                        contentDescription = stringResource(R.string.live_cd_close_guide),
                         tint = LiveColors.Fg,
                         modifier = Modifier.size(21.dp),
                     )
@@ -323,10 +325,10 @@ private fun FullscreenGuideContent(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 5.dp else 6.dp)) {
-                    GuideChip("CH ${channel.number}", LiveColors.FgDim, Color.White.copy(alpha = 0.08f))
+                    GuideChip(stringResource(R.string.live_label_ch, channel.number), LiveColors.FgDim, Color.White.copy(alpha = 0.08f))
                     GuideChip(channel.quality.label, LiveColors.FgDim, Color.White.copy(alpha = 0.08f))
                     if (catchupSupported) {
-                        GuideChip("Catchup", LiveColors.Bg, LiveColors.Accent)
+                        GuideChip(stringResource(R.string.live_label_catchup), LiveColors.Bg, LiveColors.Accent)
                     }
                 }
             }
@@ -430,19 +432,19 @@ private fun GuideTimelineSummary(
         horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 5.dp else 7.dp),
     ) {
         GuideTimelinePill(
-            label = "Aired",
+            label = stringResource(R.string.live_label_aired),
             value = pastCount.toString(),
             accent = if (catchupSupported) LiveColors.Accent else LiveColors.FgMute,
             modifier = Modifier.weight(1f),
         )
         GuideTimelinePill(
-            label = "Live",
+            label = stringResource(R.string.live),
             value = liveCount.coerceAtMost(1).toString(),
             accent = LiveColors.LiveRed,
             modifier = Modifier.weight(1f),
         )
         GuideTimelinePill(
-            label = "Later",
+            label = stringResource(R.string.later),
             value = futureCount.toString(),
             accent = LiveColors.FgDim,
             modifier = Modifier.weight(1f),
@@ -598,9 +600,9 @@ private fun GuideProgramRow(
             ) {
                 GuideChip(
                     label = when (item.state) {
-                        GuideProgramState.PastPlayable -> "AIRED"
-                        GuideProgramState.PastUnavailable -> "AIRED"
-                        GuideProgramState.Live -> "LIVE"
+                        GuideProgramState.PastPlayable -> stringResource(R.string.live_badge_aired)
+                        GuideProgramState.PastUnavailable -> stringResource(R.string.live_badge_aired)
+                        GuideProgramState.Live -> stringResource(R.string.live_badge_live)
                         GuideProgramState.Future -> startsLabel(item.program, nowMillis)
                     },
                     fg = when (item.state) {
@@ -663,9 +665,9 @@ private fun GuideEmptyState(
 ) {
     val text = when {
         !catchupSupported ->
-            "No programme timeline is available for this channel."
+            stringResource(R.string.live_empty_no_timeline_channel)
         else ->
-            "No guide timeline is available yet."
+            stringResource(R.string.live_empty_no_timeline_yet)
     }
     Box(
         modifier = Modifier
@@ -702,14 +704,15 @@ private fun GuideChip(label: String, fg: Color, bg: Color) {
 private val timelineDateFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 
+@Composable
 private fun timelineDateLabel(program: IptvProgram, nowMillis: Long): String {
     val zone = ZoneId.systemDefault()
     val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
     val programDate = Instant.ofEpochMilli(program.startUtcMillis).atZone(zone).toLocalDate()
     return when (programDate) {
-        today.minusDays(1) -> "Yesterday"
-        today -> "Today"
-        today.plusDays(1) -> "Tomorrow"
+        today.minusDays(1) -> stringResource(R.string.live_label_yesterday)
+        today -> stringResource(R.string.live_label_today)
+        today.plusDays(1) -> stringResource(R.string.live_label_tomorrow)
         else -> timelineDateFormatter.format(programDate)
     }
 }
@@ -723,11 +726,12 @@ private fun EnrichedChannel.supportsFullscreenCatchup(): Boolean {
         || channelSource.streamUrl.contains("/live/", ignoreCase = true)
 }
 
+@Composable
 private fun startsLabel(program: IptvProgram, nowMillis: Long): String {
     val minutes = ((program.startUtcMillis - nowMillis) / 60_000L).coerceAtLeast(0L)
     return when {
-        minutes < 60 -> "in ${minutes}m"
-        minutes < 24 * 60 -> "in ${minutes / 60}h ${minutes % 60}m"
-        else -> "later"
+        minutes < 60 -> stringResource(R.string.live_label_starts_in_min, minutes.toInt())
+        minutes < 24 * 60 -> stringResource(R.string.live_label_starts_in_hm, (minutes / 60).toInt(), (minutes % 60).toInt())
+        else -> stringResource(R.string.live_label_starts_later)
     }
 }

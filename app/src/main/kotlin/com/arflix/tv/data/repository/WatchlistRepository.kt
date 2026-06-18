@@ -2,6 +2,7 @@ package com.arflix.tv.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import com.arflix.tv.R
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
@@ -499,7 +500,7 @@ class WatchlistRepository @Inject constructor(
             MediaItem(
                 id = item.tmdbId,
                 title = item.title,
-                subtitle = if (item.mediaType == "tv") "TV Series" else "Movie",
+                subtitle = if (item.mediaType == "tv") context.getString(R.string.component_label_tv_series) else context.getString(R.string.movie),
                 overview = "",
                 year = "",
                 mediaType = if (item.mediaType == "tv") MediaType.TV else MediaType.MOVIE,
@@ -516,7 +517,7 @@ class WatchlistRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = details.name,
-            subtitle = "TV Series",
+            subtitle = context.getString(R.string.component_label_tv_series),
             overview = details.overview ?: "",
             year = details.firstAirDate?.take(4) ?: "",
             releaseDate = details.firstAirDate ?: "",
@@ -535,7 +536,7 @@ class WatchlistRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = details.title,
-            subtitle = "Movie",
+            subtitle = context.getString(R.string.movie),
             overview = details.overview ?: "",
             year = details.releaseDate?.take(4) ?: "",
             releaseDate = details.releaseDate ?: "",
@@ -560,7 +561,7 @@ class WatchlistRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = title,
-            subtitle = if (type == MediaType.TV) "TV Series" else "Movie",
+            subtitle = if (type == MediaType.TV) context.getString(R.string.component_label_tv_series) else context.getString(R.string.movie),
             overview = "",
             year = "",
             mediaType = type,

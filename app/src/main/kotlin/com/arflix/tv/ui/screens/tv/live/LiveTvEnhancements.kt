@@ -48,11 +48,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.repository.IptvConfig
 
 data class TvProviderFilter(
@@ -295,9 +297,9 @@ fun EpgStatusStrip(
     if (!visible) return
     val text = when {
         !warning.isNullOrBlank() -> warning
-        isLoading -> "Loading visible guide..."
-        !hasGuideSource -> "No EPG source configured"
-        else -> "Guide pending"
+        isLoading -> stringResource(R.string.live_status_loading_guide)
+        !hasGuideSource -> stringResource(R.string.live_status_no_epg_source)
+        else -> stringResource(R.string.live_status_guide_pending)
     }
     Box(
         modifier = modifier
@@ -319,7 +321,7 @@ fun EpgStatusStrip(
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                text = "$text  |  matched $matchedCount/$totalChannels visible",
+                text = stringResource(R.string.live_status_matched, text ?: "", matchedCount, totalChannels),
                 style = LiveType.SectionTag.copy(color = LiveColors.FgDim),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -356,7 +358,7 @@ fun ChannelNumberOverlay(
                 style = LiveType.NumberMono.copy(color = LiveColors.Fg, fontSize = 24.sp),
             )
             Text(
-                text = exactChannelName ?: if (matchCount > 0) "$matchCount matches" else "No channel",
+                text = exactChannelName ?: if (matchCount > 0) stringResource(R.string.live_label_matches, matchCount) else stringResource(R.string.live_empty_no_channel),
                 style = LiveType.SectionTag.copy(color = if (matchCount > 0) LiveColors.FgDim else Color(0xFFFF8A9A)),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -458,7 +460,7 @@ fun VariantPickerOverlay(
                     modifier = Modifier.size(22.dp),
                 )
                 Column {
-                    Text("Choose source", style = LiveType.ChannelName.copy(color = LiveColors.Fg, fontSize = 18.sp))
+                    Text(stringResource(R.string.live_label_choose_source), style = LiveType.ChannelName.copy(color = LiveColors.Fg, fontSize = 18.sp))
                     Text(
                         channel.name,
                         style = LiveType.SectionTag.copy(color = LiveColors.FgDim),

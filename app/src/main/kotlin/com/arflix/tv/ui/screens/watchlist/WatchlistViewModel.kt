@@ -1,7 +1,9 @@
 package com.arflix.tv.ui.screens.watchlist
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType.MOVIE
 import com.arflix.tv.data.model.MediaType.TV
@@ -11,6 +13,7 @@ import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.util.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +39,7 @@ data class WatchlistUiState(
 
 @HiltViewModel
 class WatchlistViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val watchlistRepository: WatchlistRepository,
     private val cloudSyncRepository: CloudSyncRepository,
     private val traktRepository: TraktRepository,
@@ -168,7 +172,7 @@ class WatchlistViewModel @Inject constructor(
                 } else {
                     _uiState.value = WatchlistUiState(
                         isLoading = false,
-                        error = "Failed to load Trakt watchlist"
+                        error = context.getString(R.string.watchlist_error_load_trakt)
                     )
                 }
             } else {
@@ -219,7 +223,7 @@ class WatchlistViewModel @Inject constructor(
                     val items = watchlistRepository.refreshWatchlistItems().watchlistDisplayOrder()
                     _uiState.value = items.toSplitState(isLoading = false)
                 } else if (!syncedFromTrakt) {
-                    showLocalWatchlistOrError("Failed to load Trakt watchlist")
+                    showLocalWatchlistOrError(context.getString(R.string.watchlist_error_load_trakt))
                 } else {
                     enrichLocalWatchlistInBackground()
                 }
@@ -230,7 +234,7 @@ class WatchlistViewModel @Inject constructor(
                 )
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    toastMessage = "Failed to refresh",
+                    toastMessage = context.getString(R.string.watchlist_error_refresh),
                     toastType = ToastType.ERROR
                 )
             }
@@ -265,7 +269,7 @@ class WatchlistViewModel @Inject constructor(
             try {
                 val traktConnected = runCatching { traktRepository.hasTrakt() }.getOrDefault(false)
                 if (traktConnected && !traktRepository.removeFromWatchlist(item.mediaType, item.id)) {
-                    throw IllegalStateException("Failed to remove from Trakt watchlist")
+                    throw IllegalStateException(context.getString(R.string.watchlist_failed_remove_trakt))
                 }
 
                 watchlistRepository.removeFromWatchlist(item.mediaType, item.id)
@@ -275,7 +279,7 @@ class WatchlistViewModel @Inject constructor(
                 _uiState.value = current.copy(
                     movies = current.movies.filter { it.id != item.id || it.mediaType != item.mediaType },
                     series = current.series.filter { it.id != item.id || it.mediaType != item.mediaType },
-                    toastMessage = "Removed from watchlist",
+                    toastMessage = context.getString(R.string.watchlist_toast_removed),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { cloudSyncRepository.pushToCloud() }
@@ -294,7 +298,7 @@ class WatchlistViewModel @Inject constructor(
                     )
                 )
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to remove from watchlist",
+                    toastMessage = context.getString(R.string.watchlist_failed_remove),
                     toastType = ToastType.ERROR
                 )
             }

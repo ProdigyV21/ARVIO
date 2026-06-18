@@ -12,6 +12,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.arflix.tv.R
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.AuthEmailValidator
@@ -536,7 +537,8 @@ class AuthRepository @Inject constructor(
      */
     suspend fun signIn(email: String, password: String): Result<Unit> {
         val normalizedEmail = AuthEmailValidator.normalize(email)
-        AuthEmailValidator.validate(normalizedEmail, rejectDisposable = false)?.let { message ->
+        AuthEmailValidator.validate(normalizedEmail, rejectDisposable = false)?.let { messageRes ->
+            val message = context.getString(messageRes)
             _authState.value = AuthState.Error(message)
             return Result.failure(Exception(message))
         }
@@ -575,13 +577,13 @@ class AuthRepository @Inject constructor(
                 AppLogger.breadcrumb("Auth", "email_sign_in_success")
                 Result.success(Unit)
             } else {
-                val message = safeErrorMessage(null, "Sign in failed")
+                val message = safeErrorMessage(null, context.getString(R.string.auth_signin_failed))
                 _authState.value = AuthState.Error(message)
                 AppLogger.breadcrumb("Auth", "email_sign_in_no_session", severity = "warning")
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            val message = safeErrorMessage(e, "Sign in failed")
+            val message = safeErrorMessage(e, context.getString(R.string.auth_signin_failed))
             _authState.value = AuthState.Error(message)
             AppLogger.breadcrumb("Auth", "email_sign_in_failed ${e::class.java.simpleName}", severity = "warning")
             Result.failure(Exception(message))
@@ -593,7 +595,8 @@ class AuthRepository @Inject constructor(
      */
     suspend fun signUp(email: String, password: String): Result<Unit> {
         val normalizedEmail = AuthEmailValidator.normalize(email)
-        AuthEmailValidator.validate(normalizedEmail)?.let { message ->
+        AuthEmailValidator.validate(normalizedEmail)?.let { messageRes ->
+            val message = context.getString(messageRes)
             _authState.value = AuthState.Error(message)
             return Result.failure(Exception(message))
         }
@@ -608,7 +611,7 @@ class AuthRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            val message = safeErrorMessage(e, "Sign up failed")
+            val message = safeErrorMessage(e, context.getString(R.string.auth_signup_failed))
             _authState.value = AuthState.Error(message)
             AppLogger.recordException(
                 throwable = e,
@@ -632,7 +635,7 @@ class AuthRepository @Inject constructor(
             url = Constants.AUTH_LOGIN_URL,
             email = email,
             password = password,
-            defaultError = "Sign in failed"
+            defaultError = context.getString(R.string.auth_signin_failed)
         )
     }
 
@@ -641,7 +644,7 @@ class AuthRepository @Inject constructor(
             url = Constants.CLOUD_AUTH_EMAIL_URL,
             email = email,
             password = password,
-            defaultError = "Unable to create account"
+            defaultError = context.getString(R.string.auth_unable_create_account)
         )
     }
 
@@ -675,7 +678,7 @@ class AuthRepository @Inject constructor(
                 val accessToken = json?.optString("access_token").orEmpty()
                 val refreshToken = json?.optString("refresh_token").orEmpty()
                 if (accessToken.isBlank() || refreshToken.isBlank()) {
-                    throw IllegalStateException("Auth response incomplete")
+                    throw IllegalStateException(context.getString(R.string.auth_response_incomplete))
                 }
                 CloudAccountSession(accessToken, refreshToken)
             }
@@ -739,12 +742,13 @@ class AuthRepository @Inject constructor(
                 AppLogger.breadcrumb("Auth", "session_import_success")
                 Result.success(Unit)
             } else {
-                _authState.value = AuthState.Error("Failed to import auth session")
+                val message = context.getString(R.string.auth_failed_import_session)
+                _authState.value = AuthState.Error(message)
                 AppLogger.breadcrumb("Auth", "session_import_missing_user", severity = "warning")
-                Result.failure(Exception("Failed to import auth session"))
+                Result.failure(Exception(message))
             }
         } catch (e: Exception) {
-            val message = safeErrorMessage(e, "Sign in failed")
+            val message = safeErrorMessage(e, context.getString(R.string.auth_signin_failed))
             _authState.value = AuthState.Error(message)
             AppLogger.recordException(
                 throwable = e,
@@ -820,24 +824,27 @@ class AuthRepository @Inject constructor(
                             _authState.value = AuthState.Authenticated(user.id, user.email ?: "", profile)
                             Result.success(Unit)
                         } else {
-                            _authState.value = AuthState.Error("Google Sign-In failed")
-                            Result.failure(Exception("Google Sign-In failed"))
+                            val message = context.getString(R.string.auth_google_failed)
+                            _authState.value = AuthState.Error(message)
+                            Result.failure(Exception(message))
                         }
                     } else {
-                        _authState.value = AuthState.Error("Unexpected credential type")
-                        Result.failure(Exception("Unexpected credential type"))
+                        val message = context.getString(R.string.auth_unexpected_credential)
+                        _authState.value = AuthState.Error(message)
+                        Result.failure(Exception(message))
                     }
                 }
                 else -> {
-                    _authState.value = AuthState.Error("Unexpected credential type")
-                    Result.failure(Exception("Unexpected credential type"))
+                    val message = context.getString(R.string.auth_unexpected_credential)
+                    _authState.value = AuthState.Error(message)
+                    Result.failure(Exception(message))
                 }
             }
         } catch (e: GoogleIdTokenParsingException) {
-            _authState.value = AuthState.Error("Failed to parse Google credentials")
+            _authState.value = AuthState.Error(context.getString(R.string.auth_failed_parse_google))
             Result.failure(e)
         } catch (e: Exception) {
-            _authState.value = AuthState.Error(e.message ?: "Google Sign-In failed")
+            _authState.value = AuthState.Error(e.message ?: context.getString(R.string.auth_google_failed))
             Result.failure(e)
         }
     }
@@ -943,11 +950,11 @@ class AuthRepository @Inject constructor(
         return when {
             "arvio cloud moved" in message || "password setup" in message -> rawMessage
             Constants.USE_NETLIFY_CLOUD_SYNC && "invalid email or password" in message -> netlifyPasswordHelp
-            "database error saving new user" in message -> "Account already exists. Sign in instead."
-            "settingssessionmanager" in message -> "Sign in failed. Please try again."
-            "invalid login credentials" in message -> "Invalid email or password."
-            "email not confirmed" in message || "confirm" in message -> "Please verify your email to continue."
-            "user already" in message || "already registered" in message -> "Account already exists. Sign in instead."
+            "database error saving new user" in message -> context.getString(R.string.auth_account_exists)
+            "settingssessionmanager" in message -> context.getString(R.string.auth_signin_retry)
+            "invalid login credentials" in message -> context.getString(R.string.auth_invalid_credentials)
+            "email not confirmed" in message || "confirm" in message -> context.getString(R.string.auth_verify_email)
+            "user already" in message || "already registered" in message -> context.getString(R.string.auth_account_exists)
             else -> fallback
         }
     }

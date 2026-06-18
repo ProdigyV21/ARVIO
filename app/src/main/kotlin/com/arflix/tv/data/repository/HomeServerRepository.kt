@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import androidx.datastore.preferences.core.edit
 import com.arflix.tv.BuildConfig
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.ProxyHeaders
 import com.arflix.tv.data.model.StreamBehaviorHints
@@ -270,8 +271,8 @@ class HomeServerRepository @Inject constructor(
                 val serverUrl = normalizeServerUrl(rawUrl)
                 val trimmedUsername = username.trim()
                 val trimmedDisplayName = displayName.trim()
-                require(serverUrl.isNotBlank()) { "Enter a valid server URL" }
-                require(password.isNotBlank()) { "Enter a password or token" }
+                require(serverUrl.isNotBlank()) { context.getString(R.string.homeserver_enter_url) }
+                require(password.isNotBlank()) { context.getString(R.string.homeserver_enter_password) }
 
                 val publicInfo = fetchPublicInfo(serverUrl)
                 val detectedKind = publicInfo.serverKind
@@ -289,7 +290,7 @@ class HomeServerRepository @Inject constructor(
                     return@runCatching connection
                 }
 
-                require(trimmedUsername.isNotBlank()) { "Enter a username" }
+                require(trimmedUsername.isNotBlank()) { context.getString(R.string.homeserver_enter_username) }
                 val auth = authenticate(serverUrl, trimmedUsername, password)
                 val connectionShell = HomeServerConnection(
                     enabled = true,
@@ -337,7 +338,7 @@ class HomeServerRepository @Inject constructor(
     suspend fun testConnections(): Result<List<HomeServerConnection>> = withContext(Dispatchers.IO) {
         runCatching {
             val current = currentConnections()
-            require(current.isNotEmpty()) { "No Home Server connected" }
+            require(current.isNotEmpty()) { context.getString(R.string.homeserver_none_connected) }
             val refreshed = current.map { refreshConnection(it) }
             saveConnections(refreshed)
             refreshed
@@ -361,7 +362,7 @@ class HomeServerRepository @Inject constructor(
                 ?.addQueryParameter("X-Plex-Product", "ARVIO")
                 ?.build()
                 ?.toString()
-                ?: error("Invalid code sign-in URL")
+                ?: error(context.getString(R.string.homeserver_invalid_code_url))
             val request = Request.Builder()
                 .url(url)
                 .post(ByteArray(0).toRequestBody(null))
@@ -370,12 +371,12 @@ class HomeServerRepository @Inject constructor(
             okHttpClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    error("Code sign in failed (${response.code})")
+                    error(context.getString(R.string.homeserver_code_signin_failed_code, response.code))
                 }
                 val json = JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
                 val id = json.string("id").ifBlank { json.string("pinId") }
                 val code = json.string("code")
-                require(id.isNotBlank() && code.isNotBlank()) { "Server did not return an activation code" }
+                require(id.isNotBlank() && code.isNotBlank()) { context.getString(R.string.homeserver_no_activation_code) }
                 PlexPinAuthSession(
                     id = id,
                     code = code,
@@ -394,7 +395,7 @@ class HomeServerRepository @Inject constructor(
                 ?.addQueryParameter("X-Plex-Client-Identifier", deviceId())
                 ?.build()
                 ?.toString()
-                ?: error("Invalid code sign-in URL")
+                ?: error(context.getString(R.string.homeserver_invalid_code_url))
             val request = Request.Builder()
                 .url(url)
                 .get()
@@ -403,7 +404,7 @@ class HomeServerRepository @Inject constructor(
             okHttpClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    error("Code sign in polling failed (${response.code})")
+                    error(context.getString(R.string.homeserver_code_poll_failed, response.code))
                 }
                 val json = JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
                 json.string("authToken")
@@ -829,7 +830,7 @@ class HomeServerRepository @Inject constructor(
         path: String,
         query: Map<String, String?> = emptyMap()
     ): String {
-        val base = baseUrl.toHttpUrlOrNull() ?: error("Invalid server URL")
+        val base = baseUrl.toHttpUrlOrNull() ?: error(context.getString(R.string.homeserver_invalid_url))
         val builder = base.newBuilder()
         path.trim('/').split('/').filter { it.isNotBlank() }.forEach { builder.addPathSegment(it) }
         query.forEach { (key, value) ->
@@ -867,7 +868,7 @@ class HomeServerRepository @Inject constructor(
         okHttpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                error("Server request failed (${response.code})")
+                error(context.getString(R.string.homeserver_request_failed, response.code))
             }
             return JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
         }
@@ -878,7 +879,7 @@ class HomeServerRepository @Inject constructor(
         okHttpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                error("Server request failed (${response.code})")
+                error(context.getString(R.string.homeserver_request_failed, response.code))
             }
             return body
         }
@@ -892,7 +893,7 @@ class HomeServerRepository @Inject constructor(
         okHttpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                error("Server sign in failed (${response.code})")
+                error(context.getString(R.string.homeserver_signin_failed_code, response.code))
             }
             return JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
         }
@@ -955,7 +956,7 @@ class HomeServerRepository @Inject constructor(
             userName = user?.string("Name").orEmpty()
         ).also {
             require(it.accessToken.isNotBlank() && it.userId.isNotBlank()) {
-                "Server sign in did not return a playable account"
+                context.getString(R.string.homeserver_no_playable_account)
             }
         }
     }
@@ -985,7 +986,7 @@ class HomeServerRepository @Inject constructor(
     ): HomeServerConnection {
         val trimmedAccountToken = accountToken.trim()
         val trimmedDisplayName = displayName.trim()
-        require(trimmedAccountToken.isNotBlank()) { "Missing account token" }
+        require(trimmedAccountToken.isNotBlank()) { context.getString(R.string.homeserver_missing_token) }
 
         val normalizedPreferredUrl = normalizeServerUrl(preferredServerUrl)
         val preferredIdentity = preferredInfo?.takeIf { it.serverId.isNotBlank() }
@@ -1020,7 +1021,7 @@ class HomeServerRepository @Inject constructor(
                 .takeIf { it.isNotBlank() }
             ?: trimmedAccountToken
         val candidateUrls = plexCandidateServerUrls(normalizedPreferredUrl, targetDevice)
-        require(candidateUrls.isNotEmpty()) { "No reachable server URL found for this account" }
+        require(candidateUrls.isNotEmpty()) { context.getString(R.string.homeserver_no_reachable_url) }
 
         var lastError: Throwable? = null
         candidateUrls.forEach { candidateUrl ->
@@ -1046,7 +1047,7 @@ class HomeServerRepository @Inject constructor(
                 ?: return@forEach
             val expectedServerId = targetServerId.ifBlank { preferredIdentity?.serverId.orEmpty() }
             if (expectedServerId.isNotBlank() && info.serverId.isNotBlank() && expectedServerId != info.serverId) {
-                lastError = IllegalStateException("Server identity did not match the selected account server")
+                lastError = IllegalStateException(context.getString(R.string.homeserver_identity_mismatch))
                 return@forEach
             }
             val shell = candidate.copy(
@@ -1071,7 +1072,7 @@ class HomeServerRepository @Inject constructor(
         }
 
         val message = lastError?.message?.takeIf { it.isNotBlank() }
-        error(message ?: "No accessible libraries found for this account")
+        error(message ?: context.getString(R.string.homeserver_no_libraries))
     }
 
     private fun fetchPlexResources(accountToken: String): List<PlexResourceDevice> {
@@ -1186,7 +1187,7 @@ class HomeServerRepository @Inject constructor(
     }
 
     private fun refreshConnection(connection: HomeServerConnection): HomeServerConnection {
-        require(connection.isUsable) { "${connection.serverName.ifBlank { "Home Server" }} is disabled or incomplete" }
+        require(connection.isUsable) { context.getString(R.string.homeserver_disabled_incomplete) }
         if (connection.serverKind == HomeServerKind.PLEX) {
             val accountToken = connection.accountToken.ifBlank { connection.accessToken }
             val refreshed = buildPlexConnection(
@@ -1241,7 +1242,7 @@ class HomeServerRepository @Inject constructor(
                     if (id.isBlank()) return@mapNotNull null
                     HomeServerCollection(
                         id = id,
-                        name = directory.string("title").ifBlank { directory.string("name") }.ifBlank { "Library $id" },
+                        name = directory.string("title").ifBlank { directory.string("name") }.ifBlank { context.getString(R.string.library_named, id) },
                         type = directory.string("type"),
                         enabled = true
                     )
@@ -1256,7 +1257,7 @@ class HomeServerRepository @Inject constructor(
                 if (id.isBlank()) return@mapNotNull null
                 HomeServerCollection(
                     id = id,
-                    name = item.string("Name").ifBlank { "Library" },
+                    name = item.string("Name").ifBlank { context.getString(R.string.library_default) },
                     type = item.string("CollectionType"),
                     enabled = true
                 )
@@ -1265,7 +1266,7 @@ class HomeServerRepository @Inject constructor(
 
     private fun HomeServerConnection.toCatalogCandidate(collection: HomeServerCollection): HomeServerCatalogCandidate {
         val connectionLabel = displayLabel()
-        val collectionLabel = collection.name.ifBlank { "Library" }
+        val collectionLabel = collection.name.ifBlank { context.getString(R.string.library_default) }
         val title = if (collectionLabel.contains(connectionLabel, ignoreCase = true)) {
             collectionLabel
         } else {

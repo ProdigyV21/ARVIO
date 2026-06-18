@@ -984,7 +984,7 @@ fun DetailsScreen(
             onSelect = { stream ->
                 if (isPendingDebridStream(stream)) {
                     viewModel.showToast(
-                        "This debrid torrent is still being downloaded. Try another source or wait a bit.",
+                        context.getString(R.string.details_toast_debrid_downloading),
                         ToastType.ERROR
                     )
                     return@StreamSelector
@@ -1009,7 +1009,7 @@ fun DetailsScreen(
             EpisodeContextMenu(
                 isVisible = showEpisodeContextMenu,
                 episodeName = episode.name,
-                seasonEpisode = "S${episode.seasonNumber}:E${episode.episodeNumber}",
+                seasonEpisode = stringResource(R.string.details_episode_code_short, episode.seasonNumber, episode.episodeNumber),
                 isWatched = episode.isWatched,
                 onPlay = {
                     showEpisodeContextMenu = false
@@ -1195,8 +1195,10 @@ private fun DetailsContent(
             }
         }
 
+        val tvSeriesLabel = stringResource(R.string.details_label_tv_series)
+        val movieLabel = stringResource(R.string.movie)
         val genreText = genres.take(2).map(::formatGenreName).joinToString(" / ").ifBlank {
-            if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
+            if (item.mediaType == MediaType.TV) tvSeriesLabel else movieLabel
         }
         val displayDate = item.year.takeIf { it.isNotBlank() }
             ?: item.releaseDate?.trim()?.takeIf { it.isNotEmpty() }?.let { date ->
@@ -1392,7 +1394,7 @@ private fun DetailsContent(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Primary mobile actions
-                    val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else "Play"
+                    val playButtonLabel = if (!playLabel.isNullOrBlank()) playLabel else stringResource(R.string.play)
                     MobileActionButton(
                         icon = Icons.Default.PlayArrow,
                         text = playButtonLabel,
@@ -1429,7 +1431,7 @@ private fun DetailsContent(
                         )
                         MobileIconActionButton(
                             icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                            contentDescription = if (buttonWatched) "Watched" else "Mark watched",
+                            contentDescription = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.details_btn_mark_watched),
                             isActive = buttonWatched,
                             modifier = Modifier
                                 .weight(1f)
@@ -1438,7 +1440,7 @@ private fun DetailsContent(
                         )
                         MobileIconActionButton(
                             icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                            contentDescription = if (isInWatchlist) "In watchlist" else "Add to watchlist",
+                            contentDescription = if (isInWatchlist) stringResource(R.string.details_in_watchlist) else stringResource(R.string.add_to_watchlist),
                             isActive = isInWatchlist,
                             modifier = Modifier
                                 .weight(1f)
@@ -1828,8 +1830,10 @@ private fun DetailsContent(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                val tvSeriesLabel = stringResource(R.string.details_label_tv_series)
+                val movieLabel = stringResource(R.string.movie)
                 val genreText = genres.take(2).map(::formatGenreName).joinToString(" / ").ifEmpty {
-                    if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
+                    if (item.mediaType == MediaType.TV) tvSeriesLabel else movieLabel
                 }
                 val isCompactHeight = configuration.screenHeightDp < 720
                 val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() } ?: item.year
@@ -1918,7 +1922,7 @@ private fun DetailsContent(
                                 AsyncImage(
                                     model = networkLogoRequest,
                                     imageLoader = metadataLogoImageLoader,
-                                    contentDescription = "Primary streaming provider",
+                                    contentDescription = stringResource(R.string.details_cd_primary_provider),
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier
                                         .height(16.dp)
@@ -2011,7 +2015,7 @@ private fun DetailsContent(
                 val playButtonLabel = if (!playLabel.isNullOrBlank()) {
                     playLabel
                 } else {
-                    "Play"
+                    stringResource(R.string.play)
                 }
                 Box(modifier = Modifier.clickable { onButtonClick(0) }) {
                     PremiumActionButton(
@@ -2043,7 +2047,7 @@ private fun DetailsContent(
                 Box(modifier = Modifier.clickable { onButtonClick(3) }) {
                     PremiumActionButton(
                         icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                        text = if (buttonWatched) "Watched" else "Mark Watched",
+                        text = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.details_btn_mark_watched),
                         isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 3,
                         isActive = buttonWatched,
                         isIconOnly = true
@@ -3330,12 +3334,13 @@ private fun EpisodeCard(
     val episodeCode = "S${episode.seasonNumber} • E${String.format("%02d", episode.episodeNumber)}"
     val ratingLabel = episode.imdbRating.takeIf { parseRatingValue(it) > 0f }
     val isSpoilerBlurred = spoilerBlurEnabled && !episode.isWatched
+    val noSynopsisText = stringResource(R.string.details_no_synopsis)
     val previewText = if (isSpoilerBlurred) {
         ""
     } else {
         episode.overview
             .trim()
-            .ifEmpty { "No episode synopsis available." }
+            .ifEmpty { noSynopsisText }
     }
     val episodeAirDateLabel = remember(episode.airDate) { formatEpisodeAirDateLabel(episode.airDate) }
     val isEpisodeUnaired = remember(episode.airDate) { isFutureEpisodeAirDate(episode.airDate) }
@@ -3400,7 +3405,7 @@ private fun EpisodeCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Spoiler",
+                        text = stringResource(R.string.details_spoiler),
                         style = ArvioSkin.typography.caption.copy(fontWeight = FontWeight.Bold),
                         color = Color.White.copy(alpha = 0.6f)
                     )
@@ -3600,14 +3605,16 @@ private fun SeasonButton(
 
     val isFullyWatched = totalCount > 0 && watchedCount >= totalCount
 
+    val selectSeasonLabel = stringResource(R.string.details_cd_select_season, season)
+    val seasonOptionsLabel = stringResource(R.string.details_cd_season_options)
     val clickModifier = if (onLongClick != null) {
         @OptIn(ExperimentalFoundationApi::class)
         Modifier.combinedClickable(
             onClick = onClick,
             onLongClick = onLongClick,
             role = Role.Button,
-            onClickLabel = "Select season $season",
-            onLongClickLabel = "Show season options"
+            onClickLabel = selectSeasonLabel,
+            onLongClickLabel = seasonOptionsLabel
         )
     } else {
         Modifier.clickable(onClick = onClick)
@@ -4150,7 +4157,7 @@ private fun SimilarMediaCard(
     isFocused: Boolean,
     onClick: () -> Unit = {}
 ) {
-    val mediaTypeLabel = if (item.mediaType == MediaType.TV) "TV Series" else "Movie"
+    val mediaTypeLabel = if (item.mediaType == MediaType.TV) stringResource(R.string.details_label_tv_series) else stringResource(R.string.movie)
     val yearSuffix = item.year.takeIf { it.isNotBlank() }?.let { " | $it" }.orEmpty()
     MediaCard(
         item = item.copy(subtitle = "$mediaTypeLabel$yearSuffix"),

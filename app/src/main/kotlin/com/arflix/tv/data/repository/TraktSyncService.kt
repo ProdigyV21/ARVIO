@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.arflix.tv.R
 import com.arflix.tv.data.api.*
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.util.Constants
@@ -104,7 +105,7 @@ class TraktSyncService @Inject constructor(
 
     suspend fun performFullSync(): SyncResult = withContext(Dispatchers.IO) {
         if (_isSyncing.value) {
-            return@withContext SyncResult.Error("Sync already in progress")
+            return@withContext SyncResult.Error(context.getString(R.string.sync_in_progress))
         }
 
         _isSyncing.value = true
@@ -120,7 +121,7 @@ class TraktSyncService @Inject constructor(
 
             if (hasSupabase) {
                 try {
-                    val supabaseUserId = userId ?: return@withContext SyncResult.Error("Not logged in")
+                    val supabaseUserId = userId ?: return@withContext SyncResult.Error(context.getString(R.string.error_not_logged_in))
                     updateSyncState(supabaseUserId, syncInProgress = true, lastError = null)
                 } catch (e: Exception) {
                 }
@@ -297,7 +298,7 @@ class TraktSyncService @Inject constructor(
             } catch (_: Exception) {
             }
 
-            SyncResult.Error(e.message ?: "Unknown error")
+            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown))
         } finally {
             _isSyncing.value = false
         }
@@ -310,7 +311,7 @@ class TraktSyncService @Inject constructor(
 
     suspend fun performIncrementalSync(): SyncResult = withContext(Dispatchers.IO) {
         if (_isSyncing.value) {
-            return@withContext SyncResult.Error("Sync already in progress")
+            return@withContext SyncResult.Error(context.getString(R.string.sync_in_progress))
         }
 
         _isSyncing.value = true
@@ -325,7 +326,7 @@ class TraktSyncService @Inject constructor(
                 _isSyncing.value = false
                 return@withContext performFullSync()
             }
-            val safeUserId = userId ?: return@withContext SyncResult.Error("Not logged in")
+            val safeUserId = userId ?: return@withContext SyncResult.Error(context.getString(R.string.error_not_logged_in))
 
             var syncState: SyncStateRecord? = null
             try {
@@ -471,7 +472,7 @@ class TraktSyncService @Inject constructor(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
             )
-            SyncResult.Error(e.message ?: "Unknown error")
+            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown))
         } finally {
             _isSyncing.value = false
         }
@@ -1755,7 +1756,7 @@ class TraktSyncService @Inject constructor(
         operation: String,
         block: suspend (String) -> T
     ): T {
-        val auth = getAuthHeader() ?: throw IllegalStateException("Not authenticated with Trakt")
+        val auth = getAuthHeader() ?: throw IllegalStateException(context.getString(R.string.trakt_not_authenticated))
         return try {
             block(auth)
         } catch (e: HttpException) {
@@ -1783,7 +1784,7 @@ class TraktSyncService @Inject constructor(
             }
             auth = if (!refreshed.isNullOrBlank()) "Bearer $refreshed" else null
         }
-        if (auth == null) throw IllegalStateException("Supabase auth failed")
+        if (auth == null) throw IllegalStateException(context.getString(R.string.sync_supabase_auth_failed))
         return try {
             block(auth)
         } catch (e: HttpException) {

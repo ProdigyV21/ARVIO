@@ -143,7 +143,7 @@ class LauncherContinueWatchingRepository @Inject constructor(
 
         val channel = Channel.Builder()
             .setType(TvContractCompat.Channels.TYPE_PREVIEW)
-            .setDisplayName("Continue Watching")
+            .setDisplayName(context.getString(R.string.continue_watching))
             .setDescription("Resume watching in Arvio")
             .setInternalProviderId(CHANNEL_INTERNAL_ID)
             .build()
@@ -166,7 +166,7 @@ class LauncherContinueWatchingRepository @Inject constructor(
         val program = PreviewProgram.Builder()
             .setChannelId(channelId)
             .setType(item.toPreviewType())
-            .setTitle(item.title.ifBlank { "Continue Watching" })
+            .setTitle(item.title.ifBlank { context.getString(R.string.continue_watching) })
             .setDescription(item.buildSubtitle())
             .setInternalProviderId(item.previewProgramId())
             .setPosterArtUri(item.posterPath?.takeIf { it.isNotBlank() }?.let(Uri::parse))
@@ -182,7 +182,7 @@ class LauncherContinueWatchingRepository @Inject constructor(
     private fun insertWatchNextProgram(item: ContinueWatchingItem, index: Int) {
         val builder = WatchNextProgram.Builder()
             .setType(item.toPreviewType())
-            .setTitle(item.title.ifBlank { "Continue Watching" })
+            .setTitle(item.title.ifBlank { context.getString(R.string.continue_watching) })
             .setDescription(item.buildSubtitle())
             .setInternalProviderId(item.watchNextProgramId())
             .setIntentUri(buildLaunchIntent(item).toUri(Intent.URI_INTENT_SCHEME).let(Uri::parse))
@@ -324,14 +324,16 @@ class LauncherContinueWatchingRepository @Inject constructor(
 
     private fun ContinueWatchingItem.buildSubtitle(): String {
         val episodeLabel = if (mediaType == MediaType.TV && season != null && episode != null) {
-            "Continue S${season}E${episode}"
+            context.getString(R.string.continue_season_episode, season, episode)
         } else {
-            "Continue"
+            context.getString(R.string.continue_label)
         }
         val resumeClock = resumePositionSeconds.takeIf { it > 0L }?.let(::formatResumeClock)
         return when {
-            !resumeClock.isNullOrBlank() -> "$episodeLabel from $resumeClock"
-            !episodeTitle.isNullOrBlank() -> "$episodeLabel - $episodeTitle"
+            !resumeClock.isNullOrBlank() ->
+                context.getString(R.string.launcher_continue_from, episodeLabel, resumeClock)
+            !episodeTitle.isNullOrBlank() ->
+                context.getString(R.string.launcher_continue_dash, episodeLabel, episodeTitle)
             else -> episodeLabel
         }
     }

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.arflix.tv.R
 import com.arflix.tv.data.api.*
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.AddonInstallSource
@@ -462,7 +463,7 @@ class StreamRepository @Inject constructor(
                 name = config.name,
                 version = "1.0.0",
                 description = when (config.id) {
-                    "opensubtitles" -> "Subtitles from OpenSubtitles"
+                    "opensubtitles" -> context.getString(R.string.addon_opensubtitles_description)
                     else -> ""
                 },
                 isInstalled = true,
@@ -482,7 +483,7 @@ class StreamRepository @Inject constructor(
             id = "opensubtitles",
             name = "OpenSubtitles v3",
             version = "1.0.0",
-            description = "Subtitles from OpenSubtitles",
+            description = context.getString(R.string.addon_opensubtitles_description),
             isInstalled = true,
             isEnabled = preservedEnabled,
             type = AddonType.SUBTITLE,
@@ -492,7 +493,7 @@ class StreamRepository @Inject constructor(
             id = "opensubtitles",
             name = "OpenSubtitles v3",
             version = addon?.version ?: "1.0.0",
-            description = "Subtitles from OpenSubtitles",
+            description = context.getString(R.string.addon_opensubtitles_description),
             isInstalled = true,
             isEnabled = preservedEnabled,
             type = AddonType.SUBTITLE,
@@ -554,7 +555,7 @@ class StreamRepository @Inject constructor(
         try {
             val normalizedUrl = resolveAddonInstallUrl(url)
             if (normalizedUrl.isBlank()) {
-                return@withContext Result.failure(IllegalArgumentException("Addon URL is empty"))
+                return@withContext Result.failure(IllegalArgumentException(context.getString(R.string.addon_error_url_empty)))
             }
 
             httpLocalScraperRuntime.fetchInstallCandidate(

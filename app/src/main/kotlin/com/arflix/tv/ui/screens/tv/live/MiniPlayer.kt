@@ -36,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +45,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.util.formatGenreName
@@ -202,7 +204,7 @@ private fun VideoCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.FitScreen,
-                    contentDescription = "Fullscreen",
+                    contentDescription = stringResource(R.string.live_cd_fullscreen),
                     tint = Color.White,
                     modifier = Modifier.size(21.dp),
                 )
@@ -236,7 +238,7 @@ private fun LiveBug(modifier: Modifier = Modifier) {
                 .background(LiveColors.LiveRed, CircleShape),
         )
         Text(
-            text = "LIVE",
+            text = stringResource(R.string.live_badge_live),
             style = LiveType.Badge.copy(color = Color.White),
         )
     }
@@ -283,7 +285,7 @@ private fun ChannelIdentityRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = "CH " + channel.number,
+                        text = stringResource(R.string.live_label_ch, channel.number),
                         style = LiveType.SectionTag.copy(color = LiveColors.FgMute),
                     )
                     Text(
@@ -331,7 +333,7 @@ private fun SourceBadge(count: Int, onOpenVariants: (() -> Unit)?) {
             .then(if (onOpenVariants != null) Modifier.clickable { onOpenVariants() } else Modifier)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
-        Text("$count sources", style = LiveType.Badge.copy(color = LiveColors.Accent))
+        Text(stringResource(R.string.live_label_sources, count), style = LiveType.Badge.copy(color = LiveColors.Accent))
     }
 }
 
@@ -377,7 +379,7 @@ private fun NowCard(channel: EnrichedChannel?, clockTickMillis: Long, nowNext: I
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("NOW", style = LiveType.SectionTag.copy(color = LiveColors.Accent))
+            Text(stringResource(R.string.live_badge_now), style = LiveType.SectionTag.copy(color = LiveColors.Accent))
             Text(
                 text = formatTimeWindow(now),
                 style = LiveType.TimeMono.copy(color = LiveColors.Fg),
@@ -392,7 +394,7 @@ private fun NowCard(channel: EnrichedChannel?, clockTickMillis: Long, nowNext: I
             }
         }
         Text(
-            text = now?.title ?: channel?.name ?: "No programme data",
+            text = now?.title ?: channel?.name ?: stringResource(R.string.live_empty_no_programme),
             style = LiveType.ProgramTitle.copy(color = LiveColors.Fg),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -425,7 +427,7 @@ private fun NextRow(nowNext: IptvNowNext?) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("NEXT", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
+        Text(stringResource(R.string.live_badge_next), style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
         Text(
             text = formatClock(next.startUtcMillis),
             style = LiveType.TimeMono.copy(color = LiveColors.FgDim),

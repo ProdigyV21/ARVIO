@@ -1,7 +1,9 @@
 package com.arflix.tv.ui.screens.tv
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
@@ -11,6 +13,7 @@ import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.IptvTvSessionState
 import com.arflix.tv.util.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,6 +78,7 @@ data class TvUiState(
 
 @HiltViewModel
 class TvViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     val iptvRepository: IptvRepository,
     private val cloudSyncRepository: CloudSyncRepository
 ) : ViewModel() {
@@ -433,7 +437,7 @@ class TvViewModel @Inject constructor(
                         pendingForcedReload = true
                         _uiState.value = currentState.copy(
                             isLoading = false,
-                            error = error.message ?: "Failed to load IPTV",
+                            error = error.message ?: context.getString(R.string.tv_failed_load_iptv),
                             loadingMessage = null,
                             loadingPercent = 0
                         )
@@ -441,7 +445,7 @@ class TvViewModel @Inject constructor(
                     }
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to load IPTV",
+                        error = error.message ?: context.getString(R.string.tv_failed_load_iptv),
                         loadingMessage = null,
                         loadingPercent = 0
                     )

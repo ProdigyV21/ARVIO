@@ -522,20 +522,23 @@ fun PlayerScreen(
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
+        val rewindLabel = context.getString(R.string.player_cd_rewind)
+        val forwardLabel = context.getString(R.string.player_cd_forward)
+        val playPauseLabel = if (isPlaying) context.getString(R.string.player_cd_pause) else context.getString(R.string.play)
         val actions = listOf(
             RemoteAction(
                 vectorToDrawableIcon(pipRewindPainter),
-                "Rewind 10s", "Rewind 10s", makeIntent(PIP_ACTION_REWIND, 10)
+                rewindLabel, rewindLabel, makeIntent(PIP_ACTION_REWIND, 10)
             ),
             RemoteAction(
                 vectorToDrawableIcon(if (isPlaying) pipPausePainter else pipPlayPainter),
-                if (isPlaying) "Pause" else "Play",
-                if (isPlaying) "Pause" else "Play",
+                playPauseLabel,
+                playPauseLabel,
                 makeIntent(PIP_ACTION_PLAY_PAUSE, 11)
             ),
             RemoteAction(
                 vectorToDrawableIcon(pipForwardPainter),
-                "Forward 10s", "Forward 10s", makeIntent(PIP_ACTION_FORWARD, 12)
+                forwardLabel, forwardLabel, makeIntent(PIP_ACTION_FORWARD, 12)
             )
         )
         return PictureInPictureParams.Builder()
@@ -2716,7 +2719,7 @@ fun PlayerScreen(
                     modifier = Modifier.size(12.dp)
                 )
                 Text(
-                    text = "AI Translating",
+                    text = stringResource(R.string.player_ai_translating),
                     style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f)
                 )
@@ -2820,7 +2823,7 @@ fun PlayerScreen(
                                 ) {
                                     Icon(
                                         imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
-                                        contentDescription = if (isCasting) "Stop casting" else "Cast to TV",
+                                        contentDescription = if (isCasting) stringResource(R.string.player_cd_stop_casting) else stringResource(R.string.player_cd_cast_to_tv),
                                         tint = if (isCasting) playerAccent else Color.White.copy(alpha = 0.85f),
                                         modifier = Modifier.size(22.dp)
                                     )
@@ -2967,7 +2970,7 @@ fun PlayerScreen(
                         Spacer(modifier = Modifier.width(gap))
 
                         // Subtitle settings (delay, size, vertical position)
-                        PlayerIconButton(icon = Icons.Default.Tune, contentDescription = "Subtitle Settings",
+                        PlayerIconButton(icon = Icons.Default.Tune, contentDescription = stringResource(R.string.subtitle_settings_title),
                             focusRequester = subtitleSettingsBtnFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = {
@@ -2999,7 +3002,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(wideGap))
 
                             // Rewind 10s
-                            PlayerIconButton(icon = Icons.Default.Replay10, contentDescription = "Rewind 10s",
+                            PlayerIconButton(icon = Icons.Default.Replay10, contentDescription = stringResource(R.string.player_cd_rewind),
                                 focusRequester = rewindButtonFocusRequester, size = midBtn, iconSize = midIcon,
                                 onFocusChanged = {},
                                 onClick = { queueControlsSeek(-10_000L) },
@@ -3014,7 +3017,7 @@ fun PlayerScreen(
 
                         // Play/Pause - center, largest
                         PlayerIconButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) stringResource(R.string.player_cd_pause) else stringResource(R.string.play),
                             focusRequester = playButtonFocusRequester, size = bigBtn, iconSize = bigIcon,
                             onFocusChanged = { if (it) focusedButton = 0 },
                             onClick = {
@@ -3034,7 +3037,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(gap))
 
                             // Forward 10s - own focus requester
-                            PlayerIconButton(icon = Icons.Default.Forward10, contentDescription = "Forward 10s",
+                            PlayerIconButton(icon = Icons.Default.Forward10, contentDescription = stringResource(R.string.player_cd_forward),
                                 focusRequester = forwardButtonFocusRequester, size = midBtn, iconSize = midIcon,
                                 onFocusChanged = {},
                                 onClick = { queueControlsSeek(10_000L) },
@@ -3048,7 +3051,7 @@ fun PlayerScreen(
                         }
 
                         // Aspect Ratio
-                        PlayerIconButton(icon = Icons.Default.AspectRatio, contentDescription = "Aspect: $aspectModeLabel",
+                        PlayerIconButton(icon = Icons.Default.AspectRatio, contentDescription = stringResource(R.string.player_cd_aspect, aspectModeLabel),
                             focusRequester = aspectButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = cycleAspectRatio,
@@ -3083,7 +3086,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(gap))
                             PlayerIconButton(
                                 icon = Icons.Default.PictureInPicture,
-                                contentDescription = "Picture in Picture",
+                                contentDescription = stringResource(R.string.player_cd_pip),
                                 focusRequester = pipButtonFocusRequester,
                                 size = smallBtn, iconSize = smallIcon,
                                 onFocusChanged = {},
@@ -3360,7 +3363,7 @@ fun PlayerScreen(
                         currentVolume < maxVolume / 2 -> Icons.Default.VolumeDown
                         else -> Icons.Default.VolumeUp
                     },
-                    contentDescription = "Volume",
+                    contentDescription = stringResource(R.string.player_cd_volume),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
@@ -3381,7 +3384,7 @@ fun PlayerScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (isMuted) "Muted" else "${currentVolume * 100 / maxVolume}%",
+                    text = if (isMuted) stringResource(R.string.player_muted) else "${currentVolume * 100 / maxVolume}%",
                     style = ArflixTypography.caption,
                     color = Color.White
                 )
@@ -3517,7 +3520,7 @@ fun PlayerScreen(
                     ) {
                         Icon(
                             imageVector = if (isSetup) Icons.Default.Settings else Icons.Default.ErrorOutline,
-                            contentDescription = if (isSetup) "Setup" else "Error",
+                            contentDescription = if (isSetup) stringResource(R.string.player_cd_setup) else stringResource(R.string.player_cd_error),
                             tint = accentColor,
                             modifier = Modifier.size(40.dp)
                         )
@@ -3526,7 +3529,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Text(
-                        text = if (isSetup) "Addon Setup Required" else "Playback Error",
+                        text = if (isSetup) stringResource(R.string.player_addon_setup_required) else stringResource(R.string.player_playback_error),
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
@@ -3534,7 +3537,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = uiState.error ?: "An unknown error occurred",
+                        text = uiState.error ?: stringResource(R.string.player_error_generic),
                         style = ArflixTypography.body,
                         color = TextSecondary,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,

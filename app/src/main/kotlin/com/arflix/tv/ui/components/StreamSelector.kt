@@ -228,8 +228,9 @@ fun StreamSelector(
     }
 
     // Tab labels: "All sources" + addon labels
-    val tabLabels = remember(addonTabs) {
-        listOf("All sources") + addonTabs.map { it.label }
+    val allSourcesLabel = stringResource(R.string.stream_tab_all_sources)
+    val tabLabels = remember(addonTabs, allSourcesLabel) {
+        listOf(allSourcesLabel) + addonTabs.map { it.label }
     }
 
     val presentations = remember(streams) { streams.map(::presentSource) }
@@ -463,7 +464,7 @@ fun StreamSelector(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = title.ifEmpty { "Select Source" },
+                                text = title.ifEmpty { stringResource(R.string.stream_title_select_source) },
                                 style = ArflixTypography.body.copy(
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
@@ -561,7 +562,7 @@ fun StreamSelector(
                                             if (elapsedSeconds > 0) append("${elapsedSeconds}s \u2022 ")
                                             if (loadingPluginNames.isNotEmpty()) append(stringResource(R.string.plugins_loading, loadingPluginNames.joinToString(", ")))
                                             else if (pluginScrapersLoading) append(stringResource(R.string.plugins_loading, "..."))
-                                            else if (totalAddons > 0) append("Searching addons ($completedAddons/$totalAddons)...")
+                                            else if (totalAddons > 0) append(stringResource(R.string.stream_searching_addons, completedAddons, totalAddons))
                                             else append(stringResource(R.string.finding_sources))
                                         },
                                         style = ArflixTypography.body.copy(
@@ -587,7 +588,7 @@ fun StreamSelector(
                                     }
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Text(
-                                        text = if (!hasStreamingAddons) "No Streaming Addons" else "No sources found",
+                                        text = if (!hasStreamingAddons) stringResource(R.string.stream_no_streaming_addons) else stringResource(R.string.stream_no_sources_found),
                                         style = ArflixTypography.body.copy(
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Medium
@@ -597,9 +598,9 @@ fun StreamSelector(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = if (!hasStreamingAddons)
-                                            "Go to Settings \u2192 Addons to add\na streaming addon"
+                                            stringResource(R.string.stream_no_addons_hint)
                                         else
-                                            "Try adding more addons",
+                                            stringResource(R.string.stream_try_adding_addons),
                                         style = ArflixTypography.caption.copy(fontSize = 12.sp),
                                         color = TextSecondary.copy(alpha = 0.6f),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -788,7 +789,7 @@ private fun OledSourceSelectorTv(
                     completedAddons = completedAddons,
                     totalAddons = totalAddons,
                     hasStreamingAddons = hasStreamingAddons,
-                    message = "No sources match this filter"
+                    message = stringResource(R.string.stream_no_sources_match)
                 )
                 else -> Box(modifier = Modifier.fillMaxSize()) {
                     TvLazyColumn(
@@ -1441,7 +1442,7 @@ private fun BestMatchStrip(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Best Match",
+                    text = stringResource(R.string.stream_best_match),
                     style = ArflixTypography.caption.copy(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -1535,7 +1536,7 @@ private fun SourceAddonRail(
             .padding(start = 4.dp, top = 2.dp, bottom = 2.dp)
     ) {
         Text(
-            text = "ADDONS",
+            text = stringResource(R.string.stream_section_addons),
             style = ArflixTypography.caption.copy(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -1610,11 +1611,11 @@ private fun SourceAddonRail(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RailMetric(label = "Total", value = totalSources.toString())
+            RailMetric(label = stringResource(R.string.stream_metric_total), value = totalSources.toString())
             RailMetric(label = "4K", value = count4K.toString())
             RailMetric(label = "1080p", value = count1080.toString())
             if (totalAddons > 0) {
-                RailMetric(label = "Checked", value = "$completedAddons/$totalAddons")
+                RailMetric(label = stringResource(R.string.stream_metric_checked), value = "$completedAddons/$totalAddons")
             }
         }
     }
@@ -1718,7 +1719,7 @@ private fun SourceEmptyState(
                         if (elapsedSeconds > 0) append("${elapsedSeconds}s \u2022 ")
                         if (loadingPluginNames.isNotEmpty()) append(stringResource(R.string.plugins_loading, loadingPluginNames.joinToString(", ")))
                         else if (pluginScrapersLoading) append(stringResource(R.string.plugins_loading, "..."))
-                        else if (totalAddons > 0) append("Searching addons ($completedAddons/$totalAddons)...")
+                        else if (totalAddons > 0) append(stringResource(R.string.stream_searching_addons, completedAddons, totalAddons))
                         else append(stringResource(R.string.finding_sources))
                     },
                     style = ArflixTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
@@ -1733,7 +1734,7 @@ private fun SourceEmptyState(
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = message ?: if (!hasStreamingAddons) "No streaming addons" else "No sources found",
+                    text = message ?: if (!hasStreamingAddons) stringResource(R.string.stream_no_streaming_addons) else stringResource(R.string.stream_no_sources_found),
                     style = ArflixTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     color = TextSecondary
                 )

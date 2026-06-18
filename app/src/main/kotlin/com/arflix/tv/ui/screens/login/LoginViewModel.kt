@@ -1,15 +1,18 @@
 package com.arflix.tv.ui.screens.login
 
+import android.content.Context
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.util.AuthEmailValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +30,7 @@ data class LoginUiState(
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val authRepository: AuthRepository,
     private val streamRepository: StreamRepository,
     private val cloudSyncRepository: CloudSyncRepository
@@ -47,12 +51,13 @@ class LoginViewModel @Inject constructor(
 
     fun signIn(email: String, password: String) {
         val normalizedEmail = AuthEmailValidator.normalize(email)
-        AuthEmailValidator.validate(normalizedEmail, rejectDisposable = false)?.let { message ->
+        AuthEmailValidator.validate(normalizedEmail, rejectDisposable = false)?.let { messageRes ->
+            val message = context.getString(messageRes)
             _uiState.update { it.copy(error = message) }
             return
         }
         if (password.isBlank()) {
-            _uiState.update { it.copy(error = "Please enter your password") }
+            _uiState.update { it.copy(error = context.getString(R.string.login_error_enter_password)) }
             return
         }
 
@@ -83,24 +88,25 @@ class LoginViewModel @Inject constructor(
 
     fun signUp(email: String, password: String) {
         val normalizedEmail = AuthEmailValidator.normalize(email)
-        AuthEmailValidator.validate(normalizedEmail)?.let { message ->
+        AuthEmailValidator.validate(normalizedEmail)?.let { messageRes ->
+            val message = context.getString(messageRes)
             _uiState.update { it.copy(error = message) }
             return
         }
         if (password.isBlank()) {
-            _uiState.update { it.copy(error = "Please enter your password") }
+            _uiState.update { it.copy(error = context.getString(R.string.login_error_enter_password)) }
             return
         }
 
         if (password.length < 6) {
-            _uiState.update { it.copy(error = "Password must be at least 6 characters") }
+            _uiState.update { it.copy(error = context.getString(R.string.login_error_password_short)) }
             return
         }
         val now = System.currentTimeMillis()
         val remainingCooldownMs = 60_000L - (now - lastSignUpAttemptMs)
         if (remainingCooldownMs > 0L) {
             val seconds = ((remainingCooldownMs + 999L) / 1000L).coerceAtLeast(1L)
-            _uiState.update { it.copy(error = "Please wait ${seconds}s before creating another account") }
+            _uiState.update { it.copy(error = context.getString(R.string.login_error_wait_seconds, seconds)) }
             return
         }
         lastSignUpAttemptMs = now

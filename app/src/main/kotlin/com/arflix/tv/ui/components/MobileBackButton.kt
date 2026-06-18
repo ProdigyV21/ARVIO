@@ -15,7 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.arflix.tv.R
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
 
@@ -64,7 +66,7 @@ fun MobileBackButton(
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
+            contentDescription = stringResource(R.string.back),
             tint = Color.White.copy(alpha = 0.9f),
             modifier = Modifier.size(28.dp)
         )

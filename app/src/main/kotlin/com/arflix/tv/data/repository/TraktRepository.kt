@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.arflix.tv.R
 import com.arflix.tv.data.api.*
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
@@ -2580,7 +2581,7 @@ class TraktRepository @Inject constructor(
                 MediaItem(
                     id = tmdbId,
                     title = movie.title,
-                    subtitle = "Movie",
+                    subtitle = context.getString(R.string.movie),
                     overview = "",
                     year = movie.year?.toString().orEmpty(),
                     mediaType = MediaType.MOVIE,
@@ -2595,7 +2596,7 @@ class TraktRepository @Inject constructor(
                 MediaItem(
                     id = tmdbId,
                     title = show.title,
-                    subtitle = "TV Series",
+                    subtitle = context.getString(R.string.component_label_tv_series),
                     overview = "",
                     year = show.year?.toString().orEmpty(),
                     mediaType = MediaType.TV,
@@ -2648,7 +2649,7 @@ class TraktRepository @Inject constructor(
                     MediaItem(
                         id = details.id,
                         title = details.title,
-                        subtitle = "Movie",
+                        subtitle = context.getString(R.string.movie),
                         overview = details.overview ?: "",
                         year = details.releaseDate?.take(4) ?: "",
                         tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
@@ -2669,7 +2670,7 @@ class TraktRepository @Inject constructor(
                     MediaItem(
                         id = details.id,
                         title = details.name,
-                        subtitle = "TV Series",
+                        subtitle = context.getString(R.string.component_label_tv_series),
                         overview = details.overview ?: "",
                         year = details.firstAirDate?.take(4) ?: "",
                         tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
@@ -2697,7 +2698,7 @@ class TraktRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = movie.title,
-            subtitle = "Movie",
+            subtitle = context.getString(R.string.movie),
             overview = "",
             year = movie.year?.toString().orEmpty(),
             mediaType = MediaType.MOVIE,
@@ -2717,7 +2718,7 @@ class TraktRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = show.title,
-            subtitle = "TV Series",
+            subtitle = context.getString(R.string.component_label_tv_series),
             overview = "",
             year = show.year?.toString().orEmpty(),
             mediaType = MediaType.TV,
@@ -3783,7 +3784,7 @@ data class ContinueWatchingItem(
     val totalEpisodes: Int = 0,
     val watchedEpisodes: Int = 0
 ) {
-    fun toMediaItem(): MediaItem {
+    fun toMediaItem(context: Context? = null): MediaItem {
         val effectiveDurationSeconds = durationSeconds.takeIf { it > 0L } ?: parseRuntimeLabelSeconds(duration)
         val showPlaybackProgress = !isUpNext && progress in 1..94
         val resumeSeconds = when {
@@ -3798,13 +3799,23 @@ data class ContinueWatchingItem(
         val resumeLabel = resumeSeconds.takeIf { it > 0L }?.let { formatResumeClock(it) }
 
         val subtitle = if (mediaType == MediaType.TV && season != null && episode != null) {
-            val base = "Continue S${season}.E${episode}"
-            if (!resumeLabel.isNullOrBlank()) "$base from $resumeLabel" else base
+            val base = context?.getString(R.string.continue_season_episode, season, episode)
+                ?: "Continue S${season}E${episode}"
+            if (!resumeLabel.isNullOrBlank()) {
+                context?.getString(R.string.continue_from, resumeLabel) ?: "$base from $resumeLabel"
+            } else {
+                base
+            }
         } else {
             if (mediaType == MediaType.MOVIE) {
-                if (!resumeLabel.isNullOrBlank()) "Continue from $resumeLabel" else "Continue"
+                if (!resumeLabel.isNullOrBlank()) {
+                    context?.getString(R.string.continue_from, resumeLabel)
+                        ?: "Continue from $resumeLabel"
+                } else {
+                    context?.getString(R.string.continue_label) ?: "Continue"
+                }
             } else {
-                "TV Series"
+                context?.getString(R.string.component_label_tv_series) ?: "TV Series"
             }
         }
 

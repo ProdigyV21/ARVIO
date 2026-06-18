@@ -179,7 +179,7 @@ fun SearchScreen(
     val quickFilters = listOfNotNull(
         DiscoverQuickFilter(
             key = "all",
-            label = "All",
+            label = stringResource(R.string.search_filter_all),
             isSelected = uiState.selectedType == DiscoverType.ALL && uiState.selectedGenre == null && uiState.selectedCountry == null,
             onSelect = { viewModel.setDiscoverFilters(DiscoverType.ALL, null, null) }
         ),
@@ -197,7 +197,7 @@ fun SearchScreen(
         ),
         DiscoverQuickFilter(
             key = "anime",
-            label = "Anime",
+            label = stringResource(R.string.search_filter_anime),
             isSelected = uiState.selectedType == DiscoverType.ANIME && uiState.selectedGenre == null && uiState.selectedCountry == null,
             onSelect = { viewModel.setDiscoverFilters(DiscoverType.ANIME, null, null) }
         ),

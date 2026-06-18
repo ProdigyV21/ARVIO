@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 import androidx.compose.ui.platform.LocalContext
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
@@ -115,7 +117,7 @@ fun ContinueWatchingCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play",
+                                contentDescription = stringResource(R.string.play),
                                 tint = ArvioSkin.colors.textPrimary,
                                 modifier = Modifier.size(32.dp),
                             )
@@ -162,7 +164,7 @@ fun ContinueWatchingCard(
                     }
                 }
 
-                val typeLabel = if (item.mediaType == MediaType.TV) "TV" else "MOVIE"
+                val typeLabel = if (item.mediaType == MediaType.TV) stringResource(R.string.component_badge_tv) else stringResource(R.string.component_badge_movie)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -323,7 +325,7 @@ fun ContinueWatchingCardCompact(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.play),
                         tint = ArvioSkin.colors.textPrimary,
                         modifier = Modifier.size(24.dp),
                     )

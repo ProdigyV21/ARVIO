@@ -45,11 +45,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
@@ -352,12 +354,12 @@ fun EpgGrid(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("CHANNELS", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
+                    Text(stringResource(R.string.live_label_channels), style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
                     Text(safeTotalChannelCount.toString(),
                         style = LiveType.NumberMono.copy(color = LiveColors.FgDim))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("CH", style = LiveType.SectionTag.copy(color = LiveColors.Accent))
+                    Text(stringResource(R.string.live_badge_ch), style = LiveType.SectionTag.copy(color = LiveColors.Accent))
                     Text(
                         selectedChannel?.number?.toString() ?: "—",
                         style = LiveType.NumberMono.copy(color = LiveColors.Accent),
@@ -405,7 +407,7 @@ fun EpgGrid(
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = "NOW " + formatClock(clockTickMillis),
+                            text = stringResource(R.string.live_label_now_time, formatClock(clockTickMillis)),
                             style = LiveType.Badge.copy(color = LiveColors.Bg),
                         )
                     }
@@ -545,16 +547,17 @@ fun EpgGrid(
                                 val rowHasGuideIdentity = !ch.source.epgId.isNullOrBlank() ||
                                     !ch.source.tvgName.isNullOrBlank()
                                 val placeholderTitle = when {
-                                    isGuideLoading -> "Loading guide..."
-                                    !rowHasGuideIdentity -> "No programme data"
-                                    hasGuideSource && guideAttempted -> "No guide data matched"
-                                    hasGuideSource -> "Guide pending..."
-                                    else -> "No guide source"
+                                    isGuideLoading -> stringResource(R.string.live_placeholder_loading_guide)
+                                    !rowHasGuideIdentity -> stringResource(R.string.live_empty_no_programme)
+                                    hasGuideSource && guideAttempted -> stringResource(R.string.live_placeholder_no_guide_matched)
+                                    hasGuideSource -> stringResource(R.string.live_placeholder_guide_pending)
+                                    else -> stringResource(R.string.live_placeholder_no_guide_source)
                                 }
                                 ProgramsRow(
                                     channel = ch,
                                     programs = rowPrograms,
                                     placeholderTitle = placeholderTitle,
+                                    noProgrammeData = stringResource(R.string.live_empty_no_programme),
                                     clockTickMillis = clockTickMillis,
                                     windowStartMillis = windowStartMillis,
                                     windowEndMillis = windowEndMillis,
@@ -625,6 +628,7 @@ private fun ProgramsRow(
     channel: EnrichedChannel,
     programs: List<IptvProgram>,
     placeholderTitle: String,
+    noProgrammeData: String,
     clockTickMillis: Long,
     windowStartMillis: Long,
     windowEndMillis: Long,
@@ -662,8 +666,8 @@ private fun ProgramsRow(
         // storm that made dpad navigation hitch. The now/past state is derived cheaply
         // per render from `nowMillis` via ProgramPlacement.isNow()/isPast(), and the
         // placeholder anchor refreshes whenever `windowStartMillis` rounds forward.
-        val placements = remember(programs, placeholderTitle, windowStartMillis, windowEndMillis) {
-            buildProgramPlacements(programs, windowStartMillis, windowEndMillis, nowMillis, placeholderTitle)
+        val placements = remember(programs, placeholderTitle, noProgrammeData, windowStartMillis, windowEndMillis) {
+            buildProgramPlacements(programs, windowStartMillis, windowEndMillis, nowMillis, placeholderTitle, noProgrammeData)
         }
         val focusablePlacementIndices = remember(placements, channel.catchupDays, nowMillis, epgMode) {
             if (!epgMode) return@remember emptyList()
@@ -872,11 +876,12 @@ private fun buildProgramPlacements(
     windowStartMillis: Long,
     windowEndMillis: Long,
     nowMillis: Long,
-    placeholderTitle: String = "No Information",
+    placeholderTitle: String = "",
+    noProgrammeData: String = placeholderTitle,
 ): List<ProgramPlacement> {
     val placements = mutableListOf<ProgramPlacement>()
     var cursor = windowStartMillis
-    val gapTitle = if (programs.isEmpty()) placeholderTitle else "No programme data"
+    val gapTitle = if (programs.isEmpty()) placeholderTitle else noProgrammeData
 
     programs.forEach { program ->
         // 1. Fill gap before this program
