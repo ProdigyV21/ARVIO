@@ -80,7 +80,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.lifecycleScope
 import androidx.metrics.performance.JankStats
 import androidx.metrics.performance.PerformanceMetricsState
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -92,8 +91,6 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import com.arflix.tv.data.repository.AuthRepository
-import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRequest
 import com.arflix.tv.data.repository.MediaRepository
@@ -105,7 +102,6 @@ import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
-import com.arflix.tv.ui.screens.login.LoginScreen
 import com.arflix.tv.ui.startup.StartupViewModel
 import com.arflix.tv.ui.theme.ArflixTvTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -133,9 +129,6 @@ private sealed interface ActiveProfileLoadState {
 class MainActivity : ComponentActivity() {
 
     @Inject
-    lateinit var authRepository: Lazy<AuthRepository>
-
-    @Inject
     lateinit var profileRepository: Lazy<ProfileRepository>
 
     @Inject
@@ -155,14 +148,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var mediaRepository: Lazy<MediaRepository>
-
-    // Prefetch IPTV early so the TV screen opens without a loading stall.
-    // IptvRepository is @Singleton; touching it at activity start warms the
-    // in-memory snapshot (and will trigger a disk-cache read + silent
-    // background refresh) so by the time the user navigates into the TV tab
-    // everything is already resident.
-    @Inject
-    lateinit var iptvRepository: Lazy<com.arflix.tv.data.repository.IptvRepository>
 
     private var jankStats: JankStats? = null
     private var pendingLauncherRequest by mutableStateOf<LauncherContinueWatchingRequest?>(null)
@@ -236,10 +221,6 @@ class MainActivity : ComponentActivity() {
                 isAppearanceLightStatusBars = false      // white icons on dark bg
                 isAppearanceLightNavigationBars = false  // white icons on dark bg
             }
-        }
-
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { iptvRepository.get().warmupFromCacheOnly() }
         }
 
         setContent {
@@ -329,13 +310,11 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val startupState by startupViewModel.state.collectAsStateWithLifecycle()
                     ArflixApp(
-                        authRepository = authRepository.get(),
                         profileRepository = profileRepository.get(),
                         traktRepository = traktRepository.get(),
                         profileManager = profileManager.get(),
                         watchHistoryRepository = watchHistoryRepository.get(),
                         watchlistRepository = watchlistRepository.get(),
-                        iptvRepository = iptvRepository.get(),
                         launcherContinueWatchingRepository = launcherContinueWatchingRepository.get(),
                         oledBlackBackground = oledBlackBackground,
                         skipProfileSelection = skipProfileSelection,
@@ -362,16 +341,7 @@ class MainActivity : ComponentActivity() {
         }
 
         runAfterFirstDraw {
-            lifecycleScope.launch {
-                authRepository.get().checkAuthState()
-            }
             ArflixApplication.instance.scheduleTraktSyncIfNeeded()
-            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                val repo = iptvRepository.get()
-                runCatching { repo.warmupFromCacheOnly() }
-                kotlinx.coroutines.delay(60_000L)
-                runCatching { repo.prefetchFreshStartupData() }
-            }
         }
     }
 
@@ -514,13 +484,11 @@ fun ArvioLoadingScreen() {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ArflixApp(
-    authRepository: AuthRepository,
     profileRepository: ProfileRepository,
     traktRepository: TraktRepository,
     profileManager: ProfileManager,
     watchHistoryRepository: WatchHistoryRepository,
     watchlistRepository: WatchlistRepository,
-    iptvRepository: com.arflix.tv.data.repository.IptvRepository,
     launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     oledBlackBackground: Boolean = false,
     skipProfileSelection: Boolean? = null,
@@ -533,7 +501,6 @@ fun ArflixApp(
     onExitApp: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val authState by authRepository.authState.collectAsStateWithLifecycle()
     val activeProfileState by remember(profileRepository) {
         profileRepository.activeProfile.map { profile ->
             ActiveProfileLoadState.Loaded(profile) as ActiveProfileLoadState
@@ -546,8 +513,7 @@ fun ArflixApp(
     }
     val activeProfile = (activeProfileState as? ActiveProfileLoadState.Loaded)?.profile
     val startupReady = skipProfileSelection != null &&
-        activeProfileState is ActiveProfileLoadState.Loaded &&
-        authState !is AuthState.Loading
+        activeProfileState is ActiveProfileLoadState.Loaded
 
     if (!startupReady || !startupIntroComplete) {
         ArvioLoadingScreen()
@@ -556,12 +522,7 @@ fun ArflixApp(
 
     val navController = rememberNavController()
     val appCoroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-    var lastAddonsSyncKey by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(authState, activeProfile?.id) {
-        if (authState is AuthState.NotAuthenticated) {
-            lastAddonsSyncKey = null
-        }
+    LaunchedEffect(activeProfile?.id) {
         if (activeProfile != null) {
             launcherContinueWatchingRepository.refreshForCurrentProfile()
         } else {
@@ -579,18 +540,9 @@ fun ArflixApp(
     val isMobile = deviceType.isTouchDevice()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
-    var iptvFullscreen by remember { mutableStateOf(false) }
-    LaunchedEffect(currentRoute) {
-        if (currentRoute?.startsWith("tv") != true) {
-            iptvFullscreen = false
-        }
-    }
     // Hide bottom bar on player, profile selection, and login screens.
-    // TV route shows the bottom bar on mobile (touch devices) for easy navigation;
-    // the fullscreen IPTV player uses BackHandler to return to the guide.
     val showBottomBar = isMobile && activeProfile != null &&
         currentRoute != null &&
-        !iptvFullscreen &&
         !currentRoute.contains("player") &&
         !currentRoute.contains("profile") &&
         !currentRoute.contains("login")
@@ -627,20 +579,16 @@ fun ArflixApp(
                 preloadedHeroLogoUrl = preloadedHeroLogoUrl,
                 preloadedLogoCache = preloadedLogoCache,
                 currentProfile = activeProfile,
-                isCloudConnected = authState is AuthState.Authenticated,
+                isCloudConnected = false,
                 onSwitchProfile = {
                     appCoroutineScope.launch {
                         traktRepository.clearAllProfileCaches()
                         watchHistoryRepository.clearProfileCaches()
                         watchlistRepository.clearWatchlistCache()
-                        iptvRepository.invalidateCache()
                         profileManager.setCurrentProfileId("default")
                         profileManager.setCurrentProfileName("default")
                         profileRepository.clearActiveProfile()
                     }
-                },
-                onTvFullscreenChanged = { fullscreen ->
-                    iptvFullscreen = fullscreen
                 },
                 onExitApp = onExitApp
             )

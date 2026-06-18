@@ -57,7 +57,6 @@ class TraktSyncService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val traktApi: TraktApi,
     private val supabaseApi: SupabaseApi,
-    private val authRepository: AuthRepository,
     private val outboxRepository: TraktOutboxRepository,
     private val profileManager: ProfileManager
 ) {
@@ -77,8 +76,6 @@ class TraktSyncService @Inject constructor(
 
     private val _syncEvents = MutableSharedFlow<SyncStatus>(extraBufferCapacity = 1)
     val syncEvents: SharedFlow<SyncStatus> = _syncEvents.asSharedFlow()
-
-    private val supabaseAuthMutex = Mutex()
 
     // Profile-scoped DataStore keys (must match TraktRepository for token sharing)
     private fun accessTokenKey() = profileManager.profileStringKey("trakt_access_token")
@@ -1780,28 +1777,7 @@ class TraktSyncService @Inject constructor(
         operation: String,
         block: suspend (String) -> T
     ): T {
-        // Try getting auth, force-refresh if initial attempt fails
-        var auth = getSupabaseAuth()
-        if (auth == null) {
-            val refreshed = supabaseAuthMutex.withLock {
-                authRepository.refreshAccessToken()
-            }
-            auth = if (!refreshed.isNullOrBlank()) "Bearer $refreshed" else null
-        }
-        if (auth == null) throw IllegalStateException("Supabase auth failed")
-        return try {
-            block(auth)
-        } catch (e: HttpException) {
-            if (e.code() == 401) {
-                val refreshed = supabaseAuthMutex.withLock {
-                    authRepository.refreshAccessToken()
-                }
-                if (!refreshed.isNullOrBlank()) {
-                    return block("Bearer $refreshed")
-                }
-            }
-            throw e
-        }
+        throw IllegalStateException("Supabase account sync is disabled")
     }
 
     private suspend fun getAuthHeader(): String? {
@@ -1810,15 +1786,11 @@ class TraktSyncService @Inject constructor(
     }
 
     private fun getUserId(): String? {
-        // Get user ID from AuthRepository
-        return authRepository.getCurrentUserId()
+        return null
     }
 
     private suspend fun getSupabaseAuth(): String? {
-        val token = authRepository.getAccessToken()
-        if (!token.isNullOrBlank()) return "Bearer $token"
-        val refreshed = authRepository.refreshAccessToken()
-        return refreshed?.let { "Bearer $it" }
+        return null
     }
 
     private suspend fun refreshTokenIfNeeded(force: Boolean): String? {

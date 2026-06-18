@@ -12,17 +12,13 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import org.json.JSONArray
-import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ProfileRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val authRepository: AuthRepository,
-    private val profileAvatarImageManager: ProfileAvatarImageManager,
-    private val invalidationBus: CloudSyncInvalidationBus
+    private val profileAvatarImageManager: ProfileAvatarImageManager
 ) {
     private val gson = Gson()
     private val profileListType = TypeToken.getParameterized(List::class.java, Profile::class.java).type
@@ -90,10 +86,7 @@ class ProfileRepository @Inject constructor(
             currentList.add(profile)
             prefs[PROFILES_KEY] = encodeProfiles(currentList)
         }
-        invalidationBus.markDirty(CloudSyncScope.PROFILES, profile.id, "create profile")
-        pushProfilesStateToCloud()
-
-        return profile
+return profile
     }
 
     /**
@@ -108,9 +101,7 @@ class ProfileRepository @Inject constructor(
                 prefs[PROFILES_KEY] = encodeProfiles(currentList)
             }
         }
-        invalidationBus.markDirty(CloudSyncScope.PROFILES, profile.id, "update profile")
-        pushProfilesStateToCloud()
-    }
+}
 
     /**
      * Delete a profile
@@ -127,9 +118,7 @@ class ProfileRepository @Inject constructor(
             }
         }
         profileAvatarImageManager.clearLocalAvatar(profileId)
-        invalidationBus.markDirty(CloudSyncScope.PROFILES, profileId, "delete profile")
-        pushProfilesStateToCloud()
-    }
+}
 
     /**
      * Set the active profile
@@ -146,9 +135,7 @@ class ProfileRepository @Inject constructor(
                 prefs[PROFILES_KEY] = encodeProfiles(currentList)
             }
         }
-        invalidationBus.markDirty(CloudSyncScope.PROFILES, profileId, "set active profile")
-        pushProfilesStateToCloud()
-    }
+}
 
     /**
      * Clear active profile (for switching)
@@ -157,64 +144,7 @@ class ProfileRepository @Inject constructor(
         context.profilesDataStore.edit { prefs ->
             prefs.remove(ACTIVE_PROFILE_KEY)
         }
-        invalidationBus.markDirty(CloudSyncScope.PROFILES, reason = "clear active profile")
-        pushProfilesStateToCloud()
-    }
-
-    suspend fun replaceProfilesFromCloud(
-        profiles: List<Profile>,
-        activeProfileId: String?
-    ) {
-        val localProfilesById = getProfiles().associateBy { it.id }
-        val mergedProfiles = profiles.map { cloudProfile ->
-            val localProfile = localProfilesById[cloudProfile.id]
-            if (
-                localProfile != null &&
-                localProfile.avatarImageVersion > 0L &&
-                cloudProfile.avatarImageVersion <= 0L
-            ) {
-                cloudProfile.copy(
-                    avatarId = 0,
-                    avatarImageVersion = localProfile.avatarImageVersion,
-                    avatarImageStoragePath = localProfile.avatarImageStoragePath
-                )
-            } else {
-                cloudProfile
-            }
-        }
-
-        context.profilesDataStore.edit { prefs ->
-            prefs[PROFILES_KEY] = gson.toJson(mergedProfiles)
-            if (!activeProfileId.isNullOrBlank() && mergedProfiles.any { it.id == activeProfileId }) {
-                prefs[ACTIVE_PROFILE_KEY] = activeProfileId
-            } else if (mergedProfiles.isNotEmpty()) {
-                prefs[ACTIVE_PROFILE_KEY] = mergedProfiles.first().id
-            } else {
-                prefs.remove(ACTIVE_PROFILE_KEY)
-            }
-        }
-        if (!invalidationBus.isApplyingRemoteState) {
-            pushProfilesStateToCloud()
-        }
-    }
-
-    private suspend fun pushProfilesStateToCloud() {
-        val userId = authRepository.getCurrentUserIdForSync() ?: return
-        val profiles = getProfiles()
-        val activeProfileId = getActiveProfileId()
-        authRepository.mutateAccountSyncPayload { root ->
-            root.put("activeProfileId", activeProfileId ?: JSONObject.NULL)
-            root.put("profiles", JSONArray(gson.toJson(profiles)))
-            root.put(
-                "profileAvatarImagesById",
-                profileAvatarImageManager.buildInlineAvatarImagesJson(
-                    profiles,
-                    root.optJSONObject("profileAvatarImagesById")
-                )
-            )
-            root.put("userId", userId)
-        }
-    }
+}
 
     /**
      * Create a default profile if none exist

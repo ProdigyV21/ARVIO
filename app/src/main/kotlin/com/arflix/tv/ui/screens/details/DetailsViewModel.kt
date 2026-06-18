@@ -14,7 +14,6 @@ import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TraktComment
-import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.MediaRepository
@@ -37,8 +36,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
-import com.arflix.tv.core.plugin.PluginManager
-import com.arflix.tv.domain.model.LocalScraperResult
 import javax.inject.Inject
 
 data class DetailsUiState(
@@ -65,8 +62,6 @@ data class DetailsUiState(
     val subtitles: List<Subtitle> = emptyList(),
     val isLoadingStreams: Boolean = false,
     val streamSearchStartTime: Long = 0L,
-    val pluginScrapersLoading: Boolean = false,
-    val loadingPluginNames: Set<String> = emptySet(),
     val completedAddons: Int = 0,
     val totalAddons: Int = 0,
     val hasStreamingAddons: Boolean = true,
@@ -176,14 +171,12 @@ private fun isSupplementalStream(stream: StreamSource): Boolean =
 class DetailsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val mediaRepository: MediaRepository,
-    private val pluginManager: PluginManager,
     private val profileManager: ProfileManager,
     private val traktRepository: TraktRepository,
     private val streamRepository: StreamRepository,
     private val tmdbApi: TmdbApi,
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
-    private val cloudSyncRepository: CloudSyncRepository,
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository
 ) : ViewModel() {
 
@@ -973,8 +966,7 @@ class DetailsViewModel @Inject constructor(
                     )
                     runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 }
-                runCatching { cloudSyncRepository.pushToCloud() }
-            } catch (e: Exception) {
+} catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to update watched status",
                     toastType = ToastType.ERROR
@@ -1002,9 +994,7 @@ class DetailsViewModel @Inject constructor(
                     }
                     watchlistRepository.removeFromWatchlist(currentMediaType, currentMediaId)
                 }
-                runCatching { cloudSyncRepository.pushToCloud() }
-
-                _uiState.value = _uiState.value.copy(
+_uiState.value = _uiState.value.copy(
                     isInWatchlist = newInWatchlist,
                     toastMessage = if (newInWatchlist) "Added to watchlist" else "Removed from watchlist",
                     toastType = ToastType.SUCCESS
@@ -1339,8 +1329,7 @@ class DetailsViewModel @Inject constructor(
             totalAddons = 0,
             streams = emptyList(),
             subtitles = emptyList(),
-            streamSearchStartTime = System.currentTimeMillis(),
-            pluginScrapersLoading = false
+            streamSearchStartTime = System.currentTimeMillis()
         )
         val requestId = ++loadStreamsRequestId
         val requestMediaType = currentMediaType
@@ -1386,8 +1375,7 @@ class DetailsViewModel @Inject constructor(
                 streams = emptyList(),
                 subtitles = emptyList(),
                 addonOrderedIds = orderedAddonIds,
-                streamSearchStartTime = System.currentTimeMillis(),
-                pluginScrapersLoading = false
+                streamSearchStartTime = System.currentTimeMillis()
             )
 
             if (requestMediaType == MediaType.MOVIE) {
@@ -1431,67 +1419,6 @@ class DetailsViewModel @Inject constructor(
                         requestMediaId = requestMediaId
                     )
                 }
-
-                var pluginScraperJob: kotlinx.coroutines.Job? = null
-                pluginScraperJob = viewModelScope.launch {
-                    try {
-                        _uiState.value = _uiState.value.copy(pluginScrapersLoading = true)
-                        val tmdbIdStr = requestMediaId.toString()
-                        val pluginMediaType = if (requestMediaType == MediaType.MOVIE) "movie" else "tv"
-                        pluginManager.executeScrapersStreaming(
-                            tmdbId = tmdbIdStr,
-                            mediaType = pluginMediaType,
-                            season = if (requestMediaType != MediaType.MOVIE) (season ?: 1) else null,
-                            episode = if (requestMediaType != MediaType.MOVIE) (episode ?: 1) else null
-                        ).collect { pair ->
-                            val scraperInfo = pair.first
-                            val results: List<LocalScraperResult>? = pair.second
-                            if (!isCurrentRequest()) return@collect
-
-                            val current = _uiState.value
-                            if (results == null) {
-                                // Plugin started loading
-                                _uiState.value = current.copy(
-                                    loadingPluginNames = current.loadingPluginNames + scraperInfo.name
-                                )
-                            } else {
-                                // Plugin finished loading (with or without results)
-                                val updatedNames = current.loadingPluginNames - scraperInfo.name
-                                if (results.isNotEmpty()) {
-                                    val pluginStreams = results.map { it.toStreamSource() }
-                                    val merged = sortPlayableStreamsFirst(
-                                        (current.streams + pluginStreams)
-                                            .distinctBy { "${it.url?.trim().orEmpty()}|${it.source}" }
-                                    )
-                                    _uiState.value = current.copy(
-                                        streams = merged,
-                                        isLoadingStreams = false,
-                                        loadingPluginNames = updatedNames
-                                    )
-                                } else {
-                                    _uiState.value = current.copy(
-                                        loadingPluginNames = updatedNames
-                                    )
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "[PluginScrapers] streaming execution failed: ${e.message}")
-                    } finally {
-                        val current = _uiState.value
-                        val stillLoading = loadStreamsJob?.isActive == true ||
-                                           vodAppendJob?.isActive == true ||
-                                           homeServerAppendJob?.isActive == true
-                        val newLoading = current.isLoadingStreams && current.streams.isEmpty() && stillLoading
-
-                        _uiState.value = current.copy(
-                            pluginScrapersLoading = false,
-                            loadingPluginNames = emptySet(),
-                            isLoadingStreams = newLoading
-                        )
-                    }
-                }
-
                 val result = if (currentMediaType == MediaType.MOVIE) {
                     val enabledAddons = streamRepository.installedAddons.first()
                         .filter { it.isEnabled && it.type != com.arflix.tv.data.model.AddonType.SUBTITLE }
@@ -1550,7 +1477,7 @@ class DetailsViewModel @Inject constructor(
                             homeServerAppendJob?.isActive == true || vodAppendJob?.isActive == true
                         _uiState.value = _uiState.value.copy(
                             isLoadingStreams = mergedStreams.isEmpty() &&
-                                (!progressive.isFinal || hasHomeServerConnections || supplementalSourcesStillLoading || pluginScraperJob?.isActive == true),
+                                (!progressive.isFinal || hasHomeServerConnections || supplementalSourcesStillLoading),
                             completedAddons = progressive.completedAddons,
                             totalAddons = progressive.totalAddons,
                             streams = mergedStreams,
@@ -1606,7 +1533,7 @@ class DetailsViewModel @Inject constructor(
                             homeServerAppendJob?.isActive == true || vodAppendJob?.isActive == true
                         _uiState.value = _uiState.value.copy(
                             isLoadingStreams = mergedStreams.isEmpty() &&
-                                (!progressive.isFinal || hasHomeServerConnections || supplementalSourcesStillLoading || pluginScraperJob?.isActive == true),
+                                (!progressive.isFinal || hasHomeServerConnections || supplementalSourcesStillLoading),
                             completedAddons = progressive.completedAddons,
                             totalAddons = progressive.totalAddons,
                             streams = mergedStreams,
@@ -1687,8 +1614,7 @@ class DetailsViewModel @Inject constructor(
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 // Push cloud snapshot so other devices see the episode watched-status
                 // change and the updated Continue Watching entry.
-                runCatching { cloudSyncRepository.pushToCloud() }
-            } catch (e: Exception) {
+} catch (e: Exception) {
                 // Failed silently
             }
         }
@@ -1814,8 +1740,7 @@ class DetailsViewModel @Inject constructor(
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 // Push cloud snapshot so other devices see the entire season marked watched
                 // and the updated Continue Watching entry pointing to the next unwatched episode.
-                runCatching { cloudSyncRepository.pushToCloud() }
-            } catch (_: Exception) {
+} catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to mark season as watched",
                     toastType = ToastType.ERROR
@@ -1903,8 +1828,7 @@ class DetailsViewModel @Inject constructor(
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
-                runCatching { cloudSyncRepository.pushToCloud() }
-            } catch (_: Exception) {
+} catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to mark season as unwatched",
                     toastType = ToastType.ERROR
@@ -2582,24 +2506,3 @@ private object DetailsVMRegexes {
     )
 
 }
-
-private fun LocalScraperResult.toStreamSource(): StreamSource = StreamSource(
-    source = title,
-    addonName = provider ?: name ?: "Plugin",
-    addonId = "plugin_${provider?.lowercase()?.replace(" ", "_") ?: "unknown"}",
-    quality = quality ?: "Unknown",
-    size = size ?: "",
-    sizeBytes = null,
-    url = url,
-    infoHash = infoHash,
-    fileIdx = null,
-    behaviorHints = headers?.let { hdrs ->
-        com.arflix.tv.data.model.StreamBehaviorHints(
-            notWebReady = false,
-            proxyHeaders = com.arflix.tv.data.model.ProxyHeaders(request = hdrs)
-        )
-    },
-    subtitles = emptyList(),
-    sources = emptyList(),
-    description = null
-)

@@ -1,2 +1,0 @@
--- Remote migration history placeholder.
--- The production database already has migration version 20260216 recorded.

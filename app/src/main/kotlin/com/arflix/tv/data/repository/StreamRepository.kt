@@ -18,7 +18,6 @@ import com.arflix.tv.data.model.AddonType
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.QualityFilterConfig
 import com.arflix.tv.data.model.RuntimeKind
-import com.arflix.tv.data.telegram.TelegramSourceResolver
 import com.arflix.tv.data.model.ProxyHeaders as ModelProxyHeaders
 import com.arflix.tv.data.model.StreamBehaviorHints as ModelStreamBehaviorHints
 import com.arflix.tv.data.model.StreamSource
@@ -135,11 +134,7 @@ class StreamRepository @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val profileManager: ProfileManager,
     private val animeMapper: AnimeMapper,
-    private val iptvRepository: IptvRepository,
-    private val httpLocalScraperRuntime: HttpLocalScraperRuntime,
-    private val homeServerRepository: HomeServerRepository,
-    private val invalidationBus: CloudSyncInvalidationBus,
-    private val telegramSourceResolver: TelegramSourceResolver
+    private val homeServerRepository: HomeServerRepository
 ) {
     private val gson = Gson()
     private val TAG = "StreamRepository"
@@ -371,7 +366,6 @@ class StreamRepository @Inject constructor(
     suspend fun setTorrServerBaseUrl(raw: String) {
         // Allow blank to reset to default autodetect.
         context.streamDataStore.edit { prefs -> prefs[torrServerBaseUrlKey()] = raw.trim() }
-        invalidationBus.markDirty(CloudSyncScope.PROFILE_SETTINGS, profileManager.getProfileIdSync(), "torrserver url")
     }
 
     suspend fun exportTorrServerBaseUrlForProfile(profileId: String): String {
@@ -421,8 +415,7 @@ class StreamRepository @Inject constructor(
             hidden.add(trimmed)
             prefs[hiddenBuiltInAddonsKey()] = gson.toJson(hidden.toList())
         }
-        invalidationBus.markDirty(CloudSyncScope.ADDONS, profileManager.getProfileIdSync(), "hide builtin addon")
-    }
+}
 
     // ========== Addon Management ==========
 
@@ -557,34 +550,8 @@ class StreamRepository @Inject constructor(
                 return@withContext Result.failure(IllegalArgumentException("Addon URL is empty"))
             }
 
-            httpLocalScraperRuntime.fetchInstallCandidate(
-                url = normalizedUrl,
-                customName = customName
-            )?.let { httpCandidate ->
-                return@withContext Result.success(
-                    installHttpLocalScraperCandidate(
-                        normalizedUrl = normalizedUrl,
-                        candidate = httpCandidate
-                    )
-                )
-            }
-
             val manifestUrl = getManifestUrl(normalizedUrl)
-
-            val manifest = try {
-                streamApi.getAddonManifest(manifestUrl)
-            } catch (manifestError: Exception) {
-                val httpCandidate = httpLocalScraperRuntime.fetchInstallCandidate(
-                    url = normalizedUrl,
-                    customName = customName
-                ) ?: throw manifestError
-                return@withContext Result.success(
-                    installHttpLocalScraperCandidate(
-                        normalizedUrl = normalizedUrl,
-                        candidate = httpCandidate
-                    )
-                )
-            }
+            val manifest = streamApi.getAddonManifest(manifestUrl)
 
             val transportUrl = getTransportUrl(normalizedUrl)
             val addonManifest = convertToAddonManifest(manifest)
@@ -634,31 +601,6 @@ class StreamRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    private suspend fun installHttpLocalScraperCandidate(
-        normalizedUrl: String,
-        candidate: HttpLocalScraperInstallCandidate
-    ): Addon {
-        val addonId = buildAddonInstanceId(candidate.manifest.id, normalizedUrl)
-        val newAddon = Addon(
-            id = addonId,
-            name = candidate.name,
-            version = candidate.version,
-            description = candidate.description,
-            isInstalled = true,
-            isEnabled = true,
-            type = AddonType.CUSTOM,
-            url = normalizedUrl,
-            logo = candidate.logo,
-            manifest = candidate.manifest,
-            transportUrl = candidate.transportUrl
-        )
-        val addons = installedAddons.first().toMutableList()
-        addons.removeAll { it.id == addonId }
-        addons.add(newAddon)
-        saveAddons(addons)
-        return newAddon
     }
 
     suspend fun ensureCustomAddons(urls: List<String>): List<Result<Addon>> = withContext(Dispatchers.IO) {
@@ -829,7 +771,6 @@ class StreamRepository @Inject constructor(
             prefs.remove(pendingAddonsKeyFor(profileId))
         }
         synchronized(streamResultCache) { streamResultCache.clear() }
-        invalidationBus.markDirty(CloudSyncScope.ADDONS, profileId, "replace addons")
     }
 
     suspend fun replaceSharedAddonsFromCloud(addons: List<Addon>) {
@@ -839,12 +780,11 @@ class StreamRepository @Inject constructor(
             prefs.remove(sharedPendingAddonsKey)
         }
         synchronized(streamResultCache) { streamResultCache.clear() }
-        invalidationBus.markDirty(CloudSyncScope.ADDONS, profileManager.getProfileIdSync(), "replace shared addons")
     }
 
     private suspend fun saveAddons(addons: List<Addon>) {
-        val json = gson.toJson(addons.map { sanitizeAddonDisplayName(it) })
-
+        val resolved = enforceOpenSubtitles(addons).filterNot(::isIncompleteExternalAddon)
+        val json = gson.toJson(resolved)
         // Save locally to the shared account-level addon list. Mirror to the
         // active profile key so older builds/cloud payloads can still recover it.
         context.streamDataStore.edit { prefs ->
@@ -854,7 +794,6 @@ class StreamRepository @Inject constructor(
             prefs.remove(pendingAddonsKey())
         }
         synchronized(streamResultCache) { streamResultCache.clear() }
-        invalidationBus.markDirty(CloudSyncScope.ADDONS, profileManager.getProfileIdSync(), "save addons")
     }
 
     private fun sanitizeAddonDisplayName(addon: Addon): Addon {
@@ -1380,16 +1319,12 @@ class StreamRepository @Inject constructor(
     private val ADDON_NATIVE_ANIME_SINGLE_STREAM_REQUEST_TIMEOUT_MS = 12_000L
     private val ANIME_ID_LOOKUP_TIMEOUT_MS = 3_000L
     private val NATIVE_ANIME_ID_LOOKUP_TIMEOUT_MS = 8_000L
-    // Longer timeouts for providers/requests known to be slower on large IPTV/legacy catalogs.
+    // Longer timeouts for providers/requests known to be slower on large legacy catalogs.
     private val ADDON_EXTENDED_TIMEOUT_MS = 30_000L
     private val ADDON_EXTENDED_EPISODE_TIMEOUT_MS = 45_000L
     private val ADDON_EXTENDED_SINGLE_STREAM_REQUEST_TIMEOUT_MS = 35_000L
     // Subtitles should not block playback but need enough time on slow connections.
     private val SUBTITLE_TIMEOUT_MS = 6_000L
-    // If addons return nothing, allow Xtream VOD lookup to recover playback.
-    private val VOD_LOOKUP_TIMEOUT_MS = 6_000L
-    // If addons already returned streams, keep VOD lookup shorter to avoid UI delay.
-    private val VOD_APPEND_TIMEOUT_MS = 3_000L
     private val STREAM_RESULT_CACHE_TTL_MS = 10 * 60_000L
     private val STREAM_RESULT_CACHE_HTTP_TTL_MS = 90_000L
     private val STREAM_RESULT_CACHE_HTTP_EPHEMERAL_TTL_MS = 30_000L
@@ -1487,8 +1422,7 @@ class StreamRepository @Inject constructor(
         return haystack.contains("flix-stream") ||
             haystack.contains("flix streams") ||
             haystack.contains("flickystream") ||
-            haystack.contains("flixnest") ||
-            haystack.contains("telegram")
+            haystack.contains("flixnest")
     }
 
     private fun latencyBucket(ms: Long): String = when {
@@ -1504,7 +1438,6 @@ class StreamRepository @Inject constructor(
         val url = stream.url?.trim().orEmpty()
         return when {
             addonId == HomeServerRepository.ADDON_ID -> "home_server"
-            addonId == "iptv_xtream_vod" -> "iptv_vod"
             url.startsWith("magnet:", ignoreCase = true) || !stream.infoHash.isNullOrBlank() -> "p2p"
             url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true) -> "http"
             else -> "unknown"
@@ -1525,20 +1458,6 @@ class StreamRepository @Inject constructor(
         }
         return try {
             withTimeout(addonTimeoutMs) {
-                if (httpLocalScraperRuntime.canHandle(addon)) {
-                    val streams = httpLocalScraperRuntime.resolveMovieStreams(
-                        addon = addon,
-                        imdbId = imdbId,
-                        title = title,
-                        year = year
-                    )
-                    recordAddonFetchOutcome(
-                        addonId = addon.id,
-                        success = streams.isNotEmpty(),
-                        latencyMs = System.currentTimeMillis() - startedAt
-                    )
-                    return@withTimeout streams
-                }
                 val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
                 val url = if (queryParams != null) {
                     "$baseUrl/stream/movie/$imdbId.json?$queryParams"
@@ -1619,22 +1538,6 @@ class StreamRepository @Inject constructor(
         }
         return try {
             withTimeout(addonTimeoutMs) {
-                if (httpLocalScraperRuntime.canHandle(addon)) {
-                    val streams = httpLocalScraperRuntime.resolveEpisodeStreams(
-                        addon = addon,
-                        imdbId = imdbId,
-                        season = season,
-                        episode = episode,
-                        tmdbId = tmdbId,
-                        title = title
-                    )
-                    recordAddonFetchOutcome(
-                        addonId = addon.id,
-                        success = streams.isNotEmpty(),
-                        latencyMs = System.currentTimeMillis() - startedAt
-                    )
-                    return@withTimeout streams
-                }
                 val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
 
                 val strictAnime = animeMapper.isAnimeContent(tmdbId, genreIds, originalLanguage)
@@ -1944,7 +1847,6 @@ class StreamRepository @Inject constructor(
         val filteredStreams = applyQualityRegexFilters(streams)
 
         // Keep core source lookup fully addon-driven and non-blocking.
-        // IPTV VOD enrichment is appended separately in ViewModels.
 
         val result = StreamResult(filteredStreams, subtitles)
         val createdAtMs = System.currentTimeMillis()
@@ -2014,8 +1916,7 @@ class StreamRepository @Inject constructor(
             }
 
             val prioritizedAddons = streamAddons.sortedByDescending { getAddonHealthBias(it.id) }
-            val telegramEnabled = telegramSourceResolver.isEnabled()
-            if (prioritizedAddons.isEmpty() && !telegramEnabled) {
+            if (prioritizedAddons.isEmpty()) {
                 Log.w(
                     TAG,
                     "[StreamFetch][Movie] no enabled streaming addons imdbId=$imdbId"
@@ -2047,13 +1948,13 @@ class StreamRepository @Inject constructor(
 
             Log.d(
                 TAG,
-                "[StreamFetch][Movie] querying addons imdbId=$imdbId stremio=${prioritizedAddons.size} telegram=$telegramEnabled"
+                "[StreamFetch][Movie] querying addons imdbId=$imdbId stremio=${prioritizedAddons.size}"
             )
 
             val mutex = Mutex()
             val aggregatedStreams = mutableListOf<StreamSource>()
             var completed = 0
-            val totalAddons = prioritizedAddons.size + (if (telegramEnabled) 1 else 0)
+            val totalAddons = prioritizedAddons.size
 
             suspend fun sendProgress() {
                 val deduped = aggregatedStreams
@@ -2117,21 +2018,6 @@ class StreamRepository @Inject constructor(
                 }
             }
 
-            if (telegramEnabled) {
-                launch {
-                    val telegramStreams = try {
-                        telegramSourceResolver.resolve(title = title, year = year, imdbId = imdbId, isMovie = true)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "[StreamFetch][Movie] telegram resolve failed", e)
-                        emptyList()
-                    }
-                    mutex.withLock {
-                        aggregatedStreams.addAll(telegramStreams)
-                        completed += 1
-                        sendProgress()
-                    }
-                }
-            }
         }
         awaitClose { }
     }
@@ -2177,28 +2063,7 @@ class StreamRepository @Inject constructor(
         year: Int? = null,
         tmdbId: Int? = null,
         timeoutMs: Long = 15_000L
-    ): List<StreamSource> = withContext(Dispatchers.IO) {
-        withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
-            runCatching {
-                iptvRepository.findMovieVodSources(
-                    title = title,
-                    year = year,
-                    imdbId = imdbId,
-                    tmdbId = tmdbId,
-                    allowNetwork = true
-                )
-            }.onFailure { e ->
-                System.err.println("[VOD] resolveMovieVodSources failed: ${e.message}")
-                AppLogger.recordException(
-                    throwable = e,
-                    context = mapOf(
-                        "error_area" to "StreamRepository",
-                        "source_phase" to "movie_vod_resolution"
-                    )
-                )
-            }.getOrDefault(emptyList())
-        }.orEmpty()
-    }
+    ): List<StreamSource> = emptyList()
 
     /**
      * Process raw streams into StreamSource objects -  processStreams
@@ -2367,7 +2232,6 @@ class StreamRepository @Inject constructor(
         val filteredStreams = applyQualityRegexFilters(streams)
 
         // Keep core source lookup fully addon-driven and non-blocking.
-        // IPTV VOD enrichment is appended separately in ViewModels.
 
         val result = StreamResult(filteredStreams, subtitles)
         synchronized(streamResultCache) {
@@ -2434,8 +2298,7 @@ class StreamRepository @Inject constructor(
             }
 
             val prioritizedAddons = streamAddons.sortedByDescending { getAddonHealthBias(it.id) }
-            val telegramEnabled = telegramSourceResolver.isEnabled()
-            if (prioritizedAddons.isEmpty() && !telegramEnabled) {
+            if (prioritizedAddons.isEmpty()) {
                 Log.w(
                     TAG,
                     "[StreamFetch][Episode] no enabled streaming addons imdbId=$imdbId season=$season episode=$episode"
@@ -2460,13 +2323,13 @@ class StreamRepository @Inject constructor(
 
             Log.d(
                 TAG,
-                "[StreamFetch][Episode] querying addons imdbId=$imdbId season=$season episode=$episode stremio=${prioritizedAddons.size} telegram=$telegramEnabled"
+                "[StreamFetch][Episode] querying addons imdbId=$imdbId season=$season episode=$episode stremio=${prioritizedAddons.size}"
             )
 
             val mutex = Mutex()
             val aggregatedStreams = mutableListOf<StreamSource>()
             var completed = 0
-            val totalAddons = prioritizedAddons.size + (if (telegramEnabled) 1 else 0)
+            val totalAddons = prioritizedAddons.size
 
             suspend fun sendProgress() {
                 val deduped = aggregatedStreams
@@ -2537,28 +2400,6 @@ class StreamRepository @Inject constructor(
                 }
             }
 
-            if (telegramEnabled) {
-                launch {
-                    val telegramStreams = try {
-                        telegramSourceResolver.resolve(
-                            title = title,
-                            year = null,
-                            season = season,
-                            episode = episode,
-                            imdbId = imdbId,
-                            isMovie = false
-                        )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "[StreamFetch][Episode] telegram resolve failed", e)
-                        emptyList()
-                    }
-                    mutex.withLock {
-                        aggregatedStreams.addAll(telegramStreams)
-                        completed += 1
-                        sendProgress()
-                    }
-                }
-            }
         }
         awaitClose { }
     }
@@ -2610,31 +2451,7 @@ class StreamRepository @Inject constructor(
         tmdbId: Int? = null,
         tvdbId: Int? = null,
         timeoutMs: Long = 45_000L
-    ): List<StreamSource> = withContext(Dispatchers.IO) {
-        withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
-            runCatching {
-                iptvRepository.findEpisodeVodSources(
-                    title = title,
-                    season = season,
-                    episode = episode,
-                    imdbId = imdbId,
-                    tmdbId = tmdbId,
-                    allowNetwork = true
-                )
-            }.onFailure { e ->
-                System.err.println("[VOD] resolveEpisodeVodSources failed: ${e.message}")
-                AppLogger.recordException(
-                    throwable = e,
-                    context = mapOf(
-                        "error_area" to "StreamRepository",
-                        "source_phase" to "episode_vod_resolution",
-                        "season_set" to (season > 0).toString(),
-                        "episode_set" to (episode > 0).toString()
-                    )
-                )
-            }.getOrDefault(emptyList())
-        }.orEmpty()
-    }
+    ): List<StreamSource> = emptyList()
 
     suspend fun prefetchEpisodeVod(
         imdbId: String?,
@@ -2642,33 +2459,13 @@ class StreamRepository @Inject constructor(
         episode: Int,
         title: String = "",
         tmdbId: Int? = null
-    ) = withContext(Dispatchers.IO) {
-        if (title.isBlank()) return@withContext
-        runCatching {
-            iptvRepository.prefetchEpisodeVodResolution(
-                title = title,
-                season = season,
-                episode = episode,
-                imdbId = imdbId,
-                tmdbId = tmdbId
-            )
-        }
-    }
+    ) = Unit
 
     suspend fun prefetchSeriesVodInfo(
         imdbId: String?,
         title: String = "",
         tmdbId: Int? = null
-    ) = withContext(Dispatchers.IO) {
-        if (title.isBlank()) return@withContext
-        runCatching {
-            iptvRepository.prefetchSeriesInfoForShow(
-                title = title,
-                imdbId = imdbId,
-                tmdbId = tmdbId
-            )
-        }
-    }
+    ) = Unit
 
     /**
      * Fetch subtitles for the currently selected stream (important for OpenSubtitles matching).

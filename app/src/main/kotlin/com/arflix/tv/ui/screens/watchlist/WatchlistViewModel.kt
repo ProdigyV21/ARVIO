@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType.MOVIE
 import com.arflix.tv.data.model.MediaType.TV
-import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchlistRepository
@@ -37,7 +36,6 @@ data class WatchlistUiState(
 @HiltViewModel
 class WatchlistViewModel @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
-    private val cloudSyncRepository: CloudSyncRepository,
     private val traktRepository: TraktRepository,
     private val mediaRepository: MediaRepository
 ) : ViewModel() {
@@ -120,23 +118,6 @@ class WatchlistViewModel @Inject constructor(
             if (initialLocalItems.isNotEmpty()) {
                 _uiState.value = initialLocalItems.toSplitState(isLoading = false)
                 fetchLogos(initialLocalItems)
-            }
-
-            if (initialLocalItems.isEmpty()) {
-                withTimeoutOrNull(3_500) {
-                    runCatching { cloudSyncRepository.pullFromCloud() }
-                        .onFailure { error ->
-                            AppLogger.recordException(
-                                throwable = error,
-                                context = watchlistDiagnosticContext("startup_cloud_pull")
-                            )
-                        }
-                }
-                val cloudItems = watchlistRepository.getLocalWatchlistItems().watchlistDisplayOrder()
-                if (cloudItems.isNotEmpty()) {
-                    _uiState.value = cloudItems.toSplitState(isLoading = false)
-                    fetchLogos(cloudItems)
-                }
             }
 
             val traktConnected = runCatching { traktRepository.hasTrakt() }.getOrDefault(false)
@@ -278,13 +259,6 @@ class WatchlistViewModel @Inject constructor(
                     toastMessage = "Removed from watchlist",
                     toastType = ToastType.SUCCESS
                 )
-                runCatching { cloudSyncRepository.pushToCloud() }
-                    .onFailure { error ->
-                        AppLogger.recordException(
-                            throwable = error,
-                            context = watchlistDiagnosticContext("remove_cloud_push")
-                        )
-                    }
             } catch (e: Exception) {
                 AppLogger.recordException(
                     throwable = e,
@@ -333,19 +307,6 @@ class WatchlistViewModel @Inject constructor(
 
                     watchlistRepository.syncFromTraktOrder(orderedTraktItems)
                     _uiState.value = orderedTraktItems.toSplitState(isLoading = false)
-                    runCatching { cloudSyncRepository.pushToCloud() }
-                        .onFailure { error ->
-                            AppLogger.recordException(
-                                throwable = error,
-                                context = watchlistDiagnosticContext(
-                                    phase = "trakt_sync_cloud_push",
-                                    extra = mapOf(
-                                        "raw_count" to rawCount.toString(),
-                                        "hydrated_count" to orderedTraktItems.size.toString()
-                                    )
-                                )
-                            )
-                        }
                 } else if (rawCount == 0) {
                     val cachedItems = (watchlistRepository.getCachedItems().ifEmpty {
                         watchlistRepository.getWatchlistItems()

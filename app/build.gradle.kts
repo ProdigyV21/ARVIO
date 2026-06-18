@@ -9,7 +9,6 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
-    id("androidx.baselineprofile")
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
     id("io.gitlab.arturbosch.detekt")
     kotlin("plugin.serialization")
@@ -34,7 +33,6 @@ android {
         versionName = "1.9.961"
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
-        buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
         // Emergency Supabase cost guard. Keep high-volume public metadata and
         // idle realtime polling off Supabase unless explicitly re-enabled.
         buildConfigField("Boolean", "ENABLE_TMDB_EDGE_PROXY", "false")
@@ -61,15 +59,9 @@ android {
     }
 
     productFlavors {
-        create("play") {
-            dimension = "distribution"
-            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
-            buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
-        }
         create("sideload") {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
-            buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "true")
         }
     }
 
@@ -150,12 +142,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    sourceSets {
-        getByName("main") {
-            java.srcDir("src/main/tdlib-java")
-        }
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -176,9 +162,6 @@ android {
         }
     }
 
-    baselineProfile {
-        mergeIntoMain = true
-    }
 }
 
 kotlin {
@@ -305,11 +288,10 @@ ksp {
     implementation("io.coil-kt:coil-svg:2.5.0")
     implementation("com.google.zxing:core:3.5.3")
 
-    // Supabase (optional - for cloud sync)
+    // Supabase PostgREST models used by the remaining Trakt sync bridge.
     implementation("io.github.jan-tennert.supabase:postgrest-kt:2.0.4")
-    implementation("io.github.jan-tennert.supabase:gotrue-kt:2.0.4")
     implementation("io.ktor:ktor-client-android:2.3.7")
-    // Ktor server modules used by Telegram streaming proxy
+    // Ktor server modules used by the local config endpoint
     implementation("io.ktor:ktor-server-core:2.3.7")
     implementation("io.ktor:ktor-server-cio:2.3.7")
     implementation("io.ktor:ktor-server-call-logging:2.3.7")
@@ -317,11 +299,6 @@ ksp {
 
     // DataStore for preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
-
-    // Google Sign-In / Credential Manager for TV
-    implementation("androidx.credentials:credentials:1.3.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     // WorkManager for background sync
     implementation("androidx.work:work-runtime-ktx:2.9.0")
@@ -349,23 +326,9 @@ ksp {
     // and SENTRY_DSN from secrets.properties/secrets.defaults.properties.
     implementation("io.sentry:sentry-android:8.40.0")
 
-    baselineProfile(project(":benchmark"))
 
     // NanoHTTPD – lightweight HTTP server for QR-based AI key setup
     implementation("org.nanohttpd:nanohttpd:2.3.1")
-
-    // Plugin system dependencies (Sideload flavor only)
-    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
-    add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
-    add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
-    add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
-    add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
-        exclude(group = "org.mozilla", module = "rhino")
-    }
-    add("sideloadImplementation", "org.mozilla:rhino:1.8.1")
-    add("sideloadImplementation", "com.google.re2j:re2j:1.8")
-    add("sideloadImplementation", "org.webjars.npm:crypto-js:4.2.0")
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
@@ -432,9 +395,7 @@ val validateReleaseSupabaseSecrets = tasks.register("validateReleaseSupabaseSecr
 
 tasks.configureEach {
     if (name in setOf(
-            "prePlayReleaseBuild",
             "preSideloadReleaseBuild",
-            "prePlayStagingBuild",
             "preSideloadStagingBuild"
         )
     ) {
@@ -478,20 +439,6 @@ dependencies {
     ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
     annotationProcessor("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
 
-    // Plugin system dependencies (Sideload flavor only)
-    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
-    add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
-    add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
-    add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
-    add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
-        exclude(group = "org.mozilla", module = "rhino")
-    }
-    add("sideloadImplementation", "org.webjars.npm:crypto-js:4.2.0")
-    
-    // Runtime helpers used by the sideload plugin extractor stack.
-    add("sideloadImplementation", "org.mozilla:rhino:1.8.1")
-    add("sideloadImplementation", "com.google.re2j:re2j:1.8")
 }
 
 

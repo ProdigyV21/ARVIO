@@ -25,13 +25,10 @@ import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.ContinueWatchingItem
 import com.arflix.tv.data.repository.CatalogRepository
-import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.StreamRepository
-import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.HomeServerRepository
-import com.arflix.tv.data.repository.CloudSyncStatus
 import com.arflix.tv.data.repository.CollectionTemplateManifest
 import com.arflix.tv.data.repository.WatchHistoryRepository
 import com.arflix.tv.data.repository.WatchlistRepository
@@ -93,8 +90,6 @@ data class HomeUiState(
     val isHeroTransitioning: Boolean = false,
     val isAuthenticated: Boolean = false,
     val clockFormat: String = "24h",
-    // Cloud sync status for the indicator on the home top bar
-    val syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     // Toast
     val toastMessage: String? = null,
     val toastType: ToastType = ToastType.INFO,
@@ -124,13 +119,10 @@ class HomeViewModel @Inject constructor(
     private val streamRepository: StreamRepository,
     private val traktRepository: TraktRepository,
     private val traktSyncService: TraktSyncService,
-    private val iptvRepository: IptvRepository,
     private val homeServerRepository: HomeServerRepository,
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
-    private val cloudSyncRepository: CloudSyncRepository,
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
-    private val realtimeSyncManager: com.arflix.tv.data.repository.RealtimeSyncManager,
     private val profileManager: ProfileManager,
     private val appUpdateRepository: com.arflix.tv.updater.AppUpdateRepository,
     private val apkDownloader: com.arflix.tv.updater.ApkDownloader,
@@ -160,13 +152,8 @@ class HomeViewModel @Inject constructor(
         var isLoading: Boolean = false
     )
 
-    // IPTV favorite channels — maps MediaItem.id (Int hash) to channel data
-    private val iptvChannelMap = mutableMapOf<Int, com.arflix.tv.data.model.IptvChannel>()
 
     companion object {
-        const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
-        /** Prefix used in MediaItem.status to identify IPTV items. */
-        const val IPTV_STATUS_PREFIX = "iptv:"
         private const val TOP_10_ITEM_LIMIT = 10
         private val HARD_CAPPED_TOP_10_CATALOG_IDS = setOf(
             "top10_movies_today",
@@ -174,8 +161,7 @@ class HomeViewModel @Inject constructor(
         )
     }
 
-    /** Check if a MediaItem represents an IPTV channel. */
-    fun isIptvItem(item: MediaItem): Boolean = item.status?.startsWith(IPTV_STATUS_PREFIX) == true
+    fun isIptvItem(item: MediaItem): Boolean = false
 
     fun isCollectionItem(item: MediaItem): Boolean = item.status?.startsWith("collection:") == true
 
@@ -583,12 +569,12 @@ class HomeViewModel @Inject constructor(
             // The previous code dropped these items, causing shows with new season
             // premieres to silently disappear from Continue Watching.
             if (seasonEpisodes.isEmpty()) {
-                return@mapNotNull item // Keep — TMDB may not have the season data yet
+                return@mapNotNull item // Keep â€” TMDB may not have the season data yet
             }
 
             val matchedEpisode = seasonEpisodes.firstOrNull { it.episodeNumber == episode }
             if (matchedEpisode == null) {
-                return@mapNotNull item // Keep — episode may not be on TMDB yet
+                return@mapNotNull item // Keep â€” episode may not be on TMDB yet
             }
 
             if (!isEpisodeAlreadyAired(matchedEpisode.airDate)) {
@@ -600,88 +586,9 @@ class HomeViewModel @Inject constructor(
             )
         }
     }
+    fun getIptvChannelId(item: MediaItem): String? = null
 
-    /** Extract the IPTV channel ID from a MediaItem's status field. */
-    fun getIptvChannelId(item: MediaItem): String? =
-        item.status?.removePrefix(IPTV_STATUS_PREFIX)?.takeIf { it.isNotBlank() }
-
-    /** Get the stream URL for an IPTV MediaItem. */
-    fun getIptvStreamUrl(itemId: Int): String? = iptvChannelMap[itemId]?.streamUrl
-
-    private fun iptvChannelToMediaItem(
-        channel: com.arflix.tv.data.model.IptvChannel,
-        epg: com.arflix.tv.data.model.IptvNowNext?
-    ): MediaItem {
-        val stableId = channel.id.hashCode() and 0x7FFFFFFF
-        iptvChannelMap[stableId] = channel
-
-        val nowProgram = epg?.now
-        val nextProgram = epg?.next ?: epg?.later ?: epg?.upcoming?.firstOrNull()
-        val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).apply {
-            timeZone = java.util.TimeZone.getDefault()
-        }
-        fun fmtRange(p: com.arflix.tv.data.model.IptvProgram): String {
-            val s = timeFmt.format(java.util.Date(p.startUtcMillis))
-            val e = timeFmt.format(java.util.Date(p.endUtcMillis))
-            return "$s - $e"
-        }
-        val overviewParts = mutableListOf<String>()
-        if (nowProgram != null) {
-            overviewParts.add("Now: ${fmtRange(nowProgram)}  ${nowProgram.title}")
-            if (!nowProgram.description.isNullOrBlank()) {
-                overviewParts.add(nowProgram.description)
-            }
-        }
-        if (nextProgram != null) {
-            overviewParts.add("Next: ${fmtRange(nextProgram)}  ${nextProgram.title}")
-        }
-
-        return MediaItem(
-            id = stableId,
-            title = channel.name,
-            subtitle = channel.group,
-            overview = overviewParts.joinToString("\n").ifBlank { "Live TV" },
-            mediaType = MediaType.TV,
-            image = channel.logo ?: "",
-            backdrop = channel.logo,
-            badge = "LIVE",
-            status = "$IPTV_STATUS_PREFIX${channel.id}",
-            isOngoing = true
-        )
-    }
-
-    private suspend fun buildFavoriteTvCategory(): Category? {
-        // Use non-blocking memory read first; fall back to mutex-guarded disk read
-        val snapshot = iptvRepository.getMemoryCachedSnapshot()
-            ?: return null
-        val favoriteIds = snapshot.favoriteChannels.toHashSet()
-        if (favoriteIds.isEmpty()) return null
-
-        // Re-derive now/next from cached programs so "Now" shifts when a program ends.
-        // This is free (no network) — just recalculates which program is live.
-        val favoriteChannelIds = snapshot.channels
-            .filter { favoriteIds.contains(it.id) }
-            .map { it.id }
-            .toSet()
-        iptvRepository.reDeriveCachedNowNext(favoriteChannelIds)
-        // Re-read snapshot after re-derive to get updated nowNext
-        val freshSnapshot = iptvRepository.getMemoryCachedSnapshot() ?: snapshot
-
-        // Iterate channels in their original list order (matching TV page order)
-        val items = freshSnapshot.channels
-            .filter { favoriteIds.contains(it.id) }
-            .mapNotNull { channel ->
-                val epg = freshSnapshot.nowNext[channel.id]
-                iptvChannelToMediaItem(channel, epg)
-            }
-        if (items.isEmpty()) return null
-
-        return Category(
-            id = FAVORITE_TV_CATEGORY_ID,
-            title = "Favorite TV",
-            items = items
-        )
-    }
+    fun getIptvStreamUrl(itemId: Int): String? = null
 
     private fun isCustomCatalogConfig(cfg: CatalogConfig): Boolean {
         if (cfg.kind == CatalogKind.COLLECTION || cfg.kind == CatalogKind.COLLECTION_RAIL) {
@@ -715,87 +622,6 @@ class HomeViewModel @Inject constructor(
                 .firstOrNull { !it.isPlaceholder }
             ?: categories.firstOrNull()?.items?.firstOrNull()
     }
-
-    /**
-     * Refresh the Favorite TV category's EPG data (Now/Next display).
-     * @param networkFetch If true, also fetch fresh EPG from the Xtream short EPG API.
-     *                     If false, only re-derive from cached program data (free, no network).
-     */
-    private fun refreshFavoriteTvEpg(networkFetch: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val categories = _uiState.value.categories
-                val favTvIndex = categories.indexOfFirst { it.id == FAVORITE_TV_CATEGORY_ID }
-                if (favTvIndex < 0) return@launch
-
-                val currentFavTv = categories[favTvIndex]
-                // Collect channel IDs from current items
-                val channelIds = currentFavTv.items.mapNotNull { getIptvChannelId(it) }.toSet()
-                if (channelIds.isEmpty()) return@launch
-
-                // Optionally do network refresh first
-                if (networkFetch) {
-                    val now = SystemClock.elapsedRealtime()
-                    if (now - lastEpgNetworkRefreshMs >= EPG_NETWORK_REFRESH_MS) {
-                        lastEpgNetworkRefreshMs = now
-                        runCatching { iptvRepository.refreshEpgForChannels(channelIds) }
-                    }
-                }
-
-                // Re-derive now/next from (possibly updated) cached data
-                iptvRepository.reDeriveCachedNowNext(channelIds)
-
-                // Rebuild the category with updated EPG text
-                val freshCategory = withContext(Dispatchers.IO) {
-                    runCatching { buildFavoriteTvCategory() }.getOrNull()
-                } ?: return@launch
-
-                // Check if anything actually changed to avoid needless recomposition
-                val oldOverviews = currentFavTv.items.map { it.overview }
-                val newOverviews = freshCategory.items.map { it.overview }
-                if (oldOverviews == newOverviews) return@launch
-
-                // Apply user-renamed title if applicable
-                val cfg = savedCatalogById[FAVORITE_TV_CATEGORY_ID]
-                val titled = if (cfg != null && cfg.title.isNotBlank() && cfg.title != freshCategory.title) {
-                    freshCategory.copy(title = cfg.title)
-                } else {
-                    freshCategory
-                }
-
-                withContext(Dispatchers.Main.immediate) {
-                    val current = _uiState.value.categories.toMutableList()
-                    val idx = current.indexOfFirst { it.id == FAVORITE_TV_CATEGORY_ID }
-                    if (idx >= 0) {
-                        current[idx] = titled
-                        _uiState.value = _uiState.value.copy(categories = current)
-                        System.err.println("[EPG-Refresh] Updated Favorite TV row (network=$networkFetch)")
-                    }
-                }
-            } catch (e: Exception) {
-                System.err.println("[EPG-Refresh] Error: ${e.message}")
-            }
-        }
-    }
-
-    /** Start periodic EPG refresh for the Favorite TV home row. */
-    private fun startEpgRefreshTimer() {
-        epgRefreshJob?.cancel()
-        epgRefreshJob = viewModelScope.launch {
-            // Initial delay — let home data + IPTV warmup finish first
-            delay(if (isLowRamDevice) 10_000L else 5_000L)
-            var tickCount = 0L
-            while (true) {
-                tickCount++
-                // Every tick (60s): local re-derive
-                // Every 5th tick (5 min): also do network refresh
-                val doNetwork = tickCount % ((EPG_NETWORK_REFRESH_MS / EPG_LOCAL_REFRESH_MS).coerceAtLeast(1)) == 0L
-                refreshFavoriteTvEpg(networkFetch = doNetwork)
-                delay(EPG_LOCAL_REFRESH_MS)
-            }
-        }
-    }
-
     private val isTvDevice = detectDeviceType(context) == DeviceType.TV
     private val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     private val isLowRamDevice =
@@ -804,12 +630,12 @@ class HomeViewModel @Inject constructor(
             (isTvDevice && activityManager.memoryClass <= 384)
     private val gson = com.google.gson.Gson()
 
-    // Disk cache key for the home categories — profile-scoped so each profile gets
+    // Disk cache key for the home categories â€” profile-scoped so each profile gets
     // its own cached home screen. On app launch, the cached categories are shown
     // immediately (within 1 frame) while loadHomeData() fetches fresh data from
     // TMDB in the background. This eliminates the visible skeleton/loading phase
     // that made the app feel slow on startup.
-    // Use a plain file in the cache dir instead of DataStore — DataStore has
+    // Use a plain file in the cache dir instead of DataStore â€” DataStore has
     // a size limit and the categories JSON can be 200KB+. A cache file is faster
     // to read/write and doesn't trigger DataStore observers.
     private fun categoriesCacheFile(): java.io.File {
@@ -869,16 +695,7 @@ class HomeViewModel @Inject constructor(
     private val WATCHED_BADGES_REFRESH_MS = 90_000L
     private var lastWatchedBadgesRefreshMs: Long = 0L
     private val HOME_PLACEHOLDER_ITEM_COUNT = 8
-
-    // EPG refresh intervals for Favorite TV row
-    /** Local re-derive: shift now/next from cached programs when a program ends. */
-    private val EPG_LOCAL_REFRESH_MS = 60_000L
-    /** Network refresh: fetch fresh short EPG for favorite channels (Xtream only). */
-    private val EPG_NETWORK_REFRESH_MS = 5 * 60_000L
-    private var epgRefreshJob: Job? = null
-    private var lastEpgNetworkRefreshMs: Long = 0L
-
-    private val _uiState = MutableStateFlow(HomeUiState())
+private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     val cardLogoUrls = mutableStateMapOf<String, String>()
 
@@ -1075,7 +892,6 @@ class HomeViewModel @Inject constructor(
         preloadCategoryJobs.clear()
         startupCatalogWarmupJob?.cancel()
         customCatalogsJob?.cancel()
-        epgRefreshJob?.cancel()
         lastContinueWatchingItems = emptyList()
         lastContinueWatchingUpdateMs = 0L
         lastResolvedBaseCategories = emptyList()
@@ -1083,12 +899,10 @@ class HomeViewModel @Inject constructor(
         categoryPaginationStates.clear()
         savedCatalogById.clear()
         collectionCatalogByMediaId.clear()
-        iptvChannelMap.clear()
         traktRepository.clearAllProfileCaches()
         watchlistRepository.clearWatchlistCache()
         watchHistoryRepository.clearProfileCaches()
-        iptvRepository.invalidateCache()
-        _uiState.value = HomeUiState(syncStatus = _uiState.value.syncStatus)
+        _uiState.value = HomeUiState()
         activeRuntimeProfileId = profileId
     }
 
@@ -1258,7 +1072,6 @@ class HomeViewModel @Inject constructor(
                         resetProfileRuntimeState(profileId)
                         loadHomeData()
                         refreshContinueWatchingOnly(force = true)
-                        startEpgRefreshTimer()
                     }
                 }
         }
@@ -1306,78 +1119,7 @@ class HomeViewModel @Inject constructor(
             } catch (_: Exception) {}
         }
 
-        // Subscribe to realtime watch_history events so Continue Watching refreshes on
-        // this device within a few seconds of another device updating the shared
-        // Supabase watch_history table. Before this, mid-playback updates from device A
-        // were only visible on device B after a manual Home ON_RESUME or the 5-minute
-        // periodic sync — so switching devices mid-episode always showed the stale
-        // resume position. Fixes #91.
-        viewModelScope.launch {
-            realtimeSyncManager.watchHistoryEvents.collect {
-                // Fast path: directly update the progress bar on existing CW cards using
-                // Supabase watch_history data (which Device A writes every ~5s). This gives
-                // immediate visual feedback without waiting for the full Trakt re-fetch
-                // (which can take 10+ seconds for profiles with hundreds of watched items).
-                runCatching {
-                    val historyEntries = watchHistoryRepository.getContinueWatching()
-                    if (historyEntries.isNotEmpty()) {
-                        val latestCategories = _uiState.value.categories.toMutableList()
-                        val cwIndex = latestCategories.indexOfFirst { it.id == "continue_watching" }
-                        if (cwIndex >= 0) {
-                            val existingCategory = latestCategories[cwIndex]
-                            val sortedHistory = historyEntries.sortedByDescending {
-                                it.updated_at ?: it.paused_at.orEmpty()
-                            }
-                            val updatedItems = existingCategory.items.map { mediaItem ->
-                                val mediaTypeKey = if (mediaItem.mediaType == MediaType.TV) "tv" else "movie"
-                                val itemSeason = mediaItem.nextEpisode?.seasonNumber
-                                val itemEpisode = mediaItem.nextEpisode?.episodeNumber
-                                val exactKey = "$mediaTypeKey:${mediaItem.id}:${itemSeason ?: -1}:${itemEpisode ?: -1}"
-                                val match = sortedHistory.firstOrNull { entry ->
-                                    "${entry.media_type}:${entry.show_tmdb_id}:${entry.season ?: -1}:${entry.episode ?: -1}" == exactKey
-                                }
-                                if (match != null) {
-                                    val storedProgress = (match.progress * 100f).toInt()
-                                    val derivedProgress = if (storedProgress <= 0 && match.duration_seconds > 0 && match.position_seconds > 0) {
-                                        ((match.position_seconds.toFloat() / match.duration_seconds.toFloat()) * 100f).toInt()
-                                    } else {
-                                        storedProgress
-                                    }
-                                    mediaItem.copy(progress = derivedProgress.coerceIn(0, 100))
-                                } else {
-                                    mediaItem
-                                }
-                            }
-                            latestCategories[cwIndex] = existingCategory.copy(items = updatedItems)
-                            _uiState.value = _uiState.value.copy(categories = latestCategories)
-                        }
-                    }
-                }
-                // Full refresh: re-resolve from all sources (Trakt, local, Supabase).
-                // This runs after the fast path so the progress bar updates immediately,
-                // then the authoritative Trakt data (with correct subtitle/resume label)
-                // replaces it when the fetch completes.
-                refreshContinueWatchingOnly(force = true)
-                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
-            }
-        }
-
-        // Reload home data when account_sync changes arrive from another device
-        // (catalogs, addons, settings pushed by TV/phone). This ensures the UI
-        // reflects the latest state without waiting for the next ON_RESUME.
-        viewModelScope.launch {
-            realtimeSyncManager.accountSyncEvents.collect {
-                loadHomeData()
-                runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
-            }
-        }
-
-        // Collect sync status so the UI can show a connection indicator.
-        viewModelScope.launch {
-            realtimeSyncManager.syncStatusFlow.collect { status ->
-                _uiState.value = _uiState.value.copy(syncStatus = status)
-            }
-        }
+        // periodic sync â€” so switching devices mid-episode always showed the stale
         // Restore logo URL cache from disk off the main thread. This used to run
         // synchronously during HomeViewModel init, which made the profile->home
         // transition much more likely to hitch or ANR on phones with larger caches.
@@ -1399,7 +1141,7 @@ class HomeViewModel @Inject constructor(
         }
 
         // Instantly show last session's home categories from disk cache so the home
-        // screen appears populated within 1 frame of launch — no skeleton loading
+        // screen appears populated within 1 frame of launch â€” no skeleton loading
         // phase. loadHomeData() refreshes from TMDB in the background and silently
         // replaces the cached data when it arrives.
         viewModelScope.launch(Dispatchers.IO) {
@@ -1490,17 +1232,6 @@ class HomeViewModel @Inject constructor(
             }
         }
         scheduleInitialHomeLoad()
-        // Defer heavy background warmups so first-launch navigation remains smooth.
-        viewModelScope.launch {
-            delay(if (isLowRamDevice) 10 * 60_000L else 8 * 60_000L)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                try {
-                    iptvRepository.warmXtreamVodCachesIfPossible()
-                } catch (e: Exception) {
-                    AppLogger.e("HomeVM", "warmXtreamVodCachesIfPossible failed", e)
-                }
-            }
-        }
         viewModelScope.launch {
             try {
                 // Start CW fetch as soon as Trakt auth is available. This no longer
@@ -1518,34 +1249,6 @@ class HomeViewModel @Inject constructor(
                     refreshContinueWatchingOnly(force = true)
                 }
             }
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            delay(if (isLowRamDevice) 8 * 60_000L else 6 * 60_000L)
-            // Warm IPTV channels + EPG in background after startup settles.
-            // First load from disk cache (fast), then do targeted network EPG refresh
-            // for favorite channels so home screen shows current program info.
-            try {
-                iptvRepository.prefetchFreshStartupData()
-                val snapshot = iptvRepository.getMemoryCachedSnapshot() ?: return@launch
-                // Phase 2: Refresh EPG for favorite channels (lightweight network call)
-                val snap = iptvRepository.getMemoryCachedSnapshot()
-                if (snap != null) {
-                    val favIds = snap.favoriteChannels.toHashSet()
-                    val favChannelIds = snap.channels
-                        .filter { favIds.contains(it.id) }
-                        .map { it.id }
-                        .toSet()
-                    if (favChannelIds.isNotEmpty()) {
-                        refreshFavoriteTvEpg(networkFetch = false)
-                    }
-                }
-            } catch (_: Exception) {
-            }
-        }
-        // Periodically refresh EPG data for Favorite TV row after Home settles.
-        viewModelScope.launch {
-            delay(if (isLowRamDevice) 8 * 60_000L else 6 * 60_000L)
-            startEpgRefreshTimer()
         }
         viewModelScope.launch {
             catalogRepository.observeCatalogs()
@@ -1671,9 +1374,9 @@ class HomeViewModel @Inject constructor(
             chooseInitialHero(filteredCategories)
         }
 
-        // If CW preload already set a hero with a logo, preserve it — the preloaded
+        // If CW preload already set a hero with a logo, preserve it â€” the preloaded
         // hero from startup doesn't carry a logo URL and would cause a visible flash
-        // from logo → text → logo.
+        // from logo â†’ text â†’ logo.
         val currentHero = _uiState.value.heroItem
         val currentLogo = _uiState.value.heroLogoUrl
         val finalHero = if (currentHero != null && currentLogo != null) {
@@ -1713,7 +1416,7 @@ class HomeViewModel @Inject constructor(
             val fakeId = (config.id.hashCode() and Int.MAX_VALUE).let { if (it == 0) index + 1 else it }
             collectionCatalogByMediaId[fakeId] = config
             // Cards intentionally do NOT seed a clearlogo or a description
-            // for collection tiles — the branded cover is the whole card,
+            // for collection tiles â€” the branded cover is the whole card,
             // per the design spec. Clearlogo lives only on the collection
             // detail hero; description lives only on detail, never on
             // the home-row card.
@@ -1744,7 +1447,7 @@ class HomeViewModel @Inject constructor(
      * loadHomeData restarts. loadHomeData() is called multiple times during
      * startup (profile load, catalog observer, cloud pull), each cancelling
      * the previous job. When getContinueWatching() was inside that job, the
-     * 30-60s Trakt fetch (all watched shows × progress API) was always getting
+     * 30-60s Trakt fetch (all watched shows Ã— progress API) was always getting
      * cancelled before completing. This decoupled coroutine survives those
      * restarts and updates the CW row independently when the data arrives.
      */
@@ -1767,8 +1470,8 @@ class HomeViewModel @Inject constructor(
                 publishContinueWatching(cached)
             }
 
-            // FAST PATH — resolve from cached Trakt/local data and publish
-            // immediately. Avoids the 30–60s cold-refresh wait that used to
+            // FAST PATH â€” resolve from cached Trakt/local data and publish
+            // immediately. Avoids the 30â€“60s cold-refresh wait that used to
             // leave the CW row empty for minutes (especially when the Trakt
             // progress endpoint throttles with HTTP 429).
             val instantResult = runCatching { resolveContinueWatchingItemsStable(forceFresh = false) }
@@ -1786,7 +1489,7 @@ class HomeViewModel @Inject constructor(
                 publishContinueWatching(instant)
             }
 
-            // SLOW PATH — do a freshness refresh in the background. If it
+            // SLOW PATH â€” do a freshness refresh in the background. If it
             // returns something different, republish. Swallows transient
             // Trakt 429s so the visible row doesn't blink back to empty.
             val freshResult = runCatching { resolveContinueWatchingItemsStable(forceFresh = true) }
@@ -1898,7 +1601,7 @@ class HomeViewModel @Inject constructor(
                         // BOTH built-ins AND the addon catalogs just synced above.
                         // Previously `ensurePreinstalledDefaults()` was returned
                         // directly, and its output didn't include newly-synced
-                        // addon catalogs — that's why user-added Stremio addons
+                        // addon catalogs â€” that's why user-added Stremio addons
                         // (Bharat Binge, AIO Metadata, etc.) appeared in the
                         // Catalogs tab but were dropped from the Home screen.
                         catalogRepository.ensurePreinstalledDefaults(
@@ -1943,27 +1646,14 @@ class HomeViewModel @Inject constructor(
                 val currentBaseCategories = _uiState.value.categories.filter {
                     it.id != "continue_watching" && !it.id.startsWith("collection_row_")
                 }
-                // Build Favorite TV category from IPTV cache (runs on IO)
-                val favoriteTvCategory = withContext(Dispatchers.IO) {
-                    runCatching { buildFavoriteTvCategory() }.getOrNull()
-                }
-
-                var categories = withContext(networkDispatcher) {
+var categories = withContext(networkDispatcher) {
                     val baseCategories = runCatching {
                         mediaRepository.getHomeCategories()
                     }.getOrElse { emptyList() }
 
                     val baseById = LinkedHashMap<String, Category>().apply {
                         currentBaseCategories.forEach { put(it.id, it) }
-                        baseCategories.forEach { put(it.id, it) }
-                        // Inject Favorite TV so catalog ordering picks it up, or remove
-                        // stale skeleton/placeholder if no favorites exist for this profile.
-                        if (favoriteTvCategory != null) {
-                            put(FAVORITE_TV_CATEGORY_ID, favoriteTvCategory)
-                        } else {
-                            remove(FAVORITE_TV_CATEGORY_ID)
-                        }
-                    }
+                        baseCategories.forEach { put(it.id, it) }}
 
                     // Split preinstalled into TMDB-based and MDBList-based
                     val tmdbPreinstalled = savedCatalogs
@@ -2091,9 +1781,8 @@ class HomeViewModel @Inject constructor(
                     // Build the final list following the user's savedCatalogs order
                     // for ALL catalog types (preinstalled, MDBList, custom/Trakt).
                     // The previous code added all preinstalled first, then appended
-                    // custom catalogs at the end — which ignored the user's configured
-                    // ordering and always put Favorite TV before custom catalogs
-                    // regardless of where the user placed it.
+                    // custom catalogs at the end â€” which ignored the user's configured
+                    // ordering, regardless of where the user placed it.
                     val allById = LinkedHashMap<String, Category>()
                     // Seed with preinstalled data
                     preinstalled.forEach { allById[it.id] = it }
@@ -2110,7 +1799,7 @@ class HomeViewModel @Inject constructor(
                         fallback.forEach { allById.putIfAbsent(it.id, it) }
                     }
 
-                    // Resolve in savedCatalogs order — this is the user's configured
+                    // Resolve in savedCatalogs order â€” this is the user's configured
                     // catalog ordering from Settings > Catalogs.
                     // Addon-provided service-branded catalogs (Netflix, Disney+,
                     // Hulu etc. rows contributed by aio-metadata / org.kris /
@@ -2190,9 +1879,9 @@ class HomeViewModel @Inject constructor(
 
                 // CW resolution is decoupled from loadHomeData to prevent cancellation.
                 // loadHomeData() is called multiple times during startup (profile load,
-                // catalog observer, cloud pull) — each call cancels the previous one via
+                // catalog observer, cloud pull) â€” each call cancels the previous one via
                 // loadHomeJob?.cancel(). When getContinueWatching() was inside this job,
-                // the 30-60s Trakt API fetch (97+ shows × progress call) was always
+                // the 30-60s Trakt API fetch (97+ shows Ã— progress call) was always
                 // getting cancelled before it could finish. Now it runs in its own
                 // independent coroutine that survives loadHomeData restarts.
                 val existingCW = _uiState.value.categories.firstOrNull {
@@ -2205,7 +1894,7 @@ class HomeViewModel @Inject constructor(
                     // Show the persisted CW cache instantly regardless of
                     // whether Trakt is connected. For Trakt users, the cache
                     // holds the last-successful Trakt resolution, so there's
-                    // no reason to gate it behind auth — the slow fresh
+                    // no reason to gate it behind auth â€” the slow fresh
                     // Trakt fetch (launchContinueWatchingFetch below) will
                     // still overwrite the row when it finishes. Previously
                     // Trakt users saw the row disappear during loadHomeData
@@ -2231,7 +1920,7 @@ class HomeViewModel @Inject constructor(
                     // Preserve current hero during reload.  Try to find it in the fresh
                     // categories; if the same id/mediaType still exists, use the fresh
                     // instance to ensure reference consistency.  If not found, keep the
-                    // old hero — it's still valid UI and the hero-update LaunchedEffect
+                    // old hero â€” it's still valid UI and the hero-update LaunchedEffect
                     // will correct it when the user moves focus.
                     categories.asSequence()
                         .flatMap { it.items.asSequence() }
@@ -2242,8 +1931,7 @@ class HomeViewModel @Inject constructor(
                 }
 
                 // Preload logos for the first visible rows so card overlays appear immediately.
-                // Skip IPTV items — their channel logo is already in item.image.
-                // Skip items with disk-cached logos — no network call needed.
+                // Skip items with disk-cached logos â€” no network call needed.
                 val itemsToPreload = categories
                     .take(initialLogoPrefetchRows)
                     .flatMap { it.items.take(initialLogoPrefetchItemsPerRow) }
@@ -2269,7 +1957,7 @@ class HomeViewModel @Inject constructor(
                         cachedLogoResults[key]
                     }
                     if (heroLogoFromCache != null || cachedLogoResults.isNotEmpty()) {
-                        // Use high batch limit for initial display — preload all cached logos at once
+                        // Use high batch limit for initial display â€” preload all cached logos at once
                         if (isStartupSettling()) {
                             scheduleStartupImageWarmup(logoUrls = cachedLogoResults.values.toList())
                         } else {
@@ -2383,31 +2071,6 @@ class HomeViewModel @Inject constructor(
                     }
                 }
 
-                // If the cached Favorite TV row has stale/empty EPG text, refresh it
-                // after Home has had time to settle. Doing network EPG work during
-                // startup competes with TV D-pad navigation and causes GC stalls.
-                val favTvCat = _uiState.value.categories.firstOrNull { it.id == FAVORITE_TV_CATEGORY_ID }
-                if (favTvCat != null && favTvCat.items.any { it.overview == "Live TV" }) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        delay(if (isLowRamDevice) 8 * 60_000L else 6 * 60_000L)
-                        val channelIds = favTvCat.items.mapNotNull { getIptvChannelId(it) }.toSet()
-                        if (channelIds.isNotEmpty()) {
-                            refreshFavoriteTvEpg(networkFetch = false)
-                            // Also update hero if it's an IPTV item showing stale EPG
-                            val currentHero = _uiState.value.heroItem
-                            if (currentHero != null && isIptvItem(currentHero) && currentHero.overview == "Live TV") {
-                                val updatedCat = _uiState.value.categories.firstOrNull { it.id == FAVORITE_TV_CATEGORY_ID }
-                                val updatedHero = updatedCat?.items?.firstOrNull { it.id == currentHero.id }
-                                if (updatedHero != null) {
-                                    withContext(Dispatchers.Main.immediate) {
-                                        _uiState.value = _uiState.value.copy(heroItem = updatedHero)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Custom catalogs are now loaded in the bulk path above (parallel
                 // fetch alongside TMDB + MDBList). No need for incremental loading
                 // which caused the slow one-by-one appearance and the viewport "trip"
@@ -2499,7 +2162,7 @@ class HomeViewModel @Inject constructor(
                 // already has a slot in the displayed list, or APPEND it at the end
                 // if it's brand new. This prevents mid-list insertions that cause
                 // LazyColumn to re-layout and the viewport to jump ("trip" bug).
-                // Base (TMDB) catalogs are NOT touched here — they're set in the
+                // Base (TMDB) catalogs are NOT touched here â€” they're set in the
                 // main loadHomeData path which does a single bulk replacement.
                 var anyChange = false
                 for (id in customIds) {
@@ -2515,21 +2178,8 @@ class HomeViewModel @Inject constructor(
                             anyChange = true
                         }
                     } else {
-                        // Append new custom catalog at end — no mid-list insert
+                        // Append new custom catalog at end â€” no mid-list insert
                         currentCategories.add(freshData)
-                        anyChange = true
-                    }
-                }
-
-                // Also update Favorite TV if it exists in base but not yet in displayed list
-                val favTv = baseById[FAVORITE_TV_CATEGORY_ID]
-                if (favTv != null && favTv.items.isNotEmpty()) {
-                    val favIdx = currentCategories.indexOfFirst { it.id == FAVORITE_TV_CATEGORY_ID }
-                    if (favIdx >= 0) {
-                        currentCategories[favIdx] = favTv
-                        anyChange = true
-                    } else {
-                        currentCategories.add(favTv)
                         anyChange = true
                     }
                 }
@@ -2844,7 +2494,7 @@ class HomeViewModel @Inject constructor(
      * Uses target display sizes to reduce decode overhead.
      */
     private fun preloadImagesWithCoil(urls: List<String>, width: Int, height: Int, batchLimit: Int = 0) {
-        // Bumped from 2/4 to 4/8 — enough to preload one full row of cards on
+        // Bumped from 2/4 to 4/8 â€” enough to preload one full row of cards on
         // the home screen. The old limits left the majority of visible cards
         // without preloaded images on cold start.
         val defaultLimit = if (isLowRamDevice) 4 else 8
@@ -2899,7 +2549,7 @@ class HomeViewModel @Inject constructor(
         val items: List<ContinueWatchingItem> = if (isTraktAuthenticated) {
             // When connected to Trakt, use ONLY Trakt as the source of truth for
             // Continue Watching. The previous code merged local/history items which
-            // polluted the CW row with shows not on the user's Trakt — e.g., items
+            // polluted the CW row with shows not on the user's Trakt â€” e.g., items
             // watched before connecting Trakt, or items from ARVIO Cloud watch_history
             // that Trakt doesn't know about. Trakt users expect CW to match exactly
             // what Trakt shows as "Up Next."
@@ -2912,7 +2562,7 @@ class HomeViewModel @Inject constructor(
 
             // Enrich Trakt items with local resume position data where available.
             // This preserves exact playback position (e.g., "resume at 32:15") which
-            // Trakt's progress API doesn't provide — it only gives episode-level progress.
+            // Trakt's progress API doesn't provide â€” it only gives episode-level progress.
             val localItems = runCatching { traktRepository.getLocalContinueWatching() }.getOrDefault(emptyList())
             val historyItems = loadContinueWatchingFromHistory()
             val localByKey = (localItems + historyItems).associateBy { "${it.mediaType}:${it.id}" }
@@ -2921,7 +2571,7 @@ class HomeViewModel @Inject constructor(
                 val key = "${traktItem.mediaType}:${traktItem.id}"
                 val local = localByKey[key]
                 if (local != null && local.season == traktItem.season && local.episode == traktItem.episode) {
-                    // Same episode — enrich with local resume position
+                    // Same episode â€” enrich with local resume position
                     traktItem.copy(
                         resumePositionSeconds = maxOf(traktItem.resumePositionSeconds, local.resumePositionSeconds),
                         durationSeconds = maxOf(traktItem.durationSeconds, local.durationSeconds),
@@ -2963,7 +2613,7 @@ class HomeViewModel @Inject constructor(
                 val showKey = continueWatchingKey(item.mediaType, item.id)
                 dismissedContinueWatchingKeys.contains(showKey) || persistedDismissedKeys.contains(showKey)
             }
-            // Don't filter by progress range for Trakt items — Trakt's progress API
+            // Don't filter by progress range for Trakt items â€” Trakt's progress API
             // is authoritative. Some "up next" items have synthetic progress = 0
             // (brand new season premiere, never started) which the old 1..99 filter
             // was dropping. For non-Trakt items, keep the 1..99 filter to avoid
@@ -2972,52 +2622,6 @@ class HomeViewModel @Inject constructor(
                 if (isTraktAuthenticated) true else item.progress in 1..99
             }
             .take(Constants.MAX_CONTINUE_WATCHING)
-    }
-
-    /**
-     * Pull the full cloud state (addons, catalogs, settings, profiles) on ON_RESUME.
-     * This is the critical fix for the "addon added on phone but not on TV" symptom:
-     * when the TV comes back from background, the WebSocket may be dead, so we do
-     * an explicit pull to catch any account_sync_state changes that were missed.
-     * Throttled to at most once per 10 seconds to avoid excessive pulls on rapid
-     * activity transitions (e.g., player back → home → details → home).
-     */
-    @Volatile
-    private var lastCloudPullTimestamp = 0L
-    private val cloudPullThrottleMs = 10_000L
-
-    fun pullCloudStateOnResume() {
-        val now = System.currentTimeMillis()
-        if (now - lastCloudPullTimestamp < cloudPullThrottleMs) return
-        lastCloudPullTimestamp = now
-        viewModelScope.launch(Dispatchers.IO) {
-            // If a previous push failed (dirty flag), retry it now before pulling.
-            // This ensures the cloud has our latest state before we pull the other
-            // device's state on top of it — preventing stale overwrites.
-            if (cloudSyncRepository.isPushDirty) {
-                android.util.Log.i("HomeViewModel", "Retrying dirty push before pull")
-                runCatching { cloudSyncRepository.pushToCloud() }
-            }
-            val result = runCatching {
-                cloudSyncRepository.pullFromCloud()
-            }
-            result.onSuccess { restoreResult ->
-                if (restoreResult == CloudSyncRepository.RestoreResult.RESTORED) {
-                    val profileId = profileManager.getProfileIdSync().ifBlank { "default" }
-                    if (activeRuntimeProfileId != null && activeRuntimeProfileId != profileId) {
-                        resetProfileRuntimeState(profileId)
-                    }
-                    // Cloud state was applied — reload home data so catalog changes,
-                    // addon changes, and settings from the other device take effect
-                    // immediately without waiting for the observeCatalogs flow.
-                    loadHomeData()
-                    refreshContinueWatchingOnly(force = true)
-                    restartContinueWatchingFetch()
-                }
-            }.onFailure {
-                android.util.Log.w("HomeViewModel", "ON_RESUME cloud pull failed: ${it.message}")
-            }
-        }
     }
 
     fun refreshContinueWatchingOnly(force: Boolean = false) {
@@ -3083,11 +2687,11 @@ class HomeViewModel @Inject constructor(
                     } else if (lastContinueWatchingItems.isNotEmpty()) {
                         // Only resurrect last-known CW items for non-Trakt profiles.
                         // For Trakt profiles, if the fresh fetch returned empty, that
-                        // means the user genuinely has nothing to continue — don't
+                        // means the user genuinely has nothing to continue â€” don't
                         // re-insert stale items that may include non-Trakt ghost data.
                         val isTraktAuth = runCatching { traktRepository.isAuthenticated.first() }.getOrDefault(false)
                         if (isTraktAuth) {
-                            return@launch // Trakt said empty — trust it
+                            return@launch // Trakt said empty â€” trust it
                         }
                         val persistedDismissedKeys = runCatching {
                             traktRepository.getDismissedContinueWatchingShowKeys()
@@ -3121,7 +2725,7 @@ class HomeViewModel @Inject constructor(
             val entries = watchHistoryRepository.getContinueWatching()
             if (entries.isEmpty()) return emptyList()
             val mapped = entries.distinctBy { entry ->
-                // Deduplicate at show level for TV — only keep the most recent episode per show.
+                // Deduplicate at show level for TV â€” only keep the most recent episode per show.
                 // Entries are already sorted by updated_at desc, so distinctBy keeps the latest.
                 "${entry.media_type}:${entry.show_tmdb_id}"
             }.mapNotNull { entry ->
@@ -3537,7 +3141,7 @@ class HomeViewModel @Inject constructor(
             performHeroUpdate(item, currentCachedLogo)
             scheduleHeroDetailsFetch(item, fastScrolling)
 
-            // Fetch logo async if not cached (skip IPTV — uses channel logo directly)
+            // Fetch logo async if not cached.
             if (currentCachedLogo == null && isActionableMediaItem(item) && !isIptvItem(item)) {
                 try {
                     val logoUrl = withContext(networkDispatcher) {
@@ -3833,7 +3437,6 @@ class HomeViewModel @Inject constructor(
 
                 val itemsToLoad = category.items.take(maxLogoItems).filter { item ->
                     if (!isActionableMediaItem(item)) return@filter false
-                    if (isIptvItem(item)) return@filter false  // IPTV items use channel logo directly
                     val key = "${item.mediaType}_${item.id}"
                     !hasCachedLogo(key) && logoFetchInFlight.add(key)
                 }
@@ -3909,18 +3512,6 @@ class HomeViewModel @Inject constructor(
                     }
                     watchlistRepository.addToWatchlist(item.mediaType, item.id, item)
                 }
-                runCatching { cloudSyncRepository.pushToCloud() }
-                    .onFailure { error ->
-                        AppLogger.recordException(
-                            throwable = error,
-                            context = mapOf(
-                                "error_area" to "Watchlist",
-                                "watchlist_phase" to "home_toggle_cloud_push",
-                                "media_type" to item.mediaType.name.lowercase(),
-                                "trakt_connected" to traktConnected.toString()
-                            )
-                        )
-                    }
                 _uiState.value = _uiState.value.copy(
                     toastMessage = if (isInWatchlist) "Removed from watchlist" else "Added to watchlist",
                     toastType = ToastType.SUCCESS
@@ -4034,9 +3625,8 @@ class HomeViewModel @Inject constructor(
                 // Push cloud snapshot so other devices see the watched-status change
                 // and the updated Continue Watching entry. Without this, the snapshot
                 // (localCW, localWatchedMovies, localWatchedEpisodes, dismissedCW)
-                // was never updated — only the Supabase watch_history table was.
-                runCatching { cloudSyncRepository.pushToCloud() }
-            } catch (e: Exception) {
+                // was never updated â€” only the Supabase watch_history table was.
+} catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to update watched status",
                     toastType = ToastType.ERROR
@@ -4139,8 +3729,7 @@ class HomeViewModel @Inject constructor(
                 }
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                 // Push cloud snapshot so other devices see watched status + CW update
-                runCatching { cloudSyncRepository.pushToCloud() }
-            } catch (e: Exception) {
+} catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     toastMessage = "Failed to update watched status",
                     toastType = ToastType.ERROR
@@ -4168,9 +3757,7 @@ class HomeViewModel @Inject constructor(
                 traktRepository.deletePlaybackForContent(item.id, item.mediaType)
                 traktRepository.removeFromContinueWatchingCache(item.id, null, null)
                 traktRepository.dismissContinueWatching(item)
-                runCatching { cloudSyncRepository.pushToCloud() }
-
-                val updatedCategories = _uiState.value.categories.map { category ->
+val updatedCategories = _uiState.value.categories.map { category ->
                     if (category.id == "continue_watching") {
                         category.copy(items = category.items.filter { it.id != item.id })
                     } else {

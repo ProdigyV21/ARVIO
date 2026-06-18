@@ -19,16 +19,12 @@ import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Profile
-import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.ui.screens.details.DetailsScreen
 import com.arflix.tv.ui.screens.home.HomeScreen
-import com.arflix.tv.ui.screens.login.LoginScreen
 import com.arflix.tv.ui.screens.player.PlayerScreen
 import com.arflix.tv.ui.screens.collections.CollectionDetailsScreen
 import com.arflix.tv.ui.screens.search.SearchScreen
 import com.arflix.tv.ui.screens.settings.SettingsScreen
-import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
-import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
@@ -37,7 +33,6 @@ import com.arflix.tv.util.LocalDeviceType
  * Navigation destinations
  */
 sealed class Screen(val route: String) {
-    object Login : Screen("login")
     object Home : Screen("home")
     object Search : Screen("search")
     object Watchlist : Screen("watchlist")
@@ -46,24 +41,14 @@ sealed class Screen(val route: String) {
             return "collections/${android.net.Uri.encode(catalogId)}"
         }
     }
-    object Tv : Screen("tv?channelId={channelId}&streamUrl={streamUrl}") {
-        fun createRoute(channelId: String? = null, streamUrl: String? = null): String {
-            if (channelId == null) return "tv"
-            val enc = java.net.URLEncoder.encode(channelId, "UTF-8")
-            val streamEnc = streamUrl?.let { java.net.URLEncoder.encode(it, "UTF-8") }
-            return if (streamEnc != null) "tv?channelId=$enc&streamUrl=$streamEnc" else "tv?channelId=$enc"
-        }
-    }
     object Settings : Screen("settings") {
-        fun createRoute(autoCloudAuth: Boolean = false, initialSection: String? = null): String {
+        fun createRoute(initialSection: String? = null): String {
             val base = "settings"
             val params = mutableListOf<String>()
-            if (autoCloudAuth) params.add("autoCloudAuth=true")
             initialSection?.let { params.add("initialSection=$it") }
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
-    object TelegramSettings : Screen("telegram_settings")
     object ProfileSelection : Screen("profile_selection")
 
     object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}") {
@@ -115,7 +100,7 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
-    startDestination: String = Screen.Login.route,
+    startDestination: String = Screen.ProfileSelection.route,
     preloadedCategories: List<Category> = emptyList(),
     preloadedHeroItem: MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
@@ -123,7 +108,6 @@ fun AppNavigation(
     currentProfile: Profile? = null,
     isCloudConnected: Boolean = false,
     onSwitchProfile: () -> Unit = {},
-    onTvFullscreenChanged: (Boolean) -> Unit = {},
     onExitApp: () -> Unit = {}
 ) {
     val navigateTopLevel: (String) -> Unit = { route ->
@@ -158,17 +142,6 @@ fun AppNavigation(
         popEnterTransition = { fadeIn(androidx.compose.animation.core.tween(250)) },
         popExitTransition = { fadeOut(androidx.compose.animation.core.tween(200)) }
     ) {
-        // Login screen
-        composable(Screen.Login.route) {
-            LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
-            )
-        }
-
         // Home screen
         composable(Screen.Home.route) {
             HomeScreen(
@@ -189,9 +162,7 @@ fun AppNavigation(
                 onNavigateToWatchlist = {
                     navigateTopLevel(Screen.Watchlist.route)
                 },
-                onNavigateToTv = { channelId, streamUrl ->
-                    navigateTopLevel(Screen.Tv.createRoute(channelId, streamUrl))
-                },
+                onNavigateToTv = { _, _ -> },
                 onNavigateToSettings = {
                     navigateTopLevel(Screen.Settings.route)
                 },
@@ -214,7 +185,7 @@ fun AppNavigation(
                 },
                 onNavigateToHome = { navigateHome() },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                onNavigateToTv = { navigateHome() },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
                 onSwitchProfile = {
                     onSwitchProfile()
@@ -235,7 +206,7 @@ fun AppNavigation(
                 },
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                onNavigateToTv = { navigateHome() },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
                 onSwitchProfile = {
                     onSwitchProfile()
@@ -247,44 +218,10 @@ fun AppNavigation(
             )
         }
 
-        // TV screen
-        composable(
-            route = Screen.Tv.route,
-            arguments = listOf(
-                navArgument("channelId") { type = NavType.StringType; nullable = true; defaultValue = null },
-                navArgument("streamUrl") { type = NavType.StringType; nullable = true; defaultValue = null }
-            )
-        ) { backStackEntry ->
-            val initialChannelId = backStackEntry.arguments?.getString("channelId")
-            val initialStreamUrl = backStackEntry.arguments?.getString("streamUrl")
-            LiveTvScreen(
-                currentProfile = currentProfile,
-                initialChannelId = initialChannelId,
-                initialStreamUrl = initialStreamUrl,
-                onFullscreenChanged = onTvFullscreenChanged,
-                onNavigateToHome = { navigateHome() },
-                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
-                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
-                onNavigateToIptvSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "iptv")) },
-                onSwitchProfile = {
-                    onSwitchProfile()
-                    navController.navigate(Screen.ProfileSelection.route) {
-                        popUpTo(Screen.Home.route) { inclusive = true }
-                    }
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
         // Settings screen
         composable(
-            route = "settings?autoCloudAuth={autoCloudAuth}&initialSection={initialSection}",
+            route = "settings?initialSection={initialSection}",
             arguments = listOf(
-                navArgument("autoCloudAuth") {
-                    type = NavType.BoolType
-                    defaultValue = false
-                },
                 navArgument("initialSection") {
                     type = NavType.StringType
                     nullable = true
@@ -292,17 +229,14 @@ fun AppNavigation(
                 }
             )
         ) { backStackEntry ->
-            val autoCloudAuth = backStackEntry.arguments?.getBoolean("autoCloudAuth") ?: false
             val initialSection = backStackEntry.arguments?.getString("initialSection")
             SettingsScreen(
                 currentProfile = currentProfile,
-                autoStartCloudAuth = autoCloudAuth,
                 initialSection = initialSection,
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                onNavigateToTv = { navigateHome() },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToTelegramSettings = { navController.navigate(Screen.TelegramSettings.route) },
                 onSwitchProfile = {
                     onSwitchProfile()
                     navController.navigate(Screen.ProfileSelection.route) {
@@ -311,11 +245,6 @@ fun AppNavigation(
                 },
                 onBack = { navController.popBackStack() }
             )
-        }
-
-        // Telegram settings screen
-        composable(Screen.TelegramSettings.route) {
-            TelegramSettingsScreen(onBack = { navController.popBackStack() })
         }
 
         // Profile selection screen
@@ -328,7 +257,7 @@ fun AppNavigation(
                 },
                 onShowAddProfile = { /* Handled internally by ProfileSelectionScreen */ },
                 onConnectCloud = {
-                    navController.navigate("settings?autoCloudAuth=true")
+                    navController.navigate(Screen.Settings.route)
                 },
                 isCloudConnected = isCloudConnected
             )
@@ -353,7 +282,7 @@ fun AppNavigation(
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
-                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                onNavigateToTv = { navigateHome() },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
                 onBack = { navController.popBackStack() }
             )
@@ -418,9 +347,7 @@ fun AppNavigation(
                 onNavigateToSearch = {
                     navigateTopLevel(Screen.Search.route)
                 },
-                onNavigateToTv = {
-                    navigateTopLevel(Screen.Tv.createRoute())
-                },
+                onNavigateToTv = { navigateHome() },
                 onNavigateToWatchlist = {
                     navigateTopLevel(Screen.Watchlist.route)
                 },

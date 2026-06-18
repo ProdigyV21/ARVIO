@@ -590,7 +590,6 @@ fun HomeScreen(
                 // was backgrounded — the WebSocket may have been killed by Android,
                 // so we can't rely on realtime alone. Throttled internally to avoid
                 // redundant pulls on rapid activity transitions.
-                viewModel.pullCloudStateOnResume()
                 suppressSelectUntilMs = SystemClock.elapsedRealtime() + 150L
             }
         }
@@ -1124,7 +1123,6 @@ fun HomeScreen(
             currentProfile = currentProfile,
             profileCount = profileCount,
             clockFormat = uiState.clockFormat,
-            syncStatus = uiState.syncStatus,
             hasUpdateBadge = uiState.hasUpdateBadge,
             categoryHasMoreMap = uiState.categoryHasMoreMap,
             smoothScrolling = uiState.smoothScrolling,
@@ -2158,7 +2156,6 @@ private fun HomeInputLayer(
     currentProfile: com.arflix.tv.data.model.Profile?,
     profileCount: Int = 1,
     clockFormat: String = "24h",
-    syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     hasUpdateBadge: Boolean = false,
     categoryHasMoreMap: Map<String, Boolean> = emptyMap(),
     smoothScrolling: Boolean = true,
