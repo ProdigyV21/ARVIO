@@ -138,11 +138,18 @@ fun MediaCard(
     }
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
 
-    val jumpBorderWidth = 2.5.dp
+    val jumpBorderWidth = ArvioSkin.focus.outlineWidth
 
     val context = LocalContext.current
     val density = LocalDensity.current
-    val overlayBrush: Brush? = null  // Gradient removed per user feedback
+    val overlayBrush: Brush? = Brush.verticalGradient(
+        colorStops = arrayOf(
+            0.0f to Color.Transparent,
+            0.48f to Color.Transparent,
+            0.78f to Color.Black.copy(alpha = 0.18f),
+            1.0f to Color.Black.copy(alpha = 0.62f)
+        )
+    )
     // Performance: Removed context/density from keys - they're stable CompositionLocals
     val imageRequest = remember(rawImageUrl, width, aspectRatio) {
         if (rawImageUrl == null) return@remember null
@@ -193,6 +200,8 @@ fun MediaCard(
             backgroundColor = ArvioSkin.colors.surface,
             outlineColor = ArvioSkin.colors.focusOutline,
             outlineWidth = jumpBorderWidth,
+            glowWidth = ArvioSkin.focus.glowWidth,
+            glowAlpha = ArvioSkin.focus.glowAlpha,
             showRestBorder = true,
             focusedScale = focusedScale,
             pressedScale = 0.97f,

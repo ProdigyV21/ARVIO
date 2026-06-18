@@ -1029,12 +1029,12 @@ fun HomeScreen(
                             val height = size.height
                             val leftScrim = Brush.horizontalGradient(
                                 colorStops = arrayOf(
-                                    0.0f to Color.Black.copy(alpha = 0.95f),
-                                    0.12f to Color.Black.copy(alpha = 0.88f),
-                                    0.22f to Color.Black.copy(alpha = 0.72f),
-                                    0.32f to Color.Black.copy(alpha = 0.50f),
-                                    0.42f to Color.Black.copy(alpha = 0.30f),
-                                    0.55f to Color.Black.copy(alpha = 0.10f),
+                                    0.0f to Color(0xFF030405).copy(alpha = 0.96f),
+                                    0.12f to Color(0xFF030405).copy(alpha = 0.90f),
+                                    0.24f to Color(0xFF061214).copy(alpha = 0.74f),
+                                    0.36f to Color.Black.copy(alpha = 0.50f),
+                                    0.48f to Color.Black.copy(alpha = 0.26f),
+                                    0.60f to Color.Black.copy(alpha = 0.08f),
                                     0.65f to Color.Transparent,
                                     1.0f to Color.Transparent
                                 ),
@@ -1043,9 +1043,9 @@ fun HomeScreen(
                             )
                             val topScrim = Brush.verticalGradient(
                                 colorStops = arrayOf(
-                                    0.0f to Color.Black.copy(alpha = 0.7f),
-                                    0.06f to Color.Black.copy(alpha = 0.45f),
-                                    0.15f to Color.Black.copy(alpha = 0.15f),
+                                    0.0f to Color(0xFF030405).copy(alpha = 0.76f),
+                                    0.07f to Color(0xFF030405).copy(alpha = 0.48f),
+                                    0.17f to Color.Black.copy(alpha = 0.16f),
                                     0.25f to Color.Transparent,
                                     1.0f to Color.Transparent
                                 ),
@@ -1056,8 +1056,8 @@ fun HomeScreen(
                                 colorStops = arrayOf(
                                     0.0f to Color.Transparent,
                                     0.85f to Color.Transparent,
-                                    0.92f to Color.Black.copy(alpha = 0.5f),
-                                    1.0f to Color.Black.copy(alpha = 0.85f)
+                                    0.90f to Color.Black.copy(alpha = 0.46f),
+                                    1.0f to Color(0xFF030405).copy(alpha = 0.88f)
                                 ),
                                 startY = 0f,
                                 endY = height

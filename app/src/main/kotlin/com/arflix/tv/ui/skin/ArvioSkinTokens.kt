@@ -92,18 +92,18 @@ data class ArvioSkinTokens(
 
             return ArvioSkinTokens(
                 colors = ArvioColorTokens(
-                    background = Color(0xFF000000),
-                    surface = Color(0xFF0D0D0D),
-                    surfaceRaised = Color(0xFF1A1A1A),
-                    textPrimary = Color(0xFFEDEDED),
-                    textMuted = Color(0xB3EDEDED),
-                    accent = Color(0xFFEDEDED),
-                    focusOutline = Color(0xFFFFFFFF),  // Glowing white focus
-                    focusGradientStart = Color(0xFFFFFFFF),  // White
-                    focusGradientEnd = Color(0xFFFFFFFF),    // White (no gradient)
-                    tealAccent = Color(0xFF00D9B5),  // Teal checkmark color
-                    watchedGreen = Color(0xFF4CAF50),  // Green checkmark (Arctic Fuse 2 style)
-                    inProgressGrey = Color(0xFF757575),  // Grey clock for in-progress
+                    background = Color(0xFF030405),
+                    surface = Color(0xFF101318),
+                    surfaceRaised = Color(0xFF1B2028),
+                    textPrimary = Color(0xFFF4F5F5),
+                    textMuted = Color(0xB8F4F5F5),
+                    accent = Color(0xFFFFD166),
+                    focusOutline = Color(0xFFF8FAFA),
+                    focusGradientStart = Color(0xFF58D6C9),
+                    focusGradientEnd = Color(0xFFFFD166),
+                    tealAccent = Color(0xFF64E6D5),
+                    watchedGreen = Color(0xFF38D98B),
+                    inProgressGrey = Color(0xFF8B95A1),
                 ),
                 spacing = ArvioSpacingTokens(
                     x1 = 4.dp,
@@ -116,9 +116,9 @@ data class ArvioSkinTokens(
                     x16 = 64.dp,
                 ),
                 radius = ArvioRadiusTokens(
-                    sm = 8.dp,
-                    md = 12.dp,
-                    lg = 16.dp,
+                    sm = 6.dp,
+                    md = 8.dp,
+                    lg = 12.dp,
                 ),
                 typography = ArvioTypographyTokens(
                     heroTitle = TextStyle(
@@ -178,14 +178,14 @@ data class ArvioSkinTokens(
                     heroFadeMillis = 200,         // Smooth backdrop dissolve
                 ),
                 focus = ArvioFocusTokens(
-                    scaleFocused = 1.05f,  // Noticeable scale for TV viewing distance
+                    scaleFocused = 1.045f,
                     scalePressed = 0.97f,
-                    durationMillis = 120,  // Smooth but responsive animations
+                    durationMillis = 120,
                     easing = easeOut,
-                    outlineWidth = 3.dp,   // Prominent white border
-                    glowWidth = 0.dp,      // No glow for performance
-                    glowAlpha = 0f,        // No glow
-                    translationZFocused = 8.dp,  // Visible lift effect
+                    outlineWidth = 2.dp,
+                    glowWidth = 8.dp,
+                    glowAlpha = 0.22f,
+                    translationZFocused = 8.dp,
                 ),
             )
         }

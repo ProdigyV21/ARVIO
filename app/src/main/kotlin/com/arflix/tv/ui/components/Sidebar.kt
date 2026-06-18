@@ -9,6 +9,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,18 +88,33 @@ fun Sidebar(
     // Sidebar: subtle transparent gradient so backdrop shows through
     Box(
         modifier = modifier
-            .width(56.dp)
+            .width(64.dp)
             .fillMaxHeight()
             .background(
                 Brush.horizontalGradient(
                     listOf(
-                        Color.Black.copy(alpha = 0.4f),
-                        Color.Black.copy(alpha = 0.2f),
+                        ArvioSkin.colors.background.copy(alpha = 0.92f),
+                        ArvioSkin.colors.surface.copy(alpha = 0.42f),
                         Color.Transparent
                     )
                 )
             )
     ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(1.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Transparent,
+                            ArvioSkin.colors.tealAccent.copy(alpha = 0.24f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
         Column(
             modifier = Modifier.fillMaxHeight(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -110,7 +126,7 @@ fun Sidebar(
                     profile = profile!!,
                     isFocused = isSidebarFocused && focusedIndex == 0
                 )
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(30.dp))
             }
 
             // Flexible space - pushes center group down
@@ -119,7 +135,7 @@ fun Sidebar(
             // Center group: Search, Home, Watchlist, TV (vertically centered)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(28.dp)
+                verticalArrangement = Arrangement.spacedBy(26.dp)
             ) {
                 centerItems.forEachIndexed { index, item ->
                     SidebarIcon(
@@ -180,7 +196,7 @@ private fun SidebarProfileAvatar(
                     .width(3.dp)
                     .height(22.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(ArvioSkin.colors.focusOutline.copy(alpha = indicatorAlpha))
+                    .background(ArvioSkin.colors.accent.copy(alpha = indicatorAlpha))
             )
         }
         Box(
@@ -189,6 +205,11 @@ private fun SidebarProfileAvatar(
                 .size(30.dp)
                 .clip(CircleShape)
                 .background(Color.Transparent)
+                .border(
+                    width = if (isFocused) 1.dp else 0.dp,
+                    color = ArvioSkin.colors.focusOutline.copy(alpha = if (isFocused) 0.7f else 0f),
+                    shape = CircleShape
+                )
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -218,8 +239,8 @@ private fun SidebarIcon(
     val iconColor by animateColorAsState(
         targetValue = when {
             isFocused -> Color.White  // white when D-pad navigating (wins over selected)
-            isSelected -> accent  // ROYGBIV accent when selected (current screen)
-            else -> Color(0xFF444444)  // Darker grey when unfocused
+            isSelected -> accent
+            else -> ArvioSkin.colors.textMuted.copy(alpha = 0.36f)
         },
         animationSpec = tween(
             durationMillis = AnimationConstants.DURATION_FAST,
@@ -240,8 +261,8 @@ private fun SidebarIcon(
 
     val chipBackground by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White.copy(alpha = 0.16f)
-            isSelected -> Color.White.copy(alpha = 0.06f)
+            isFocused -> ArvioSkin.colors.surfaceRaised.copy(alpha = 0.78f)
+            isSelected -> accent.copy(alpha = 0.14f)
             else -> Color.Transparent
         },
         animationSpec = tween(
@@ -274,7 +295,7 @@ private fun SidebarIcon(
                     .width(3.dp)
                     .height(22.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(ArvioSkin.colors.focusOutline.copy(alpha = indicatorAlpha))
+                    .background(accent.copy(alpha = indicatorAlpha))
             )
         }
 
@@ -283,7 +304,12 @@ private fun SidebarIcon(
                 .align(Alignment.Center)
                 .size(30.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(chipBackground),
+                .background(chipBackground)
+                .border(
+                    width = if (isFocused) 1.dp else 0.dp,
+                    color = ArvioSkin.colors.focusOutline.copy(alpha = if (isFocused) 0.68f else 0f),
+                    shape = RoundedCornerShape(10.dp)
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(
