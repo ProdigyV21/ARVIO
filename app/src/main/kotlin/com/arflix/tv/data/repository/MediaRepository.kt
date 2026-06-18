@@ -3032,9 +3032,16 @@ class MediaRepository @Inject constructor(
             }
             if (mediaType == MediaType.TV) {
                 TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = false)
-                    ?: getTvSeasonTrailerKey(mediaId, includeFallbackTypes = false)
-                    ?: TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = true)
-                    ?: getTvSeasonTrailerKey(mediaId, includeFallbackTypes = true)
+                    ?: run {
+                        val seasonTrailers = getTvSeasonTrailerKeys(mediaId)
+                        seasonTrailers.strictKey
+                            ?: TrailerResolver.selectBestTrailerKey(
+                                videos,
+                                contentLanguage,
+                                includeFallbackTypes = true
+                            )
+                            ?: seasonTrailers.fallbackKey
+                    }
             } else {
                 TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = true)
             }
@@ -3070,18 +3077,33 @@ class MediaRepository @Inject constructor(
         return (localized + fallback).distinctBy { it.key }
     }
 
-    private suspend fun getTvSeasonTrailerKey(tvId: Int, includeFallbackTypes: Boolean): String? {
+    private data class TvSeasonTrailerKeys(
+        val strictKey: String?,
+        val fallbackKey: String?
+    )
+
+    private suspend fun getTvSeasonTrailerKeys(tvId: Int): TvSeasonTrailerKeys {
         val details = runCatching {
             tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage)
-        }.getOrNull() ?: return null
+        }.getOrNull() ?: return TvSeasonTrailerKeys(strictKey = null, fallbackKey = null)
 
+        var fallbackKey: String? = null
         for (seasonNumber in TrailerResolver.seasonFallbackOrder(details.seasons)) {
             val videos = getVideosWithLanguageFallback { language ->
                 tmdbApi.getTvSeasonVideos(tvId, seasonNumber, apiKey, language = language).results
             }
-            TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes)?.let { return it }
+            TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = false)?.let {
+                return TvSeasonTrailerKeys(strictKey = it, fallbackKey = fallbackKey)
+            }
+            if (fallbackKey == null) {
+                fallbackKey = TrailerResolver.selectBestTrailerKey(
+                    videos = videos,
+                    preferredLanguage = contentLanguage,
+                    includeFallbackTypes = true
+                )
+            }
         }
-        return null
+        return TvSeasonTrailerKeys(strictKey = null, fallbackKey = fallbackKey)
     }
 
     /**

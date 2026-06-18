@@ -7,6 +7,7 @@ import com.arflix.tv.data.api.TmdbVideo
 import com.arflix.tv.data.api.TmdbVideosResponse
 import com.arflix.tv.data.model.MediaType
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
@@ -36,6 +37,48 @@ class MediaRepositoryTrailerTest {
         val repository = mediaRepository(tmdbApi)
 
         assertEquals("season-two-trailer", repository.getTrailerKey(MediaType.TV, 123))
+    }
+
+    @Test
+    fun `getTrailerKey does not fetch tv seasons when show level trailer exists`() = runTest {
+        val tmdbApi = mockk<TmdbApi>()
+        coEvery { tmdbApi.getVideos("tv", 789, any(), null) } returns TmdbVideosResponse(
+            results = listOf(video(key = "show-trailer", type = "Trailer", official = true))
+        )
+
+        val repository = mediaRepository(tmdbApi)
+
+        assertEquals("show-trailer", repository.getTrailerKey(MediaType.TV, 789))
+        coVerify(exactly = 0) { tmdbApi.getTvDetails(789, any(), any()) }
+    }
+
+    @Test
+    fun `getTrailerKey scans tv seasons once when fallback clip is selected`() = runTest {
+        val tmdbApi = mockk<TmdbApi>()
+        coEvery { tmdbApi.getVideos("tv", 456, any(), null) } returns TmdbVideosResponse(
+            results = emptyList()
+        )
+        coEvery { tmdbApi.getTvDetails(456, any(), null) } returns TmdbTvDetails(
+            id = 456,
+            name = "Series",
+            seasons = listOf(
+                TmdbTvSeason(seasonNumber = 1, episodeCount = 8),
+                TmdbTvSeason(seasonNumber = 2, episodeCount = 10)
+            )
+        )
+        coEvery { tmdbApi.getTvSeasonVideos(456, 2, any(), null) } returns TmdbVideosResponse(
+            results = listOf(video(key = "season-two-clip", type = "Clip"))
+        )
+        coEvery { tmdbApi.getTvSeasonVideos(456, 1, any(), null) } returns TmdbVideosResponse(
+            results = emptyList()
+        )
+
+        val repository = mediaRepository(tmdbApi)
+
+        assertEquals("season-two-clip", repository.getTrailerKey(MediaType.TV, 456))
+        coVerify(exactly = 1) { tmdbApi.getTvDetails(456, any(), null) }
+        coVerify(exactly = 1) { tmdbApi.getTvSeasonVideos(456, 2, any(), null) }
+        coVerify(exactly = 1) { tmdbApi.getTvSeasonVideos(456, 1, any(), null) }
     }
 
     private fun mediaRepository(tmdbApi: TmdbApi): MediaRepository {
