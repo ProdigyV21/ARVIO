@@ -6,17 +6,10 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import com.arflix.tv.data.model.Profile
-import com.arflix.tv.util.Constants
 import com.arflix.tv.util.ProfileAvatarFiles
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.MediaType.Companion.toMediaType
-import org.json.JSONObject
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -29,11 +22,8 @@ data class ImportedProfileAvatar(
 
 @Singleton
 class ProfileAvatarImageManager @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val authRepository: AuthRepository
+    @ApplicationContext private val context: Context
 ) {
-    private val httpClient = OkHttpClient()
-
     suspend fun importAvatar(profileId: String, uriString: String): ImportedProfileAvatar =
         withContext(Dispatchers.IO) {
             val version = System.currentTimeMillis()
@@ -48,7 +38,7 @@ class ProfileAvatarImageManager @Inject constructor(
             ProfileAvatarFiles.cleanupProfile(context, profileId, keepVersion = version)
             ImportedProfileAvatar(
                 version = version,
-                storagePath = uploadAvatar(profileId, version, file).getOrNull()
+                storagePath = null
             )
         }
 
@@ -65,44 +55,14 @@ class ProfileAvatarImageManager @Inject constructor(
             val file = ProfileAvatarFiles.localFile(context, profile) ?: return@withContext
             if (file.exists() && file.length() > 0L) return@withContext
 
-            val resolvedInlineBase64 = inlineBase64
-                ?.takeIf { it.isNotBlank() }
-                ?: loadInlineAvatarFromCloud(profile.id)
-
-            if (!resolvedInlineBase64.isNullOrBlank()) {
+            if (!inlineBase64.isNullOrBlank()) {
                 runCatching {
-                    val bytes = Base64.decode(resolvedInlineBase64, Base64.NO_WRAP)
+                    val bytes = Base64.decode(inlineBase64, Base64.NO_WRAP)
                     file.writeBytes(bytes)
                     ProfileAvatarFiles.cleanupProfile(context, profile.id, keepVersion = profile.avatarImageVersion)
                 }.onSuccess { return@withContext }
             }
-
-            val storagePath = profile.avatarImageStoragePath?.trim().orEmpty()
-            if (storagePath.isBlank()) return@withContext
-            downloadAvatar(storagePath, file).onSuccess {
-                ProfileAvatarFiles.cleanupProfile(context, profile.id, keepVersion = profile.avatarImageVersion)
-            }
         }
-
-    fun buildInlineAvatarImagesJson(
-        profiles: List<Profile>,
-        existingImagesById: JSONObject? = null
-    ): JSONObject {
-        val result = JSONObject()
-        profiles
-            .filter { it.avatarImageVersion > 0L }
-            .forEach { profile ->
-                val localImage = readInlineBase64(profile)
-                val preservedImage = existingImagesById
-                    ?.optString(profile.id)
-                    ?.takeIf { it.isNotBlank() }
-                val image = localImage ?: preservedImage
-                if (!image.isNullOrBlank()) {
-                    result.put(profile.id, image)
-                }
-            }
-        return result
-    }
 
     fun readInlineBase64(profile: Profile): String? {
         val file = ProfileAvatarFiles.localFile(context, profile) ?: return null
@@ -149,63 +109,4 @@ class ProfileAvatarImageManager @Inject constructor(
         return sample.coerceAtLeast(1)
     }
 
-    private suspend fun uploadAvatar(profileId: String, version: Long, file: File): Result<String> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val userId = authRepository.getCurrentUserId().orEmpty()
-                val token = authRepository.getAccessToken().orEmpty()
-                if (userId.isBlank() || token.isBlank()) error("Not logged in")
-
-                val path = "$userId/$profileId/$version.jpg"
-                val request = Request.Builder()
-                    .url("${Constants.SUPABASE_URL.trimEnd('/')}/storage/v1/object/$BUCKET/$path")
-                    .header("apikey", Constants.SUPABASE_ANON_KEY)
-                    .header("Authorization", "Bearer $token")
-                    .header("Content-Type", "image/jpeg")
-                    .header("cache-control", "31536000")
-                    .header("x-upsert", "true")
-                    .post(file.asRequestBody("image/jpeg".toMediaType()))
-                    .build()
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("Avatar upload failed: HTTP ${response.code}")
-                }
-                path
-            }
-        }
-
-    private suspend fun downloadAvatar(storagePath: String, destination: File): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val token = authRepository.getAccessToken().orEmpty()
-                if (token.isBlank()) error("Not logged in")
-                val request = Request.Builder()
-                    .url("${Constants.SUPABASE_URL.trimEnd('/')}/storage/v1/object/$BUCKET/$storagePath")
-                    .header("apikey", Constants.SUPABASE_ANON_KEY)
-                    .header("Authorization", "Bearer $token")
-                    .get()
-                    .build()
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) error("Avatar download failed: HTTP ${response.code}")
-                    val bytes = response.body?.bytes() ?: error("Empty avatar response")
-                    destination.writeBytes(bytes)
-                }
-            }
-        }
-
-    private suspend fun loadInlineAvatarFromCloud(profileId: String): String? {
-        return authRepository.loadAccountSyncPayload().getOrNull()
-            ?.takeIf { it.isNotBlank() }
-            ?.let { payload ->
-                runCatching {
-                    JSONObject(payload)
-                        .optJSONObject("profileAvatarImagesById")
-                        ?.optString(profileId)
-                        ?.takeIf { it.isNotBlank() }
-                }.getOrNull()
-            }
-    }
-
-    private companion object {
-        const val BUCKET = "profile-avatars"
-    }
 }

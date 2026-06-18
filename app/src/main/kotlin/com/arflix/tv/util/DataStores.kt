@@ -9,4 +9,3 @@ val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(na
 val Context.traktDataStore: DataStore<Preferences> by preferencesDataStore(name = "trakt_prefs")
 val Context.profilesDataStore: DataStore<Preferences> by preferencesDataStore(name = "profiles_prefs")
 val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_prefs")
-val Context.telegramDataStore: DataStore<Preferences> by preferencesDataStore(name = "telegram_prefs")

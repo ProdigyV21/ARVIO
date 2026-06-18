@@ -22,12 +22,6 @@ import coil.disk.DiskCache
 import coil.imageLoader
 import coil.memory.MemoryCache
 import com.arflix.tv.network.OkHttpProvider
-import com.arflix.tv.data.repository.AppUsageAnalyticsRepository
-import com.arflix.tv.data.repository.AuthRepository
-import com.arflix.tv.data.repository.AuthState
-import com.arflix.tv.data.repository.CloudSyncCoordinator
-import com.arflix.tv.data.repository.CloudSyncRepository
-import com.arflix.tv.data.repository.RealtimeSyncManager
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.util.AppLogger
@@ -41,7 +35,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.arflix.tv.util.settingsDataStore
@@ -62,17 +55,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     @Inject
     lateinit var profileManager: ProfileManager
     @Inject
-    lateinit var authRepository: AuthRepository
-    @Inject
-    lateinit var cloudSyncRepository: CloudSyncRepository
-    @Inject
-    lateinit var cloudSyncCoordinator: CloudSyncCoordinator
-    @Inject
-    lateinit var realtimeSyncManager: RealtimeSyncManager
-    @Inject
     lateinit var watchlistRepository: WatchlistRepository
-    @Inject
-    lateinit var appUsageAnalyticsRepository: AppUsageAnalyticsRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -103,60 +86,12 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         if (!SentryCrashReporter.initialize(this)) {
             CrashlyticsProvider.initialize()
         }
-        // Initialize active profile asynchronously to avoid blocking cold start.
-        // Wire realtime push notification when realtime is enabled.
-        cloudSyncRepository.onPushCompleted = { realtimeSyncManager.markPush() }
-
         appScope.launch {
             runCatching { profileManager.initialize() }
             // Preload watchlist cache in background for instant display
             runCatching { watchlistRepository.getWatchlistItems() }
-            delay(2_500L)
-            cloudSyncCoordinator.start()
-            if (!authRepository.getCurrentUserId().isNullOrBlank()) {
-                if (BuildConfig.ENABLE_REALTIME_CLOUD_SYNC) {
-                    realtimeSyncManager.start()
-                }
-                // Pull early enough that reopening the app feels like an actual
-                // sync, while still letting the first frame and profile bootstrap land.
-                delay(3_000L)
-                runCatching { cloudSyncRepository.pullFromCloud() }
-            }
         }
 
-        appScope.launch {
-            // Wait for first navigation/auth restore work to start so the
-            // event can include account context without delaying app launch.
-            delay(3_000L)
-            runCatching { appUsageAnalyticsRepository.recordAppOpen() }
-        }
-
-        // Observe auth state: start realtime on login, stop on logout
-        appScope.launch {
-            authRepository.authState.collectLatest { state ->
-                when (state) {
-                    is AuthState.Authenticated -> {
-                        delay(2_000L)
-                        if (!authRepository.getCurrentUserId().isNullOrBlank()) {
-                            cloudSyncCoordinator.start()
-                            if (BuildConfig.ENABLE_REALTIME_CLOUD_SYNC) {
-                                realtimeSyncManager.start()
-                            }
-                            runCatching { cloudSyncRepository.pullFromCloud() }
-                        }
-                    }
-                    AuthState.NotAuthenticated -> {
-                        realtimeSyncManager.stop()
-                        cloudSyncCoordinator.stop()
-                    }
-                    is AuthState.Error -> {
-                        realtimeSyncManager.stop()
-                        cloudSyncCoordinator.stop()
-                    }
-                    AuthState.Loading -> Unit
-                }
-            }
-        }
     }
 
     override fun newImageLoader(): ImageLoader {

@@ -97,7 +97,6 @@ fun AppTopBar(
     profile: Profile? = null,
     profileCount: Int = 1,
     clockFormat: String = "24h",
-    syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     hasUpdateBadge: Boolean = false,
     modifier: Modifier = Modifier
 ) {

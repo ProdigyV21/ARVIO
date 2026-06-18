@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.arflix.tv.data.repository.CloudSyncScope
 import com.arflix.tv.di.RepositoryAccessEntryPoint
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
@@ -126,11 +125,6 @@ suspend fun toggleCatalogueRowLayoutMode(
         val current = parseCardLayoutMode(prefs[key] ?: fallback)
         prefs[key] = toggledCardLayoutMode(current)
     }
-    entryPoint.cloudSyncInvalidationBus().markDirty(
-        CloudSyncScope.PROFILE_SETTINGS,
-        profileId,
-        "catalogue row layout"
-    )
 }
 
 @Composable

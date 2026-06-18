@@ -49,8 +49,7 @@ data class LocalWatchlistItem(
 class WatchlistRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val profileManager: ProfileManager,
-    private val tmdbApi: TmdbApi,
-    private val invalidationBus: CloudSyncInvalidationBus
+    private val tmdbApi: TmdbApi
 ) {
     private val gson = Gson()
 
@@ -424,7 +423,6 @@ class WatchlistRepository @Inject constructor(
             context.traktDataStore.edit { prefs ->
                 prefs[watchlistKeyFor(safeProfileId)] = json
             }
-            invalidationBus.markDirty(CloudSyncScope.WATCHLIST, safeProfileId, "import watchlist")
             if (profileManager.getProfileIdSync() == safeProfileId) {
                 clearWatchlistCache()
             }
@@ -475,7 +473,6 @@ class WatchlistRepository @Inject constructor(
         context.traktDataStore.edit { prefs ->
             prefs[watchlistKey()] = json
         }
-        invalidationBus.markDirty(CloudSyncScope.WATCHLIST, profileManager.getProfileIdSync(), "save watchlist")
     }
 
     /**
