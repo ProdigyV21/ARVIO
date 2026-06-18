@@ -127,6 +127,7 @@ class MediaRepository @Inject constructor(
     private val imdbRatingsByIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
     private val episodeImdbIdCache = ConcurrentHashMap<String, CacheEntry<String>>()
     private val imdbIdCache = ConcurrentHashMap<String, String>()
+    private val trailerKeyCache = ConcurrentHashMap<String, CacheEntry<String?>>()
     private val addonImdbToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val addonTitleToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val collectionRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
@@ -3021,22 +3022,66 @@ class MediaRepository @Inject constructor(
      * Get trailer key (YouTube)
      */
     suspend fun getTrailerKey(mediaType: MediaType, mediaId: Int): String? {
-        val type = if (mediaType == MediaType.TV) "tv" else "movie"
-        return try {
-            val videos = tmdbApi.getVideos(type, mediaId, apiKey, language = contentLanguage)
-            var results = videos.results
-            // If language-specific request returned no YouTube videos, fall back to English
-            if (results.none { it.site == "YouTube" } && !contentLanguage.isNullOrBlank()) {
-                results = tmdbApi.getVideos(type, mediaId, apiKey, language = null).results
+        val cacheKey = trailerKeyCacheKey(mediaType, mediaId)
+        getTrailerKeyCacheEntry(cacheKey)?.let { return it.data }
+
+        val resolved = try {
+            val type = if (mediaType == MediaType.TV) "tv" else "movie"
+            val videos = getVideosWithLanguageFallback { language ->
+                tmdbApi.getVideos(type, mediaId, apiKey, language = language).results
             }
-            val trailer = results.find { it.type == "Trailer" && it.site == "YouTube" && it.official }
-                ?: results.find { it.type == "Trailer" && it.site == "YouTube" }
-                ?: results.find { it.type == "Teaser" && it.site == "YouTube" }
-                ?: results.find { it.site == "YouTube" }
-            trailer?.key
+            if (mediaType == MediaType.TV) {
+                TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = false)
+                    ?: getTvSeasonTrailerKey(mediaId, includeFallbackTypes = false)
+                    ?: TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = true)
+                    ?: getTvSeasonTrailerKey(mediaId, includeFallbackTypes = true)
+            } else {
+                TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes = true)
+            }
         } catch (e: Exception) {
             null
         }
+        trailerKeyCache[cacheKey] = CacheEntry(resolved, System.currentTimeMillis())
+        return resolved
+    }
+
+    private fun trailerKeyCacheKey(mediaType: MediaType, mediaId: Int): String {
+        return "${mediaType.name}_$mediaId:${contentLanguage.orEmpty()}"
+    }
+
+    private fun getTrailerKeyCacheEntry(cacheKey: String): CacheEntry<String?>? {
+        val entry = trailerKeyCache[cacheKey] ?: return null
+        return if (System.currentTimeMillis() - entry.timestamp < CACHE_TTL_MS) {
+            entry
+        } else {
+            trailerKeyCache.remove(cacheKey)
+            null
+        }
+    }
+
+    private suspend fun getVideosWithLanguageFallback(
+        fetch: suspend (String?) -> List<com.arflix.tv.data.api.TmdbVideo>
+    ): List<com.arflix.tv.data.api.TmdbVideo> {
+        val preferredLanguage = contentLanguage?.takeIf { it.isNotBlank() }
+        val localized = fetch(preferredLanguage)
+        if (preferredLanguage == null) return localized
+
+        val fallback = runCatching { fetch(null) }.getOrDefault(emptyList())
+        return (localized + fallback).distinctBy { it.key }
+    }
+
+    private suspend fun getTvSeasonTrailerKey(tvId: Int, includeFallbackTypes: Boolean): String? {
+        val details = runCatching {
+            tmdbApi.getTvDetails(tvId, apiKey, language = contentLanguage)
+        }.getOrNull() ?: return null
+
+        for (seasonNumber in TrailerResolver.seasonFallbackOrder(details.seasons)) {
+            val videos = getVideosWithLanguageFallback { language ->
+                tmdbApi.getTvSeasonVideos(tvId, seasonNumber, apiKey, language = language).results
+            }
+            TrailerResolver.selectBestTrailerKey(videos, contentLanguage, includeFallbackTypes)?.let { return it }
+        }
+        return null
     }
 
     /**
