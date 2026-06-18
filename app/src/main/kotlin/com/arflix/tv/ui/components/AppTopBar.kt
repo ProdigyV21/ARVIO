@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -120,7 +121,8 @@ fun AppTopBar(
                 Brush.verticalGradient(
                     colors = listOf(
                         Color.Black.copy(alpha = 0.72f),
-                        Color.Black.copy(alpha = 0.36f),
+                        ArvioSkin.colors.background.copy(alpha = 0.82f),
+                        ArvioSkin.colors.surface.copy(alpha = 0.38f),
                         Color.Transparent
                     )
                 )
@@ -183,6 +185,22 @@ fun AppTopBar(
                 )
             }
         }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            ArvioSkin.colors.tealAccent.copy(alpha = 0.22f),
+                            ArvioSkin.colors.accent.copy(alpha = 0.16f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
     }
 }
 
@@ -197,8 +215,8 @@ private fun TopBarNavChip(
 
     val containerColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White.copy(alpha = 0.2f)
-            isSelected -> Color.White.copy(alpha = 0.1f)
+            isFocused -> ArvioSkin.colors.surfaceRaised.copy(alpha = 0.90f)
+            isSelected -> accent.copy(alpha = 0.14f)
             else -> Color.Transparent
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
@@ -232,16 +250,26 @@ private fun TopBarNavChip(
     } else {
         stringResource(item.labelRes)
     }
+    val chipShape = RoundedCornerShape(999.dp)
 
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(containerColor)
+            .clip(chipShape)
+            .background(containerColor, chipShape)
+            .border(
+                width = if (isFocused || isSelected) 1.dp else 0.dp,
+                color = when {
+                    isFocused -> ArvioSkin.colors.focusOutline.copy(alpha = 0.62f)
+                    isSelected -> accent.copy(alpha = 0.36f)
+                    else -> Color.Transparent
+                },
+                shape = chipShape
+            )
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .padding(horizontal = 15.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -285,8 +313,8 @@ private fun TopBarSettingsGear(
     )
     val containerColor by animateColorAsState(
         targetValue = when {
-            isFocused -> Color.White.copy(alpha = 0.2f)
-            isSelected -> Color.White.copy(alpha = 0.1f)
+            isFocused -> ArvioSkin.colors.surfaceRaised.copy(alpha = 0.90f)
+            isSelected -> accent.copy(alpha = 0.14f)
             else -> Color.Transparent
         },
         animationSpec = tween(AnimationConstants.DURATION_FAST),
@@ -303,6 +331,15 @@ private fun TopBarSettingsGear(
             .size(36.dp)
             .clip(CircleShape)
             .background(containerColor)
+            .border(
+                width = if (isFocused || isSelected) 1.dp else 0.dp,
+                color = when {
+                    isFocused -> ArvioSkin.colors.focusOutline.copy(alpha = 0.62f)
+                    isSelected -> accent.copy(alpha = 0.36f)
+                    else -> Color.Transparent
+                },
+                shape = CircleShape
+            )
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
