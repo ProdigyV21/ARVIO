@@ -278,8 +278,14 @@ fun PlayerScreen(
                     Build.MODEL.contains("Box R", ignoreCase = true)
                 )
     }
-    val allowExceedCodecCapabilities = remember(preferExtensionDecoder) {
+    val allowVideoExceedCodecCapabilities = remember(deviceType, preferExtensionDecoder) {
+        !preferExtensionDecoder && !deviceType.isTouchDevice()
+    }
+    val allowAudioExceedCodecCapabilities = remember(preferExtensionDecoder) {
         !preferExtensionDecoder
+    }
+    val allowRendererExceedCodecCapabilities = remember(deviceType, preferExtensionDecoder) {
+        !preferExtensionDecoder && !deviceType.isTouchDevice()
     }
 
     // Keep playback in landscape while the player is visible, regardless of the
@@ -322,6 +328,7 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(true) }
     var hasPlaybackStarted by remember { mutableStateOf(false) }  // Track if playback has actually started
+    var firstVideoFrameRendered by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
@@ -584,6 +591,9 @@ fun PlayerScreen(
         pendingStartupFailoverMessage = null
         pendingStartupFailureRecorded = false
         dvStartupFallbackStage = 0
+        blackVideoRecoveryStage = 0
+        blackVideoReadySinceMs = null
+        firstVideoFrameRendered = false
         rebufferRecoverAttempted = false
         longRebufferCount = 0
         autoAdvanceAttempts = 0
@@ -806,12 +816,13 @@ fun PlayerScreen(
                         .setAllowAudioMixedMimeTypeAdaptiveness(true)
                         // Disable HDR requirement - play HDR as SDR if needed
                         .setForceLowestBitrate(false)
-                        // Keep strict caps only for the Amlogic/SEI TV decoder workaround.
-                        // Phones/tablets and other devices need the older permissive path so
-                        // home-server files with DTS/TrueHD/Atmos/EAC3 tracks still get audio.
-                        .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
-                        .setExceedAudioConstraintsIfNecessary(allowExceedCodecCapabilities)
-                        .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
+                        // Phones/tablets must not pick a video track above the hardware renderer's
+                        // capability: that can produce audio/subtitles with a permanently black
+                        // video surface on 4K remux/DV files. Keep audio permissive for DTS/TrueHD
+                        // style tracks, but keep video renderer selection strict on touch devices.
+                        .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
+                        .setExceedAudioConstraintsIfNecessary(allowAudioExceedCodecCapabilities)
+                        .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
                         .build()
                 }
             )
@@ -848,6 +859,7 @@ fun PlayerScreen(
 
                     override fun onRenderedFirstFrame() {
                         if (playerReleasedAtomic.get()) return
+                        firstVideoFrameRendered = true
                         markPlaybackStarted("first_frame")
                     }
 
@@ -910,8 +922,8 @@ fun PlayerScreen(
                                 selector?.let {
                                     it.parameters = it.buildUponParameters()
                                         .setPreferredVideoMimeType(preferredMime)
-                                        .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
-                                        .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
+                                        .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
+                                        .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
                                         .build()
                                 }
                                 dvStartupFallbackStage += 1
@@ -1351,6 +1363,7 @@ fun PlayerScreen(
             val prepareStartMs = streamSelectedTime ?: System.currentTimeMillis()
             bufferingStartTime = null
             hasPlaybackStarted = false  // Reset for new stream
+            firstVideoFrameRendered = false
             readyPlayingSinceMs = null
             playbackIssueReported = false
             rebufferRecoverAttempted = false
@@ -1398,6 +1411,16 @@ fun PlayerScreen(
                 dvStartupFallbackStage = 0
                 blackVideoRecoveryStage = 0
                 blackVideoReadySinceMs = null
+                firstVideoFrameRendered = false
+                val selector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+                selector?.let {
+                    it.parameters = it.buildUponParameters()
+                        .setPreferredVideoMimeType(null)
+                        .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
+                        .setExceedAudioConstraintsIfNecessary(allowAudioExceedCodecCapabilities)
+                        .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
+                        .build()
+                }
             }
             httpDataSourceFactory.setDefaultRequestProperties(baseRequestHeaders + streamHeaders)
 
@@ -1773,19 +1796,22 @@ fun PlayerScreen(
             val hasVideoTrack = exoPlayer.currentTracks.groups.any { group ->
                 group.type == C.TRACK_TYPE_VIDEO && group.length > 0
             }
-            val hasVideoOutput = exoPlayer.videoSize.width > 0 && exoPlayer.videoSize.height > 0
             val blackVideoState =
                 uiState.selectedStreamUrl != null &&
                     exoPlayer.playbackState == Player.STATE_READY &&
                     exoPlayer.playWhenReady &&
                     hasVideoTrack &&
-                    !hasVideoOutput
+                    !firstVideoFrameRendered
             if (blackVideoState) {
                 if (blackVideoReadySinceMs == null) {
                     blackVideoReadySinceMs = loopNowMs
                 } else {
                     val stuckMs = loopNowMs - (blackVideoReadySinceMs ?: 0L)
-                    val thresholdMs = if (blackVideoRecoveryStage == 0) 6_500L else 9_000L
+                    val thresholdMs = when (blackVideoRecoveryStage) {
+                        0 -> 4_500L
+                        1 -> 7_000L
+                        else -> 9_000L
+                    }
                     if (stuckMs >= thresholdMs && blackVideoRecoveryStage < 2) {
                         val selector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
                         val preferredMime = if (blackVideoRecoveryStage == 0) {
@@ -1796,35 +1822,52 @@ fun PlayerScreen(
                         selector?.let {
                             it.parameters = it.buildUponParameters()
                                 .setPreferredVideoMimeType(preferredMime)
-                                .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
-                                .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
+                                .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
+                                .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
                                 .build()
                         }
                         val resumeAt = exoPlayer.currentPosition.coerceAtLeast(0L)
                         val keepPlaying = exoPlayer.playWhenReady
+                        playbackStartupDiag(
+                            "black video recovery stage=$blackVideoRecoveryStage preferred=$preferredMime " +
+                                "size=${exoPlayer.videoSize.width}x${exoPlayer.videoSize.height}"
+                        )
                         exoPlayer.seekTo(resumeAt)
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = keepPlaying
                         blackVideoRecoveryStage += 1
                         blackVideoReadySinceMs = loopNowMs
+                    } else if (stuckMs >= thresholdMs && blackVideoRecoveryStage >= 2 && !startupHardFailureReported) {
+                        playbackStartupDiag(
+                            "black video failure no_first_frame elapsedMs=$stuckMs " +
+                                "state=${exoPlayer.playbackState} failovers=$autoAdvanceAttempts"
+                        )
+                        if (allowStartupSourceFallback &&
+                            !userSelectedSourceManually &&
+                            tryAdvanceToNextStream()
+                        ) {
+                            continue
+                        }
+                        startupHardFailureReported = true
+                        playbackIssueReported = true
+                        viewModel.onSelectedStreamPlaybackFailure()
+                        viewModel.reportPlaybackError(
+                            "Video could not render on this device. Try another source."
+                        )
                     }
                 }
             } else {
                 blackVideoReadySinceMs = null
             }
 
-            // Mark playback as started as soon as the player is actually playing.
-            val readyPlayingGraceElapsed = readyPlayingSinceMs?.let { loopNowMs - it >= 900L } == true
+            // Mark playback as started only after a real first frame for video sources.
+            // Audio-only streams can still start from READY/isPlaying.
             if (!hasPlaybackStarted &&
                 readyAndPlaying &&
-                (!hasVideoTrack || hasVideoOutput || readyPlayingGraceElapsed)
+                (!hasVideoTrack || firstVideoFrameRendered)
             ) {
                 markPlaybackStarted(
-                    if (readyPlayingGraceElapsed && hasVideoTrack && !hasVideoOutput) {
-                        "ready_playing_grace"
-                    } else {
-                        "ready_playing_poll"
-                    }
+                    if (hasVideoTrack) "ready_playing_after_first_frame" else "ready_playing_audio_only"
                 )
             }
 
