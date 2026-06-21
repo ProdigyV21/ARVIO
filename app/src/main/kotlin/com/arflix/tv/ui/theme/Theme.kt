@@ -12,7 +12,7 @@ import com.arflix.tv.ui.skin.ProvideArvioSkin
 import com.arflix.tv.ui.skin.accentColorFromName
 
 /**
- * ARVIO Color scheme holder - Arctic Fuse 2 inspired
+ * Majo Stream color scheme holder - Arctic Fuse 2 inspired
  * Minimal dark theme with light gray (#EDEDED) on pure black (#000000)
  */
 data class ArvioColors(
@@ -82,7 +82,7 @@ fun appBackgroundDark(): Color {
 val LocalArflixColors = LocalArvioColors
 
 /**
- * Main ARVIO TV theme - Arctic Fuse 2 inspired
+ * Main Majo Stream TV theme - Arctic Fuse 2 inspired
  * Pure black background, light gray text, white focus states
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -148,7 +148,7 @@ fun ArflixTvTheme(
 )
 
 /**
- * Access custom ARVIO colors
+ * Access custom Majo Stream colors
  */
 object ArvioTheme {
     val colors: ArvioColors

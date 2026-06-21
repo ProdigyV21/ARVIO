@@ -21,8 +21,8 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Subtitles
@@ -30,6 +30,9 @@ import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,7 +47,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import com.arflix.tv.data.model.Profile
+import androidx.compose.ui.res.stringResource
+import com.arflix.tv.R
+import com.arflix.tv.ui.components.TextInputModal
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.ui.theme.appBackgroundDark
@@ -53,77 +58,102 @@ import com.arflix.tv.ui.theme.appBackgroundDark
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
-    currentProfile: Profile? = null,
     initialSection: String? = null,
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
-    onNavigateToTv: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
-    onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showTmdbKeyDialog by remember { mutableStateOf(false) }
+    var showWatchmodeKeyDialog by remember { mutableStateOf(false) }
+    var showAddonUrlDialog by remember { mutableStateOf(false) }
 
     val sections = listOf(
         SettingsSection(
-            icon = Icons.Outlined.Person,
-            title = "Profile",
-            rows = listOf(
-                "Active profile" to (currentProfile?.name ?: "No profile selected")
-            )
-        ),
-        SettingsSection(
             icon = Icons.Outlined.PlayCircle,
-            title = "Playback",
+            title = stringResource(R.string.playback),
             rows = listOf(
-                "Autoplay next" to uiState.autoPlayNext.asEnabledLabel(),
-                "Single source autoplay" to uiState.autoPlaySingleSource.asEnabledLabel(),
-                "Frame rate matching" to uiState.frameRateMatchingMode,
-                "Volume boost" to "${uiState.volumeBoostDb} dB"
+                SettingsRow("Autoplay next", uiState.autoPlayNext.asEnabledLabel()),
+                SettingsRow("Single source autoplay", uiState.autoPlaySingleSource.asEnabledLabel()),
+                SettingsRow("Frame rate matching", uiState.frameRateMatchingMode),
+                SettingsRow("Volume boost", "${uiState.volumeBoostDb} dB")
             )
         ),
         SettingsSection(
             icon = Icons.Outlined.Subtitles,
-            title = "Subtitles",
+            title = stringResource(R.string.subtitles),
             rows = listOf(
-                "Default subtitle" to uiState.defaultSubtitle,
-                "Secondary subtitle" to uiState.secondarySubtitle,
-                "AI subtitles" to uiState.subtitleAiEnabled.asEnabledLabel(),
-                "AI model" to uiState.subtitleAiModel.name
+                SettingsRow("Default subtitle", uiState.defaultSubtitle),
+                SettingsRow("Secondary subtitle", uiState.secondarySubtitle),
+                SettingsRow("AI subtitles", uiState.subtitleAiEnabled.asEnabledLabel()),
+                SettingsRow("AI model", uiState.subtitleAiModel.name)
+            )
+        ),
+        SettingsSection(
+            icon = Icons.Outlined.Key,
+            title = "API keys",
+            rows = listOf(
+                SettingsRow(
+                    label = "TMDB API key",
+                    value = uiState.tmdbApiKeyStatus,
+                    onClick = { showTmdbKeyDialog = true }
+                ),
+                SettingsRow(
+                    label = "Watchmode API key",
+                    value = uiState.watchmodeApiKeyStatus,
+                    onClick = { showWatchmodeKeyDialog = true }
+                )
             )
         ),
         SettingsSection(
             icon = Icons.Outlined.Extension,
             title = "Stremio addons",
             rows = listOf(
-                "Installed addons" to uiState.addons.size.toString(),
-                "Catalogs" to uiState.catalogs.size.toString()
+                SettingsRow("Installed addons", uiState.addons.size.toString()),
+                SettingsRow("Catalogs", uiState.catalogs.size.toString()),
+                SettingsRow(
+                    label = "Add Stremio/AIOStreams addon",
+                    value = if (uiState.isInstallingAddon) {
+                        "Installing..."
+                    } else {
+                        uiState.addonInstallStatus.ifBlank { "Paste URL" }
+                    },
+                    onClick = if (uiState.isInstallingAddon) {
+                        null
+                    } else {
+                        {
+                            viewModel.clearAddonInstallStatus()
+                            showAddonUrlDialog = true
+                        }
+                    }
+                )
             )
         ),
         SettingsSection(
             icon = Icons.Outlined.Palette,
-            title = "Appearance",
+            title = stringResource(R.string.interface_label),
             rows = listOf(
-                "Theme accent" to uiState.accentColor,
-                "OLED black" to uiState.oledBlackBackground.asEnabledLabel(),
-                "Clock" to uiState.clockFormat,
-                "Language" to uiState.contentLanguage
+                SettingsRow("Theme accent", uiState.accentColor),
+                SettingsRow("OLED black", uiState.oledBlackBackground.asEnabledLabel()),
+                SettingsRow("Clock", uiState.clockFormat),
+                SettingsRow("Language", uiState.contentLanguage)
             )
         ),
         SettingsSection(
             icon = Icons.Outlined.Dns,
-            title = "Network",
+            title = stringResource(R.string.network),
             rows = listOf(
-                "DNS provider" to uiState.dnsProvider,
-                "Custom user agent" to uiState.customUserAgent.ifBlank { "Default" }
+                SettingsRow("DNS provider", uiState.dnsProvider),
+                SettingsRow("Custom user agent", uiState.customUserAgent.ifBlank { "Default" })
             )
         ),
         SettingsSection(
             icon = Icons.Outlined.SystemUpdate,
             title = "Updates",
             rows = listOf(
-                "Self update" to uiState.isSelfUpdateSupported.asEnabledLabel(),
-                "Status" to uiState.updateStatus.toString()
+                SettingsRow("Self update", uiState.isSelfUpdateSupported.asEnabledLabel()),
+                SettingsRow("Status", uiState.updateStatus.toString())
             )
         )
     )
@@ -150,8 +180,7 @@ fun SettingsScreen(
                 onBack = onBack,
                 onNavigateToHome = onNavigateToHome,
                 onNavigateToSearch = onNavigateToSearch,
-                onNavigateToWatchlist = onNavigateToWatchlist,
-                onSwitchProfile = onSwitchProfile
+                onNavigateToWatchlist = onNavigateToWatchlist
             )
 
             LazyColumn(
@@ -160,16 +189,11 @@ fun SettingsScreen(
             ) {
                 item {
                     Text(
-                        text = initialSection?.let { "Settings / ${it.replace('_', ' ')}" } ?: "Settings",
+                        text = initialSection?.let { "${stringResource(R.string.settings)} / ${it.replace('_', ' ')}" }
+                            ?: stringResource(R.string.settings),
                         color = TextPrimary,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Core controls for the stripped-down Arvio experience.",
-                        color = TextSecondary,
-                        fontSize = 15.sp
                     )
                 }
 
@@ -178,6 +202,43 @@ fun SettingsScreen(
                 }
             }
         }
+
+        TextInputModal(
+            isVisible = showTmdbKeyDialog,
+            title = "TMDB API key",
+            hint = "Paste TMDB v3 API key",
+            initialValue = "",
+            isPassword = true,
+            onConfirm = { value ->
+                viewModel.saveTmdbApiKey(value)
+                showTmdbKeyDialog = false
+            },
+            onCancel = { showTmdbKeyDialog = false }
+        )
+        TextInputModal(
+            isVisible = showWatchmodeKeyDialog,
+            title = "Watchmode API key",
+            hint = "Paste Watchmode API key",
+            initialValue = "",
+            isPassword = true,
+            onConfirm = { value ->
+                viewModel.saveWatchmodeApiKey(value)
+                showWatchmodeKeyDialog = false
+            },
+            onCancel = { showWatchmodeKeyDialog = false }
+        )
+        TextInputModal(
+            isVisible = showAddonUrlDialog,
+            title = "Addon URL",
+            hint = "Paste Stremio manifest URL",
+            initialValue = "",
+            isPassword = true,
+            onConfirm = { value ->
+                viewModel.installAddonFromUrl(value)
+                showAddonUrlDialog = false
+            },
+            onCancel = { showAddonUrlDialog = false }
+        )
     }
 }
 
@@ -186,8 +247,7 @@ private fun SettingsHeader(
     onBack: () -> Unit,
     onNavigateToHome: () -> Unit,
     onNavigateToSearch: () -> Unit,
-    onNavigateToWatchlist: () -> Unit,
-    onSwitchProfile: () -> Unit
+    onNavigateToWatchlist: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -200,7 +260,6 @@ private fun SettingsHeader(
             HeaderIcon(Icons.Outlined.Search, onNavigateToSearch)
             HeaderIcon(Icons.Outlined.Bookmark, onNavigateToWatchlist)
         }
-        HeaderIcon(Icons.Outlined.Person, onSwitchProfile)
     }
 }
 
@@ -221,7 +280,13 @@ private fun HeaderIcon(icon: ImageVector, onClick: () -> Unit) {
 private data class SettingsSection(
     val icon: ImageVector,
     val title: String,
-    val rows: List<Pair<String, String>>
+    val rows: List<SettingsRow>
+)
+
+private data class SettingsRow(
+    val label: String,
+    val value: String,
+    val onClick: (() -> Unit)? = null
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -252,16 +317,27 @@ private fun SettingsSectionCard(section: SettingsSection) {
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(12.dp))
-            section.rows.forEach { (label, value) ->
+            section.rows.forEach { row ->
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .then(
+                            if (row.onClick != null) {
+                                Modifier
+                                    .clickable { row.onClick.invoke() }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            } else {
+                                Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            }
+                        ),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = label, color = TextSecondary, fontSize = 14.sp)
+                    Text(text = row.label, color = TextSecondary, fontSize = 14.sp)
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        text = value,
+                        text = row.value,
                         color = TextPrimary,
                         fontSize = 14.sp,
                         maxLines = 1,

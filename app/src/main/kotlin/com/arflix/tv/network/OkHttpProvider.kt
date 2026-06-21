@@ -8,10 +8,14 @@ import coil.decode.SvgDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.arflix.tv.BuildConfig
+import com.arflix.tv.ui.performance.TV_MENU_IMAGE_MAX_PARALLEL_REQUESTS
+import com.arflix.tv.ui.performance.TV_MENU_IMAGE_MAX_PARALLEL_REQUESTS_PER_HOST
 import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.Dns
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.dnsoverhttps.DnsOverHttps
@@ -57,6 +61,7 @@ object OkHttpProvider {
     private const val GOOGLE_DOH_URL = "https://dns.google/dns-query"
     private const val ADGUARD_DOH_HOST = "dns.adguard-dns.com"
     private const val ADGUARD_DOH_URL = "https://dns.adguard-dns.com/dns-query"
+    private val absoluteUrlRegex = Regex("""https?://[^\s)]+""", RegexOption.IGNORE_CASE)
 
     const val DNS_PROVIDER_PREF_KEY = "dns_provider_global"
     const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -176,9 +181,76 @@ object OkHttpProvider {
         val request = chain.request()
         Log.i(
             TAG,
-            "API request dnsProvider=$selectedDnsProvider method=${request.method} host=${request.url.host} url=${request.url}"
+            "API request dnsProvider=$selectedDnsProvider method=${request.method} host=${request.url.host} url=${request.url.toDnsLogUrl()}"
         )
         chain.proceed(request)
+    }
+
+    private fun HttpUrl.toDnsLogUrl(): String {
+        val lowerHost = host.lowercase()
+        val lowerPath = encodedPath.lowercase()
+        val isSensitiveAddonUrl =
+            lowerHost.contains("aiostreams") ||
+                lowerPath.contains("/stremio/") ||
+                lowerPath.contains("manifest.json")
+
+        val redactedPath = when {
+            !isSensitiveAddonUrl -> encodedPath
+            lowerPath.contains("manifest.json") -> "/.../manifest.json"
+            lowerPath.contains("/stremio/") -> "/stremio/..."
+            else -> "/..."
+        }
+        val redactedQuery = encodedQuery?.redactSensitiveQueryParams()
+        return buildString {
+            append(scheme)
+            append("://")
+            append(logHostAndPort())
+            append(redactedPath)
+            if (!redactedQuery.isNullOrBlank()) {
+                append('?')
+                append(redactedQuery)
+            }
+        }
+    }
+
+    private fun HttpUrl.logHostAndPort(): String {
+        val formattedHost = if (host.contains(':') && !host.startsWith("[")) "[$host]" else host
+        val defaultPort = when (scheme) {
+            "http" -> 80
+            "https" -> 443
+            else -> -1
+        }
+        return if (port == defaultPort || defaultPort == -1) formattedHost else "$formattedHost:$port"
+    }
+
+    private fun String.redactSensitiveQueryParams(): String {
+        return split('&').joinToString("&") { part ->
+            val key = part.substringBefore('=', "")
+            if (key.isSensitiveLogQueryKey()) {
+                "$key=REDACTED"
+            } else {
+                part
+            }
+        }
+    }
+
+    private fun String.isSensitiveLogQueryKey(): Boolean {
+        val normalized = lowercase()
+        return normalized.contains("key") ||
+            normalized.contains("token") ||
+            normalized.contains("secret") ||
+            normalized.contains("auth") ||
+            normalized.contains("pass") ||
+            normalized.contains("jwt") ||
+            normalized.contains("session") ||
+            normalized.contains("signature") ||
+            normalized == "sig"
+    }
+
+    private fun String.redactSensitiveUrlsForLog(): String {
+        return absoluteUrlRegex.replace(this) { match ->
+            match.value.toHttpUrlOrNull()?.toDnsLogUrl() ?: match.value
+        }
     }
 
     private val lenientJsonGzipInterceptor = Interceptor { chain ->
@@ -279,7 +351,9 @@ object OkHttpProvider {
         }
 
     private fun buildAppClient(): OkHttpClient {
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
+        val loggingInterceptor = HttpLoggingInterceptor { message ->
+            HttpLoggingInterceptor.Logger.DEFAULT.log(message.redactSensitiveUrlsForLog())
+        }.apply {
             level = if (BuildConfig.DEBUG) {
                 HttpLoggingInterceptor.Level.BASIC
             } else {
@@ -468,14 +542,21 @@ object OkHttpProvider {
         // The image CDN (image.tmdb.org) is a fast static-asset CDN that should respond
         // in <500ms; anything longer is a network issue that retrying later will fix.
         return OkHttpClient.Builder()
+            .dispatcher(buildCoilDispatcher())
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
-            .connectionPool(ConnectionPool(8, 30, TimeUnit.SECONDS))
+            .connectionPool(ConnectionPool(TV_MENU_IMAGE_MAX_PARALLEL_REQUESTS, 30, TimeUnit.SECONDS))
             .dns(dns)
             .retryOnConnectionFailure(true)
             .build()
     }
+
+    private fun buildCoilDispatcher(): okhttp3.Dispatcher =
+        okhttp3.Dispatcher().apply {
+            maxRequests = TV_MENU_IMAGE_MAX_PARALLEL_REQUESTS
+            maxRequestsPerHost = TV_MENU_IMAGE_MAX_PARALLEL_REQUESTS_PER_HOST
+        }
 
     fun createCoilImageLoader(context: Context): ImageLoader {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager

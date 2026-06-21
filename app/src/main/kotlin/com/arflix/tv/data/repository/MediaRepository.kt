@@ -17,6 +17,8 @@ import com.arflix.tv.data.api.TmdbWatchProviderRegion
 import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.api.TraktPublicListItem
 import com.arflix.tv.data.api.StremioMetaPreview
+import com.arflix.tv.data.api.WatchmodeApi
+import com.arflix.tv.data.api.WatchmodeTitle
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
@@ -32,11 +34,15 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.util.CatalogUrlParser
+import com.arflix.tv.util.AppContentPreferences
 import com.arflix.tv.util.Constants
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -82,11 +88,13 @@ data class PersonMediaSearchResult(
 @Singleton
 class MediaRepository @Inject constructor(
     private val tmdbApi: TmdbApi,
+    private val watchmodeApi: WatchmodeApi,
     private val traktRepository: TraktRepository,
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient,
     private val streamRepository: StreamRepository,
-    private val homeServerRepository: HomeServerRepository
+    private val homeServerRepository: HomeServerRepository,
+    private val watchmodeCatalogCache: WatchmodeCatalogCache
 ) {
 
     data class CategoryPageResult(
@@ -94,14 +102,23 @@ class MediaRepository @Inject constructor(
         val hasMore: Boolean
     )
 
-    private val apiKey = Constants.TMDB_API_KEY
+    private val apiKey: String
+        get() = Constants.TMDB_API_KEY
+    private val watchmodeApiKey: String
+        get() = Constants.WATCHMODE_API_KEY
     private val gson = Gson()
 
-    /** TMDB content language (e.g. "en-US", "fr-FR", "nl-NL"). Null = TMDB default (English). */
+    /** TMDB content language (e.g. "sv-SE", "fr-FR", "nl-NL"). Null = TMDB default (English). */
     @Volatile
-    var contentLanguage: String? = null
+    var contentLanguage: String? = AppContentPreferences.DEFAULT_LANGUAGE_TAG
         set(value) {
             field = value?.replace("iw", "he")?.replace('_', '-')
+        }
+
+    @Volatile
+    var watchRegion: String = AppContentPreferences.DEFAULT_WATCH_REGION
+        set(value) {
+            field = AppContentPreferences.normalizeWatchRegion(value)
         }
 
     // === IN-MEMORY CACHE FOR PERFORMANCE ===
@@ -131,6 +148,14 @@ class MediaRepository @Inject constructor(
     private val addonImdbToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val addonTitleToTmdbCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val collectionRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
+    private val watchmodeRefsCache = ConcurrentHashMap<String, CacheEntry<WatchmodeCatalogCache.Snapshot>>()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val watchmodeRefreshInFlight = ConcurrentHashMap.newKeySet<String>()
+    private val WATCHMODE_FRESH_CACHE_MS = 24 * 60 * 60 * 1000L
+    private val WATCHMODE_STALE_CACHE_MS = 7 * 24 * 60 * 60 * 1000L
+    private val WATCHMODE_PAGE_LIMIT = 250
+    private val WATCHMODE_MAX_REFS_PER_SOURCE = 500
+    private val WATCHMODE_BACKGROUND_REFRESH_LIMIT = 80
 
     private fun <T> getFromCache(cache: Map<String, CacheEntry<T>>, key: String): T? {
         val entry = cache[key] ?: return null
@@ -210,6 +235,10 @@ class MediaRepository @Inject constructor(
                 append(':')
                 append(source.watchRegion.orEmpty())
                 append(':')
+                append(source.watchmodeSourceId ?: -1)
+                append(':')
+                append(source.watchmodeSourceTypes.orEmpty())
+                append(':')
                 append(source.sortBy.orEmpty())
                 append(':')
                 append(source.mdblistSlug.orEmpty())
@@ -237,10 +266,11 @@ class MediaRepository @Inject constructor(
         // other fixed groups keep the small cap.
         val unlimitedGroup = catalog.collectionGroup == CollectionGroupKind.SERVICE ||
             catalog.collectionGroup == CollectionGroupKind.GENRE
+        val collectionSources = collectionSourcesForCatalog(catalog)
 
         // Resolve all sources in parallel so a slow/failed source never blocks the
         // others — this alone fixes "empty" genre collections where one source 404s.
-        val sourceBudgets = catalog.collectionSources.map { source ->
+        val sourceBudgets = collectionSources.map { source ->
             if (unlimitedGroup) {
                 (targetCount + 20).coerceAtLeast(40)
             } else when (source.kind) {
@@ -250,7 +280,7 @@ class MediaRepository @Inject constructor(
             }
         }
         val perSourceRefs: List<List<Pair<MediaType, Int>>> = coroutineScope {
-            catalog.collectionSources.mapIndexed { index, source ->
+            collectionSources.mapIndexed { index, source ->
                 async {
                     runCatching {
                         resolveCollectionSourceRefs(
@@ -294,6 +324,17 @@ class MediaRepository @Inject constructor(
         return resolved
     }
 
+    private fun collectionSourcesForCatalog(catalog: CatalogConfig): List<CollectionSourceConfig> {
+        val sources = catalog.collectionSources
+        if (catalog.collectionGroup != CollectionGroupKind.SERVICE) return sources
+
+        val regionBoundSources = sources.filter { source ->
+            source.kind == CollectionSourceKind.WATCHMODE_SOURCE ||
+                source.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER
+        }
+        return regionBoundSources.ifEmpty { sources }
+    }
+
     fun getCachedItem(mediaType: MediaType, mediaId: Int): MediaItem? {
         val cacheKey = detailsCacheKey(mediaType, mediaId)
         return getFromCache(detailsCache, cacheKey)
@@ -319,6 +360,8 @@ class MediaRepository @Inject constructor(
         val cacheKey = detailsCacheKey(mediaType, mediaId)
         return imdbIdCache[cacheKey]
     }
+
+    suspend fun getOrResolveImdbId(mediaType: MediaType, mediaId: Int): String? = resolveImdbId(mediaType, mediaId)
 
     suspend fun getImdbRating(mediaType: MediaType, mediaId: Int, imdbId: String? = null): String? {
         val cacheKey = detailsCacheKey(mediaType, mediaId)
@@ -364,7 +407,7 @@ class MediaRepository @Inject constructor(
         val request = Request.Builder()
             .url("https://v3-cinemeta.strem.io/meta/$typePath/$imdbId.json")
             .header("Accept", "application/json")
-            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
+            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; MajoStream)"))
             .build()
 
         runCatching {
@@ -487,7 +530,7 @@ class MediaRepository @Inject constructor(
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json")
-                .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
+                .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; MajoStream)"))
                 .build()
 
             val fetched = runCatching {
@@ -519,7 +562,7 @@ class MediaRepository @Inject constructor(
         val request = Request.Builder()
             .url("https://v3-cinemeta.strem.io/meta/series/$imdbId.json")
             .header("Accept", "application/json")
-            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
+            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; MajoStream)"))
             .build()
 
         runCatching {
@@ -569,6 +612,37 @@ class MediaRepository @Inject constructor(
 
     fun getDefaultCatalogConfigs(): List<CatalogConfig> = buildPreinstalledDefaults()
 
+    suspend fun refreshStreamingServiceCatalogRefs(
+        catalogs: List<CatalogConfig> = buildPreinstalledDefaults(),
+        limitPerSource: Int = WATCHMODE_BACKGROUND_REFRESH_LIMIT
+    ): Int {
+        if (watchmodeApiKey.isBlank() || limitPerSource <= 0) return 0
+        val watchmodeSources = catalogs
+            .asSequence()
+            .filter { it.collectionGroup == CollectionGroupKind.SERVICE }
+            .flatMap { collectionSourcesForCatalog(it).asSequence() }
+            .filter { it.kind == CollectionSourceKind.WATCHMODE_SOURCE }
+            .filter { it.watchmodeSourceId != null }
+            .distinctBy { source ->
+                listOf(
+                    source.watchmodeSourceId,
+                    source.mediaType?.lowercase(Locale.US),
+                    source.watchRegion ?: watchRegion,
+                    source.watchmodeSourceTypes.orEmpty(),
+                    source.sortBy ?: "popularity_desc"
+                ).joinToString("|")
+            }
+            .toList()
+
+        var refreshedRefs = 0
+        watchmodeSources.forEach { source ->
+            refreshedRefs += runCatching {
+                loadCollectionWatchmodeRefs(source, limitPerSource).size
+            }.getOrDefault(0)
+        }
+        return refreshedRefs
+    }
+
     companion object {
         const val STREAMING_COLLECTION_ADDON_URL = "https://pastebin.com/raw/P4gfd98n"
         private val UPLOADED_COVER_BASE = "https://" + "nu" + "vioapp.space/uploads/covers/"
@@ -608,7 +682,7 @@ class MediaRepository @Inject constructor(
                 kind = CollectionSourceKind.TMDB_WATCH_PROVIDER,
                 mediaType = if (mediaType == MediaType.MOVIE) "movie" else "series",
                 tmdbWatchProviderId = providerId,
-                watchRegion = "US",
+                watchRegion = AppContentPreferences.DEFAULT_WATCH_REGION,
                 sortBy = "popularity.desc"
             )
             fun tmdbCollectionSource(collectionId: Int) = CollectionSourceConfig(
@@ -624,6 +698,18 @@ class MediaRepository @Inject constructor(
                 },
                 tmdbKeywordId = keywordId,
                 sortBy = "popularity.desc"
+            )
+            fun tmdbDiscoverSource(
+                mediaType: MediaType,
+                sortBy: String,
+                voteCountGte: Int? = null,
+                runtimeLteMinutes: Int? = null
+            ) = CollectionSourceConfig(
+                kind = CollectionSourceKind.TMDB_DISCOVER,
+                mediaType = if (mediaType == MediaType.MOVIE) "movie" else "series",
+                sortBy = sortBy,
+                voteCountGte = voteCountGte,
+                runtimeLteMinutes = runtimeLteMinutes
             )
             fun tmdbGenreSource(mediaType: MediaType, genreId: Int) = CollectionSourceConfig(
                 kind = CollectionSourceKind.TMDB_GENRE,
@@ -1464,7 +1550,8 @@ class MediaRepository @Inject constructor(
                 "jurassic park" to "jurassic world",
                 "lord of the rings" to "lord of the rings & hobbit",
                 "family" to "family movie night",
-                "superhero" to "superhero & villains"
+                "superhero" to "superhero & villains",
+                "max" to "hbo max"
             )
             fun resolveLegacyCollection(title: String): CatalogConfig? {
                 val normalizedTitle = title.trim().lowercase(Locale.US)
@@ -1488,7 +1575,11 @@ class MediaRepository @Inject constructor(
                         source.tmdbKeywordId?.toString().orEmpty(),
                         source.tmdbWatchProviderId?.toString().orEmpty(),
                         source.watchRegion.orEmpty(),
+                        source.watchmodeSourceId?.toString().orEmpty(),
+                        source.watchmodeSourceTypes.orEmpty(),
                         source.sortBy.orEmpty(),
+                        source.voteCountGte?.toString().orEmpty(),
+                        source.runtimeLteMinutes?.toString().orEmpty(),
                         source.curatedRefs?.joinToString(",").orEmpty(),
                         source.mdblistSlug.orEmpty()
                     ).joinToString("|")
@@ -1505,7 +1596,12 @@ class MediaRepository @Inject constructor(
                 )
             }
 
-            val templateCollections = CollectionTemplateManifest.entries.map { entry ->
+            val templateCollections = CollectionTemplateManifest.entries
+                .filter { entry ->
+                    entry.group != CollectionGroupKind.SERVICE ||
+                        entry.title in CollectionTemplateManifest.defaultSwedishServiceTitles
+                }
+                .map { entry ->
                 val legacy = resolveLegacyCollection(entry.title)
                 val legacyStaticCover = legacy?.collectionCoverImageUrl?.takeUnless {
                     it.contains(".gif", ignoreCase = true) || it.contains("gifv", ignoreCase = true)
@@ -1552,13 +1648,109 @@ class MediaRepository @Inject constructor(
                         primary = entry.sources,
                         fallback = legacy?.collectionSources.orEmpty()
                     ),
-                    requiredAddonUrls = emptyList()
+                requiredAddonUrls = emptyList()
                 )
             }
 
+            val smartIntentCollections = listOf(
+                collection(
+                    id = "collection_intent_short_movie",
+                    title = "Kort film ikväll",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Filmer under 100 minuter med starka betyg när du vill se något klart ikväll.",
+                    sources = listOf(
+                        tmdbDiscoverSource(
+                            mediaType = MediaType.MOVIE,
+                            sortBy = "vote_average.desc",
+                            voteCountGte = 250,
+                            runtimeLteMinutes = 100
+                        )
+                    )
+                ),
+                collection(
+                    id = "collection_intent_best_movies",
+                    title = "Bäst betyg just nu",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Säkra filmval där höga betyg väger tyngre än ren trend.",
+                    sources = listOf(
+                        tmdbDiscoverSource(
+                            mediaType = MediaType.MOVIE,
+                            sortBy = "vote_average.desc",
+                            voteCountGte = 1200
+                        )
+                    )
+                ),
+                collection(
+                    id = "collection_intent_new_streaming_movies",
+                    title = "Nytt att streama",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Digitala premiärer och nya streamingfilmer från uppdaterade listor.",
+                    sources = listOf(
+                        mdblistSource("snoak/latest-movies-digital-release")
+                    )
+                ),
+                collection(
+                    id = "collection_intent_family_break_movies",
+                    title = "Familj och lediga kvällar",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Familj, äventyr och komedi för lov, helger och kvällar när flera ska välja.",
+                    sources = listOf(
+                        tmdbGenreSource(MediaType.MOVIE, 10751),
+                        tmdbGenreSource(MediaType.MOVIE, 12),
+                        tmdbGenreSource(MediaType.MOVIE, 35)
+                    )
+                ),
+                collection(
+                    id = "collection_intent_best_series",
+                    title = "Bäst betyg bland serier",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Serier med stark publikbas och höga betyg, utan filmresultat blandat.",
+                    sources = listOf(
+                        tmdbDiscoverSource(
+                            mediaType = MediaType.TV,
+                            sortBy = "vote_average.desc",
+                            voteCountGte = 600
+                        )
+                    )
+                ),
+                collection(
+                    id = "collection_intent_new_streaming_series",
+                    title = "Nya serier att streama",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Aktuella serier och nya säsonger från uppdaterade listor.",
+                    sources = listOf(
+                        mdblistSource("snoak/latest-tv-shows")
+                    )
+                ),
+                collection(
+                    id = "collection_intent_series_buzz",
+                    title = "Serier folk pratar om",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Aktuella serier med tydlig aktivitet just nu.",
+                    sources = listOf(
+                        tmdbDiscoverSource(
+                            mediaType = MediaType.TV,
+                            sortBy = "popularity.desc",
+                            voteCountGte = 100
+                        )
+                    )
+                ),
+                collection(
+                    id = "collection_intent_family_series",
+                    title = "Familjeserier",
+                    group = CollectionGroupKind.FEATURED,
+                    description = "Lättare familj, animation och komedi när hela soffan ska kunna hänga med.",
+                    sources = listOf(
+                        tmdbGenreSource(MediaType.TV, 10751),
+                        tmdbGenreSource(MediaType.TV, 16),
+                        tmdbGenreSource(MediaType.TV, 35)
+                    )
+                )
+            )
+
             val pinnedLeadCatalogs = topLevelCatalogs.drop(1).take(3)
             val trailingCatalogs = listOf(topLevelCatalogs.first()) + topLevelCatalogs.drop(4)
-            return pinnedLeadCatalogs + collectionRails + templateCollections + trailingCatalogs
+            return pinnedLeadCatalogs + smartIntentCollections + collectionRails + templateCollections + trailingCatalogs
         }
     }
 
@@ -1570,6 +1762,10 @@ class MediaRepository @Inject constructor(
      * - Provider categories: wider recency window to keep full rows populated
      */
     suspend fun getHomeCategories(): List<Category> = coroutineScope {
+        if (apiKey.isBlank()) {
+            return@coroutineScope emptyList()
+        }
+
         // Return cached categories if still fresh
         val now = System.currentTimeMillis()
         if (cachedHomeCategories.isNotEmpty() && now - homeCategoriesFetchedAt < HOME_CATEGORIES_CACHE_MS) {
@@ -2008,6 +2204,8 @@ class MediaRepository @Inject constructor(
                 CollectionSourceKind.TMDB_COLLECTION -> loadCollectionTmdbCollectionRefs(source, limit)
                 CollectionSourceKind.TMDB_KEYWORD -> loadCollectionKeywordRefs(source, limit)
                 CollectionSourceKind.TMDB_WATCH_PROVIDER -> loadCollectionWatchProviderRefs(source, limit)
+                CollectionSourceKind.TMDB_DISCOVER -> loadCollectionDiscoverRefs(source, limit)
+                CollectionSourceKind.WATCHMODE_SOURCE -> loadCollectionWatchmodeRefs(source, limit)
                 CollectionSourceKind.CURATED_IDS -> loadCollectionCuratedRefs(source, limit)
                 CollectionSourceKind.MDBLIST_PUBLIC -> loadCollectionMdblistPublicRefs(source, limit)
             }
@@ -2074,6 +2272,189 @@ class MediaRepository @Inject constructor(
         }.take(limit)
     }
 
+    private suspend fun loadCollectionWatchmodeRefs(
+        source: CollectionSourceConfig,
+        limit: Int
+    ): List<Pair<MediaType, Int>> {
+        val sourceId = source.watchmodeSourceId ?: return emptyList()
+        val region = normalizeWatchRegion(source.watchRegion ?: watchRegion)
+        val mediaType = when (source.mediaType?.lowercase(Locale.US)) {
+            "movie" -> "movie"
+            "series", "tv", "show" -> "tv_series"
+            else -> return emptyList()
+        }
+        val sourceTypes = source.watchmodeSourceTypes?.takeIf { it.isNotBlank() }
+        val sortBy = source.sortBy ?: "popularity_desc"
+        val requestedLimit = limit.coerceAtLeast(1)
+        val targetLimit = requestedLimit.coerceAtMost(WATCHMODE_MAX_REFS_PER_SOURCE)
+        val cacheKey = WatchmodeCatalogCache.keyFor(
+            sourceId = sourceId,
+            mediaType = mediaType,
+            region = region,
+            sourceTypes = sourceTypes,
+            sortBy = sortBy
+        )
+        val now = System.currentTimeMillis()
+        val cached = watchmodeRefsCache[cacheKey]
+        if (cached != null && now - cached.timestamp < WATCHMODE_FRESH_CACHE_MS) {
+            val snapshot = cached.data
+            if (snapshot.hasEnoughRefsFor(requestedLimit)) {
+                return snapshot.refs.take(requestedLimit)
+            }
+        } else if (cached != null) {
+            watchmodeRefsCache.remove(cacheKey)
+        }
+
+        val diskSnapshot = withContext(Dispatchers.IO) {
+            watchmodeCatalogCache.read(cacheKey)
+        }
+        if (diskSnapshot != null && now - diskSnapshot.fetchedAtMs < WATCHMODE_FRESH_CACHE_MS) {
+            watchmodeRefsCache[cacheKey] = CacheEntry(diskSnapshot, diskSnapshot.fetchedAtMs)
+            if (diskSnapshot.hasEnoughRefsFor(requestedLimit)) {
+                return diskSnapshot.refs.take(requestedLimit)
+            }
+        }
+
+        val key = watchmodeApiKey
+        if (diskSnapshot != null &&
+            diskSnapshot.refs.isNotEmpty() &&
+            now - diskSnapshot.fetchedAtMs < WATCHMODE_STALE_CACHE_MS &&
+            diskSnapshot.hasEnoughRefsFor(requestedLimit)
+        ) {
+            if (key.isNotBlank()) {
+                refreshWatchmodeRefsInBackground(
+                    cacheKey = cacheKey,
+                    sourceId = sourceId,
+                    mediaType = mediaType,
+                    region = region,
+                    sourceTypes = sourceTypes,
+                    sortBy = sortBy,
+                    targetLimit = targetLimit
+                )
+            }
+            return diskSnapshot.refs.take(requestedLimit)
+        }
+
+        if (key.isBlank()) {
+            return diskSnapshot?.refs?.take(requestedLimit).orEmpty()
+        }
+
+        return runCatching {
+            fetchWatchmodeRefsSnapshot(
+                cacheKey = cacheKey,
+                apiKey = key,
+                sourceId = sourceId,
+                mediaType = mediaType,
+                region = region,
+                sourceTypes = sourceTypes,
+                sortBy = sortBy,
+                targetLimit = targetLimit
+            ).refs.take(requestedLimit)
+        }.getOrElse {
+            diskSnapshot?.refs?.take(requestedLimit).orEmpty()
+        }
+    }
+
+    private fun WatchmodeCatalogCache.Snapshot.hasEnoughRefsFor(limit: Int): Boolean {
+        return complete || refs.size >= limit
+    }
+
+    private fun refreshWatchmodeRefsInBackground(
+        cacheKey: String,
+        sourceId: Int,
+        mediaType: String,
+        region: String,
+        sourceTypes: String?,
+        sortBy: String,
+        targetLimit: Int
+    ) {
+        if (!watchmodeRefreshInFlight.add(cacheKey)) return
+        repositoryScope.launch {
+            try {
+                val key = watchmodeApiKey
+                if (key.isNotBlank()) {
+                    fetchWatchmodeRefsSnapshot(
+                        cacheKey = cacheKey,
+                        apiKey = key,
+                        sourceId = sourceId,
+                        mediaType = mediaType,
+                        region = region,
+                        sourceTypes = sourceTypes,
+                        sortBy = sortBy,
+                        targetLimit = targetLimit
+                    )
+                }
+            } finally {
+                watchmodeRefreshInFlight.remove(cacheKey)
+            }
+        }
+    }
+
+    private suspend fun fetchWatchmodeRefsSnapshot(
+        cacheKey: String,
+        apiKey: String,
+        sourceId: Int,
+        mediaType: String,
+        region: String,
+        sourceTypes: String?,
+        sortBy: String,
+        targetLimit: Int
+    ): WatchmodeCatalogCache.Snapshot {
+        val target = targetLimit.coerceIn(1, WATCHMODE_MAX_REFS_PER_SOURCE)
+        val pageLimit = target.coerceAtMost(WATCHMODE_PAGE_LIMIT)
+        val refs = LinkedHashSet<Pair<MediaType, Int>>()
+        var page = 1
+        var totalPages = 1
+        var totalResults: Int? = null
+        do {
+            val response = watchmodeApi.listTitles(
+                apiKey = apiKey,
+                types = mediaType,
+                regions = region,
+                sourceIds = sourceId.toString(),
+                sourceTypes = sourceTypes,
+                sortBy = sortBy,
+                page = page,
+                limit = pageLimit
+            )
+            totalPages = response.totalPages.coerceAtLeast(1)
+            totalResults = response.totalResults.takeIf { it > 0 } ?: totalResults
+            response.titles.mapNotNull { it.toTmdbRef() }.forEach { refs.add(it) }
+            if (response.titles.isEmpty()) break
+            page += 1
+        } while (refs.size < target && page <= totalPages)
+
+        val total = totalResults
+        val complete = when {
+            total != null && refs.size >= total -> true
+            page > totalPages -> true
+            refs.size < pageLimit -> true
+            else -> false
+        }
+        val snapshot = WatchmodeCatalogCache.Snapshot(
+            refs = refs.toList(),
+            fetchedAtMs = System.currentTimeMillis(),
+            complete = complete
+        )
+        if (snapshot.refs.isNotEmpty()) {
+            watchmodeRefsCache[cacheKey] = CacheEntry(snapshot, snapshot.fetchedAtMs)
+            withContext(Dispatchers.IO) {
+                watchmodeCatalogCache.write(cacheKey, snapshot)
+            }
+        }
+        return snapshot
+    }
+
+    private fun WatchmodeTitle.toTmdbRef(): Pair<MediaType, Int>? {
+        val id = tmdbId?.takeIf { it > 0 } ?: return null
+        val type = when (tmdbType?.lowercase(Locale.US) ?: type?.lowercase(Locale.US)) {
+            "movie" -> MediaType.MOVIE
+            "tv", "tv_series", "series", "show" -> MediaType.TV
+            else -> return null
+        }
+        return type to id
+    }
+
     /**
      * TMDB `/collection/{id}` returns the canonical list of films in a franchise
      * (Harry Potter = 1241, LOTR = 119, etc.). We keep sort-by-release-date so
@@ -2121,6 +2502,7 @@ class MediaRepository @Inject constructor(
                     apiKey,
                     keywords = keyword,
                     sortBy = sortBy,
+                    runtimeLte = source.runtimeLteMinutes,
                     language = contentLanguage,
                     page = page
                 )
@@ -2147,6 +2529,7 @@ class MediaRepository @Inject constructor(
                             apiKey,
                             keywords = keyword,
                             sortBy = sortBy,
+                            runtimeLte = source.runtimeLteMinutes,
                             language = contentLanguage,
                             page = page
                         )
@@ -2171,6 +2554,41 @@ class MediaRepository @Inject constructor(
         }
     }
 
+    private suspend fun loadCollectionDiscoverRefs(
+        source: CollectionSourceConfig,
+        limit: Int
+    ): List<Pair<MediaType, Int>> {
+        val sortBy = source.sortBy ?: "popularity.desc"
+        return when (source.mediaType?.lowercase(Locale.US)) {
+            "movie" -> loadPagedTmdbDiscoverRefs(
+                mediaType = MediaType.MOVIE,
+                limit = limit
+            ) { page ->
+                tmdbApi.discoverMovies(
+                    apiKey,
+                    sortBy = sortBy,
+                    minVoteCount = source.voteCountGte,
+                    runtimeLte = source.runtimeLteMinutes,
+                    language = contentLanguage,
+                    page = page
+                )
+            }
+            "series", "tv", "show" -> loadPagedTmdbDiscoverRefs(
+                mediaType = MediaType.TV,
+                limit = limit
+            ) { page ->
+                tmdbApi.discoverTv(
+                    apiKey,
+                    sortBy = sortBy,
+                    minVoteCount = source.voteCountGte,
+                    language = contentLanguage,
+                    page = page
+                )
+            }
+            else -> emptyList()
+        }
+    }
+
     /**
      * Streaming-service trending via `with_watch_providers`. Used for services
      * that don't have a dedicated addon catalog (Apple TV+, Paramount+, Hulu,
@@ -2182,7 +2600,7 @@ class MediaRepository @Inject constructor(
         limit: Int
     ): List<Pair<MediaType, Int>> {
         val providerId = source.tmdbWatchProviderId ?: return emptyList()
-        val region = source.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
+        val region = normalizeWatchRegion(source.watchRegion ?: watchRegion)
         val sortBy = source.sortBy ?: "popularity.desc"
         return when (source.mediaType?.lowercase(Locale.US)) {
             "movie" -> loadPagedTmdbDiscoverRefs(
@@ -2194,6 +2612,7 @@ class MediaRepository @Inject constructor(
                     watchProviders = providerId,
                     watchRegion = region,
                     sortBy = sortBy,
+                    runtimeLte = source.runtimeLteMinutes,
                     language = contentLanguage,
                     page = page
                 )
@@ -2259,6 +2678,7 @@ class MediaRepository @Inject constructor(
                     apiKey,
                     genres = genreId.toString(),
                     sortBy = sortBy,
+                    runtimeLte = source.runtimeLteMinutes,
                     language = contentLanguage,
                     page = page
                 )
@@ -2294,6 +2714,7 @@ class MediaRepository @Inject constructor(
                     apiKey,
                     crew = personId.toString(),
                     sortBy = sortBy,
+                    runtimeLte = source.runtimeLteMinutes,
                     language = contentLanguage,
                     page = page
                 )
@@ -3052,6 +3473,35 @@ class MediaRepository @Inject constructor(
         return resolved
     }
 
+    /**
+     * Get title-level YouTube videos for trailers/extras. TV titles often keep
+     * useful trailers and featurettes on season endpoints, so include a small
+     * season fallback for the details page extras rail.
+     */
+    suspend fun getTitleVideos(mediaType: MediaType, mediaId: Int): List<com.arflix.tv.data.api.TmdbVideo> {
+        val type = if (mediaType == MediaType.TV) "tv" else "movie"
+        val titleVideos = getVideosWithLanguageFallback { language ->
+            tmdbApi.getVideos(type, mediaId, apiKey, language = language).results
+        }
+        if (mediaType != MediaType.TV) return titleVideos
+
+        val details = runCatching {
+            tmdbApi.getTvDetails(mediaId, apiKey, language = contentLanguage)
+        }.getOrNull() ?: return titleVideos
+
+        val seasonVideos = TrailerResolver.seasonFallbackOrder(details.seasons)
+            .take(4)
+            .flatMap { seasonNumber ->
+                runCatching {
+                    getVideosWithLanguageFallback { language ->
+                        tmdbApi.getTvSeasonVideos(mediaId, seasonNumber, apiKey, language = language).results
+                    }
+                }.getOrDefault(emptyList())
+            }
+
+        return (titleVideos + seasonVideos).distinctBy { it.key }
+    }
+
     private fun trailerKeyCacheKey(mediaType: MediaType, mediaId: Int): String {
         return "${mediaType.name}_$mediaId:${contentLanguage.orEmpty()}"
     }
@@ -3070,11 +3520,19 @@ class MediaRepository @Inject constructor(
         fetch: suspend (String?) -> List<com.arflix.tv.data.api.TmdbVideo>
     ): List<com.arflix.tv.data.api.TmdbVideo> {
         val preferredLanguage = contentLanguage?.takeIf { it.isNotBlank() }
-        val localized = fetch(preferredLanguage)
-        if (preferredLanguage == null) return localized
+        val localized = runCatching { fetch(preferredLanguage) }.getOrDefault(emptyList())
 
-        val fallback = runCatching { fetch(null) }.getOrDefault(emptyList())
-        return (localized + fallback).distinctBy { it.key }
+        val englishFallback = if (preferredLanguage.equals("en-US", ignoreCase = true)) {
+            emptyList()
+        } else {
+            runCatching { fetch("en-US") }.getOrDefault(emptyList())
+        }
+        val defaultFallback = if (preferredLanguage == null) {
+            emptyList()
+        } else {
+            runCatching { fetch(null) }.getOrDefault(emptyList())
+        }
+        return (localized + englishFallback + defaultFallback).distinctBy { it.key }
     }
 
     private data class TvSeasonTrailerKeys(
@@ -3332,7 +3790,7 @@ class MediaRepository @Inject constructor(
 
         val requestedRegion = normalizeWatchRegion(preferredRegion)
         val localeRegion = normalizeWatchRegion(Locale.getDefault().country)
-        val candidateRegions = listOf(requestedRegion, localeRegion, "US")
+        val candidateRegions = listOf(requestedRegion, watchRegion, localeRegion, "US")
             .distinct()
 
         val resolvedFromPreferred = candidateRegions.firstNotNullOfOrNull { regionKey ->
@@ -3447,7 +3905,7 @@ class MediaRepository @Inject constructor(
 
     private fun normalizeWatchRegion(region: String?): String {
         val value = region?.trim()?.uppercase(Locale.US).orEmpty()
-        return value.takeIf { it.length == 2 } ?: "US"
+        return value.takeIf { it.length == 2 } ?: AppContentPreferences.DEFAULT_WATCH_REGION
     }
 
     private suspend fun loadTraktCatalogRefs(sourceUrl: String?, sourceRef: String? = null): List<Pair<MediaType, Int>> {
@@ -3644,7 +4102,7 @@ class MediaRepository @Inject constructor(
     private fun fetchUrl(url: String): String? {
         val request = Request.Builder()
             .url(url)
-            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
+            .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; MajoStream)"))
             .build()
         return runCatching {
             okHttpClient.newCall(request).execute().use { response ->
@@ -3801,15 +4259,16 @@ private fun TmdbCrewMember.toDirectorCastMember(): CastMember {
 }
 
 private fun TmdbPersonDetails.toPersonDetails(): PersonDetails {
-    val knownFor = combinedCredits?.cast
-        ?.filter { it.posterPath != null && (it.mediaType == "movie" || it.mediaType == "tv") }
-        ?.sortedByDescending { it.voteCount }
-        ?.take(20)
-        ?.map {
+    val knownFor = (combinedCredits?.cast.orEmpty() + combinedCredits?.crew.orEmpty())
+        .filter { it.posterPath != null && (it.mediaType == "movie" || it.mediaType == "tv") }
+        .distinctBy { "${it.mediaType}:${it.id}" }
+        .sortedByDescending { it.voteCount }
+        .take(20)
+        .map {
             it.toMediaItem(
                 if (it.mediaType == "tv") MediaType.TV else MediaType.MOVIE
             )
-        } ?: emptyList()
+        }
 
     return PersonDetails(
         id = id,

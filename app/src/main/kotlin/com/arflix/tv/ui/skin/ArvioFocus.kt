@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.arflix.tv.ui.performance.shouldUsePassiveFocusableSurface
 
 @OptIn(ExperimentalFoundationApi::class)
 fun Modifier.arvioFocusable(
@@ -56,6 +57,19 @@ fun Modifier.arvioFocusable(
     onLongClick: (() -> Unit)? = null,
     onFocusChanged: (Boolean) -> Unit = {},
 ): Modifier = composed {
+    if (
+        shouldUsePassiveFocusableSurface(
+            enableSystemFocus = enableSystemFocus,
+            hasClick = onClick != null,
+            hasLongClick = onLongClick != null,
+            isFocusedOverride = isFocusedOverride,
+            showRestBorder = showRestBorder,
+            focusedScale = focusedScale
+        )
+    ) {
+        return@composed this
+    }
+
     val interactionSource = remember { MutableInteractionSource() }
     // Allow the user's "Accent Color" setting to override the default
     val resolvedOutlineColor = LocalAccentColorOverride.current ?: outlineColor
@@ -95,11 +109,16 @@ fun Modifier.arvioFocusable(
     val highlightAlpha = if (visualFocused) 1f else animatedHighlightAlpha
 
     // Subtle luminous edge always visible on cards that opt in (glass morphism).
-    val restBorderAlpha by animateFloatAsState(
-        targetValue = if (showRestBorder && !visualFocused) 0.4f else 0f,
-        animationSpec = tween(durationMillis = 150, easing = tokens.easing),
-        label = "arvio_rest_border",
-    )
+    val restBorderAlpha = if (animateFocus) {
+        val animatedRestBorderAlpha by animateFloatAsState(
+            targetValue = if (showRestBorder && !visualFocused) 0.4f else 0f,
+            animationSpec = tween(durationMillis = 150, easing = tokens.easing),
+            label = "arvio_rest_border",
+        )
+        animatedRestBorderAlpha
+    } else {
+        if (showRestBorder && !visualFocused) 0.4f else 0f
+    }
 
     val originX = if (visualFocused) focusedTransformOriginX.coerceIn(0f, 1f) else 0.5f
     val focusTransformOrigin = TransformOrigin(originX, 0.5f)

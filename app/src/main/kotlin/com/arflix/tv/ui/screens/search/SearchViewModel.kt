@@ -5,7 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
+import com.arflix.tv.data.model.CatalogConfig
+import com.arflix.tv.data.model.CatalogSourceType
+import com.arflix.tv.data.model.CollectionGroupKind
+import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.MediaRepository
+import com.arflix.tv.data.repository.StreamAvailabilityRepository
+import com.arflix.tv.data.stream.StreamAvailabilitySummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 data class Genre(val id: Int, val name: String)
@@ -67,6 +74,22 @@ enum class SortOption(val label: String, val apiValue: String) { POPULAR("Popula
 private val EMPTY_MEDIA_ITEMS: List<MediaItem> = emptyList()
 private val EMPTY_CATEGORIES: List<Category> = emptyList()
 private val EMPTY_LOGO_URLS: Map<String, String> = emptyMap()
+private val EMPTY_CATALOG_RESULTS: List<SearchCatalogResult> = emptyList()
+private val EMPTY_STREAM_SUMMARY_STATES: Map<String, SearchStreamSummaryState> = emptyMap()
+
+data class SearchCatalogResult(
+    val catalogId: String,
+    val title: String,
+    val subtitle: String,
+    val imageUrl: String?,
+    val sourceLabel: String
+)
+
+data class SearchStreamSummaryState(
+    val summary: StreamAvailabilitySummary? = null,
+    val isLoading: Boolean = false,
+    val hasChecked: Boolean = false
+)
 
 data class SearchUiState(
     val query: String = "",
@@ -75,6 +98,8 @@ data class SearchUiState(
     val movieResults: List<MediaItem> = EMPTY_MEDIA_ITEMS,
     val tvResults: List<MediaItem> = EMPTY_MEDIA_ITEMS,
     val personResults: List<Category> = EMPTY_CATEGORIES,
+    val catalogResults: List<SearchCatalogResult> = EMPTY_CATALOG_RESULTS,
+    val streamSummaryStates: Map<String, SearchStreamSummaryState> = EMPTY_STREAM_SUMMARY_STATES,
     val cardLogoUrls: Map<String, String> = EMPTY_LOGO_URLS,
     val error: String? = null,
     // Discover rows - always 5 rows, dynamically built from active filters
@@ -93,7 +118,9 @@ data class SearchUiState(
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
-    private val mediaRepository: MediaRepository
+    private val mediaRepository: MediaRepository,
+    private val catalogRepository: CatalogRepository,
+    private val streamAvailabilityRepository: StreamAvailabilityRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -101,10 +128,14 @@ class SearchViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var discoverJob: Job? = null
+    private var streamSummaryJob: Job? = null
+    private var pendingStreamSummaryKey: String? = null
     private var cachedSuggestionQuery = ""
     private var cachedSuggestionResults: List<MediaItem> = EMPTY_MEDIA_ITEMS
     private var cachedPeopleQuery = ""
     private var cachedPeopleResults: List<Category> = EMPTY_CATEGORIES
+    private var cachedCatalogQuery = ""
+    private var cachedCatalogResults: List<SearchCatalogResult> = EMPTY_CATALOG_RESULTS
 
     init { loadDiscoverRows() }
 
@@ -254,7 +285,10 @@ class SearchViewModel @Inject constructor(
         if (newQuery.trim().isEmpty()) {
             cachedSuggestionQuery = ""; cachedSuggestionResults = EMPTY_MEDIA_ITEMS
             cachedPeopleQuery = ""; cachedPeopleResults = EMPTY_CATEGORIES
-            _uiState.value = _uiState.value.copy(query = "", isLoading = false, results = EMPTY_MEDIA_ITEMS, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES, cardLogoUrls = EMPTY_LOGO_URLS, error = null, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS)
+            cachedCatalogQuery = ""; cachedCatalogResults = EMPTY_CATALOG_RESULTS
+            streamSummaryJob?.cancel()
+            pendingStreamSummaryKey = null
+            _uiState.value = _uiState.value.copy(query = "", isLoading = false, results = EMPTY_MEDIA_ITEMS, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES, catalogResults = EMPTY_CATALOG_RESULTS, streamSummaryStates = EMPTY_STREAM_SUMMARY_STATES, cardLogoUrls = EMPTY_LOGO_URLS, error = null, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS)
             searchJob?.cancel(); return
         }
         debounceSearch()
@@ -267,7 +301,7 @@ class SearchViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, isAiSearch = false, personResults = EMPTY_CATEGORIES)
             try {
-                val (sorted, peopleRows) = withContext(Dispatchers.IO) {
+                val (sorted, peopleRows, catalogRows) = withContext(Dispatchers.IO) {
                     coroutineScope {
                         val mediaDeferred = async {
                             if (cachedSuggestionQuery.equals(query, true) && cachedSuggestionResults.isNotEmpty()) {
@@ -297,14 +331,24 @@ class SearchViewModel @Inject constructor(
                                 rows
                             }
                         }
-                        mediaDeferred.await() to peopleDeferred.await()
+                        val catalogDeferred = async {
+                            if (cachedCatalogQuery.equals(query, true) && cachedCatalogResults.isNotEmpty()) {
+                                cachedCatalogResults
+                            } else {
+                                val rows = searchCatalogResults(query, catalogRepository.getCatalogs())
+                                cachedCatalogQuery = query
+                                cachedCatalogResults = rows
+                                rows
+                            }
+                        }
+                        Triple(mediaDeferred.await(), peopleDeferred.await(), catalogDeferred.await())
                     }
                 }
                 val movies = sorted.filter { it.mediaType == MediaType.MOVIE }; val tv = sorted.filter { it.mediaType == MediaType.TV }
                 val personItems = peopleRows.flatMap { it.items }
                 val top = (personItems.take(24) + movies.take(16) + tv.take(16)).distinctBy { "${it.mediaType}_${it.id}" }
                 val logos = withContext(Dispatchers.IO) { top.map { item -> async { val k = "${item.mediaType}_${item.id}"; val l = runCatching { mediaRepository.getLogoUrl(item.mediaType, item.id) }.getOrNull(); if (l.isNullOrBlank()) null else k to l } }.awaitAll().filterNotNull().toMap() }
-                _uiState.value = _uiState.value.copy(isLoading = false, results = sorted, movieResults = movies, tvResults = tv, personResults = peopleRows, cardLogoUrls = logos)
+                _uiState.value = _uiState.value.copy(isLoading = false, results = sorted, movieResults = movies, tvResults = tv, personResults = peopleRows, catalogResults = catalogRows, cardLogoUrls = logos)
             } catch (e: Exception) { _uiState.value = _uiState.value.copy(isLoading = false, error = e.message) }
         }
     }
@@ -330,7 +374,7 @@ class SearchViewModel @Inject constructor(
 
     private fun executeSmartSearch(sq: SmartQuery) {
         searchJob?.cancel(); searchJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, isAiSearch = true, aiInterpretation = sq.interpretation, error = null, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES)
+            _uiState.value = _uiState.value.copy(isLoading = true, isAiSearch = true, aiInterpretation = sq.interpretation, error = null, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES, catalogResults = EMPTY_CATALOG_RESULTS, streamSummaryStates = EMPTY_STREAM_SUMMARY_STATES)
             try {
                 val items = withContext(Dispatchers.IO) {
                     if (sq.similarTo != null) { val r = mediaRepository.search(sq.similarTo); val m = r.firstOrNull(); if (m != null) mediaRepository.getSimilar(m.mediaType, m.id) else EMPTY_MEDIA_ITEMS }
@@ -392,12 +436,224 @@ class SearchViewModel @Inject constructor(
         )
     }
 
-    fun clearSearch() { searchJob?.cancel(); cachedSuggestionQuery = ""; cachedSuggestionResults = EMPTY_MEDIA_ITEMS; cachedPeopleQuery = ""; cachedPeopleResults = EMPTY_CATEGORIES; _uiState.value = _uiState.value.copy(query = "", isLoading = false, results = EMPTY_MEDIA_ITEMS, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES, cardLogoUrls = EMPTY_LOGO_URLS, error = null, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS) }
+    fun focusStreamSummary(item: MediaItem) {
+        val key = streamSummaryKey(item)
+        val existing = _uiState.value.streamSummaryStates[key]
+        if (existing?.summary != null || existing?.isLoading == true) return
+
+        pendingStreamSummaryKey = key
+        streamSummaryJob?.cancel()
+        streamSummaryJob = viewModelScope.launch {
+            delay(STREAM_SUMMARY_DEBOUNCE_MS)
+            if (pendingStreamSummaryKey != key) return@launch
+
+            _uiState.value = _uiState.value.copy(
+                streamSummaryStates = _uiState.value.streamSummaryStates + (key to SearchStreamSummaryState(isLoading = true))
+            )
+
+            val summary = withContext(Dispatchers.IO) {
+                runCatching {
+                    val imdbId = mediaRepository.getCachedImdbId(item.mediaType, item.id)
+                        ?: withTimeoutOrNull(IMDB_RESOLVE_TIMEOUT_MS) {
+                            mediaRepository.getOrResolveImdbId(item.mediaType, item.id)
+                        }
+                    val year = item.year.take(4).toIntOrNull()
+                    when (item.mediaType) {
+                        MediaType.MOVIE -> streamAvailabilityRepository.movieSummary(
+                            imdbId = imdbId,
+                            title = item.title,
+                            year = year,
+                            timeoutMs = STREAM_SUMMARY_TIMEOUT_MS
+                        )
+                        MediaType.TV -> streamAvailabilityRepository.episodeSummary(
+                            imdbId = imdbId,
+                            title = item.title,
+                            year = year,
+                            season = item.nextEpisode?.seasonNumber ?: 1,
+                            episode = item.nextEpisode?.episodeNumber ?: 1,
+                            tmdbId = item.id,
+                            genreIds = item.genreIds,
+                            originalLanguage = item.originalLanguage,
+                            timeoutMs = STREAM_SUMMARY_TIMEOUT_MS
+                        )
+                    }
+                }.getOrNull()
+            }
+
+            val updated = SearchStreamSummaryState(
+                summary = summary,
+                isLoading = false,
+                hasChecked = true
+            )
+            _uiState.value = _uiState.value.copy(
+                streamSummaryStates = _uiState.value.streamSummaryStates + (key to updated)
+            )
+        }
+    }
+
+    fun clearSearch() { searchJob?.cancel(); streamSummaryJob?.cancel(); pendingStreamSummaryKey = null; cachedSuggestionQuery = ""; cachedSuggestionResults = EMPTY_MEDIA_ITEMS; cachedPeopleQuery = ""; cachedPeopleResults = EMPTY_CATEGORIES; cachedCatalogQuery = ""; cachedCatalogResults = EMPTY_CATALOG_RESULTS; _uiState.value = _uiState.value.copy(query = "", isLoading = false, results = EMPTY_MEDIA_ITEMS, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES, catalogResults = EMPTY_CATALOG_RESULTS, streamSummaryStates = EMPTY_STREAM_SUMMARY_STATES, cardLogoUrls = EMPTY_LOGO_URLS, error = null, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS) }
     fun getGenresForType(): List<Genre> = when (_uiState.value.selectedType) { DiscoverType.MOVIES -> MOVIE_GENRES; DiscoverType.TV_SHOWS -> TV_GENRES; DiscoverType.ALL -> ALL_GENRES; DiscoverType.ANIME -> ANIME_GENRES }
     private fun interleave(a: List<MediaItem>, b: List<MediaItem>): List<MediaItem> { val r = mutableListOf<MediaItem>(); for (i in 0 until maxOf(a.size, b.size)) { if (i < a.size) r.add(a[i]); if (i < b.size) r.add(b[i]) }; return r }
+
+    companion object {
+        const val STREAM_SUMMARY_DEBOUNCE_MS = 360L
+        const val STREAM_SUMMARY_TIMEOUT_MS = 3_500L
+        const val IMDB_RESOLVE_TIMEOUT_MS = 1_500L
+    }
+}
+
+fun searchStreamSummaryKey(item: MediaItem): String = "${item.mediaType}:${item.id}"
+
+private fun streamSummaryKey(item: MediaItem): String = searchStreamSummaryKey(item)
+
+internal fun searchStreamSummaryLabel(state: SearchStreamSummaryState?): String? {
+    state ?: return null
+    val summary = state.summary
+    if (summary != null) {
+        val labels = buildList {
+            summary.bestResolution?.takeIf { it.isNotBlank() }?.let(::add)
+            summary.bestVisualTag?.takeIf { it.isNotBlank() }?.let(::add)
+            summary.bestAudioTag?.takeIf { it.isNotBlank() }?.let(::add)
+            if (summary.hasSwedishSubtitles) add("SE subs")
+            if (summary.isCachedOrDebridReady) add("Cached")
+            summary.bestSourceLabel?.takeIf { it.isNotBlank() }?.let { add(it.take(18)) }
+            add("${summary.sourceCount} src")
+        }
+        return labels.joinToString(" / ")
+    }
+    return when {
+        state.isLoading -> "Checking sources"
+        state.hasChecked -> "Sources -"
+        else -> null
+    }
 }
 
 private object SearchRegexes {
     val LIKE_MATCH_REGEX = Regex("(?:movies?|shows?|series|films?)\\s+like\\s+(.+)", RegexOption.IGNORE_CASE)
     val LIMIT_MATCH_REGEX = Regex("top\\s+(\\d+)", RegexOption.IGNORE_CASE)
+}
+
+internal fun searchCatalogResults(
+    query: String,
+    catalogs: List<CatalogConfig>,
+    limit: Int = 12
+): List<SearchCatalogResult> {
+    val normalizedQuery = normalizeCatalogSearchText(query)
+    if (normalizedQuery.length < 2) return emptyList()
+    val queryTokens = normalizedQuery.split(' ').filter { it.length >= 2 }
+
+    return catalogs
+        .asSequence()
+        .mapNotNull { catalog ->
+            val searchable = listOfNotNull(
+                catalog.title,
+                catalog.collectionDescription,
+                catalog.addonName,
+                catalog.sourceRef,
+                catalog.sourceType.name,
+                catalog.collectionGroup?.name,
+                catalog.id.replace('_', ' ')
+            )
+            val normalizedFields = searchable.map(::normalizeCatalogSearchText)
+            val bestRank = normalizedFields.minOfOrNull { field ->
+                when {
+                    field == normalizedQuery -> 0
+                    field.startsWith(normalizedQuery) -> 1
+                    field.contains(normalizedQuery) -> 2
+                    queryTokens.isNotEmpty() && queryTokens.all { token -> field.contains(token) } -> 3
+                    else -> 99
+                }
+            } ?: 99
+            if (bestRank >= 99) return@mapNotNull null
+            val groupBoost = when (catalog.collectionGroup) {
+                CollectionGroupKind.SERVICE -> 0
+                CollectionGroupKind.FEATURED -> 1
+                CollectionGroupKind.GENRE -> 2
+                CollectionGroupKind.FRANCHISE -> 2
+                CollectionGroupKind.NETWORK -> 2
+                CollectionGroupKind.DECADE -> 3
+                null -> 4
+            }
+            RankedCatalogSearchResult(
+                rank = bestRank,
+                groupBoost = groupBoost,
+                sourceBoost = catalog.sourceType.catalogSourceBoost(),
+                title = catalog.title,
+                result = catalog.toSearchCatalogResult()
+            )
+        }
+        .sortedWith(
+            compareBy<RankedCatalogSearchResult> { it.rank }
+                .thenBy { it.groupBoost }
+                .thenBy { it.sourceBoost }
+                .thenBy { it.title.lowercase() }
+        )
+        .map { it.result }
+        .distinctBy { it.catalogId }
+        .take(limit)
+        .toList()
+}
+
+private data class RankedCatalogSearchResult(
+    val rank: Int,
+    val groupBoost: Int,
+    val sourceBoost: Int,
+    val title: String,
+    val result: SearchCatalogResult
+)
+
+private fun CatalogConfig.toSearchCatalogResult(): SearchCatalogResult {
+    return SearchCatalogResult(
+        catalogId = id,
+        title = title,
+        subtitle = collectionDescription?.takeIf { it.isNotBlank() }
+            ?: collectionGroup?.catalogGroupLabel()
+            ?: sourceType.catalogSourceLabel(),
+        imageUrl = collectionHeroImageUrl
+            ?: collectionHeroGifUrl
+            ?: collectionCoverImageUrl
+            ?: collectionFocusGifUrl,
+        sourceLabel = sourceType.catalogSourceLabel()
+    )
+}
+
+private fun normalizeCatalogSearchText(text: String): String {
+    return text
+        .lowercase()
+        .replace("&", " and ")
+        .replace("+", " plus ")
+        .replace(Regex("[^a-z0-9åäö]+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+}
+
+private fun CatalogSourceType.catalogSourceLabel(): String {
+    return when (this) {
+        CatalogSourceType.TRAKT -> "Trakt"
+        CatalogSourceType.MDBLIST -> "MDBList"
+        CatalogSourceType.ADDON -> "Addon"
+        CatalogSourceType.HOME_SERVER -> "Server"
+        CatalogSourceType.PREINSTALLED -> "Majo"
+    }
+}
+
+private fun CatalogSourceType.catalogSourceBoost(): Int {
+    return when (this) {
+        CatalogSourceType.PREINSTALLED -> 0
+        CatalogSourceType.ADDON -> 1
+        CatalogSourceType.MDBLIST -> 2
+        CatalogSourceType.TRAKT -> 3
+        CatalogSourceType.HOME_SERVER -> 4
+    }
+}
+
+private fun CollectionGroupKind.catalogGroupLabel(): String {
+    return when (this) {
+        CollectionGroupKind.FEATURED -> "Featured collection"
+        CollectionGroupKind.SERVICE -> "Streaming service"
+        CollectionGroupKind.GENRE -> "Genre"
+        CollectionGroupKind.DECADE -> "Decade"
+        CollectionGroupKind.FRANCHISE -> "Franchise"
+        CollectionGroupKind.NETWORK -> "Network"
+    }
 }

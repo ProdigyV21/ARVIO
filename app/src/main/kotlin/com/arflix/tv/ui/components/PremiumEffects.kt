@@ -40,7 +40,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Premium visual effects for ARVIO
+ * Premium visual effects for Majo Stream
  * Inspired by NoopyTV's neon dark theme
  */
 

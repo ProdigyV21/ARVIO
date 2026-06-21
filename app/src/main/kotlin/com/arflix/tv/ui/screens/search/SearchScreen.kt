@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -49,9 +50,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
@@ -70,12 +73,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
@@ -109,9 +115,10 @@ fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
+    onNavigateToCatalog: (String) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
+    onNavigateToDiscover: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
-    onNavigateToTv: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
@@ -125,7 +132,8 @@ fun SearchScreen(
     val searchBarWidth = if (isTouchDevice) configuration.screenWidthDp.dp - 24.dp
         else (configuration.screenWidthDp.dp * 0.48f).coerceIn(460.dp, 680.dp)
 
-    val hasSearchResults = uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty() || uiState.personResults.isNotEmpty()
+    val hasCatalogResults = uiState.catalogResults.isNotEmpty()
+    val hasSearchResults = hasCatalogResults || uiState.movieResults.isNotEmpty() || uiState.tvResults.isNotEmpty() || uiState.personResults.isNotEmpty()
     val hasAiResults = uiState.isAiSearch && uiState.aiResults.isNotEmpty()
     val searchTopResults = remember(uiState.movieResults, uiState.tvResults) {
         interleaveSearchResults(uiState.movieResults, uiState.tvResults).take(24)
@@ -148,9 +156,12 @@ fun SearchScreen(
         hasSearchResults -> uiState.cardLogoUrls
         else -> uiState.discoverLogoUrls
     }
+    val catalogRowPresent = uiState.query.isNotEmpty() && !uiState.isAiSearch && hasCatalogResults
+    val catalogRowOffset = if (catalogRowPresent) 1 else 0
+    val resultRowCount = catalogRowOffset + activeCategories.size
 
     var focusZone by remember { mutableStateOf(FocusZone.SEARCH_INPUT) }
-    val hasProfile = currentProfile != null
+    val hasProfile = false
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 1 else 0) }
     var isSearchInputFocused by remember { mutableStateOf(false) }
@@ -258,12 +269,58 @@ fun SearchScreen(
             )
         }
     )
+    val searchPreview = remember(
+        activeCategories,
+        currentRowIndex,
+        currentItemIndex,
+        uiState.aiResults,
+        hasAiResults,
+        catalogRowOffset
+    ) {
+        resolveSearchPreview(
+            categories = activeCategories,
+            currentRowIndex = currentRowIndex - catalogRowOffset,
+            currentItemIndex = currentItemIndex,
+            aiResults = uiState.aiResults,
+            hasAiResults = hasAiResults
+        )
+    }
+    val focusedMediaResult = remember(
+        uiState.query,
+        uiState.isAiSearch,
+        focusZone,
+        currentRowIndex,
+        currentItemIndex,
+        catalogRowPresent,
+        catalogRowOffset,
+        activeCategories
+    ) {
+        if (uiState.query.isBlank() || uiState.isAiSearch || focusZone != FocusZone.RESULTS || hasAiResults) {
+            null
+        } else if (catalogRowPresent && currentRowIndex == 0) {
+            null
+        } else {
+            activeCategories
+                .getOrNull(currentRowIndex - catalogRowOffset)
+                ?.items
+                ?.getOrNull(currentItemIndex)
+        }
+    }
+
+    LaunchedEffect(focusedMediaResult?.mediaType, focusedMediaResult?.id) {
+        focusedMediaResult?.let(viewModel::focusStreamSummary)
+    }
+
     LaunchedEffect(quickFilters.size) {
         focusedFilterIndex = focusedFilterIndex.coerceIn(0, (quickFilters.size - 1).coerceAtLeast(0))
     }
-    LaunchedEffect(uiState.query, activeCategories.size, hasAiResults) {
-        currentRowIndex = currentRowIndex.coerceIn(0, (activeCategories.size - 1).coerceAtLeast(0))
-        val maxItem = (activeCategories.getOrNull(currentRowIndex)?.items?.size ?: 1) - 1
+    LaunchedEffect(uiState.query, activeCategories.size, uiState.catalogResults.size, hasAiResults, catalogRowPresent) {
+        currentRowIndex = currentRowIndex.coerceIn(0, (resultRowCount - 1).coerceAtLeast(0))
+        val maxItem = if (catalogRowPresent && currentRowIndex == 0) {
+            uiState.catalogResults.size - 1
+        } else {
+            (activeCategories.getOrNull(currentRowIndex - catalogRowOffset)?.items?.size ?: 1) - 1
+        }
         currentItemIndex = currentItemIndex.coerceIn(0, maxItem.coerceAtLeast(0))
     }
     LaunchedEffect(uiState.selectedType, uiState.selectedGenre?.id, uiState.selectedCountry?.code) {
@@ -273,7 +330,7 @@ fun SearchScreen(
 
     // LaunchedEffect to restore RESULTS focus when results become available
     LaunchedEffect(activeCategories, hasAiResults) {
-        if ((activeCategories.isNotEmpty() || hasAiResults) && focusZone == FocusZone.SEARCH_INPUT && isSearchInputFocused.not()) {
+        if ((resultRowCount > 0 || hasAiResults) && focusZone == FocusZone.SEARCH_INPUT && isSearchInputFocused.not()) {
             // If we have results and just returned from details, stay in search input but prepare for results
             // This prevents the "back to keyboard" issue when returning from details
         }
@@ -301,37 +358,58 @@ fun SearchScreen(
     val dpadModifier = if (!isTouchDevice) {
         Modifier.onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-            if (isSearchEditing && (event.key == Key.Back || event.key == Key.Escape)) {
-                isSearchEditing = false
-                keyboardController?.hide()
-                runCatching { searchFocusRequester.requestFocus() }
-                return@onPreviewKeyEvent true
-            }
             val effectiveKey = when (event.key) {
                 Key.DirectionLeft  -> if (isRtl) Key.DirectionRight else Key.DirectionLeft
                 Key.DirectionRight -> if (isRtl) Key.DirectionLeft  else Key.DirectionRight
                 else -> event.key
             }
             when (effectiveKey) {
-                Key.Back, Key.Escape -> when (focusZone) {
-                    FocusZone.RESULTS -> {
-                        if (showFilters && quickFilters.isNotEmpty()) {
+                Key.Back, Key.Escape -> {
+                    when (
+                        resolveSearchBackAction(
+                            focusZone = focusZone,
+                            isEditing = isSearchEditing,
+                            hasQuery = uiState.query.isNotBlank(),
+                            showFilters = showFilters,
+                            hasFilters = quickFilters.isNotEmpty()
+                        )
+                    ) {
+                        SearchBackAction.HIDE_KEYBOARD -> {
+                            isSearchEditing = false
+                            keyboardController?.hide()
+                            runCatching { searchFocusRequester.requestFocus() }
+                        }
+                        SearchBackAction.CLEAR_QUERY -> {
+                            isSearchEditing = false
+                            keyboardController?.hide()
+                            viewModel.clearSearch()
+                            focusZone = FocusZone.SEARCH_INPUT
+                            runCatching { searchFocusRequester.requestFocus() }
+                        }
+                        SearchBackAction.MOVE_TO_FILTERS -> {
                             focusZone = FocusZone.FILTERS
                             focusedFilterIndex = focusedFilterIndex.coerceIn(0, (quickFilters.size - 1).coerceAtLeast(0))
                             try { filtersFocusRequester.requestFocus() } catch (_: Exception) {}
                         }
-                        else { focusZone = FocusZone.SEARCH_INPUT; searchFocusRequester.requestFocus() }
-                        true
+                        SearchBackAction.MOVE_TO_SEARCH_INPUT -> {
+                            isSearchEditing = false
+                            keyboardController?.hide()
+                            focusZone = FocusZone.SEARCH_INPUT
+                            runCatching { searchFocusRequester.requestFocus() }
+                        }
+                        SearchBackAction.MOVE_TO_SIDEBAR -> {
+                            isSearchEditing = false
+                            keyboardController?.hide()
+                            focusZone = FocusZone.SIDEBAR
+                        }
+                        SearchBackAction.EXIT -> {
+                            isSearchEditing = false
+                            keyboardController?.hide()
+                            if (uiState.query.isNotBlank()) viewModel.clearSearch()
+                            onBack()
+                        }
                     }
-                    FocusZone.FILTERS -> { focusZone = FocusZone.SEARCH_INPUT; searchFocusRequester.requestFocus(); true }
-                    FocusZone.SEARCH_INPUT -> {
-                        // Always progress toward sidebar so repeated Back presses can exit Search.
-                        isSearchEditing = false
-                        keyboardController?.hide()
-                        focusZone = FocusZone.SIDEBAR
-                        true
-                    }
-                    FocusZone.SIDEBAR -> { onBack(); true }
+                    true
                 }
                 Key.DirectionUp -> when (focusZone) {
                     FocusZone.SIDEBAR -> true
@@ -369,7 +447,7 @@ fun SearchScreen(
                             focusedFilterIndex = focusedFilterIndex.coerceIn(0, (quickFilters.size - 1).coerceAtLeast(0))
                             try { filtersFocusRequester.requestFocus() } catch (_: Exception) {}
                         }
-                        else if (activeCategories.isNotEmpty() || hasAiResults) {
+                        else if (resultRowCount > 0 || hasAiResults) {
                             resultsLastNavEventTime = SystemClock.elapsedRealtime()
                             focusZone = FocusZone.RESULTS
                             currentRowIndex = 0
@@ -378,7 +456,7 @@ fun SearchScreen(
                         true
                     }
                     FocusZone.FILTERS -> {
-                        if (activeCategories.isNotEmpty() || hasAiResults) {
+                        if (resultRowCount > 0 || hasAiResults) {
                             resultsLastNavEventTime = SystemClock.elapsedRealtime()
                             focusZone = FocusZone.RESULTS
                             currentRowIndex = 0
@@ -388,7 +466,7 @@ fun SearchScreen(
                     }
                     FocusZone.RESULTS -> {
                         if (hasAiResults) false // AI grid: let native focus handle navigation
-                        else if (currentRowIndex < activeCategories.size - 1) {
+                        else if (currentRowIndex < resultRowCount - 1) {
                             resultsLastNavEventTime = SystemClock.elapsedRealtime()
                             currentRowIndex++
                             currentItemIndex = 0
@@ -424,8 +502,12 @@ fun SearchScreen(
                     FocusZone.RESULTS -> {
                         if (hasAiResults) false // AI grid: let native focus handle navigation
                         else {
-                            val cats = activeCategories.filter { it.items.isNotEmpty() }
-                            val maxItem = (cats.getOrNull(currentRowIndex)?.items?.size ?: 1) - 1
+                            val maxItem = if (catalogRowPresent && currentRowIndex == 0) {
+                                uiState.catalogResults.size - 1
+                            } else {
+                                val cats = activeCategories.filter { it.items.isNotEmpty() }
+                                (cats.getOrNull(currentRowIndex - catalogRowOffset)?.items?.size ?: 1) - 1
+                            }
                             if (currentItemIndex < maxItem) {
                                 resultsLastNavEventTime = SystemClock.elapsedRealtime()
                                 currentItemIndex++
@@ -444,8 +526,14 @@ fun SearchScreen(
                 Key.Enter, Key.DirectionCenter -> {
                     when (focusZone) {
                         FocusZone.SIDEBAR -> {
-                            if (hasProfile && sidebarFocusIndex == 0) onSwitchProfile()
-                            else when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) { SidebarItem.SEARCH -> Unit; SidebarItem.HOME -> onNavigateToHome(); SidebarItem.WATCHLIST -> onNavigateToWatchlist(); SidebarItem.TV -> onNavigateToTv(); SidebarItem.SETTINGS -> onNavigateToSettings(); null -> Unit }
+                            when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
+                                SidebarItem.SEARCH -> Unit
+                                SidebarItem.HOME -> onNavigateToHome()
+                                SidebarItem.DISCOVER -> onNavigateToDiscover()
+                                SidebarItem.WATCHLIST -> onNavigateToWatchlist()
+                                SidebarItem.SETTINGS -> onNavigateToSettings()
+                                null -> Unit
+                            }
                             true
                         }
                         FocusZone.SEARCH_INPUT -> {
@@ -462,9 +550,13 @@ fun SearchScreen(
                             if (hasAiResults) false
                             else {
                                 // Use stable category lookup to avoid race condition with dynamic list updates
-                                val cats = activeCategories.filter { it.items.isNotEmpty() }
-                                val item = cats.getOrNull(currentRowIndex)?.items?.getOrNull(currentItemIndex)
-                                if (item != null) onNavigateToDetails(item.mediaType, item.id)
+                                if (catalogRowPresent && currentRowIndex == 0) {
+                                    uiState.catalogResults.getOrNull(currentItemIndex)?.let { onNavigateToCatalog(it.catalogId) }
+                                } else {
+                                    val cats = activeCategories.filter { it.items.isNotEmpty() }
+                                    val item = cats.getOrNull(currentRowIndex - catalogRowOffset)?.items?.getOrNull(currentItemIndex)
+                                    if (item != null) onNavigateToDetails(item.mediaType, item.id)
+                                }
                                 true
                             }
                         }
@@ -476,7 +568,8 @@ fun SearchScreen(
     } else Modifier
 
     Box(modifier = Modifier.fillMaxSize().background(appBackgroundDark()).then(dpadModifier)) {
-        if (!isTouchDevice) AppTopBar(selectedItem = SidebarItem.SEARCH, isFocused = focusZone == FocusZone.SIDEBAR, focusedIndex = sidebarFocusIndex, profile = currentProfile)
+        SearchAmbientBackground(preview = searchPreview)
+        if (!isTouchDevice) AppTopBar(selectedItem = SidebarItem.SEARCH, isFocused = focusZone == FocusZone.SIDEBAR, focusedIndex = sidebarFocusIndex)
 
         Column(modifier = Modifier.fillMaxSize().padding(top = if (isTouchDevice) 16.dp else AppTopBarContentTopInset).padding(horizontal = if (isTouchDevice) 12.dp else if (isCompactHeight) 20.dp else 28.dp)) {
             // ── Search Bar ──
@@ -486,7 +579,7 @@ fun SearchScreen(
                     .padding(
                         start = if (isTouchDevice) 0.dp else 22.dp,
                         end = if (isTouchDevice) 0.dp else 22.dp,
-                        bottom = if (isCompactHeight) 6.dp else 8.dp
+                        bottom = if (isCompactHeight) 8.dp else 12.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -526,7 +619,7 @@ fun SearchScreen(
                             focusZone = FocusZone.FILTERS
                             focusedFilterIndex = 0
                             runCatching { filtersFocusRequester.requestFocus() }
-                        } else if (activeCategories.isNotEmpty() || hasAiResults) {
+                        } else if (resultRowCount > 0 || hasAiResults) {
                             resultsLastNavEventTime = SystemClock.elapsedRealtime()
                             focusZone = FocusZone.RESULTS
                             currentRowIndex = 0
@@ -534,6 +627,15 @@ fun SearchScreen(
                         }
                     }
                 )
+                if (!isTouchDevice) {
+                    Spacer(Modifier.width(if (isCompactHeight) 18.dp else 24.dp))
+                    SearchPreviewHeader(
+                        preview = searchPreview,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(if (isCompactHeight) 104.dp else 124.dp)
+                    )
+                }
             }
 
             // ── Filter Chips (discover mode) - focusable with D-pad ──
@@ -554,7 +656,7 @@ fun SearchScreen(
                         runCatching { searchFocusRequester.requestFocus() }
                     },
                     onMoveDown = {
-                        if (activeCategories.isNotEmpty() || hasAiResults) {
+                        if (resultRowCount > 0 || hasAiResults) {
                             resultsLastNavEventTime = SystemClock.elapsedRealtime()
                             focusZone = FocusZone.RESULTS
                             currentRowIndex = 0
@@ -595,19 +697,33 @@ fun SearchScreen(
 
                 uiState.isDiscoverLoading && activeCategories.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator(color = Pink, size = 48.dp) }
 
-                activeCategories.isNotEmpty() -> {
+                resultRowCount > 0 -> {
                     // Row-based content (discover rows or search results) - HomeScreen pattern
-                    RowsLayer(
-                        categories = activeCategories,
-                        cardLogoUrls = activeLogoUrls,
-                        currentRowIndex = currentRowIndex,
-                        currentItemIndex = currentItemIndex,
-                        lastNavEventTime = resultsLastNavEventTime,
-                        fastScrollThresholdMs = fastScrollThresholdMs,
-                        isFocused = focusZone == FocusZone.RESULTS,
-                        isTouchDevice = isTouchDevice,
-                        onItemClick = { onNavigateToDetails(it.mediaType, it.id) }
-                    )
+                    Column(Modifier.fillMaxSize()) {
+                        if (catalogRowPresent) {
+                            CatalogResultsRow(
+                                catalogs = uiState.catalogResults,
+                                currentItemIndex = currentItemIndex,
+                                isFocused = focusZone == FocusZone.RESULTS && currentRowIndex == 0,
+                                isTouchDevice = isTouchDevice,
+                                onCatalogClick = { onNavigateToCatalog(it.catalogId) }
+                            )
+                        }
+                        if (activeCategories.isNotEmpty()) {
+                            RowsLayer(
+                                categories = activeCategories,
+                                cardLogoUrls = activeLogoUrls,
+                                streamSummaryStates = if (uiState.query.isNotBlank()) uiState.streamSummaryStates else emptyMap(),
+                                currentRowIndex = (currentRowIndex - catalogRowOffset).coerceAtLeast(0),
+                                currentItemIndex = currentItemIndex,
+                                lastNavEventTime = resultsLastNavEventTime,
+                                fastScrollThresholdMs = fastScrollThresholdMs,
+                                isFocused = focusZone == FocusZone.RESULTS && !(catalogRowPresent && currentRowIndex == 0),
+                                isTouchDevice = isTouchDevice,
+                                onItemClick = { onNavigateToDetails(it.mediaType, it.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -623,6 +739,181 @@ private data class DiscoverQuickFilter(
     val isSelected: Boolean,
     val onSelect: () -> Unit
 )
+
+@Composable
+private fun SearchAmbientBackground(preview: SearchPreviewState?) {
+    val imageUrl = preview?.backgroundImageUrl
+
+    Box(Modifier.fillMaxSize().background(appBackgroundDark())) {
+        if (!imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = 0.42f }
+            )
+        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            appBackgroundDark().copy(alpha = 0.96f),
+                            appBackgroundDark().copy(alpha = 0.74f),
+                            appBackgroundDark().copy(alpha = 0.36f)
+                        )
+                    )
+                )
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            appBackgroundDark().copy(alpha = 0.68f),
+                            appBackgroundDark().copy(alpha = 0.20f),
+                            appBackgroundDark().copy(alpha = 0.94f)
+                        )
+                    )
+                )
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SearchPreviewHeader(
+    preview: SearchPreviewState?,
+    modifier: Modifier = Modifier
+) {
+    if (preview == null) {
+        Spacer(modifier)
+        return
+    }
+
+    val item = preview.focusedItem
+    val posterUrl = item.image.takeIf { it.isNotBlank() } ?: preview.backgroundImageUrl
+    val mediaLabel = when (item.mediaType) {
+        MediaType.TV -> stringResource(R.string.series)
+        MediaType.MOVIE -> stringResource(R.string.movie)
+    }
+    val rating = item.imdbRating.takeIf { it.isNotBlank() }
+        ?: item.rating.takeIf { it.isNotBlank() }
+        ?: item.tmdbRating.takeIf { it.isNotBlank() }
+
+    val metaParts = mutableListOf<String>()
+    if (preview.isPersonResult) {
+        metaParts += "Person"
+    } else {
+        metaParts += mediaLabel
+    }
+    item.year.takeIf { it.isNotBlank() }?.let { metaParts += it }
+    if (!preview.isPersonResult) {
+        item.duration.takeIf { it.isNotBlank() }?.let { metaParts += it }
+    }
+    val metadata = metaParts.joinToString(" / ")
+    val supportingText = if (preview.isPersonResult) {
+        buildString {
+            append("Known for ")
+            append(item.title)
+            if (item.character.isNotBlank()) {
+                append(" as ")
+                append(item.character)
+            }
+        }
+    } else {
+        item.overview.takeIf { it.isNotBlank() } ?: item.subtitle.takeIf { it.isNotBlank() }
+    }
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.11f),
+                        Color.White.copy(alpha = 0.055f),
+                        Color.White.copy(alpha = 0.015f)
+                    )
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.13f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .height(96.dp)
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+        ) {
+            if (!posterUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = posterUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 14.dp, end = 12.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                preview.displayTitle,
+                style = ArflixTypography.sectionTitle.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                metadata,
+                style = ArflixTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                color = Color.White.copy(alpha = 0.72f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!supportingText.isNullOrBlank()) {
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    supportingText,
+                    style = ArflixTypography.body.copy(fontSize = 13.sp, lineHeight = 17.sp),
+                    color = Color.White.copy(alpha = 0.72f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (!rating.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Top)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.36f))
+                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 9.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    "IMDb $rating",
+                    style = ArflixTypography.caption.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                    color = Color.White.copy(alpha = 0.88f),
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -656,8 +947,8 @@ private fun SearchInputBar(
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary,
                 cursorColor = Color.White,
-                focusedContainerColor = BackgroundCard,
-                unfocusedContainerColor = BackgroundCard,
+                focusedContainerColor = BackgroundCard.copy(alpha = 0.82f),
+                unfocusedContainerColor = BackgroundCard.copy(alpha = 0.66f),
                 focusedIndicatorColor = Color.White,
                 unfocusedIndicatorColor = Color.White.copy(alpha = 0.18f)
             ),
@@ -676,7 +967,7 @@ private fun SearchInputBar(
     ArvioFocusableSurface(
         modifier = Modifier
             .width(searchBarWidth)
-            .height(54.dp)
+            .height(50.dp)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
@@ -688,11 +979,11 @@ private fun SearchInputBar(
             }
             .focusRequester(searchFocusRequester),
         shape = shape,
-        backgroundColor = Color.White.copy(alpha = if (isFocused) 0.075f else 0.045f),
+        backgroundColor = Color.White.copy(alpha = if (isFocused) 0.105f else 0.052f),
         outlineColor = Color.White,
-        outlineWidth = if (isFocused) 3.dp else 2.dp,
-        glowWidth = if (isFocused) 2.dp else 0.dp,
-        glowAlpha = 0.22f,
+        outlineWidth = if (isFocused) 2.dp else 1.dp,
+        glowWidth = if (isFocused) 1.dp else 0.dp,
+        glowAlpha = 0.18f,
         focusedScale = 1f,
         pressedScale = 0.985f,
         useSystemFocusForVisuals = false,
@@ -712,7 +1003,7 @@ private fun SearchInputBar(
                 value = query,
                 onValueChange = onQueryChange,
                 readOnly = !isEditing,
-                textStyle = ArflixTypography.body.copy(color = TextPrimary, fontSize = 17.sp),
+                textStyle = ArflixTypography.body.copy(color = TextPrimary, fontSize = 16.sp),
                 cursorBrush = SolidColor(Color.White),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -724,7 +1015,7 @@ private fun SearchInputBar(
                     if (query.isEmpty()) {
                         Text(
                             stringResource(R.string.search),
-                            style = ArflixTypography.body.copy(fontSize = 17.sp),
+                            style = ArflixTypography.body.copy(fontSize = 16.sp),
                             color = Color.White.copy(alpha = 0.32f)
                         )
                     }
@@ -778,12 +1069,12 @@ private fun DiscoverFilterStrip(
                 }
             }
             .arvioDpadFocusGroup(),
-        horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 7.dp else 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 7.dp else 8.dp),
         contentPadding = PaddingValues(
             start = if (isTouchDevice) 0.dp else 22.dp,
             end = if (isTouchDevice) 6.dp else 40.dp,
-            top = 4.dp,
-            bottom = 4.dp
+            top = 2.dp,
+            bottom = 5.dp
         )
     ) {
         itemsIndexed(filters, key = { _, filter -> filter.key }) { index, filter ->
@@ -814,17 +1105,17 @@ private fun GlowChip(
     var systemFocused by remember { mutableStateOf(false) }
     val focused = isVisuallyFocused || (useSystemFocusForVisuals && systemFocused)
     val active = focused || isSelected
-    val chipShape = RoundedCornerShape(7.dp)
+    val chipShape = RoundedCornerShape(6.dp)
     val accentColor = resolveAccentColor(fallback = Color.White)
     val backgroundColor = when {
-        focused -> Color.White.copy(alpha = 0.12f)
-        isSelected -> Color.White.copy(alpha = 0.92f)
-        else -> Color.White.copy(alpha = 0.075f)
+        focused -> Color.White.copy(alpha = 0.11f)
+        isSelected -> Color.White.copy(alpha = 0.88f)
+        else -> Color.White.copy(alpha = 0.062f)
     }
     val borderColor = when {
         focused -> accentColor
-        isSelected -> Color.White.copy(alpha = 0.92f)
-        else -> Color.White.copy(alpha = 0.24f)
+        isSelected -> Color.White.copy(alpha = 0.88f)
+        else -> Color.White.copy(alpha = 0.18f)
     }
     Box(
         modifier = modifier
@@ -834,7 +1125,7 @@ private fun GlowChip(
                 shape = chipShape
             )
             .border(
-                width = if (focused) 2.5.dp else 1.dp,
+                width = if (focused) 2.dp else 1.dp,
                 color = borderColor,
                 shape = chipShape
             )
@@ -844,12 +1135,12 @@ private fun GlowChip(
                 if (it.isFocused) onFocused()
             }
             .focusable()
-            .padding(horizontal = 17.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Text(
             label,
             style = ArflixTypography.caption.copy(
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium
             ),
             color = when {
@@ -864,10 +1155,141 @@ private fun GlowChip(
 
 // ── Rows Layer (HomeScreen pattern - manual focus, smooth scroll) ────────────
 
+@Composable
+private fun CatalogResultsRow(
+    catalogs: List<SearchCatalogResult>,
+    currentItemIndex: Int,
+    isFocused: Boolean,
+    isTouchDevice: Boolean,
+    onCatalogClick: (SearchCatalogResult) -> Unit
+) {
+    val itemWidth = if (isTouchDevice) 188.dp else 238.dp
+    val rowState = rememberLazyListState()
+    val focusBleedPadding = if (isTouchDevice) 14.dp else 22.dp
+
+    LaunchedEffect(isFocused, currentItemIndex) {
+        if (!isFocused) return@LaunchedEffect
+        val safeIndex = currentItemIndex.coerceIn(0, (catalogs.size - 1).coerceAtLeast(0))
+        val first = rowState.firstVisibleItemIndex
+        val visibleItems = rowState.layoutInfo.visibleItemsInfo
+        val last = visibleItems.lastOrNull()?.index ?: first
+        if (safeIndex < first || safeIndex > last) {
+            rowState.animateScrollToItem(safeIndex)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (isTouchDevice) 150.dp else 168.dp)
+    ) {
+        Text(
+            text = "Kataloger och tjänster",
+            style = ArvioSkin.typography.sectionTitle.copy(fontSize = 15.sp),
+            color = Color.White.copy(alpha = if (isFocused) 0.9f else 0.62f),
+            modifier = Modifier.padding(start = focusBleedPadding, top = 4.dp, bottom = 8.dp)
+        )
+        LazyRow(
+            state = rowState,
+            contentPadding = PaddingValues(start = focusBleedPadding, end = itemWidth),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .arvioDpadFocusGroup()
+        ) {
+            itemsIndexed(catalogs, key = { _, catalog -> catalog.catalogId }) { index, catalog ->
+                CatalogSearchCard(
+                    catalog = catalog,
+                    width = itemWidth,
+                    isFocused = isFocused && index == currentItemIndex,
+                    isTouchDevice = isTouchDevice,
+                    onClick = { onCatalogClick(catalog) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogSearchCard(
+    catalog: SearchCatalogResult,
+    width: Dp,
+    isFocused: Boolean,
+    isTouchDevice: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val borderColor = if (isFocused) Color.White.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.10f)
+    val bgColor = if (isFocused) Color.White.copy(alpha = 0.12f) else BackgroundCard.copy(alpha = 0.72f)
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(if (isTouchDevice) 104.dp else 116.dp)
+            .clip(shape)
+            .background(bgColor)
+            .border(if (isFocused) 2.dp else 1.dp, borderColor, shape)
+            .then(if (isTouchDevice) Modifier.clickable { onClick() } else Modifier)
+    ) {
+        if (!catalog.imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = catalog.imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { alpha = if (isFocused) 0.42f else 0.24f }
+            )
+        }
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            appBackgroundDark().copy(alpha = 0.88f),
+                            appBackgroundDark().copy(alpha = 0.54f)
+                        )
+                    )
+                )
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = catalog.title,
+                    style = ArflixTypography.body.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = catalog.subtitle,
+                    style = ArflixTypography.caption.copy(fontSize = 11.sp),
+                    color = Color.White.copy(alpha = 0.72f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = catalog.sourceLabel,
+                style = ArflixTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                color = AccentGreen.copy(alpha = if (isFocused) 1f else 0.82f),
+                maxLines = 1
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RowsLayer(
     categories: List<Category>, cardLogoUrls: Map<String, String>,
+    streamSummaryStates: Map<String, SearchStreamSummaryState>,
     currentRowIndex: Int, currentItemIndex: Int,
     lastNavEventTime: Long,
     fastScrollThresholdMs: Long,
@@ -1020,7 +1442,7 @@ private fun RowsLayer(
                                 MediaCard(
                                     item = item.copy(
                                         title = buildCardTitle(item),
-                                        subtitle = buildCardSubtitle(item),
+                                        subtitle = buildCardSubtitle(item, streamSummaryStates[searchStreamSummaryKey(item)]),
                                         releaseDate = null,
                                         year = ""
                                     ),
@@ -1080,13 +1502,15 @@ private fun buildCardTitle(item: MediaItem): String {
 }
 
 @Composable
-private fun buildCardSubtitle(item: MediaItem): String {
+private fun buildCardSubtitle(item: MediaItem, streamSummaryState: SearchStreamSummaryState? = null): String {
     val mediaLabel = when (item.mediaType) {
         MediaType.TV -> stringResource(R.string.series)
         MediaType.MOVIE -> stringResource(R.string.movie)
     }
     val year = item.year.takeIf { it.isNotBlank() }
-    return if (year != null) "$mediaLabel · $year" else mediaLabel
+    val base = if (year != null) "$mediaLabel · $year" else mediaLabel
+    val streamLabel = searchStreamSummaryLabel(streamSummaryState)
+    return if (streamLabel.isNullOrBlank()) base else "$base · $streamLabel"
 }
 
 private fun interleaveSearchResults(movies: List<MediaItem>, shows: List<MediaItem>): List<MediaItem> {
@@ -1099,4 +1523,35 @@ private fun interleaveSearchResults(movies: List<MediaItem>, shows: List<MediaIt
     return combined.distinctBy { "${it.mediaType}_${it.id}" }
 }
 
-private enum class FocusZone { SIDEBAR, SEARCH_INPUT, FILTERS, RESULTS }
+internal enum class FocusZone { SIDEBAR, SEARCH_INPUT, FILTERS, RESULTS }
+
+internal enum class SearchBackAction {
+    HIDE_KEYBOARD,
+    CLEAR_QUERY,
+    MOVE_TO_FILTERS,
+    MOVE_TO_SEARCH_INPUT,
+    MOVE_TO_SIDEBAR,
+    EXIT
+}
+
+internal fun resolveSearchBackAction(
+    focusZone: FocusZone,
+    isEditing: Boolean,
+    hasQuery: Boolean,
+    showFilters: Boolean,
+    hasFilters: Boolean
+): SearchBackAction {
+    if (isEditing) return SearchBackAction.HIDE_KEYBOARD
+
+    return when (focusZone) {
+        FocusZone.RESULTS -> {
+            if (showFilters && hasFilters) SearchBackAction.MOVE_TO_FILTERS
+            else SearchBackAction.MOVE_TO_SEARCH_INPUT
+        }
+        FocusZone.FILTERS -> SearchBackAction.MOVE_TO_SEARCH_INPUT
+        FocusZone.SEARCH_INPUT -> {
+            if (hasQuery) SearchBackAction.CLEAR_QUERY else SearchBackAction.MOVE_TO_SIDEBAR
+        }
+        FocusZone.SIDEBAR -> SearchBackAction.EXIT
+    }
+}

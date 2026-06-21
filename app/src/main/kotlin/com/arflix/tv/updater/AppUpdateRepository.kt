@@ -36,7 +36,8 @@ class AppUpdateRepository @Inject constructor(
         return installer == "com.android.vending"
     }
 
-    fun supportsSelfUpdate(): Boolean = BuildConfig.SELF_UPDATE_ENABLED && !isPlayStoreInstall()
+    fun supportsSelfUpdate(): Boolean =
+        BuildConfig.SELF_UPDATE_ENABLED && !BuildConfig.DEBUG && !isPlayStoreInstall()
 
     /**
      * Returns the actually installed version name from PackageManager,
@@ -58,7 +59,7 @@ class AppUpdateRepository @Inject constructor(
                 val request = Request.Builder()
                     .url(url)
                     .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "ARVIO/${BuildConfig.VERSION_NAME}")
+                    .header("User-Agent", "MajoStream/${BuildConfig.VERSION_NAME}")
                     .build()
 
                 okHttpClient.newCall(request).execute().use { response ->
@@ -81,7 +82,7 @@ class AppUpdateRepository @Inject constructor(
 
                     AppUpdate(
                         tag = tag,
-                        title = dto.name?.takeIf { it.isNotBlank() } ?: tag,
+                        title = "Majo Stream $tag",
                         notes = dto.body.orEmpty(),
                         releaseUrl = dto.htmlUrl,
                         assetName = asset.name,

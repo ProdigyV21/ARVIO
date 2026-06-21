@@ -2,6 +2,7 @@
 <resources>
     <string name="home">Hem</string>
     <string name="search">Sök</string>
+    <string name="discover">Upptäck</string>
     <string name="watchlist">Bevakningslista</string>
     <string name="settings">Inställningar</string>
     <string name="general">Allmänt</string>

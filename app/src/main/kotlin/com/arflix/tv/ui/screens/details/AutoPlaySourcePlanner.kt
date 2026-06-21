@@ -1,88 +1,51 @@
 package com.arflix.tv.ui.screens.details
 
 import com.arflix.tv.data.model.StreamSource
-import java.util.Locale
+import com.arflix.tv.data.stream.analyzeStreamSource
+import com.arflix.tv.data.stream.bestStreamAvailabilityAnalysisForStreams
+import com.arflix.tv.data.stream.parseSizeString
 
 // Autoplay starts the best quality/size source it can find within ~2s. It keeps
 // collecting progressive addon results until every addon has reported OR this
 // ceiling is reached, then plays the best candidate found so far.
 internal const val AUTOPLAY_MAX_WAIT_MS = 2000L
 // Once a top-tier (4K) source is found we only briefly settle to let a larger 4K
-// rip arrive, instead of waiting on slow addons — 4K quality can't be beaten.
+// rip arrive, instead of waiting on slow addons. 4K quality cannot be beaten.
 internal const val AUTOPLAY_TOP_TIER_SETTLE_MS = 450L
 internal const val AUTOPLAY_SOURCE_RECHECK_MS = 120L
 private const val TOP_TIER_QUALITY_SCORE = 4
 
-private val fourKRegex = Regex("""\b4[kK]\b""")
-private val sizeRegex = Regex("""(?i)(\d+(?:[\.,]\d+)?)\s*(TB|GB|MB|KB|B|GiB|MiB|KiB)?""")
-
-/** Score quality from all stream text because addons do not fill the quality field consistently. */
+/** Score quality from the shared stream analysis because addons do not fill quality consistently. */
 internal fun qualityScoreForAutoPlay(stream: StreamSource): Int {
-    val combined = buildString {
-        append(stream.quality)
-        append(' ')
-        append(stream.source)
-        append(' ')
-        append(stream.addonName)
-        stream.behaviorHints?.filename?.let {
-            append(' ')
-            append(it)
-        }
-        stream.description?.let {
-            append(' ')
-            append(it)
-        }
-    }
-    return when {
-        combined.contains("2160p", ignoreCase = true) || fourKRegex.containsMatchIn(combined) -> 4
-        combined.contains("1080p", ignoreCase = true) -> 3
-        combined.contains("720p", ignoreCase = true) -> 2
-        combined.contains("480p", ignoreCase = true) -> 1
-        else -> 0
-    }
+    return analyzeStreamSource(stream).resolutionScore
 }
 
 internal fun bestAutoPlayStream(
     streams: List<StreamSource>,
     minQualityScore: Int
 ): StreamSource? {
-    return streams
-        .asSequence()
-        .filter { stream -> qualityScoreForAutoPlay(stream) >= minQualityScore }
-        .sortedWith(
-            // Best quality, then biggest size — that is the user's "best" definition.
-            // `notWebReady` HTTP sources (e.g. direct MKV rips) are fully playable on the
-            // native ExoPlayer, so they are eligible; webReady only breaks ties at equal
-            // quality+size so a known-simple URL wins a coin-flip.
-            compareByDescending<StreamSource> { qualityScoreForAutoPlay(it) }
+    val candidates = streams.filter { stream -> qualityScoreForAutoPlay(stream) >= minQualityScore }
+    val best = bestStreamAvailabilityAnalysisForStreams(candidates)?.stream ?: return null
+
+    // Shared availability ranking decides quality/release/size/cached. Prefer a simpler
+    // web-ready URL only when it is effectively tied with that best candidate.
+    return candidates
+        .filter { candidate -> isSameAvailabilityTier(candidate, best) }
+        .maxWithOrNull(
+            compareBy<StreamSource> { if (it.behaviorHints?.notWebReady == true) 0 else 1 }
+                .thenBy { if (it.behaviorHints?.cached == true) 1 else 0 }
                 .thenByDescending { autoPlaySizeBytes(it) }
-                .thenByDescending { if (it.behaviorHints?.notWebReady == true) 0 else 1 }
-                .thenByDescending { if (it.behaviorHints?.cached == true) 1 else 0 }
                 .thenBy { it.addonName.lowercase() }
                 .thenBy { it.source.lowercase() }
-        )
-        .firstOrNull()
+        ) ?: best
 }
 
 /**
  * The source sheet sorts from the visible size string because addon-provided
- * byte hints are inconsistent. Autoplay must do the same or it can choose a
- * tiny 720p source over a visibly larger 4K one.
+ * byte hints are inconsistent. Autoplay must do the same.
  */
 internal fun autoPlaySizeBytes(stream: StreamSource): Long {
-    val raw = stream.size.trim()
-    if (raw.isBlank()) return 0L
-    val match = sizeRegex.find(raw) ?: return 0L
-    val value = match.groupValues[1].replace(',', '.').toDoubleOrNull() ?: return 0L
-    val unit = match.groupValues.getOrNull(2)?.uppercase(Locale.US).orEmpty()
-    val multiplier = when (unit) {
-        "TB" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
-        "GB", "GIB" -> 1024.0 * 1024.0 * 1024.0
-        "MB", "MIB" -> 1024.0 * 1024.0
-        "KB", "KIB" -> 1024.0
-        else -> 1.0
-    }
-    return (value * multiplier).toLong()
+    return parseSizeString(stream.size)
 }
 
 internal fun minQualityThreshold(value: String): Int {
@@ -123,11 +86,9 @@ internal fun isPendingDebridStream(stream: StreamSource): Boolean {
  *
  * Goal: play the best quality/size found across all sources, within ~2 seconds.
  * - Hard ceiling at [AUTOPLAY_MAX_WAIT_MS]: whatever is best by then plays.
- * - No candidate yet → wait while addons are still loading (until the ceiling).
- * - Top-tier (4K) candidate → only a brief settle ([AUTOPLAY_TOP_TIER_SETTLE_MS]) to let a
- *   larger 4K rip arrive; don't stall on slow addons since 4K can't be out-qualitied.
- * - Sub-4K candidate → keep collecting until every addon has reported (so a better
- *   source isn't missed), capped by the ceiling.
+ * - No candidate yet: wait while addons are still loading, until the ceiling.
+ * - Top-tier (4K) candidate: settle briefly so a bigger 4K can arrive, then play.
+ * - Sub-4K candidate: keep collecting until every addon has reported, capped by the ceiling.
  */
 internal fun shouldWaitForAutoPlaySources(
     isLoadingStreams: Boolean,
@@ -140,4 +101,13 @@ internal fun shouldWaitForAutoPlaySources(
         return elapsedMs < AUTOPLAY_TOP_TIER_SETTLE_MS
     }
     return isLoadingStreams
+}
+
+private fun isSameAvailabilityTier(a: StreamSource, b: StreamSource): Boolean {
+    val aa = analyzeStreamSource(a)
+    val bb = analyzeStreamSource(b)
+    return aa.resolutionScore == bb.resolutionScore &&
+        aa.releaseScore == bb.releaseScore &&
+        aa.sizeBytes == bb.sizeBytes &&
+        aa.isCachedOrDebridReady == bb.isCachedOrDebridReady
 }

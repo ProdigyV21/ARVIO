@@ -39,15 +39,14 @@ object Constants {
     // API base URLs.
     const val TMDB_BASE_URL = "https://api.themoviedb.org/3/"
     const val TRAKT_API_URL = "https://api.trakt.tv/"
+    const val WATCHMODE_API_URL = "https://api.watchmode.com/"
 
-    private fun usableSecret(value: String): String =
-        value.takeUnless { candidate ->
-            candidate.isBlank() || candidate.startsWith("your-", ignoreCase = true)
-        } ?: ""
+    private fun usableSecret(value: String): String = RuntimeApiKeys.sanitize(value)
 
     // Optional local direct-call credentials. Release builds should use the Edge
     // Function proxies so these values do not have to be shipped in the client.
-    val TMDB_API_KEY: String get() = usableSecret(BuildConfig.TMDB_API_KEY)
+    val TMDB_API_KEY: String get() = RuntimeApiKeys.resolveTmdbApiKey(BuildConfig.TMDB_API_KEY)
+    val WATCHMODE_API_KEY: String get() = RuntimeApiKeys.resolveWatchmodeApiKey(BuildConfig.WATCHMODE_API_KEY)
     val TRAKT_CLIENT_ID: String get() = usableSecret(BuildConfig.TRAKT_CLIENT_ID)
     val TRAKT_CLIENT_SECRET: String
         get() = usableSecret(BuildConfig.TRAKT_CLIENT_SECRET)

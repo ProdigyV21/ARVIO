@@ -4,7 +4,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 
 /**
- * ARVIO Animation Constants - Premium TV Motion Design
+ * Majo Stream animation constants - Premium TV motion design
  * Smooth, fluid transitions optimized for TV viewing distance
  */
 object AnimationConstants {

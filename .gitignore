@@ -142,6 +142,7 @@ supabase/functions/tv-auth-web/
 !screenshots/*.png
 
 # Build logs and dev artifacts
+artifacts/
 build_*.txt
 *_log.txt
 crash_*.txt

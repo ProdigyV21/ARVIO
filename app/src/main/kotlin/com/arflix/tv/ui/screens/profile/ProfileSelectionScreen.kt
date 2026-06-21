@@ -1,4 +1,4 @@
-package com.arflix.tv.ui.screens.profile
+﻿package com.arflix.tv.ui.screens.profile
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.Composable
@@ -42,7 +41,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,9 +67,7 @@ import com.arflix.tv.R
 fun ProfileSelectionScreen(
     viewModel: ProfileViewModel = hiltViewModel(),
     onProfileSelected: () -> Unit,
-    onShowAddProfile: () -> Unit,
-    onConnectCloud: () -> Unit = {},
-    isCloudConnected: Boolean = false
+    onShowAddProfile: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -81,7 +77,7 @@ fun ProfileSelectionScreen(
     // Track if profile was selected in this session to trigger navigation
     var navigateTriggered by remember { mutableStateOf(false) }
 
-    // Guard against Enter key events from previous screen (TV only — touch devices don't need this)
+    // Guard against Enter key events from previous screen (TV only â€” touch devices don't need this)
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isReadyForInput by remember { mutableStateOf(isTouchDevice) }
 
@@ -151,11 +147,11 @@ fun ProfileSelectionScreen(
         ) {
             // Title
             Text(
-                text = "ARVIO",
-                fontSize = 32.sp,
+                text = "MAJO STREAM",
+                fontSize = 30.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
-                letterSpacing = 6.sp
+                letterSpacing = 4.sp
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -282,19 +278,6 @@ fun ProfileSelectionScreen(
                     }
                 }
             )
-
-            if (!isCloudConnected) {
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Cloud connect button — focusable on TV, tappable on mobile
-                CloudConnectButton(
-                    onClick = {
-                        if ((isTouchDevice || isReadyForInput) && !uiState.isSwitchingProfile) {
-                            onConnectCloud()
-                        }
-                    }
-                )
-            }
 
             if (uiState.isSwitchingProfile) {
                 Spacer(modifier = Modifier.height(18.dp))
@@ -588,86 +571,5 @@ private fun ManageProfilesButton(
             color = Color.White,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun CloudConnectButton(
-    onClick: () -> Unit
-) {
-    val isTouchDevice = LocalDeviceType.current.isTouchDevice()
-    var isFocused by remember { mutableIntStateOf(0) }
-
-    if (isTouchDevice) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFF6C63FF).copy(alpha = 0.25f),
-                            Color(0xFF00D4FF).copy(alpha = 0.18f)
-                        )
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
-                .clickable { onClick() }
-                .padding(horizontal = 24.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Cloud,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(18.dp)
-            )
-            Text(
-                text = stringResource(R.string.connect_to_cloud),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.85f)
-            )
-        }
-    } else {
-        Surface(
-            onClick = onClick,
-            modifier = Modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = Color.White.copy(alpha = 0.06f),
-                focusedContainerColor = Color.White.copy(alpha = 0.18f)
-            ),
-            border = ClickableSurfaceDefaults.border(
-                border = androidx.tv.material3.Border(
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                    shape = RoundedCornerShape(24.dp)
-                ),
-                focusedBorder = androidx.tv.material3.Border(
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = 0.6f)),
-                    shape = RoundedCornerShape(24.dp)
-                )
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Cloud,
-                    contentDescription = null,
-                    tint = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = stringResource(R.string.connect_to_cloud),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f)
-                )
-            }
-        }
     }
 }

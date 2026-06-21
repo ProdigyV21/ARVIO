@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ARVIO TV Splash Theme - Shows immediately on app launch -->
+    <!-- Majo Stream TV Splash Theme - Shows immediately on app launch -->
     <style name="Theme.ArflixTV.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/background_dark</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_majo_stream_splash</item>
         <item name="windowSplashScreenAnimationDuration">0</item>
         <!-- Post-splash transitions to Mobile theme (no fullscreen).
              TV overrides this in MainActivity.onCreate() before super. -->
@@ -14,7 +14,7 @@
         <item name="android:backgroundDimEnabled">false</item>
     </style>
 
-    <!-- ARVIO TV Theme - Arctic Fuse 2 Inspired (TV devices only) -->
+    <!-- Majo Stream TV Theme - Arctic Fuse 2 Inspired (TV devices only) -->
     <style name="Theme.ArflixTV" parent="@style/Theme.Leanback">
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:colorBackground">@color/background_dark</item>
@@ -35,7 +35,7 @@
         <item name="colorAccent">@color/accent_white</item>
     </style>
 
-    <!-- ARVIO Mobile Theme - AppCompat-based so MediaRouteChooserDialog works (phones/tablets).
+    <!-- Majo Stream Mobile Theme - AppCompat-based so MediaRouteChooserDialog works (phones/tablets).
          Does NOT extend Theme.ArflixTV/Leanback — AppCompatDialog requires an AppCompat ancestor. -->
     <style name="Theme.ArflixTV.Mobile" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/background_dark</item>

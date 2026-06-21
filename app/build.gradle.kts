@@ -17,6 +17,22 @@ plugins {
     // id("com.google.firebase.crashlytics")
 }
 
+val enableTmdbEdgeProxy = false
+val enableTraktEdgeProxy = false
+val enableRealtimeCloudSync = false
+val enableRealtimeWatchSync = false
+val enablePeriodicCloudPull = false
+val enableNetlifyCloudSync = false
+val enableSupabaseSyncMirror = false
+val releaseSupabaseSecretsRequired =
+    enableTmdbEdgeProxy ||
+        enableTraktEdgeProxy ||
+        enableRealtimeCloudSync ||
+        enableRealtimeWatchSync ||
+        enablePeriodicCloudPull ||
+        enableNetlifyCloudSync ||
+        enableSupabaseSyncMirror
+
 android {
     namespace = "com.arflix.tv"
     compileSdk = 36
@@ -35,14 +51,14 @@ android {
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
         // Emergency Supabase cost guard. Keep high-volume public metadata and
         // idle realtime polling off Supabase unless explicitly re-enabled.
-        buildConfigField("Boolean", "ENABLE_TMDB_EDGE_PROXY", "false")
-        buildConfigField("Boolean", "ENABLE_TRAKT_EDGE_PROXY", "false")
-        buildConfigField("Boolean", "ENABLE_REALTIME_CLOUD_SYNC", "true")
-        buildConfigField("Boolean", "ENABLE_REALTIME_WATCH_SYNC", "false")
-        buildConfigField("Boolean", "ENABLE_PERIODIC_CLOUD_PULL", "false")
-        buildConfigField("Boolean", "ENABLE_NETLIFY_CLOUD_SYNC", "true")
-        buildConfigField("Boolean", "ENABLE_SUPABASE_SYNC_MIRROR", "false")
-        buildConfigField("String", "NETLIFY_BACKEND_URL", "\"https://auth.arvio.tv/.netlify/functions\"")
+        buildConfigField("Boolean", "ENABLE_TMDB_EDGE_PROXY", enableTmdbEdgeProxy.toString())
+        buildConfigField("Boolean", "ENABLE_TRAKT_EDGE_PROXY", enableTraktEdgeProxy.toString())
+        buildConfigField("Boolean", "ENABLE_REALTIME_CLOUD_SYNC", enableRealtimeCloudSync.toString())
+        buildConfigField("Boolean", "ENABLE_REALTIME_WATCH_SYNC", enableRealtimeWatchSync.toString())
+        buildConfigField("Boolean", "ENABLE_PERIODIC_CLOUD_PULL", enablePeriodicCloudPull.toString())
+        buildConfigField("Boolean", "ENABLE_NETLIFY_CLOUD_SYNC", enableNetlifyCloudSync.toString())
+        buildConfigField("Boolean", "ENABLE_SUPABASE_SYNC_MIRROR", enableSupabaseSyncMirror.toString())
+        buildConfigField("String", "NETLIFY_BACKEND_URL", "\"\"")
 
 
         // Support both 32-bit and 64-bit devices (required for Google Play since 2019)
@@ -133,6 +149,31 @@ android {
             isJniDebuggable = false
 
             buildConfigField("Boolean", "ENABLE_CRASH_REPORTING", "true")
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
+        }
+
+        create("qa") {
+            initWith(getByName("release"))
+            versionNameSuffix = "-qa"
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isJniDebuggable = false
+
+            buildConfigField("Boolean", "ENABLE_CRASH_REPORTING", "false")
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
+        }
+
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
+            isDebuggable = false
+            isJniDebuggable = false
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
         }
     }
 
@@ -394,7 +435,9 @@ val validateReleaseSupabaseSecrets = tasks.register("validateReleaseSupabaseSecr
 }
 
 tasks.configureEach {
-    if (name in setOf(
+    if (
+        releaseSupabaseSecretsRequired &&
+        name in setOf(
             "preSideloadReleaseBuild",
             "preSideloadStagingBuild"
         )

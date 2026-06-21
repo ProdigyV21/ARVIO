@@ -17,5 +17,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ARVIO"
+rootProject.name = "MajoStream"
 include(":app")
+include(":macrobenchmark")

@@ -1375,6 +1375,30 @@ class StreamRepository @Inject constructor(
             val host = uri.host ?: return@runCatching rawUrl
             val path = uri.path.orEmpty()
             val rawQuery = uri.rawQuery
+            val lowerHost = host.lowercase(Locale.US)
+            val lowerPath = path.lowercase(Locale.US)
+            val redactedStremioPath = when {
+                lowerHost.contains("aiostreams") || lowerPath.contains("/stremio/") -> {
+                    val endpoint = when {
+                        lowerPath.contains("/stream/") -> path.substringAfter("/stream/", "")
+                            .takeIf { it.isNotBlank() }
+                            ?.let { "/stream/$it" }
+                        lowerPath.contains("/catalog/") -> path.substringAfter("/catalog/", "")
+                            .takeIf { it.isNotBlank() }
+                            ?.let { "/catalog/$it" }
+                        lowerPath.contains("/meta/") -> path.substringAfter("/meta/", "")
+                            .takeIf { it.isNotBlank() }
+                            ?.let { "/meta/$it" }
+                        lowerPath.endsWith("/manifest.json") -> "/manifest.json"
+                        else -> null
+                    }
+                    "/stremio/...${endpoint.orEmpty()}"
+                }
+                else -> null
+            }
+            if (redactedStremioPath != null) {
+                return@runCatching "${uri.scheme}://$host$redactedStremioPath"
+            }
             if (rawQuery.isNullOrBlank()) {
                 "${uri.scheme}://$host$path"
             } else {
@@ -1396,6 +1420,34 @@ class StreamRepository @Inject constructor(
                 "${uri.scheme}://$host$path?$redacted"
             }
         }.getOrDefault(rawUrl)
+    }
+
+    private fun sanitizeAddonLogId(addon: Addon): String {
+        val sensitiveSource = listOfNotNull(
+            addon.id,
+            addon.url,
+            addon.transportUrl,
+            addon.manifest?.id
+        ).any { value ->
+            val normalized = value.lowercase(Locale.US)
+            normalized.contains("aiostreams") ||
+                normalized.contains("elfhosted") ||
+                normalized.contains("/stremio/") ||
+                normalized.contains("api_key") ||
+                normalized.contains("apikey") ||
+                normalized.contains("token=") ||
+                normalized.contains("auth") ||
+                normalized.contains("jwt") ||
+                normalized.contains("eyj")
+        }
+        if (!sensitiveSource) return addon.id
+
+        val safeName = addon.name
+            .ifBlank { "custom-addon" }
+            .take(32)
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .ifBlank { "custom-addon" }
+        return "$safeName:redacted"
     }
 
     private fun Throwable.toShortLogMessage(): String {
@@ -1451,6 +1503,7 @@ class StreamRepository @Inject constructor(
         year: Int? = null
     ): List<StreamSource> {
         val startedAt = System.currentTimeMillis()
+        val addonLogId = sanitizeAddonLogId(addon)
         val addonTimeoutMs = if (addonNeedsExtendedStreamTimeout(addon)) {
             ADDON_EXTENDED_TIMEOUT_MS
         } else {
@@ -1466,13 +1519,13 @@ class StreamRepository @Inject constructor(
                 }
                 Log.d(
                     TAG,
-                    "[StreamFetch][Movie] request addon=${addon.name} addonId=${addon.id} url=${sanitizeLogUrl(url)}"
+                    "[StreamFetch][Movie] request addon=${addon.name} addonId=$addonLogId url=${sanitizeLogUrl(url)}"
                 )
                 val response = streamApi.getAddonStreams(url)
                 val streams = processStreams(response.streams ?: emptyList(), addon)
                 Log.d(
                     TAG,
-                    "[StreamFetch][Movie] response addon=${addon.name} addonId=${addon.id} streams=${streams.size} elapsedMs=${System.currentTimeMillis() - startedAt}"
+                    "[StreamFetch][Movie] response addon=${addon.name} addonId=$addonLogId streams=${streams.size} elapsedMs=${System.currentTimeMillis() - startedAt}"
                 )
                 recordAddonFetchOutcome(
                     addonId = addon.id,
@@ -1484,11 +1537,11 @@ class StreamRepository @Inject constructor(
         } catch (timeout: TimeoutCancellationException) {
             Log.w(
                 TAG,
-                "[StreamFetch][Movie] timeout addon=${addon.name} addonId=${addon.id} timeoutMs=$addonTimeoutMs elapsedMs=${System.currentTimeMillis() - startedAt}"
+                "[StreamFetch][Movie] timeout addon=${addon.name} addonId=$addonLogId timeoutMs=$addonTimeoutMs elapsedMs=${System.currentTimeMillis() - startedAt}"
             )
             AppLogger.breadcrumb(
                 tag = "Sources",
-                message = "addon_movie_timeout addon=${addon.id} latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
+                message = "addon_movie_timeout addon=$addonLogId latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
                 severity = "warning"
             )
             recordAddonFetchOutcome(
@@ -1500,11 +1553,11 @@ class StreamRepository @Inject constructor(
         } catch (error: Exception) {
             Log.w(
                 TAG,
-                "[StreamFetch][Movie] failure addon=${addon.name} addonId=${addon.id} elapsedMs=${System.currentTimeMillis() - startedAt} error=${error.toShortLogMessage()}"
+                "[StreamFetch][Movie] failure addon=${addon.name} addonId=$addonLogId elapsedMs=${System.currentTimeMillis() - startedAt} error=${error.toShortLogMessage()}"
             )
             AppLogger.breadcrumb(
                 tag = "Sources",
-                message = "addon_movie_failed addon=${addon.id} error=${error::class.java.simpleName} latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
+                message = "addon_movie_failed addon=$addonLogId error=${error::class.java.simpleName} latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
                 severity = "warning"
             )
             recordAddonFetchOutcome(
@@ -1529,6 +1582,7 @@ class StreamRepository @Inject constructor(
         airDate: String? = null
     ): List<StreamSource> {
         val startedAt = System.currentTimeMillis()
+        val addonLogId = sanitizeAddonLogId(addon)
         val nativeAnimeAddonHint = shouldPreferNativeAnimeIds(addon)
         val extendedTimeout = addonNeedsExtendedStreamTimeout(addon)
         val addonTimeoutMs = when {
@@ -1619,7 +1673,7 @@ class StreamRepository @Inject constructor(
                         val requestUrl = streamUrl(requestType, contentId)
                         Log.d(
                             TAG,
-                            "[StreamFetch][Episode] $label request addon=${addon.name} addonId=${addon.id} type=$requestType url=${sanitizeLogUrl(requestUrl)}"
+                            "[StreamFetch][Episode] $label request addon=${addon.name} addonId=$addonLogId type=$requestType url=${sanitizeLogUrl(requestUrl)}"
                         )
                         try {
                             val response = withTimeoutOrNull(singleRequestTimeoutMs) {
@@ -1628,14 +1682,14 @@ class StreamRepository @Inject constructor(
                             if (response == null) {
                                 Log.w(
                                     TAG,
-                                    "[StreamFetch][Episode] $label request timeout addon=${addon.name} addonId=${addon.id} type=$requestType timeoutMs=$singleRequestTimeoutMs"
+                                    "[StreamFetch][Episode] $label request timeout addon=${addon.name} addonId=$addonLogId type=$requestType timeoutMs=$singleRequestTimeoutMs"
                                 )
                                 continue
                             }
                             val streams = processStreams(response.streams ?: emptyList(), addon)
                             Log.d(
                                 TAG,
-                                "[StreamFetch][Episode] $label response addon=${addon.name} addonId=${addon.id} type=$requestType streams=${streams.size} elapsedMs=${System.currentTimeMillis() - startedAt}"
+                                "[StreamFetch][Episode] $label response addon=${addon.name} addonId=$addonLogId type=$requestType streams=${streams.size} elapsedMs=${System.currentTimeMillis() - startedAt}"
                             )
                             if (streams.isNotEmpty()) return streams
                         } catch (timeout: TimeoutCancellationException) {
@@ -1644,14 +1698,14 @@ class StreamRepository @Inject constructor(
                             lastError = error
                             Log.w(
                                 TAG,
-                                "[StreamFetch][Episode] $label failure addon=${addon.name} addonId=${addon.id} type=$requestType error=${error.toShortLogMessage()}"
+                                "[StreamFetch][Episode] $label failure addon=${addon.name} addonId=$addonLogId type=$requestType error=${error.toShortLogMessage()}"
                             )
                         }
                     }
                     if (lastError != null) {
                         AppLogger.breadcrumb(
                             tag = "Sources",
-                            message = "episode_${label}_failed addon=${addon.id} error=${lastError::class.java.simpleName}",
+                            message = "episode_${label}_failed addon=$addonLogId error=${lastError::class.java.simpleName}",
                             severity = "warning"
                         )
                     }
@@ -1695,7 +1749,7 @@ class StreamRepository @Inject constructor(
                     if (retryCandidates.isNotEmpty()) {
                         Log.d(
                             TAG,
-                            "[StreamFetch][Episode] native anime retry addon=${addon.name} addonId=${addon.id} candidates=${retryCandidates.joinToString(",") { it.label }}"
+                            "[StreamFetch][Episode] native anime retry addon=${addon.name} addonId=$addonLogId candidates=${retryCandidates.joinToString(",") { it.label }}"
                         )
                     }
                     for (candidate in retryCandidates) {
@@ -1708,7 +1762,7 @@ class StreamRepository @Inject constructor(
                         if (addonStreams.isNotEmpty()) {
                             AppLogger.breadcrumb(
                                 tag = "Sources",
-                                message = "episode_native_anime_retry_success addon=${addon.id} candidate=${candidate.label}",
+                                message = "episode_native_anime_retry_success addon=$addonLogId candidate=${candidate.label}",
                                 severity = "info"
                             )
                             break
@@ -1737,13 +1791,13 @@ class StreamRepository @Inject constructor(
                                 val airDateUrl = streamUrl("series", airDateId)
                                 Log.d(
                                     TAG,
-                                    "[StreamFetch][Episode] airDate request addon=${addon.name} addonId=${addon.id} url=${sanitizeLogUrl(airDateUrl)}"
+                                    "[StreamFetch][Episode] airDate request addon=${addon.name} addonId=$addonLogId url=${sanitizeLogUrl(airDateUrl)}"
                                 )
                                 val airDateResponse = streamApi.getAddonStreams(airDateUrl)
                                 val airDateStreams = processStreams(airDateResponse.streams ?: emptyList(), addon)
                                 Log.d(
                                     TAG,
-                                    "[StreamFetch][Episode] airDate response addon=${addon.name} addonId=${addon.id} streams=${airDateStreams.size}"
+                                    "[StreamFetch][Episode] airDate response addon=${addon.name} addonId=$addonLogId streams=${airDateStreams.size}"
                                 )
                                 if (airDateStreams.isNotEmpty()) {
                                     addonStreams = airDateStreams
@@ -1753,11 +1807,11 @@ class StreamRepository @Inject constructor(
                     } catch (airDateError: Exception) {
                         Log.w(
                             TAG,
-                            "[StreamFetch][Episode] airDate failure addon=${addon.name} addonId=${addon.id} error=${airDateError.toShortLogMessage()}"
+                            "[StreamFetch][Episode] airDate failure addon=${addon.name} addonId=$addonLogId error=${airDateError.toShortLogMessage()}"
                         )
                         AppLogger.breadcrumb(
                             tag = "Sources",
-                            message = "episode_airdate_fallback_failed addon=${addon.id} error=${airDateError::class.java.simpleName}",
+                            message = "episode_airdate_fallback_failed addon=$addonLogId error=${airDateError::class.java.simpleName}",
                             severity = "warning"
                         )
                     }
@@ -1773,11 +1827,11 @@ class StreamRepository @Inject constructor(
         } catch (timeout: TimeoutCancellationException) {
             Log.w(
                 TAG,
-                "[StreamFetch][Episode] timeout addon=${addon.name} addonId=${addon.id} timeoutMs=$addonTimeoutMs elapsedMs=${System.currentTimeMillis() - startedAt}"
+                "[StreamFetch][Episode] timeout addon=${addon.name} addonId=$addonLogId timeoutMs=$addonTimeoutMs elapsedMs=${System.currentTimeMillis() - startedAt}"
             )
             AppLogger.breadcrumb(
                 tag = "Sources",
-                message = "addon_episode_timeout addon=${addon.id} latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
+                message = "addon_episode_timeout addon=$addonLogId latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
                 severity = "warning"
             )
             recordAddonFetchOutcome(
@@ -1789,11 +1843,11 @@ class StreamRepository @Inject constructor(
         } catch (error: Exception) {
             Log.w(
                 TAG,
-                "[StreamFetch][Episode] failure addon=${addon.name} addonId=${addon.id} elapsedMs=${System.currentTimeMillis() - startedAt} error=${error.toShortLogMessage()}"
+                "[StreamFetch][Episode] failure addon=${addon.name} addonId=$addonLogId elapsedMs=${System.currentTimeMillis() - startedAt} error=${error.toShortLogMessage()}"
             )
             AppLogger.breadcrumb(
                 tag = "Sources",
-                message = "addon_episode_failed addon=${addon.id} error=${error::class.java.simpleName} latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
+                message = "addon_episode_failed addon=$addonLogId error=${error::class.java.simpleName} latency=${latencyBucket(System.currentTimeMillis() - startedAt)}",
                 severity = "warning"
             )
             recordAddonFetchOutcome(

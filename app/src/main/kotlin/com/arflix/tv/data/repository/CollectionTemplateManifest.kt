@@ -6,6 +6,7 @@ import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.CollectionSourceConfig
 import com.arflix.tv.data.model.CollectionSourceKind
 import com.arflix.tv.data.model.CollectionTileShape
+import com.arflix.tv.util.AppContentPreferences
 import java.util.Locale
 
 internal data class CollectionSourceListMetadata(
@@ -35,6 +36,9 @@ internal object CollectionTemplateManifest {
     private const val VIDEO_BASE = "https://raw.githubusercontent.com/mrtxiv/networks-video-collection/3486fc9a3d0efe59d1929e75f66021dc4e15bcb7/networks%20videos/"
     private const val STREAMING_SERVICE_IMAGE_BASE = "https://raw.githubusercontent.com/chrishudson918/images/46fd4f8c335a7c581a7dcdb7dfac268c68ef84fc/Landscape%20Streaming%20Services/"
     private const val GENRE_IMAGE_BASE = "https://raw.githubusercontent.com/chrishudson918/images/main/Landscape%20Genres/"
+    private const val MAX_WIDE_LOGO_URL = "https://mcdn.tv.tele2.net/3rdParty/contentful/55pa6u7ivxls/5ChzLSPQ7rPWEqSZeOkmMk/5aeff981e7235ee6ca92f94055058ee5/HBO_Max_Logo_Iridescent_White_051625__1_.png?maxWidth=3440"
+    private const val SKYSHOWTIME_WIDE_LOGO_URL = "https://mcdn.tv.tele2.net/3rdParty/contentful/55pa6u7ivxls/2uepNjcyMQuPLSKurK6q0G/e6dea33455c827e0102fd9b46abaab0c/skyshow.se_b_SkyShowtime.png"
+    private const val VIAPLAY_WIDE_LOGO_URL = "https://ik.imagekit.io/tp/20220201-viaplay-logo.png"
     private const val STREAMING_ADDON_URL = "https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsYXRwLGhibSxwbXAscGNwLGhsdSxzdHo6OlVTOjE3NzYzMjQxMDg4OTM6MDowOkdU/manifest.json"
     private const val MARVEL_ADDON_URL = "https://addon-marvel.onrender.com/catalog/marvel-mcu/manifest.json"
     private const val DC_ADDON_URL = "https://addon-dc-cq85.onrender.com/catalog/dc-chronological/manifest.json"
@@ -45,8 +49,20 @@ internal object CollectionTemplateManifest {
 
     val railOrder = listOf(
         CollectionGroupKind.SERVICE,
+        CollectionGroupKind.FEATURED,
         CollectionGroupKind.GENRE,
         CollectionGroupKind.FRANCHISE
+    )
+
+    val defaultSwedishServiceTitles = setOf(
+        "Netflix",
+        "Disney+",
+        "Apple TV+",
+        "Prime Video",
+        "Max",
+        "SkyShowtime",
+        "Viaplay",
+        "Crunchyroll"
     )
 
     val entries: List<CollectionTemplateEntry> = listOf(
@@ -114,6 +130,8 @@ internal object CollectionTemplateManifest {
             hideTitle = true,
             heroVideoUrl = "${VIDEO_BASE}netflix.mp4",
             sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 203),
+                watchmodeSource(type = "series", sourceId = 203),
                 source(addonId = "aio-metadata", type = "movie", catalogId = "streaming.nfx"),
                 source(addonId = "aio-metadata", type = "series", catalogId = "streaming.nfx"),
                 watchProviderSource(type = "movie", providerId = 8),
@@ -132,7 +150,11 @@ internal object CollectionTemplateManifest {
             hideTitle = true,
             heroVideoUrl = "${VIDEO_BASE}disneyplus.mp4",
             sources = listOf(
-                mdblistSource("garycrawfordgc/disney-shows")
+                watchmodeSource(type = "movie", sourceId = 372),
+                watchmodeSource(type = "series", sourceId = 372),
+                mdblistSource("garycrawfordgc/disney-shows"),
+                watchProviderSource(type = "movie", providerId = 337),
+                watchProviderSource(type = "series", providerId = 337)
             ),
             listMetadata = listOf(
                 metadata(sourceCatalogId = "mdblist.garycrawfordgc.disney-shows", sourceAddonId = null, sourceName = "Disney+", sourceLabel = "MDBLIST", mediaType = "all", itemCount = null, author = "garycrawfordgc", url = "https://mdblist.com/lists/garycrawfordgc/disney-shows")
@@ -146,6 +168,8 @@ internal object CollectionTemplateManifest {
             hideTitle = true,
             heroVideoUrl = "${VIDEO_BASE}appletv.mp4",
             sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 371),
+                watchmodeSource(type = "series", sourceId = 371),
                 source(addonId = "aio-metadata", type = "movie", catalogId = "streaming.atp"),
                 source(addonId = "aio-metadata", type = "series", catalogId = "streaming.atp"),
                 watchProviderSource(type = "movie", providerId = 350),
@@ -164,6 +188,8 @@ internal object CollectionTemplateManifest {
             hideTitle = true,
             heroVideoUrl = "${VIDEO_BASE}amazonprime.mp4",
             sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 26),
+                watchmodeSource(type = "series", sourceId = 26),
                 source(addonId = "aio-metadata", type = "movie", catalogId = "streaming.amp"),
                 source(addonId = "aio-metadata", type = "series", catalogId = "streaming.amp"),
                 watchProviderSource(type = "movie", providerId = 9),
@@ -175,21 +201,57 @@ internal object CollectionTemplateManifest {
             )
         ),
         entry(
-            title = "HBO Max",
+            title = "Max",
             group = CollectionGroupKind.SERVICE,
-            coverImageUrl = "${STREAMING_SERVICE_IMAGE_BASE}hbo.jpegli.jpg",
+            coverImageUrl = MAX_WIDE_LOGO_URL,
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = "${VIDEO_BASE}hbomax.mp4",
             sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 387),
+                watchmodeSource(type = "series", sourceId = 387),
                 source(addonId = "aio-metadata", type = "movie", catalogId = "streaming.hbm"),
                 source(addonId = "aio-metadata", type = "series", catalogId = "streaming.hbm"),
                 watchProviderSource(type = "movie", providerId = 1899),
                 watchProviderSource(type = "series", providerId = 1899)
             ),
             listMetadata = listOf(
-                metadata(sourceCatalogId = "streaming.hbm", sourceAddonId = "aio-metadata", sourceName = "HBO Max", sourceLabel = "AIO", mediaType = "movie", itemCount = null, author = null, url = null),
-                metadata(sourceCatalogId = "streaming.hbm", sourceAddonId = "aio-metadata", sourceName = "HBO Max", sourceLabel = "AIO", mediaType = "series", itemCount = null, author = null, url = null)
+                metadata(sourceCatalogId = "watchmode.387.movie", sourceAddonId = null, sourceName = "Max Movies", sourceLabel = "Watchmode", mediaType = "movie", itemCount = null, author = null, url = "https://api.watchmode.com/docs"),
+                metadata(sourceCatalogId = "watchmode.387.series", sourceAddonId = null, sourceName = "Max Series", sourceLabel = "Watchmode", mediaType = "series", itemCount = null, author = null, url = "https://api.watchmode.com/docs"),
+                metadata(sourceCatalogId = "streaming.hbm", sourceAddonId = "aio-metadata", sourceName = "Max", sourceLabel = "AIO", mediaType = "movie", itemCount = null, author = null, url = null),
+                metadata(sourceCatalogId = "streaming.hbm", sourceAddonId = "aio-metadata", sourceName = "Max", sourceLabel = "AIO", mediaType = "series", itemCount = null, author = null, url = null)
+            )
+        ),
+        entry(
+            title = "SkyShowtime",
+            group = CollectionGroupKind.SERVICE,
+            coverImageUrl = SKYSHOWTIME_WIDE_LOGO_URL,
+            tileShape = CollectionTileShape.LANDSCAPE,
+            hideTitle = true,
+            heroVideoUrl = null,
+            sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 464),
+                watchmodeSource(type = "series", sourceId = 464)
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "watchmode.464.movie", sourceAddonId = null, sourceName = "SkyShowtime Movies", sourceLabel = "Watchmode", mediaType = "movie", itemCount = null, author = null, url = "https://api.watchmode.com/docs"),
+                metadata(sourceCatalogId = "watchmode.464.series", sourceAddonId = null, sourceName = "SkyShowtime Series", sourceLabel = "Watchmode", mediaType = "series", itemCount = null, author = null, url = "https://api.watchmode.com/docs")
+            )
+        ),
+        entry(
+            title = "Viaplay",
+            group = CollectionGroupKind.SERVICE,
+            coverImageUrl = VIAPLAY_WIDE_LOGO_URL,
+            tileShape = CollectionTileShape.LANDSCAPE,
+            hideTitle = true,
+            heroVideoUrl = null,
+            sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 486),
+                watchmodeSource(type = "series", sourceId = 486)
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "watchmode.486.movie", sourceAddonId = null, sourceName = "Viaplay Movies", sourceLabel = "Watchmode", mediaType = "movie", itemCount = null, author = null, url = "https://api.watchmode.com/docs"),
+                metadata(sourceCatalogId = "watchmode.486.series", sourceAddonId = null, sourceName = "Viaplay Series", sourceLabel = "Watchmode", mediaType = "series", itemCount = null, author = null, url = "https://api.watchmode.com/docs")
             )
         ),
         entry(
@@ -330,6 +392,8 @@ internal object CollectionTemplateManifest {
             hideTitle = true,
             heroVideoUrl = "${VIDEO_BASE}crunchyroll.mp4",
             sources = listOf(
+                watchmodeSource(type = "movie", sourceId = 80),
+                watchmodeSource(type = "series", sourceId = 80),
                 source(addonId = "aio-metadata", type = "movie", catalogId = "streaming.cru_movie"),
                 source(addonId = "aio-metadata", type = "series", catalogId = "streaming.cru_series"),
                 watchProviderSource(type = "movie", providerId = 283),
@@ -867,8 +931,18 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(748),
+                tmdbCollectionSource(453993),
+                tmdbCollectionSource(556),
+                mdblistSource("jxduffy/x-men-chronological-order")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.748", sourceAddonId = null, sourceName = "X-Men Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/748"),
+                metadata(sourceCatalogId = "tmdb.collection.453993", sourceAddonId = null, sourceName = "Deadpool Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/453993"),
+                metadata(sourceCatalogId = "tmdb.collection.556", sourceAddonId = null, sourceName = "Wolverine Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/556"),
+                metadata(sourceCatalogId = "mdblist.jxduffy.x-men-chronological-order", sourceAddonId = null, sourceName = "X-Men Chronological Order", sourceLabel = "MDBLIST", mediaType = "all", itemCount = null, author = "jxduffy", url = "https://mdblist.com/lists/jxduffy/x-men-chronological-order")
+            )
         ),
         entry(
             title = "Hunger Games",
@@ -877,8 +951,14 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(131635),
+                mdblistSource("vancityguy/hunger-games")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.131635", sourceAddonId = null, sourceName = "The Hunger Games Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/131635"),
+                metadata(sourceCatalogId = "mdblist.vancityguy.hunger-games", sourceAddonId = null, sourceName = "Hunger Games", sourceLabel = "MDBLIST", mediaType = "movie", itemCount = 4, author = "vancityguy", url = "https://mdblist.com/lists/vancityguy/hunger-games")
+            )
         ),
         entry(
             title = "Avatar",
@@ -887,8 +967,14 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(87096),
+                mdblistSource("thebirdod/avatar-collection")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.87096", sourceAddonId = null, sourceName = "Avatar Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/87096"),
+                metadata(sourceCatalogId = "mdblist.thebirdod.avatar-collection", sourceAddonId = null, sourceName = "Avatar Collection", sourceLabel = "MDBLIST", mediaType = "movie", itemCount = 5, author = "thebirdod", url = "https://mdblist.com/lists/thebirdod/avatar-collection")
+            )
         ),
         entry(
             title = "Dune",
@@ -897,8 +983,14 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(726871),
+                mdblistSource("mbjackass/dune")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.726871", sourceAddonId = null, sourceName = "Dune Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/726871"),
+                metadata(sourceCatalogId = "mdblist.mbjackass.dune", sourceAddonId = null, sourceName = "Dune", sourceLabel = "MDBLIST", mediaType = "all", itemCount = 3, author = "mbjackass", url = "https://mdblist.com/lists/mbjackass/dune")
+            )
         ),
         entry(
             title = "Indiana Jones",
@@ -907,8 +999,14 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(84),
+                mdblistSource("thebirdod/indiana-jones-collection")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.84", sourceAddonId = null, sourceName = "Indiana Jones Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/84"),
+                metadata(sourceCatalogId = "mdblist.thebirdod.indiana-jones-collection", sourceAddonId = null, sourceName = "Indiana Jones Collection", sourceLabel = "MDBLIST", mediaType = "movie", itemCount = 5, author = "thebirdod", url = "https://mdblist.com/lists/thebirdod/indiana-jones-collection")
+            )
         ),
         entry(
             title = "The Godfather",
@@ -917,8 +1015,14 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(230),
+                mdblistSource("vancityguy/the-godfather")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.230", sourceAddonId = null, sourceName = "The Godfather Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/230"),
+                metadata(sourceCatalogId = "mdblist.vancityguy.the-godfather", sourceAddonId = null, sourceName = "The Godfather", sourceLabel = "MDBLIST", mediaType = "movie", itemCount = 3, author = "vancityguy", url = "https://mdblist.com/lists/vancityguy/the-godfather")
+            )
         ),
         entry(
             title = "John Wick",
@@ -927,8 +1031,12 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(404609)
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.404609", sourceAddonId = null, sourceName = "John Wick Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/404609")
+            )
         ),
         entry(
             title = "Transformers",
@@ -937,8 +1045,14 @@ internal object CollectionTemplateManifest {
             tileShape = CollectionTileShape.LANDSCAPE,
             hideTitle = true,
             heroVideoUrl = null,
-            sources = emptyList(),
-            listMetadata = emptyList()
+            sources = listOf(
+                tmdbCollectionSource(8650),
+                mdblistSource("aaron713/transformers")
+            ),
+            listMetadata = listOf(
+                metadata(sourceCatalogId = "tmdb.collection.8650", sourceAddonId = null, sourceName = "Transformers Collection", sourceLabel = "TMDB", mediaType = "movie", itemCount = null, author = null, url = "https://www.themoviedb.org/collection/8650"),
+                metadata(sourceCatalogId = "mdblist.aaron713.transformers", sourceAddonId = null, sourceName = "Transformers", sourceLabel = "MDBLIST", mediaType = "movie", itemCount = 6, author = "aaron713", url = "https://mdblist.com/lists/aaron713/transformers")
+            )
         )
     )
 
@@ -1078,8 +1192,17 @@ internal object CollectionTemplateManifest {
         kind = CollectionSourceKind.TMDB_WATCH_PROVIDER,
         mediaType = type,
         tmdbWatchProviderId = providerId,
-        watchRegion = "US",
+        watchRegion = AppContentPreferences.DEFAULT_WATCH_REGION,
         sortBy = "popularity.desc"
+    )
+
+    private fun watchmodeSource(type: String, sourceId: Int, sourceTypes: String? = null) = CollectionSourceConfig(
+        kind = CollectionSourceKind.WATCHMODE_SOURCE,
+        mediaType = type,
+        watchRegion = AppContentPreferences.DEFAULT_WATCH_REGION,
+        watchmodeSourceId = sourceId,
+        watchmodeSourceTypes = sourceTypes,
+        sortBy = "popularity_desc"
     )
 
     private fun slugify(value: String): String {

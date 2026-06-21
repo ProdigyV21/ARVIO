@@ -44,6 +44,8 @@ enum class CollectionSourceKind {
     // used for streaming-service collections (Apple TV+, Paramount+, Hulu,
     // Peacock) when no addon catalog is available.
     TMDB_WATCH_PROVIDER,
+    TMDB_DISCOVER,
+    WATCHMODE_SOURCE,
     // Explicit list of TMDB (MediaType, id) pairs in canonical order. Used for
     // franchises where neither release-date sort nor a single TMDB collection
     // captures the correct ordering — e.g. Star Wars (timeline order spans
@@ -68,7 +70,11 @@ data class CollectionSourceConfig(
     val tmdbKeywordId: Int? = null,
     val tmdbWatchProviderId: Int? = null,
     val watchRegion: String? = null,
+    val watchmodeSourceId: Int? = null,
+    val watchmodeSourceTypes: String? = null,
     val sortBy: String? = null,
+    val voteCountGte: Int? = null,
+    val runtimeLteMinutes: Int? = null,
     // Encoded as e.g. "movie:11" / "tv:82856". Preserves order — the list is
     // rendered in exactly this sequence in collection detail screens.
     val curatedRefs: List<String>? = null,

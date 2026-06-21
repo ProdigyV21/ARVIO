@@ -154,9 +154,9 @@ fun AppUpdateModal(
 
                 val subtitle = when (status) {
                     is UpdateStatus.Checking -> "Checking GitHub Releases..."
-                    is UpdateStatus.UpdateAvailable -> "Update available: ${status.update.title} (${status.update.tag})"
+                    is UpdateStatus.UpdateAvailable -> "A newer Majo Stream build is available (${status.update.tag})"
                     is UpdateStatus.Downloading -> "Downloading update..."
-                    is UpdateStatus.ReadyToInstall -> "${status.update.title} is ready to install."
+                    is UpdateStatus.ReadyToInstall -> "Majo Stream ${status.update.tag} is ready to install."
                     is UpdateStatus.Installing -> "Installing update... Please follow the system prompt."
                     is UpdateStatus.Failure -> "Update failed."
                     is UpdateStatus.Success -> "You already have the latest version installed."
@@ -192,7 +192,7 @@ fun AppUpdateModal(
                         LinearProgressIndicator(
                             progress = status.progress ?: 0f,
                             modifier = Modifier.fillMaxWidth(),
-                            color = Pink, // Uses ARVIO's Pink accent instead of SuccessGreen
+                            color = Pink,
                             trackColor = Color.White.copy(alpha = 0.08f)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -203,20 +203,18 @@ fun AppUpdateModal(
                         )
                     }
                     is UpdateStatus.ReadyToInstall -> {
-                        androidx.compose.material3.Text("The latest ARVIO update has been downloaded and is ready to install.", style = ArflixTypography.body, color = TextPrimary)
+                        androidx.compose.material3.Text("The latest Majo Stream update has been downloaded and is ready to install.", style = ArflixTypography.body, color = TextPrimary)
                     }
                     is UpdateStatus.Installing -> {
                         androidx.compose.material3.Text("The Android package installer should appear. If it does not, you can try pressing Install again.", style = ArflixTypography.body, color = TextPrimary)
                     }
                     is UpdateStatus.UpdateAvailable -> {
-                        if (status.update.notes.isNotBlank()) {
-                            androidx.compose.material3.Text(
-                                text = status.update.notes.take(900),
-                                style = ArflixTypography.caption.copy(lineHeight = 18.sp),
-                                color = TextSecondary,
-                                modifier = Modifier.heightIn(max = 260.dp)
-                            )
-                        }
+                        androidx.compose.material3.Text(
+                            text = "Download the latest APK when you are ready. Your local profiles, addons, settings, watchlist and progress stay on this device.",
+                            style = ArflixTypography.caption.copy(lineHeight = 18.sp),
+                            color = TextSecondary,
+                            modifier = Modifier.heightIn(max = 260.dp)
+                        )
                     }
                     else -> {}
                 }

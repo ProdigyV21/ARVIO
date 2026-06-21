@@ -28,7 +28,7 @@ interface TmdbApi {
     suspend fun discoverTv(
         @Query("api_key") apiKey: String,
         @Query("with_watch_providers") watchProviders: Int? = null,
-        @Query("watch_region") watchRegion: String = "US",
+        @Query("watch_region") watchRegion: String = "SE",
         @Query("sort_by") sortBy: String = "popularity.desc",
         @Query("with_genres") genres: String? = null,
         @Query("with_people") people: String? = null,
@@ -54,6 +54,7 @@ interface TmdbApi {
         @Query("primary_release_year") year: Int? = null,
         @Query("release_date.gte") releaseDateGte: String? = null,
         @Query("release_date.lte") releaseDateLte: String? = null,
+        @Query("with_runtime.lte") runtimeLte: Int? = null,
         @Query("with_watch_providers") watchProviders: Int? = null,
         @Query("watch_region") watchRegion: String? = null,
         @Query("language") language: String? = null,
@@ -345,7 +346,10 @@ data class TmdbWatchProvidersResponse(val id: Int = 0, val results: Map<String, 
 data class TmdbWatchProviderRegion(val link: String? = null, val flatrate: List<TmdbWatchProvider> = emptyList(), val free: List<TmdbWatchProvider> = emptyList(), val ads: List<TmdbWatchProvider> = emptyList(), val rent: List<TmdbWatchProvider> = emptyList(), val buy: List<TmdbWatchProvider> = emptyList())
 data class TmdbWatchProvider(@SerializedName("provider_id") val providerId: Int = 0, @SerializedName("provider_name") val providerName: String = "", @SerializedName("logo_path") val logoPath: String? = null, @SerializedName("display_priority") val displayPriority: Int = 0)
 data class TmdbPersonDetails(val id: Int = 0, val name: String = "", val biography: String? = null, @SerializedName("place_of_birth") val placeOfBirth: String? = null, val birthday: String? = null, @SerializedName("profile_path") val profilePath: String? = null, @SerializedName("combined_credits") val combinedCredits: TmdbCombinedCredits? = null)
-data class TmdbCombinedCredits(val cast: List<TmdbMediaItem> = emptyList())
+data class TmdbCombinedCredits(
+    val cast: List<TmdbMediaItem> = emptyList(),
+    val crew: List<TmdbMediaItem> = emptyList()
+)
 data class TmdbReviewsResponse(val id: Int = 0, val page: Int = 1, val results: List<TmdbReview> = emptyList(), @SerializedName("total_pages") val totalPages: Int = 1, @SerializedName("total_results") val totalResults: Int = 0)
 data class TmdbReview(val id: String = "", val author: String = "", @SerializedName("author_details") val authorDetails: TmdbAuthorDetails? = null, val content: String = "", @SerializedName("created_at") val createdAt: String = "", @SerializedName("updated_at") val updatedAt: String = "", val url: String = "")
 data class TmdbAuthorDetails(val name: String = "", val username: String = "", @SerializedName("avatar_path") val avatarPath: String? = null, val rating: Float? = null)

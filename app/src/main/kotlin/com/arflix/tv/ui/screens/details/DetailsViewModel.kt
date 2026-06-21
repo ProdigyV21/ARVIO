@@ -22,12 +22,14 @@ import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchHistoryRepository
 import com.arflix.tv.data.repository.WatchlistRepository
+import com.arflix.tv.util.AppContentPreferences
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +51,12 @@ data class DetailsUiState(
     val totalSeasons: Int = 1,
     val currentSeason: Int = 1,
     val cast: List<CastMember> = emptyList(),
+    val titleExtras: List<TitleExtraUi> = emptyList(),
+    val titleExtrasState: TitleExtrasState = TitleExtrasState(),
+    val titlePeople: List<TitlePersonUi> = emptyList(),
+    val titleCredits: TitleCreditSummaryUi = TitleCreditSummaryUi(),
+    val titlePageMode: TitlePageMode = TitlePageMode.Movie,
+    val seriesPlayback: SeriesPlaybackUi = SeriesPlaybackUi(),
     val similar: List<MediaItem> = emptyList(),
     val similarLogoUrls: Map<String, String> = emptyMap(),
     val reviews: List<Review> = emptyList(),
@@ -295,6 +303,19 @@ class DetailsViewModel @Inject constructor(
                     episodes = cachedEpisodes ?: emptyList(),
                     currentSeason = seasonToLoad,
                     totalSeasons = cachedTotalSeasons,
+                    titleExtrasState = TitleExtrasState(isLoading = true),
+                    titlePageMode = if (mediaType == MediaType.TV) TitlePageMode.Series else TitlePageMode.Movie,
+                    seriesPlayback = if (mediaType == MediaType.TV) {
+                        buildSeriesPlaybackUi(
+                            episodes = cachedEpisodes ?: emptyList(),
+                            currentSeason = seasonToLoad,
+                            seasonProgress = emptyMap(),
+                            playSeason = initialSeason,
+                            playEpisode = initialEpisode
+                        )
+                    } else {
+                        SeriesPlaybackUi()
+                    },
                     playSeason = initialSeason,
                     playEpisode = initialEpisode,
                     playLabel = if (mediaType == MediaType.TV && initialSeason != null && initialEpisode != null) {
@@ -376,11 +397,26 @@ class DetailsViewModel @Inject constructor(
                         if (!firstEpisodes.isNullOrEmpty()) {
                             updateState { state ->
                                 if (state.currentSeason == seasonToLoad && state.episodes == firstEpisodes) {
-                                    state
+                                    state.copy(
+                                        seriesPlayback = buildSeriesPlaybackUi(
+                                            episodes = firstEpisodes,
+                                            currentSeason = state.currentSeason,
+                                            seasonProgress = state.seasonProgress,
+                                            playSeason = state.playSeason,
+                                            playEpisode = state.playEpisode
+                                        )
+                                    )
                                 } else {
                                     state.copy(
                                         episodes = firstEpisodes,
-                                        currentSeason = seasonToLoad
+                                        currentSeason = seasonToLoad,
+                                        seriesPlayback = buildSeriesPlaybackUi(
+                                            episodes = firstEpisodes,
+                                            currentSeason = seasonToLoad,
+                                            seasonProgress = state.seasonProgress,
+                                            playSeason = state.playSeason,
+                                            playEpisode = state.playEpisode
+                                        )
                                     )
                                 }
                             }
@@ -444,6 +480,7 @@ class DetailsViewModel @Inject constructor(
                     item = itemWithWatchedStatus,
                     totalSeasons = totalSeasons,
                     currentSeason = seasonToLoad,
+                    titlePageMode = if (mediaType == MediaType.TV) TitlePageMode.Series else TitlePageMode.Movie,
                     genres = genreNames,
                     language = languageName,
                     budget = visibleBudget,
@@ -497,7 +534,53 @@ class DetailsViewModel @Inject constructor(
                     delay(180L)
                     val trailerKey = runCatching { mediaRepository.getTrailerKey(mediaType, mediaId) }.getOrNull()
                     if (trailerKey != null) {
-                        updateState { state -> state.copy(trailerKey = trailerKey) }
+                        updateState { state ->
+                            val fallbackExtrasState = if (
+                                state.titleExtrasState.hasAttemptedLoad &&
+                                state.titleExtrasState.items.isEmpty()
+                            ) {
+                                buildTitleExtrasState(
+                                    videos = emptyList(),
+                                    fallbackTrailerKey = trailerKey,
+                                    isLoading = false,
+                                    hasAttemptedLoad = true
+                                )
+                            } else {
+                                state.titleExtrasState
+                            }
+                            state.copy(
+                                trailerKey = trailerKey,
+                                titleExtrasState = fallbackExtrasState,
+                                titleExtras = fallbackExtrasState.items.takeIf { fallbackExtrasState.items.isNotEmpty() }
+                                    ?: state.titleExtras
+                            )
+                        }
+                    }
+                }
+
+                launch {
+                    delay(200L)
+                    val extrasState = runCatching { loadTitleExtrasState(mediaType, mediaId) }.getOrElse {
+                        TitleExtrasState(hasAttemptedLoad = true)
+                    }
+                    updateState { state ->
+                        val resolvedExtrasState = if (extrasState.items.isEmpty() && !state.trailerKey.isNullOrBlank()) {
+                            buildTitleExtrasState(
+                                videos = emptyList(),
+                                fallbackTrailerKey = state.trailerKey,
+                                isLoading = false,
+                                hasAttemptedLoad = true
+                            )
+                        } else {
+                            extrasState
+                        }
+                        state.copy(
+                            titleExtrasState = resolvedExtrasState,
+                            titleExtras = resolvedExtrasState.items,
+                            trailerKey = state.trailerKey ?: resolvedExtrasState.items.firstOrNull {
+                                it.type == "Trailer" || it.type == "Teaser"
+                            }?.youtubeKey
+                        )
                     }
                 }
 
@@ -506,6 +589,20 @@ class DetailsViewModel @Inject constructor(
                     val cast = runCatching { mediaRepository.getCast(mediaType, mediaId) }.getOrNull()
                     if (!cast.isNullOrEmpty()) {
                         updateState { state -> state.copy(cast = cast) }
+                    }
+                }
+
+                launch {
+                    delay(300L)
+                    val peopleAndCredits = runCatching { loadTitlePeopleAndCredits(mediaType, mediaId) }.getOrNull()
+                    if (peopleAndCredits != null) {
+                        val (people, credits) = peopleAndCredits
+                        updateState { state ->
+                            state.copy(
+                                titlePeople = people.takeIf { it.isNotEmpty() } ?: state.titlePeople,
+                                titleCredits = credits
+                            )
+                        }
                     }
                 }
 
@@ -576,7 +673,7 @@ class DetailsViewModel @Inject constructor(
                         mediaRepository.getStreamingServices(
                             mediaType = mediaType,
                             mediaId = mediaId,
-                            preferredRegion = Locale.getDefault().country
+                            preferredRegion = AppContentPreferences.DEFAULT_WATCH_REGION
                         )
                     }.getOrNull()
                     if (servicesResult != null) {
@@ -650,15 +747,17 @@ class DetailsViewModel @Inject constructor(
                         updateState { state ->
                             val shouldUseEpisodeTarget = !hasExplicitEpisodeTarget &&
                                 (state.playLabel.isNullOrBlank() || state.playLabel == "Start S1E1")
+                            val nextPlaySeason = if (shouldUseEpisodeTarget) {
+                                nextUnwatchedEpisode?.seasonNumber ?: if (hasWatchedEpisodes) 1 else state.playSeason
+                            } else state.playSeason
+                            val nextPlayEpisode = if (shouldUseEpisodeTarget) {
+                                nextUnwatchedEpisode?.episodeNumber ?: if (hasWatchedEpisodes) 1 else state.playEpisode
+                            } else state.playEpisode
                             state.copy(
                                 episodes = decoratedEpisodes,
                                 initialEpisodeIndex = initialEpisodeIndex,
-                                playSeason = if (shouldUseEpisodeTarget) {
-                                    nextUnwatchedEpisode?.seasonNumber ?: if (hasWatchedEpisodes) 1 else state.playSeason
-                                } else state.playSeason,
-                                playEpisode = if (shouldUseEpisodeTarget) {
-                                    nextUnwatchedEpisode?.episodeNumber ?: if (hasWatchedEpisodes) 1 else state.playEpisode
-                                } else state.playEpisode,
+                                playSeason = nextPlaySeason,
+                                playEpisode = nextPlayEpisode,
                                 playLabel = if (shouldUseEpisodeTarget) {
                                     if (nextUnwatchedEpisode != null) {
                                         "Continue S${nextUnwatchedEpisode.seasonNumber}E${nextUnwatchedEpisode.episodeNumber}"
@@ -667,7 +766,14 @@ class DetailsViewModel @Inject constructor(
                                     } else {
                                         state.playLabel
                                     }
-                                } else state.playLabel
+                                } else state.playLabel,
+                                seriesPlayback = buildSeriesPlaybackUi(
+                                    episodes = decoratedEpisodes,
+                                    currentSeason = state.currentSeason,
+                                    seasonProgress = state.seasonProgress,
+                                    playSeason = nextPlaySeason,
+                                    playEpisode = nextPlayEpisode
+                                )
                             )
                         }
                     }
@@ -713,7 +819,14 @@ class DetailsViewModel @Inject constructor(
                     updateState { state ->
                         state.copy(
                             seasonProgress = seasonProgress,
-                            totalSeasons = resolvedTotalSeasons
+                            totalSeasons = resolvedTotalSeasons,
+                            seriesPlayback = buildSeriesPlaybackUi(
+                                episodes = state.episodes,
+                                currentSeason = state.currentSeason,
+                                seasonProgress = seasonProgress,
+                                playSeason = state.playSeason,
+                                playEpisode = state.playEpisode
+                            )
                         )
                     }
                 }
@@ -725,11 +838,20 @@ class DetailsViewModel @Inject constructor(
                             it.season == initialSeason && it.episode == initialEpisode
                         }
                         updateState { state ->
+                            val playSeason = initialSeason
+                            val playEpisode = initialEpisode
                             state.copy(
-                                playSeason = initialSeason,
-                                playEpisode = initialEpisode,
+                                playSeason = playSeason,
+                                playEpisode = playEpisode,
                                 playLabel = matchedResume?.label ?: "Continue S${initialSeason}E${initialEpisode}",
-                                playPositionMs = matchedResume?.positionMs
+                                playPositionMs = matchedResume?.positionMs,
+                                seriesPlayback = buildSeriesPlaybackUi(
+                                    episodes = state.episodes,
+                                    currentSeason = state.currentSeason,
+                                    seasonProgress = state.seasonProgress,
+                                    playSeason = playSeason,
+                                    playEpisode = playEpisode
+                                )
                             )
                         }
                         return@launch
@@ -742,7 +864,14 @@ class DetailsViewModel @Inject constructor(
                                 playSeason = playTarget?.season,
                                 playEpisode = playTarget?.episode,
                                 playLabel = playTarget?.label,
-                                playPositionMs = playTarget?.positionMs
+                                playPositionMs = playTarget?.positionMs,
+                                seriesPlayback = buildSeriesPlaybackUi(
+                                    episodes = state.episodes,
+                                    currentSeason = state.currentSeason,
+                                    seasonProgress = state.seasonProgress,
+                                    playSeason = playTarget?.season,
+                                    playEpisode = playTarget?.episode
+                                )
                             )
                         }
                     } else {
@@ -753,7 +882,14 @@ class DetailsViewModel @Inject constructor(
                                 playSeason = playTarget?.season,
                                 playEpisode = playTarget?.episode,
                                 playLabel = playTarget?.label,
-                                playPositionMs = playTarget?.positionMs
+                                playPositionMs = playTarget?.positionMs,
+                                seriesPlayback = buildSeriesPlaybackUi(
+                                    episodes = state.episodes,
+                                    currentSeason = state.currentSeason,
+                                    seasonProgress = state.seasonProgress,
+                                    playSeason = playTarget?.season,
+                                    playEpisode = playTarget?.episode
+                                )
                             )
                         }
                     }
@@ -844,7 +980,14 @@ class DetailsViewModel @Inject constructor(
 
                     _uiState.value = _uiState.value.copy(
                         episodes = decoratedEpisodes,
-                        currentSeason = seasonNumber
+                        currentSeason = seasonNumber,
+                        seriesPlayback = buildSeriesPlaybackUi(
+                            episodes = decoratedEpisodes,
+                            currentSeason = seasonNumber,
+                            seasonProgress = _uiState.value.seasonProgress,
+                            playSeason = _uiState.value.playSeason,
+                            playEpisode = _uiState.value.playEpisode
+                        )
                     )
                 } else {
                     // If no episodes returned, keep current and show error
@@ -1116,17 +1259,28 @@ _uiState.value = _uiState.value.copy(
 
             // Read latest state to avoid overwriting concurrent updates (e.g. seasonProgress)
             val latestState = _uiState.value
+            val nextEpisodes = if (updatedEpisodes.isNotEmpty()) updatedEpisodes else latestState.episodes
+            val nextSeasonProgress = if (updatedProgress !== latestForEpisodes.seasonProgress) updatedProgress else latestState.seasonProgress
+            val nextPlaySeason = playTarget?.season ?: latestState.playSeason
+            val nextPlayEpisode = playTarget?.episode ?: latestState.playEpisode
             _uiState.value = latestState.copy(
                 item = updatedItem ?: latestState.item,
                 // Only overwrite episodes if we actually computed watched badges;
                 // otherwise keep the latest (avoids blanking if episodes were populated concurrently)
-                episodes = if (updatedEpisodes.isNotEmpty()) updatedEpisodes else latestState.episodes,
+                episodes = nextEpisodes,
                 // Only update seasonProgress if we actually computed new data; preserve existing otherwise
-                seasonProgress = if (updatedProgress !== latestForEpisodes.seasonProgress) updatedProgress else latestState.seasonProgress,
-                playSeason = playTarget?.season ?: latestState.playSeason,
-                playEpisode = playTarget?.episode ?: latestState.playEpisode,
+                seasonProgress = nextSeasonProgress,
+                playSeason = nextPlaySeason,
+                playEpisode = nextPlayEpisode,
                 playLabel = playTarget?.label ?: latestState.playLabel,
-                playPositionMs = playTarget?.positionMs ?: 0L
+                playPositionMs = playTarget?.positionMs ?: 0L,
+                seriesPlayback = buildSeriesPlaybackUi(
+                    episodes = nextEpisodes,
+                    currentSeason = latestState.currentSeason,
+                    seasonProgress = nextSeasonProgress,
+                    playSeason = nextPlaySeason,
+                    playEpisode = nextPlayEpisode
+                )
             )
         }
     }
@@ -1190,6 +1344,55 @@ _uiState.value = _uiState.value.copy(
             selectedPerson = null
         )
     }
+
+    private suspend fun loadTitleExtrasState(mediaType: MediaType, mediaId: Int): TitleExtrasState {
+        return buildTitleExtrasState(
+            videos = mediaRepository.getTitleVideos(mediaType, mediaId),
+            fallbackTrailerKey = _uiState.value.trailerKey,
+            isLoading = false,
+            hasAttemptedLoad = true
+        )
+    }
+
+    private suspend fun loadTitlePeopleAndCredits(mediaType: MediaType, mediaId: Int): Pair<List<TitlePersonUi>, TitleCreditSummaryUi> {
+        val type = tmdbPathFor(mediaType)
+        val credits = tmdbApi.getCredits(type, mediaId, Constants.TMDB_API_KEY)
+        val summary = buildTitleCreditSummary(credits)
+        val seeds = buildTitlePeople(
+            credits = credits,
+            personDetailsById = emptyMap(),
+            currentMediaType = mediaType,
+            currentMediaId = mediaId
+        )
+        if (seeds.isEmpty()) return emptyList<TitlePersonUi>() to summary
+
+        val detailsById = withTimeoutOrNull(4_000L) {
+            coroutineScope {
+                seeds.map { seed ->
+                    async {
+                        val details = runCatching {
+                            tmdbApi.getPersonDetails(seed.id, Constants.TMDB_API_KEY)
+                        }.getOrNull()
+                        seed.id to details
+                    }
+                }.mapNotNull { deferred ->
+                    val (id, details) = deferred.await()
+                    details?.let { id to it }
+                }.toMap()
+            }
+        }.orEmpty()
+
+        val people = buildTitlePeople(
+            credits = credits,
+            personDetailsById = detailsById,
+            currentMediaType = mediaType,
+            currentMediaId = mediaId
+        )
+        return people to summary
+    }
+
+    private fun tmdbPathFor(mediaType: MediaType): String =
+        if (mediaType == MediaType.TV) "tv" else "movie"
 
     // ========== Stream Resolution ==========
 
@@ -1726,14 +1929,25 @@ _uiState.value = _uiState.value.copy(
 
                 val playTarget = buildPlayTarget(currentMediaType, refreshedProgress, null)
 
-                _uiState.value = _uiState.value.copy(
+                val latestState = _uiState.value
+                val nextProgress = refreshedProgress?.progress ?: optimisticProgress
+                val nextPlaySeason = playTarget?.season ?: latestState.playSeason
+                val nextPlayEpisode = playTarget?.episode ?: latestState.playEpisode
+                _uiState.value = latestState.copy(
                     item = currentItem.copy(isWatched = nextUnwatched == null),
                     episodes = updatedEpisodes,
-                    seasonProgress = refreshedProgress?.progress ?: optimisticProgress,
-                    playSeason = playTarget?.season ?: _uiState.value.playSeason,
-                    playEpisode = playTarget?.episode ?: _uiState.value.playEpisode,
-                    playLabel = playTarget?.label ?: _uiState.value.playLabel,
-                    playPositionMs = playTarget?.positionMs ?: _uiState.value.playPositionMs,
+                    seasonProgress = nextProgress,
+                    playSeason = nextPlaySeason,
+                    playEpisode = nextPlayEpisode,
+                    playLabel = playTarget?.label ?: latestState.playLabel,
+                    playPositionMs = playTarget?.positionMs ?: latestState.playPositionMs,
+                    seriesPlayback = buildSeriesPlaybackUi(
+                        episodes = updatedEpisodes,
+                        currentSeason = latestState.currentSeason,
+                        seasonProgress = nextProgress,
+                        playSeason = nextPlaySeason,
+                        playEpisode = nextPlayEpisode
+                    ),
                     toastMessage = "Season $season marked as watched",
                     toastType = ToastType.SUCCESS
                 )

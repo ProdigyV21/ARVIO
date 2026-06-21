@@ -144,7 +144,7 @@ class LauncherContinueWatchingRepository @Inject constructor(
         val channel = Channel.Builder()
             .setType(TvContractCompat.Channels.TYPE_PREVIEW)
             .setDisplayName("Continue Watching")
-            .setDescription("Resume watching in Arvio")
+            .setDescription("Resume watching in Majo Stream")
             .setInternalProviderId(CHANNEL_INTERNAL_ID)
             .build()
 

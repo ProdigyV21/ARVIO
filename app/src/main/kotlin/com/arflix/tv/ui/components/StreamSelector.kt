@@ -89,9 +89,10 @@ import com.arflix.tv.ui.theme.TextSecondary
 import androidx.compose.ui.res.stringResource
 import coil.compose.AsyncImage
 import com.arflix.tv.R
+import com.arflix.tv.data.stream.analyzeStreamSource
 
 // OLED source picker colors. Keep these deliberately monochrome so the sheet
-// feels like the rest of ARVIO instead of a separate dashboard.
+// feels like the rest of Majo Stream instead of a separate dashboard.
 private val OledPanel = Color.White.copy(alpha = 0.055f)
 private val OledPanelStrong = Color.White.copy(alpha = 0.095f)
 private val OledBorder = Color.White.copy(alpha = 0.16f)
@@ -303,14 +304,11 @@ fun StreamSelector(
     }
 
     // Count stats
-    val count4K = remember(streams) {
-        streams.count {
-            it.quality.contains("4K", ignoreCase = true) ||
-            it.quality.contains("2160p", ignoreCase = true)
-        }
+    val count4K = remember(presentations) {
+        presentations.count { it.resolutionLabel == "4K" }
     }
-    val count1080 = remember(streams) {
-        streams.count { it.quality.contains("1080p", ignoreCase = true) }
+    val count1080 = remember(presentations) {
+        presentations.count { it.resolutionLabel == "1080p" }
     }
     AnimatedVisibility(
         visible = isVisible,
@@ -877,6 +875,8 @@ private data class SourcePresentation(
     val releaseScore: Int,
     val codecLabel: String?,
     val audioLabel: String?,
+    val visualTags: List<String>,
+    val audioTags: List<String>,
     val transportLabel: String?,
     val multiSourceLabel: String?,
     val languageLabel: String?,
@@ -919,41 +919,6 @@ private object SourceBadgeImages {
     const val AUDIO_5_1 = "$WHITE_TAGS/white_51.png"
 }
 
-
-
-private object StreamRegexes {
-    val AV1 = Regex("""\bAV1\b""", RegexOption.IGNORE_CASE)
-    val HEVC = Regex("""\b(HEVC|X265|H265)\b""", RegexOption.IGNORE_CASE)
-    val H264 = Regex("""\b(H264|X264|AVC)\b""", RegexOption.IGNORE_CASE)
-    val REMUX = Regex("""\bREMUX\b""", RegexOption.IGNORE_CASE)
-    val BLURAY = Regex("""\b(BLURAY|BDRIP|BDREMUX)\b""", RegexOption.IGNORE_CASE)
-    val WEBDL = Regex("""\b(WEB[- .]?DL|WEBDL)\b""", RegexOption.IGNORE_CASE)
-    val WEBRIP = Regex("""\bWEB[- .]?RIP\b""", RegexOption.IGNORE_CASE)
-    val HDTV = Regex("""\bHDTV\b""", RegexOption.IGNORE_CASE)
-    val CAM = Regex("""\b(CAM|TS|TELESYNC|HDCAM)\b""", RegexOption.IGNORE_CASE)
-    val ATMOS = Regex("""\bATMOS\b""", RegexOption.IGNORE_CASE)
-    val TRUEHD = Regex("""\bTRUEHD\b""", RegexOption.IGNORE_CASE)
-    val DTS = Regex("""\b(DTS[- .]?HD|DTS|DDP|EAC3|AC3|AAC)\b""", RegexOption.IGNORE_CASE)
-    val DTS_X = Regex("""\bDTS[-_.: ]?X\b""", RegexOption.IGNORE_CASE)
-    val DTS_HD_MA = Regex("""\bDTS[-_. ]?(?:HD[-_. ]?)?(?:MA|MASTER)\b""", RegexOption.IGNORE_CASE)
-    val DTS_HD_ONLY = Regex("""\bDTS[-_. ]?HD\b""", RegexOption.IGNORE_CASE)
-    val DD_PLUS = Regex("""\b(DDP|DD\+|EAC-?3|E-?AC-?3)\b""", RegexOption.IGNORE_CASE)
-    val DD = Regex("""\b(AC-?3|DD(?:[ ._-]?5[ ._-]?1)?|DOLBY[ ._-]?DIGITAL)\b""", RegexOption.IGNORE_CASE)
-    val CH71 = Regex("""\b7[ .]?1\b""", RegexOption.IGNORE_CASE)
-    val CH51 = Regex("""\b5[ .]?1\b""", RegexOption.IGNORE_CASE)
-    val MULTI_AUDIO = Regex("""\b(MULTI|DUAL[ .-]?AUDIO|MULTI[ .-]?AUDIO)\b""", RegexOption.IGNORE_CASE)
-    val LANGUAGE_HINT = Regex("""\b(ENG|ENGLISH|HIN|HINDI|TAM|TAMIL|TEL|TELUGU|JPN|JAPANESE|KOR|KOREAN|SPA|SPANISH|FRE|FRENCH|GER|GERMAN|ITA|ITALIAN)\b""", RegexOption.IGNORE_CASE)
-    val DV = Regex("""\b(DV|DoVi|Dolby[\s._-]*Vision)\b""", RegexOption.IGNORE_CASE)
-    val HDR10_PLUS = Regex("""\b(HDR10\+|HDR10\s*PLUS|HDR\s*10\s*\+)\b""", RegexOption.IGNORE_CASE)
-    val HDR10 = Regex("""\bHDR10\b""", RegexOption.IGNORE_CASE)
-    val HDR = Regex("""\bHDR(10\+?|10)?\b""", RegexOption.IGNORE_CASE)
-    val IMAX = Regex("""\bIMAX\b""", RegexOption.IGNORE_CASE)
-    val WHITESPACE = Regex("""\s+""")
-    val SIZE_PATTERN_1 = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
-    val SIZE_PATTERN_2 = Regex("""(\d+(?:\.\d+)?)\s*(TIB|GIB|MIB|KIB)""")
-    val SIZE_PATTERN_3 = Regex("""^(\d+(?:\.\d+)?)$""")
-}
-
 private fun sourceTabId(stream: StreamSource): String {
     val baseName = stream.addonName.split(" - ").firstOrNull()?.trim() ?: stream.addonName
     return if (stream.addonId == "home_server" && baseName.isNotBlank()) {
@@ -982,53 +947,11 @@ private fun isSelectedSource(candidate: StreamSource, selected: StreamSource?): 
     return sameUrl || (sameAddon && (sameSource || sameFile || sameBingeGroup))
 }
 
-private fun isDebridLikeSource(stream: StreamSource, blob: String? = null): Boolean {
-    val addonName = stream.addonName
-    val text = blob ?: buildString {
-        append(stream.source)
-        append(' ')
-        append(stream.quality)
-        append(' ')
-        append(stream.addonName)
-        append(' ')
-        append(stream.behaviorHints?.filename.orEmpty())
-        append(' ')
-        append(stream.url.orEmpty())
-    }
-    return addonName.contains("torbox", ignoreCase = true) ||
-        addonName.contains("torrentio tb", ignoreCase = true) ||
-        addonName.contains("torrentio rd", ignoreCase = true) ||
-        addonName.contains("torrentio pm", ignoreCase = true) ||
-        addonName.contains("torrentio ad", ignoreCase = true) ||
-        text.contains("debrid", ignoreCase = true) ||
-        text.contains("real-debrid", ignoreCase = true) ||
-        text.contains("realdebrid", ignoreCase = true) ||
-        text.contains("premiumize", ignoreCase = true) ||
-        text.contains("alldebrid", ignoreCase = true) ||
-        text.contains(" RD+", ignoreCase = true) ||
-        text.contains("[RD+]", ignoreCase = true) ||
-        text.contains(" TB+", ignoreCase = true) ||
-        text.contains("[TB+]", ignoreCase = true) ||
-        text.contains("torbox", ignoreCase = true)
-}
-
 private fun sourceFilterMatches(presentation: SourcePresentation, selectedFilter: String): Boolean {
-    val stream = presentation.stream
-    val blob = buildString {
-        append(stream.source)
-        append(' ')
-        append(stream.quality)
-        append(' ')
-        append(stream.addonName)
-        append(' ')
-        append(stream.behaviorHints?.filename.orEmpty())
-        append(' ')
-        append(stream.url.orEmpty())
-    }
     return when (selectedFilter) {
         "4K" -> presentation.resolutionLabel == "4K"
         "1080p" -> presentation.resolutionLabel == "1080p"
-        "Debrid" -> isDebridLikeSource(stream, blob)
+        "Debrid" -> presentation.sortCached
         "Direct" -> presentation.sortDirect
         else -> true
     }
@@ -1052,57 +975,9 @@ private fun sourceStatusText(
     }
 }
 
-private fun cleanSourceDisplayTitle(raw: String): String {
-    val oneLine = raw
-        .replace('\n', ' ')
-        .replace('\r', ' ')
-        .replace(StreamRegexes.WHITESPACE, " ")
-        .trim()
-
-    if (oneLine.length <= 92) return oneLine.ifBlank { "Unknown source" }
-
-    val withoutExtension = oneLine
-        .replace(Regex("""\.(mkv|mp4|avi|mov|ts)$""", RegexOption.IGNORE_CASE), "")
-    val compact = withoutExtension
-        .replace(Regex("""\b(19|20)\d{2}\b.*"""), "")
-        .replace('.', ' ')
-        .replace('_', ' ')
-        .replace(StreamRegexes.WHITESPACE, " ")
-        .trim()
-        .takeIf { it.length in 8..70 }
-
-    return compact ?: oneLine.take(92).trimEnd('.', ' ', '-', '_')
-}
-
 private fun presentSource(stream: StreamSource): SourcePresentation {
-    val rawTitle = stream.behaviorHints?.filename?.takeIf { it.isNotBlank() } ?: stream.source
-    val title = cleanSourceDisplayTitle(rawTitle)
-    val addonLabel = stream.addonName.split(" - ").firstOrNull()?.trim() ?: stream.addonName
-    val searchBlob = buildString {
-        append(stream.quality)
-        append(' ')
-        append(stream.source)
-        append(' ')
-        append(stream.addonName)
-        append(' ')
-        append(stream.behaviorHints?.filename.orEmpty())
-    }
-
-    val resolutionLabel = when {
-        searchBlob.contains("2160p", true) || searchBlob.contains("4K", true) -> "4K"
-        searchBlob.contains("1080p", true) -> "1080p"
-        searchBlob.contains("720p", true) -> "720p"
-        StreamRegexes.CAM.containsMatchIn(searchBlob) -> "CAM"
-        else -> stream.quality.split(" ").firstOrNull()?.take(8) ?: "SD"
-    }
-    val resolutionScore = when (resolutionLabel) {
-        "4K" -> 4
-        "1080p" -> 3
-        "720p" -> 2
-        "CAM" -> 0
-        else -> 1
-    }
-    val qualityColor = when (resolutionLabel) {
+    val analysis = analyzeStreamSource(stream)
+    val qualityColor = when (analysis.resolutionLabel) {
         "4K" -> AccentGold
         "1080p" -> AccentBlue
         "720p" -> Color(0xFF06B6D4)
@@ -1110,112 +985,28 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
         else -> TextSecondary
     }
 
-    val releaseLabel = when {
-        StreamRegexes.REMUX.containsMatchIn(searchBlob) -> "REMUX"
-        StreamRegexes.BLURAY.containsMatchIn(searchBlob) -> "BluRay"
-        StreamRegexes.WEBDL.containsMatchIn(searchBlob) -> "WEB-DL"
-        StreamRegexes.WEBRIP.containsMatchIn(searchBlob) -> "WEBRip"
-        StreamRegexes.HDTV.containsMatchIn(searchBlob) -> "HDTV"
-        StreamRegexes.CAM.containsMatchIn(searchBlob) -> "CAM"
-        else -> null
-    }
-    val releaseScore = when (releaseLabel) {
-        "REMUX" -> 5
-        "BluRay" -> 4
-        "WEB-DL" -> 3
-        "WEBRip" -> 2
-        "HDTV" -> 1
-        else -> 0
-    }
-
-    val codecLabel = when {
-        StreamRegexes.AV1.containsMatchIn(searchBlob) -> "AV1"
-        StreamRegexes.HEVC.containsMatchIn(searchBlob) -> "HEVC"
-        StreamRegexes.H264.containsMatchIn(searchBlob) -> "H.264"
-        else -> null
-    }
-
-    val audioLabel = when {
-        StreamRegexes.ATMOS.containsMatchIn(searchBlob) -> "Atmos"
-        StreamRegexes.TRUEHD.containsMatchIn(searchBlob) -> "TrueHD"
-        StreamRegexes.CH71.containsMatchIn(searchBlob) -> "7.1"
-        StreamRegexes.CH51.containsMatchIn(searchBlob) -> "5.1"
-        StreamRegexes.DTS.containsMatchIn(searchBlob) -> StreamRegexes.DTS.find(searchBlob)?.value?.uppercase()
-        else -> null
-    }
-
-    val addonLower = addonLabel.lowercase()
-    val isTorrentProvider =
-        addonLower.contains("torrentio") ||
-        addonLower.contains("torrent") ||
-        addonLower.contains("debrid") ||
-        addonLower.contains("realdebrid") ||
-        addonLower.contains("premiumize") ||
-        addonLower.contains("alldebrid") ||
-        searchBlob.contains("magnet:", ignoreCase = true)
-
-    val hasDirectHttpUrl = !stream.url.isNullOrBlank() && stream.url.startsWith("http", true)
-    val isIptvVod = stream.addonId == "iptv_xtream_vod" || addonLower.contains("iptv vod")
-    val isDebridReady = isDebridLikeSource(stream, searchBlob)
-    val isReady = stream.behaviorHints?.cached == true || isDebridReady
-
-    val transportLabel = when {
-        stream.behaviorHints?.cached == true -> "Cached"
-        isDebridReady -> "Debrid"
-        !stream.infoHash.isNullOrBlank() || stream.sources.isNotEmpty() || isTorrentProvider -> "Torrent"
-        isIptvVod && hasDirectHttpUrl -> "VOD"
-        else -> null
-    }
-    val multiSourceLabel = when {
-        stream.sources.size > 1 -> "${stream.sources.size} sources"
-        stream.sources.size == 1 -> "1 source"
-        else -> null
-    }
-
-    val subtitleLangs = stream.subtitles.mapNotNull { sub ->
-        sub.lang.takeIf { it.isNotBlank() }
-    }.distinct()
-    val languageLabel = when {
-        StreamRegexes.MULTI_AUDIO.containsMatchIn(searchBlob) -> "Multi-audio"
-        subtitleLangs.size > 1 -> "${subtitleLangs.size} langs"
-        subtitleLangs.size == 1 -> subtitleLangs.first().uppercase()
-        else -> StreamRegexes.LANGUAGE_HINT.find(searchBlob)?.value?.uppercase()
-    }
-
-    val chips = buildList {
-        add(addonLabel)
-        transportLabel?.let(::add)
-        multiSourceLabel?.let(::add)
-        languageLabel?.let(::add)
-        releaseLabel?.let(::add)
-        codecLabel?.let(::add)
-        if (StreamRegexes.HDR.containsMatchIn(searchBlob)) add("HDR")
-        if (StreamRegexes.DV.containsMatchIn(searchBlob)) add("DV")
-        if (StreamRegexes.IMAX.containsMatchIn(searchBlob)) add("IMAX")
-        audioLabel?.let(::add)
-        if (stream.size.isNotBlank()) add(stream.size)
-    }
-
     return SourcePresentation(
         stream = stream,
-        title = title,
-        rawTitle = rawTitle,
-        addonLabel = addonLabel,
-        resolutionLabel = resolutionLabel,
-        resolutionScore = resolutionScore,
-        releaseLabel = releaseLabel,
-        releaseScore = releaseScore,
-        codecLabel = codecLabel,
-        audioLabel = audioLabel,
-        transportLabel = transportLabel,
-        multiSourceLabel = multiSourceLabel,
-        languageLabel = languageLabel,
-        chips = chips.distinct(),
+        title = analysis.title,
+        rawTitle = analysis.rawTitle,
+        addonLabel = analysis.addonLabel,
+        resolutionLabel = analysis.resolutionLabel,
+        resolutionScore = analysis.resolutionScore,
+        releaseLabel = analysis.releaseLabel,
+        releaseScore = analysis.releaseScore,
+        codecLabel = analysis.codecLabel,
+        audioLabel = analysis.audioLabel,
+        visualTags = analysis.visualTags,
+        audioTags = analysis.audioTags,
+        transportLabel = analysis.transportLabel,
+        multiSourceLabel = analysis.multiSourceLabel,
+        languageLabel = analysis.languageLabel,
+        chips = analysis.chips,
         qualityColor = qualityColor,
-        sizeBytes = getSizeBytes(stream),
-        sortCached = isReady,
-        sortDirect = !stream.url.isNullOrBlank() && stream.url.startsWith("http", true),
-        description = cleanStreamDescription(stream.description, rawTitle)
+        sizeBytes = analysis.sizeBytes,
+        sortCached = analysis.isCachedOrDebridReady,
+        sortDirect = analysis.isDirectHttp,
+        description = cleanStreamDescription(stream.description, analysis.rawTitle)
     )
 }
 
@@ -1238,23 +1029,7 @@ private fun cleanStreamDescription(raw: String?, title: String): String? {
     return cleaned.takeIf { it.isNotBlank() }
 }
 
-private fun StreamSource.multiSourceCountLabel(): String? = when {
-    sources.size > 1 -> "${sources.size} sources"
-    sources.size == 1 -> "1 source"
-    else -> null
-}
-
 private fun sourceBadges(presentation: SourcePresentation): List<SourceBadge> = buildList {
-    val blob = buildString {
-        append(presentation.rawTitle)
-        append(' ')
-        append(presentation.stream.source)
-        append(' ')
-        append(presentation.stream.quality)
-        append(' ')
-        append(presentation.chips.joinToString(" "))
-    }
-
     when (presentation.resolutionLabel) {
         "4K" -> add(SourceBadge("4K", SourceBadgeImages.UHD_4K))
         "1080p" -> add(SourceBadge("1080p", SourceBadgeImages.FULL_HD_1080))
@@ -1278,30 +1053,37 @@ private fun sourceBadges(presentation: SourcePresentation): List<SourceBadge> = 
         "AV1" -> add(SourceBadge("AV1"))
     }
 
-    when {
-        StreamRegexes.DV.containsMatchIn(blob) -> add(SourceBadge("DV", SourceBadgeImages.DOLBY_VISION))
-        StreamRegexes.HDR10_PLUS.containsMatchIn(blob) -> add(SourceBadge("HDR10+", SourceBadgeImages.HDR10_PLUS))
-        StreamRegexes.HDR10.containsMatchIn(blob) -> add(SourceBadge("HDR10", SourceBadgeImages.HDR10))
-        StreamRegexes.HDR.containsMatchIn(blob) -> add(SourceBadge("HDR", SourceBadgeImages.HDR))
-    }
-    if (StreamRegexes.IMAX.containsMatchIn(blob)) {
-        add(SourceBadge("IMAX", SourceBadgeImages.IMAX))
+    presentation.visualTags.forEach { tag ->
+        visualSourceBadge(tag)?.let(::add)
     }
 
-    when {
-        presentation.audioLabel.equals("Atmos", ignoreCase = true) -> add(SourceBadge("Atmos", SourceBadgeImages.ATMOS))
-        presentation.audioLabel.equals("TrueHD", ignoreCase = true) -> add(SourceBadge("TrueHD", SourceBadgeImages.TRUEHD))
-        presentation.audioLabel.equals("7.1", ignoreCase = true) -> add(SourceBadge("7.1", SourceBadgeImages.AUDIO_7_1))
-        presentation.audioLabel.equals("5.1", ignoreCase = true) -> add(SourceBadge("5.1", SourceBadgeImages.AUDIO_5_1))
-        StreamRegexes.DTS_X.containsMatchIn(blob) -> add(SourceBadge("DTS:X", SourceBadgeImages.DTS_X))
-        StreamRegexes.DTS_HD_MA.containsMatchIn(blob) -> add(SourceBadge("DTS-HD MA", SourceBadgeImages.DTS_HD_MA))
-        StreamRegexes.DTS_HD_ONLY.containsMatchIn(blob) -> add(SourceBadge("DTS-HD", SourceBadgeImages.DTS_HD))
-        presentation.audioLabel?.contains("DTS", ignoreCase = true) == true -> add(SourceBadge("DTS", SourceBadgeImages.DTS))
-        StreamRegexes.DD_PLUS.containsMatchIn(blob) -> add(SourceBadge("DD+", SourceBadgeImages.DOLBY_DIGITAL_PLUS))
-        StreamRegexes.DD.containsMatchIn(blob) -> add(SourceBadge("DD", SourceBadgeImages.DOLBY_DIGITAL))
+    presentation.audioTags.forEach { tag ->
+        audioSourceBadge(tag)?.let(::add)
     }
 
 }.distinctBy { it.text }
+
+private fun visualSourceBadge(tag: String): SourceBadge? = when (tag) {
+    "DV" -> SourceBadge("DV", SourceBadgeImages.DOLBY_VISION)
+    "HDR10+" -> SourceBadge("HDR10+", SourceBadgeImages.HDR10_PLUS)
+    "HDR10" -> SourceBadge("HDR10", SourceBadgeImages.HDR10)
+    "HDR" -> SourceBadge("HDR", SourceBadgeImages.HDR)
+    "IMAX" -> SourceBadge("IMAX", SourceBadgeImages.IMAX)
+    else -> null
+}
+private fun audioSourceBadge(tag: String): SourceBadge? = when (tag) {
+    "Atmos" -> SourceBadge("Atmos", SourceBadgeImages.ATMOS)
+    "TrueHD" -> SourceBadge("TrueHD", SourceBadgeImages.TRUEHD)
+    "DTS:X" -> SourceBadge("DTS:X", SourceBadgeImages.DTS_X)
+    "DTS-HD MA" -> SourceBadge("DTS-HD MA", SourceBadgeImages.DTS_HD_MA)
+    "DTS-HD" -> SourceBadge("DTS-HD", SourceBadgeImages.DTS_HD)
+    "DD+" -> SourceBadge("DD+", SourceBadgeImages.DOLBY_DIGITAL_PLUS)
+    "DD" -> SourceBadge("DD", SourceBadgeImages.DOLBY_DIGITAL)
+    "7.1" -> SourceBadge("7.1", SourceBadgeImages.AUDIO_7_1)
+    "5.1" -> SourceBadge("5.1", SourceBadgeImages.AUDIO_5_1)
+    "DTS" -> SourceBadge("DTS", SourceBadgeImages.DTS)
+    else -> null
+}
 
 private fun rowSubtitle(presentation: SourcePresentation): String {
     return presentation.addonLabel
@@ -2279,30 +2061,19 @@ private fun FilterTab(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CompactQualityBadge(stream: StreamSource) {
-    // IMAX and DV tokens are almost always in the filename / source title, not the
-    // pre-extracted `quality` string. Combine all fields we have so detection works
-    // regardless of where the token lives. This fixes issue #118.
-    val searchBlob = buildString {
-        append(stream.quality)
-        append(' ')
-        append(stream.source)
-        append(' ')
-        append(stream.behaviorHints?.filename.orEmpty())
-    }
-
-    val quality = stream.quality
-    val is4K = quality.contains("4K", ignoreCase = true) || quality.contains("2160p")
-    val is1080 = quality.contains("1080p")
-    val is720 = quality.contains("720p")
-    val isHDR = StreamRegexes.HDR.containsMatchIn(searchBlob)
-    val isDV = StreamRegexes.DV.containsMatchIn(searchBlob)
-    val isIMAX = StreamRegexes.IMAX.containsMatchIn(searchBlob)
+    val analysis = analyzeStreamSource(stream)
+    val is4K = analysis.resolutionLabel == "4K"
+    val is1080 = analysis.resolutionLabel == "1080p"
+    val is720 = analysis.resolutionLabel == "720p"
+    val isHDR = analysis.visualTags.any { it.startsWith("HDR") }
+    val isDV = analysis.visualTags.contains("DV")
+    val isIMAX = analysis.visualTags.contains("IMAX")
 
     val displayText = when {
         is4K -> "4K"
         is1080 -> "1080p"
         is720 -> "720p"
-        else -> quality.split(" ").firstOrNull()?.take(6) ?: "SD"
+        else -> analysis.resolutionLabel
     }
 
     val color = when {
@@ -2381,73 +2152,5 @@ private fun CompactQualityBadge(stream: StreamSource) {
                 )
             }
         }
-    }
-}
-
-// Helper function to get size in bytes for sorting
-// ALWAYS parses the display size string to ensure consistent sorting across all streams
-private fun getSizeBytes(stream: StreamSource): Long {
-    // ALWAYS parse from display string - don't use sizeBytes field
-    // This ensures consistent comparison (some streams have sizeBytes from behaviorHints
-    // in actual bytes, others have it parsed with 1024 multiplier - causes inconsistency)
-    return parseSizeString(stream.size)
-}
-
-// Robust size string parser - handles all common formats
-private fun parseSizeString(sizeStr: String): Long {
-    if (sizeStr.isBlank()) return 0L
-
-    // Normalize: uppercase, replace comma with dot, remove extra spaces
-    val normalized = sizeStr.uppercase()
-        .replace(",", ".")
-        .replace(StreamRegexes.WHITESPACE, " ")
-        .trim()
-
-    // Try multiple regex patterns to catch all formats
-
-    // Pattern 1: "15.2 GB", "6GB", "1.5 TB" etc.
-    val pattern1 = StreamRegexes.SIZE_PATTERN_1
-    pattern1.find(normalized)?.let { match ->
-        val number = match.groupValues[1].toDoubleOrNull() ?: return@let
-        val unit = match.groupValues[2]
-        return calculateBytes(number, unit)
-    }
-
-    // Pattern 2: Numbers with GiB/MiB notation
-    val pattern2 = StreamRegexes.SIZE_PATTERN_2
-    pattern2.find(normalized)?.let { match ->
-        val number = match.groupValues[1].toDoubleOrNull() ?: return@let
-        val unit = match.groupValues[2].replace("IB", "B") // Convert TIB->TB, GIB->GB etc.
-        return calculateBytes(number, unit)
-    }
-
-    // Pattern 3: Just a number (assume bytes) - very rare
-    val pattern3 = StreamRegexes.SIZE_PATTERN_3
-    pattern3.find(normalized)?.let { match ->
-        return match.groupValues[1].toLongOrNull() ?: 0L
-    }
-
-    return 0L
-}
-
-// Calculate bytes from number and unit
-private fun calculateBytes(number: Double, unit: String): Long {
-    return when (unit) {
-        "TB" -> (number * 1024.0 * 1024.0 * 1024.0 * 1024.0).toLong()
-        "GB" -> (number * 1024.0 * 1024.0 * 1024.0).toLong()
-        "MB" -> (number * 1024.0 * 1024.0).toLong()
-        "KB" -> (number * 1024.0).toLong()
-        else -> number.toLong()
-    }
-}
-
-// Helper function to get quality score for sorting (basic, used for display)
-private fun qualityScore(quality: String): Int {
-    return when {
-        quality.contains("4K", ignoreCase = true) || quality.contains("2160p") -> 4
-        quality.contains("1080p", ignoreCase = true) -> 3
-        quality.contains("720p", ignoreCase = true) -> 2
-        quality.contains("480p", ignoreCase = true) -> 1
-        else -> 0
     }
 }

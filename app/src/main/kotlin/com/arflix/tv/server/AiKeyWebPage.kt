@@ -1,4 +1,4 @@
-package com.arflix.tv.server
+﻿package com.arflix.tv.server
 
 object AiKeyWebPage {
 
@@ -45,7 +45,7 @@ object AiKeyWebPage {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Arvio – AI Translation Key</title>
+<title>Majo Stream â€“ AI Translation Key</title>
 $sharedCss
 <style>
   .provider-btn { display: flex; flex-direction: column; align-items: flex-start; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 1.25rem 1.5rem; color: #fff; font-family: inherit; cursor: pointer; transition: all 0.25s ease; text-decoration: none; margin-bottom: 1rem; }
@@ -60,8 +60,8 @@ $sharedCss
 <body>
 <div class="page">
   <div class="header">
-    <img src="/logo.png" alt="Arvio" class="header-logo">
-    <p>AI Subtitle Translation – API Key Setup</p>
+    <img src="/logo.png" alt="Majo Stream" class="header-logo">
+    <p>AI Subtitle Translation â€“ API Key Setup</p>
   </div>
 
   <p style="font-size:0.85rem; color:rgba(255,255,255,0.35); margin-bottom:1.5rem;">Choose your AI provider to set its API key:</p>
@@ -69,13 +69,13 @@ $sharedCss
   <a href="/groq" class="provider-btn">
     <span class="badge badge-groq">DEFAULT</span>
     <span class="name">Groq</span>
-    <span class="model">Llama 3.3 70B · Free tier: 1K RPM / 500K RPD</span>
+    <span class="model">Llama 3.3 70B Â· Free tier: 1K RPM / 500K RPD</span>
   </a>
 
   <a href="/gemini" class="provider-btn">
     <span class="badge badge-gemini">BETTER QUALITY</span>
     <span class="name">Google Gemini</span>
-    <span class="model">Gemini 2.5 Flash · Free tier available</span>
+    <span class="model">Gemini 2.5 Flash Â· Free tier available</span>
   </a>
 </div>
 </body>
@@ -86,17 +86,17 @@ $sharedCss
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Arvio – Groq API Key</title>
+<title>Majo Stream â€“ Groq API Key</title>
 $sharedCss
 </head>
 <body>
 <div class="page">
   <div class="header">
-    <img src="/logo.png" alt="Arvio" class="header-logo">
+    <img src="/logo.png" alt="Majo Stream" class="header-logo">
     <p>Set your Groq API Key</p>
   </div>
 
-  <a href="/" class="back">← Back</a>
+  <a href="/" class="back">â† Back</a>
 
   <label for="apiKey">Groq API Key</label>
   <input type="password" id="apiKey" placeholder="gsk_..." autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -154,17 +154,17 @@ document.getElementById('apiKey').addEventListener('keydown', function(e) { if (
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Arvio – Gemini API Key</title>
+<title>Majo Stream â€“ Gemini API Key</title>
 $sharedCss
 </head>
 <body>
 <div class="page">
   <div class="header">
-    <img src="/logo.png" alt="Arvio" class="header-logo">
+    <img src="/logo.png" alt="Majo Stream" class="header-logo">
     <p>Set your Google Gemini API Key</p>
   </div>
 
-  <a href="/" class="back">← Back</a>
+  <a href="/" class="back">â† Back</a>
 
   <label for="apiKey">Google Gemini API Key</label>
   <input type="password" id="apiKey" placeholder="AIzaSy..." autocomplete="off" autocapitalize="off" spellcheck="false">

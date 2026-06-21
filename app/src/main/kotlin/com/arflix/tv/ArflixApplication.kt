@@ -6,9 +6,11 @@ import android.content.ComponentCallbacks2
 import android.graphics.Bitmap
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Constraints
 import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -27,8 +29,11 @@ import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.CrashlyticsProvider
 import com.arflix.tv.util.DeviceType
+import com.arflix.tv.util.RuntimeApiKeys
+import com.arflix.tv.util.SecureStorage
 import com.arflix.tv.util.SentryCrashReporter
 import com.arflix.tv.util.detectDeviceType
+import com.arflix.tv.worker.StreamingCatalogRefreshWorker
 import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -37,12 +42,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import com.arflix.tv.util.settingsDataStore
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 /**
- * ARVIO TV Application class
+ * Majo Stream TV Application class
  */
 @HiltAndroidApp
 class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFactory {
@@ -60,6 +66,8 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        initializeRuntimeApiKeys()
 
         // OkHttpProvider.init(context) just stashes the app context; it does
         // not build the OkHttpClient. Safe to keep on the main thread — it's
@@ -94,6 +102,30 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
 
     }
 
+    private fun initializeRuntimeApiKeys() {
+        runCatching {
+            runBlocking(Dispatchers.IO) {
+                val prefs = settingsDataStore.data.first()
+                val key = androidx.datastore.preferences.core.stringPreferencesKey(
+                    RuntimeApiKeys.TMDB_API_KEY_PREF_KEY
+                )
+                val savedTmdbApiKey = SecureStorage.decrypt(
+                    prefs[key],
+                    RuntimeApiKeys.TMDB_API_KEYSTORE_ALIAS
+                )
+                RuntimeApiKeys.setTmdbApiKey(savedTmdbApiKey)
+                val watchmodeKey = androidx.datastore.preferences.core.stringPreferencesKey(
+                    RuntimeApiKeys.WATCHMODE_API_KEY_PREF_KEY
+                )
+                val savedWatchmodeApiKey = SecureStorage.decrypt(
+                    prefs[watchmodeKey],
+                    RuntimeApiKeys.WATCHMODE_API_KEYSTORE_ALIAS
+                )
+                RuntimeApiKeys.setWatchmodeApiKey(savedWatchmodeApiKey)
+            }
+        }
+    }
+
     override fun newImageLoader(): ImageLoader {
         val isTvDevice = detectDeviceType(this) == DeviceType.TV
         val isLowRamDevice = isLowRamDevice()
@@ -103,7 +135,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             .okHttpClient(OkHttpProvider.coilClient)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    // The 2 GB Android TV dump showed Arvio spending most of
+                    // The 2 GB Android TV dump showed Majo Stream spending most of
                     // its memory in native bitmap/texture allocations
                     // (255 MB native heap, 77 MB GPU cache). Use a fixed TV
                     // image budget instead of a percent of largeHeap memory so
@@ -210,6 +242,41 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             TraktSyncWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP,
             syncRequest
+        )
+    }
+
+    /**
+     * Schedule Swedish service catalog refresh. This keeps Watchmode refs warm
+     * while staying under the free monthly quota by refreshing once per day.
+     */
+    fun scheduleStreamingCatalogRefreshIfNeeded() {
+        val networkConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val oneTimeRequest = OneTimeWorkRequestBuilder<StreamingCatalogRefreshWorker>()
+            .setInitialDelay(StreamingCatalogRefreshWorker.STARTUP_DELAY_MINUTES, TimeUnit.MINUTES)
+            .setConstraints(networkConstraints)
+            .addTag(StreamingCatalogRefreshWorker.TAG)
+            .build()
+
+        val refreshRequest = PeriodicWorkRequestBuilder<StreamingCatalogRefreshWorker>(
+            StreamingCatalogRefreshWorker.REFRESH_INTERVAL_HOURS, TimeUnit.HOURS
+        )
+            .setConstraints(networkConstraints)
+            .addTag(StreamingCatalogRefreshWorker.TAG)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            StreamingCatalogRefreshWorker.WORK_NAME_ON_OPEN,
+            ExistingWorkPolicy.KEEP,
+            oneTimeRequest
+        )
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            StreamingCatalogRefreshWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            refreshRequest
         )
     }
 

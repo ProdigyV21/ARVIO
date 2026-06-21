@@ -39,6 +39,16 @@ class AutoPlaySourcePlannerTest {
     }
 
     @Test
+    fun `best autoplay uses shared availability ranking for release quality before size`() {
+        val largeWeb = stream(source = "Movie 2160p WEB-DL", quality = "4K", size = "52 GB")
+        val remux = stream(source = "Movie 2160p REMUX", quality = "4K", size = "35 GB")
+
+        val selected = bestAutoPlayStream(listOf(largeWeb, remux), minQualityScore = 0)
+
+        assertEquals(remux, selected)
+    }
+
+    @Test
     fun `top-tier 4k source plays after a brief settle without waiting on slow addons`() {
         val top = stream(source = "Movie 2160p REMUX", quality = "4K", size = "52 GB")
 

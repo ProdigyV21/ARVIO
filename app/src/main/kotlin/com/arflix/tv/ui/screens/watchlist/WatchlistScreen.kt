@@ -76,6 +76,9 @@ import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.tr
 import kotlinx.coroutines.delay
 
+internal const val WATCHLIST_EMPTY_TITLE_COPY = "Your watchlist is empty"
+internal const val WATCHLIST_EMPTY_BODY_COPY = "Add movies and shows to watch later"
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun WatchlistScreen(
@@ -84,7 +87,7 @@ fun WatchlistScreen(
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
-    onNavigateToTv: () -> Unit = {},
+    onNavigateToDiscover: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit = {}
@@ -100,7 +103,7 @@ fun WatchlistScreen(
     }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var isSidebarFocused by remember { mutableStateOf(false) }
-    val hasProfile = currentProfile != null
+    val hasProfile = false
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
     var sidebarFocusIndex by remember { mutableIntStateOf(if (hasProfile) 3 else 2) }
     val rootFocusRequester = remember { FocusRequester() }
@@ -236,17 +239,13 @@ fun WatchlistScreen(
                         }
                         Key.Enter, Key.DirectionCenter -> {
                             if (isSidebarFocused) {
-                                if (hasProfile && sidebarFocusIndex == 0) {
-                                    onSwitchProfile()
-                                } else {
-                                    when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
-                                        SidebarItem.SEARCH -> onNavigateToSearch()
-                                        SidebarItem.HOME -> onNavigateToHome()
-                                        SidebarItem.WATCHLIST -> {}
-                                        SidebarItem.TV -> onNavigateToTv()
-                                        SidebarItem.SETTINGS -> onNavigateToSettings()
-                                        null -> Unit
-                                    }
+                                when (topBarFocusedItem(sidebarFocusIndex, hasProfile)) {
+                                    SidebarItem.SEARCH -> onNavigateToSearch()
+                                    SidebarItem.HOME -> onNavigateToHome()
+                                    SidebarItem.DISCOVER -> onNavigateToDiscover()
+                                    SidebarItem.WATCHLIST -> {}
+                                    SidebarItem.SETTINGS -> onNavigateToSettings()
+                                    null -> Unit
                                 }
                             } else {
                                 enterKeyDownTimeMs = SystemClock.elapsedRealtime()
@@ -281,8 +280,7 @@ fun WatchlistScreen(
             AppTopBar(
                 selectedItem = SidebarItem.WATCHLIST,
                 isFocused = isSidebarFocused,
-                focusedIndex = sidebarFocusIndex,
-                profile = currentProfile
+                focusedIndex = sidebarFocusIndex
             )
         }
 
@@ -330,14 +328,14 @@ fun WatchlistScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = tr("Your watchlist is empty"),
+                                text = tr(WATCHLIST_EMPTY_TITLE_COPY),
                                 style = ArflixTypography.body,
                                 color = Color.White.copy(alpha = 0.5f),
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = tr("Add movies and shows for later"),
+                                text = tr(WATCHLIST_EMPTY_BODY_COPY),
                                 style = ArflixTypography.caption,
                                 color = Color.White.copy(alpha = 0.3f),
                                 textAlign = TextAlign.Center

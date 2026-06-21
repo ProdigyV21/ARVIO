@@ -26,7 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Bookmark
-import androidx.compose.material.icons.outlined.LiveTv
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -61,8 +61,8 @@ import com.arflix.tv.ui.theme.TextSecondary
 enum class SidebarItem(val icon: ImageVector, @StringRes val labelRes: Int) {
     SEARCH(Icons.Outlined.Search, R.string.search),
     HOME(Icons.Outlined.Home, R.string.home),
+    DISCOVER(Icons.Outlined.Explore, R.string.discover),
     WATCHLIST(Icons.Outlined.Bookmark, R.string.watchlist),
-    TV(Icons.Outlined.LiveTv, R.string.tv_shows),
     SETTINGS(Icons.Outlined.Settings, R.string.settings)
 }
 
@@ -78,12 +78,16 @@ fun Sidebar(
     onItemSelected: (SidebarItem) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val centerItems = listOf(SidebarItem.SEARCH, SidebarItem.HOME, SidebarItem.WATCHLIST)
+    val centerItems = listOf(SidebarItem.SEARCH, SidebarItem.HOME, SidebarItem.DISCOVER, SidebarItem.WATCHLIST)
     val bottomItem = SidebarItem.SETTINGS
     val hasProfile = profile != null
-    // With profile: index 0 = profile, 1-4 = center items, 5 = settings. Without: 0-3 = center, 4 = settings.
+    // With profile: index 0 = profile, 1-3 = center items, 4 = settings. Without: 0-2 = center, 3 = settings.
     val centerFocusedIndex = if (hasProfile) focusedIndex - 1 else focusedIndex
-    val settingsFocused = if (hasProfile) focusedIndex == 5 else focusedIndex == 4
+    val settingsFocused = if (hasProfile) {
+        focusedIndex == centerItems.size + 1
+    } else {
+        focusedIndex == centerItems.size
+    }
 
     // Sidebar: subtle transparent gradient so backdrop shows through
     Box(
@@ -132,7 +136,7 @@ fun Sidebar(
             // Flexible space - pushes center group down
             Spacer(modifier = Modifier.weight(1f))
 
-            // Center group: Search, Home, Watchlist, TV (vertically centered)
+            // Center group: Search, Home, Watchlist (vertically centered)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(26.dp)

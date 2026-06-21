@@ -35,11 +35,12 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.ui.performance.TvImageRole
+import com.arflix.tv.ui.performance.buildTvSizedImageRequest
+import com.arflix.tv.ui.performance.scaledDecodeSize
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.skin.rememberArvioCardShape
@@ -83,9 +84,13 @@ fun MediaCard(
     showTitle: Boolean = true,
     titleMaxLines: Int = 1,
     subtitleMaxLines: Int = 1,
+    showRestBorder: Boolean = true,
     isFocusedOverride: Boolean = false,
     focusedScale: Float = 1.045f,
     enableSystemFocus: Boolean = true,
+    enableClickHandling: Boolean = true,
+    imageDecodeScale: Float = 1f,
+    useRgb565Image: Boolean = false,
     onFocused: () -> Unit = {},
     onClick: () -> Unit = {},
     onLongClick: (() -> Unit)? = null,
@@ -131,40 +136,51 @@ fun MediaCard(
     } else null
     val showCollectionTitleOverlay = isCollectionTile && showTitle
     val isGenreCollectionTile = item.collectionGroup == CollectionGroupKind.GENRE
+    val isServiceCollectionTile = item.collectionGroup == CollectionGroupKind.SERVICE
     val rawImageUrl = if (visualFocused && enableFocusedImageSwap) {
         explicitFocusUrl ?: collectionFocusUrl ?: baseImageUrl
     } else {
         baseImageUrl
     }
+    val surfaceOnClick = if (enableClickHandling) onClick else null
+    val surfaceOnLongClick = if (enableClickHandling) onLongClick else null
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
 
     val jumpBorderWidth = ArvioSkin.focus.outlineWidth
 
     val context = LocalContext.current
     val density = LocalDensity.current
-    val overlayBrush: Brush? = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.0f to Color.Transparent,
-            0.48f to Color.Transparent,
-            0.78f to Color.Black.copy(alpha = 0.18f),
-            1.0f to Color.Black.copy(alpha = 0.62f)
+    val overlayBrush: Brush? = if (isServiceCollectionTile) {
+        null
+    } else {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.0f to Color.Transparent,
+                0.48f to Color.Transparent,
+                0.78f to Color.Black.copy(alpha = 0.18f),
+                1.0f to Color.Black.copy(alpha = 0.62f)
+            )
         )
-    )
+    }
+    val imageContentScale = if (isServiceCollectionTile) ContentScale.Fit else ContentScale.Crop
     // Performance: Removed context/density from keys - they're stable CompositionLocals
-    val imageRequest = remember(rawImageUrl, width, aspectRatio) {
+    val imageRequest = remember(rawImageUrl, width, aspectRatio, imageDecodeScale, useRgb565Image) {
         if (rawImageUrl == null) return@remember null
-        val widthPx = with(density) { width.roundToPx() }
-        val heightPx = (widthPx / aspectRatio).toInt().coerceAtLeast(1)
-        val cacheKey = "$rawImageUrl|${widthPx}x$heightPx"
-        ImageRequest.Builder(context)
-            .data(rawImageUrl)
-            .size(widthPx, heightPx)
-            .precision(Precision.INEXACT)
-            .allowHardware(true)
-            .memoryCacheKey(cacheKey)
-            .placeholderMemoryCacheKey(cacheKey)
-            .crossfade(false)
-            .build()
+        val displayWidthPx = with(density) { width.roundToPx() }
+        val displayHeightPx = (displayWidthPx / aspectRatio).toInt().coerceAtLeast(1)
+        val (widthPx, heightPx) = scaledDecodeSize(
+            displayWidthPx = displayWidthPx,
+            displayHeightPx = displayHeightPx,
+            decodeScale = imageDecodeScale
+        )
+        buildTvSizedImageRequest(
+            context = context,
+            url = rawImageUrl,
+            widthPx = widthPx,
+            heightPx = heightPx,
+            role = TvImageRole.HOME_CARD,
+            rgb565 = useRgb565Image
+        )
     }
     // Performance: Removed context/density from keys
     val effectiveLogoImageUrl = logoImageUrl.takeIf { showLogoImage }
@@ -174,16 +190,14 @@ fun MediaCard(
         if (effectiveLogoImageUrl.isNullOrBlank()) {
             null
         } else {
-            val cacheKey = "$effectiveLogoImageUrl|${logoWidthPx}x$logoHeightPx"
-            ImageRequest.Builder(context)
-                .data(effectiveLogoImageUrl)
-                .size(logoWidthPx, logoHeightPx)
-                .precision(Precision.INEXACT)
-                .allowHardware(true)
-                .memoryCacheKey(cacheKey)
-                .placeholderMemoryCacheKey(cacheKey)
-                .crossfade(false)
-                .build()
+            buildTvSizedImageRequest(
+                context = context,
+                url = effectiveLogoImageUrl,
+                widthPx = logoWidthPx,
+                heightPx = logoHeightPx,
+                role = TvImageRole.HOME_LOGO,
+                rgb565 = false
+            )
         }
     }
 
@@ -202,15 +216,15 @@ fun MediaCard(
             outlineWidth = jumpBorderWidth,
             glowWidth = ArvioSkin.focus.glowWidth,
             glowAlpha = ArvioSkin.focus.glowAlpha,
-            showRestBorder = true,
+            showRestBorder = showRestBorder,
             focusedScale = focusedScale,
             pressedScale = 0.97f,
             focusedTransformOriginX = 0.5f,
             animateFocus = animateFocus,
             enableSystemFocus = enableSystemFocus,
             isFocusedOverride = isFocusedOverride,
-            onClick = onClick,
-            onLongClick = onLongClick,
+            onClick = surfaceOnClick,
+            onLongClick = surfaceOnLongClick,
             onFocusChanged = {
                 isFocused = it
                 if (it) onFocused()
@@ -226,7 +240,7 @@ fun MediaCard(
                     AsyncImage(
                         model = imageRequest,
                         contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
+                        contentScale = imageContentScale,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
@@ -464,13 +478,7 @@ fun MediaCard(
                         offset = androidx.compose.ui.geometry.Offset(2f, 2f),
                         blurRadius = 6f
                     )
-                ) else ArvioSkin.typography.cardTitle.copy(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = androidx.compose.ui.graphics.Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 6f
-                    )
-                ),
+                ) else ArvioSkin.typography.cardTitle,
                 color = if (visualFocused) {
                     ArvioSkin.colors.textPrimary
                 } else {
@@ -490,19 +498,22 @@ fun MediaCard(
                         when (item.mediaType) {
                             MediaType.TV -> "TV Series"
                             MediaType.MOVIE -> "Movie"
-                            else -> "Media"
                         }
                     }
             }
             Text(
                 text = subtitle,
-                style = ArvioSkin.typography.caption.copy(
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = androidx.compose.ui.graphics.Color.Black,
-                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 4f
+                style = if (isMobile) {
+                    ArvioSkin.typography.caption.copy(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = androidx.compose.ui.graphics.Color.Black,
+                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                            blurRadius = 4f
+                        )
                     )
-                ),
+                } else {
+                    ArvioSkin.typography.caption
+                },
                 color = ArvioSkin.colors.textMuted.copy(alpha = 0.85f),
                 maxLines = subtitleMaxLines,
                 overflow = TextOverflow.Ellipsis,
@@ -603,16 +614,14 @@ fun PosterCard(
         if (posterUrl == null) return@remember null
         val widthPx = with(density) { width.roundToPx() }
         val heightPx = (widthPx / aspectRatio).toInt().coerceAtLeast(1)
-        val cacheKey = "$posterUrl|${widthPx}x$heightPx"
-        ImageRequest.Builder(context)
-            .data(posterUrl)
-            .size(widthPx, heightPx)
-            .precision(Precision.INEXACT)
-            .allowHardware(true)
-            .memoryCacheKey(cacheKey)
-            .placeholderMemoryCacheKey(cacheKey)
-            .crossfade(false)
-            .build()
+        buildTvSizedImageRequest(
+            context = context,
+            url = posterUrl,
+            widthPx = widthPx,
+            heightPx = heightPx,
+            role = TvImageRole.HOME_CARD,
+            rgb565 = true
+        )
     }
 
     Column(modifier = modifier.width(width)) {
@@ -697,6 +706,19 @@ fun FeaturedMediaCard(
 ) {
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
     val imageUrl = (item.backdrop ?: item.image).takeIf { it.isNotBlank() }
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val imageRequest = remember(imageUrl, width, height) {
+        val url = imageUrl ?: return@remember null
+        buildTvSizedImageRequest(
+            context = context,
+            url = url,
+            widthPx = with(density) { width.roundToPx() },
+            heightPx = with(density) { height.roundToPx() },
+            role = TvImageRole.HOME_CARD,
+            rgb565 = true
+        )
+    }
 
     ArvioFocusableSurface(
         modifier = Modifier.size(width, height),
@@ -711,9 +733,9 @@ fun FeaturedMediaCard(
         isFocusedOverride = true,
         onClick = onClick,
     ) { _ ->
-        if (imageUrl != null) {
+        if (imageRequest != null) {
             AsyncImage(
-                model = imageUrl,
+                model = imageRequest,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

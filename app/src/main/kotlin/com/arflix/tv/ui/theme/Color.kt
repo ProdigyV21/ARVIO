@@ -3,7 +3,7 @@ package com.arflix.tv.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * ARVIO Color Palette
+ * Majo Stream color palette
  * Arctic Fuse 2 Inspired - Minimal Dark Theme
  */
 

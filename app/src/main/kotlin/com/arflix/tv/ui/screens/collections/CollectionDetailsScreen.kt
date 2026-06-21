@@ -7,14 +7,22 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed as foundationItemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -38,8 +47,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -68,14 +79,23 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.MediaRepository
+import com.arflix.tv.data.repository.StreamAvailabilityRepository
+import com.arflix.tv.data.stream.StreamAvailabilitySummary
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaCard
+import com.arflix.tv.ui.components.Toast
+import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
+import com.arflix.tv.ui.focus.arvioManualBringIntoViewBoundary
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
+import com.arflix.tv.ui.performance.rememberTvMenuBackdropRequest
+import com.arflix.tv.ui.performance.tvMenuBackdropSwapDelayMs
 import com.arflix.tv.ui.theme.ArflixTypography
-import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
+import com.arflix.tv.ui.theme.ImdbYellow
+import com.arflix.tv.ui.theme.appBackgroundDark
+import com.arflix.tv.util.Constants
 import com.arflix.tv.util.LocalDeviceType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,15 +105,27 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class CollectionTab { MOVIES, SERIES }
 
+enum class CollectionToastType { SUCCESS, ERROR, INFO }
+
+data class CollectionPreviewState(
+    val item: MediaItem? = null,
+    val imdbRating: String = "",
+    val streamSummary: StreamAvailabilitySummary? = null,
+    val isLoadingStreamSummary: Boolean = false,
+    val isLoading: Boolean = false
+)
+
 data class CollectionDetailsUiState(
     val catalog: CatalogConfig? = null,
     val movieItems: List<MediaItem> = emptyList(),
     val seriesItems: List<MediaItem> = emptyList(),
+    val preview: CollectionPreviewState = CollectionPreviewState(),
     val supportsMovies: Boolean = false,
     val supportsSeries: Boolean = false,
     val isLoadingMovies: Boolean = true,
@@ -104,6 +136,8 @@ data class CollectionDetailsUiState(
     val hasMoreSeries: Boolean = false,
     val loadedMovieOffset: Int = 0,
     val loadedSeriesOffset: Int = 0,
+    val toastMessage: String? = null,
+    val toastType: CollectionToastType = CollectionToastType.INFO,
     val error: String? = null
 ) {
     val hasMovies: Boolean get() = movieItems.isNotEmpty()
@@ -113,17 +147,21 @@ data class CollectionDetailsUiState(
 @HiltViewModel
 class CollectionDetailsViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
-    private val mediaRepository: MediaRepository
+    private val mediaRepository: MediaRepository,
+    private val streamAvailabilityRepository: StreamAvailabilityRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CollectionDetailsUiState())
     val uiState: StateFlow<CollectionDetailsUiState> = _uiState.asStateFlow()
     private val _cardLogoUrls = MutableStateFlow<Map<String, String>>(emptyMap())
     val cardLogoUrls: StateFlow<Map<String, String>> = _cardLogoUrls.asStateFlow()
+    private val previewCache = mutableMapOf<String, CollectionPreviewState>()
+    private var previewJob: Job? = null
 
-    private companion object {
+    companion object {
         const val FIRST_PAGE = 8
         const val PAGE_STEP = 12
         const val BACKGROUND_PREFETCH_DELAY_MS = 350L
+        const val PREVIEW_ENRICH_DEBOUNCE_MS = 260L
         const val TMDB_COLLECTION_PREFIX = "tmdb_collection:"
     }
 
@@ -154,6 +192,15 @@ class CollectionDetailsViewModel @Inject constructor(
                 isLoadingMovies = true,
                 isLoadingSeries = true
             )
+            val missingServiceKeyMessage = missingServiceCatalogKeysMessage(catalog)
+            if (missingServiceKeyMessage != null) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingMovies = false,
+                    isLoadingSeries = false,
+                    error = missingServiceKeyMessage
+                )
+                return@launch
+            }
 
             val primaryTab = when {
                 _uiState.value.supportsMovies -> CollectionTab.MOVIES
@@ -345,6 +392,105 @@ class CollectionDetailsViewModel @Inject constructor(
         }
     }
 
+    fun focusPreview(item: MediaItem) {
+        val key = previewKey(item) ?: return
+        val currentPreview = _uiState.value.preview
+        val currentPreviewKey = previewKey(currentPreview.item)
+        val cached = previewCache[key]
+
+        if (cached != null && !cached.isLoading && !cached.isLoadingStreamSummary) {
+            _uiState.value = _uiState.value.copy(preview = cached)
+            previewJob?.cancel()
+            previewJob = null
+            return
+        }
+
+        if (currentPreviewKey == key) {
+            if (!currentPreview.isLoading && !currentPreview.isLoadingStreamSummary) {
+                previewCache[key] = currentPreview
+                previewJob?.cancel()
+                previewJob = null
+            }
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            preview = cached ?: CollectionPreviewState(
+                item = item,
+                imdbRating = item.imdbRating.ifBlank { item.tmdbRating },
+                isLoadingStreamSummary = true,
+                isLoading = true
+            )
+        )
+
+        previewJob?.cancel()
+        previewJob = viewModelScope.launch {
+            delay(PREVIEW_ENRICH_DEBOUNCE_MS)
+
+            val detailedItem = runCatching {
+                when (item.mediaType) {
+                    MediaType.MOVIE -> mediaRepository.getMovieDetails(item.id)
+                    MediaType.TV -> mediaRepository.getTvDetails(item.id)
+                }
+            }.getOrNull()
+            val mergedItem = detailedItem ?: item
+            val fallbackRating = item.imdbRating.ifBlank { item.tmdbRating }
+            val imdbRating = mergedItem.imdbRating
+                .ifBlank { runCatching { mediaRepository.getImdbRating(item.mediaType, item.id) }.getOrNull().orEmpty() }
+                .ifBlank { fallbackRating }
+            val enrichedItem = if (imdbRating.isNotBlank() && mergedItem.imdbRating.isBlank()) {
+                mergedItem.copy(imdbRating = imdbRating)
+            } else {
+                mergedItem
+            }
+            val imdbId = runCatching {
+                mediaRepository.getOrResolveImdbId(enrichedItem.mediaType, enrichedItem.id)
+            }.getOrNull()
+            val streamSummary = runCatching {
+                val year = enrichedItem.year.toPreviewYear()
+                when (enrichedItem.mediaType) {
+                    MediaType.MOVIE -> streamAvailabilityRepository.movieSummary(
+                        imdbId = imdbId,
+                        title = enrichedItem.title,
+                        year = year
+                    )
+                    MediaType.TV -> streamAvailabilityRepository.episodeSummary(
+                        imdbId = imdbId,
+                        title = enrichedItem.title,
+                        year = year,
+                        season = enrichedItem.nextEpisode?.seasonNumber ?: 1,
+                        episode = enrichedItem.nextEpisode?.episodeNumber ?: 1,
+                        tmdbId = enrichedItem.id,
+                        genreIds = enrichedItem.genreIds,
+                        originalLanguage = enrichedItem.originalLanguage
+                    )
+                }
+            }.getOrNull()
+            val preview = CollectionPreviewState(
+                item = enrichedItem,
+                imdbRating = imdbRating,
+                streamSummary = streamSummary,
+                isLoadingStreamSummary = false,
+                isLoading = false
+            )
+
+            if (previewKey(_uiState.value.preview.item) != key) return@launch
+            previewCache[key] = preview
+            _uiState.value = _uiState.value.copy(preview = preview)
+        }
+    }
+
+    fun dismissToast() {
+        _uiState.value = _uiState.value.copy(toastMessage = null)
+    }
+
+    private fun previewKey(item: MediaItem?): String? {
+        item ?: return null
+        return "${item.mediaType}:${item.id}"
+    }
+
+    private fun String.toPreviewYear(): Int? = take(4).toIntOrNull()
+
     private fun catalogForTab(catalog: CatalogConfig, tab: CollectionTab): CatalogConfig {
         val filteredSources = catalog.collectionSources.filter { sourceMatchesTab(it, tab) }
         return catalog.copy(collectionSources = filteredSources)
@@ -371,6 +517,21 @@ class CollectionDetailsViewModel @Inject constructor(
             else -> true
         }
     }
+
+    private fun missingServiceCatalogKeysMessage(catalog: CatalogConfig): String? {
+        if (catalog.collectionGroup != CollectionGroupKind.SERVICE) return null
+
+        val hasWatchmodeSource = catalog.collectionSources.any { it.kind == CollectionSourceKind.WATCHMODE_SOURCE }
+        val hasTmdbProviderSource = catalog.collectionSources.any { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }
+        val hasUsableTmdbKey = Constants.TMDB_API_KEY.isNotBlank()
+        val hasRegionedServiceSource = hasWatchmodeSource || hasTmdbProviderSource
+
+        return if (hasRegionedServiceSource && !hasUsableTmdbKey) {
+            "Add a TMDB API key in Settings > API keys to load Swedish service catalogs. Watchmode improves freshness, but TMDB is required for artwork and details."
+        } else {
+            null
+        }
+    }
 }
 
 @Composable
@@ -379,10 +540,10 @@ fun CollectionDetailsScreen(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     viewModel: CollectionDetailsViewModel = hiltViewModel(),
     onNavigateToDetails: (MediaType, Int) -> Unit,
+    onNavigateToPlayer: (MediaType, Int, Int?, Int?, String?) -> Unit,
     onNavigateToHome: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToWatchlist: () -> Unit,
-    onNavigateToTv: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onSwitchProfile: () -> Unit = {},
     onBack: () -> Unit
@@ -557,36 +718,78 @@ fun CollectionDetailsScreen(
         } else {
             seriesGridState
         }
-        CollectionItemsGrid(
-            items = items,
-            gridColumns = gridColumns,
-            cardWidth = cardWidth,
-            usePosterCards = usePosterCards,
-            gridState = gridState,
-            pendingFocusIndex = pendingFocusIndex,
-            onClearPendingFocus = { pendingFocusIndex = -1 },
-            hasMovies = uiState.supportsMovies,
-            hasSeries = uiState.supportsSeries,
-            cardLogoUrls = cardLogoUrls,
-            selectedTab = selectedTab,
-            moviesTabFocusRequester = moviesTabFocusRequester,
-            seriesTabFocusRequester = seriesTabFocusRequester,
-            onTabSelected = { selectedTab = it },
-            onItemClick = { onNavigateToDetails(it.mediaType, it.id) },
-            onItemFocused = { item, index ->
-                viewModel.preloadLogos(listOf(item))
-                when (activeTab) {
-                    CollectionTab.MOVIES -> lastFocusedMovieIndex = index
-                    CollectionTab.SERIES -> lastFocusedSeriesIndex = index
-                }
-            },
-            onVisibleItemsChanged = { visibleItems -> viewModel.preloadLogos(visibleItems) },
-            onNearEnd = { viewModel.loadMoreIfNeeded(activeTab) },
-            isLoading = isTabLoading,
-            isLoadingMore = isTabLoadingMore,
-            emptyMessage = uiState.error ?: "Nothing to show here yet.",
-            topContentPadding = if (isMobile) 18.dp else if (usePosterCards) 22.dp else 10.dp
-        )
+        if (isMobile) {
+            CollectionItemsGrid(
+                items = items,
+                gridColumns = gridColumns,
+                cardWidth = cardWidth,
+                usePosterCards = usePosterCards,
+                gridState = gridState,
+                pendingFocusIndex = pendingFocusIndex,
+                onClearPendingFocus = { pendingFocusIndex = -1 },
+                hasMovies = uiState.supportsMovies,
+                hasSeries = uiState.supportsSeries,
+                cardLogoUrls = cardLogoUrls,
+                selectedTab = selectedTab,
+                moviesTabFocusRequester = moviesTabFocusRequester,
+                seriesTabFocusRequester = seriesTabFocusRequester,
+                onTabSelected = { selectedTab = it },
+                onItemClick = { onNavigateToDetails(it.mediaType, it.id) },
+                onItemFocused = { item, index ->
+                    viewModel.preloadLogos(listOf(item))
+                    when (activeTab) {
+                        CollectionTab.MOVIES -> lastFocusedMovieIndex = index
+                        CollectionTab.SERIES -> lastFocusedSeriesIndex = index
+                    }
+                },
+                onVisibleItemsChanged = { visibleItems -> viewModel.preloadLogos(visibleItems) },
+                onNearEnd = { viewModel.loadMoreIfNeeded(activeTab) },
+                isLoading = isTabLoading,
+                isLoadingMore = isTabLoadingMore,
+                emptyMessage = uiState.error ?: "Nothing to show here yet.",
+                topContentPadding = 18.dp
+            )
+        } else {
+            CollectionMasterDetailList(
+                catalog = uiState.catalog,
+                items = items,
+                preview = uiState.preview,
+                hasMovies = uiState.supportsMovies,
+                hasSeries = uiState.supportsSeries,
+                selectedTab = selectedTab,
+                moviesTabFocusRequester = moviesTabFocusRequester,
+                seriesTabFocusRequester = seriesTabFocusRequester,
+                onTabSelected = { selectedTab = it },
+                onItemClick = { onNavigateToDetails(it.mediaType, it.id) },
+                onItemFocused = { item, index ->
+                    viewModel.focusPreview(item)
+                    when (activeTab) {
+                        CollectionTab.MOVIES -> lastFocusedMovieIndex = index
+                        CollectionTab.SERIES -> lastFocusedSeriesIndex = index
+                    }
+                    if (items.size > 10 && index >= items.size - 3) viewModel.loadMoreIfNeeded(activeTab)
+                },
+                onNearEnd = { viewModel.loadMoreIfNeeded(activeTab) },
+                isLoading = isTabLoading,
+                isLoadingMore = isTabLoadingMore,
+                emptyMessage = uiState.error ?: "Nothing to show here yet."
+            )
+        }
+
+        uiState.toastMessage?.let { message ->
+            Toast(
+                message = message,
+                type = when (uiState.toastType) {
+                    CollectionToastType.SUCCESS -> ComponentToastType.SUCCESS
+                    CollectionToastType.ERROR -> ComponentToastType.ERROR
+                    CollectionToastType.INFO -> ComponentToastType.INFO
+                },
+                isVisible = true,
+                durationMs = if (uiState.toastType == CollectionToastType.ERROR) 8000 else 3500,
+                onDismiss = { viewModel.dismissToast() }
+            )
+        }
+
     }
 }
 
@@ -738,6 +941,509 @@ private fun CollectionTabChip(
             color = fg
         )
     }
+}
+
+@Composable
+private fun CollectionMasterDetailList(
+    catalog: CatalogConfig?,
+    items: List<MediaItem>,
+    preview: CollectionPreviewState,
+    hasMovies: Boolean,
+    hasSeries: Boolean,
+    selectedTab: CollectionTab,
+    moviesTabFocusRequester: FocusRequester,
+    seriesTabFocusRequester: FocusRequester,
+    onTabSelected: (CollectionTab) -> Unit,
+    onItemClick: (MediaItem) -> Unit,
+    onItemFocused: (MediaItem, Int) -> Unit,
+    onNearEnd: () -> Unit,
+    isLoading: Boolean,
+    isLoadingMore: Boolean,
+    emptyMessage: String
+) {
+    val listState = rememberLazyListState()
+    var selectedIndex by rememberSaveable(selectedTab) { mutableStateOf(0) }
+    val safeSelectedIndex = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+    val listFocusRequesters = remember(items.size, selectedTab) { List(items.size) { FocusRequester() } }
+    val firstItemKey = items.firstOrNull()?.let { "${it.mediaType}-${it.id}" }
+    val selectedItem = items.getOrNull(safeSelectedIndex)
+    val displayPreview = when {
+        preview.item != null && selectedItem != null &&
+            preview.item.id == selectedItem.id && preview.item.mediaType == selectedItem.mediaType -> preview
+        selectedItem != null -> CollectionPreviewState(
+            item = selectedItem,
+            imdbRating = selectedItem.imdbRating.ifBlank { selectedItem.tmdbRating },
+            isLoading = true
+        )
+        else -> preview
+    }
+
+    LaunchedEffect(selectedTab, items.size) {
+        if (items.isNotEmpty() && selectedIndex > items.lastIndex) {
+            selectedIndex = items.lastIndex
+            runCatching { listState.scrollToItem(items.lastIndex) }
+        }
+    }
+
+    LaunchedEffect(selectedTab, firstItemKey) {
+        if (items.isEmpty()) return@LaunchedEffect
+        val nextIndex = safeSelectedIndex.coerceAtMost(items.lastIndex)
+        selectedIndex = nextIndex
+        onItemFocused(items[nextIndex], nextIndex)
+        runCatching { listState.scrollToItem(nextIndex) }
+        delay(260)
+        runCatching { listFocusRequesters.getOrNull(nextIndex)?.requestFocus() }
+    }
+
+    LaunchedEffect(listState, items.size) {
+        snapshotFlow {
+            val layout = listState.layoutInfo
+            layout.visibleItemsInfo.lastOrNull()?.index ?: 0
+        }.distinctUntilChanged().collect { last ->
+            if (items.size > 10 && last >= items.size - 3) onNearEnd()
+        }
+    }
+
+    val backgroundImage = displayPreview.item?.backdrop?.takeIf { it.isNotBlank() }
+        ?: displayPreview.item?.image?.takeIf { it.isNotBlank() }
+        ?: catalog?.collectionHeroImageUrl?.takeIf { it.isNotBlank() }
+        ?: catalog?.collectionCoverImageUrl?.takeIf { it.isNotBlank() }
+    val isTvDevice = !LocalDeviceType.current.isTouchDevice()
+    var settledBackgroundImage by remember { mutableStateOf<String?>(backgroundImage) }
+    LaunchedEffect(backgroundImage, isTvDevice) {
+        val next = backgroundImage
+        if (next == settledBackgroundImage) return@LaunchedEffect
+        val delayMs = tvMenuBackdropSwapDelayMs(
+            isTvDevice = isTvDevice,
+            hasDisplayedBackdrop = !settledBackgroundImage.isNullOrBlank()
+        )
+        if (delayMs > 0L) delay(delayMs)
+        settledBackgroundImage = next
+    }
+    val backgroundRequest = rememberTvMenuBackdropRequest(settledBackgroundImage)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+    ) {
+        if (backgroundRequest != null) {
+            AsyncImage(
+                model = backgroundRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                alpha = 0.54f
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            appBackgroundDark().copy(alpha = 0.96f),
+                            appBackgroundDark().copy(alpha = 0.78f),
+                            Color.Black.copy(alpha = 0.28f),
+                            Color.Black.copy(alpha = 0.64f)
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            appBackgroundDark().copy(alpha = 0.72f),
+                            Color.Transparent,
+                            appBackgroundDark().copy(alpha = 0.92f)
+                        )
+                    )
+                )
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 28.dp, top = 24.dp, end = 30.dp, bottom = 28.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(330.dp)
+                    .fillMaxHeight()
+            ) {
+                androidx.tv.material3.Text(
+                    text = catalog?.title?.takeIf { it.isNotBlank() } ?: "Collection",
+                    color = TextPrimary,
+                    style = ArflixTypography.heroTitle.copy(
+                        fontSize = 23.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
+                )
+                CollectionTabBar(
+                    hasMovies = hasMovies,
+                    hasSeries = hasSeries,
+                    selectedTab = selectedTab,
+                    moviesTabFocusRequester = moviesTabFocusRequester,
+                    seriesTabFocusRequester = seriesTabFocusRequester,
+                    onTabSelected = onTabSelected
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                when {
+                    isLoading -> CollectionListSkeleton()
+                    items.isEmpty() && !isLoadingMore -> CollectionEmptyState(message = emptyMessage)
+                    else -> {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .arvioManualBringIntoViewBoundary()
+                                .arvioDpadFocusGroup(),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            foundationItemsIndexed(
+                                items,
+                                key = { _, item -> "${item.mediaType}-${item.id}" },
+                                contentType = { _, _ -> "collection_text_row" }
+                            ) { index, item ->
+                                CollectionTextRow(
+                                    item = item,
+                                    isSelected = index == safeSelectedIndex,
+                                    preview = displayPreview.takeIf { previewState ->
+                                        val previewItem = previewState.item
+                                        previewItem?.id == item.id && previewItem.mediaType == item.mediaType
+                                    },
+                                    focusRequester = listFocusRequesters[index],
+                                    onFocused = {
+                                        selectedIndex = index
+                                        onItemFocused(item, index)
+                                    },
+                                    onClick = { onItemClick(item) },
+                                    onUpFromFirst = {
+                                        when (selectedTab) {
+                                            CollectionTab.MOVIES -> moviesTabFocusRequester.requestFocus()
+                                            CollectionTab.SERIES -> seriesTabFocusRequester.requestFocus()
+                                        }
+                                    },
+                                    isFirst = index == 0
+                                )
+                            }
+                            if (isLoadingMore) {
+                                item(contentType = "collection_loading_more") {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            color = Color.White.copy(alpha = 0.82f),
+                                            strokeWidth = 2.dp,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            CollectionPreviewPanel(
+                preview = displayPreview,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+            )
+        }
+    }
+}
+
+@Composable
+private fun CollectionTextRow(
+    item: MediaItem,
+    isSelected: Boolean,
+    preview: CollectionPreviewState?,
+    focusRequester: FocusRequester,
+    onFocused: () -> Unit,
+    onClick: () -> Unit,
+    onUpFromFirst: () -> Unit,
+    isFirst: Boolean
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val rowShape = RoundedCornerShape(7.dp)
+    val bgBrush = when {
+        isFocused -> Brush.horizontalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.26f),
+                Color.White.copy(alpha = 0.13f),
+                Color.Transparent
+            )
+        )
+        isSelected -> Brush.horizontalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.12f),
+                Color.White.copy(alpha = 0.05f),
+                Color.Transparent
+            )
+        )
+        else -> Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+    }
+    val borderColor = if (isFocused) Color.White.copy(alpha = 0.9f) else Color.Transparent
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .graphicsLayer {
+                scaleX = if (isFocused) 1.014f else 1f
+                scaleY = if (isFocused) 1.014f else 1f
+            }
+            .clip(rowShape)
+            .background(bgBrush)
+            .border(1.dp, borderColor, rowShape)
+            .focusRequester(focusRequester)
+            .onFocusChanged {
+                isFocused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionRight -> false
+                    Key.DirectionUp -> {
+                        if (isFirst) {
+                            onUpFromFirst()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    else -> false
+                }
+            }
+            .focusable()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        androidx.tv.material3.Text(
+            text = item.title,
+            color = if (isFocused) Color.White else TextPrimary.copy(alpha = 0.92f),
+            style = ArflixTypography.body.copy(
+                fontSize = 13.5.sp,
+                fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Medium
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        androidx.tv.material3.Text(
+            text = rowMeta(item, preview?.streamSummary),
+            color = TextSecondary,
+            style = ArflixTypography.caption.copy(fontSize = 10.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(112.dp)
+        )
+        androidx.tv.material3.Text(
+            text = "IMDb ${item.imdbRating.ifBlank { item.tmdbRating }.ifBlank { "-" }}",
+            color = ImdbYellow,
+            style = ArflixTypography.caption.copy(
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            ),
+            maxLines = 1,
+            modifier = Modifier.width(48.dp)
+        )
+    }
+}
+
+@Composable
+private fun CollectionPreviewPanel(
+    preview: CollectionPreviewState,
+    modifier: Modifier = Modifier
+) {
+    val item = preview.item
+
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.18f),
+                            Color.Black.copy(alpha = 0.58f)
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            appBackgroundDark().copy(alpha = 0.30f),
+                            appBackgroundDark().copy(alpha = 0.86f)
+                        )
+                    )
+                )
+        )
+
+        if (item == null) {
+            CollectionEmptyState(message = "Nothing selected.")
+            return@Box
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth(0.62f)
+                .padding(start = 4.dp, end = 20.dp, bottom = 30.dp),
+            verticalArrangement = Arrangement.Bottom
+        ) {
+            androidx.tv.material3.Text(
+                text = item.title,
+                color = Color.White,
+                style = ArflixTypography.heroTitle.copy(
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(9.dp))
+            androidx.tv.material3.Text(
+                text = previewMeta(item, preview),
+                color = TextSecondary,
+                style = ArflixTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            StreamSummaryFlags(preview)
+            Spacer(modifier = Modifier.height(12.dp))
+            androidx.tv.material3.Text(
+                text = item.overview.ifBlank { "No overview available." },
+                color = TextPrimary.copy(alpha = 0.9f),
+                style = ArflixTypography.body.copy(fontSize = 15.sp),
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        item.image.takeIf { it.isNotBlank() }?.let { poster ->
+            AsyncImage(
+                model = poster,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 8.dp, bottom = 32.dp)
+                    .width(204.dp)
+                    .aspectRatio(2f / 3f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+                    .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+            )
+        }
+    }
+}
+
+@Composable
+private fun StreamSummaryFlags(preview: CollectionPreviewState) {
+    val summary = preview.streamSummary
+    val labels = when {
+        summary != null -> buildList {
+            summary.bestSourceLabel?.takeIf { it.isNotBlank() }?.let(::add)
+            summary.bestResolution?.takeIf { it.isNotBlank() }?.let(::add)
+            summary.bestVisualTag?.takeIf { it.isNotBlank() }?.let(::add)
+            summary.bestAudioTag?.takeIf { it.isNotBlank() }?.let(::add)
+            if (summary.hasSwedishSubtitles) add("SE subs")
+            if (summary.isCachedOrDebridReady) add("Cached")
+            add("${summary.sourceCount} ${if (summary.sourceCount == 1) "source" else "sources"}")
+        }
+        preview.isLoadingStreamSummary -> listOf("Checking sources")
+        else -> emptyList()
+    }
+
+    if (labels.isEmpty()) return
+
+    Spacer(modifier = Modifier.height(7.dp))
+    androidx.tv.material3.Text(
+        text = labels.joinToString("  •  "),
+        color = TextPrimary.copy(alpha = 0.82f),
+        style = ArflixTypography.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun CollectionListSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(10) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color.White.copy(alpha = 0.06f))
+            )
+        }
+    }
+}
+
+internal fun rowMeta(item: MediaItem, streamSummary: StreamAvailabilitySummary? = null): String {
+    val parts = mutableListOf<String>()
+    item.year.takeIf { it.isNotBlank() }?.let(parts::add)
+    val runtime = when {
+        item.mediaType == MediaType.TV && item.totalEpisodes != null -> "${item.totalEpisodes} eps"
+        item.mediaType == MediaType.TV && item.status?.isNotBlank() == true -> item.status
+        item.duration.isNotBlank() -> item.duration.toCompactRowRuntime()
+        else -> null
+    }
+    runtime?.let(parts::add)
+    collectionStreamSummaryCompactLabel(streamSummary)?.let(parts::add)
+    return parts.joinToString(" • ").ifBlank {
+        if (item.mediaType == MediaType.TV) "Series" else "Movie"
+    }
+}
+
+private fun String.toCompactRowRuntime(): String = replace(" ", "")
+
+internal fun collectionStreamSummaryCompactLabel(summary: StreamAvailabilitySummary?): String? {
+    summary ?: return null
+    return buildList {
+        summary.bestResolution?.takeIf { it.isNotBlank() }?.let(::add)
+        summary.bestVisualTag?.takeIf { it.isNotBlank() }?.let(::add)
+        summary.bestAudioTag?.takeIf { it.isNotBlank() }?.let(::add)
+        if (summary.hasSwedishSubtitles) add("SE")
+        summary.bestSourceLabel?.takeIf { it.isNotBlank() }?.let { add(it.take(18)) }
+        add("${summary.sourceCount} src")
+    }.joinToString("/").takeIf { it.isNotBlank() }
+}
+
+private fun previewMeta(item: MediaItem, preview: CollectionPreviewState): String {
+    val parts = mutableListOf<String>()
+    item.year.takeIf { it.isNotBlank() }?.let(parts::add)
+    parts += if (item.mediaType == MediaType.TV) "Series" else "Movie"
+    item.duration.takeIf { it.isNotBlank() }?.let(parts::add)
+    item.status.takeIf { !it.isNullOrBlank() }?.let(parts::add)
+    val rating = preview.imdbRating.ifBlank { item.imdbRating }.ifBlank { item.tmdbRating }
+    parts += "IMDb ${rating.ifBlank { "-" }}"
+    return parts.joinToString("  •  ")
 }
 
 @Composable

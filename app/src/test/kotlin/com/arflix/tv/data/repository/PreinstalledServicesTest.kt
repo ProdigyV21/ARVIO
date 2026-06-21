@@ -4,7 +4,6 @@ import com.arflix.tv.data.model.CatalogKind
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.CollectionSourceKind
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,14 +21,9 @@ class PreinstalledServicesTest {
         "collection_service_disneyplus",
         "collection_service_apple_tvplus",
         "collection_service_prime_video",
-        "collection_service_hbo_max",
-        "collection_service_hulu",
-        "collection_service_paramountplus",
-        "collection_service_peacock",
-        "collection_service_starz",
-        "collection_service_shudder",
-        "collection_service_mgmplus",
-        "collection_service_discoveryplus",
+        "collection_service_max",
+        "collection_service_skyshowtime",
+        "collection_service_viaplay",
         "collection_service_crunchyroll"
     )
 
@@ -38,9 +32,7 @@ class PreinstalledServicesTest {
         "collection_service_disneyplus",
         "collection_service_apple_tvplus",
         "collection_service_prime_video",
-        "collection_service_hbo_max",
-        "collection_service_hulu",
-        "collection_service_paramountplus",
+        "collection_service_max",
         "collection_service_crunchyroll"
     )
 
@@ -91,9 +83,7 @@ class PreinstalledServicesTest {
             "collection_service_disneyplus" to "networks%20videos/disneyplus.mp4",
             "collection_service_apple_tvplus" to "networks%20videos/appletv.mp4",
             "collection_service_prime_video" to "networks%20videos/amazonprime.mp4",
-            "collection_service_hbo_max" to "networks%20videos/hbomax.mp4",
-            "collection_service_hulu" to "networks%20videos/hulu.mp4",
-            "collection_service_paramountplus" to "networks%20videos/paramount.mp4",
+            "collection_service_max" to "networks%20videos/hbomax.mp4",
             "collection_service_crunchyroll" to "networks%20videos/crunchyroll.mp4"
         )
         services.forEach { cfg ->
@@ -117,45 +107,43 @@ class PreinstalledServicesTest {
     }
 
     @Test
-    fun `template service collections include TMDB provider fallbacks`() {
+    fun `template service collections include Watchmode Swedish sources`() {
         val services = MediaRepository.buildPreinstalledDefaults()
             .filter { it.kind == CatalogKind.COLLECTION && it.collectionGroup == CollectionGroupKind.SERVICE }
         assertTrue("Expected service collections", services.isNotEmpty())
         services.forEach { cfg ->
-            if (cfg.title == "Disney+") {
-                assertTrue(
-                    "Disney+ must use the curated MDBList source",
-                    cfg.collectionSources.any {
-                        it.kind == CollectionSourceKind.MDBLIST_PUBLIC &&
-                            it.mdblistSlug == "garycrawfordgc/disney-shows"
-                    }
-                )
-                return@forEach
-            }
             assertTrue(
-                "${cfg.title} must have a TMDB watch-provider fallback",
-                cfg.collectionSources.any { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }
+                "${cfg.title} must have a Watchmode source",
+                cfg.collectionSources.any { it.kind == CollectionSourceKind.WATCHMODE_SOURCE }
             )
         }
     }
 
     @Test
-    fun `Paramount uses current US Paramount Plus providers`() {
-        val paramount = MediaRepository.buildPreinstalledDefaults()
-            .first { it.title == "Paramount+" }
-        val providerIds = paramount.collectionSources
-            .filter { it.kind == CollectionSourceKind.TMDB_WATCH_PROVIDER }
-            .mapNotNull { it.tmdbWatchProviderId }
-            .toSet()
-        val aioCatalogIds = paramount.collectionSources
-            .filter { it.kind == CollectionSourceKind.ADDON_CATALOG }
-            .mapNotNull { it.addonCatalogId }
-            .toSet()
+    fun `Swedish service Watchmode ids are wired`() {
+        val expected = mapOf(
+            "Netflix" to 203,
+            "Disney+" to 372,
+            "Apple TV+" to 371,
+            "Prime Video" to 26,
+            "Max" to 387,
+            "SkyShowtime" to 464,
+            "Viaplay" to 486,
+            "Crunchyroll" to 80
+        )
+        val services = MediaRepository.buildPreinstalledDefaults()
+            .filter { it.kind == CatalogKind.COLLECTION && it.collectionGroup == CollectionGroupKind.SERVICE }
 
-        assertTrue("Paramount should use the AIO streaming.pmp catalog", "streaming.pmp" in aioCatalogIds)
-        assertTrue("Paramount Premium provider missing", 2303 in providerIds)
-        assertTrue("Paramount Essential provider missing", 2616 in providerIds)
-        assertFalse("Legacy provider 531 returns wrong US content", 531 in providerIds)
+        expected.forEach { (title, sourceId) ->
+            val service = services.first { it.title == title }
+            assertTrue(
+                "$title missing Watchmode source $sourceId",
+                service.collectionSources.any {
+                    it.kind == CollectionSourceKind.WATCHMODE_SOURCE &&
+                        it.watchmodeSourceId == sourceId
+                }
+            )
+        }
     }
 
     @Test
@@ -183,6 +171,52 @@ class PreinstalledServicesTest {
             it.kind == CollectionSourceKind.TMDB_GENRE &&
                 it.mediaType == "series" &&
                 it.tmdbGenreId == 10759
+        })
+    }
+
+    @Test
+    fun `smart decision collections include runtime and vote guarded TMDB discover sources`() {
+        val catalogs = MediaRepository.buildPreinstalledDefaults()
+        val shortMovie = catalogs.first { it.id == "collection_intent_short_movie" }
+        val bestMovies = catalogs.first { it.id == "collection_intent_best_movies" }
+        val bestSeries = catalogs.first { it.id == "collection_intent_best_series" }
+        val familyMovies = catalogs.first { it.id == "collection_intent_family_break_movies" }
+        val newSeries = catalogs.first { it.id == "collection_intent_new_streaming_series" }
+        val familySeries = catalogs.first { it.id == "collection_intent_family_series" }
+
+        assertEquals(CollectionGroupKind.FEATURED, shortMovie.collectionGroup)
+        val shortMovieSource = shortMovie.collectionSources.single()
+        assertEquals(CollectionSourceKind.TMDB_DISCOVER, shortMovieSource.kind)
+        assertEquals("movie", shortMovieSource.mediaType)
+        assertEquals("vote_average.desc", shortMovieSource.sortBy)
+        assertEquals(100, shortMovieSource.runtimeLteMinutes)
+        assertEquals(250, shortMovieSource.voteCountGte)
+
+        val bestMovieSource = bestMovies.collectionSources.single()
+        assertEquals(CollectionSourceKind.TMDB_DISCOVER, bestMovieSource.kind)
+        assertEquals("movie", bestMovieSource.mediaType)
+        assertEquals(1200, bestMovieSource.voteCountGte)
+        assertNull(bestMovieSource.runtimeLteMinutes)
+
+        val bestSeriesSource = bestSeries.collectionSources.single()
+        assertEquals(CollectionSourceKind.TMDB_DISCOVER, bestSeriesSource.kind)
+        assertEquals("series", bestSeriesSource.mediaType)
+        assertEquals(600, bestSeriesSource.voteCountGte)
+
+        assertTrue(familyMovies.collectionSources.all { it.mediaType == "movie" })
+        assertTrue(familyMovies.collectionSources.any {
+            it.kind == CollectionSourceKind.TMDB_GENRE &&
+                it.tmdbGenreId == 10751
+        })
+
+        val newSeriesSource = newSeries.collectionSources.single()
+        assertEquals(CollectionSourceKind.MDBLIST_PUBLIC, newSeriesSource.kind)
+        assertEquals("snoak/latest-tv-shows", newSeriesSource.mdblistSlug)
+
+        assertTrue(familySeries.collectionSources.all { it.mediaType == "series" })
+        assertTrue(familySeries.collectionSources.any {
+            it.kind == CollectionSourceKind.TMDB_GENRE &&
+                it.tmdbGenreId == 10751
         })
     }
 }

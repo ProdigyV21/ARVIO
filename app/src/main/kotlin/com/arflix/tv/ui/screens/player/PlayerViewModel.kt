@@ -23,6 +23,7 @@ import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchHistoryEntry
 import com.arflix.tv.data.repository.WatchHistoryRepository
+import com.arflix.tv.data.stream.analyzeStreamSource
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.settingsDataStore
@@ -1394,24 +1395,26 @@ class PlayerViewModel @Inject constructor(
 
     private fun playbackPriorityScore(stream: StreamSource): Int {
         val text = streamSearchText(stream)
+        val analysis = analyzeStreamSource(stream)
 
         // Autoplay intentionally prefers the highest-quality source first.
-        var score = qualityScore(stream.quality) * 1_000
+        var score = analysis.resolutionScore * 1_000
+        score += analysis.releaseScore * 90
 
-        val sizeBytes = parseSize(stream.size)
+        val sizeBytes = analysis.sizeBytes
         score += when {
             sizeBytes <= 0L -> 0
             else -> (sizeBytes / (512L * 1024L * 1024L)).toInt().coerceAtMost(240)
         }
 
         if (text.contains("cam") || text.contains("hdcam") || text.contains("telesync")) score -= 600
-        if (text.contains("web-dl") || text.contains("webrip")) score += 50
-        if (text.contains("bluray") || text.contains("blu-ray")) score += 60
-        if (text.contains("remux")) score += 80
-        if (text.contains("dolby vision") || text.contains(" dovi") || text.contains(" dv ")) score += 30
-        if (text.contains("x265") || text.contains("hevc") || text.contains("h265")) score += 30
-        if (text.contains("x264") || text.contains("h264")) score += 20
-        if (stream.behaviorHints?.cached == true || text.contains(" rd+")) score += 500
+        if (analysis.visualTag == "DV") score += 35
+        if (analysis.visualTags.any { it.startsWith("HDR") }) score += 25
+        if (analysis.audioTags.contains("Atmos")) score += 25
+        if (analysis.audioTags.contains("TrueHD")) score += 15
+        if (analysis.codecLabel == "HEVC" || analysis.codecLabel == "AV1") score += 25
+        if (analysis.codecLabel == "H.264") score += 10
+        if (analysis.isCachedOrDebridReady) score += 500
         if (stream.behaviorHints?.notWebReady == true) score -= 150
         if (!stream.url.isNullOrBlank() && stream.url.startsWith("http", ignoreCase = true)) score += 100
         if (stream.url?.startsWith("magnet:", ignoreCase = true) == true) score -= 800
@@ -1648,9 +1651,10 @@ class PlayerViewModel @Inject constructor(
         val url = stream.url?.trim().orEmpty()
         if (url.isBlank() || url.startsWith("magnet:", ignoreCase = true)) return false
         if (stream.behaviorHints?.notWebReady == true) return false
-        return stream.behaviorHints?.cached == true ||
-            qualityScore(stream.quality) >= 4 ||
-            (qualityScore(stream.quality) >= 3 && parseSize(stream.size) >= 8L * 1024L * 1024L * 1024L)
+        val analysis = analyzeStreamSource(stream)
+        return analysis.isCachedOrDebridReady ||
+            analysis.resolutionScore >= 4 ||
+            (analysis.resolutionScore >= 3 && analysis.sizeBytes >= 8L * 1024L * 1024L * 1024L)
     }
 
     private fun pickPreferredStream(
@@ -1674,13 +1678,15 @@ class PlayerViewModel @Inject constructor(
         streams: List<StreamSource>,
         preferredLanguage: String
     ): List<StreamSource> {
+        val analyses = streams.associateWith { analyzeStreamSource(it) }
         return streams.sortedWith(
             compareBy<StreamSource> { streamRepository.getPlaybackHostHealthPenalty(it) }
                 .thenBy { if (it.behaviorHints?.notWebReady == true) 1 else 0 }
-                .thenByDescending { qualityScore(it.quality) }
-                .thenByDescending { parseSize(it.size) }
+                .thenByDescending { analyses.getValue(it).resolutionScore }
+                .thenByDescending { analyses.getValue(it).releaseScore }
+                .thenByDescending { analyses.getValue(it).sizeBytes }
                 .thenByDescending { playbackPriorityScore(it) }
-                .thenByDescending { if (it.behaviorHints?.cached == true) 1 else 0 }
+                .thenByDescending { if (analyses.getValue(it).isCachedOrDebridReady) 1 else 0 }
                 .thenByDescending { streamLanguageScore(it, preferredLanguage) }
                 .thenByDescending { streamRepository.getAddonHealthBias(it.addonId) }
         )
@@ -1690,10 +1696,12 @@ class PlayerViewModel @Inject constructor(
         streams: List<StreamSource>,
         preferredLanguage: String
     ): List<StreamSource> {
+        val analyses = streams.associateWith { analyzeStreamSource(it) }
         return streams.sortedWith(
             compareBy<StreamSource> { addonOrderIndex(it) }
-                .thenByDescending { parseSize(it.size) }
-                .thenByDescending { qualityScore(it.quality) }
+                .thenByDescending { analyses.getValue(it).resolutionScore }
+                .thenByDescending { analyses.getValue(it).releaseScore }
+                .thenByDescending { analyses.getValue(it).sizeBytes }
                 .thenByDescending { playbackPriorityScore(it) }
                 .thenBy { streamRepository.getPlaybackHostHealthPenalty(it) }
                 .thenBy { if (it.behaviorHints?.notWebReady == true) 1 else 0 }

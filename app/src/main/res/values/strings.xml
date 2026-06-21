@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ARVIO</string>
+    <string name="app_name">Majo Stream</string>
     <string name="now_playing">NOW PLAYING</string>
 
     <!-- Navigation -->
     <string name="home">Home</string>
     <string name="search">Search</string>
+    <string name="discover">Discover</string>
     <string name="watchlist">Watchlist</string>
     <string name="settings">Settings</string>
-    <string name="topbar_tv">TV</string>
     <string name="my_watchlist">My Watchlist</string>
 
     <!-- Content types -->
@@ -133,7 +133,7 @@
     <string name="volume_boost">Volume Boost</string>
     <string name="dns_provider">DNS Provider</string>
     <string name="custom_user_agent">Custom User-Agent</string>
-    <string name="custom_user_agent_desc">Leave blank to use ARVIO defaults. Custom values apply when a source does not provide its own User-Agent.</string>
+    <string name="custom_user_agent_desc">Leave blank to use Majo Stream defaults. Custom values apply when a source does not provide its own User-Agent.</string>
     <string name="add_playlist">Add Playlist</string>
     <string name="refresh_iptv">Refresh TV Data</string>
     <string name="delete_iptv">Delete TV Playlists</string>
@@ -149,8 +149,6 @@
     <string name="trending_in_shows">Trending Shows</string>
     <string name="add_addon">Add Addon</string>
     <string name="trakt_account">Trakt Account</string>
-    <string name="cloud_account">Cloud Account</string>
-    <string name="force_cloud_sync">Force Cloud Sync</string>
     <string name="switch_profile">Switch Profile</string>
     <string name="app_version">App Version</string>
 
@@ -218,7 +216,6 @@
     <string name="set_profile_pin">Set Profile PIN</string>
     <string name="done">Done</string>
     <string name="save">Save</string>
-    <string name="connect_to_cloud">Connect to ARVIO Cloud</string>
     <string name="view_collection">View Collection</string>
 
     <!-- In-player subtitle settings panel -->

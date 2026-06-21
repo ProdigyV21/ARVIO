@@ -83,7 +83,7 @@ object ApkInstaller {
                 return "Signature conflict detected. The installed version was signed with a different key.\n\n" +
                     "To update, please uninstall the current version first:\n" +
                     "Settings > Apps > ${context.applicationInfo.loadLabel(pm)} > Uninstall\n\n" +
-                    "Then install the new version. Your cloud-synced data (watchlist, progress) will be restored after login."
+                    "Then install the new version. Your local profiles, addons, watchlist and progress are stored on this device."
             }
         } catch (_: Exception) {
             // Can't check — proceed with install attempt

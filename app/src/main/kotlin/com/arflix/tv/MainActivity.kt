@@ -29,43 +29,34 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.arflix.tv.ui.components.AppBottomBar
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.content.pm.ActivityInfo
+import android.util.Log
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
-import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
 import com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY
 import com.arflix.tv.util.ACCENT_COLOR_KEY
+import com.arflix.tv.util.AppContentPreferences
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.LocalHasTouchScreen
 import com.arflix.tv.util.LocalAppLanguage
@@ -73,11 +64,8 @@ import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
 import com.arflix.tv.util.detectDeviceType
 import com.arflix.tv.util.deviceHasTouchScreen
 import com.arflix.tv.util.settingsDataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.metrics.performance.JankStats
@@ -94,22 +82,21 @@ import androidx.work.workDataOf
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRequest
 import com.arflix.tv.data.repository.MediaRepository
-import com.arflix.tv.data.repository.ProfileManager
 import com.arflix.tv.data.repository.ProfileRepository
-import com.arflix.tv.data.repository.TraktRepository
-import com.arflix.tv.data.repository.WatchHistoryRepository
-import com.arflix.tv.data.repository.WatchlistRepository
+import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
 import com.arflix.tv.ui.startup.StartupViewModel
 import com.arflix.tv.ui.theme.ArflixTvTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.arflix.tv.ui.performance.performanceScreenName
+import com.arflix.tv.ui.performance.shouldTrackJankStats
 import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.worker.TraktSyncWorker
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.PI
@@ -132,25 +119,19 @@ class MainActivity : ComponentActivity() {
     lateinit var profileRepository: Lazy<ProfileRepository>
 
     @Inject
-    lateinit var traktRepository: Lazy<TraktRepository>
-
-    @Inject
-    lateinit var profileManager: Lazy<ProfileManager>
-
-    @Inject
-    lateinit var watchHistoryRepository: Lazy<WatchHistoryRepository>
-
-    @Inject
-    lateinit var watchlistRepository: Lazy<WatchlistRepository>
-
-    @Inject
     lateinit var launcherContinueWatchingRepository: Lazy<LauncherContinueWatchingRepository>
 
     @Inject
     lateinit var mediaRepository: Lazy<MediaRepository>
 
+    @Inject
+    lateinit var streamRepository: Lazy<StreamRepository>
+
     private var jankStats: JankStats? = null
+    @Volatile
+    private var currentJankScreen: String = "main"
     private var pendingLauncherRequest by mutableStateOf<LauncherContinueWatchingRequest?>(null)
+    private var pendingDebugRoute by mutableStateOf<String?>(null)
 
     // StartupViewModel for parallel loading during splash
     private val startupViewModel: StartupViewModel by viewModels()
@@ -189,6 +170,8 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
         pendingLauncherRequest = parseLauncherRequest(intent)
+        pendingDebugRoute = parseDebugRoute(intent)
+        installDebugAddonIfRequested(intent)
 
         // Set orientation based on device type
         requestedOrientation = when (initialDeviceType) {
@@ -228,22 +211,18 @@ class MainActivity : ComponentActivity() {
             val deviceModeOverride by remember {
                 this@MainActivity.settingsDataStore.data.map { it[DEVICE_MODE_OVERRIDE_KEY] }
             }.collectAsStateWithLifecycle(initialValue = null)
-            var skipProfileSelection by remember { mutableStateOf<Boolean?>(null) }
+            var skipProfileSelection by remember { mutableStateOf(true) }
             LaunchedEffect(Unit) {
-                val skipSelection =
-                    this@MainActivity.settingsDataStore.data.first()[SKIP_PROFILE_SELECTION_KEY] ?: false
-                if (skipSelection) {
-                    val profiles = profileRepository.get()
-                    val activeProfile = profiles.getActiveProfile()
-                    if (activeProfile == null) {
-                        val fallbackProfile = profiles.getProfiles().maxByOrNull { it.lastUsedAt }
-                            ?: profiles.createDefaultProfileIfNeeded()
-                        if (fallbackProfile != null) {
-                            profiles.setActiveProfile(fallbackProfile.id)
-                        }
+                val profiles = profileRepository.get()
+                val activeProfile = profiles.getActiveProfile()
+                if (activeProfile == null) {
+                    val fallbackProfile = profiles.getProfiles().maxByOrNull { it.lastUsedAt }
+                        ?: profiles.createDefaultProfileIfNeeded()
+                    if (fallbackProfile != null) {
+                        profiles.setActiveProfile(fallbackProfile.id)
                     }
                 }
-                skipProfileSelection = skipSelection
+                skipProfileSelection = true
             }
             val oledBlackBackground by remember {
                 this@MainActivity.settingsDataStore.data.map { it[OLED_BLACK_BACKGROUND_KEY] ?: false }
@@ -256,7 +235,8 @@ class MainActivity : ComponentActivity() {
             }.collectAsStateWithLifecycle(initialValue = null)
             val appLanguage by remember(activeProfileId) {
                 this@MainActivity.settingsDataStore.data.map { prefs ->
-                    val fallbackLanguage = prefs[LAST_APP_LANGUAGE_KEY] ?: "en-US"
+                    val fallbackLanguage = prefs[LAST_APP_LANGUAGE_KEY]
+                        ?: AppContentPreferences.DEFAULT_LANGUAGE_TAG
                     val profileId = activeProfileId
                     if (profileId.isNullOrBlank()) {
                         fallbackLanguage
@@ -264,9 +244,9 @@ class MainActivity : ComponentActivity() {
                         prefs[stringPreferencesKey("profile_${profileId}_content_language")] ?: fallbackLanguage
                     }
                 }
-            }.collectAsStateWithLifecycle(initialValue = "en-US")
+            }.collectAsStateWithLifecycle(initialValue = AppContentPreferences.DEFAULT_LANGUAGE_TAG)
             LaunchedEffect(appLanguage) {
-                mediaRepository.get().contentLanguage = if (appLanguage == "en-US") null else appLanguage
+                mediaRepository.get().contentLanguage = AppContentPreferences.normalizeLanguageForTmdb(appLanguage)
             }
             val deviceType = when (deviceModeOverride) {
                 "tv" -> DeviceType.TV
@@ -311,37 +291,37 @@ class MainActivity : ComponentActivity() {
                     val startupState by startupViewModel.state.collectAsStateWithLifecycle()
                     ArflixApp(
                         profileRepository = profileRepository.get(),
-                        traktRepository = traktRepository.get(),
-                        profileManager = profileManager.get(),
-                        watchHistoryRepository = watchHistoryRepository.get(),
-                        watchlistRepository = watchlistRepository.get(),
                         launcherContinueWatchingRepository = launcherContinueWatchingRepository.get(),
                         oledBlackBackground = oledBlackBackground,
                         skipProfileSelection = skipProfileSelection,
                         pendingLauncherRequest = pendingLauncherRequest,
                         onConsumeLauncherRequest = { pendingLauncherRequest = null },
+                        pendingDebugRoute = pendingDebugRoute,
+                        onConsumeDebugRoute = { pendingDebugRoute = null },
                         preloadedCategories = startupState.categories,
                         preloadedHeroItem = startupState.heroItem,
                         preloadedHeroLogoUrl = startupState.heroLogoUrl,
                         preloadedLogoCache = startupState.logoCache,
+                        onPerformanceScreenChanged = ::updatePerformanceScreen,
                         onExitApp = { finish() }
                     )
                 }
             }
         }
 
-        if (BuildConfig.DEBUG) {
+        if (shouldTrackJankStats(BuildConfig.DEBUG, BuildConfig.BUILD_TYPE)) {
             jankStats = JankStats.createAndTrack(window) { frameData ->
                 if (frameData.isJank) {
                     val durationMs = frameData.frameDurationUiNanos / 1_000_000
+                    Log.w(JANK_TAG, "screen=$currentJankScreen durationMs=$durationMs")
                 }
             }
-            PerformanceMetricsState.getHolderForHierarchy(window.decorView)
-                .state?.putState("screen", "Main")
+            updatePerformanceScreen("main")
         }
 
         runAfterFirstDraw {
             ArflixApplication.instance.scheduleTraktSyncIfNeeded()
+            ArflixApplication.instance.scheduleStreamingCatalogRefreshIfNeeded()
         }
     }
 
@@ -349,6 +329,8 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingLauncherRequest = parseLauncherRequest(intent)
+        pendingDebugRoute = parseDebugRoute(intent)
+        installDebugAddonIfRequested(intent)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -370,10 +352,57 @@ class MainActivity : ComponentActivity() {
         jankStats = null
         super.onDestroy()
     }
+
+    private fun installDebugAddonIfRequested(intent: android.content.Intent?) {
+        if (!BuildConfig.DEBUG) return
+        val addonUrl = intent
+            ?.getStringExtra("majo_debug_addon_url")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+
+        lifecycleScope.launch {
+            streamRepository.get().ensureCustomAddons(listOf(addonUrl))
+        }
+    }
+
+    private fun updatePerformanceScreen(route: String?) {
+        val screen = performanceScreenName(route)
+        currentJankScreen = screen
+        if (!shouldTrackJankStats(BuildConfig.DEBUG, BuildConfig.BUILD_TYPE)) return
+        PerformanceMetricsState.getHolderForHierarchy(window.decorView)
+            .state
+            ?.putState("screen", screen)
+    }
+
+    private companion object {
+        const val JANK_TAG = "MajoJank"
+    }
 }
 
 private fun MainActivity.parseLauncherRequest(intent: android.content.Intent?): LauncherContinueWatchingRequest? {
     return intent?.data?.toLauncherContinueWatchingRequest()
+}
+
+private fun parseDebugRoute(intent: android.content.Intent?): String? {
+    if (!BuildConfig.DEBUG) return null
+    val route = intent
+        ?.getStringExtra("majo_debug_route")
+        ?.trim()
+        ?.removePrefix("/")
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+
+    return route.takeIf {
+        it == Screen.Home.route ||
+            it == Screen.Search.route ||
+            it == Screen.Discover.route ||
+            it == Screen.Watchlist.route ||
+            it.startsWith("settings") ||
+            it.startsWith("collections/") ||
+            it.startsWith("details/") ||
+            it.startsWith("player/")
+    }
 }
 
 private fun ComponentActivity.runAfterFirstDraw(block: () -> Unit) {
@@ -388,11 +417,11 @@ private fun ComponentActivity.runAfterFirstDraw(block: () -> Unit) {
 }
 
 /**
- * Simple ARVIO loading screen - app logo + spinner
+ * Majo Stream startup screen.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun ArvioLoadingScreen() {
+fun MajoStreamLoadingScreen() {
     val infiniteTransition = rememberInfiniteTransition(label = "loading")
     val reveal = remember { Animatable(0f) }
 
@@ -413,14 +442,14 @@ fun ArvioLoadingScreen() {
         label = "sweep"
     )
 
-    val logoAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.96f,
+    val wordmarkAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(2100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "logoAlpha"
+        label = "wordmarkAlpha"
     )
 
     Box(
@@ -434,24 +463,24 @@ fun ArvioLoadingScreen() {
 
             val progress = reveal.value
             val logoCenterY = center.y - 8.dp.toPx()
-            val baselineY = logoCenterY + 138.dp.toPx()
+            val baselineY = logoCenterY + 86.dp.toPx()
 
-            val halfWidth = 180.dp.toPx() * progress
+            val halfWidth = 210.dp.toPx() * progress
             val lineStartX = center.x - halfWidth
             val lineEndX = center.x + halfWidth
             drawLine(
-                color = Color(0xFF00F0D0).copy(alpha = 0.32f * progress),
+                color = Color(0xFFFFB000).copy(alpha = 0.54f * progress),
                 start = Offset(lineStartX, baselineY),
                 end = Offset(lineEndX, baselineY),
-                strokeWidth = 1.6.dp.toPx(),
+                strokeWidth = 1.8.dp.toPx(),
                 cap = StrokeCap.Round
             )
 
-            val sweepHalfWidth = 34.dp.toPx()
+            val sweepHalfWidth = 46.dp.toPx()
             val sweepTravel = (halfWidth - sweepHalfWidth).coerceAtLeast(0f)
             val sweepX = center.x + (sweep * sweepTravel)
             drawLine(
-                color = Color.White.copy(alpha = 0.54f * progress),
+                color = Color.White.copy(alpha = 0.72f * progress),
                 start = Offset(sweepX - sweepHalfWidth, baselineY),
                 end = Offset(sweepX + sweepHalfWidth, baselineY),
                 strokeWidth = 1.2.dp.toPx(),
@@ -459,89 +488,95 @@ fun ArvioLoadingScreen() {
             )
         }
 
-        Image(
-            painter = painterResource(id = R.drawable.arvio_loading_logo),
-            contentDescription = "ARVIO",
+        Column(
             modifier = Modifier
                 .padding(horizontal = 24.dp)
-                .fillMaxWidth(0.52f)
-                .widthIn(max = 320.dp)
                 .graphicsLayer {
-                    alpha = reveal.value * logoAlpha
-                    val scale = 0.88f + (0.12f * reveal.value)
+                    alpha = reveal.value * wordmarkAlpha
+                    val scale = 0.92f + (0.08f * reveal.value)
                     scaleX = scale
                     scaleY = scale
                     translationY = (1f - reveal.value) * 18.dp.toPx()
                 },
-            contentScale = ContentScale.Fit,
-        )
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "MAJO",
+                fontSize = 52.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                letterSpacing = 7.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "STREAM",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFFFB000),
+                letterSpacing = 5.sp
+            )
+        }
     }
 }
 
 /**
- * Root composable for the ARVIO app
+ * Root composable for the Majo Stream app
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ArflixApp(
     profileRepository: ProfileRepository,
-    traktRepository: TraktRepository,
-    profileManager: ProfileManager,
-    watchHistoryRepository: WatchHistoryRepository,
-    watchlistRepository: WatchlistRepository,
     launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     oledBlackBackground: Boolean = false,
     skipProfileSelection: Boolean? = null,
     pendingLauncherRequest: LauncherContinueWatchingRequest? = null,
     onConsumeLauncherRequest: () -> Unit = {},
+    pendingDebugRoute: String? = null,
+    onConsumeDebugRoute: () -> Unit = {},
     preloadedCategories: List<com.arflix.tv.data.model.Category> = emptyList(),
     preloadedHeroItem: com.arflix.tv.data.model.MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
     preloadedLogoCache: Map<String, String> = emptyMap(),
+    onPerformanceScreenChanged: (String?) -> Unit = {},
     onExitApp: () -> Unit = {}
 ) {
-    val context = LocalContext.current
     val activeProfileState by remember(profileRepository) {
         profileRepository.activeProfile.map { profile ->
             ActiveProfileLoadState.Loaded(profile) as ActiveProfileLoadState
         }
     }.collectAsStateWithLifecycle(initialValue = ActiveProfileLoadState.Loading)
-    var startupIntroComplete by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(1350)
-        startupIntroComplete = true
-    }
     val activeProfile = (activeProfileState as? ActiveProfileLoadState.Loaded)?.profile
-    val startupReady = skipProfileSelection != null &&
-        activeProfileState is ActiveProfileLoadState.Loaded
+        ?: remember {
+            com.arflix.tv.data.model.Profile(
+                id = "default",
+                name = "Profile 1",
+                avatarColor = com.arflix.tv.data.model.ProfileColors.colors[0]
+            )
+        }
+    val startupReady = skipProfileSelection == true
 
-    if (!startupReady || !startupIntroComplete) {
-        ArvioLoadingScreen()
+    if (!startupReady) {
+        MajoStreamLoadingScreen()
         return
     }
 
+    val activeProfileId = activeProfile.id
     val navController = rememberNavController()
-    val appCoroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-    LaunchedEffect(activeProfile?.id) {
-        if (activeProfile != null) {
-            launcherContinueWatchingRepository.refreshForCurrentProfile()
-        } else {
-            launcherContinueWatchingRepository.clearPublishedPrograms()
-        }
+    LaunchedEffect(activeProfileId) {
+        launcherContinueWatchingRepository.refreshForCurrentProfile()
     }
 
-    val startDestination = if (skipProfileSelection == true && activeProfile != null) {
-        Screen.Home.route
-    } else {
-        Screen.ProfileSelection.route
-    }
+    val startDestination = Screen.Home.route
 
     val deviceType = LocalDeviceType.current
     val isMobile = deviceType.isTouchDevice()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+    LaunchedEffect(currentRoute) {
+        onPerformanceScreenChanged(currentRoute)
+    }
     // Hide bottom bar on player, profile selection, and login screens.
-    val showBottomBar = isMobile && activeProfile != null &&
+    val showBottomBar = isMobile &&
         currentRoute != null &&
         !currentRoute.contains("player") &&
         !currentRoute.contains("profile") &&
@@ -578,18 +613,7 @@ fun ArflixApp(
                 preloadedHeroItem = preloadedHeroItem,
                 preloadedHeroLogoUrl = preloadedHeroLogoUrl,
                 preloadedLogoCache = preloadedLogoCache,
-                currentProfile = activeProfile,
-                isCloudConnected = false,
-                onSwitchProfile = {
-                    appCoroutineScope.launch {
-                        traktRepository.clearAllProfileCaches()
-                        watchHistoryRepository.clearProfileCaches()
-                        watchlistRepository.clearWatchlistCache()
-                        profileManager.setCurrentProfileId("default")
-                        profileManager.setCurrentProfileName("default")
-                        profileRepository.clearActiveProfile()
-                    }
-                },
+                currentProfile = null,
                 onExitApp = onExitApp
             )
         }
@@ -607,9 +631,8 @@ fun ArflixApp(
         }
     }
 
-    LaunchedEffect(activeProfile?.id, pendingLauncherRequest) {
+    LaunchedEffect(activeProfileId, pendingLauncherRequest) {
         val request = pendingLauncherRequest ?: return@LaunchedEffect
-        if (activeProfile == null) return@LaunchedEffect
 
         val route = Screen.Details.createRoute(
             mediaType = request.mediaType,
@@ -618,10 +641,20 @@ fun ArflixApp(
             initialEpisode = request.episode
         )
         navController.navigate(route) {
-            popUpTo(Screen.ProfileSelection.route) { inclusive = true }
+            popUpTo(Screen.Home.route) { inclusive = false }
             launchSingleTop = true
         }
         onConsumeLauncherRequest()
+    }
+
+    LaunchedEffect(activeProfileId, pendingDebugRoute) {
+        val route = pendingDebugRoute ?: return@LaunchedEffect
+
+        navController.navigate(route) {
+            popUpTo(Screen.Home.route) { inclusive = false }
+            launchSingleTop = true
+        }
+        onConsumeDebugRoute()
     }
 }
 

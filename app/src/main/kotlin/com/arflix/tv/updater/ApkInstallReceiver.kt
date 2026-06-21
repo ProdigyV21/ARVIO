@@ -113,7 +113,7 @@ class ApkInstallReceiver : BroadcastReceiver() {
         /**
          * The broadcast action used for PackageInstaller session callbacks. Derived from the
          * applicationId at runtime so it's unique per build flavor (e.g. `.staging`) and
-         * cannot collide with other installs of ARVIO on the same device.
+         * cannot collide with other installs of Majo Stream on the same device.
          */
         fun actionFor(context: Context): String {
             return "${context.packageName}.INSTALL_COMPLETE"

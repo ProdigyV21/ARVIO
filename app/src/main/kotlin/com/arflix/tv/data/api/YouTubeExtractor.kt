@@ -65,7 +65,7 @@ private data class StreamCandidate(
     val ext: String
 )
 
-private data class ManifestBestVariant(
+internal data class ManifestBestVariant(
     val url: String,
     val width: Int,
     val height: Int,
@@ -77,9 +77,89 @@ private data class ManifestCandidate(
     val priority: Int,
     val manifestUrl: String,
     val selectedVariantUrl: String,
+    val fallbackVariantUrls: List<String>,
     val height: Int,
     val bandwidth: Long
 )
+
+internal fun selectHighestQualityHlsVariant(
+    manifestUrl: String,
+    manifestBody: String
+): ManifestBestVariant? {
+    return selectHighestQualityHlsVariants(manifestUrl, manifestBody).firstOrNull()
+}
+
+private fun selectHighestQualityHlsVariants(
+    manifestUrl: String,
+    manifestBody: String
+): List<ManifestBestVariant> {
+    val lines = manifestBody.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
+    val variants = mutableListOf<ManifestBestVariant>()
+    for (i in lines.indices) {
+        val line = lines[i]
+        if (!line.startsWith("#EXT-X-STREAM-INF:")) continue
+        val attrs = parseHlsVariantAttributeList(line)
+        val nextLine = lines.getOrNull(i + 1) ?: continue
+        if (nextLine.startsWith("#")) continue
+        val (width, height) = parseHlsVariantResolution(attrs["RESOLUTION"].orEmpty())
+        val bandwidth = attrs["BANDWIDTH"]?.toLongOrNull() ?: 0L
+        variants += ManifestBestVariant(
+            url = absolutizeHlsVariantUrl(manifestUrl, nextLine),
+            width = width,
+            height = height,
+            bandwidth = bandwidth
+        )
+    }
+    return variants.sortedWith(
+        compareByDescending<ManifestBestVariant> { it.height }
+            .thenByDescending { it.bandwidth }
+            .thenByDescending { it.width }
+    )
+}
+
+private fun parseHlsVariantAttributeList(line: String): Map<String, String> {
+    val index = line.indexOf(':')
+    if (index == -1) return emptyMap()
+    val raw = line.substring(index + 1)
+    val out = LinkedHashMap<String, String>()
+    val key = StringBuilder()
+    val value = StringBuilder()
+    var inKey = true
+    var inQuote = false
+    for (ch in raw) {
+        if (inKey) {
+            if (ch == '=') inKey = false else key.append(ch)
+            continue
+        }
+        if (ch == '"') {
+            inQuote = !inQuote
+            continue
+        }
+        if (ch == ',' && !inQuote) {
+            val k = key.toString().trim()
+            if (k.isNotEmpty()) out[k] = value.toString().trim()
+            key.clear()
+            value.clear()
+            inKey = true
+            continue
+        }
+        value.append(ch)
+    }
+    val lastKey = key.toString().trim()
+    if (lastKey.isNotEmpty()) out[lastKey] = value.toString().trim()
+    return out
+}
+
+private fun parseHlsVariantResolution(raw: String): Pair<Int, Int> {
+    val parts = raw.split('x')
+    if (parts.size != 2) return 0 to 0
+    return (parts[0].toIntOrNull() ?: 0) to (parts[1].toIntOrNull() ?: 0)
+}
+
+private fun absolutizeHlsVariantUrl(baseUrl: String, maybeRelative: String): String {
+    if (maybeRelative.startsWith("http://", true) || maybeRelative.startsWith("https://", true)) return maybeRelative
+    return runCatching { URL(URL(baseUrl), maybeRelative).toString() }.getOrDefault(maybeRelative)
+}
 
 private val DEFAULT_HEADERS = mapOf(
     "accept-language" to "en-US,en;q=0.9",
@@ -303,10 +383,12 @@ class InAppYouTubeExtractor @Inject constructor() {
                 val manifestJobs = manifestUrls.map { (clientKey, priority, manifestUrl) ->
                     async(Dispatchers.IO) {
                         try {
-                            val variant = parseHlsManifest(manifestUrl) ?: return@async null
+                            val variants = parseHlsManifestVariants(manifestUrl)
+                            val variant = variants.firstOrNull() ?: return@async null
                             ManifestCandidate(
                                 client = clientKey, priority = priority,
                                 manifestUrl = manifestUrl, selectedVariantUrl = variant.url,
+                                fallbackVariantUrls = variants.drop(1).map { it.url },
                                 height = variant.height, bandwidth = variant.bandwidth
                             )
                         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -327,20 +409,40 @@ class InAppYouTubeExtractor @Inject constructor() {
         // Prefer HLS manifest — ExoPlayer handles it natively (adaptive bitrate, no n-param 403).
         // Direct adaptive stream URLs require n-param decryption which we don't do, so they 403.
         if (bestManifest != null) {
-            return TrailerPlaybackSource(videoUrl = bestManifest.manifestUrl, audioUrl = null)
+            return TrailerPlaybackSource(
+                videoUrl = bestManifest.manifestUrl,
+                audioUrl = null,
+                fallbackVideoUrls = listOf(bestManifest.selectedVariantUrl) + bestManifest.fallbackVariantUrls,
+                height = bestManifest.height,
+                bandwidth = bestManifest.bandwidth
+            )
         }
 
-        // Fall back to progressive (combined video+audio, also not n-param throttled at lower quality)
-        val bestProgressive = sortCandidates(progressive).firstOrNull()
-        if (bestProgressive != null) {
-            return TrailerPlaybackSource(videoUrl = bestProgressive.url, audioUrl = null)
-        }
-
-        // Last resort: adaptive streams (may 403 without n-param decryption)
+        // Progressive YouTube streams are commonly capped at low quality. Prefer the
+        // highest adaptive video+audio pair and keep progressive streams as fallback.
+        val progressiveFallbacks = sortCandidates(progressive).map { it.url }
         val bestVideo = pickBestForClient(adaptiveVideo, PREFERRED_SEPARATE_CLIENT)
         val bestAudio = pickBestForClient(adaptiveAudio, PREFERRED_SEPARATE_CLIENT)
+        if (bestVideo != null && bestAudio != null) {
+            return TrailerPlaybackSource(
+                videoUrl = bestVideo.url,
+                audioUrl = bestAudio.url,
+                fallbackVideoUrls = progressiveFallbacks,
+                height = bestVideo.height
+            )
+        }
+
+        val bestProgressive = progressiveFallbacks.firstOrNull()
+        if (bestProgressive != null) {
+            return TrailerPlaybackSource(
+                videoUrl = bestProgressive,
+                audioUrl = null,
+                fallbackVideoUrls = progressiveFallbacks.drop(1)
+            )
+        }
+
         val videoUrl = bestVideo?.url ?: return null
-        return TrailerPlaybackSource(videoUrl = videoUrl, audioUrl = bestAudio?.url)
+        return TrailerPlaybackSource(videoUrl = videoUrl, audioUrl = null, height = bestVideo.height)
     }
 
     private suspend fun getWatchConfig(): WatchConfig {
@@ -454,30 +556,11 @@ class InAppYouTubeExtractor @Inject constructor() {
         return gson.fromJson(response.body, Map::class.java) ?: emptyMap<String, Any>()
     }
 
-    private fun parseHlsManifest(manifestUrl: String): ManifestBestVariant? {
+    private fun parseHlsManifestVariants(manifestUrl: String): List<ManifestBestVariant> {
         val response = performRequest(url = manifestUrl, method = "GET", headers = DEFAULT_HEADERS)
         if (!response.ok) throw IllegalStateException("Failed to fetch HLS manifest (${response.status})")
 
-        val lines = response.body.lineSequence().map { it.trim() }.filter { it.isNotBlank() }.toList()
-        var bestVariant: ManifestBestVariant? = null
-
-        for (i in lines.indices) {
-            val line = lines[i]
-            if (!line.startsWith("#EXT-X-STREAM-INF:")) continue
-            val attrs = parseHlsAttributeList(line)
-            val nextLine = lines.getOrNull(i + 1) ?: continue
-            if (nextLine.startsWith("#")) continue
-            val (width, height) = parseResolution(attrs["RESOLUTION"].orEmpty())
-            val bandwidth = attrs["BANDWIDTH"]?.toLongOrNull() ?: 0L
-            val candidate = ManifestBestVariant(url = absolutizeUrl(manifestUrl, nextLine), width = width, height = height, bandwidth = bandwidth)
-            if (bestVariant == null || candidate.height > bestVariant.height ||
-                (candidate.height == bestVariant.height && candidate.bandwidth > bestVariant.bandwidth) ||
-                (candidate.height == bestVariant.height && candidate.bandwidth == bestVariant.bandwidth && candidate.width > bestVariant.width)
-            ) {
-                bestVariant = candidate
-            }
-        }
-        return bestVariant
+        return selectHighestQualityHlsVariants(manifestUrl, response.body)
     }
 
     private fun parseHlsAttributeList(line: String): Map<String, String> {

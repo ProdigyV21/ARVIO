@@ -8,6 +8,7 @@ import com.arflix.tv.data.api.StreamApi
 import com.arflix.tv.data.api.SupabaseApi
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TraktApi
+import com.arflix.tv.data.api.WatchmodeApi
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.util.Constants
 import dagger.Module
@@ -44,7 +45,7 @@ object AppModule {
 
                 // Only inject if it's not the default English. Map "iw" to "he".
                 val urlBuilder = originalHttpUrl.newBuilder()
-                if (lang != "en-US") {
+                if (lang != "en-US" && originalHttpUrl.queryParameter("language").isNullOrBlank()) {
                     val tmdbLang = lang.replace("iw", "he").replace('_', '-')
                     urlBuilder.setQueryParameter("language", tmdbLang)
                 }
@@ -71,6 +72,17 @@ object AppModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(TraktApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideWatchmodeApi(okHttpClient: OkHttpClient): WatchmodeApi {
+        return Retrofit.Builder()
+            .baseUrl(Constants.WATCHMODE_API_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(WatchmodeApi::class.java)
     }
 
     @Provides

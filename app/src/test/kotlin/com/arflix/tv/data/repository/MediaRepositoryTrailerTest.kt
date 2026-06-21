@@ -5,16 +5,31 @@ import com.arflix.tv.data.api.TmdbTvDetails
 import com.arflix.tv.data.api.TmdbTvSeason
 import com.arflix.tv.data.api.TmdbVideo
 import com.arflix.tv.data.api.TmdbVideosResponse
+import com.arflix.tv.data.api.WatchmodeApi
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.util.RuntimeApiKeys
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
+import java.nio.file.Files
 
 class MediaRepositoryTrailerTest {
+
+    @Before
+    fun setUp() {
+        RuntimeApiKeys.setTmdbApiKey("test-key")
+    }
+
+    @After
+    fun tearDown() {
+        RuntimeApiKeys.clearTmdbApiKey()
+    }
 
     @Test
     fun `getTrailerKey uses season trailer when tv show level only has fallback clip`() = runTest {
@@ -84,12 +99,18 @@ class MediaRepositoryTrailerTest {
     private fun mediaRepository(tmdbApi: TmdbApi): MediaRepository {
         return MediaRepository(
             tmdbApi = tmdbApi,
+            watchmodeApi = mockk<WatchmodeApi>(relaxed = true),
             traktRepository = mockk(relaxed = true),
             traktApi = mockk(relaxed = true),
             okHttpClient = OkHttpClient(),
             streamRepository = mockk(relaxed = true),
-            homeServerRepository = mockk(relaxed = true)
-        )
+            homeServerRepository = mockk(relaxed = true),
+            watchmodeCatalogCache = WatchmodeCatalogCache(
+                Files.createTempDirectory("watchmode-cache").toFile()
+            )
+        ).apply {
+            contentLanguage = null
+        }
     }
 
     private fun video(

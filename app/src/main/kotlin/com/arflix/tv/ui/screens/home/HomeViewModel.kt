@@ -2,6 +2,7 @@ package com.arflix.tv.ui.screens.home
 
 import android.app.ActivityManager
 import android.content.Context
+import android.graphics.Bitmap
 import com.arflix.tv.util.settingsDataStore
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -32,6 +33,8 @@ import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.CollectionTemplateManifest
 import com.arflix.tv.data.repository.WatchHistoryRepository
 import com.arflix.tv.data.repository.WatchlistRepository
+import com.arflix.tv.ui.performance.TV_HOME_CARD_IMAGE_DECODE_SCALE
+import com.arflix.tv.util.AppContentPreferences
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.DeviceType
@@ -64,6 +67,7 @@ import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 data class HomeUiState(
     val isLoading: Boolean = false,
@@ -419,7 +423,7 @@ class HomeViewModel @Inject constructor(
             mediaRepository.getStreamingServices(
                 mediaType = mediaType,
                 mediaId = mediaId,
-                preferredRegion = Locale.getDefault().country
+                preferredRegion = AppContentPreferences.DEFAULT_WATCH_REGION
             )
         }.getOrNull()
             ?.services
@@ -612,6 +616,14 @@ class HomeViewModel @Inject constructor(
         return category?.items?.any { !it.isPlaceholder } == true
     }
 
+    private fun isExplorationOnlyHomeCategory(category: Category): Boolean {
+        return false
+    }
+
+    private fun filterHomePresentationCategories(categories: List<Category>): List<Category> {
+        return categories.filterNot(::isExplorationOnlyHomeCategory)
+    }
+
     private fun chooseInitialHero(categories: List<Category>): MediaItem? {
         val preferredRow = categories.firstOrNull { category ->
             !category.id.startsWith("collection_row_") && category.items.any { !it.isPlaceholder }
@@ -642,7 +654,7 @@ class HomeViewModel @Inject constructor(
         val profileId = profileManager.getProfileIdSync()
             .ifBlank { "default" }
             .replace(HomeVMRegexes.ALPHANUMERIC_REGEX, "_")
-        val language = (mediaRepository.contentLanguage ?: "en-US")
+        val language = (mediaRepository.contentLanguage ?: AppContentPreferences.DEFAULT_LANGUAGE_TAG)
             .replace(HomeVMRegexes.ALPHANUMERIC_REGEX, "_")
         return java.io.File(context.cacheDir, "home_categories_cache_${profileId}_$language.json")
     }
@@ -650,17 +662,18 @@ class HomeViewModel @Inject constructor(
     private suspend fun applyContentLanguageFromPrefs(): String {
         val prefs = context.settingsDataStore.data.first()
         val profileId = profileManager.getProfileId()
-        val fallbackLanguage = prefs[LAST_APP_LANGUAGE_KEY] ?: "en-US"
+        val fallbackLanguage = prefs[LAST_APP_LANGUAGE_KEY] ?: AppContentPreferences.DEFAULT_LANGUAGE_TAG
         val language = prefs[profileManager.profileStringKeyFor(profileId, "content_language")]
             ?: fallbackLanguage
-        mediaRepository.contentLanguage = if (language == "en-US") null else language
+        mediaRepository.contentLanguage = AppContentPreferences.normalizeLanguageForTmdb(language)
         return language
     }
 
     private fun persistCategoriesCache(categories: List<Category>) {
-        val cacheable = categories.filter { cat ->
-            cat.items.isNotEmpty() && cat.items.none { it.isPlaceholder }
-        }
+        val cacheable = filterHomePresentationCategories(categories)
+            .filter { cat ->
+                cat.items.isNotEmpty() && cat.items.none { it.isPlaceholder }
+            }
         if (cacheable.isEmpty()) return
         runCatching {
             categoriesCacheFile().writeText(gson.toJson(cacheable))
@@ -681,7 +694,7 @@ class HomeViewModel @Inject constructor(
                 .getParameterized(MutableList::class.java, Category::class.java)
                 .type
             val parsed: List<Category> = gson.fromJson(json, type) ?: emptyList()
-            parsed.filter { it.items.isNotEmpty() }
+            filterHomePresentationCategories(parsed.filter { it.items.isNotEmpty() })
         }.getOrDefault(emptyList())
     }
     // IO concurrency for network requests (logo fetches, catalog loads, etc.)
@@ -703,6 +716,7 @@ private val _uiState = MutableStateFlow(HomeUiState())
     private var heroUpdateJob: Job? = null
     private var heroDetailsJob: Job? = null
     private var prefetchJob: Job? = null
+    private var tvHomeCardImageWarmupJob: Job? = null
     private var preloadCategoryPriorityJob: Job? = null
     private val preloadCategoryJobs = ConcurrentHashMap<Int, Job>()
     private var startupCatalogWarmupJob: Job? = null
@@ -725,23 +739,27 @@ private val _uiState = MutableStateFlow(HomeUiState())
     private val FOCUS_PREFETCH_COALESCE_MS = if (isLowRamDevice) 180L else 120L
     private val BACKDROP_IDLE_PREFETCH_MS = if (isLowRamDevice) 220L else 160L
 
-    private val homeLandscapeCardWidthDp = 210
+    private val homeLandscapeCardWidthDp = 270
     private val homeLogoWidthDp = 220
     private val homeLogoHeightDp = 64
     private val logoPreloadWidth = (homeLogoWidthDp * context.resources.displayMetrics.density)
-        .toInt()
+        .roundToInt()
         .coerceAtLeast(1)
     private val logoPreloadHeight = (homeLogoHeightDp * context.resources.displayMetrics.density)
-        .toInt()
+        .roundToInt()
         .coerceAtLeast(1)
     private val cardBackdropWidth = (homeLandscapeCardWidthDp * context.resources.displayMetrics.density)
-        .toInt()
+        .roundToInt()
         .coerceAtLeast(1)
     private val cardBackdropHeight = (cardBackdropWidth / (16f / 9f))
         .toInt()
         .coerceAtLeast(1)
-    private val backdropPreloadWidth = cardBackdropWidth
-    private val backdropPreloadHeight = cardBackdropHeight
+    private val backdropPreloadWidth = (cardBackdropWidth * TV_HOME_CARD_IMAGE_DECODE_SCALE)
+        .roundToInt()
+        .coerceAtLeast(1)
+    private val backdropPreloadHeight = (cardBackdropHeight * TV_HOME_CARD_IMAGE_DECODE_SCALE)
+        .roundToInt()
+        .coerceAtLeast(1)
     private val initialLogoPrefetchRows = 1
     private val initialLogoPrefetchItemsPerRow = if (isLowRamDevice) 1 else 2
     // Prefetch enough backdrops to fill the first visible row on the home screen
@@ -887,6 +905,7 @@ private val _uiState = MutableStateFlow(HomeUiState())
         cwFetchJob?.cancel()
         cwFetchJob = null
         watchedBadgesJob?.cancel()
+        tvHomeCardImageWarmupJob?.cancel()
         preloadCategoryPriorityJob?.cancel()
         preloadCategoryJobs.values.forEach { it.cancel() }
         preloadCategoryJobs.clear()
@@ -1147,7 +1166,7 @@ private val _uiState = MutableStateFlow(HomeUiState())
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 applyContentLanguageFromPrefs()
-                val cachedCategories = loadCategoriesCache()
+                val cachedCategories = filterHomePresentationCategories(loadCategoriesCache())
                 if (cachedCategories.isNotEmpty() && _uiState.value.categories.isEmpty()) {
                     val heroItem = chooseInitialHero(cachedCategories)
                     val heroKey = heroItem?.let { "${it.mediaType}_${it.id}" }
@@ -1219,11 +1238,11 @@ private val _uiState = MutableStateFlow(HomeUiState())
 
                         lastContinueWatchingItems = cwCategory.items
                         lastContinueWatchingUpdateMs = SystemClock.elapsedRealtime()
-                        val updated = _uiState.value.categories.toMutableList()
+                        val updated = filterHomePresentationCategories(_uiState.value.categories).toMutableList()
                         val idx = updated.indexOfFirst { it.id == "continue_watching" }
                         if (idx >= 0) updated[idx] = cwCategory else updated.add(0, cwCategory)
                         _uiState.value = _uiState.value.copy(
-                            categories = updated
+                            categories = filterHomePresentationCategories(updated)
                         )
                     }
                 }
@@ -1295,7 +1314,7 @@ private val _uiState = MutableStateFlow(HomeUiState())
 
         // Check for updates shortly after startup
         viewModelScope.launch {
-            delay(if (isLowRamDevice) 15_000L else 10_000L)
+            delay(if (isLowRamDevice) 120_000L else 90_000L)
             checkForAppUpdates(silent = true)
         }
 
@@ -1335,7 +1354,9 @@ private val _uiState = MutableStateFlow(HomeUiState())
         putCachedLogos(logoCache)
 
         // Filter out any existing continue_watching from preloaded data
-        val filteredCategories = categories.filter { it.id != "continue_watching" }.toMutableList()
+        val filteredCategories = filterHomePresentationCategories(
+            categories.filter { it.id != "continue_watching" }
+        ).toMutableList()
 
         // Preserve real CW data if we already have it (from disk cache preload in init).
         // Only show placeholders if we have NO real CW items yet.
@@ -1540,7 +1561,7 @@ private val _uiState = MutableStateFlow(HomeUiState())
             } else {
                 current.add(0, continueWatchingCategory)
             }
-            _uiState.value = _uiState.value.copy(categories = current)
+            _uiState.value = _uiState.value.copy(categories = filterHomePresentationCategories(current))
         }
     }
 
@@ -1721,12 +1742,14 @@ var categories = withContext(networkDispatcher) {
                                     }
                                 }.awaitAll().filterNotNull()
                                 if (results.isNotEmpty()) {
-                                    val current = _uiState.value.categories.toMutableList()
+                                    val current = filterHomePresentationCategories(_uiState.value.categories).toMutableList()
                                     for (cat in results) {
                                         val idx = current.indexOfFirst { it.id == cat.id }
                                         if (idx >= 0) current[idx] = cat else current.add(cat)
                                     }
-                                    _uiState.value = _uiState.value.copy(categories = current)
+                                    _uiState.value = _uiState.value.copy(
+                                        categories = filterHomePresentationCategories(current)
+                                    )
                                 }
                             }
                         }
@@ -1861,7 +1884,7 @@ var categories = withContext(networkDispatcher) {
                         }
                         else -> categoryById[cfg.id]
                     }
-                }.toMutableList()
+                }.let(::filterHomePresentationCategories).toMutableList()
                 if (categories.any { it.id != "continue_watching" && !it.id.startsWith("collection_row_") }) {
                     lastResolvedBaseCategories = categories.filter {
                         it.id != "continue_watching" && !it.id.startsWith("collection_row_")
@@ -1968,7 +1991,7 @@ var categories = withContext(networkDispatcher) {
                         }
                         _uiState.value = _uiState.value.copy(
                             isLoading = _uiState.value.isLoading,
-                            categories = categories,
+                            categories = filterHomePresentationCategories(categories),
                             collectionRows = collectionRows,
                             heroItem = heroItem,
                             heroLogoUrl = heroLogoFromCache ?: _uiState.value.heroLogoUrl,
@@ -2034,7 +2057,7 @@ var categories = withContext(networkDispatcher) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isInitialLoad = false,
-                    categories = categories,
+                    categories = filterHomePresentationCategories(categories),
                     collectionRows = collectionRows,
                     heroItem = heroItem,
                     heroLogoUrl = heroLogoUrl,
@@ -2100,7 +2123,9 @@ var categories = withContext(networkDispatcher) {
                         } else {
                             updated.add(0, continueWatchingCategory)
                         }
-                        _uiState.value = _uiState.value.copy(categories = updated)
+                        _uiState.value = _uiState.value.copy(
+                            categories = filterHomePresentationCategories(updated)
+                        )
                     }
                 }
               } catch (e: Exception) {
@@ -2197,7 +2222,7 @@ var categories = withContext(networkDispatcher) {
 
                 if (!anyChange) return
                 _uiState.value = latestState.copy(
-                    categories = currentCategories,
+                    categories = filterHomePresentationCategories(currentCategories),
                     categoryHasMoreMap = categoryPaginationStates.mapValues { it.value.hasMore }
                 )
             }
@@ -2399,7 +2424,7 @@ var categories = withContext(networkDispatcher) {
                 pagination.hasMore = result.hasMore
 
                 _uiState.value = _uiState.value.copy(
-                    categories = updatedCategories,
+                    categories = filterHomePresentationCategories(updatedCategories),
                     categoryHasMoreMap = _uiState.value.categoryHasMoreMap + (categoryId to result.hasMore)
                 )
             } catch (_: Exception) {
@@ -2486,31 +2511,40 @@ var categories = withContext(networkDispatcher) {
             )
         }
 
-        return rows
+        return filterHomePresentationCategories(rows)
     }
 
     /**
      * Phase 1.2: Preload images into Coil's memory/disk cache
      * Uses target display sizes to reduce decode overhead.
      */
-    private fun preloadImagesWithCoil(urls: List<String>, width: Int, height: Int, batchLimit: Int = 0) {
+    private fun preloadImagesWithCoil(
+        urls: List<String>,
+        width: Int,
+        height: Int,
+        batchLimit: Int = 0,
+        useRgb565: Boolean = false
+    ) {
         // Bumped from 2/4 to 4/8 â€” enough to preload one full row of cards on
         // the home screen. The old limits left the majority of visible cards
         // without preloaded images on cold start.
         val defaultLimit = if (isLowRamDevice) 4 else 8
         val limit = if (batchLimit > 0) batchLimit else defaultLimit
+        val colorMode = if (useRgb565) "rgb565" else "argb"
         val uniqueUrls = urls.filter { url ->
-            preloadedRequests.add("$url|${width}x${height}")
+            preloadedRequests.add("$url|${width}x${height}|$colorMode")
         }.take(limit)
         if (uniqueUrls.isEmpty()) return
 
         uniqueUrls.forEach { url ->
             val requestWidth = width.coerceAtLeast(1)
             val requestHeight = height.coerceAtLeast(1)
-            val cacheKey = "$url|${requestWidth}x$requestHeight"
+            val cacheKey = "$url|${requestWidth}x$requestHeight|$colorMode"
             val request = ImageRequest.Builder(context)
                 .data(url)
                 .size(requestWidth, requestHeight)
+                .bitmapConfig(if (useRgb565) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888)
+                .allowRgb565(useRgb565)
                 .precision(Precision.INEXACT)
                 .allowHardware(true)
                 .memoryCacheKey(cacheKey)
@@ -2526,7 +2560,12 @@ var categories = withContext(networkDispatcher) {
     }
 
     private fun preloadBackdropImages(urls: List<String>) {
-        preloadImagesWithCoil(urls, backdropPreloadWidth, backdropPreloadHeight)
+        preloadImagesWithCoil(
+            urls = urls,
+            width = backdropPreloadWidth,
+            height = backdropPreloadHeight,
+            useRgb565 = true
+        )
     }
 
     private fun scheduleIdleBackdropPreload(urls: List<String>) {
@@ -2536,6 +2575,42 @@ var categories = withContext(networkDispatcher) {
             delay(BACKDROP_IDLE_PREFETCH_MS)
             if (lastFocusChangeTime != requestedAt) return@launch
             preloadBackdropImages(urls)
+        }
+    }
+
+    fun preloadTvHomeCardImagesAround(rowIndex: Int, itemIndex: Int) {
+        tvHomeCardImageWarmupJob?.cancel()
+        tvHomeCardImageWarmupJob = viewModelScope.launch(networkDispatcher) {
+            delay(if (isLowRamDevice) 180L else 110L)
+            val categories = _uiState.value.categories
+            if (categories.isEmpty()) return@launch
+
+            val rowsToWarm = listOf(rowIndex, rowIndex + 1, rowIndex + 2)
+                .filter { it in categories.indices }
+            rowsToWarm.forEachIndexed { rowOffset, categoryIndex ->
+                val category = categories[categoryIndex]
+                if (category.items.isEmpty()) return@forEachIndexed
+
+                val startIndex = if (categoryIndex == rowIndex) {
+                    itemIndex.coerceIn(0, category.items.lastIndex)
+                } else {
+                    0
+                }
+                val itemLimit = when {
+                    rowOffset == 0 && isLowRamDevice -> 5
+                    rowOffset == 0 -> 8
+                    isLowRamDevice -> 3
+                    else -> 5
+                }
+                val backdropUrls = category.items
+                    .asSequence()
+                    .drop(startIndex)
+                    .take(itemLimit)
+                    .mapNotNull { it.backdrop ?: it.image }
+                    .toList()
+                preloadBackdropImages(backdropUrls)
+                delay(if (isLowRamDevice) 140L else 80L)
+            }
         }
     }
 
@@ -2550,7 +2625,7 @@ var categories = withContext(networkDispatcher) {
             // When connected to Trakt, use ONLY Trakt as the source of truth for
             // Continue Watching. The previous code merged local/history items which
             // polluted the CW row with shows not on the user's Trakt â€” e.g., items
-            // watched before connecting Trakt, or items from ARVIO Cloud watch_history
+            // watched before connecting Trakt, or items restored from watch history
             // that Trakt doesn't know about. Trakt users expect CW to match exactly
             // what Trakt shows as "Up Next."
             val traktItems = if (forceFresh) {
@@ -2658,18 +2733,20 @@ var categories = withContext(networkDispatcher) {
                     continueWatchingCategory.items.forEach { mediaRepository.cacheItem(it) }
                     lastContinueWatchingItems = continueWatchingCategory.items
                     lastContinueWatchingUpdateMs = now
-                    val latestCategories = _uiState.value.categories.toMutableList()
+                    val latestCategories = filterHomePresentationCategories(_uiState.value.categories).toMutableList()
                     val continueWatchingIndex = latestCategories.indexOfFirst { it.id == "continue_watching" }
                     if (continueWatchingIndex >= 0) {
                         latestCategories[continueWatchingIndex] = continueWatchingCategory
                     } else {
                         latestCategories.add(0, continueWatchingCategory)
                     }
-                    _uiState.value = _uiState.value.copy(categories = latestCategories)
+                    _uiState.value = _uiState.value.copy(
+                        categories = filterHomePresentationCategories(latestCategories)
+                    )
                     refreshWatchedBadges()
                 } else {
                     // No new data from any source
-                    val latestCategories = _uiState.value.categories.toMutableList()
+                    val latestCategories = filterHomePresentationCategories(_uiState.value.categories).toMutableList()
                     val continueWatchingIndex = latestCategories.indexOfFirst { it.id == "continue_watching" }
                     val latestHasPlaceholders = latestCategories
                         .getOrNull(continueWatchingIndex)
@@ -2679,7 +2756,9 @@ var categories = withContext(networkDispatcher) {
                         // We had placeholders but no data loaded - remove the placeholder category
                         if (continueWatchingIndex >= 0) {
                             latestCategories.removeAt(continueWatchingIndex)
-                            _uiState.value = _uiState.value.copy(categories = latestCategories)
+                            _uiState.value = _uiState.value.copy(
+                                categories = filterHomePresentationCategories(latestCategories)
+                            )
                         }
                     } else if (!latestHasPlaceholders && continueWatchingIndex >= 0) {
                         // Continue Watching exists with real data - preserve it exactly as is
@@ -2709,7 +2788,9 @@ var categories = withContext(networkDispatcher) {
                             items = safeItems
                         )
                         latestCategories.add(0, continueWatchingCategory)
-                        _uiState.value = _uiState.value.copy(categories = latestCategories)
+                        _uiState.value = _uiState.value.copy(
+                            categories = filterHomePresentationCategories(latestCategories)
+                        )
                     }
                     // Else: No data anywhere - nothing to show, UI already doesn't have it
                 }
@@ -3039,7 +3120,7 @@ var categories = withContext(networkDispatcher) {
                 }
 
                 _uiState.value = _uiState.value.copy(
-                    categories = updatedCategories,
+                    categories = filterHomePresentationCategories(updatedCategories),
                     heroItem = updatedHero
                 )
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
@@ -3067,7 +3148,7 @@ var categories = withContext(networkDispatcher) {
         scheduleHeroDetailsFetch(item, fastScrolling = true)
     }
 
-    fun updateHeroItem(item: MediaItem) {
+    fun updateHeroItem(item: MediaItem, enrich: Boolean = true) {
         if (isCollectionItem(item)) {
             if (item.isPlaceholder) return
             heroUpdateJob?.cancel()
@@ -3124,7 +3205,9 @@ var categories = withContext(networkDispatcher) {
         if (cachedLogo != null && !fastScrolling) {
             heroUpdateJob?.cancel()
             performHeroUpdate(item, cachedLogo)
-            scheduleHeroDetailsFetch(item, fastScrolling)
+            if (enrich) {
+                scheduleHeroDetailsFetch(item, fastScrolling)
+            }
             return
         }
 
@@ -3139,10 +3222,12 @@ var categories = withContext(networkDispatcher) {
             // Check if still the current focus after debounce
             val currentCachedLogo = getCachedLogo(cacheKey)
             performHeroUpdate(item, currentCachedLogo)
-            scheduleHeroDetailsFetch(item, fastScrolling)
+            if (enrich) {
+                scheduleHeroDetailsFetch(item, fastScrolling)
+            }
 
             // Fetch logo async if not cached.
-            if (currentCachedLogo == null && isActionableMediaItem(item) && !isIptvItem(item)) {
+            if (enrich && currentCachedLogo == null && isActionableMediaItem(item) && !isIptvItem(item)) {
                 try {
                     val logoUrl = withContext(networkDispatcher) {
                         mediaRepository.getLogoUrl(item.mediaType, item.id)
@@ -3248,12 +3333,10 @@ var categories = withContext(networkDispatcher) {
         }
     }
 
-    private fun prefetchTrailerUrl(trailerKey: String) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching {
-                youTubeExtractor.extractPlaybackSource("https://www.youtube.com/watch?v=$trailerKey")
-            }
-        }
+    private fun prefetchTrailerUrl(_trailerKey: String) {
+        // Home is a navigation surface; resolving YouTube playback URLs here
+        // competes with D-pad frame time. Trailer playback still resolves on the
+        // actual trailer surfaces.
     }
 
     private fun scheduleHeroDetailsFetch(item: MediaItem, fastScrolling: Boolean) {
@@ -3565,7 +3648,7 @@ var categories = withContext(networkDispatcher) {
                         }
 
                         _uiState.value = _uiState.value.copy(
-                            categories = updatedCategories,
+                            categories = filterHomePresentationCategories(updatedCategories),
                             toastMessage = "S${nextEp.seasonNumber}E${nextEp.episodeNumber} marked as watched",
                             toastType = ToastType.SUCCESS
                         )
@@ -3666,7 +3749,7 @@ var categories = withContext(networkDispatcher) {
                         }
 
                         _uiState.value = _uiState.value.copy(
-                            categories = updatedCategories,
+                            categories = filterHomePresentationCategories(updatedCategories),
                             toastMessage = "S${nextEp.seasonNumber}E${nextEp.episodeNumber} marked as watched",
                             toastType = ToastType.SUCCESS
                         )
@@ -3768,7 +3851,7 @@ val updatedCategories = _uiState.value.categories.map { category ->
                 }
 
                 _uiState.value = _uiState.value.copy(
-                    categories = updatedCategories,
+                    categories = filterHomePresentationCategories(updatedCategories),
                     toastMessage = "Removed from Continue Watching",
                     toastType = ToastType.SUCCESS
                 )

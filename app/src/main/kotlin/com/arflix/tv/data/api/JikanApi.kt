@@ -8,11 +8,11 @@ import retrofit2.http.Path
 /**
  * Jikan v4 is an unofficial REST API for MyAnimeList.net data.
  *
- * Used by ARVIO to display the MAL community score next to IMDB/TMDB ratings
+ * Used by Majo Stream to display the MAL community score next to IMDB/TMDB ratings
  * on anime details pages. See issue #45.
  *
  * Base URL: `https://api.jikan.moe/v4/`
- * Rate limit: ~3 req/s, 60 req/min (unofficial, subject to change). ARVIO
+ * Rate limit: ~3 req/s, 60 req/min (unofficial, subject to change). Majo Stream
  * caches scores in memory so a typical details load performs at most one
  * Jikan request per unique MAL ID per session.
  *

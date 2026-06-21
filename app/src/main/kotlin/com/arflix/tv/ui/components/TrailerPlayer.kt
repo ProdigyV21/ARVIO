@@ -22,14 +22,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.arflix.tv.R
 import com.arflix.tv.data.api.InAppYouTubeExtractor
+import com.arflix.tv.data.api.TrailerPlaybackSource
 import com.arflix.tv.data.api.YoutubeChunkedDataSourceFactory
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -64,8 +67,8 @@ fun TrailerPlayer(
     val currentOnPlayingChanged by rememberUpdatedState(onPlayingChanged)
 
     var shouldPlay by remember { mutableStateOf(false) }
-    var videoUrl by remember { mutableStateOf<String?>(null) }
-    var audioUrl by remember { mutableStateOf<String?>(null) }
+    var playbackSource by remember { mutableStateOf<TrailerPlaybackSource?>(null) }
+    var fallbackIndex by remember { mutableStateOf(0) }
 
     val entryPoint = remember {
         EntryPointAccessors.fromApplication(context, TrailerPlayerEntryPoint::class.java)
@@ -74,19 +77,15 @@ fun TrailerPlayer(
 
     LaunchedEffect(youtubeKey) {
         shouldPlay = false
-        videoUrl = null
-        audioUrl = null
+        playbackSource = null
+        fallbackIndex = 0
         delay(delayMs)
         withContext(Dispatchers.IO) {
             try {
-                val source = extractor.extractPlaybackSource("https://www.youtube.com/watch?v=$youtubeKey")
-                if (source != null) {
-                    videoUrl = source.videoUrl
-                    audioUrl = source.audioUrl
-                }
+                playbackSource = extractor.extractPlaybackSource("https://www.youtube.com/watch?v=$youtubeKey")
             } catch (_: Exception) {}
         }
-        if (videoUrl != null) {
+        if (playbackSource?.videoUrl != null) {
             shouldPlay = true
             currentOnPlayingChanged(true)
         } else {
@@ -97,31 +96,52 @@ fun TrailerPlayer(
     // TextureView (set via XML) means the view is transparent during the fade-in,
     // so the backdrop image shows through while ExoPlayer buffers. No black flash.
     AnimatedVisibility(
-        visible = shouldPlay && videoUrl != null,
+        visible = shouldPlay && playbackSource?.videoUrl != null,
         enter = fadeIn(animationSpec = tween(800)),
         exit = fadeOut(),
         modifier = modifier
     ) {
+        val source = playbackSource
+        val videoUrls = remember(source) {
+            buildList {
+                source?.videoUrl?.takeIf { it.isNotBlank() }?.let(::add)
+                source?.fallbackVideoUrls.orEmpty()
+                    .filter { it.isNotBlank() }
+                    .forEach(::add)
+            }.distinct()
+        }
+        val activeVideoUrl = videoUrls.getOrNull(fallbackIndex)
+        val activeAudioUrl = if (fallbackIndex == 0) source?.audioUrl else null
         val player = remember(youtubeKey) {
-            ExoPlayer.Builder(context).build().apply {
-                repeatMode = Player.REPEAT_MODE_OFF
-                playWhenReady = true
-            }
+            ExoPlayer.Builder(context)
+                .setTrackSelector(
+                    DefaultTrackSelector(context).apply {
+                        parameters = buildUponParameters()
+                            .setForceHighestSupportedBitrate(true)
+                            .setForceLowestBitrate(false)
+                            .build()
+                    }
+                )
+                .build()
+                .apply {
+                    repeatMode = Player.REPEAT_MODE_OFF
+                    playWhenReady = true
+                }
         }
 
         LaunchedEffect(volume) {
             player.volume = volume.coerceIn(0f, 1f)
         }
 
-        LaunchedEffect(videoUrl, audioUrl, youtubeKey) {
-            val vUrl = videoUrl ?: return@LaunchedEffect
-            if (!audioUrl.isNullOrBlank()) {
+        LaunchedEffect(activeVideoUrl, activeAudioUrl, youtubeKey) {
+            val vUrl = activeVideoUrl ?: return@LaunchedEffect
+            if (!activeAudioUrl.isNullOrBlank()) {
                 val factory = DefaultMediaSourceFactory(YoutubeChunkedDataSourceFactory())
-                val videoSource = factory.createMediaSource(MediaItem.fromUri(vUrl))
-                val audioSource = factory.createMediaSource(MediaItem.fromUri(audioUrl!!))
+                val videoSource = factory.createMediaSource(trailerMediaItem(vUrl))
+                val audioSource = factory.createMediaSource(trailerMediaItem(activeAudioUrl))
                 player.setMediaSource(MergingMediaSource(videoSource, audioSource))
             } else {
-                player.setMediaItem(MediaItem.fromUri(vUrl))
+                player.setMediaItem(trailerMediaItem(vUrl))
             }
             player.prepare()
         }
@@ -130,7 +150,13 @@ fun TrailerPlayer(
         DisposableEffect(lifecycleOwner, player) {
             val listener = object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    extractor.evictCache(youtubeKey)
+                    if (fallbackIndex < videoUrls.lastIndex) {
+                        fallbackIndex += 1
+                    } else {
+                        extractor.evictCache(youtubeKey)
+                        shouldPlay = false
+                        currentOnPlayingChanged(false)
+                    }
                 }
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (playbackState == Player.STATE_ENDED) {
@@ -174,4 +200,16 @@ fun TrailerPlayer(
             modifier = Modifier.fillMaxSize().clipToBounds()
         )
     }
+}
+
+private fun trailerMediaItem(url: String): MediaItem {
+    val lower = url.lowercase()
+    return MediaItem.Builder()
+        .setUri(url)
+        .apply {
+            if (lower.contains(".m3u8") || lower.contains("manifest")) {
+                setMimeType(MimeTypes.APPLICATION_M3U8)
+            }
+        }
+        .build()
 }
