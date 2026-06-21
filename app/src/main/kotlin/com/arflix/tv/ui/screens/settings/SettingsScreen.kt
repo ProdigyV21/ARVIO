@@ -5884,7 +5884,7 @@ private fun IptvSettings(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (selectionMode) {
-                                Icon(imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = if (isSelected) Pink else TextSecondary, modifier = Modifier.size(24.dp))
+                                Icon(imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = stringResource(if (isSelected) R.string.item_selected else R.string.item_not_selected), tint = if (isSelected) Pink else TextSecondary, modifier = Modifier.size(24.dp))
                                 Spacer(modifier = Modifier.width(16.dp))
                             } else {
                                 Icon(imageVector = Icons.Default.LiveTv, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
@@ -6919,7 +6919,7 @@ private fun CatalogsSettings(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (selectionMode) {
-                                    Icon(if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = null, tint = if (isSelected) Pink else TextSecondary, modifier = Modifier.size(24.dp))
+                                    Icon(if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = stringResource(if (isSelected) R.string.item_selected else R.string.item_not_selected), tint = if (isSelected) Pink else TextSecondary, modifier = Modifier.size(24.dp))
                                     Spacer(modifier = Modifier.width(16.dp))
                                 } else {
                                     Icon(Icons.Default.Widgets, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))

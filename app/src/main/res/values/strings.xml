@@ -92,6 +92,8 @@
     <string name="add">Add</string>
     <string name="refresh">Refresh</string>
     <string name="selected">selected</string>
+    <string name="item_selected">Selected</string>
+    <string name="item_not_selected">Not selected</string>
     <string name="sign_in">Sign In</string>
     <string name="log_out">Log Out</string>
     <string name="watched">Watched</string>
