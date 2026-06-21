@@ -4,6 +4,23 @@ ARVIO is an Android media hub for TV, phone, and tablet form factors. This repos
 
 The app provides a media browser, player shell, profile support, optional cloud sync, IPTV playlist support, catalog configuration, home-server integrations, and integrations with user-configured sources. ARVIO does not host, store, sell, or distribute movies, series, live TV channels, playlists, streams, or other third-party media.
 
+## Table of Contents
+
+- [ARVIO](#arvio)
+- [Repository Purpose](#repository-purpose)
+- [Features](#features)
+- [Availability](#availability)
+- [Support ARVIO](#support-arvio)
+- [Screenshots](#screenshots)
+- [Content And Source Policy](#content-and-source-policy)
+- [Cloud Sync](#cloud-sync)
+- [Build And Run](#build-and-run)
+- [Local Configuration](#local-configuration)
+- [Release Checks](#release-checks)
+- [Privacy](#privacy)
+- [License](#license)
+- [AI Disclosure](#ai-disclosure)
+
 ## Repository Purpose
 
 This GitHub repository is for:
