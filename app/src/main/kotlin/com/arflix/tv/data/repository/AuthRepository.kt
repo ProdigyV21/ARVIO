@@ -1187,23 +1187,19 @@ class AuthRepository @Inject constructor(
     private fun isJwtExpired(token: String, bufferSeconds: Long = 60): Boolean {
         return try {
             val parts = token.split(".")
-            if (parts.size < 2) return true
+            if (parts.size != 3) return true
             val payload = String(
                 Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP),
                 Charsets.UTF_8
             )
             val json = JSONObject(payload)
-            // SECURITY FIX: Reject tokens without exp claim
-            if (!json.has("exp")) {
-                return true
-            }
+            if (!json.has("exp")) return true
             val exp = json.getLong("exp")
-            if (exp <= 0L) {
-                return true
-            }
+            if (exp <= 0L) return true // Explicit zero-check
             val now = Clock.System.now().epochSeconds
             exp <= now + bufferSeconds
         } catch (e: Exception) {
+            AppLogger.e("Auth", "JWT parsing error", e)
             true
         }
     }
