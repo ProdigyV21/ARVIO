@@ -5291,7 +5291,7 @@ private fun PlayerMetadataChrome(
                 )
             }
 
-            if (!uiState.logoUrl.isNullOrBlank() && displayTitle.isNotBlank()) {
+            if (!uiState.logoUrl.isNullOrBlank() && displayTitle.isNotBlank() && mediaType == MediaType.TV) {
                 Text(
                     text = displayTitle,
                     style = ArflixTypography.sectionTitle.copy(
