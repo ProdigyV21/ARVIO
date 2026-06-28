@@ -32,7 +32,8 @@ fun resolveAccentColor(fallback: Color): Color {
  * Maps a user-facing colour name to its [Color] value.
  * Used by the accent colour setting and the colour picker.
  */
-fun accentColorFromName(name: String): Color = when (name) {
+fun accentColorFromName(name: String): Color = when (name.trim()) {
+    "White" -> Color(0xFFFFFFFF)
     // Primary palette (existing)
     "Red" -> Color(0xFFFF4444)
     "Orange" -> Color(0xFFFF8800)
