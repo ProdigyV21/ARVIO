@@ -33,6 +33,7 @@ fun resolveAccentColor(fallback: Color): Color {
  * Used by the accent colour setting and the colour picker.
  */
 fun accentColorFromName(name: String): Color = when (name) {
+    // Primary palette (existing)
     "Red" -> Color(0xFFFF4444)
     "Orange" -> Color(0xFFFF8800)
     "Yellow" -> Color(0xFFFFDD44)
@@ -40,6 +41,22 @@ fun accentColorFromName(name: String): Color = when (name) {
     "Blue" -> Color(0xFF4488FF)
     "Indigo" -> Color(0xFF6644CC)
     "Violet" -> Color(0xFFBB44CC)
+    // Secondary palette (new)
+    "Gold" -> Color(0xFFFFD700)
+    "Silver" -> Color(0xFFC0C0C0)
+    "Rose Gold" -> Color(0xFFEAA6A0)
+    "Teal" -> Color(0xFF009688)
+    "Cyan" -> Color(0xFF00BCD4)
+    "Magenta" -> Color(0xFFE040FB)
+    "Charcoal" -> Color(0xFF5D6D7E)
+    "Slate" -> Color(0xFF8899AA)
+    "Cream" -> Color(0xFFFFFDD0)
+    "Olive" -> Color(0xFF8A9A5B)
+    "Navy" -> Color(0xFF4A6FA5)
+    "Amber" -> Color(0xFFFFC107)
+    "Maroon" -> Color(0xFFC62828)
+    "Lavender" -> Color(0xFFB39DDB)
+    "Bronze" -> Color(0xFFCD7F32)
     else -> Color(0xFFFFFFFF) // White (default)
 }
 

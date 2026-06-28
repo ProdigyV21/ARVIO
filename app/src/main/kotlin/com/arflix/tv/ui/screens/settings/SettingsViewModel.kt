@@ -1186,11 +1186,16 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Cycle the accent color through the rainbow palette.
-     * Order: White → Red → Orange → Yellow → Green → Blue → Indigo → Violet → White
+     * Cycle the accent color through the full palette (primary + secondary).
+     * Order: neutrals → warms → cools → back to White
      */
     fun cycleAccentColor() {
-        val colors = listOf("White", "Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet")
+        val colors = listOf(
+            "White", "Silver", "Slate", "Charcoal", "Cream",
+            "Gold", "Bronze", "Amber", "Orange", "Red", "Maroon",
+            "Rose Gold", "Magenta", "Lavender", "Violet", "Indigo", "Navy",
+            "Blue", "Cyan", "Teal", "Green", "Olive", "Yellow"
+        )
         val current = _uiState.value.accentColor
         val nextIndex = (colors.indexOf(current) + 1) % colors.size
         val next = colors[nextIndex]
