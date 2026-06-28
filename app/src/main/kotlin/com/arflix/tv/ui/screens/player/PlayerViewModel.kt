@@ -968,10 +968,16 @@ class PlayerViewModel @Inject constructor(
                 val season = currentSeason
                 val episode = currentEpisode
                 if (season != null && episode != null) {
-                    currentEpisodeTitle = runCatching {
+                    val matchedEpisode = runCatching {
                         val seasonDetails = tmdbApi.getTvSeason(mediaId, season, Constants.TMDB_API_KEY)
-                        seasonDetails.episodes.firstOrNull { it.episodeNumber == episode }?.name
+                        seasonDetails.episodes.firstOrNull { it.episodeNumber == episode }
                     }.getOrNull()
+                    currentEpisodeTitle = matchedEpisode?.name
+                    // Use per-episode overview in pause overlay instead of the series synopsis,
+                    // so each episode shows its unique description rather than the show's generic blurb.
+                    matchedEpisode?.overview?.takeIf { it.isNotBlank() }?.let { epOv ->
+                        overview = epOv
+                    }
                 }
             } else {
                 val movieDetails = details as com.arflix.tv.data.api.TmdbMovieDetails
