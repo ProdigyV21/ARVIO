@@ -2644,7 +2644,7 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                if (uiState.backdropUrl != null) {
+                if (uiState.backdropUrl != null && uiState.loadingBackground == "Backdrop") {
                     AsyncImage(
                         model = uiState.backdropUrl,
                         contentDescription = null,
@@ -2662,7 +2662,10 @@ fun PlayerScreen(
                     logoUrl = uiState.logoUrl,
                     title = uiState.title,
                     progress = if (uiState.showLoadingStats) uiState.streamProgress else null,
-                    phaseLabel = if (uiState.showLoadingStats) uiState.streamLoadPhase else null
+                    phaseLabel = if (uiState.showLoadingStats) uiState.streamLoadPhase else null,
+                    animationStyle = uiState.loadingAnimationStyle,
+                    progressStyle = uiState.loadingProgressStyle,
+                    backgroundStyle = uiState.loadingBackground
                 )
             }
         }
@@ -2674,7 +2677,13 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                PulsingLogo(logoUrl = uiState.logoUrl, title = uiState.title)
+                PulsingLogo(
+                    logoUrl = uiState.logoUrl,
+                    title = uiState.title,
+                    animationStyle = uiState.loadingAnimationStyle,
+                    progressStyle = uiState.loadingProgressStyle,
+                    backgroundStyle = uiState.loadingBackground
+                )
             }
         }
 
@@ -3657,26 +3666,74 @@ private fun PulsingLogo(
     title: String,
     modifier: Modifier = Modifier,
     progress: Float? = null,
-    phaseLabel: String? = null
+    phaseLabel: String? = null,
+    animationStyle: String = "Heartbeat",
+    progressStyle: String = "Arc",
+    backgroundStyle: String = "Dark"
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "heartbeat")
+    val accentColor = LocalAccentColorOverride.current ?: Color.White
+    val infiniteTransition = rememberInfiniteTransition(label = "pulsingLogo")
+
+    // --- Logo scale animation ---
     val scale by infiniteTransition.animateFloat(
         initialValue = 1.0f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
             animation = keyframes {
-                durationMillis = 1500
-                // Two quick beats followed by a short rest (heartbeat).
-                1.0f at 0
-                1.08f at 160 using FastOutSlowInEasing
-                1.02f at 280 using FastOutSlowInEasing
-                1.12f at 420 using FastOutSlowInEasing
-                1.0f at 620 using FastOutSlowInEasing
-                1.0f at 1500
+                when (animationStyle) {
+                    "Heartbeat" -> {
+                        durationMillis = 1500
+                        1.0f at 0
+                        1.08f at 160 using FastOutSlowInEasing
+                        1.02f at 280 using FastOutSlowInEasing
+                        1.12f at 420 using FastOutSlowInEasing
+                        1.0f at 620 using FastOutSlowInEasing
+                        1.0f at 1500
+                    }
+                    "Breathe" -> {
+                        durationMillis = 3000
+                        1.0f at 0
+                        1.10f at 1500 using FastOutSlowInEasing
+                        1.0f at 3000 using FastOutSlowInEasing
+                    }
+                    "Glow" -> {
+                        // Scale remains steady; alpha pulses instead
+                        durationMillis = 1
+                        1.0f at 0
+                        1.0f at 1
+                    }
+                    else -> { // "Static" / fallback
+                        durationMillis = 1
+                        1.0f at 0
+                        1.0f at 1
+                    }
+                }
             },
             repeatMode = RepeatMode.Restart
         ),
-        label = "heartbeatScale"
+        label = "logoScale"
+    )
+
+    // --- Glow alpha animation (only active for "Glow" style) ---
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                if (animationStyle == "Glow") {
+                    durationMillis = 2000
+                    0.55f at 0
+                    1.0f at 1000 using FastOutSlowInEasing
+                    0.55f at 2000 using FastOutSlowInEasing
+                } else {
+                    durationMillis = 1
+                    1.0f at 0
+                    1.0f at 1
+                }
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "glowAlpha"
     )
 
     // Smoothly interpolate discrete progress jumps from the ViewModel so the
@@ -3695,41 +3752,74 @@ private fun PulsingLogo(
             modifier = Modifier.size(196.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (progress != null) {
-                // Track + arc progress ring — renders even at 0% so users see
-                // the loader frame immediately rather than a bare logo.
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val strokeWidthPx = 4.dp.toPx()
-                    val diameter = size.minDimension - strokeWidthPx
-                    val topLeft = Offset(
-                        (size.width - diameter) / 2f,
-                        (size.height - diameter) / 2f
-                    )
-                    val arcSize = Size(diameter, diameter)
-                    // Track
-                    drawArc(
-                        color = Color.White.copy(alpha = 0.15f),
-                        startAngle = 0f,
-                        sweepAngle = 360f,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
-                    )
-                    // Filled arc
-                    drawArc(
-                        color = Color.White,
-                        startAngle = -90f,
-                        sweepAngle = 360f * animatedProgress,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
-                    )
+            // --- Progress ring / bar (accent-colored) ---
+            if (progress != null && progressStyle != "None") {
+                when (progressStyle) {
+                    "Arc" -> {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidthPx = 4.dp.toPx()
+                            val diameter = size.minDimension - strokeWidthPx
+                            val topLeft = Offset(
+                                (size.width - diameter) / 2f,
+                                (size.height - diameter) / 2f
+                            )
+                            val arcSize = Size(diameter, diameter)
+                            // Track
+                            drawArc(
+                                color = accentColor.copy(alpha = 0.15f),
+                                startAngle = 0f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = arcSize,
+                                style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
+                            )
+                            // Filled arc — accent-colored
+                            drawArc(
+                                color = accentColor,
+                                startAngle = -90f,
+                                sweepAngle = 360f * animatedProgress,
+                                useCenter = false,
+                                topLeft = topLeft,
+                                size = arcSize,
+                                style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+                    "Linear" -> {
+                        // Horizontal progress bar positioned below the logo box
+                        // (rendered inside the Box so it overlays at the bottom)
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp)
+                                .width(152.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(accentColor.copy(alpha = 0.15f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(animatedProgress)
+                                    .fillMaxHeight()
+                                    .background(accentColor, RoundedCornerShape(2.dp))
+                            )
+                        }
+                    }
+                    "Percentage" -> {
+                        // No ring or bar — percentage text shown below
+                    }
                 }
             }
+
+            // --- Logo with animation ---
             Box(
-                modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = glowAlpha
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (!logoUrl.isNullOrBlank()) {
@@ -3741,13 +3831,23 @@ private fun PulsingLogo(
             }
         }
 
-        if (progress != null) {
+        // --- Progress text / percentage below the logo ---
+        if (progress != null && progressStyle != "None") {
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "${(animatedProgress * 100f).toInt()}%",
-                style = ArflixTypography.sectionTitle.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-                color = Color.White
-            )
+            if (progressStyle == "Percentage" || progressStyle == "Arc") {
+                Text(
+                    text = "${(animatedProgress * 100f).toInt()}%",
+                    style = ArflixTypography.sectionTitle.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+                    color = accentColor
+                )
+            }
+            if (progressStyle == "Linear") {
+                Text(
+                    text = "${(animatedProgress * 100f).toInt()}%",
+                    style = ArflixTypography.sectionTitle.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+                    color = accentColor
+                )
+            }
             if (!phaseLabel.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(

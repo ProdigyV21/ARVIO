@@ -201,7 +201,13 @@ data class SettingsUiState(
     val subtitleAiModel: SubtitleAiModel = SubtitleAiModel.GROQ_LLAMA_70B,
     val subtitleRemoveHearingImpaired: Boolean = true,
     val aiKeyServerState: AiKeyServerState = AiKeyServerState(),
-    val smoothScrolling: Boolean = true
+    val smoothScrolling: Boolean = true,
+    // Loading animation style: Heartbeat / Breathe / Glow / Static
+    val loadingAnimationStyle: String = "Heartbeat",
+    // Loading progress style: Arc / Linear / Percentage / None
+    val loadingProgressStyle: String = "Arc",
+    // Loading background treatment: Dark / Backdrop
+    val loadingBackground: String = "Dark"
 )
 
 @HiltViewModel
@@ -270,6 +276,9 @@ class SettingsViewModel @Inject constructor(
     // a handful of discrete dB values. Parsed back to Int on read.
     private fun volumeBoostDbKey() = profileManager.profileStringKey("volume_boost_db")
     private fun showLoadingStatsKey() = profileManager.profileBooleanKey("show_loading_stats")
+    private fun loadingAnimationStyleKey() = profileManager.profileStringKey("loading_animation_style")
+    private fun loadingProgressStyleKey() = profileManager.profileStringKey("loading_progress_style")
+    private fun loadingBackgroundKey() = profileManager.profileStringKey("loading_background")
 
     private fun subtitleSizeKey() = profileManager.profileStringKey("subtitle_size")
     private fun subtitleColorKey() = profileManager.profileStringKey("subtitle_color")
@@ -462,6 +471,9 @@ class SettingsViewModel @Inject constructor(
             val volumeBoostDb = prefs[volumeBoostDbKey()]?.toIntOrNull()?.coerceIn(0, 15) ?: 0
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
             val smoothScrolling = prefs[smoothScrollingKey()] ?: true
+            val loadingAnimationStyle = prefs[loadingAnimationStyleKey()] ?: "Heartbeat"
+            val loadingProgressStyle = prefs[loadingProgressStyleKey()] ?: "Arc"
+            val loadingBackground = prefs[loadingBackgroundKey()] ?: "Dark"
 
             val subtitleSize = prefs[subtitleSizeKey()] ?: "Medium"
             val subtitleColor = prefs[subtitleColorKey()] ?: "White"
@@ -530,7 +542,9 @@ class SettingsViewModel @Inject constructor(
                 showBudget = showBudget,
                 volumeBoostDb = volumeBoostDb,
                 showLoadingStats = showLoadingStats,
-
+                loadingAnimationStyle = loadingAnimationStyle,
+                loadingProgressStyle = loadingProgressStyle,
+                loadingBackground = loadingBackground,
                 subtitleSize = subtitleSize,
                 subtitleColor = subtitleColor,
                 subtitleStyle = subtitleStyle,
@@ -1172,6 +1186,42 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             context.settingsDataStore.edit { it[showLoadingStatsKey()] = enabled }
             _uiState.value = _uiState.value.copy(showLoadingStats = enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun cycleLoadingAnimationStyle() {
+        val styles = listOf("Heartbeat", "Breathe", "Glow", "Static")
+        val current = _uiState.value.loadingAnimationStyle
+        val nextIndex = (styles.indexOf(current) + 1) % styles.size
+        val next = styles[nextIndex]
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[loadingAnimationStyleKey()] = next }
+            _uiState.value = _uiState.value.copy(loadingAnimationStyle = next)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun cycleLoadingProgressStyle() {
+        val styles = listOf("Arc", "Linear", "Percentage", "None")
+        val current = _uiState.value.loadingProgressStyle
+        val nextIndex = (styles.indexOf(current) + 1) % styles.size
+        val next = styles[nextIndex]
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[loadingProgressStyleKey()] = next }
+            _uiState.value = _uiState.value.copy(loadingProgressStyle = next)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun cycleLoadingBackground() {
+        val options = listOf("Dark", "Backdrop")
+        val current = _uiState.value.loadingBackground
+        val nextIndex = (options.indexOf(current) + 1) % options.size
+        val next = options[nextIndex]
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[loadingBackgroundKey()] = next }
+            _uiState.value = _uiState.value.copy(loadingBackground = next)
             syncLocalStateToCloud(silent = true)
         }
     }

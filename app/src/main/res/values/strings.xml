@@ -188,6 +188,12 @@
     <string name="accent_color_desc">Choose the accent color for focus rings, buttons, and selected items</string>
     <string name="show_loading_stats_desc">Display stream resolution progress</string>
     <string name="volume_boost_desc">Amplify quiet sources (via system LoudnessEnhancer)</string>
+    <string name="loading_animation_style">Loading Animation</string>
+    <string name="loading_animation_style_desc">Choose how the clearlogo animates during loading</string>
+    <string name="loading_progress_style">Loading Progress</string>
+    <string name="loading_progress_style_desc">Choose the progress indicator style during loading</string>
+    <string name="loading_background">Loading Background</string>
+    <string name="loading_background_desc">Choose the background treatment during loading</string>
     <string name="dns_desc">Resolve API and stream requests</string>
     <string name="add_catalog_desc">Import a Trakt or MDBList catalog URL</string>
 

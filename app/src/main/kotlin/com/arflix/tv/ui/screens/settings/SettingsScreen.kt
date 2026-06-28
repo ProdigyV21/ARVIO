@@ -219,7 +219,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "subtitles" -> listOf(1, 2, 4, 5, 6, 7, 8, 9)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
         "playback" -> listOf(10, 11, 12, 13, 14, 37, 34, 16, 15, 27)
-        "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 36)
+        "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 36, 38, 39, 40)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -1339,7 +1339,13 @@ fun SettingsScreen(
                             onSubtitleAiApiKeyClick = { showAiApiKeyDialog = true },
                             onSubtitleAiQrClick = { viewModel.startAiKeyServer() },
                             customUserAgent = uiState.customUserAgent,
-                            onCustomUserAgentClick = { showCustomUserAgentDialog = true }
+                            onCustomUserAgentClick = { showCustomUserAgentDialog = true },
+                            loadingAnimationStyle = uiState.loadingAnimationStyle,
+                            onLoadingAnimationStyleClick = { viewModel.cycleLoadingAnimationStyle() },
+                            loadingProgressStyle = uiState.loadingProgressStyle,
+                            onLoadingProgressStyleClick = { viewModel.cycleLoadingProgressStyle() },
+                            loadingBackground = uiState.loadingBackground,
+                            onLoadingBackgroundClick = { viewModel.cycleLoadingBackground() }
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -4746,7 +4752,13 @@ private fun TvGeneralSettingsRows(
     onSubtitleAiApiKeyClick: () -> Unit = {},
     onSubtitleAiQrClick: () -> Unit = {},
     customUserAgent: String = "",
-    onCustomUserAgentClick: () -> Unit = {}
+    onCustomUserAgentClick: () -> Unit = {},
+    loadingAnimationStyle: String = "Heartbeat",
+    onLoadingAnimationStyleClick: () -> Unit = {},
+    loadingProgressStyle: String = "Arc",
+    onLoadingProgressStyleClick: () -> Unit = {},
+    loadingBackground: String = "Dark",
+    onLoadingBackgroundClick: () -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
@@ -4854,6 +4866,33 @@ private fun TvGeneralSettingsRows(
                 34 -> SettingsRow(Icons.Default.Schedule, stringResource(R.string.trailer_delay), stringResource(R.string.trailer_delay_desc), "${trailerDelaySeconds}s", focusedIndex == localIndex, onTrailerDelayClick, Modifier.settingsFocusSlot(localIndex))
                 35 -> SettingsRow(Icons.Default.Language, stringResource(R.string.custom_user_agent), stringResource(R.string.custom_user_agent_desc), formatUserAgentPreview(customUserAgent, 30), focusedIndex == localIndex, onCustomUserAgentClick, Modifier.settingsFocusSlot(localIndex))
                 37 -> SettingsToggleRow(stringResource(R.string.trailer_in_cards), stringResource(R.string.trailer_in_cards_desc), trailerInCards, focusedIndex == localIndex, onTrailerInCardsToggle, Modifier.settingsFocusSlot(localIndex))
+                38 -> SettingsRow(
+                    icon = Icons.Default.Palette,
+                    title = stringResource(R.string.loading_animation_style),
+                    subtitle = stringResource(R.string.loading_animation_style_desc),
+                    value = loadingAnimationStyle,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onLoadingAnimationStyleClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                39 -> SettingsRow(
+                    icon = Icons.Default.Refresh,
+                    title = stringResource(R.string.loading_progress_style),
+                    subtitle = stringResource(R.string.loading_progress_style_desc),
+                    value = loadingProgressStyle,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onLoadingProgressStyleClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                40 -> SettingsRow(
+                    icon = Icons.Default.Movie,
+                    title = stringResource(R.string.loading_background),
+                    subtitle = stringResource(R.string.loading_background_desc),
+                    value = loadingBackground,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onLoadingBackgroundClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
             }
         }
     }

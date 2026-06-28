@@ -103,6 +103,12 @@ data class PlayerUiState(
     val volumeBoostDb: Int = 0,
     // Show loading progress during stream resolution
     val showLoadingStats: Boolean = true,
+    // Loading animation style: Heartbeat / Breathe / Glow / Static
+    val loadingAnimationStyle: String = "Heartbeat",
+    // Loading progress style: Arc / Linear / Percentage / None
+    val loadingProgressStyle: String = "Arc",
+    // Loading background treatment: Dark / Backdrop
+    val loadingBackground: String = "Dark",
     // Skip intro/recap
     val activeSkipInterval: SkipInterval? = null,
     val skipIntervalDismissed: Boolean = false,
@@ -257,6 +263,9 @@ class PlayerViewModel @Inject constructor(
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
     private fun showLoadingStatsKey() = profileManager.profileBooleanKey("show_loading_stats")
+    private fun loadingAnimationStyleKey() = profileManager.profileStringKey("loading_animation_style")
+    private fun loadingProgressStyleKey() = profileManager.profileStringKey("loading_progress_style")
+    private fun loadingBackgroundKey() = profileManager.profileStringKey("loading_background")
     private val gson = Gson()
     private val knownLanguageCodes = setOf(
         "en", "es", "fr", "de", "it", "pt", "nl", "ru", "zh", "ja", "ko",
@@ -387,6 +396,9 @@ class PlayerViewModel @Inject constructor(
             val subOffset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
             val autoPlayNext = prefs[autoPlayNextKey()] ?: true
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
+            val loadingAnimationStyle = prefs[loadingAnimationStyleKey()] ?: "Heartbeat"
+            val loadingProgressStyle = prefs[loadingProgressStyleKey()] ?: "Arc"
+            val loadingBackground = prefs[loadingBackgroundKey()] ?: "Dark"
             val volumeBoostDb = prefs[profileManager.profileStringKey("volume_boost_db")]
                 ?.toIntOrNull()?.coerceIn(0, 15) ?: 0
             val orderedAddonIds = streamRepository.installedAddons.first()
@@ -430,6 +442,9 @@ class PlayerViewModel @Inject constructor(
                 subtitleOffset = subOffset,
                 autoPlayNext = autoPlayNext,
                 showLoadingStats = showLoadingStats,
+                loadingAnimationStyle = loadingAnimationStyle,
+                loadingProgressStyle = loadingProgressStyle,
+                loadingBackground = loadingBackground,
                 volumeBoostDb = volumeBoostDb
             )
 
