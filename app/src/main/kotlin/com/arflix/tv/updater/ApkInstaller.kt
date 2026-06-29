@@ -11,6 +11,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.arflix.tv.BuildConfig
+import com.arflix.tv.R
 import java.io.File
 import java.io.FileInputStream
 
@@ -80,10 +81,10 @@ object ApkInstaller {
             }
 
             if (installedSigs.isNotEmpty() && apkSigs.isNotEmpty() && installedSigs != apkSigs) {
-                return "Signature conflict detected. The installed version was signed with a different key.\n\n" +
-                    "To update, please uninstall the current version first:\n" +
-                    "Settings > Apps > ${context.applicationInfo.loadLabel(pm)} > Uninstall\n\n" +
-                    "Then install the new version. Your cloud-synced data (watchlist, progress) will be restored after login."
+                return context.getString(
+                    R.string.update_error_signature_conflict,
+                    context.applicationInfo.loadLabel(pm)
+                )
             }
         } catch (_: Exception) {
             // Can't check — proceed with install attempt

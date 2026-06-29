@@ -7,6 +7,8 @@ import com.arflix.tv.core.plugin.cloudstream.ExternalExtensionLoader
 import com.arflix.tv.core.plugin.cloudstream.ExternalExtensionRunner
 import com.arflix.tv.core.plugin.cloudstream.ExternalRepoParser
 import com.arflix.tv.data.local.PluginDataStore
+import com.arflix.tv.data.repository.CloudSyncInvalidationBus
+import com.arflix.tv.data.repository.CloudSyncScope
 import com.arflix.tv.domain.model.ExternalPluginEntry
 import com.arflix.tv.domain.model.LocalScraperResult
 import com.arflix.tv.domain.model.PluginManifest
@@ -65,7 +67,8 @@ class PluginManager @Inject constructor(
     private val runtime: PluginRuntime,
     private val externalRepoParser: ExternalRepoParser,
     private val externalExtensionLoader: ExternalExtensionLoader,
-    private val externalExtensionRunner: ExternalExtensionRunner
+    private val externalExtensionRunner: ExternalExtensionRunner,
+    private val invalidationBus: CloudSyncInvalidationBus
 ) {
     private val moshi = Moshi.Builder()
         .addLast(KotlinJsonAdapterFactory())
@@ -247,28 +250,21 @@ class PluginManager @Inject constructor(
     fun flushPendingSync() {
         if (pendingPushAfterSync) {
             pendingPushAfterSync = false
-            Log.d(TAG, "flushPendingSync: firing deferred push")
-            triggerRemoteSync()
+            Log.d(TAG, "flushPendingSync: firing deferred push after remote sync")
+            triggerRemoteSync("flush after remote sync")
         }
     }
 
     private var syncJob: kotlinx.coroutines.Job? = null
 
-    private fun triggerRemoteSync() {
+    private fun triggerRemoteSync(reason: String = "plugin change") {
         if (isSyncingFromRemote) {
-            Log.d(TAG, "triggerRemoteSync: skipped (syncing from remote), will push after sync")
+            Log.d(TAG, "triggerRemoteSync: deferred (syncing from remote)")
             pendingPushAfterSync = true
             return
         }
-        if (true /* !authManager.isAuthenticated */) {
-            Log.d(TAG, "triggerRemoteSync: skipped (not authenticated, simulated)")
-            return
-        }
-        Log.d(TAG, "triggerRemoteSync: scheduling push in 500ms")
-        syncJob?.cancel()
-        syncJob = syncScope.launch {
-            kotlinx.coroutines.delay(500)
-        }
+        Log.d(TAG, "triggerRemoteSync: marking dirty — $reason")
+        invalidationBus.markDirty(CloudSyncScope.PLUGINS, null, reason)
     }
 
     // Combined flow of enabled scrapers
@@ -399,7 +395,7 @@ class PluginManager @Inject constructor(
         downloadJsScrapers(repo.id, canonicalManifestUrl, manifest.getActiveScrapers())
 
         Log.d(TAG, "NuvioTV repository added: ${repo.name} with ${manifest.getActiveScrapers().size} scrapers")
-        triggerRemoteSync()
+        triggerRemoteSync("repo added: ${repo.name}")
         return Result.success(repo)
     }
 
@@ -430,7 +426,7 @@ class PluginManager @Inject constructor(
         downloadDexExtensions(repo.id, parseResult.plugins)
 
         Log.d(TAG, "External repository added: ${repo.name} with ${parseResult.plugins.size} extensions")
-        triggerRemoteSync()
+        triggerRemoteSync("repo added: ${repo.name}")
         return Result.success(repo)
     }
 
@@ -457,14 +453,7 @@ class PluginManager @Inject constructor(
         // Remove repository
         dataStore.removeRepository(repoId)
 
-        // Push synchronously when user-initiated (not during reconciliation)
-        // to prevent the next sync pull from re-adding the removed repo
-        if (!isSyncingFromRemote && false /* authManager.isAuthenticated */) {
-            Log.d(TAG, "removeRepository: pushing removal to remote synchronously")
-            // pluginSyncService.pushToRemote()
-        } else if (isSyncingFromRemote) {
-            pendingPushAfterSync = true
-        }
+        triggerRemoteSync("repo removed: $repoId")
     }
 
 
@@ -603,6 +592,7 @@ class PluginManager @Inject constructor(
             if (scraper.id == scraperId) scraper.copy(enabled = enabled) else scraper
         }
         dataStore.saveScrapers(updatedScrapers)
+        triggerRemoteSync("scraper toggled: $scraperId=$enabled")
     }
 
     /**
@@ -614,6 +604,7 @@ class PluginManager @Inject constructor(
             if (scraper.repositoryId == repoId) scraper.copy(enabled = enabled) else scraper
         }
         dataStore.saveScrapers(updatedScrapers)
+        triggerRemoteSync("all scrapers toggled for repo: $repoId=$enabled")
     }
 
     /**
@@ -621,6 +612,7 @@ class PluginManager @Inject constructor(
      */
     suspend fun setPluginsEnabled(enabled: Boolean) {
         dataStore.setPluginsEnabled(enabled)
+        triggerRemoteSync("plugins enabled=$enabled")
     }
 
     suspend fun setGroupStreamsByRepository(enabled: Boolean) {
@@ -682,7 +674,7 @@ class PluginManager @Inject constructor(
         mediaType: String,
         season: Int? = null,
         episode: Int? = null
-    ): Flow<Pair<ScraperInfo, List<LocalScraperResult>>> = channelFlow {
+    ): Flow<Pair<ScraperInfo, List<LocalScraperResult>?>> = channelFlow {
         val enabledList = enabledScrapers.first()
             .filter { it.supportsType(mediaType) }
 
@@ -705,10 +697,11 @@ class PluginManager @Inject constructor(
         enabledList.forEach { scraper ->
             launch {
                 try {
+                    send(scraper to null)
                     val results = executeScraperWithSingleFlight(scraper, tmdbId, mediaType, season, episode)
                     send(scraper to results)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Scraper ${scraper.name} failed in streaming: ${e.message}")
+                    Log.w(TAG, "Scraper ${scraper.id} streaming failed: ${e.message}")
                     send(scraper to emptyList())
                 }
             }

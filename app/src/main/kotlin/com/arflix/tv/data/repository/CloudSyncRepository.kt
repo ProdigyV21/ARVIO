@@ -91,7 +91,8 @@ class CloudSyncRepository @Inject constructor(
     private val watchHistoryRepository: WatchHistoryRepository,
     private val watchlistRepository: WatchlistRepository,
     private val profileAvatarImageManager: ProfileAvatarImageManager,
-    private val invalidationBus: CloudSyncInvalidationBus
+    private val invalidationBus: CloudSyncInvalidationBus,
+    private val pluginDataStore: com.arflix.tv.data.local.PluginDataStore
 ) {
     private val TAG = "CloudSync"
     private val gson = Gson()
@@ -624,6 +625,16 @@ class CloudSyncRepository @Inject constructor(
         root.put("iptvFavoriteGroups", JSONArray(gson.toJson(iptvRepository.observeFavoriteGroups().first())))
         root.put("iptvFavoriteChannels", JSONArray(gson.toJson(iptvRepository.observeFavoriteChannels().first())))
 
+        // Plugin repositories and scrapers (sideload flavor)
+        runCatching {
+            val pluginRepos = pluginDataStore.repositories.first()
+            val pluginScrapers = pluginDataStore.scrapers.first()
+            val pluginsEnabled = pluginDataStore.pluginsEnabled.first()
+            root.put("pluginRepositories", JSONArray(gson.toJson(pluginRepos)))
+            root.put("pluginScrapers", JSONArray(gson.toJson(pluginScrapers)))
+            root.put("pluginsEnabled", pluginsEnabled)
+        }
+
         // Informational
         val isTraktLinked = traktRepository.hasTrakt()
         root.put("traktLinked", isTraktLinked)
@@ -736,8 +747,14 @@ class CloudSyncRepository @Inject constructor(
             )
         }
 
+        val effectivePayload = if (existingRemotePayload != null && !iptvRepository.isGroupOrderLocallyDirty()) {
+            mergeRemoteGroupOrder(payload, existingRemotePayload)
+        } else {
+            payload
+        }
+
         val payloadHash = runCatching {
-            JSONObject(payload).apply { remove("updatedAt") }.toString().hashCode()
+            JSONObject(effectivePayload).apply { remove("updatedAt") }.toString().hashCode()
         }.getOrNull()
 
         if (!force && payloadHash != null && payloadHash == lastPushedPayloadHash && !isPushDirty && pushFailureCount == 0) {
@@ -749,15 +766,15 @@ class CloudSyncRepository @Inject constructor(
             return Result.success(Unit)
         }
 
-        val result = authRepository.saveAccountSyncPayload(payload)
+        val result = authRepository.saveAccountSyncPayload(effectivePayload)
         if (result.isSuccess) {
             clearLocalDirtyAfterSuccessfulPush()
             lastPushedPayloadHash = payloadHash
             pushFailureCount = 0
-            Log.i(TAG, "Push succeeded size=${payloadSizeBucket(payload)}")
+            Log.i(TAG, "Push succeeded size=${payloadSizeBucket(effectivePayload)}")
             AppLogger.breadcrumb(
                 tag = "CloudSync",
-                message = "push_success size=${payloadSizeBucket(payload)} user=${userId.take(8)}",
+                message = "push_success size=${payloadSizeBucket(effectivePayload)} user=${userId.take(8)}",
                 severity = "info"
             )
             onPushCompleted?.invoke()
@@ -769,7 +786,7 @@ class CloudSyncRepository @Inject constructor(
             pushFailureCount++
             Log.w(
                 TAG,
-                "Push failed size=${payloadSizeBucket(payload)} failures=$pushFailureCount error=${result.exceptionOrNull()?.message}"
+                "Push failed size=${payloadSizeBucket(effectivePayload)} failures=$pushFailureCount error=${result.exceptionOrNull()?.message}"
             )
             AppLogger.recordException(
                 throwable = result.exceptionOrNull() ?: IllegalStateException("Cloud push failed"),
@@ -777,12 +794,32 @@ class CloudSyncRepository @Inject constructor(
                     "error_area" to "CloudSync",
                     "cloud_flow" to "push_save_payload",
                     "dirty" to isPushDirty.toString(),
-                    "payload_size" to payloadSizeBucket(payload),
+                    "payload_size" to payloadSizeBucket(effectivePayload),
                     "failure_count" to pushFailureCount.toString()
                 )
             )
         }
         return result
+    }
+
+    private fun mergeRemoteGroupOrder(localPayload: String, remotePayload: String): String {
+        return runCatching {
+            val local = JSONObject(localPayload)
+            val remote = JSONObject(remotePayload)
+            val localByProfile = local.optJSONObject("iptvByProfile") ?: return@runCatching localPayload
+            val remoteByProfile = remote.optJSONObject("iptvByProfile") ?: return@runCatching localPayload
+            val remoteKeys = remoteByProfile.keys()
+            while (remoteKeys.hasNext()) {
+                val profileId = remoteKeys.next()
+                val remoteProfile = remoteByProfile.optJSONObject(profileId) ?: continue
+                val localProfile = localByProfile.optJSONObject(profileId) ?: continue
+                val remoteGroupOrder = remoteProfile.optJSONArray("groupOrder") ?: continue
+                if (remoteGroupOrder.length() > 0) {
+                    localProfile.put("groupOrder", remoteGroupOrder)
+                }
+            }
+            local.toString()
+        }.getOrDefault(localPayload)
     }
 
     // ══════════════════════════════════════════════════════════
@@ -1442,6 +1479,21 @@ class CloudSyncRepository @Inject constructor(
 
         traktRepository.clearAllProfileCaches()
         watchHistoryRepository.clearProfileCaches()
+
+        // Restore plugin repositories and scrapers
+        runCatching {
+            root.optJSONArray("pluginRepositories")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
+                val type = com.google.gson.reflect.TypeToken.getParameterized(List::class.java, com.arflix.tv.domain.model.PluginRepository::class.java).type
+                val repos: List<com.arflix.tv.domain.model.PluginRepository> = gson.fromJson(json, type) ?: emptyList()
+                if (repos.isNotEmpty()) pluginDataStore.saveRepositories(repos)
+            }
+            root.optJSONArray("pluginScrapers")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
+                val type = com.google.gson.reflect.TypeToken.getParameterized(List::class.java, com.arflix.tv.domain.model.ScraperInfo::class.java).type
+                val scrapers: List<com.arflix.tv.domain.model.ScraperInfo> = gson.fromJson(json, type) ?: emptyList()
+                if (scrapers.isNotEmpty()) pluginDataStore.saveScrapers(scrapers)
+            }
+            if (root.has("pluginsEnabled")) pluginDataStore.setPluginsEnabled(root.optBoolean("pluginsEnabled", false))
+        }.onFailure { AppLogger.recordException(it, mapOf("error_area" to "CloudSync", "cloud_flow" to "apply_plugins")) }
 
         System.err.println("[CLOUD-SYNC] Full cloud restore applied successfully")
     }

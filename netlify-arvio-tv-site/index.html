@@ -1,0 +1,3072 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARVIO for Android TV - Open Source Media Hub</title>
+<meta name="description" content="ARVIO is a free, open-source media hub for Android TV and Google TV. Live TV, Plex, Emby, Jellyfin, Telegram, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for the remote.">
+<link rel="canonical" href="https://arvio.tv/">
+<link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ARVIO">
+<meta property="og:title" content="ARVIO for Android TV">
+<meta property="og:description" content="Live TV, Plex, Emby, Jellyfin, Telegram, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for Android TV.">
+<meta property="og:url" content="https://arvio.tv/">
+<meta property="og:image" content="https://arvio.tv/assets/arvio-social.webp">
+<meta property="og:image:width" content="1536">
+<meta property="og:image:height" content="1024">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ARVIO for Android TV">
+<meta name="twitter:description" content="Live TV, Plex, Emby, Jellyfin, Telegram, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for Android TV.">
+<meta name="twitter:image" content="https://arvio.tv/assets/arvio-social.webp">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ARVIO","applicationCategory":"MultimediaApplication","operatingSystem":"Android TV, Google TV, Android","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"downloadUrl":"https://play.google.com/store/apps/details?id=com.arvio.tv","codeRepository":"https://github.com/ProdigyV21/ARVIO","description":"Live TV, Plex, Emby, Jellyfin, Telegram, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for Android TV."}</script>
+<style>/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/f470dc6a-7cfa-4b87-b5ad-81c1b6eb5baa.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/1881e9da-a53a-475b-93fc-ee2dcf0a5e70.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/b060007f-dbc6-40e1-a516-74436d38fd70.woff2") format('woff2');
+  unicode-range: U+1F00-1FFF;
+}
+/* greek */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/1401589a-73f1-4e80-926b-f05f583e5669.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/ec811170-1add-47a7-aa82-477cd3c52bb9.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/a535c116-1243-41eb-a7c1-9fa6e340c125.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("assets/d7be4484-6185-4e32-a59f-6a6944d73935.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/e80ea4be-ff0b-4464-8554-b6bb476f9b3c.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/c6f07c21-5e65-4036-ab03-9384d81eeabb.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/5b7eb443-5161-49c4-8602-2ac7bc0f1461.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/99beb0bd-f9b5-4eef-bfa8-ece7205a6813.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/11f1a232-70ab-4c91-b054-a4a6ea5dd0fd.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("assets/eae176f2-c2a3-40b8-8c6c-df5ace58987e.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/e80ea4be-ff0b-4464-8554-b6bb476f9b3c.woff2") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/c6f07c21-5e65-4036-ab03-9384d81eeabb.woff2") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/5b7eb443-5161-49c4-8602-2ac7bc0f1461.woff2") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/99beb0bd-f9b5-4eef-bfa8-ece7205a6813.woff2") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/11f1a232-70ab-4c91-b054-a4a6ea5dd0fd.woff2") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("assets/eae176f2-c2a3-40b8-8c6c-df5ace58987e.woff2") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+.nav-donate {
+  position: relative;
+  padding-left: 22px !important;
+}
+.nav-donate::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background:
+    radial-gradient(circle at 30% 30%, #ff7eb8, #ff3d8a 60%, #c9106a 100%);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z' fill='black'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z' fill='black'/></svg>") center/contain no-repeat;
+  filter: drop-shadow(0 0 6px rgba(255,61,138,0.55));
+  transition: transform .18s ease;
+}
+.nav-donate:hover::before { transform: translateY(-50%) scale(1.15); }
+</style>
+<style>
+  :root, [data-theme="dark"] {
+    --bg: oklch(0.16 0.008 60);
+    --bg-2: oklch(0.20 0.010 60);
+    --bg-3: oklch(0.25 0.012 60);
+    --line: oklch(0.32 0.010 60);
+    --line-soft: oklch(0.28 0.010 60 / 0.6);
+    --ink: oklch(0.98 0.008 80);
+    --ink-2: oklch(0.78 0.010 70);
+    --ink-3: oklch(0.58 0.012 70);
+    --accent: oklch(0.82 0.17 280);
+    --accent-2: oklch(0.72 0.18 240);
+    --accent-soft: oklch(0.82 0.17 280 / 0.14);
+    --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  [data-theme="light"] {
+    --bg: #F8FAFC;
+    --bg-2: #FFFFFF;
+    --bg-3: #F1F5F9;
+    --line: #CBD5E1;
+    --line-soft: #E2E8F0;
+    --ink: #0F172A;
+    --ink-2: #475569;
+    --ink-3: #64748B;
+    --accent: oklch(0.62 0.17 280);
+    --accent-2: oklch(0.58 0.18 240);
+    --accent-soft: oklch(0.62 0.17 280 / 0.14);
+    --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { background: var(--bg); scroll-behavior: smooth; }
+  
+  html.theme-transitioning,
+  html.theme-transitioning *,
+  html.theme-transitioning *::before,
+  html.theme-transitioning *::after {
+    transition-property: background-color, color, border-color, box-shadow, fill, stroke !important;
+    transition-duration: 0.35s !important;
+    transition-timing-function: ease !important;
+  }
+  
+  body {
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+    overflow-x: hidden;
+  }
+  [id] { scroll-margin-top: 92px; }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--accent); color: oklch(0.15 0.008 60); }
+
+  .wrap { max-width: 1360px; margin: 0 auto; padding: 0 32px; }
+
+  /* ============ BACKGROUND NOISE + GRADIENT ============ */
+  .bg-fx {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 0%, var(--accent-soft), transparent 70%),
+      radial-gradient(ellipse 50% 50% at 10% 30%, oklch(0.72 0.18 30 / 0.08), transparent 70%);
+  }
+  /* Moving conic-gradient mesh — clearly visible slow rotation */
+  .bg-mesh {
+    position: fixed; inset: -50%; z-index: -1; pointer-events: none;
+    background: conic-gradient(from 0deg at 50% 50%,
+      transparent 0deg,
+      var(--accent-soft) 60deg,
+      transparent 120deg,
+      oklch(0.72 0.18 30 / 0.12) 180deg,
+      transparent 240deg,
+      var(--accent-soft) 300deg,
+      transparent 360deg);
+    filter: blur(80px);
+    opacity: 0.6;
+    animation: meshSpin 30s linear infinite;
+    will-change: transform;
+  }
+  @keyframes meshSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .bg-fx::before,
+  .bg-fx::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.7;
+    will-change: transform;
+  }
+  .bg-fx::before {
+    width: 40vw; height: 40vw;
+    left: 0; top: 0;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 65%);
+    animation: drift1 16s ease-in-out infinite;
+  }
+  .bg-fx::after {
+    width: 35vw; height: 35vw;
+    right: 0; top: 40vh;
+    background: radial-gradient(circle, var(--accent-2) 0%, transparent 65%);
+    animation: drift2 20s ease-in-out infinite;
+  }
+  .bg-aurora {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    overflow: hidden;
+  }
+  .bg-aurora span {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.5;
+    will-change: transform;
+  }
+  .bg-aurora .a1 {
+    width: 30vw; height: 30vw;
+    left: 50vw; top: 10vh;
+    background: radial-gradient(circle, oklch(0.72 0.18 var(--hue, 280)) 0%, transparent 65%);
+    animation: drift3 22s ease-in-out infinite;
+  }
+  .bg-aurora .a2 {
+    width: 25vw; height: 25vw;
+    left: 20vw; top: 60vh;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 65%);
+    animation: drift4 18s ease-in-out infinite;
+  }
+  .bg-aurora .a3 {
+    width: 35vw; height: 35vw;
+    right: 10vw; top: 20vh;
+    background: radial-gradient(circle, var(--accent-2) 0%, transparent 65%);
+    animation: drift5 26s ease-in-out infinite;
+  }
+  .bg-grain {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    opacity: 0.04;
+    background-image: radial-gradient(oklch(1 0 0 / 0.4) 0.5px, transparent 0.5px),
+                      radial-gradient(oklch(1 0 0 / 0.3) 0.5px, transparent 0.5px);
+    background-size: 3px 3px, 5px 5px;
+    background-position: 0 0, 1px 1px;
+  }
+  @keyframes drift1 {
+    0%   { transform: translate(0, 0) scale(1); }
+    25%  { transform: translate(60vw, 20vh) scale(1.2); }
+    50%  { transform: translate(30vw, 60vh) scale(0.9); }
+    75%  { transform: translate(-10vw, 40vh) scale(1.1); }
+    100% { transform: translate(0, 0) scale(1); }
+  }
+  @keyframes drift2 {
+    0%   { transform: translate(0, 0) scale(1); }
+    25%  { transform: translate(-40vw, -20vh) scale(0.85); }
+    50%  { transform: translate(-60vw, 20vh) scale(1.15); }
+    75%  { transform: translate(-20vw, 40vh) scale(0.95); }
+    100% { transform: translate(0, 0) scale(1); }
+  }
+  @keyframes drift3 {
+    0%   { transform: translate(0, 0) scale(1); }
+    33%  { transform: translate(-40vw, 30vh) scale(1.3); }
+    66%  { transform: translate(20vw, 50vh) scale(0.8); }
+    100% { transform: translate(0, 0) scale(1); }
+  }
+  @keyframes drift4 {
+    0%   { transform: translate(0, 0) scale(1); }
+    33%  { transform: translate(50vw, -20vh) scale(0.75); }
+    66%  { transform: translate(30vw, 20vh) scale(1.2); }
+    100% { transform: translate(0, 0) scale(1); }
+  }
+  @keyframes drift5 {
+    0%   { transform: translate(0, 0) scale(1); }
+    33%  { transform: translate(-50vw, 30vh) scale(1.25); }
+    66%  { transform: translate(-20vw, -10vh) scale(0.85); }
+    100% { transform: translate(0, 0) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bg-fx::before, .bg-fx::after, .bg-aurora span, .bg-mesh { animation: none !important; }
+  }
+
+  /* ============ NAV ============ */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in oklch, var(--bg) 92%, transparent);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .nav-inner {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 1fr);
+    align-items: center;
+    gap: 18px;
+    padding: 16px 0;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    justify-self: start;
+    font-weight: 700; letter-spacing: 0.02em;
+    font-size: 15px;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 28px;
+    display: block;
+    object-fit: contain;
+    flex: 0 0 auto;
+    filter: drop-shadow(0 0 12px rgba(13, 240, 194, 0.18));
+  }
+  .brand-wordmark {
+    height: 28px;
+    width: 132px;
+    display: block;
+    object-fit: contain;
+    filter: drop-shadow(0 0 14px rgba(13, 240, 194, 0.16));
+  }
+  .nav-links {
+    justify-self: center;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+    background:
+      linear-gradient(180deg, color-mix(in oklch, var(--ink) 4%, transparent), transparent),
+      color-mix(in oklch, var(--bg) 84%, transparent);
+    box-shadow: 0 16px 44px -32px oklch(0 0 0 / 0.9);
+    font-size: 13px;
+    color: var(--ink-2);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .nav-links a {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    transition: color .3s ease, background .3s ease, box-shadow .3s ease, transform .3s ease;
+  }
+  .nav-links a::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 6px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    opacity: 0;
+    transform: scaleX(0.45);
+    transition: opacity .3s ease, transform .3s cubic-bezier(.2,.9,.2,1);
+  }
+  .nav-links a:hover,
+  .nav-links a.active {
+    color: var(--ink);
+    background: color-mix(in oklch, var(--ink) 7%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--ink) 7%, transparent) inset;
+    transform: translateY(-1px);
+  }
+  .nav-links a.active {
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 15%, transparent);
+    box-shadow: 0 0 18px color-mix(in oklch, var(--accent) 25%, transparent), 0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent) inset;
+  }
+  .nav-links a:hover::after,
+  .nav-links a.active::after { opacity: 1; transform: scaleX(1); }
+  .nav-links .nav-donate {
+    padding-left: 28px !important;
+    color: color-mix(in oklch, #ff7eb8 58%, var(--ink));
+  }
+  .nav-links .nav-donate::before { left: 11px; }
+  .nav-actions {
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 0;
+  }
+  .theme-toggle {
+    background: transparent;
+    border: none;
+    color: var(--ink-2);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, background 0.2s, transform 0.2s;
+  }
+  .theme-toggle:hover {
+    color: var(--ink);
+    background: color-mix(in oklch, var(--ink) 8%, transparent);
+  }
+  .theme-toggle:active {
+    transform: scale(0.9);
+  }
+  .nav-web {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 40px;
+    padding: 10px 18px;
+    border: 1px solid color-mix(in oklch, var(--accent) 70%, transparent);
+    border-radius: 999px;
+    color: var(--ink);
+    background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 18%, transparent), color-mix(in oklch, var(--accent-2) 10%, transparent));
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 12%, transparent) inset, 0 10px 28px -18px var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: transform .2s ease, border-color .2s ease, background .2s ease;
+  }
+  .nav-web::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  .nav-web:hover {
+    transform: translateY(-1px);
+    border-color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 18%, var(--bg));
+  }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 999px;
+    background: var(--ink); color: var(--bg);
+    font-size: 13px; font-weight: 600;
+    transition: transform .2s ease, box-shadow .2s;
+  }
+  .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 10px 30px -10px oklch(0 0 0 / 0.5); }
+
+  /* ============ HERO ============ */
+  .hero {
+    padding: 80px 0 60px;
+    position: relative;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 10px;
+    font-weight: 500;
+  }
+  .eyebrow::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 5px var(--accent-soft);
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 5px var(--accent-soft); }
+    50% { box-shadow: 0 0 0 10px color-mix(in oklch, var(--accent) 0%, transparent); }
+  }
+
+  .hero-h1 {
+    font-weight: 800;
+    font-size: clamp(48px, 7vw, 110px);
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+    max-width: 11ch;
+    margin: 28px 0 0;
+    text-wrap: balance;
+  }
+  .hero-h1 .accent {
+    background: linear-gradient(110deg, var(--accent) 30%, var(--accent-2) 70%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+  }
+  .hero-h1 .slash {
+    display: inline-block;
+    color: var(--ink-3); font-weight: 300; margin: 0 .1em;
+  }
+
+  .hero-sub {
+    margin-top: 32px;
+    max-width: 560px;
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+  .hero-ctas { margin-top: 40px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+
+  /* Animated reveals */
+  .reveal {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity .9s cubic-bezier(.2,.9,.2,1), transform .9s cubic-bezier(.2,.9,.2,1);
+  }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal[data-delay="1"] { transition-delay: .08s; }
+  .reveal[data-delay="2"] { transition-delay: .16s; }
+  .reveal[data-delay="3"] { transition-delay: .24s; }
+  .reveal[data-delay="4"] { transition-delay: .32s; }
+  .reveal[data-delay="5"] { transition-delay: .40s; }
+
+  /* Play Store button */
+  .btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 16px 24px; border-radius: 999px;
+    font-size: 15px; font-weight: 600;
+    transition: transform .25s cubic-bezier(.2,.9,.2,1), box-shadow .25s, background .2s;
+    cursor: pointer; border: none; font-family: inherit;
+    position: relative; overflow: hidden;
+  }
+  .btn-play {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: oklch(0.15 0.008 60);
+    padding: 18px 28px;
+    font-size: 16px; font-weight: 700;
+    box-shadow: 0 12px 40px -10px var(--accent);
+  }
+  .btn-play:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 18px 50px -10px var(--accent); }
+  .btn-play .play-ico {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: oklch(0.15 0.008 60); color: var(--accent);
+    display: grid; place-items: center;
+    font-size: 11px;
+  }
+  .btn-play small { display: block; font-size: 10px; letter-spacing: 0.12em; opacity: 0.7; text-transform: uppercase; font-weight: 600; }
+  .btn-play strong { display: block; font-size: 16px; font-weight: 700; line-height: 1.1; }
+
+  .btn-ghost {
+    background: transparent; color: var(--ink); border: 1px solid var(--line);
+    padding: 16px 22px;
+  }
+  .btn-ghost:hover { background: var(--bg-2); transform: translateY(-1px); }
+  .btn-ghost svg { width: 14px; height: 14px; }
+
+  .hero-sideload {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+    letter-spacing: 0.06em; margin-top: 18px;
+  }
+  .hero-sideload a { color: var(--ink-2); border-bottom: 1px dashed var(--line); padding-bottom: 1px; }
+  .hero-sideload a:hover { color: var(--accent); }
+
+  .hero-meta {
+    margin-top: 72px;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 1px; background: var(--line-soft);
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .hero-meta > div {
+    background: var(--bg); padding: 24px 20px;
+    transition: background .3s;
+  }
+  .hero-meta > div:hover { background: var(--bg-2); }
+  .meta-k { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; }
+  .meta-v { font-size: clamp(28px, 2.6vw, 40px); line-height: 1; margin-top: 10px; letter-spacing: -0.035em; font-weight: 700; }
+
+  /* ============ SHOWCASE ============ */
+  .showcase {
+    padding: 40px 0 120px;
+    position: relative;
+  }
+  .tv-frame {
+    position: relative;
+    aspect-ratio: 16/9;
+    border-radius: 16px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    overflow: hidden;
+    box-shadow: 0 60px 160px -50px oklch(0 0 0 / 0.7), 0 0 0 1px var(--line-soft) inset;
+    transform: perspective(2000px) rotateX(0deg);
+    transition: transform .6s cubic-bezier(.2,.9,.2,1);
+  }
+  .tv-frame { will-change: auto; }
+  .tv-frame img, .tv-frame .img-slot {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .img-slot {
+    background-image:
+      repeating-linear-gradient(45deg, transparent 0 16px, oklch(0.30 0.010 60 / 0.35) 16px 17px),
+      var(--bg-2);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .placeholder-label {
+    position: absolute; left: 20px; top: 20px;
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    background: var(--bg); border: 1px solid var(--line);
+    padding: 6px 10px; border-radius: 6px;
+    z-index: 2;
+  }
+
+  /* marquee ticker under showcase */
+  .ticker {
+    margin-top: 40px;
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+    padding: 18px 0;
+    overflow: hidden;
+    white-space: nowrap;
+    display: flex;
+    font-family: var(--mono); font-size: 13px;
+    color: var(--ink-2);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+  }
+  .ticker-track {
+    display: flex; gap: 48px;
+    padding-right: 48px;
+  }
+  .ticker-track > span:nth-child(2) { display: none; }
+  .ticker-track span { display: flex; align-items: center; gap: 48px; }
+  .ticker-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* ============ SECTION HEADERS ============ */
+  .section { padding: 140px 0; position: relative; }
+  .section,
+  .compare,
+  .oss,
+  .download,
+  footer {
+    content-visibility: auto;
+    contain-intrinsic-size: 900px;
+  }
+  .section-head { display: grid; grid-template-columns: 220px 1fr; gap: 40px; margin-bottom: 72px; align-items: end; }
+  .section-num { font-family: var(--mono); font-size: 12px; color: var(--ink-3); letter-spacing: 0.14em; font-weight: 500; }
+  .section-title { font-size: clamp(44px, 6.2vw, 88px); line-height: 0.95; margin: 0; letter-spacing: -0.035em; max-width: 1000px; font-weight: 700; }
+  .section-title .accent {
+    background: linear-gradient(110deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ============ FEATURES ============ */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .feature {
+    background: var(--bg);
+    padding: 36px 32px;
+    min-height: 280px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    gap: 32px;
+    position: relative;
+    transition: background .4s, transform .4s;
+    overflow: hidden;
+  }
+  .feature:hover { background: var(--bg-2); }
+  .feature::after {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transform: scaleX(0); transform-origin: left;
+    transition: transform .4s cubic-bezier(.2,.9,.2,1);
+  }
+  .feature:hover::after { transform: scaleX(1); }
+
+  .feature.size-lg { grid-column: span 8; }
+  .feature.size-md { grid-column: span 4; }
+  .feature.size-sm { grid-column: span 4; }
+  .feature.size-halfwide { grid-column: span 6; }
+
+  .feature-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+  .feature-num { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.12em; font-weight: 500; }
+  .feature-title {
+    font-weight: 700;
+    font-size: 36px; line-height: 1.05; letter-spacing: -0.03em;
+    margin: 0 0 16px;
+  }
+  .feature.size-lg .feature-title { font-size: 48px; }
+  .feature-desc { color: var(--ink-2); font-size: 15px; line-height: 1.6; max-width: 48ch; }
+
+  .feature-visual {
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    height: 160px;
+    position: relative;
+    overflow: hidden;
+  }
+  .feature:hover .feature-visual { border-color: var(--accent-soft); }
+  .feature.size-lg .feature-visual { height: 280px; }
+  .feature.size-halfwide .feature-visual { height: 220px; }
+
+  /* screenshot-backed feature visuals */
+  .vis-shot {
+    background-size: cover;
+    background-position: center top;
+    position: relative;
+  }
+  .vis-shot::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(to bottom, transparent 40%, oklch(0 0 0 / 0.55) 100%);
+    transition: opacity .4s;
+  }
+  .feature:hover .vis-shot::after { opacity: 0.2; }
+  .vis-shot .tag {
+    position: absolute; left: 12px; bottom: 12px;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink);
+    background: color-mix(in oklch, oklch(0.15 0.008 60) 70%, transparent);
+    backdrop-filter: blur(6px);
+    padding: 5px 9px; border-radius: 5px;
+    z-index: 2;
+    border: 1px solid oklch(0.35 0.010 60 / 0.5);
+  }
+  .vis-shot.zoom-live { background-position: center; background-size: cover; }
+  .vis-shot.zoom-home { background-position: center; background-size: cover; }
+  .vis-shot.zoom-catalogs { background-position: center; background-size: cover; }
+  .vis-shot.zoom-details { background-position: center; background-size: cover; }
+  .vis-shot.zoom-profiles { background-position: center; background-size: cover; }
+  .vis-shot.zoom-player { background-position: center; background-size: cover; }
+  .vis-shot.zoom-mobile { background-size: contain; background-repeat: no-repeat; background-color: var(--bg-3); background-position: center; }
+
+  /* Live EPG feature visual */
+  .vis-iptv {
+    background:
+      linear-gradient(var(--line-soft), var(--line-soft)) 0 30px / 100% 1px no-repeat,
+      linear-gradient(var(--line-soft), var(--line-soft)) 0 60px / 100% 1px no-repeat,
+      linear-gradient(var(--line-soft), var(--line-soft)) 0 90px / 100% 1px no-repeat,
+      linear-gradient(var(--line-soft), var(--line-soft)) 0 120px / 100% 1px no-repeat,
+      var(--bg-2);
+  }
+  .vis-iptv .ch {
+    position: absolute; height: 22px; border-radius: 4px;
+    background: var(--bg-3); border-left: 2px solid var(--ink-2);
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-2); padding: 4px 8px;
+    white-space: nowrap; overflow: hidden;
+  }
+  .vis-iptv .ch.accent { background: var(--accent-soft); border-left-color: var(--accent); color: var(--accent); }
+  .vis-iptv .playhead {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 20px var(--accent);
+    animation: playhead 6s ease-in-out infinite alternate;
+  }
+  @keyframes playhead {
+    from { left: 20%; }
+    to { left: 80%; }
+  }
+
+  .vis-channels {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 16px;
+  }
+  .vis-channels > div {
+    background: var(--bg-3); border-radius: 5px; aspect-ratio: 1;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 9px; color: var(--ink-3); font-weight: 500;
+    transition: all .3s;
+  }
+  .feature:hover .vis-channels > div:nth-child(3n) {
+    background: var(--accent-soft); color: var(--accent);
+    transform: scale(1.05);
+  }
+
+  /* progress bar visual */
+  .vis-progress { padding: 40px 24px; }
+  .vis-progress .bar { height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden; }
+  .vis-progress .bar i {
+    display: block; height: 100%; width: 38%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 2px;
+    animation: barfill 4s ease-in-out infinite alternate;
+  }
+  @keyframes barfill {
+    from { width: 22%; }
+    to { width: 62%; }
+  }
+  .vis-progress .meta { font-family: var(--mono); font-size: 10px; color: var(--ink-3); letter-spacing: .08em; margin-top: 14px; display:flex; justify-content:space-between; }
+
+  /* QR visual */
+  .vis-qr {
+    display: grid; place-items: center;
+    background: radial-gradient(circle at 50% 50%, var(--accent-soft), transparent 70%);
+  }
+  .vis-qr .qr-box {
+    width: 92px; height: 92px; border-radius: 12px;
+    background:
+      conic-gradient(from 0deg at 50% 50%, var(--ink) 0 25%, transparent 25% 50%, var(--ink) 50% 75%, transparent 75%),
+      var(--bg);
+    position: relative;
+    box-shadow: 0 0 0 8px var(--accent-soft);
+  }
+  .vis-qr .qr-box::before, .vis-qr .qr-box::after {
+    content: ""; position: absolute; width: 22px; height: 22px;
+    border: 3px solid var(--ink); border-radius: 4px;
+  }
+  .vis-qr .qr-box::before { top: 6px; left: 6px; }
+  .vis-qr .qr-box::after { top: 6px; right: 6px; }
+  @keyframes qrscan {
+    0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); }
+    50% { box-shadow: 0 0 0 18px transparent; }
+  }
+
+  /* addon visual */
+  .vis-addons { padding: 14px; display: flex; flex-wrap: wrap; gap: 6px; align-content: center; justify-content: center; }
+  .vis-addons .pill {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+    padding: 6px 10px; border-radius: 999px;
+    background: var(--bg-3); color: var(--ink-2);
+    border: 1px solid var(--line-soft);
+    transition: all .3s;
+  }
+  .feature:hover .vis-addons .pill:nth-child(odd) {
+    background: var(--accent-soft); color: var(--accent); border-color: transparent;
+  }
+
+  /* collections visual */
+  .vis-collections { background: #000; }
+  .vis-collections .streak {
+    position: absolute; top: 0; bottom: 60px; width: 2px;
+    filter: blur(2px);
+    opacity: 0.8;
+    animation: streakFade 4s ease-in-out infinite alternate;
+  }
+  .vis-collections .s1 { left: 12%; background: linear-gradient(to bottom, transparent, #e50914, transparent); }
+  .vis-collections .s2 { left: 28%; background: linear-gradient(to bottom, transparent, #ffb703, transparent); animation-delay: .4s; }
+  .vis-collections .s3 { left: 46%; background: linear-gradient(to bottom, transparent, #e50914, transparent); animation-delay: .8s; }
+  .vis-collections .s4 { left: 68%; background: linear-gradient(to bottom, transparent, #0063e5, transparent); animation-delay: 1.2s; }
+  .vis-collections .s5 { left: 84%; background: linear-gradient(to bottom, transparent, #00a8e1, transparent); animation-delay: 1.6s; }
+  @keyframes streakFade {
+    from { opacity: 0.3; transform: scaleY(0.8); }
+    to { opacity: 1; transform: scaleY(1.1); }
+  }
+  .vis-collections .svc-row {
+    position: absolute; bottom: 14px; left: 14px; right: 14px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .vis-collections .svc {
+    height: 38px; border-radius: 6px;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
+    box-shadow: 0 8px 20px -8px oklch(0 0 0 / 0.8);
+  }
+
+  /* trakt visual */
+  .vis-trakt { padding: 18px 20px; }
+  .vis-trakt .row {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 10px; color: var(--ink-2);
+    letter-spacing: .06em;
+    padding: 6px 0; border-bottom: 1px solid var(--line-soft);
+  }
+  .vis-trakt .row:last-child { border: none; }
+  .vis-trakt .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .vis-trakt .row.muted .dot { background: var(--ink-3); }
+
+  /* ============ PLAYER STRIP ============ */
+  .player-strip {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1px; background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: 2px; overflow: hidden;
+  }
+  .player-strip > div {
+    background: var(--bg); padding: 44px 36px;
+    transition: background .3s;
+  }
+  .player-strip > div:hover { background: var(--bg-2); }
+  .ps-label { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 28px; font-weight: 500; }
+  .ps-list { display: flex; flex-direction: column; gap: 14px; padding: 0; margin: 0; }
+  .ps-list li {
+    list-style: none;
+    font-size: 28px; line-height: 1.1;
+    letter-spacing: -0.025em;
+    font-weight: 600;
+    transition: color .2s;
+  }
+  .ps-list li:hover { color: var(--accent); }
+  .ps-list li span { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: 10px; letter-spacing: 0.08em; font-weight: 400; }
+
+  /* ============ SCREENSHOTS ============ */
+  .shots-rail {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+    margin-top: 32px;
+  }
+  .shot {
+    aspect-ratio: 16/10;
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .4s cubic-bezier(.2,.9,.2,1), box-shadow .4s;
+    cursor: pointer;
+  }
+  .shot:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 30px 60px -20px oklch(0 0 0 / 0.5);
+    border-color: var(--accent-soft);
+    z-index: 2;
+  }
+  .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shot .img-slot { position: absolute; inset: 0; }
+  .shot-label {
+    position: absolute; left: 14px; bottom: 14px;
+    font-family: var(--mono); font-size: 10px; color: var(--ink);
+    letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500;
+    background: color-mix(in oklch, var(--bg) 80%, transparent);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--line-soft);
+    padding: 6px 10px; border-radius: 6px; z-index: 2;
+  }
+  .shot-num {
+    position: absolute; right: 14px; top: 14px;
+    font-family: var(--mono); font-size: 10px; color: var(--ink-2);
+    letter-spacing: 0.08em; z-index: 2;
+    background: color-mix(in oklch, var(--bg) 80%, transparent);
+    backdrop-filter: blur(8px);
+    padding: 4px 8px; border-radius: 4px;
+  }
+
+  .shots-mobile {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+    margin-top: 18px;
+  }
+  .shot-mobile {
+    aspect-ratio: 9/19;
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform .4s cubic-bezier(.2,.9,.2,1);
+  }
+  .shot-mobile:hover { transform: translateY(-8px) rotate(-1deg); border-color: var(--accent-soft); }
+  .shot-mobile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shot-mobile .img-slot { position: absolute; inset: 0; }
+
+  /* ============ DEVICES ============ */
+  .devices-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: 2px; overflow: hidden;
+  }
+  .device {
+    background: var(--bg); padding: 44px 28px 32px;
+    display: flex; flex-direction: column; gap: 20px;
+    min-height: 240px;
+    position: relative;
+    transition: background .3s;
+  }
+  .device:hover { background: var(--bg-2); }
+  .device.primary { background: var(--bg-2); }
+  .device.primary::before {
+    content: "PRIMARY";
+    position: absolute; top: 14px; right: 14px;
+    font-family: var(--mono); font-size: 9px; color: var(--accent);
+    letter-spacing: 0.16em;
+    padding: 4px 8px; border-radius: 4px;
+    background: var(--accent-soft);
+    font-weight: 600;
+  }
+  .device-ico {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: var(--bg-3); border: 1px solid var(--line-soft);
+    display: grid; place-items: center; color: var(--accent);
+    transition: all .3s;
+  }
+  .device:hover .device-ico { background: var(--accent-soft); transform: rotate(-4deg) scale(1.08); }
+  .device-name { font-size: 28px; line-height: 1; letter-spacing: -0.025em; font-weight: 700; }
+  .device-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase; margin-top: auto; font-weight: 500; }
+
+  /* ============ DOWNLOAD ============ */
+  .download {
+    padding: 180px 0;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .download::before {
+    content: ""; position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 900px; height: 900px;
+    background: radial-gradient(circle, var(--accent-soft), transparent 60%);
+    z-index: 0;
+  }
+  @keyframes orbit {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+  .download > .wrap { position: relative; z-index: 1; }
+  .download h2 {
+    font-weight: 800;
+    font-size: clamp(56px, 10vw, 160px);
+    line-height: 0.92;
+    margin: 0;
+    letter-spacing: -0.045em;
+  }
+  .download h2 .accent {
+    background: linear-gradient(110deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .download-sub { margin: 32px auto 48px; max-width: 560px; color: var(--ink-2); font-size: 18px; }
+  .download-primary { display: flex; justify-content: center; margin-bottom: 24px; }
+  .download-secondary {
+    display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+    font-size: 13px; color: var(--ink-3); align-items: center;
+  }
+  .download-secondary a { color: var(--ink-2); border-bottom: 1px dashed var(--line); padding-bottom: 1px; }
+  .download-secondary a:hover { color: var(--accent); }
+  .download-note {
+    margin-top: 48px; font-family: var(--mono); font-size: 11px;
+    color: var(--ink-3); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+
+  /* ============ COMPARE ============ */
+  .compare {
+    padding: 100px 0;
+    background:
+      radial-gradient(1000px 500px at 90% 0%, oklch(0.30 0.04 250 / 0.20), transparent 60%),
+      var(--bg);
+  }
+  .compare-table {
+    margin-top: 64px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--bg-2);
+  }
+  .compare-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+    border-top: 1px solid var(--line-soft);
+  }
+  .compare-row:first-child { border-top: 0; }
+  .compare-cell {
+    padding: 22px 20px;
+    font-size: 14px;
+    color: var(--ink-2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 1px solid var(--line-soft);
+  }
+  .compare-cell:first-child { border-left: 0; color: var(--ink); font-weight: 500; }
+  .compare-row.head .compare-cell {
+    background: oklch(0.18 0.012 60);
+    color: var(--ink-2);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    padding: 16px 20px;
+  }
+  .compare-row.head .compare-cell.us { color: var(--accent); }
+  .compare-cell.us { background: oklch(0.20 0.025 60 / 0.5); color: var(--ink); font-weight: 500; }
+  .compare-mark {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .compare-mark.yes { background: oklch(0.65 0.15 145 / 0.18); color: oklch(0.78 0.18 145); }
+  .compare-mark.no { background: oklch(0.30 0.02 30 / 0.4); color: oklch(0.55 0.05 30); }
+  .compare-mark.partial { background: oklch(0.55 0.13 80 / 0.18); color: oklch(0.75 0.15 80); }
+  .compare-note { font-size: 12px; color: var(--ink-3); margin-top: 16px; text-align: right; }
+  @media (max-width: 900px) {
+    .compare-table { font-size: 12px; }
+    .compare-row { grid-template-columns: 1.3fr 0.7fr 0.7fr 0.7fr 0.7fr; }
+    .compare-cell { padding: 14px 10px; font-size: 12px; }
+    .compare-row.head .compare-cell { font-size: 9px; padding: 12px 8px; }
+  }
+
+  /* ============ SETUP ============ */
+  .setup {
+    padding: 100px 0;
+  }
+  .setup-grid {
+    margin-top: 64px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    counter-reset: setup;
+  }
+  .setup-step {
+    position: relative;
+    padding: 40px 32px 36px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background:
+      linear-gradient(180deg, oklch(0.20 0.012 60 / 0.6), oklch(0.16 0.010 60 / 0.4));
+    overflow: hidden;
+  }
+  .setup-step::before {
+    counter-increment: setup;
+    content: counter(setup, decimal-leading-zero);
+    position: absolute;
+    top: 24px; right: 32px;
+    font-family: var(--font-display);
+    font-size: 80px;
+    font-weight: 200;
+    color: oklch(0.30 0.015 60);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+  .setup-step:nth-child(1)::before { color: oklch(0.50 0.16 60 / 0.4); }
+  .setup-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: oklch(0.22 0.018 60);
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+    margin-bottom: 24px;
+  }
+  .setup-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .setup-desc {
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+  .setup-time {
+    margin-top: 20px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .setup-time::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: oklch(0.65 0.15 145);
+  }
+  @media (max-width: 900px) { .setup-grid { grid-template-columns: 1fr; } }
+
+  /* ============ GUIDE ============ */
+  .guide {
+    padding: 110px 0;
+    background:
+      radial-gradient(900px 520px at 12% 18%, color-mix(in oklch, var(--accent) 13%, transparent), transparent 62%),
+      radial-gradient(760px 480px at 92% 58%, color-mix(in oklch, var(--accent-2) 11%, transparent), transparent 64%),
+      linear-gradient(180deg, transparent, oklch(0.18 0.010 60 / 0.52) 45%, transparent),
+      var(--bg);
+    scroll-margin-top: 0;
+  }
+  .guide-panel {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
+    gap: 28px;
+    align-items: start;
+  }
+  .guide-card {
+    position: sticky;
+    top: 96px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background:
+      linear-gradient(180deg, color-mix(in oklch, var(--accent) 7%, transparent), transparent 42%),
+      oklch(0.15 0.010 60 / 0.88);
+    padding: 32px;
+    box-shadow: 0 24px 70px -45px color-mix(in oklch, var(--accent) 45%, black);
+  }
+  .guide-kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 18px;
+  }
+  .guide-card h3 {
+    font-size: clamp(32px, 4.2vw, 56px);
+    line-height: 0.96;
+    letter-spacing: -0.04em;
+    margin: 0 0 18px;
+  }
+  .guide-card p {
+    color: var(--ink-2);
+    line-height: 1.65;
+    max-width: 58ch;
+    margin: 0 0 24px;
+  }
+  .guide-summary {
+    display: grid;
+    gap: 10px;
+    margin: 28px 0;
+  }
+  .guide-summary-item {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    background: color-mix(in oklch, var(--ink) 3%, transparent);
+  }
+  .guide-summary-num {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .guide-summary-label {
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .guide-warning {
+    border: 1px solid color-mix(in oklch, var(--accent) 35%, var(--line));
+    background: color-mix(in oklch, var(--accent) 9%, var(--bg));
+    border-radius: 14px;
+    padding: 16px;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 24px 0;
+  }
+  .guide-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .guide-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--bg);
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .guide-link.secondary {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .guide-list {
+    position: relative;
+    display: grid;
+    gap: 14px;
+    padding: 4px 0 4px 28px;
+  }
+  .guide-list::before {
+    content: "";
+    position: absolute;
+    left: 20px;
+    top: 22px;
+    bottom: 22px;
+    width: 1px;
+    background: linear-gradient(180deg, var(--accent), var(--line), var(--accent-2));
+    opacity: 0.7;
+  }
+  .guide-step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 16px;
+    align-items: start;
+    padding: 22px 22px 22px 0;
+    border: 1px solid var(--line-soft);
+    border-left: 0;
+    border-radius: 0 18px 18px 0;
+    background:
+      linear-gradient(90deg, color-mix(in oklch, var(--accent) 8%, transparent), transparent 48%),
+      color-mix(in oklch, var(--bg) 88%, var(--ink) 3%);
+    transition: border-color .2s, background .2s, transform .2s;
+  }
+  .guide-step:hover {
+    transform: translateX(3px);
+    border-color: color-mix(in oklch, var(--accent) 38%, var(--line));
+    background:
+      linear-gradient(90deg, color-mix(in oklch, var(--accent) 12%, transparent), transparent 52%),
+      color-mix(in oklch, var(--bg) 84%, var(--ink) 5%);
+  }
+  .guide-step:last-child { padding-bottom: 22px; }
+  .guide-num {
+    position: relative;
+    z-index: 1;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(circle at 35% 28%, color-mix(in oklch, var(--accent) 55%, white), var(--accent) 42%, color-mix(in oklch, var(--accent-2) 50%, black));
+    color: var(--accent);
+    color: oklch(0.12 0.012 60);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 0 0 8px var(--bg), 0 10px 28px -18px var(--accent);
+  }
+  .guide-phase {
+    display: inline-flex;
+    width: fit-content;
+    margin-bottom: 8px;
+    padding: 5px 9px;
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+    color: var(--ink-3);
+    background: color-mix(in oklch, var(--ink) 3%, transparent);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .guide-step h4 {
+    margin: 0 0 6px;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+  }
+  .guide-step p {
+    margin: 0;
+    color: var(--ink-2);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .guide-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .guide-tag {
+    padding: 6px 9px;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--ink) 5%, transparent);
+    color: var(--ink-3);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  @media (max-width: 900px) {
+    .guide-panel { grid-template-columns: 1fr; }
+    .guide-card {
+      position: relative;
+      top: auto;
+      padding: 28px 24px;
+    }
+    .guide-list { padding-left: 18px; }
+    .guide-list::before { left: 10px; }
+    .guide-step {
+      grid-template-columns: 42px 1fr;
+      padding: 18px 16px 18px 0;
+    }
+    .guide-num {
+      width: 42px;
+      height: 42px;
+      box-shadow: 0 0 0 6px var(--bg), 0 10px 24px -18px var(--accent);
+    }
+  }
+  @media (max-width: 560px) {
+    .guide { padding: 88px 0; }
+    .guide-panel { gap: 20px; margin-top: 36px; }
+    .guide-actions { display: grid; }
+    .guide-link { justify-content: center; text-align: center; }
+    .guide-list { padding-left: 0; }
+    .guide-list::before { display: none; }
+    .guide-step {
+      grid-template-columns: 1fr;
+      border-left: 1px solid var(--line-soft);
+      border-radius: 18px;
+      padding: 18px;
+    }
+    .guide-step:hover { transform: none; }
+  }
+
+  /* ============ FAQ ============ */
+  .faq {
+    padding: 100px 0;
+    background: var(--bg);
+  }
+  .faq-list {
+    margin-top: 56px;
+    max-width: 880px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .faq-item {
+    border-top: 1px solid var(--line-soft);
+    padding: 28px 0;
+  }
+  .faq-item:last-child { border-bottom: 1px solid var(--line-soft); }
+  .faq-q {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    transition: color .2s;
+  }
+  .faq-q::-webkit-details-marker { display: none; }
+  .faq-q:hover { color: var(--accent); }
+  .faq-q-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: transform .3s, border-color .3s, background .3s;
+  }
+  .faq-item[open] .faq-q-icon {
+    transform: rotate(45deg);
+    border-color: var(--accent);
+    background: oklch(0.55 0.16 60 / 0.15);
+    color: var(--accent);
+  }
+  .faq-a {
+    margin-top: 16px;
+    color: var(--ink-2);
+    line-height: 1.7;
+    font-size: 15px;
+    max-width: 70ch;
+  }
+  .faq-a a { color: var(--accent); border-bottom: 1px solid oklch(0.55 0.16 60 / 0.4); }
+
+  /* ============ OSS ============ */
+  .oss {
+    padding: 100px 0;
+  }
+  .oss-inner { display: grid; grid-template-columns: 1.3fr 1fr; gap: 60px; align-items: center; }
+  .oss-big { font-size: clamp(44px, 5.5vw, 76px); line-height: 1; letter-spacing: -0.035em; margin: 0; font-weight: 700; }
+  .oss-big .accent { background: linear-gradient(110deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .oss-side { color: var(--ink-2); font-size: 16px; max-width: 420px; }
+  .oss-side p { margin: 0 0 20px; line-height: 1.6; }
+
+  /* ============ FOOTER ============ */
+  footer {
+    padding: 72px 0 32px;
+  }
+  .foot-top {
+    display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 40px;
+    padding-bottom: 56px;
+  }
+  .foot-big {
+    font-size: 64px; line-height: 0.95; letter-spacing: -0.035em;
+    font-weight: 700; margin-top: 24px;
+  }
+  .foot-col h4 { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 16px; }
+  .foot-col a { display: block; color: var(--ink-2); font-size: 14px; padding: 6px 0; transition: color .2s, transform .2s; }
+  .foot-col a:hover { color: var(--accent); transform: translateX(2px); }
+  .foot-bot {
+    padding-top: 28px;
+    border-top: 1px solid var(--line-soft);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.1em;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 900px) {
+    .wrap { padding: 0 20px; }
+    .nav-links { display: none; }
+    .nav-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .nav-actions { margin-left: auto; gap: 8px; }
+    .nav-web { min-height: 40px; padding: 10px 14px; }
+    .hero { padding: 48px 0 20px; }
+    .hero-meta { grid-template-columns: repeat(2, 1fr); }
+    .section { padding: 80px 0; }
+    .section-head { grid-template-columns: 1fr; gap: 16px; margin-bottom: 40px; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .feature.size-lg, .feature.size-md, .feature.size-sm, .feature.size-halfwide { grid-column: span 1; }
+    .player-strip { grid-template-columns: 1fr; }
+    .shots-rail { grid-template-columns: 1fr 1fr; }
+    .shots-mobile { grid-template-columns: 1fr 1fr; }
+    .devices-grid { grid-template-columns: 1fr 1fr; }
+    .oss-inner { grid-template-columns: 1fr; gap: 24px; }
+    .foot-top { grid-template-columns: 1fr 1fr; }
+    .download { padding: 100px 0; }
+  }
+
+  @media (max-width: 640px) {
+    .nav-inner { padding: 12px 20px; }
+    .nav-web { padding: 10px 12px; font-size: 12px; }
+    .nav-cta { padding: 10px 13px; font-size: 12px; }
+    .compare { padding: 72px 0; }
+    .compare-table {
+      display: grid;
+      gap: 14px;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+      background: transparent;
+    }
+    .compare-row.head { display: none; }
+    .compare-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--bg-2);
+    }
+    .compare-cell {
+      min-width: 0;
+      border-left: 0;
+      border-top: 1px solid var(--line-soft);
+      padding: 13px 16px;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .compare-cell:first-child {
+      border-top: 0;
+      background: oklch(0.18 0.012 60);
+      font-size: 15px;
+    }
+    .compare-cell:not(:first-child)::before {
+      flex: 0 0 86px;
+      color: var(--ink-3);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .compare-cell:nth-child(2)::before { content: "ARVIO"; }
+    .compare-cell:nth-child(3)::before { content: "Stremio"; }
+    .compare-cell:nth-child(4)::before { content: "Plex"; }
+    .compare-cell:nth-child(5)::before { content: "Tivimate"; }
+  }
+
+  /* ============ CINEMATIC SHOWCASE ============ */
+  .hero-content-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
+    position: relative;
+    z-index: 10;
+  }
+  .hero-left {
+    flex: 1;
+    max-width: 640px;
+    position: relative;
+    z-index: 2;
+  }
+  .hero-right {
+    flex: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 500px;
+    perspective: 1200px;
+    z-index: 1;
+  }
+
+  .cinematic-showcase {
+    position: relative;
+    width: 384px;
+    height: 216px;
+    --r: 300px;
+    transform-style: preserve-3d;
+    transform: rotateX(8deg) rotateY(-16deg);
+    transition: transform 0.6s cubic-bezier(0.2, 0.9, 0.2, 1);
+  }
+  
+  .cinematic-showcase:hover {
+    transform: rotateX(2deg) rotateY(-5deg);
+  }
+
+  .ambient-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 400px;
+    height: 400px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, color-mix(in oklch, var(--accent) 60%, transparent), color-mix(in oklch, var(--accent-2) 30%, transparent), transparent 70%);
+    filter: blur(60px);
+    opacity: 0.5;
+    animation: pulseGlow 6s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  @keyframes pulseGlow {
+    0% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.9); }
+    100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1.1); }
+  }
+
+  .carousel-track {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    animation: rotateCarousel 24s linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes rotateCarousel {
+    from { transform: rotateY(0deg); }
+    to { transform: rotateY(-360deg); }
+  }
+
+  .card-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transform: rotateY(var(--a, 0deg)) translateZ(var(--r, 300px));
+  }
+
+  .movie-card {
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    background: #0c0a12;
+    border: 1px solid oklch(1 1 1 / 0.12);
+    box-shadow: 0 30px 60px -15px oklch(0 0 0 / 0.8);
+    overflow: hidden;
+    backface-visibility: hidden;
+    transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.2, 1), box-shadow 0.4s ease, border-color 0.4s ease;
+  }
+
+  .card-wrapper:hover .movie-card {
+    transform: translateY(-14px) scale(1.05);
+    box-shadow: 0 40px 80px -10px oklch(0 0 0 / 0.9), 0 0 30px color-mix(in oklch, var(--accent) 50%, transparent);
+    border-color: color-mix(in oklch, var(--accent) 60%, transparent);
+  }
+
+  .movie-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+  }
+
+  .movie-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, oklch(0 0 0 / 0.6), transparent 48%);
+    pointer-events: none;
+  }
+
+  .card-cap {
+    position: absolute;
+    left: 12px;
+    bottom: 11px;
+    z-index: 2;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #fff;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: oklch(0 0 0 / 0.5);
+    border: 1px solid oklch(1 1 1 / 0.14);
+  }
+
+  .particles-container {
+    position: absolute;
+    inset: -100px;
+    pointer-events: none;
+    transform-style: preserve-3d;
+  }
+
+  .light-streak {
+    position: absolute;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    height: 2px;
+    width: 120px;
+    opacity: 0;
+    filter: blur(2px);
+  }
+  
+  .streak-1 { top: 20%; left: -20%; animation: flyStreak 8s linear infinite 1s; }
+  .streak-2 { top: 60%; right: -20%; width: 200px; animation: flyStreak 6s linear infinite 3s; background: linear-gradient(90deg, transparent, var(--accent-2), transparent); }
+  .streak-3 { top: 80%; left: -10%; animation: flyStreak 10s linear infinite 0s; }
+
+  @keyframes flyStreak {
+    0% { transform: translateX(0) translateZ(-200px); opacity: 0; }
+    20% { opacity: 0.6; }
+    80% { opacity: 0.6; }
+    100% { transform: translateX(800px) translateZ(100px); opacity: 0; }
+  }
+
+  @media (max-width: 900px) {
+    .hero-content-split { flex-direction: column; text-align: center; gap: 60px; }
+    .hero-left { max-width: 100%; }
+    .hero-right { min-height: 400px; }
+    .hero-h1 { margin-left: auto; margin-right: auto; }
+    .hero-sub { margin-left: auto; margin-right: auto; }
+    .hero-ctas { justify-content: center; }
+    .cinematic-showcase { width: 288px; height: 162px; --r: 210px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grain"></div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="ARVIO home">
+      <img class="brand-wordmark" src="assets/arvio-wordmark.png" alt="ARVIO">
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#player">Player</a>
+      <a href="#screens">Screens</a>
+      <a href="#setup">Setup</a>
+      <a href="#guide">Guide</a>
+      <a href="#faq">FAQ</a>
+      <a class="nav-donate" href="https://ko-fi.com/arvio" target="_blank" rel="noopener">Donate</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+        <svg id="theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: block;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        <svg id="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+      <a class="nav-web" href="/web/">Web app</a>
+      <a class="nav-cta" href="https://play.google.com/store/apps/details?id=com.arvio.tv" target="_blank" rel="noopener">Get ARVIO
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-content-split">
+      <div class="hero-left">
+        <div class="reveal in"><span class="eyebrow">Media hub · Android TV · Open source</span></div>
+        <h1 class="hero-h1 reveal in" data-delay="1" id="hero-h1">
+          ARVIO for Android TV,<br><span class="accent">without the clutter.</span>
+        </h1>
+        <p class="hero-sub reveal in" data-delay="2">Live TV, Plex, Emby, Jellyfin, Telegram, addons, watchlists, subtitles, and Trakt sync in one fast, ad-free home built for the remote.</p>
+        <div class="hero-ctas reveal in" data-delay="3">
+          <a class="btn btn-play" href="https://play.google.com/store/apps/details?id=com.arvio.tv" target="_blank" rel="noopener">
+            <span class="play-ico">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M8 5v14l11-7z"></path></svg>
+            </span>
+            <span>
+              <small>Install</small>
+              <strong>Get ARVIO</strong>
+            </span>
+          </a>
+          <a class="btn btn-ghost" href="#screens">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M10 8l6 4-6 4V8z"></path></svg>
+            View screenshots
+          </a>
+        </div>
+        <div class="hero-sideload reveal in" data-delay="4">
+          APK available on <a href="https://github.com/ProdigyV21/ARVIO/releases">GitHub</a> - Play Store recommended for auto-updates
+        </div>
+      </div>
+      <div class="hero-right reveal in" data-delay="4">
+        <div class="ambient-glow"></div>
+        <div class="particles-container">
+          <div class="light-streak streak-1"></div>
+          <div class="light-streak streak-2"></div>
+          <div class="light-streak streak-3"></div>
+        </div>
+        <div class="cinematic-showcase">
+          <div class="carousel-track">
+            <div class="card-wrapper" style="--a: 0deg;">
+              <div class="movie-card"><img src="assets/a8d8836c-0b29-4232-a545-5c112c26ebbb.webp" alt="ARVIO Home on Android TV" loading="eager" decoding="async"><span class="card-cap">Home</span></div>
+            </div>
+            <div class="card-wrapper" style="--a: 72deg;">
+              <div class="movie-card"><img src="assets/cb602938-0a58-4480-8f8a-f21fac260e1d.webp" alt="ARVIO Live TV" loading="lazy" decoding="async"><span class="card-cap">Live TV</span></div>
+            </div>
+            <div class="card-wrapper" style="--a: 144deg;">
+              <div class="movie-card"><img src="assets/58a51fcb-b75b-4891-82f3-f797e12afdc1.webp" alt="ARVIO title details" loading="lazy" decoding="async"><span class="card-cap">Details</span></div>
+            </div>
+            <div class="card-wrapper" style="--a: 216deg;">
+              <div class="movie-card"><img src="assets/a1703ba5-e81a-44fc-a257-52f24cc895f4.webp" alt="ARVIO collections" loading="lazy" decoding="async"><span class="card-cap">Collections</span></div>
+            </div>
+            <div class="card-wrapper" style="--a: 288deg;">
+              <div class="movie-card"><img src="assets/a9f9dd6c-4a0c-4ff5-b6d8-4cb8890875f6.webp" alt="ARVIO 4K HDR player" loading="lazy" decoding="async"><span class="card-cap">Player · 4K</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-meta">
+      <div class="reveal in" data-delay="1">
+        <div class="meta-k">IPTV format</div>
+        <div class="meta-v">M3U</div>
+      </div>
+      <div class="reveal in" data-delay="2">
+        <div class="meta-k">Max resolution</div>
+        <div class="meta-v">4K HDR</div>
+      </div>
+      <div class="reveal in" data-delay="3">
+        <div class="meta-k">Collections</div>
+        <div class="meta-v">10+</div>
+      </div>
+      <div class="reveal in" data-delay="4">
+        <div class="meta-k">Surround audio</div>
+        <div class="meta-v">Atmos</div>
+      </div>
+      <div class="reveal in" data-delay="5">
+        <div class="meta-k">License</div>
+        <div class="meta-v">Open source</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SHOWCASE -->
+<section class="showcase">
+  <div class="wrap">
+    <div class="tv-frame reveal">
+      <img src="assets/a8d8836c-0b29-4232-a545-5c112c26ebbb.webp" alt="ARVIO Home on Android TV" style="width:100%;height:100%;object-fit:cover;display:block" loading="eager" fetchpriority="high" decoding="async">
+      <span class="placeholder-label">// TV · Home</span>
+    </div>
+
+    <div class="ticker">
+      <div class="ticker-track">
+        <span>Live TV<span class="ticker-dot"></span>M3U playlists<span class="ticker-dot"></span>Plex + Emby + Jellyfin<span class="ticker-dot"></span>Telegram<span class="ticker-dot"></span>Trakt + MDBList<span class="ticker-dot"></span>Stremio addons<span class="ticker-dot"></span>ARVIO Cloud<span class="ticker-dot"></span>Dolby Vision<span class="ticker-dot"></span>Dolby Atmos<span class="ticker-dot"></span>4K HDR<span class="ticker-dot"></span>Multi‑profile<span class="ticker-dot"></span>Auto‑play<span class="ticker-dot"></span></span>
+        <span>Live TV<span class="ticker-dot"></span>M3U playlists<span class="ticker-dot"></span>Plex + Emby + Jellyfin<span class="ticker-dot"></span>Telegram<span class="ticker-dot"></span>Trakt + MDBList<span class="ticker-dot"></span>Stremio addons<span class="ticker-dot"></span>ARVIO Cloud<span class="ticker-dot"></span>Dolby Vision<span class="ticker-dot"></span>Dolby Atmos<span class="ticker-dot"></span>4K HDR<span class="ticker-dot"></span>Multi‑profile<span class="ticker-dot"></span>Auto‑play<span class="ticker-dot"></span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">01 / Features</div>
+      <h2 class="section-title">Everything you watch, <span class="accent">organized for TV.</span></h2>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature size-lg reveal">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">01</span>
+            <span class="feature-num">LIVE TV</span>
+          </div>
+          <h3 class="feature-title">Live TV that behaves like TV.</h3>
+          <p class="feature-desc">Import M3U or Xtream playlists, keep channels grouped, add favorites, browse the EPG, and keep a mini-player running while you move.</p>
+        </div>
+        <div class="feature-visual vis-shot zoom-live" style="background-image:url(&quot;assets/cb602938-0a58-4480-8f8a-f21fac260e1d.webp&quot;)">
+          <span class="tag">EPG / Favorites / Mini-player</span>
+        </div>
+      </article>
+
+      <article class="feature size-md reveal" data-delay="1">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">02</span>
+            <span class="feature-num">CATALOGS</span>
+          </div>
+          <h3 class="feature-title">Your catalogs and servers, in your order.</h3>
+          <p class="feature-desc">Connect Plex, Emby, or Jellyfin servers, use built-in rows, or plug in Trakt and MDBList lists, then reorder everything so your TV opens exactly where you start.</p>
+        </div>
+        <div class="feature-visual vis-shot zoom-catalogs" style="background-image:url(&quot;assets/0db5f9ea-38ef-43d3-b57c-99c6ff9e7436.webp&quot;)">
+          <span class="tag">Plex / Emby / Jellyfin / Trakt</span>
+        </div>
+      </article>
+
+      <article class="feature size-sm reveal">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">03</span>
+            <span class="feature-num">ADDONS</span>
+          </div>
+          <h3 class="feature-title">Stremio addons, native on TV.</h3>
+          <p class="feature-desc">Bring familiar Stremio sources into a remote-first interface with metadata, subtitles, and providers already close at hand.</p>
+        </div>
+        <div class="feature-visual vis-addons">
+          <span class="pill">Cinemeta</span>
+          <span class="pill">TMDB</span>
+          <span class="pill">OpenSubtitles</span>
+          <span class="pill">Public Domain</span>
+          <span class="pill">YouTube</span>
+          <span class="pill">WatchHub</span>
+        </div>
+      </article>
+
+      <article class="feature size-sm reveal" data-delay="1">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">04</span>
+            <span class="feature-num">TELEGRAM</span>
+          </div>
+          <h3 class="feature-title">Telegram sources, connected privately.</h3>
+          <p class="feature-desc">Sign in by QR code or phone, then search your own Telegram channels and groups for video files right from movie and show pages.</p>
+        </div>
+        <div class="feature-visual vis-addons">
+          <span class="pill">QR sign-in</span>
+          <span class="pill">Channels</span>
+          <span class="pill">Groups</span>
+          <span class="pill">Video files</span>
+          <span class="pill">Private account</span>
+        </div>
+      </article>
+
+      <article class="feature size-sm reveal" data-delay="2">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">05</span>
+            <span class="feature-num">CLOUD</span>
+          </div>
+          <h3 class="feature-title">Cloud sync without typing passwords.</h3>
+          <p class="feature-desc">Pair by QR code, then sync profiles, addons, catalogs, and settings across TVs without a keyboard.</p>
+        </div>
+        <div class="feature-visual vis-qr">
+          <div class="qr-box"></div>
+        </div>
+      </article>
+
+      <article class="feature size-sm reveal">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">06</span>
+            <span class="feature-num">TRAKT</span>
+          </div>
+          <h3 class="feature-title">Trakt progress that follows you.</h3>
+          <p class="feature-desc">Resume points, history, watchlists, and scrobbling stay aligned so every profile can pick up from the right spot.</p>
+        </div>
+        <div class="feature-visual vis-shot zoom-details" style="background-image:url(&quot;assets/58a51fcb-b75b-4891-82f3-f797e12afdc1.webp&quot;)">
+          <span class="tag">Resume / Scrobble / Watchlist</span>
+        </div>
+      </article>
+
+      <article class="feature size-sm reveal">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">07</span>
+            <span class="feature-num">COLLECTIONS</span>
+          </div>
+          <h3 class="feature-title">Streaming-service rows, already built in.</h3>
+          <p class="feature-desc">Netflix, Disney+, Apple TV, Prime Video, HBO Max, Hulu, Paramount+ and more get first-class rows with artwork, focus states, and genre shortcuts.</p>
+        </div>
+        <div class="feature-visual vis-shot zoom-live" style="background-image:url(&quot;assets/a1703ba5-e81a-44fc-a257-52f24cc895f4.webp&quot;);background-position:center">
+          <span class="tag">10+ services / Genres / Fast focus</span>
+        </div>
+      </article>
+
+      <article class="feature size-sm reveal" data-delay="1">
+        <div>
+          <div class="feature-top">
+            <span class="feature-num">08</span>
+            <span class="feature-num">SESSIONS</span>
+          </div>
+          <h3 class="feature-title">Profiles, watchlists, and Up Next.</h3>
+          <p class="feature-desc">Continue Watching, per-profile watch state, watchlists, and auto-play countdowns keep the home screen useful without turning it into admin work.</p>
+        </div>
+        <div class="feature-visual vis-shot zoom-profiles" style="background-image:url(&quot;assets/65a39902-0c4f-4b55-b53e-f0d414404dca.webp&quot;)">
+          <span class="tag">Profiles / Watchlists / Up Next</span>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- PLAYER -->
+<section class="section" id="player">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">02 / Player</div>
+      <h2 class="section-title">A player that <span class="accent">stays out of the way.</span></h2>
+    </div>
+
+    <div class="player-strip">
+      <div class="reveal">
+        <div class="ps-label">Video</div>
+        <ul class="ps-list">
+          <li>H.264 <span>AVC</span></li>
+          <li>H.265 <span>HEVC</span></li>
+          <li>VP9</li>
+          <li>AV1</li>
+          <li>Dolby Vision</li>
+        </ul>
+      </div>
+      <div class="reveal" data-delay="1">
+        <div class="ps-label">Audio</div>
+        <ul class="ps-list">
+          <li>AAC</li>
+          <li>AC3 · EAC3</li>
+          <li>DTS · DTS‑HD</li>
+          <li>TrueHD</li>
+          <li>Dolby Atmos</li>
+        </ul>
+      </div>
+      <div class="reveal" data-delay="2">
+        <div class="ps-label">Containers &amp; streaming</div>
+        <ul class="ps-list">
+          <li>MKV</li>
+          <li>MP4 · WebM</li>
+          <li>HLS · DASH</li>
+          <li>4K HDR</li>
+          <li>Multi‑track</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="reveal" style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em;margin-top:24px;max-width:720px;text-transform:uppercase;font-weight:500">Powered by ExoPlayer (Media3) with the FFmpeg extension. Passthrough and hardware decode depend on your device and Android audio pipeline.</p>
+  </div>
+</section>
+
+<!-- COMPARE -->
+<section class="compare" id="compare">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">03 / Compared</div>
+      <h2 class="section-title">Why ARVIO <span class="accent">feels better on TV.</span></h2>
+    </div>
+
+    <div class="compare-table reveal" data-delay="1">
+      <div class="compare-row head">
+        <div class="compare-cell"></div>
+        <div class="compare-cell us">ARVIO</div>
+        <div class="compare-cell">Other media hubs</div>
+        <div class="compare-cell">Server‑based apps</div>
+        <div class="compare-cell">Stock TV app</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Built for Android TV remote</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Native</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Skin‑dependent</div>
+        <div class="compare-cell"><span class="compare-mark yes">✓</span> Yes</div>
+        <div class="compare-cell"><span class="compare-mark yes">✓</span> Yes</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Stremio addons</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Built‑in</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Catalogs &amp; collections</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> 10+ built‑in</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Manual setup</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Manual setup</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> Single feed</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Plex / Emby / Jellyfin</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Connected</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Varies</div>
+        <div class="compare-cell"><span class="compare-mark yes">✓</span> Native</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Telegram source search</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Built-in</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Trakt sync</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> First‑class</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Add‑on</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Add‑on</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Live TV (M3U / Xtream)</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Built‑in</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Add‑on</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Paid tier</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> No</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">No server required</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Yes</div>
+        <div class="compare-cell"><span class="compare-mark yes">✓</span> Yes</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> Needs server</div>
+        <div class="compare-cell"><span class="compare-mark yes">✓</span> Yes</div>
+      </div>
+      <div class="compare-row">
+        <div class="compare-cell">Free &amp; ad‑free</div>
+        <div class="compare-cell us"><span class="compare-mark yes">✓</span> Open source</div>
+        <div class="compare-cell"><span class="compare-mark yes">✓</span> Open source</div>
+        <div class="compare-cell"><span class="compare-mark partial">~</span> Freemium</div>
+        <div class="compare-cell"><span class="compare-mark no">✕</span> Ads</div>
+      </div>
+    </div>
+    <div class="compare-note reveal">Compared in good faith · Each tool has its strengths — pick what fits your couch.</div>
+  </div>
+</section>
+
+<!-- SCREENSHOTS -->
+<section class="section" id="screens">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">04 / Screens</div>
+      <h2 class="section-title">Built for the <span class="accent">10‑foot</span> — and the 6‑inch.</h2>
+    </div>
+
+    <div class="shots-rail">
+      <div class="shot reveal"><img src="assets/a8d8836c-0b29-4232-a545-5c112c26ebbb.webp" alt="TV Home" loading="lazy" decoding="async"><span class="shot-num">01</span><span class="shot-label">TV · Home</span></div>
+      <div class="shot reveal" data-delay="1"><img src="assets/58a51fcb-b75b-4891-82f3-f797e12afdc1.webp" alt="TV Details" loading="lazy" decoding="async"><span class="shot-num">02</span><span class="shot-label">TV · Details</span></div>
+      <div class="shot reveal" data-delay="2"><img src="assets/cb602938-0a58-4480-8f8a-f21fac260e1d.webp" alt="TV Live" loading="lazy" decoding="async"><span class="shot-num">03</span><span class="shot-label">TV · Live TV</span></div>
+      <div class="shot reveal" data-delay="3"><img src="assets/0db5f9ea-38ef-43d3-b57c-99c6ff9e7436.webp" alt="TV Catalogs" loading="lazy" decoding="async"><span class="shot-num">04</span><span class="shot-label">TV · Catalogs</span></div>
+    </div>
+
+    <div class="shots-rail" style="margin-top:18px">
+      <div class="shot reveal" style="grid-column: span 2"><img src="assets/a1703ba5-e81a-44fc-a257-52f24cc895f4.webp" alt="Collections" loading="lazy" decoding="async"><span class="shot-num">05</span><span class="shot-label">Built-in collections</span></div>
+      <div class="shot reveal" data-delay="1" style="grid-column: span 2"><img src="assets/a9f9dd6c-4a0c-4ff5-b6d8-4cb8890875f6.webp" alt="Player" loading="lazy" decoding="async"><span class="shot-num">06</span><span class="shot-label">Player · 4K HDR</span></div>
+    </div>
+
+    <div class="shots-mobile" style="grid-template-columns: repeat(3, 1fr); max-width: 720px; margin-left: auto; margin-right: auto">
+      <div class="shot-mobile reveal"><img src="assets/283eb09c-734a-497d-82db-c6a56ba3b332.webp" alt="Mobile Home" loading="lazy" decoding="async"><span class="shot-num">07</span><span class="shot-label">Mobile · Home</span></div>
+      <div class="shot-mobile reveal" data-delay="1"><img src="assets/65a39902-0c4f-4b55-b53e-f0d414404dca.webp" alt="Profiles" loading="lazy" decoding="async"><span class="shot-num">08</span><span class="shot-label">Profiles</span></div>
+      <div class="shot-mobile reveal" data-delay="2"><div class="img-slot" style="background:linear-gradient(135deg, var(--accent-soft), transparent), var(--bg-2); display:grid; place-items:center; text-align:center; padding:20px"><div><div style="font-size:10px;color:var(--ink-3);letter-spacing:.08em;margin-bottom:8px">MORE</div><div style="font-size:13px;color:var(--ink);line-height:1.3">On your phone, too</div></div></div></div>
+    </div>
+
+    <p class="reveal" style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em;margin-top:32px;text-transform:uppercase;font-weight:500">// Captured on Android TV &amp; Pixel — actual ARVIO UI</p>
+  </div>
+</section>
+
+<!-- DEVICES -->
+<section class="section" id="devices">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">05 / Devices</div>
+      <h2 class="section-title">Android TV <span class="accent">first</span>, mobile alongside.</h2>
+    </div>
+
+    <div class="devices-grid">
+      <div class="device primary reveal">
+        <div class="device-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"></rect><path d="M8 22h8M12 18v4"></path></svg>
+        </div>
+        <div class="device-name">Android TV</div>
+        <div class="device-meta">Primary · D‑pad tuned</div>
+      </div>
+      <div class="device reveal" data-delay="1">
+        <div class="device-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"></rect><circle cx="12" cy="11" r="3"></circle><path d="M8 22h8"></path></svg>
+        </div>
+        <div class="device-name">Google TV</div>
+        <div class="device-meta">Supported</div>
+      </div>
+      <div class="device reveal" data-delay="2">
+        <div class="device-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"></rect><path d="M11 18h2"></path></svg>
+        </div>
+        <div class="device-name">Android phone</div>
+        <div class="device-meta">Companion UI</div>
+      </div>
+      <div class="device reveal" data-delay="3">
+        <div class="device-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8"></path><path d="M3 9h18"></path></svg>
+        </div>
+        <div class="device-name">Android tablet</div>
+        <div class="device-meta">Companion UI</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SETUP -->
+<section class="setup" id="setup">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">06 / Setup</div>
+      <h2 class="section-title">From install to <span class="accent">first stream</span> in minutes.</h2>
+    </div>
+
+    <div class="setup-grid">
+      <div class="setup-step reveal">
+        <div class="setup-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+        </div>
+        <div class="setup-title">Install from Play Store</div>
+        <div class="setup-desc">Open Google Play on your Android TV, search for ARVIO, hit install. No account, no setup wizard, no upsells.</div>
+        <div class="setup-time">Under a minute</div>
+      </div>
+      <div class="setup-step reveal" data-delay="1">
+        <div class="setup-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+        </div>
+        <div class="setup-title">Add a server, catalog, or source</div>
+        <div class="setup-desc">Connect Plex, Emby, Jellyfin, or Telegram, paste an addon URL, or import an M3U for live TV. Profile presets get you running fast.</div>
+        <div class="setup-time">Two minutes</div>
+      </div>
+      <div class="setup-step reveal" data-delay="2">
+        <div class="setup-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+        </div>
+        <div class="setup-title">Press play</div>
+        <div class="setup-desc">Browse, hit OK on the remote, the player takes over. Trakt picks up watch state. Resume points stay in sync across devices.</div>
+        <div class="setup-time">You're streaming</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GUIDE -->
+<section class="guide" id="guide">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">07 / Beginner Guide</div>
+      <h2 class="section-title">Set up ARVIO <span class="accent">the clean way.</span></h2>
+    </div>
+
+    <div class="guide-panel reveal" data-delay="1">
+      <div class="guide-card">
+        <div class="guide-kicker">Setup roadmap</div>
+        <h3>From fresh install to a synced TV home.</h3>
+        <p>Follow the path in order: create your space, connect sync, add your libraries and legal sources, then tune playback once.</p>
+        <div class="guide-summary">
+          <div class="guide-summary-item">
+            <span class="guide-summary-num">01</span>
+            <span class="guide-summary-label">Profile and cloud sync</span>
+          </div>
+          <div class="guide-summary-item">
+            <span class="guide-summary-num">02</span>
+            <span class="guide-summary-label">Servers, Telegram, catalogs, IPTV, and sources</span>
+          </div>
+          <div class="guide-summary-item">
+            <span class="guide-summary-num">03</span>
+            <span class="guide-summary-label">Playback polish and troubleshooting</span>
+          </div>
+        </div>
+        <div class="guide-warning">Use only sources you are allowed to access. Torrent-based sources are not supported. ARVIO supports HTTP sources and user-configured debrid-compatible sources, but it does not host media, provide streams, or grant rights to third-party content.</div>
+        <div class="guide-actions">
+          <a class="guide-link" href="https://stremio-addons.net/" target="_blank" rel="noopener">Browse compatible source directory</a>
+          <a class="guide-link secondary" href="/web/">Open ARVIO Web</a>
+        </div>
+      </div>
+
+      <div class="guide-list">
+        <div class="guide-step">
+          <span class="guide-num">01</span>
+          <div>
+            <div class="guide-phase">Start</div>
+            <h4>Create your profile</h4>
+            <p>Choose a name, color, and avatar. Use separate profiles for family, kids, guests, or different watch histories.</p>
+            <div class="guide-tags"><span class="guide-tag">Profiles</span><span class="guide-tag">Personal home screen</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">02</span>
+          <div>
+            <div class="guide-phase">Sync</div>
+            <h4>Pair ARVIO Cloud</h4>
+            <p>Go to Settings, Accounts, ARVIO Cloud, then scan the QR code with your phone. This keeps profiles, settings, catalogs, IPTV state, watch state, and profile avatars aligned across your devices.</p>
+            <div class="guide-tags"><span class="guide-tag">QR pair</span><span class="guide-tag">Cloud backup</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">03</span>
+          <div>
+            <div class="guide-phase">Optional</div>
+            <h4>Connect Trakt</h4>
+            <p>Sign in if you want synced watch history, watchlists, scrobbling, and Continue Watching across devices.</p>
+            <div class="guide-tags"><span class="guide-tag">Watch history</span><span class="guide-tag">Watchlists</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">04</span>
+          <div>
+            <div class="guide-phase">Libraries</div>
+            <h4>Connect Plex, Emby, or Jellyfin</h4>
+            <p>Open Settings, Home Server. For Emby or Jellyfin, choose Add server, enter the server URL, then add your username and password or token. For Plex, choose Connect with code, optionally enter a server URL, then scan the QR code or open the auth page and confirm the code.</p>
+            <div class="guide-tags"><span class="guide-tag">Plex</span><span class="guide-tag">Emby</span><span class="guide-tag">Jellyfin</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">05</span>
+          <div>
+            <div class="guide-phase">Libraries</div>
+            <h4>Use server libraries in ARVIO</h4>
+            <p>Connected home servers can appear as sources and catalog rows. Name each server clearly, then use Test connection to confirm the active profile can reach every server before browsing.</p>
+            <div class="guide-tags"><span class="guide-tag">Catalog rows</span><span class="guide-tag">Test connection</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">06</span>
+          <div>
+            <div class="guide-phase">Sources</div>
+            <h4>Connect Telegram</h4>
+            <p>Open Settings, Accounts, Telegram. On TV, scan the QR code with Telegram from your phone. On mobile, enter the phone number for your Telegram account, then confirm the code sent to Telegram. ARVIO can then search your own channels and groups for matching video files.</p>
+            <div class="guide-tags"><span class="guide-tag">QR sign-in</span><span class="guide-tag">Channels</span><span class="guide-tag">Groups</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">07</span>
+          <div>
+            <div class="guide-phase">Expand</div>
+            <h4>Add catalogs and IPTV</h4>
+            <p>Add public Trakt or MDBList rows from Settings, Catalogs. For live TV, use Settings, IPTV, Add Playlist, then add an M3U URL or Xtream server details with an optional EPG URL.</p>
+            <div class="guide-tags"><span class="guide-tag">Catalogs</span><span class="guide-tag">Live TV</span><span class="guide-tag">EPG</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">08</span>
+          <div>
+            <div class="guide-phase">Sources</div>
+            <h4>Add compatible sources</h4>
+            <p>Use HTTP sources and user-configured debrid-compatible sources only. Torrent-based sources are not supported. For long URLs, use the Google TV or Google Home phone remote keyboard.</p>
+            <div class="guide-tags"><span class="guide-tag">HTTP</span><span class="guide-tag">Debrid-compatible</span><span class="guide-tag">No torrent sources</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">09</span>
+          <div>
+            <div class="guide-phase">Polish</div>
+            <h4>Tune playback</h4>
+            <p>Set subtitle language, content language, minimum quality, DNS provider, frame-rate matching, volume boost, and card layout from Settings. Player menus also handle subtitles and audio tracks.</p>
+            <div class="guide-tags"><span class="guide-tag">Subtitles</span><span class="guide-tag">Frame rate</span><span class="guide-tag">Quality filters</span></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="guide-num">10</span>
+          <div>
+            <div class="guide-phase">Support</div>
+            <h4>Fix common issues</h4>
+            <p>If something fails, verify the URL on your phone first, reload the playlist or source, test Home Server connections, check account pairing, clear Telegram cache if needed, then restart ARVIO and the TV.</p>
+            <div class="guide-tags"><span class="guide-tag">Reload</span><span class="guide-tag">Connection test</span><span class="guide-tag">Restart once</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OSS -->
+<section class="oss" id="oss">
+  <div class="wrap oss-inner">
+    <div class="reveal">
+      <div class="section-num" style="margin-bottom:20px">08 / Open</div>
+      <h2 class="oss-big">Open source.<br><span class="accent">Built in the open.</span></h2>
+    </div>
+    <div class="oss-side reveal" data-delay="1">
+      <p>ARVIO is open source. Source code, releases, APKs, issues, and contributions all live on GitHub.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px">
+        <a class="btn btn-ghost" href="https://github.com/ProdigyV21/ARVIO">GitHub repo</a>
+        <a class="btn btn-ghost" href="https://ko-fi.com/arvio">Ko‑fi</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq" id="faq">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="section-num">09 / Questions</div>
+      <h2 class="section-title">Questions before <span class="accent">you install.</span></h2>
+    </div>
+
+    <div class="faq-list">
+      <details class="faq-item reveal">
+        <summary class="faq-q">
+          <span>Is ARVIO free? Are there ads?</span>
+          <span class="faq-q-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </summary>
+        <div class="faq-a">Free, open source. No ads, no analytics, no upsells, no premium tier. If you want to support the project, there's a Ko‑fi link — but nothing in the app is gated behind it.</div>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary class="faq-q">
+          <span>Does ARVIO host or stream content?</span>
+          <span class="faq-q-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </summary>
+        <div class="faq-a">No. ARVIO is a hub — it talks to the addons, M3U lists and accounts <em>you</em> connect. We ship metadata addons (Cinemeta, TMDB) and subtitle providers (OpenSubtitles) and integrate Trakt, but we don't host video.</div>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary class="faq-q">
+          <span>Which devices are supported?</span>
+          <span class="faq-q-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </summary>
+        <div class="faq-a">Android TV and Google TV are first‑class — Chromecast with Google TV, NVIDIA Shield, Onn 4K, Walmart Onn, most Sony Bravia and TCL sets. Android phones and tablets get the companion UI. iOS, Apple TV and webOS are not supported.</div>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary class="faq-q">
+          <span>What about codec support? Dolby? HDR?</span>
+          <span class="faq-q-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </summary>
+        <div class="faq-a">ExoPlayer (Media3) with the FFmpeg extension covers AV1, HEVC, VP9, H.264, AAC, AC3, EAC3, TrueHD, DTS where the device's audio pipeline allows passthrough. HDR10 and Dolby Vision depend on your hardware. Subtitles: SRT, VTT, ASS/SSA, PGS.</div>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary class="faq-q">
+          <span>Do I need a media server?</span>
+          <span class="faq-q-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </summary>
+        <div class="faq-a">No server required. ARVIO runs entirely on the TV. Optional cloud sync (watchlist, resume points) is available via Trakt — your account, your data.</div>
+      </details>
+
+      <details class="faq-item reveal">
+        <summary class="faq-q">
+          <span>How do I install the APK directly?</span>
+          <span class="faq-q-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+        </summary>
+        <div class="faq-a">Grab the latest APK from <a href="https://github.com/ProdigyV21/ARVIO/releases">GitHub releases</a>. On Android TV, enable "Install unknown apps" for your file manager, then sideload. The Play Store path is recommended for auto‑updates.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section class="download" id="download">
+  <div class="wrap">
+    <span class="eyebrow reveal" style="justify-content:center">Available now</span>
+    <h2 class="reveal" data-delay="1">Install it<br>on your <span class="accent">TV tonight.</span></h2>
+    <p class="download-sub reveal" data-delay="2">Free and open source. No account required — sign in only if you want cloud sync.</p>
+    <div class="download-primary reveal" data-delay="3">
+      <a class="btn btn-play" href="https://play.google.com/store/apps/details?id=com.arvio.tv" target="_blank" rel="noopener" style="padding:22px 36px">
+        <span class="play-ico" style="width:36px;height:36px">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"></path></svg>
+        </span>
+        <span>
+          <small>Install</small>
+          <strong style="font-size:22px">Get ARVIO</strong>
+        </span>
+      </a>
+    </div>
+    <div class="download-secondary reveal" data-delay="4">
+      <span>or</span>
+      <a href="https://github.com/ProdigyV21/ARVIO/releases">Download the APK</a>
+      <span>·</span>
+      <a href="https://discord.gg/bGBBGKFZVh">Join Discord</a>
+    </div>
+    <div class="download-note reveal" data-delay="5">Sideload note · Enable "Install unknown apps" on Android TV to use the APK</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="foot-top">
+      <div>
+        <div class="brand">
+          <img class="brand-wordmark" src="assets/arvio-wordmark.png" alt="ARVIO">
+        </div>
+        <div class="foot-big">Open-source TV,<br>made calmer.</div>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#player">Player</a>
+        <a href="#devices">Devices</a>
+        <a href="#screens">Screens</a>
+        <a href="#guide">Guide</a>
+      </div>
+      <div class="foot-col">
+        <h4>Community</h4>
+        <a href="https://github.com/ProdigyV21/ARVIO">GitHub</a>
+        <a href="https://discord.gg/bGBBGKFZVh">Discord</a>
+        <a href="https://ko-fi.com/arvio">Ko‑fi</a>
+      </div>
+      <div class="foot-col">
+        <h4>Legal</h4>
+        <a href="https://github.com/ProdigyV21/ARVIO/blob/main/LICENSE">License</a>
+        <a href="https://github.com/ProdigyV21/ARVIO/blob/main/PRIVACY.md">Privacy</a>
+        <a href="https://github.com/ProdigyV21/ARVIO/tree/main/LICENSES">Third-party</a>
+      </div>
+    </div>
+    <div class="foot-bot">
+      <div>© 2026 ARVIO · Open source</div>
+      <div>Android TV · Google TV · Mobile</div>
+    </div>
+  </div>
+</footer>
+
+<!-- Motion: one-time reveal on scroll -->
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal:not(.in)').forEach(el => io.observe(el));
+</script>
+
+<script>
+  // Theme Toggle Logic
+  const themeToggle = document.getElementById('theme-toggle');
+  const iconLight = document.getElementById('theme-icon-light');
+  const iconDark = document.getElementById('theme-icon-dark');
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('arvio-theme', theme);
+    if (theme === 'light') {
+      iconLight.style.display = 'none';
+      iconDark.style.display = 'block';
+    } else {
+      iconLight.style.display = 'block';
+      iconDark.style.display = 'none';
+    }
+  }
+
+  // Initialize Theme
+  const savedTheme = localStorage.getItem('arvio-theme');
+  const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+
+  if (savedTheme) {
+    setTheme(savedTheme);
+  } else if (systemPrefersLight) {
+    setTheme('light');
+  } else {
+    setTheme('dark');
+  }
+
+  // Toggle Theme on Click
+  themeToggle.addEventListener('click', () => {
+    document.documentElement.classList.add('theme-transitioning');
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+    
+    // Remove transition class after animation completes
+    setTimeout(() => {
+      document.documentElement.classList.remove('theme-transitioning');
+    }, 350);
+  });
+
+  // Scroll Spy Logic
+  const spySections = document.querySelectorAll('header[id], section[id]');
+  const spyNavLinks = document.querySelectorAll('.nav-links a[href^="#"]');
+
+  const spyObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        spyNavLinks.forEach(link => {
+          link.classList.remove('active');
+          link.removeAttribute('aria-current');
+          if (link.getAttribute('href') === `#${entry.target.id}`) {
+            link.classList.add('active');
+            link.setAttribute('aria-current', 'page');
+          }
+        });
+      }
+    });
+  }, { rootMargin: '-100px 0px -60% 0px' });
+
+  spySections.forEach(sec => spyObserver.observe(sec));
+</script>
+
+</body></html>

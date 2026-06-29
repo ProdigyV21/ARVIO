@@ -66,18 +66,27 @@ $sharedCss
 
   <p style="font-size:0.85rem; color:rgba(255,255,255,0.35); margin-bottom:1.5rem;">Choose your AI provider to set its API key:</p>
 
-  <a href="/groq" class="provider-btn">
+  <a id="groqLink" href="/groq" class="provider-btn">
     <span class="badge badge-groq">DEFAULT</span>
     <span class="name">Groq</span>
     <span class="model">Llama 3.3 70B · Free tier: 1K RPM / 500K RPD</span>
   </a>
 
-  <a href="/gemini" class="provider-btn">
+  <a id="geminiLink" href="/gemini" class="provider-btn">
     <span class="badge badge-gemini">BETTER QUALITY</span>
     <span class="name">Google Gemini</span>
     <span class="model">Gemini 2.5 Flash · Free tier available</span>
   </a>
 </div>
+<script>
+var t = new URLSearchParams(window.location.search).get('t') || '';
+if (t) {
+  ['groqLink','geminiLink'].forEach(function(id) {
+    var a = document.getElementById(id);
+    if (a) a.href = a.getAttribute('href') + '?t=' + encodeURIComponent(t);
+  });
+}
+</script>
 </body>
 </html>
 """.trimIndent()

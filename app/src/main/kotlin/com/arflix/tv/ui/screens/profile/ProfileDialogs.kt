@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -69,10 +70,12 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.ProfileColors
 import com.arflix.tv.ui.components.AvatarIcon
 import com.arflix.tv.ui.components.AvatarRegistry
+import com.arflix.tv.ui.components.avatarCategoryLabel
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.ProfileAvatarFiles
 import coil.compose.AsyncImage
@@ -99,7 +102,7 @@ fun AddProfileDialog(
     onDismiss: () -> Unit
 ) {
     ProfileDialogContent(
-        title = "Add Profile",
+        title = stringResource(R.string.add_profile),
         autoFocusNameInput = true,
         name = name,
         onNameChange = onNameChange,
@@ -111,7 +114,7 @@ fun AddProfileDialog(
         useCustomAvatarImage = useCustomAvatarImage,
         onAvatarImageSelected = onAvatarImageSelected,
         onRemoveAvatarImage = onRemoveAvatarImage,
-        confirmLabel = "Create",
+        confirmLabel = stringResource(R.string.confirm),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         onDelete = null
@@ -143,7 +146,7 @@ fun EditProfileDialog(
     onRemovePin: () -> Unit = {}
 ) {
     ProfileDialogContent(
-        title = "Edit Profile",
+        title = stringResource(R.string.profile_edit_title),
         autoFocusNameInput = false,
         name = name,
         onNameChange = onNameChange,
@@ -155,7 +158,7 @@ fun EditProfileDialog(
         useCustomAvatarImage = useCustomAvatarImage,
         onAvatarImageSelected = onAvatarImageSelected,
         onRemoveAvatarImage = onRemoveAvatarImage,
-        confirmLabel = "Save",
+        confirmLabel = stringResource(R.string.save),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         onDelete = onDelete,
@@ -193,6 +196,7 @@ private fun ProfileDialogContent(
     onRemovePin: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val profileNameHint = stringResource(R.string.profile_name_hint)
     val configuration = LocalConfiguration.current
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     val useMobileLayout = isTouchDevice && configuration.screenWidthDp < 700
@@ -325,7 +329,7 @@ private fun ProfileDialogContent(
                                     setText(name)
                                     setTextColor(android.graphics.Color.WHITE)
                                     setHintTextColor(android.graphics.Color.GRAY)
-                                    hint = "Profile name"
+                                    hint = profileNameHint
                                     textSize = 16f
                                     background = null
                                     setPadding(36, 32, 36, 32)
@@ -372,7 +376,7 @@ private fun ProfileDialogContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Profile Lock",
+                                text = stringResource(R.string.profile_lock),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFB0B0B0),
@@ -384,7 +388,7 @@ private fun ProfileDialogContent(
                             ) {
                                 if (profile.pin.isNullOrEmpty()) {
                                     DialogButton(
-                                        text = "Set PIN",
+                                        text = stringResource(R.string.profile_set_pin),
                                         isPrimary = false,
                                         onClick = {
                                             hideKeyboard()
@@ -394,7 +398,7 @@ private fun ProfileDialogContent(
                                     )
                                 } else {
                                     DialogButton(
-                                        text = "Change PIN",
+                                        text = stringResource(R.string.profile_change_pin),
                                         isPrimary = false,
                                         onClick = {
                                             hideKeyboard()
@@ -403,7 +407,7 @@ private fun ProfileDialogContent(
                                         modifier = Modifier.weight(1f)
                                     )
                                     DialogButton(
-                                        text = "Remove PIN",
+                                        text = stringResource(R.string.profile_remove_pin),
                                         isPrimary = false,
                                         onClick = {
                                             hideKeyboard()
@@ -439,7 +443,7 @@ private fun ProfileDialogContent(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             DialogButton(
-                                text = "Cancel",
+                                text = stringResource(R.string.cancel),
                                 isPrimary = false,
                                 onClick = {
                                     hideKeyboard()
@@ -449,7 +453,7 @@ private fun ProfileDialogContent(
                             )
                             if (onDelete != null) {
                                 DialogButton(
-                                    text = "Delete",
+                                    text = stringResource(R.string.delete),
                                     isPrimary = false,
                                     isDestructive = true,
                                     onClick = {
@@ -466,7 +470,7 @@ private fun ProfileDialogContent(
 
                     AvatarRegistry.categories.forEachIndexed { rowIdx, (label, ids) ->
                         Text(
-                            text = label,
+                            text = avatarCategoryLabel(label),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color.White.copy(alpha = 0.5f),
@@ -569,7 +573,7 @@ private fun ProfileDialogContent(
                                         setText(name)
                                         setTextColor(android.graphics.Color.WHITE)
                                         setHintTextColor(android.graphics.Color.GRAY)
-                                        hint = "Profile name"
+                                        hint = profileNameHint
                                         textSize = 16f
                                         background = null
                                         setPadding(36, 32, 36, 32)
@@ -617,7 +621,7 @@ private fun ProfileDialogContent(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "Profile Lock",
+                                    text = stringResource(R.string.profile_lock),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFFB0B0B0),
@@ -629,7 +633,7 @@ private fun ProfileDialogContent(
                                 ) {
                                     if (profile.pin.isNullOrEmpty()) {
                                         DialogButton(
-                                            text = "Set PIN",
+                                            text = stringResource(R.string.profile_set_pin),
                                             isPrimary = false,
                                             onClick = {
                                                 hideKeyboard()
@@ -639,7 +643,7 @@ private fun ProfileDialogContent(
                                         )
                                     } else {
                                         DialogButton(
-                                            text = "Change PIN",
+                                            text = stringResource(R.string.profile_change_pin),
                                             isPrimary = false,
                                             onClick = {
                                                 hideKeyboard()
@@ -648,7 +652,7 @@ private fun ProfileDialogContent(
                                             modifier = Modifier.weight(1f)
                                         )
                                         DialogButton(
-                                            text = "Remove PIN",
+                                            text = stringResource(R.string.profile_remove_pin),
                                             isPrimary = false,
                                             onClick = {
                                                 hideKeyboard()
@@ -685,7 +689,7 @@ private fun ProfileDialogContent(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 DialogButton(
-                                    text = "Cancel",
+                                    text = stringResource(R.string.cancel),
                                     isPrimary = false,
                                     onClick = {
                                         hideKeyboard()
@@ -695,7 +699,7 @@ private fun ProfileDialogContent(
                                 )
                                 if (onDelete != null) {
                                     DialogButton(
-                                        text = "Delete",
+                                        text = stringResource(R.string.delete),
                                         isPrimary = false,
                                         isDestructive = true,
                                         onClick = {
@@ -716,7 +720,7 @@ private fun ProfileDialogContent(
                         // Avatar picker - 4 horizontal scrolling rows by category
                         AvatarRegistry.categories.forEachIndexed { rowIdx, (label, ids) ->
                             Text(
-                                text = label,
+                                text = avatarCategoryLabel(label),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.White.copy(alpha = 0.5f),
@@ -842,14 +846,14 @@ private fun AvatarImageButtons(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         DialogButton(
-            text = if (hasCustomAvatar) "Change Photo" else "Upload Photo",
+            text = if (hasCustomAvatar) stringResource(R.string.profile_change_photo) else stringResource(R.string.profile_upload_photo),
             isPrimary = false,
             onClick = onUpload,
             modifier = Modifier.fillMaxWidth()
         )
         if (hasCustomAvatar) {
             DialogButton(
-                text = "Remove Photo",
+                text = stringResource(R.string.profile_remove_photo),
                 isPrimary = false,
                 onClick = onRemove,
                 modifier = Modifier.fillMaxWidth()
@@ -915,7 +919,7 @@ private fun AvatarGridItem(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.selected),
                         tint = Color.White,
                         modifier = Modifier.size(22.dp)
                     )

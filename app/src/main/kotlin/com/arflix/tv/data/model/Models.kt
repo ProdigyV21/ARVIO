@@ -210,6 +210,9 @@ data class Subtitle(
     val groupIndex: Int? = null,
     val trackIndex: Int? = null,
     val isForced: Boolean = false,
+    // True for image-based subtitle tracks (PGS/VOBSUB/DVB). These carry no text and
+    // therefore cannot be used as an AI translation source.
+    val isBitmap: Boolean = false,
 ) : Serializable
 
 /**

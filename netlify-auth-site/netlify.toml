@@ -2,6 +2,11 @@
   publish = "."
 
 [[redirects]]
+  from = "/delete"
+  to = "/delete-account.html"
+  status = 200
+
+[[redirects]]
   from = "/account-deletion"
   to = "/delete-account.html"
   status = 200

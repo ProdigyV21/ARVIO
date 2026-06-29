@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
+import java.nio.charset.StandardCharsets
 
 /**
  * Typographic channel logo placeholder. Variant chosen by first char-code % 3.
@@ -46,7 +48,7 @@ fun ChannelLogo(
     val variant = (channel.name.firstOrNull()?.code ?: 0) % 3
     val context = LocalContext.current
     val density = LocalDensity.current
-    val logoUrl = channel.logo
+    val logoUrl = safeChannelLogoUrl(channel.logo)
     var showFallback by remember(logoUrl) { mutableStateOf(logoUrl.isNullOrBlank()) }
     Box(
         modifier = modifier
@@ -131,6 +133,34 @@ internal fun initialsFor(name: String): String {
         1 -> parts[0].take(2).uppercase()
         else -> (parts[0].first().toString() + parts[1].first().toString()).uppercase()
     }
+}
+
+private fun safeChannelLogoUrl(raw: String?): String? {
+    val trimmed = raw?.trim().orEmpty()
+    if (trimmed.isBlank()) return null
+    val normalized = when {
+        trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+        trimmed.startsWith("//") -> "https:$trimmed"
+        else -> decodeLegacyLogoUrl(trimmed)
+    } ?: return null
+    return normalized.takeIf {
+        it.startsWith("http://", ignoreCase = true) ||
+            it.startsWith("https://", ignoreCase = true)
+    }
+}
+
+private fun decodeLegacyLogoUrl(value: String): String? {
+    if (value.length < 12 || value.any { it.isWhitespace() }) return null
+    return listOf(Base64.DEFAULT, Base64.URL_SAFE or Base64.NO_WRAP)
+        .asSequence()
+        .mapNotNull { flags ->
+            runCatching { String(Base64.decode(value, flags), StandardCharsets.UTF_8).trim() }.getOrNull()
+        }
+        .firstOrNull { decoded ->
+            decoded.startsWith("http://", ignoreCase = true) ||
+                decoded.startsWith("https://", ignoreCase = true)
+        }
 }
 
 /** Small dot + label pair used in EPG rows. */

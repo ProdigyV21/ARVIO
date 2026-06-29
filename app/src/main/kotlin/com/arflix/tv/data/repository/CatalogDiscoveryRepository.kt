@@ -1,9 +1,12 @@
 package com.arflix.tv.data.repository
 
+import android.content.Context
 import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.model.CatalogDiscoveryResult
 import com.arflix.tv.data.model.CatalogSourceType
+import com.arflix.tv.R
 import com.arflix.tv.util.Constants
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -15,6 +18,7 @@ import javax.inject.Singleton
 
 @Singleton
 class CatalogDiscoveryRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient
 ) {
@@ -43,7 +47,7 @@ class CatalogDiscoveryRepository @Inject constructor(
             Result.failure(
                 trakt.exceptionOrNull()
                     ?: mdblist.exceptionOrNull()
-                    ?: IllegalStateException("Failed to search catalogs")
+                    ?: IllegalStateException(context.getString(R.string.catalog_failed_search))
             )
         }
     }

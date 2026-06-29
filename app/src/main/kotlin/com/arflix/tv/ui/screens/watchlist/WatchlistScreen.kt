@@ -39,7 +39,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -96,6 +98,7 @@ fun WatchlistScreen(
     } else {
         if (isMobile) 200.dp else 230.dp
     }
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     var isSidebarFocused by remember { mutableStateOf(false) }
     val hasProfile = currentProfile != null
     val maxSidebarIndex = topBarMaxIndex(hasProfile)
@@ -118,8 +121,15 @@ fun WatchlistScreen(
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
+        var initialResumeHandled = false
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (initialResumeHandled) {
+                    viewModel.refreshAfterResume()
+                } else {
+                    initialResumeHandled = true
+                }
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -167,7 +177,12 @@ fun WatchlistScreen(
             .focusable()
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
-                    when (event.key) {
+                    val effectiveKey = when (event.key) {
+                        Key.DirectionLeft  -> if (isRtl) Key.DirectionRight else Key.DirectionLeft
+                        Key.DirectionRight -> if (isRtl) Key.DirectionLeft  else Key.DirectionRight
+                        else -> event.key
+                    }
+                    when (effectiveKey) {
                         Key.Back, Key.Escape -> {
                             if (isSidebarFocused) onBack() else isSidebarFocused = true
                             true

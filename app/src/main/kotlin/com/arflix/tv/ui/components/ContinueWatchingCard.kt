@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 import androidx.compose.ui.platform.LocalContext
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.ui.skin.ArvioFocusableSurface
@@ -115,7 +117,7 @@ fun ContinueWatchingCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Play",
+                                contentDescription = stringResource(R.string.play),
                                 tint = ArvioSkin.colors.textPrimary,
                                 modifier = Modifier.size(32.dp),
                             )
@@ -162,7 +164,7 @@ fun ContinueWatchingCard(
                     }
                 }
 
-                val typeLabel = if (item.mediaType == MediaType.TV) "TV" else "MOVIE"
+                val typeLabel = if (item.mediaType == MediaType.TV) stringResource(R.string.component_badge_tv) else stringResource(R.string.component_badge_movie)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -186,7 +188,13 @@ fun ContinueWatchingCard(
 
         Text(
             text = item.title,
-            style = ArvioSkin.typography.cardTitle,
+            style = ArvioSkin.typography.cardTitle.copy(
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = androidx.compose.ui.graphics.Color.Black,
+                    offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                    blurRadius = 6f
+                )
+            ),
             color = if (isFocused) ArvioSkin.colors.textPrimary else ArvioSkin.colors.textMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -196,7 +204,13 @@ fun ContinueWatchingCard(
         if (meta != null) {
             Text(
                 text = meta,
-                style = ArvioSkin.typography.caption,
+                style = ArvioSkin.typography.caption.copy(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                ),
                 color = ArvioSkin.colors.textMuted.copy(alpha = 0.85f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -274,7 +288,13 @@ fun ContinueWatchingCardCompact(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.title,
-                    style = ArvioSkin.typography.cardTitle,
+                    style = ArvioSkin.typography.cardTitle.copy(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = androidx.compose.ui.graphics.Color.Black,
+                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                            blurRadius = 6f
+                        )
+                    ),
                     color = ArvioSkin.colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -282,7 +302,13 @@ fun ContinueWatchingCardCompact(
                 if (episodeInfo != null) {
                     Text(
                         text = episodeInfo,
-                        style = ArvioSkin.typography.caption,
+                        style = ArvioSkin.typography.caption.copy(
+                            shadow = androidx.compose.ui.graphics.Shadow(
+                                color = androidx.compose.ui.graphics.Color.Black,
+                                offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                                blurRadius = 4f
+                            )
+                        ),
                         color = ArvioSkin.colors.textMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -299,7 +325,7 @@ fun ContinueWatchingCardCompact(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Play",
+                        contentDescription = stringResource(R.string.play),
                         tint = ArvioSkin.colors.textPrimary,
                         modifier = Modifier.size(24.dp),
                     )

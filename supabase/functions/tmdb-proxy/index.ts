@@ -115,7 +115,7 @@ async function fetchTmdbJson(tmdbUrl: URL): Promise<TmdbFetchResult> {
           // broke strict clients with truncated gzip bodies. Prefer identity
           // here so the app receives stable JSON through this proxy.
           'Accept-Encoding': 'identity;q=1, *;q=0',
-          'Cache-Control': attempt === 0 ? 'no-cache' : 'no-store',
+          'Cache-Control': attempt === 0 ? 'max-age=300' : 'no-store',
           'Pragma': 'no-cache',
           'User-Agent': 'ARVIO-TMDB-Proxy/1.0',
         },
@@ -216,7 +216,7 @@ serve(async (req) => {
       headers: {
         ...corsHeaders(req),
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
+        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
         'X-RateLimit-Limit': String(RATE_LIMIT),
         'X-RateLimit-Remaining': String(rateCheck.remaining),
         'X-TMDB-Proxy-Attempts': String(result.attempts),

@@ -65,7 +65,7 @@ ARVIO uses HTTPS for ARVIO Cloud and supported third-party APIs. The app may als
 
 Local data remains on your device until you remove it in the app, clear Android app data, or uninstall the app.
 
-ARVIO Cloud data remains in Supabase until you delete it or request deletion. You can request cloud account and synced data deletion at [auth.arvio.tv/delete-account](https://auth.arvio.tv/delete-account). You can also disconnect Trakt in app settings or revoke ARVIO access from your Trakt account.
+ARVIO Cloud data remains in Supabase until you delete it or request deletion. You can request cloud account and synced data deletion at [auth.arvio.tv/delete](https://auth.arvio.tv/delete). You can also disconnect Trakt in app settings or revoke ARVIO access from your Trakt account.
 
 ## Children's Privacy
 

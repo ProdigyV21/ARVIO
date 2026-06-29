@@ -18,23 +18,23 @@
 # Log stripping for release builds
 # Remove ALL logs for maximum performance
 # ============================================
--assumenosideeffects class android.util.Log {
-    public static int v(...);
-    public static int d(...);
-    public static int i(...);
-    public static int w(...);
-    public static int e(...);
-    public static int wtf(...);
-}
+# -assumenosideeffects class android.util.Log {
+#     public static int v(...);
+#     public static int d(...);
+#     public static int i(...);
+#     public static int w(...);
+#     public static int e(...);
+#     public static int wtf(...);
+# }
 
 # Also strip ALL our custom AppLogger methods
--assumenosideeffects class com.arflix.tv.util.AppLogger {
-    public static void v(...);
-    public static void d(...);
-    public static void i(...);
-    public static void w(...);
-    public static void e(...);
-}
+# -assumenosideeffects class com.arflix.tv.util.AppLogger {
+#     public static void v(...);
+#     public static void d(...);
+#     public static void i(...);
+#     public static void w(...);
+#     public static void e(...);
+# }
 
 # Strip Kotlin debug assertions in release
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
@@ -119,6 +119,19 @@
 -dontwarn edu.umd.cs.findbugs.annotations.**
 -dontwarn javax.script.**
 -dontwarn org.mozilla.javascript.**
+
+# CloudStream API & Dependencies (External plugins are compiled against these)
+-keep class com.lagradost.** { *; }
+-keep interface com.lagradost.** { *; }
+-dontwarn com.lagradost.**
+
+-keep class org.jsoup.** { *; }
+-keep interface org.jsoup.** { *; }
+-dontwarn org.jsoup.**
+
+-keep class com.fasterxml.jackson.** { *; }
+-keep interface com.fasterxml.jackson.** { *; }
+-dontwarn com.fasterxml.jackson.**
 
 # ============================================
 # Hilt / Dagger - KEEP EVERYTHING
@@ -218,6 +231,13 @@
 # ============================================
 -keep class org.drinkless.tdlib.** { *; }
 -dontwarn org.drinkless.tdlib.**
+
+# ============================================
+# org.json — Android provides these at runtime; any bundled copy must not be
+# renamed or R8 will produce org.json.b/c names that collide with the system
+# classes and fail ART bytecode verification (VerifyError on app launch).
+# ============================================
+-keep class org.json.** { *; }
 
 # ============================================
 # App-specific keeps

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -21,9 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 
 private data class TouchCategoryRailItem(
     val id: String,
@@ -60,17 +62,17 @@ fun TouchCategoryRail(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
-                    contentDescription = "Search",
+                    contentDescription = stringResource(R.string.search),
                     tint = LiveColors.FgDim,
                 )
                 Text(
-                    text = "Search channels",
+                    text = stringResource(R.string.live_label_search_channels),
                     style = LiveType.CatLabel.copy(color = LiveColors.Fg),
                 )
             }
         }
 
-        items(items, key = { it.id }) { item ->
+        itemsIndexed(items, key = { index, item -> "${item.id}#$index" }) { _, item ->
             val active = selectedId == item.id
             Box(
                 modifier = Modifier
@@ -112,15 +114,15 @@ private fun rememberTouchRailItems(
     selectedId: String,
 ): List<TouchCategoryRailItem> {
     val base = buildList {
-        tree.top.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
-        tree.global.categories.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
-        tree.countries.categories.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
-        tree.adult.categories.forEach { add(TouchCategoryRailItem(it.id, it.label, it.count)) }
+        tree.top.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        tree.global.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        tree.countries.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        tree.adult.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
     }.distinctBy { it.id }.toMutableList()
 
     val selected = tree.byId(selectedId)
     if (selected != null && base.none { it.id == selectedId }) {
-        base.add(0, TouchCategoryRailItem(selected.id, selected.label, selected.count))
+        base.add(0, TouchCategoryRailItem(selected.id, liveCategoryLabel(selected.label), selected.count))
     }
 
     return base

@@ -1,0 +1,20 @@
+{
+  "name": "arvio-auth-backend",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "netlify dev",
+    "deploy": "netlify deploy --prod",
+    "db:status": "netlify database status",
+    "db:import": "node scripts/import-supabase-export.mjs",
+    "blobs:import": "node scripts/import-supabase-export-blobs.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.9",
+    "@netlify/database": "^1.0.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "netlify-cli": "^26.1.0"
+  }
+}

@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import android.util.Log
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.arflix.tv.BuildConfig
 import com.arflix.tv.util.Constants
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -63,7 +64,7 @@ class RealtimeSyncManager @Inject constructor(
         // change, server filter missed it). Halving the interval tightens
         // the worst-case propagation window for cross-device sync without
         // meaningfully increasing load (one GET every 45s while signed in).
-        private const val PERIODIC_SYNC_INTERVAL_MS = 45_000L
+        private const val PERIODIC_SYNC_INTERVAL_MS = 15 * 60 * 1000L
         private const val DEBOUNCE_MS = 2_000L
         private const val WATCH_HISTORY_DEBOUNCE_MS = 1_000L
         private const val WATCH_HISTORY_SELF_ECHO_GUARD_MS = 1_500L
@@ -126,9 +127,22 @@ class RealtimeSyncManager @Inject constructor(
     fun start() {
         if (isRunning.getAndSet(true)) return
         Log.i(TAG, "Starting realtime sync")
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            Log.i(TAG, "Netlify cloud sync enabled; Supabase realtime socket disabled")
+            scope.launch {
+                _syncStatusFlow.value = if (authRepository.getCurrentUserIdForSync().isNullOrBlank()) {
+                    CloudSyncStatus.NOT_SIGNED_IN
+                } else {
+                    CloudSyncStatus.CONNECTED
+                }
+            }
+            return
+        }
         _syncStatusFlow.value = CloudSyncStatus.RECONNECTING
         connectWebSocket()
-        startPeriodicSync()
+        if (BuildConfig.ENABLE_PERIODIC_CLOUD_PULL) {
+            startPeriodicSync()
+        }
         startTokenRefreshLoop()
     }
 
@@ -274,6 +288,7 @@ class RealtimeSyncManager @Inject constructor(
         }
         ws.send(accountSyncJoin.toString())
 
+        if (BuildConfig.ENABLE_REALTIME_WATCH_SYNC) {
         // Channel 2: watch_history INSERT + UPDATE + DELETE events.
         // DELETE was missing previously — when a user removed an item from Continue
         // Watching on device A, device B never got a realtime notification for the
@@ -354,7 +369,14 @@ class RealtimeSyncManager @Inject constructor(
         }
         ws.send(watchedTablesJoin.toString())
 
-        Log.i(TAG, "Joined account_sync + watch_history + watched_status channels for user $userId")
+        }
+
+        val channels = if (BuildConfig.ENABLE_REALTIME_WATCH_SYNC) {
+            "account_sync + watch_history + watched_status"
+        } else {
+            "account_sync"
+        }
+        Log.i(TAG, "Joined $channels channels for user $userId")
     }
 
     private fun handleMessage(text: String) {

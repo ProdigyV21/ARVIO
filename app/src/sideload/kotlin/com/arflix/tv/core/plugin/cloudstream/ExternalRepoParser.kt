@@ -104,7 +104,13 @@ class ExternalRepoParser @Inject constructor(
     private suspend fun fetchPluginList(url: String): List<ExternalPluginEntry>? = withContext(Dispatchers.IO) {
         val body = fetchBody(url) ?: return@withContext null
         try {
-            pluginListAdapter.fromJson(body.trim())
+            val list = pluginListAdapter.fromJson(body.trim()) ?: return@withContext null
+            list.map { entry ->
+                entry.copy(
+                    url = resolveUrl(url, entry.url),
+                    iconUrl = entry.iconUrl?.let { resolveUrl(url, it) }
+                )
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse plugin list from $url: ${e.message}")
             null

@@ -3,9 +3,15 @@ package com.arflix.tv.ui.screens.details
 import com.arflix.tv.data.model.StreamSource
 import java.util.Locale
 
-internal const val AUTOPLAY_STRONG_SOURCE_SETTLE_MS = 180L
-internal const val AUTOPLAY_WEAK_SOURCE_SETTLE_MS = 900L
+// Autoplay starts the best quality/size source it can find within ~2s. It keeps
+// collecting progressive addon results until every addon has reported OR this
+// ceiling is reached, then plays the best candidate found so far.
+internal const val AUTOPLAY_MAX_WAIT_MS = 2000L
+// Once a top-tier (4K) source is found we only briefly settle to let a larger 4K
+// rip arrive, instead of waiting on slow addons — 4K quality can't be beaten.
+internal const val AUTOPLAY_TOP_TIER_SETTLE_MS = 450L
 internal const val AUTOPLAY_SOURCE_RECHECK_MS = 120L
+private const val TOP_TIER_QUALITY_SCORE = 4
 
 private val fourKRegex = Regex("""\b4[kK]\b""")
 private val sizeRegex = Regex("""(?i)(\d+(?:[\.,]\d+)?)\s*(TB|GB|MB|KB|B|GiB|MiB|KiB)?""")
@@ -42,26 +48,20 @@ internal fun bestAutoPlayStream(
 ): StreamSource? {
     return streams
         .asSequence()
-        .filter { stream ->
-            stream.behaviorHints?.notWebReady != true &&
-                qualityScoreForAutoPlay(stream) >= minQualityScore
-        }
+        .filter { stream -> qualityScoreForAutoPlay(stream) >= minQualityScore }
         .sortedWith(
+            // Best quality, then biggest size — that is the user's "best" definition.
+            // `notWebReady` HTTP sources (e.g. direct MKV rips) are fully playable on the
+            // native ExoPlayer, so they are eligible; webReady only breaks ties at equal
+            // quality+size so a known-simple URL wins a coin-flip.
             compareByDescending<StreamSource> { qualityScoreForAutoPlay(it) }
                 .thenByDescending { autoPlaySizeBytes(it) }
+                .thenByDescending { if (it.behaviorHints?.notWebReady == true) 0 else 1 }
                 .thenByDescending { if (it.behaviorHints?.cached == true) 1 else 0 }
                 .thenBy { it.addonName.lowercase() }
                 .thenBy { it.source.lowercase() }
         )
         .firstOrNull()
-}
-
-internal fun isStrongAutoPlaySource(stream: StreamSource): Boolean {
-    val quality = qualityScoreForAutoPlay(stream)
-    val size = autoPlaySizeBytes(stream)
-    return quality >= 4 ||
-        (quality >= 3 && size >= 7L * 1024L * 1024L * 1024L) ||
-        size >= 14L * 1024L * 1024L * 1024L
 }
 
 /**
@@ -118,14 +118,26 @@ internal fun isPendingDebridStream(stream: StreamSource): Boolean {
     ).any { text.contains(it) }
 }
 
+/**
+ * Decides whether autoplay should keep waiting for more/better sources, or start now.
+ *
+ * Goal: play the best quality/size found across all sources, within ~2 seconds.
+ * - Hard ceiling at [AUTOPLAY_MAX_WAIT_MS]: whatever is best by then plays.
+ * - No candidate yet → wait while addons are still loading (until the ceiling).
+ * - Top-tier (4K) candidate → only a brief settle ([AUTOPLAY_TOP_TIER_SETTLE_MS]) to let a
+ *   larger 4K rip arrive; don't stall on slow addons since 4K can't be out-qualitied.
+ * - Sub-4K candidate → keep collecting until every addon has reported (so a better
+ *   source isn't missed), capped by the ceiling.
+ */
 internal fun shouldWaitForAutoPlaySources(
     isLoadingStreams: Boolean,
     selectedStream: StreamSource?,
     elapsedMs: Long
 ): Boolean {
+    if (elapsedMs >= AUTOPLAY_MAX_WAIT_MS) return false
     if (selectedStream == null) return isLoadingStreams
-    if (isStrongAutoPlaySource(selectedStream)) {
-        return elapsedMs < AUTOPLAY_STRONG_SOURCE_SETTLE_MS
+    if (qualityScoreForAutoPlay(selectedStream) >= TOP_TIER_QUALITY_SCORE) {
+        return elapsedMs < AUTOPLAY_TOP_TIER_SETTLE_MS
     }
-    return elapsedMs < AUTOPLAY_WEAK_SOURCE_SETTLE_MS
+    return isLoadingStreams
 }

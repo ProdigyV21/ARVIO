@@ -192,6 +192,17 @@ fun AppNavigation(
                 onNavigateToTv = { channelId, streamUrl ->
                     navigateTopLevel(Screen.Tv.createRoute(channelId, streamUrl))
                 },
+                onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            mediaType = mediaType,
+                            mediaId = mediaId,
+                            streamUrl = streamUrl,
+                            preferredAddonId = preferredAddonId,
+                            preferredSourceName = preferredSourceName
+                        )
+                    )
+                },
                 onNavigateToSettings = {
                     navigateTopLevel(Screen.Settings.route)
                 },
@@ -349,6 +360,17 @@ fun AppNavigation(
                 currentProfile = currentProfile,
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                },
+                onNavigateToPlayer = { mediaType, mediaId, streamUrl, preferredAddonId, preferredSourceName ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            mediaType = mediaType,
+                            mediaId = mediaId,
+                            streamUrl = streamUrl,
+                            preferredAddonId = preferredAddonId,
+                            preferredSourceName = preferredSourceName
+                        )
+                    )
                 },
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },

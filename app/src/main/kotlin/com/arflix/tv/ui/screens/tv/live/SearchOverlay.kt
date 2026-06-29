@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -47,6 +47,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.util.formatGenreName
@@ -70,6 +72,7 @@ import kotlinx.coroutines.withContext
 fun SearchOverlay(
     channels: List<EnrichedChannel>,
     nowNext: Map<String, IptvNowNext> = emptyMap(),
+    searchProvider: (suspend (String) -> List<EnrichedChannel>)? = null,
     onDismiss: () -> Unit,
     onPick: (EnrichedChannel) -> Unit,
 ) {
@@ -80,19 +83,41 @@ fun SearchOverlay(
     val firstResultFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
+    // Resolved up front so they can be used inside the non-composable search LaunchedEffect.
+    val nowFormat = stringResource(R.string.live_search_now)
+    val guideLabels = GuideMatchLabels(
+        now = stringResource(R.string.now),
+        next = stringResource(R.string.next),
+        later = stringResource(R.string.later),
+        guide = stringResource(R.string.live_program_guide),
+        nowFormat = nowFormat,
+    )
+
     // Debounce input for 150ms per spec §7.
     LaunchedEffect(query) {
         delay(150)
         debounced = query.trim()
     }
 
-    LaunchedEffect(debounced, channels, nowNext) {
+    LaunchedEffect(debounced, channels, nowNext, searchProvider) {
         val q = debounced.lowercase()
         if (q.isEmpty()) {
             // Show the first 60 by default — gives a preview list users can scroll.
             results = channels.take(60).map { channel ->
-                SearchResult(channel, nowNext[channel.id]?.now?.let { "Now: ${it.title}" })
+                SearchResult(channel, nowNext[channel.id]?.now?.let { nowFormat.format(it.title) })
             }
+            return@LaunchedEffect
+        }
+        val providerResults = searchProvider
+            ?.let { provider -> withContext(Dispatchers.IO) { provider(q) } }
+            .orEmpty()
+        if (providerResults.isNotEmpty()) {
+            results = providerResults
+                .distinctBy { it.id }
+                .take(200)
+                .map { channel ->
+                    SearchResult(channel, nowNext[channel.id]?.now?.let { nowFormat.format(it.title) })
+                }
             return@LaunchedEffect
         }
         results = withContext(Dispatchers.Default) {
@@ -125,7 +150,7 @@ fun SearchOverlay(
                         ch.country?.lowercase() == q -> 200
                         else -> 0
                     }
-                    SearchResult(ch, guideMatch?.let { labelProgramMatch(it, nowNext[ch.id]) }) to score
+                    SearchResult(ch, guideMatch?.let { labelProgramMatch(it, nowNext[ch.id], guideLabels) }) to score
                 }
                 .filter { it.second > 0 }
                 .sortedByDescending { it.second }
@@ -201,7 +226,7 @@ fun SearchOverlay(
                     decorationBox = { inner ->
                         if (query.isEmpty()) {
                             Text(
-                                "Channel name, number, or category…",
+                                stringResource(R.string.live_hint_search),
                                 style = TextStyle(color = LiveColors.FgMute, fontSize = 18.sp),
                             )
                         }
@@ -223,7 +248,7 @@ fun SearchOverlay(
                 modifier = Modifier.fillMaxWidth().height(440.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(results, key = { it.channel.id }) { result ->
+                itemsIndexed(results, key = { index, result -> "${result.channel.id}#$index" }) { _, result ->
                     val ch = result.channel
                     val focusMod = if (results.isNotEmpty() && ch.id == results.first().channel.id) {
                         Modifier.focusRequester(firstResultFocus)
@@ -262,12 +287,24 @@ private fun IptvNowNext.bestProgramMatch(query: String): IptvProgram? {
         ?: candidates.firstOrNull { it.title.lowercase().contains(query) }
 }
 
-private fun labelProgramMatch(program: IptvProgram, guide: IptvNowNext?): String {
+private data class GuideMatchLabels(
+    val now: String,
+    val next: String,
+    val later: String,
+    val guide: String,
+    val nowFormat: String,
+)
+
+private fun labelProgramMatch(
+    program: IptvProgram,
+    guide: IptvNowNext?,
+    labels: GuideMatchLabels,
+): String {
     val prefix = when (program) {
-        guide?.now -> "Now"
-        guide?.next -> "Next"
-        guide?.later -> "Later"
-        else -> "Guide"
+        guide?.now -> labels.now
+        guide?.next -> labels.next
+        guide?.later -> labels.later
+        else -> labels.guide
     }
     return "$prefix: ${program.title}"
 }

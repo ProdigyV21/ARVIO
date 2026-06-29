@@ -16,9 +16,12 @@ import coil.size.Precision
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
+import com.arflix.tv.data.model.CatalogSourceType
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.SportsAddonCapabilities
+import com.arflix.tv.R
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.TraktSyncService
@@ -27,6 +30,7 @@ import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.CloudSyncRepository
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.SportsRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.HomeServerRepository
@@ -51,6 +55,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -121,6 +127,7 @@ class HomeViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val catalogRepository: CatalogRepository,
     private val streamRepository: StreamRepository,
+    private val sportsRepository: SportsRepository,
     private val traktRepository: TraktRepository,
     private val traktSyncService: TraktSyncService,
     private val iptvRepository: IptvRepository,
@@ -161,6 +168,20 @@ class HomeViewModel @Inject constructor(
 
     // IPTV favorite channels — maps MediaItem.id (Int hash) to channel data
     private val iptvChannelMap = mutableMapOf<Int, com.arflix.tv.data.model.IptvChannel>()
+    private val _sportsHomeRows = MutableStateFlow(sportsRepository.defaultHomeRows())
+    val sportsHomeRows: StateFlow<List<Category>> = combine(
+        _sportsHomeRows,
+        catalogRepository.observeCatalogs().map { catalogs ->
+            catalogs.map { it.id }.toSet()
+        }.distinctUntilChanged()
+    ) { rows, visibleIds ->
+        rows.filter { it.id in visibleIds }
+    }.let { flow ->
+        val state = MutableStateFlow<List<Category>>(emptyList())
+        viewModelScope.launch { flow.collect { state.value = it } }
+        state.asStateFlow()
+    }
+    private var selectedSportsCategoryId: String? = null
 
     companion object {
         const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
@@ -177,6 +198,79 @@ class HomeViewModel @Inject constructor(
     fun isIptvItem(item: MediaItem): Boolean = item.status?.startsWith(IPTV_STATUS_PREFIX) == true
 
     fun isCollectionItem(item: MediaItem): Boolean = item.status?.startsWith("collection:") == true
+
+    fun isSportsHomeItem(item: MediaItem): Boolean =
+        SportsAddonCapabilities.isSportsHomeStatus(item.status)
+
+    fun withSportsHomeRows(
+        categories: List<Category>,
+        sportsRows: List<Category>
+    ): List<Category> = sportsRepository.mergeSportsRows(categories, sportsRows)
+
+    fun openSportsHomeItem(
+        item: MediaItem,
+        onNavigateToSettings: () -> Unit,
+        onNavigateToPlayer: (MediaType, Int, String, String?, String?) -> Unit
+    ) {
+        val status = item.status.orEmpty()
+        viewModelScope.launch {
+            val addons = streamRepository.installedAddons.first()
+            val hasSportsAddon = addons.any { addon ->
+                addon.isInstalled &&
+                    addon.isEnabled &&
+                    SportsAddonCapabilities.isSportsLiveTvAddon(addon)
+            }
+
+            when {
+                SportsAddonCapabilities.isSportsEventStatus(status) -> {
+                    if (!hasSportsAddon) {
+                        showSportsToast(context.getString(R.string.home_sports_addon_required), ToastType.INFO)
+                        onNavigateToSettings()
+                        return@launch
+                    }
+                    if (!item.badge.equals("LIVE", ignoreCase = true)) {
+                        showSportsToast(context.getString(R.string.home_sports_event_not_live), ToastType.INFO)
+                        return@launch
+                    }
+                    showSportsToast(context.getString(R.string.home_sports_opening), ToastType.INFO)
+                    val playback = sportsRepository.resolvePlayback(status, item.title)
+                    if (playback == null) {
+                        showSportsToast(context.getString(R.string.home_sports_playback_failed), ToastType.ERROR)
+                    } else {
+                        onNavigateToPlayer(
+                            MediaType.TV,
+                            playback.mediaId,
+                            playback.streamUrl,
+                            playback.addonId,
+                            playback.sourceName
+                        )
+                    }
+                }
+
+                SportsAddonCapabilities.isSportsCategoryStatus(status) -> {
+                    if (!hasSportsAddon) {
+                        showSportsToast(context.getString(R.string.home_sports_addon_required), ToastType.INFO)
+                        onNavigateToSettings()
+                        return@launch
+                    }
+                    selectedSportsCategoryId = sportsRepository.selectedSportIdFromStatus(status)
+                    _sportsHomeRows.value = sportsRepository.buildHomeRows(addons, selectedSportsCategoryId)
+                }
+
+                else -> {
+                    showSportsToast(context.getString(R.string.home_sports_addon_required), ToastType.INFO)
+                    onNavigateToSettings()
+                }
+            }
+        }
+    }
+
+    private fun showSportsToast(message: String, type: ToastType) {
+        _uiState.value = _uiState.value.copy(
+            toastMessage = message,
+            toastType = type
+        )
+    }
 
     /** Returns the service / franchise hero-video URL for a focused collection tile, or null. */
     fun getCollectionHeroVideoUrl(item: MediaItem): String? {
@@ -195,7 +289,7 @@ class HomeViewModel @Inject constructor(
     private fun isActionableMediaItem(item: MediaItem): Boolean {
         // Non-actionable items are expected during filtering: invalid IDs cannot be opened,
         // placeholders are synthetic UI entries, and collection tiles use their own handling.
-        return item.id > 0 && !item.isPlaceholder && !isCollectionItem(item)
+        return item.id > 0 && !item.isPlaceholder && !isCollectionItem(item) && !isSportsHomeItem(item)
     }
 
     private fun continueWatchingKey(mediaType: MediaType, id: Int): String {
@@ -695,6 +789,10 @@ class HomeViewModel @Inject constructor(
     private fun isCollectionRailConfig(cfg: CatalogConfig): Boolean = cfg.kind == CatalogKind.COLLECTION_RAIL
 
     private fun isCollectionTileConfig(cfg: CatalogConfig): Boolean = cfg.kind == CatalogKind.COLLECTION
+
+    private fun isSportsCatalogRow(categoryId: String): Boolean =
+        categoryId == SportsAddonCapabilities.SPORTS_CATEGORY_ROW_ID ||
+            categoryId == SportsAddonCapabilities.POPULAR_LIVE_TV_ROW_ID
 
     private fun collectionRowId(group: CollectionGroupKind): String {
         return "collection_row_${group.name.lowercase(Locale.US)}"
@@ -1245,6 +1343,12 @@ class HomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            streamRepository.installedAddons.collectLatest { addons ->
+                _sportsHomeRows.value = sportsRepository.buildHomeRows(addons, selectedSportsCategoryId)
+            }
+        }
+
+        viewModelScope.launch {
             profileManager.activeProfileId
                 .distinctUntilChanged()
                 .collect { profileId ->
@@ -1707,6 +1811,46 @@ class HomeViewModel @Inject constructor(
         return collectionCatalogByMediaId[item.id]
     }
 
+    private val collectionTitleResById: Map<String, Int> = mapOf(
+        "Featured" to R.string.featured,
+        "Services" to R.string.services,
+        "Genres" to R.string.genres,
+        "Decades" to R.string.decades,
+        "Franchises" to R.string.franchises,
+        "Networks" to R.string.networks,
+        "Latest Movies" to R.string.collections_latest_movies,
+        "Latest Shows" to R.string.collections_latest_shows,
+        "Trending Movies" to R.string.trending_movies,
+        "Trending Shows" to R.string.trending_in_shows,
+        "Action" to R.string.collections_genre_action,
+        "Comedy" to R.string.collections_genre_comedy,
+        "Sci-Fi" to R.string.collections_genre_sci_fi,
+        "Thriller" to R.string.collections_genre_thriller,
+        "Drama" to R.string.collections_genre_drama,
+        "Horror" to R.string.collections_genre_horror,
+        "Documentary" to R.string.collections_genre_documentary,
+        "Romance" to R.string.collections_genre_romance,
+        "Animation" to R.string.collections_genre_animation,
+        "Family" to R.string.collections_genre_family,
+        "Fantasy" to R.string.collections_genre_fantasy,
+        "Adventure" to R.string.collections_genre_adventure,
+        "Superhero" to R.string.collections_genre_superhero,
+        "War & Military" to R.string.collections_genre_war_military,
+        "20's Movies" to R.string.collections_decade_20s,
+        "10's Movies" to R.string.collections_decade_10s,
+        "00's Movies" to R.string.collections_decade_00s,
+        "90's Movies" to R.string.collections_decade_90s,
+        "80's Movies" to R.string.collections_decade_80s,
+        "70's Movies" to R.string.collections_decade_70s,
+        "60's Movies" to R.string.collections_decade_60s,
+    )
+
+    /** Display-only localization of preinstalled collection/rail titles. The persisted
+     *  CatalogConfig keeps the English title (used for matching/dedup); only the
+     *  ephemeral Category/MediaItem shown on the home screen is translated. */
+    private fun localizedCollectionTitle(title: String): String =
+        collectionTitleResById[title]?.let { context.getString(it) } ?: title
+
     private fun toCollectionCategory(row: HomeCollectionRow): Category {
         val items = row.items.mapIndexed { index, config ->
             val fakeId = (config.id.hashCode() and Int.MAX_VALUE).let { if (it == 0) index + 1 else it }
@@ -1718,7 +1862,7 @@ class HomeViewModel @Inject constructor(
             // the home-row card.
             MediaItem(
                 id = fakeId,
-                title = config.title,
+                title = localizedCollectionTitle(config.title),
                 overview = "",
                 mediaType = MediaType.MOVIE,
                 image = config.collectionCoverImageUrl.orEmpty(),
@@ -1733,7 +1877,7 @@ class HomeViewModel @Inject constructor(
         }
         return Category(
             id = row.id,
-            title = row.title,
+            title = localizedCollectionTitle(row.title),
             items = items
         )
     }
@@ -1955,6 +2099,7 @@ class HomeViewModel @Inject constructor(
                     val baseById = LinkedHashMap<String, Category>().apply {
                         currentBaseCategories.forEach { put(it.id, it) }
                         baseCategories.forEach { put(it.id, it) }
+                        _sportsHomeRows.value.forEach { put(it.id, it) }
                         // Inject Favorite TV so catalog ordering picks it up, or remove
                         // stale skeleton/placeholder if no favorites exist for this profile.
                         if (favoriteTvCategory != null) {
@@ -2130,7 +2275,7 @@ class HomeViewModel @Inject constructor(
                         }
                         val cat = allById[cfg.id]
                         if (cat == null || cat.items.isEmpty()) return@mapNotNull null
-                        if (!cfg.isPreinstalled &&
+                        if (cfg.sourceType == CatalogSourceType.ADDON &&
                             cat.title.trim().lowercase(Locale.US) in serviceTitleBlocklist
                         ) return@mapNotNull null
                         cat.withTop10CapIfNeeded()
@@ -2181,7 +2326,9 @@ class HomeViewModel @Inject constructor(
                     if (category.id != "continue_watching" && !category.id.startsWith("collection_row_")) {
                         categoryPaginationStates[category.id] = CategoryPaginationState(
                             loadedCount = category.items.size,
-                            hasMore = category.items.size >= getCategoryPageSize(category.id) && !isHardCappedTop10Catalog(category.id)
+                            hasMore = !isSportsCatalogRow(category.id) &&
+                                category.items.size >= getCategoryPageSize(category.id) &&
+                                !isHardCappedTop10Catalog(category.id)
                         )
                     }
                 }
@@ -2444,7 +2591,7 @@ class HomeViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isInitialLoad = false,
-                    error = if (_uiState.value.categories.isEmpty()) e.message ?: "Failed to load content" else null
+                    error = if (_uiState.value.categories.isEmpty()) e.message ?: context.getString(R.string.home_failed_load_content) else null
                 )
             } finally {
             }
@@ -3921,7 +4068,7 @@ class HomeViewModel @Inject constructor(
                         )
                     }
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = if (isInWatchlist) "Removed from watchlist" else "Added to watchlist",
+                    toastMessage = if (isInWatchlist) context.getString(R.string.watchlist_toast_removed) else context.getString(R.string.added_to_watchlist),
                     toastType = ToastType.SUCCESS
                 )
             } catch (e: Exception) {
@@ -3934,7 +4081,7 @@ class HomeViewModel @Inject constructor(
                     )
                 )
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watchlist",
+                    toastMessage = context.getString(R.string.details_failed_update_watchlist),
                     toastType = ToastType.ERROR
                 )
             }
@@ -3948,13 +4095,13 @@ class HomeViewModel @Inject constructor(
                     if (item.isWatched) {
                         traktRepository.markMovieUnwatched(item.id)
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Marked as unwatched",
+                            toastMessage = context.getString(R.string.details_marked_unwatched),
                             toastType = ToastType.SUCCESS
                         )
                     } else {
                         traktRepository.markMovieWatched(item.id)
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Marked as watched",
+                            toastMessage = context.getString(R.string.details_marked_watched),
                             toastType = ToastType.SUCCESS
                         )
                     }
@@ -3974,7 +4121,7 @@ class HomeViewModel @Inject constructor(
 
                         _uiState.value = _uiState.value.copy(
                             categories = updatedCategories,
-                            toastMessage = "S${nextEp.seasonNumber}E${nextEp.episodeNumber} marked as watched",
+                            toastMessage = context.getString(R.string.details_episode_marked_watched, nextEp.seasonNumber, nextEp.episodeNumber),
                             toastType = ToastType.SUCCESS
                         )
 
@@ -4024,7 +4171,7 @@ class HomeViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode info available",
+                            toastMessage = context.getString(R.string.home_no_episode_info),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -4037,7 +4184,7 @@ class HomeViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.details_failed_update_watched),
                     toastType = ToastType.ERROR
                 )
             }
@@ -4051,12 +4198,12 @@ class HomeViewModel @Inject constructor(
                     if (!item.isWatched) {
                         traktRepository.markMovieWatched(item.id)
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Marked as watched",
+                            toastMessage = context.getString(R.string.details_marked_watched),
                             toastType = ToastType.SUCCESS
                         )
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Already watched",
+                            toastMessage = context.getString(R.string.home_already_watched),
                             toastType = ToastType.INFO
                         )
                     }
@@ -4076,7 +4223,7 @@ class HomeViewModel @Inject constructor(
 
                         _uiState.value = _uiState.value.copy(
                             categories = updatedCategories,
-                            toastMessage = "S${nextEp.seasonNumber}E${nextEp.episodeNumber} marked as watched",
+                            toastMessage = context.getString(R.string.details_episode_marked_watched, nextEp.seasonNumber, nextEp.episodeNumber),
                             toastType = ToastType.SUCCESS
                         )
 
@@ -4131,7 +4278,7 @@ class HomeViewModel @Inject constructor(
                         } catch (_: Exception) {}
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "No episode info available",
+                            toastMessage = context.getString(R.string.home_no_episode_info),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -4141,7 +4288,7 @@ class HomeViewModel @Inject constructor(
                 runCatching { cloudSyncRepository.pushToCloud() }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to update watched status",
+                    toastMessage = context.getString(R.string.details_failed_update_watched),
                     toastType = ToastType.ERROR
                 )
             }
@@ -4181,7 +4328,7 @@ class HomeViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(
                     categories = updatedCategories,
-                    toastMessage = "Removed from Continue Watching",
+                    toastMessage = context.getString(R.string.home_removed_continue_watching),
                     toastType = ToastType.SUCCESS
                 )
                 runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
@@ -4194,7 +4341,7 @@ class HomeViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to remove from Continue Watching",
+                    toastMessage = context.getString(R.string.home_failed_remove_continue_watching),
                     toastType = ToastType.ERROR
                 )
             }
@@ -4221,7 +4368,7 @@ class HomeViewModel @Inject constructor(
                 } else {
                     if (!silent) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "You already have the latest version",
+                            toastMessage = context.getString(R.string.update_already_latest),
                             toastType = ToastType.INFO
                         )
                     }
@@ -4230,7 +4377,7 @@ class HomeViewModel @Inject constructor(
             }.onFailure { error ->
                 if (!silent) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = error.message ?: "Failed to check for updates",
+                        toastMessage = error.message ?: context.getString(R.string.update_check_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -4273,7 +4420,7 @@ class HomeViewModel @Inject constructor(
                 installAppUpdateOrRequestPermission()
             }.onFailure { error ->
                 updateStatusManager.updateStatus(
-                    com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: "Download failed", update)
+                    com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: context.getString(R.string.update_download_failed), update)
                 )
             }
         }

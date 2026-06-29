@@ -63,9 +63,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
@@ -119,6 +121,7 @@ fun SearchScreen(
     val configuration = LocalConfiguration.current
     val isCompactHeight = configuration.screenHeightDp <= 780
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val searchBarWidth = if (isTouchDevice) configuration.screenWidthDp.dp - 24.dp
         else (configuration.screenWidthDp.dp * 0.48f).coerceIn(460.dp, 680.dp)
 
@@ -176,7 +179,7 @@ fun SearchScreen(
     val quickFilters = listOfNotNull(
         DiscoverQuickFilter(
             key = "all",
-            label = "All",
+            label = stringResource(R.string.search_filter_all),
             isSelected = uiState.selectedType == DiscoverType.ALL && uiState.selectedGenre == null && uiState.selectedCountry == null,
             onSelect = { viewModel.setDiscoverFilters(DiscoverType.ALL, null, null) }
         ),
@@ -194,7 +197,7 @@ fun SearchScreen(
         ),
         DiscoverQuickFilter(
             key = "anime",
-            label = "Anime",
+            label = stringResource(R.string.search_filter_anime),
             isSelected = uiState.selectedType == DiscoverType.ANIME && uiState.selectedGenre == null && uiState.selectedCountry == null,
             onSelect = { viewModel.setDiscoverFilters(DiscoverType.ANIME, null, null) }
         ),
@@ -304,7 +307,12 @@ fun SearchScreen(
                 runCatching { searchFocusRequester.requestFocus() }
                 return@onPreviewKeyEvent true
             }
-            when (event.key) {
+            val effectiveKey = when (event.key) {
+                Key.DirectionLeft  -> if (isRtl) Key.DirectionRight else Key.DirectionLeft
+                Key.DirectionRight -> if (isRtl) Key.DirectionLeft  else Key.DirectionRight
+                else -> event.key
+            }
+            when (effectiveKey) {
                 Key.Back, Key.Escape -> when (focusZone) {
                     FocusZone.RESULTS -> {
                         if (showFilters && quickFilters.isNotEmpty()) {
@@ -536,6 +544,7 @@ fun SearchScreen(
                     focusedFilterIndex = focusedFilterIndex,
                     filtersFocusRequester = filtersFocusRequester,
                     isTouchDevice = isTouchDevice,
+                    isRtl = isRtl,
                     onFocused = { index ->
                         focusZone = FocusZone.FILTERS
                         focusedFilterIndex = index
@@ -733,6 +742,7 @@ private fun DiscoverFilterStrip(
     focusedFilterIndex: Int,
     filtersFocusRequester: FocusRequester,
     isTouchDevice: Boolean,
+    isRtl: Boolean = false,
     onFocused: (Int) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -761,8 +771,8 @@ private fun DiscoverFilterStrip(
                 when (event.key) {
                     Key.DirectionUp -> { onMoveUp(); true }
                     Key.DirectionDown -> { onMoveDown(); true }
-                    Key.DirectionLeft -> { onMoveLeft(); true }
-                    Key.DirectionRight -> { onMoveRight(); true }
+                    Key.DirectionLeft -> { if (isRtl) onMoveRight() else onMoveLeft(); true }
+                    Key.DirectionRight -> { if (isRtl) onMoveLeft() else onMoveRight(); true }
                     Key.Enter, Key.DirectionCenter -> false
                     else -> false
                 }

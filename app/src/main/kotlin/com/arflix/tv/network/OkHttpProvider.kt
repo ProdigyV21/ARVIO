@@ -329,11 +329,21 @@ object OkHttpProvider {
 
     private val customUserAgentInterceptor = Interceptor { chain ->
         val request = chain.request()
-        val customUserAgent = _customUserAgent
-        if (customUserAgent.isBlank() || request.header("User-Agent") != null) {
+        // If a call already set an explicit User-Agent (e.g. CatalogRepository,
+        // StalkerApi), respect it. Otherwise apply the user's custom UA when set,
+        // falling back to a real browser UA.
+        //
+        // Why the browser fallback matters: OkHttp's default UA is `okhttp/<ver>`,
+        // which Cloudflare "Bot Fight Mode" challenges/blocks. Many Stremio addons
+        // (e.g. flixnest) sit behind Cloudflare and return 403 to library UAs while
+        // serving browsers fine — so the addon's streams never reach the app and it
+        // silently shows no sources. Defaulting to a browser UA fixes this for every
+        // Cloudflare-fronted addon without changing behaviour for hosts that don't care.
+        if (request.header("User-Agent") != null) {
             chain.proceed(request)
         } else {
-            chain.proceed(request.newBuilder().header("User-Agent", customUserAgent).build())
+            val userAgent = _customUserAgent.ifBlank { DEFAULT_USER_AGENT }
+            chain.proceed(request.newBuilder().header("User-Agent", userAgent).build())
         }
     }
 
@@ -469,10 +479,13 @@ object OkHttpProvider {
 
     fun createCoilImageLoader(context: Context): ImageLoader {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        // Keep the image cache modest: TV boxes cap the heap at ~384MB and the Live
+        // TV page (player buffers + channel data) needs the headroom. Disk cache
+        // still holds 48MB, so posters reload quickly without pinning Java heap.
         val imageCacheBytes = if (activityManager?.isLowRamDevice == true) {
-            32 * 1024 * 1024
+            24 * 1024 * 1024
         } else {
-            48 * 1024 * 1024
+            32 * 1024 * 1024
         }
         return ImageLoader.Builder(context)
             .okHttpClient(coilClient)

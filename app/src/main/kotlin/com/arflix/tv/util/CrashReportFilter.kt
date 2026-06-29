@@ -9,6 +9,8 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.net.ssl.SSLHandshakeException
 
 /**
@@ -18,6 +20,8 @@ import javax.net.ssl.SSLHandshakeException
  * already handled by the app or caused by user/network/provider state.
  */
 object CrashReportFilter {
+    private const val MAX_TRACKED_HANDLED_SIGNATURES = 256
+
     private val alwaysIgnoredClassNames = setOf(
         "JobCancellationException",
         "LeftCompositionCancellationException",
@@ -26,7 +30,12 @@ object CrashReportFilter {
     )
 
     private val handledOnlyClassNames = setOf(
+        "HttpRequestException",
         "HttpRequestTimeoutException",
+        "ClientRequestException",
+        "ServerResponseException",
+        "RedirectResponseException",
+        "UnknownRestException",
         "TimeoutCancellationException"
     )
 
@@ -38,20 +47,48 @@ object CrashReportFilter {
         "selected stream playback failed",
         "playback source list empty",
         "playback imdb id missing",
+        "provided playback url could not be resolved",
+        "source lookup failed",
         "complete epg backfill timed out",
+        "complete epg backfill returned empty guide",
         "iptv load timed out",
+        "playlist loaded but contains no channels",
         "m3u request failed",
+        "expected url scheme 'http' or 'https'",
+        "expected url scheme \"http\" or \"https\"",
         "incomplete trakt watchlist fetch",
+        "trakt credentials not configured",
+        "trakt token request failed",
+        "trakt continue watching hydration returned zero items",
+        "trakt rate limit",
+        "rate limit",
+        "too many requests",
         "http 401",
+        "http 403",
+        "http 404",
+        "http 429",
+        "bad http status",
+        "exponential backoff active",
+        "cache overflow",
+        "queue overflow",
+        "ratelimit_backoff",
+        "error_usage_exceeded",
+        "send_error",
+        "network_error",
         "jwt expired",
         "invalid jwt",
         "token is expired",
+        "unable to parse or verify signature",
+        "supabase.co",
+        "auth/v1/logout",
         "row-level security policy",
         "chain validation failed",
         "unable to resolve host",
         "failed to connect",
         "request timeout has expired"
     )
+
+    private val handledExceptionCounts = ConcurrentHashMap<String, AtomicInteger>()
 
     fun shouldReportHandledException(throwable: Throwable): Boolean {
         return dropReasonForHandledException(throwable) == null
@@ -62,6 +99,16 @@ object CrashReportFilter {
         if (isAlwaysIgnored(throwable)) return false
         if (level == SentryLevel.FATAL) return true
         return shouldReportHandledException(throwable)
+    }
+
+    fun shouldSampleHandledException(throwable: Throwable, context: Map<String, String> = emptyMap()): Boolean {
+        if (handledExceptionCounts.size > MAX_TRACKED_HANDLED_SIGNATURES) {
+            handledExceptionCounts.clear()
+        }
+        val count = handledExceptionCounts
+            .getOrPut(handledExceptionSignature(throwable, context)) { AtomicInteger(0) }
+            .incrementAndGet()
+        return count <= 3 || count == 10 || count == 50 || count == 100
     }
 
     fun dropReasonForHandledException(throwable: Throwable): String? {
@@ -110,6 +157,32 @@ object CrashReportFilter {
         }
     }
 
+    private fun handledExceptionSignature(throwable: Throwable, context: Map<String, String>): String {
+        val root = rootCause(throwable)
+        val area = context["error_area"].orEmpty()
+        val flow = context["cloud_flow"].orEmpty()
+        val phase = context["trakt_phase"]
+            ?: context["player_phase"]
+            ?: context["iptv_phase"]
+            ?: context["phase"]
+            ?: ""
+        val message = root.message
+            .orEmpty()
+            .replace(URL_PATTERN, "[URL]")
+            .replace(TOKEN_PATTERN, "[TOKEN]")
+            .take(140)
+        return "${root::class.java.name}|$area|$flow|$phase|$message"
+    }
+
+    private fun rootCause(throwable: Throwable): Throwable {
+        var current = throwable
+        val seen = mutableSetOf<Throwable>()
+        while (current.cause != null && seen.add(current)) {
+            current = current.cause ?: break
+        }
+        return current
+    }
+
     private fun Throwable.anyCause(predicate: (Throwable) -> Boolean): Boolean {
         var current: Throwable? = this
         val seen = mutableSetOf<Throwable>()
@@ -119,4 +192,7 @@ object CrashReportFilter {
         }
         return false
     }
+
+    private val URL_PATTERN = Regex("\\b(?:https?|wss?|ftp|file|content)://[^\\s\"'<>]+", RegexOption.IGNORE_CASE)
+    private val TOKEN_PATTERN = Regex("\\b[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\b")
 }

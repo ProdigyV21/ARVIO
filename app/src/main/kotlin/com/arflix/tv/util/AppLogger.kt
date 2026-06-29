@@ -155,6 +155,14 @@ object AppLogger {
         context.forEach { (key, value) ->
             crashContextProvider?.setCustomKey(safeTag(key), sanitize(value))
         }
+        if (!CrashReportFilter.shouldSampleHandledException(throwable, context)) {
+            breadcrumb(
+                tag = "exception",
+                message = "sampled ${throwable::class.java.simpleName}",
+                severity = "info"
+            )
+            return
+        }
         crashContextProvider?.recordException(throwable)
     }
 

@@ -75,7 +75,6 @@ private class TranslatingTextOutput(
     private var cueSerial = 0
 
     override fun onCues(cueGroup: CueGroup) {
-        lastCueGroup = cueGroup
         val cues = cueGroup.cues
 
         // Fire once when the first non-empty cue arrives while TextRenderer.render() is on the
@@ -87,20 +86,39 @@ private class TranslatingTextOutput(
         }
 
         if (!manager.isEnabled) {
+            lastCueGroup = cueGroup
             delegate.onCues(cueGroup)
             return
         }
         if (cues.isEmpty()) {
+            // Genuine end-of-subtitle marker — update so pending translations know display cleared.
+            lastCueGroup = cueGroup
             delegate.onCues(cueGroup)
             return
         }
 
-        val text = extractText(cues)
+        val rawText = extractRawText(cues)
+        if (rawText.isBlank()) {
+            // Cues carry no extractable text (e.g. bitmap/PGS image subtitles). They can't be
+            // translated — pass the originals through so image subtitles still appear on screen
+            // instead of being hidden behind a blank.
+            lastCueGroup = cueGroup
+            delegate.onCues(cueGroup)
+            return
+        }
+        val text = if (manager.removeHearingImpaired) stripHearingImpaired(rawText) else rawText
         if (text.isBlank()) {
+            // SDH sound-effect-only cue (e.g. "[CROWD CHEERING]") — hide it but do NOT update
+            // lastCueGroup. Updating here would invalidate any in-flight dialogue translation
+            // that arrived just before this sound-effect cue, causing the translated text to be
+            // silently discarded and the user to see English instead of Hebrew on every line.
             delegate.onCues(CueGroup(emptyList(), cueGroup.presentationTimeUs))
             return
         }
 
+        // Real translatable dialogue cue — update lastCueGroup so any stale in-flight
+        // translation from the previous cue is correctly discarded.
+        lastCueGroup = cueGroup
         val serial = ++cueSerial
         val cached = manager.getCached(text)
         if (cached != null) {
@@ -128,27 +146,34 @@ private class TranslatingTextOutput(
             delegate.onCues(cues)
             return
         }
-        val text = extractText(cues)
+        val rawText = extractRawText(cues)
+        if (rawText.isBlank()) {
+            // No translatable text (e.g. bitmap subtitles) — show originals rather than hiding.
+            delegate.onCues(cues)
+            return
+        }
+        val text = if (manager.removeHearingImpaired) stripHearingImpaired(rawText) else rawText
         if (text.isBlank()) {
             delegate.onCues(emptyList())
             return
         }
-        // Cache-only path — full async translation is driven by onCues(CueGroup)
+        // Cache-only path — full async translation is driven by onCues(CueGroup).
+        // If translation is in-flight, hide cues so this call doesn't race and show English
+        // while onCues(CueGroup) is waiting for the async result.
         val cached = manager.getCached(text)
-        if (cached != null) {
-            delegate.onCues(applyTranslatedLinesToCues(cues, cached))
-        } else {
-            delegate.onCues(cues)
+        when {
+            cached != null -> delegate.onCues(applyTranslatedLinesToCues(cues, cached))
+            manager.isInFlight(text) -> delegate.onCues(emptyList())
+            else -> delegate.onCues(cues)
         }
     }
 
-    private fun extractText(cues: List<Cue>): String {
-        val removeHI = manager.removeHearingImpaired
-        val raw = cues.mapNotNull { it.text?.toString()?.trim() }
+    // Raw joined cue text before any hearing-impaired stripping. Blank when cues carry no
+    // text at all (e.g. bitmap/PGS image subtitles, whose Cue.text is null).
+    private fun extractRawText(cues: List<Cue>): String =
+        cues.mapNotNull { it.text?.toString()?.trim() }
             .filter { it.isNotBlank() }
             .joinToString("\n")
-        return if (removeHI) stripHearingImpaired(raw) else raw
-    }
 
     private fun stripHearingImpaired(text: String): String =
         text.replace(AiSubtitleRegexes.BRACKET_REGEX, "")

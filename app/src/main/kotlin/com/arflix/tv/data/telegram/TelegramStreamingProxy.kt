@@ -49,6 +49,7 @@ class TelegramStreamingProxy @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var port: Int = 0
     private var server: io.ktor.server.engine.ApplicationEngine? = null
+    @Volatile private var lastStreamedFileId: Int? = null
 
     fun start() {
         if (server != null) return
@@ -62,6 +63,14 @@ class TelegramStreamingProxy @Inject constructor(
                         call.respond(HttpStatusCode.BadRequest)
                         return@get
                     }
+
+                    // When a new file starts streaming, clean up the previous one so
+                    // TDLib's downloaded chunks don't accumulate in tdlib_files/ indefinitely.
+                    val prev = lastStreamedFileId
+                    if (prev != null && prev != fileId) {
+                        scope.launch { deleteFile(prev) }
+                    }
+                    lastStreamedFileId = fileId
 
                     val rangeHeader = call.request.headers[HttpHeaders.Range]
                     val (rangeStart, rangeEnd) = parseRange(rangeHeader)
@@ -111,9 +120,24 @@ class TelegramStreamingProxy @Inject constructor(
     }
 
     fun stop() {
+        lastStreamedFileId?.let { scope.launch { deleteFile(it) } }
+        lastStreamedFileId = null
         server?.stop(0, 0)
         server = null
         Log.d(TAG, "Streaming proxy stopped")
+    }
+
+    private suspend fun deleteFile(fileId: Int) {
+        runCatching {
+            client.sendRequest(TdApi.CancelDownloadFile().also { req ->
+                req.fileId = fileId
+                req.onlyIfPending = false
+            })
+        }
+        runCatching {
+            client.sendRequest(TdApi.DeleteFile().also { it.fileId = fileId })
+            Log.d(TAG, "Deleted cached file $fileId")
+        }
     }
 
     fun getUrl(fileId: Int): String {

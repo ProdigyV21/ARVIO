@@ -1,7 +1,10 @@
-﻿package com.arflix.tv.data.repository
+package com.arflix.tv.data.repository
 
+import android.content.Context
+import com.arflix.tv.R
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.AuthEmailValidator
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -42,6 +45,7 @@ data class TvDeviceAuthCompleteResult(
 
 @Singleton
 class TvDeviceAuthRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -51,15 +55,15 @@ class TvDeviceAuthRepository @Inject constructor(
             runCatching {
                 val request = Request.Builder()
                     .url(Constants.TV_AUTH_START_URL)
-                    .header("apikey", Constants.SUPABASE_ANON_KEY)
-                    .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
+                    .header("apikey", Constants.APP_ANON_KEY)
+                    .header("Authorization", "Bearer ${Constants.APP_ANON_KEY}")
                     .post("{}".toRequestBody(jsonMediaType))
                     .build()
 
                 okHttpClient.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
-                        throw IllegalStateException(parseError(body, "Failed to start TV auth"))
+                        throw IllegalStateException(parseError(body, context.getString(R.string.tv_link_failed_start)))
                     }
                     val json = JSONObject(body)
                     val userCode = json.getString("user_code")
@@ -84,8 +88,8 @@ class TvDeviceAuthRepository @Inject constructor(
                 val payload = JSONObject().put("device_code", deviceCode).toString()
                 val statusRequest = Request.Builder()
                     .url(Constants.TV_AUTH_STATUS_URL)
-                    .header("apikey", Constants.SUPABASE_ANON_KEY)
-                    .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
+                    .header("apikey", Constants.APP_ANON_KEY)
+                    .header("Authorization", "Bearer ${Constants.APP_ANON_KEY}")
                     .post(payload.toRequestBody(jsonMediaType))
                     .build()
 
@@ -95,20 +99,20 @@ class TvDeviceAuthRepository @Inject constructor(
                         // Backward compatibility for older deployments still using /tv-auth-poll
                         val pollRequest = Request.Builder()
                             .url(Constants.TV_AUTH_POLL_URL)
-                            .header("apikey", Constants.SUPABASE_ANON_KEY)
-                            .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
+                            .header("apikey", Constants.APP_ANON_KEY)
+                            .header("Authorization", "Bearer ${Constants.APP_ANON_KEY}")
                             .post(payload.toRequestBody(jsonMediaType))
                             .build()
                         okHttpClient.newCall(pollRequest).execute().use { fallback ->
                             val fallbackBody = fallback.body?.string().orEmpty()
                             if (!fallback.isSuccessful) {
-                                throw IllegalStateException(parseError(fallbackBody, "Failed to poll TV auth status"))
+                                throw IllegalStateException(parseError(fallbackBody, context.getString(R.string.tv_link_failed_poll)))
                             }
                             return@use parseStatus(fallbackBody)
                         }
                     }
                     if (!response.isSuccessful) {
-                        throw IllegalStateException(parseError(body, "Failed to poll TV auth status"))
+                        throw IllegalStateException(parseError(body, context.getString(R.string.tv_link_failed_poll)))
                     }
                     parseStatus(body)
                 }
@@ -124,7 +128,8 @@ class TvDeviceAuthRepository @Inject constructor(
     ): Result<TvDeviceAuthCompleteResult> {
         val normalizedEmail = AuthEmailValidator.normalize(email)
         val isSignup = intent.equals("signup", ignoreCase = true)
-        AuthEmailValidator.validate(normalizedEmail, rejectDisposable = isSignup)?.let { message ->
+        AuthEmailValidator.validate(normalizedEmail, rejectDisposable = isSignup)?.let { messageRes ->
+            val message = context.getString(messageRes)
             return Result.failure(IllegalArgumentException(message))
         }
         return withContext(Dispatchers.IO) {
@@ -138,15 +143,15 @@ class TvDeviceAuthRepository @Inject constructor(
 
                 val request = Request.Builder()
                     .url(Constants.TV_AUTH_COMPLETE_URL)
-                    .header("apikey", Constants.SUPABASE_ANON_KEY)
-                    .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
+                    .header("apikey", Constants.APP_ANON_KEY)
+                    .header("Authorization", "Bearer ${Constants.APP_ANON_KEY}")
                     .post(payload.toRequestBody(jsonMediaType))
                     .build()
 
                 okHttpClient.newCall(request).execute().use { response ->
                     val body = response.body?.string().orEmpty()
                     if (!response.isSuccessful) {
-                        throw IllegalStateException(parseError(body, "Failed to link TV"))
+                        throw IllegalStateException(parseError(body, context.getString(R.string.tv_link_failed)))
                     }
                     TvDeviceAuthCompleteResult(ok = true)
                 }

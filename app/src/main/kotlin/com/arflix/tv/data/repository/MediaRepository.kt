@@ -1,5 +1,6 @@
 package com.arflix.tv.data.repository
 
+import android.content.Context
 import com.arflix.tv.R
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
@@ -31,8 +32,10 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
+import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.util.CatalogUrlParser
 import com.arflix.tv.util.Constants
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -81,6 +84,7 @@ data class PersonMediaSearchResult(
  */
 @Singleton
 class MediaRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val tmdbApi: TmdbApi,
     private val traktRepository: TraktRepository,
     private val traktApi: TraktApi,
@@ -100,6 +104,9 @@ class MediaRepository @Inject constructor(
     /** TMDB content language (e.g. "en-US", "fr-FR", "nl-NL"). Null = TMDB default (English). */
     @Volatile
     var contentLanguage: String? = null
+        set(value) {
+            field = value?.replace("iw", "he")?.replace('_', '-')
+        }
 
     // === IN-MEMORY CACHE FOR PERFORMANCE ===
     private data class CacheEntry<T>(val data: T, val timestamp: Long)
@@ -585,6 +592,8 @@ class MediaRepository @Inject constructor(
                 CatalogConfig("trending_movies", "Trending in Movies", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trending-movies", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trending-movies"),
                 CatalogConfig("trending_tv", "Trending in Shows", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trakt-s-trending-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trakt-s-trending-shows"),
                 CatalogConfig("trending_anime", "Trending in Anime", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/trending-anime-shows", sourceRef = "mdblist:https://mdblist.com/lists/snoak/trending-anime-shows"),
+                CatalogConfig(SportsAddonCapabilities.SPORTS_CATEGORY_ROW_ID, "Sports", CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+                CatalogConfig(SportsAddonCapabilities.POPULAR_LIVE_TV_ROW_ID, "Popular Live Sports", CatalogSourceType.PREINSTALLED, isPreinstalled = true),
                 CatalogConfig("top10_movies_today", "Top 10 Movies Today", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/top-10-movies-of-the-day", sourceRef = "mdblist:https://mdblist.com/lists/snoak/top-10-movies-of-the-day"),
                 CatalogConfig("top10_shows_today", "Top 10 Shows Today", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/top-10-shows-of-the-day", sourceRef = "mdblist:https://mdblist.com/lists/snoak/top-10-shows-of-the-day"),
                 CatalogConfig("just_added", "Just Added", CatalogSourceType.MDBLIST, isPreinstalled = true, sourceUrl = "https://mdblist.com/lists/snoak/latest-movies-digital-release", sourceRef = "mdblist:https://mdblist.com/lists/snoak/latest-movies-digital-release"),
@@ -1649,17 +1658,17 @@ class MediaRepository @Inject constructor(
         val categories = listOf(
             Category(
                 id = "trending_movies",
-                title = "Trending Movies",
+                title = context.getString(R.string.trending_movies),
                 items = safeItems({ trendingMovies.await() }, MediaType.MOVIE)
             ),
             Category(
                 id = "trending_tv",
-                title = "Trending Series",
+                title = context.getString(R.string.trending_series),
                 items = safeItems({ trendingTv.await() }, MediaType.TV)
             ),
             Category(
                 id = "trending_anime",
-                title = "Trending Anime",
+                title = context.getString(R.string.trending_anime),
                 items = safeItems({ trendingAnime.await() }, MediaType.TV)
             )
         )

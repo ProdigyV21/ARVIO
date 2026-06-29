@@ -81,6 +81,15 @@ class TelegramRepository @Inject constructor(
         wipeTdlibFiles(context)
     }
 
+    fun getCacheSize(): Long {
+        val dir = File(context.filesDir, "tdlib_files")
+        return if (dir.exists()) dir.walkBottomUp().filter { it.isFile }.sumOf { it.length() } else 0L
+    }
+
+    fun clearCache() {
+        File(context.filesDir, "tdlib_files").listFiles()?.forEach { it.deleteRecursively() }
+    }
+
     suspend fun getChats(limit: Int = 200): List<TelegramChat> {
         val result = client.sendRequest(TdApi.GetChats().also { it.limit = limit })
         val chats = (result as? TdApi.Chats) ?: return emptyList()

@@ -312,7 +312,7 @@ class MainActivity : ComponentActivity() {
             }
             val isRtl = remember(appLanguage) {
                 val lang = java.util.Locale.forLanguageTag(appLanguage.replace('_', '-')).language
-                lang in listOf("ar", "he", "fa", "ur")
+                lang in listOf("ar", "he", "iw", "fa", "ur")
             }
             CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalContext provides localizedContext,

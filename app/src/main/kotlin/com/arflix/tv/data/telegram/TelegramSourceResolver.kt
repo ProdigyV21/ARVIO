@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import com.arflix.tv.R
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.util.Constants
@@ -71,7 +72,7 @@ class TelegramSourceResolver @Inject constructor(
                 resolveInternal(title, year, season, episode, imdbId, isMovie)
             } ?: emptyList<StreamSource>().also {
                 Log.w(TAG, "Telegram search timed out for '$title'")
-                showToast("Telegram search timed out")
+                showToast(context.getString(R.string.telegram_search_timed_out))
             }
 
             cache[key] = CacheEntry(results, System.currentTimeMillis() + cacheTtl(year, isMovie))
@@ -92,12 +93,17 @@ class TelegramSourceResolver @Inject constructor(
         isMovie: Boolean
     ): List<StreamSource> {
         val excludedIds = repository.getExcludedChatIds().first()
-        val (englishTitle, hebrewTitle) = fetchTitles(imdbId, isMovie)
+        // Read content language from SharedPreferences (same store SettingsViewModel writes to).
+        // Avoids a DI cycle: StreamRepository → TelegramSourceResolver → MediaRepository → StreamRepository.
+        val rawLang = context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
+            .getString("locale_tag", "en-US") ?: "en-US"
+        val langCode = rawLang.replace("iw", "he").substringBefore("-")
+        val (englishTitle, localizedTitle) = fetchTitles(imdbId, isMovie, langCode)
 
         val queries = if (season != null && episode != null)
-            matcher.buildSeriesQueries(title, season, episode, hebrewTitle, englishTitle)
+            matcher.buildSeriesQueries(title, season, episode, localizedTitle, englishTitle, langCode)
         else
-            matcher.buildMovieQueries(title, year, hebrewTitle, englishTitle)
+            matcher.buildMovieQueries(title, year, localizedTitle, englishTitle)
 
         val seen = mutableSetOf<Pair<String, Long>>()
         val allMessages = mutableListOf<TelegramVideoMessage>()
@@ -128,7 +134,7 @@ class TelegramSourceResolver @Inject constructor(
                     fileName = msg.fileName,
                     caption = msg.caption,
                     title = title,
-                    hebrewTitle = hebrewTitle,
+                    localizedTitle = localizedTitle,
                     englishTitle = englishTitle,
                     year = year,
                     season = season,
@@ -163,19 +169,19 @@ class TelegramSourceResolver @Inject constructor(
                 )
             }
             .sortedWith(
-                compareByDescending<StreamSource> { matcher.isHebrew(it.source) }
+                compareByDescending<StreamSource> { langCode == "he" && matcher.isHebrew(it.source) }
                     .thenByDescending { qualityTier(it.quality) }
                     .thenByDescending { it.sizeBytes ?: 0L }
             )
     }
 
     private fun friendlyError(raw: String?): String {
-        if (raw == null) return "Telegram search failed"
+        if (raw == null) return context.getString(R.string.telegram_search_failed)
         val waitSeconds = raw.removePrefix("FLOOD_WAIT_").toIntOrNull()
         return if (waitSeconds != null)
-            "Too many searches — please wait ${waitSeconds}s before retrying"
+            context.getString(R.string.telegram_too_many_searches, waitSeconds)
         else
-            "Telegram: $raw"
+            context.getString(R.string.telegram_error_raw, raw)
     }
 
     private fun showToast(message: String) {
@@ -195,21 +201,31 @@ class TelegramSourceResolver @Inject constructor(
         else -> 0
     }
 
-    private suspend fun fetchTitles(imdbId: String, isMovie: Boolean): Pair<String?, String?> {
+    private suspend fun fetchTitles(imdbId: String, isMovie: Boolean, langCode: String): Pair<String?, String?> {
         if (imdbId.isBlank()) return null to null
         return try {
             val findResult = tmdbApi.findByExternalId(imdbId, Constants.TMDB_API_KEY)
             val findItem = if (isMovie) findResult.movieResults.firstOrNull()
                            else findResult.tvResults.firstOrNull()
             val tmdbId = findItem?.id ?: return null to null
-            val englishTitle = (if (isMovie) findItem.title else findItem.name).takeIf { it.isNotBlank() }
-            val hebrewTitle = if (isMovie)
-                tmdbApi.getMovieDetails(tmdbId, Constants.TMDB_API_KEY, language = "he").title
+            // Always fetch English explicitly — the HTTP interceptor may inject the user's
+            // content language into all TMDB calls, so findItem.title isn't always English.
+            val englishTitle = if (isMovie)
+                tmdbApi.getMovieDetails(tmdbId, Constants.TMDB_API_KEY, language = "en").title
                     .takeIf { it.isNotBlank() }
             else
-                tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = "he").name
+                tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = "en").name
                     .takeIf { it.isNotBlank() }
-            englishTitle to hebrewTitle
+            // Fetch localized title only when the user's language is not English
+            val localizedTitle = if (langCode != "en") {
+                if (isMovie)
+                    tmdbApi.getMovieDetails(tmdbId, Constants.TMDB_API_KEY, language = langCode).title
+                        .takeIf { it.isNotBlank() }
+                else
+                    tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = langCode).name
+                        .takeIf { it.isNotBlank() }
+            } else null
+            englishTitle to localizedTitle
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch titles for $imdbId: ${e.message}")
             null to null

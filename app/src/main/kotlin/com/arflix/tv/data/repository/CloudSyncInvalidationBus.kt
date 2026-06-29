@@ -15,7 +15,8 @@ enum class CloudSyncScope {
     IPTV,
     WATCHLIST,
     LOCAL_HISTORY,
-    ACCOUNT
+    ACCOUNT,
+    PLUGINS
 }
 
 data class CloudSyncInvalidation(

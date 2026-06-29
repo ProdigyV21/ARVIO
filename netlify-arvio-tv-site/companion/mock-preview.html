@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARVIO Companion — Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#000;--bg-card:#111;--bg-card2:#1a1a1a;--bg-hover:#222;--border:#2a2a2a;--gold:#f5c442;--gold-dim:rgba(245,196,66,0.12);--text:#f0f0f0;--text-muted:#888;--text-dim:#555;--green:#4ade80;--red:#f87171;--blue:#60a5fa;--radius:12px;--sidebar-w:220px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+.page{padding:32px 32px 32px calc(var(--sidebar-w)+32px)}
+.sidebar{width:var(--sidebar-w);background:var(--bg-card);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:10}
+.sidebar-logo{display:flex;align-items:center;gap:10px;padding:20px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:16px}
+.sidebar-logo img{width:28px;height:28px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;color:var(--text-muted);cursor:pointer;border-radius:8px;margin:2px 8px;transition:.15s}
+.nav-item svg{width:18px;height:18px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nav-item.active{background:var(--gold-dim);color:var(--gold)}
+.sidebar-user{margin-top:auto;padding:16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.avatar{width:36px;height:36px;border-radius:50%;background:var(--gold);color:#000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.user-name{font-size:13px;font-weight:600}
+.user-email{font-size:11px;color:var(--text-muted)}
+
+/* Section title */
+.section-title{font-size:22px;font-weight:700;margin-bottom:24px;display:flex;align-items:center;gap:10px}
+.section-sep{height:1px;background:var(--border);margin:40px 0}
+
+/* Stat cards */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.stat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:20px}
+.stat-icon.gold{background:var(--gold-dim)}
+.stat-icon.green{background:rgba(74,222,128,.1)}
+.stat-icon.blue{background:rgba(96,165,250,.1)}
+.stat-icon.purple{background:rgba(167,139,250,.1)}
+.stat-val{font-size:28px;font-weight:700;margin-bottom:4px}
+.stat-lbl{color:var(--text-muted);font-size:13px}
+
+/* Cards grid */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:32px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.card-title{font-weight:600;font-size:15px}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;gap:4px}
+.badge.green{background:rgba(74,222,128,.15);color:var(--green)}
+.badge.red{background:rgba(248,113,113,.15);color:var(--red)}
+.badge.gold{background:var(--gold-dim);color:var(--gold)}
+.badge.blue{background:rgba(96,165,250,.15);color:var(--blue)}
+.badge.muted{background:#222;color:var(--text-muted)}
+
+/* Toggle */
+.toggle{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;border-radius:12px;background:#333;cursor:pointer;transition:.2s}
+.toggle input:checked + .toggle-track{background:var(--gold)}
+.toggle-track::after{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s}
+.toggle input:checked + .toggle-track::after{left:23px}
+
+/* Row item */
+.row-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.row-item:last-child{border-bottom:none}
+.row-icon{width:36px;height:36px;border-radius:8px;background:var(--bg-card2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.row-main{flex:1;min-width:0}
+.row-title{font-weight:500;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Profile cards */
+.profile-grid{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:32px}
+.profile-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;width:180px;position:relative}
+.profile-card.active{border-color:var(--gold)}
+.profile-avatar{width:64px;height:64px;border-radius:50%;background:var(--gold);color:#000;font-size:24px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+.profile-name{font-weight:600;font-size:15px;margin-bottom:8px}
+.profile-badges{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+.profile-active-dot{width:8px;height:8px;border-radius:50%;background:var(--green);position:absolute;top:12px;left:12px}
+
+/* IPTV */
+.playlist-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:12px}
+.playlist-name{font-weight:600;font-size:15px;margin-bottom:4px}
+.playlist-url{font-size:12px;color:var(--text-muted);font-family:monospace;margin-bottom:12px;word-break:break-all}
+.channel-count{font-size:22px;font-weight:700;color:var(--gold)}
+
+/* Chip list */
+.chip-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{padding:5px 12px;border-radius:20px;background:var(--bg-card2);border:1px solid var(--border);font-size:12px;color:var(--text-muted)}
+
+/* Plugin */
+.scraper-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.scraper-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.scraper-dot.on{background:var(--green)}
+.scraper-dot.off{background:#333}
+.scraper-info{flex:1}
+.scraper-name{font-weight:600}
+.scraper-meta{font-size:12px;color:var(--text-muted);margin-top:3px}
+
+/* History */
+.history-item{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border)}
+.history-poster{width:42px;height:58px;border-radius:6px;background:var(--bg-card2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.history-title{font-weight:500;margin-bottom:4px}
+.history-meta{font-size:12px;color:var(--text-muted)}
+.progress-bar{height:3px;background:#222;border-radius:2px;margin-top:6px;overflow:hidden}
+.progress-fill{height:100%;background:var(--gold);border-radius:2px}
+
+/* AI section */
+.model-option{border:2px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;margin-bottom:10px}
+.model-option.selected{border-color:var(--gold);background:var(--gold-dim)}
+.model-name{font-weight:600;margin-bottom:4px}
+.model-desc{font-size:12px;color:var(--text-muted)}
+
+/* Settings rows */
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--border)}
+.settings-label{font-weight:500}
+.settings-desc{font-size:12px;color:var(--text-muted);margin-top:2px}
+
+.section{margin-bottom:0}
+h2.sub{font-size:16px;font-weight:600;margin:24px 0 14px;color:var(--text-muted)}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <img src="../assets/arvio-icon-512.png" onerror="this.style.display='none'" alt="">
+    ARVIO
+  </div>
+  <div style="padding:8px 0;flex:1">
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+      Profiles
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+      Add-ons
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      IPTV
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      Plugins
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      History
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+      Watchlist
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      AI Subtitles
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M4.93 4.93a10 10 0 000 14.14"/></svg>
+      Settings
+    </div>
+  </div>
+  <div class="sidebar-user">
+    <div class="avatar">A</div>
+    <div>
+      <div class="user-name">ARVIO User</div>
+      <div class="user-email">user@example.com</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="page">
+
+  <!-- ═══ DASHBOARD ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      Dashboard
+    </div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-icon gold">🎬</div>
+        <div class="stat-val">47</div>
+        <div class="stat-lbl">Movies watched</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">📺</div>
+        <div class="stat-val">312</div>
+        <div class="stat-lbl">Episodes watched</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">🔖</div>
+        <div class="stat-val">8</div>
+        <div class="stat-lbl">Watchlist</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple">🧩</div>
+        <div class="stat-val">5</div>
+        <div class="stat-lbl">Active add-ons</div>
+      </div>
+    </div>
+
+    <h2 class="sub">Recent Activity</h2>
+    <div class="cards">
+      <div class="history-item" style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;background:var(--bg-card)">
+        <div class="history-poster">🎬</div>
+        <div style="flex:1">
+          <div class="history-title">Inception</div>
+          <div class="history-meta">Movie · 1d ago</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+        </div>
+        <span class="badge green">Completed</span>
+      </div>
+      <div class="history-item" style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;background:var(--bg-card)">
+        <div class="history-poster">📺</div>
+        <div style="flex:1">
+          <div class="history-title">Breaking Bad</div>
+          <div class="history-meta">S05E14 · 2d ago</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:72%"></div></div>
+        </div>
+        <span class="badge gold">72%</span>
+      </div>
+      <div class="history-item" style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;background:var(--bg-card)">
+        <div class="history-poster">🎬</div>
+        <div style="flex:1">
+          <div class="history-title">Oppenheimer</div>
+          <div class="history-meta">Movie · 4d ago</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:55%"></div></div>
+        </div>
+        <span class="badge muted">55%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ═══ PROFILES ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      Profiles
+    </div>
+    <div class="profile-grid">
+      <div class="profile-card active">
+        <div class="profile-active-dot"></div>
+        <div class="profile-avatar">A</div>
+        <div class="profile-name">Alex</div>
+        <div class="profile-badges"><span class="badge green">● Active</span></div>
+      </div>
+      <div class="profile-card">
+        <div class="profile-avatar" style="background:#60a5fa">S</div>
+        <div class="profile-name">Sarah</div>
+        <div class="profile-badges"><span class="badge muted">🔒 Locked</span></div>
+      </div>
+      <div class="profile-card">
+        <div class="profile-avatar" style="background:#4ade80">K</div>
+        <div class="profile-name">Kids</div>
+        <div class="profile-badges"><span class="badge blue">👶 Kids</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ═══ ADDONS ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+      Stremio Add-ons
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Torrentio</span>
+          <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);font-family:monospace;word-break:break-all">torrentio.strem.fun/manifest.json</div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Cinemeta</span>
+          <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);font-family:monospace;word-break:break-all">v3-cinemeta.strem.io/manifest.json</div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">OpenSubtitles</span>
+          <label class="toggle"><input type="checkbox"><div class="toggle-track"></div></label>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);font-family:monospace;word-break:break-all">opensubtitles-v3.strem.io/manifest.json</div>
+      </div>
+    </div>
+    <h2 class="sub">Telegram</h2>
+    <div class="card" style="max-width:400px">
+      <div class="card-header">
+        <span class="card-title">ARVIO Bot</span>
+        <span class="badge green">● Active</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-muted)">@arvio_updates</div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ═══ IPTV ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      IPTV — Alex
+    </div>
+    <div class="playlist-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+        <div>
+          <div class="playlist-name">ישראל HD</div>
+          <div class="playlist-url">https://example.m3u</div>
+          <div style="font-size:12px;color:var(--text-muted)">EPG: https://example.com/epg.xml</div>
+        </div>
+        <div style="text-align:center">
+          <div class="channel-count">142</div>
+          <div style="font-size:11px;color:var(--text-muted)">ערוצים</div>
+        </div>
+      </div>
+    </div>
+    <div class="playlist-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+        <div>
+          <div class="playlist-name">Sports Pack</div>
+          <div class="playlist-url">https://sports.m3u</div>
+          <div style="font-size:12px;color:var(--text-dim)">ללא EPG</div>
+        </div>
+        <div style="text-align:center">
+          <div class="channel-count">38</div>
+          <div style="font-size:11px;color:var(--text-muted)">ערוצים</div>
+        </div>
+      </div>
+    </div>
+    <h2 class="sub">Favourite Groups</h2>
+    <div class="chip-list">
+      <div class="chip">Israel</div>
+      <div class="chip">Sports</div>
+      <div class="chip">Movies</div>
+    </div>
+    <h2 class="sub">Favourite Channels</h2>
+    <div class="chip-list">
+      <div class="chip">Channel 12</div>
+      <div class="chip">Channel 13</div>
+      <div class="chip">HOT Sport 1</div>
+      <div class="chip">Sport 5</div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ═══ PLUGINS ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      Plugins
+    </div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="settings-row" style="padding:0">
+        <div>
+          <div class="settings-label">Plugins enabled</div>
+          <div class="settings-desc">Enable or disable the scraper engine</div>
+        </div>
+        <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+      </div>
+    </div>
+    <h2 class="sub">Repositories</h2>
+    <div class="card" style="margin-bottom:24px">
+      <div class="row-item">
+        <div class="row-icon">📦</div>
+        <div class="row-main">
+          <div class="row-title">ARVIO Plugins</div>
+          <div class="row-sub" style="font-family:monospace">raw.githubusercontent.com/arvio/plugins/main/repo.json</div>
+        </div>
+        <span class="badge gold">12 scrapers</span>
+      </div>
+      <div class="row-item">
+        <div class="row-icon">📦</div>
+        <div class="row-main">
+          <div class="row-title">Community Repo</div>
+          <div class="row-sub" style="font-family:monospace">community.arvio.tv/repo.json</div>
+        </div>
+        <span class="badge muted">7 scrapers</span>
+      </div>
+    </div>
+    <h2 class="sub">Scrapers</h2>
+    <div class="scraper-card">
+      <div class="scraper-dot on"></div>
+      <div class="scraper-info">
+        <div class="scraper-name">YesMovies <span style="color:var(--text-muted);font-weight:400;font-size:12px">v2.1.0</span></div>
+        <div class="scraper-meta">Movies · Series · Hebrew · English</div>
+      </div>
+      <span class="badge green">Active</span>
+    </div>
+    <div class="scraper-card">
+      <div class="scraper-dot on"></div>
+      <div class="scraper-info">
+        <div class="scraper-name">PrimeWire <span style="color:var(--text-muted);font-weight:400;font-size:12px">v1.4.2</span></div>
+        <div class="scraper-meta">Movies · English</div>
+      </div>
+      <span class="badge green">Active</span>
+    </div>
+    <div class="scraper-card">
+      <div class="scraper-dot off"></div>
+      <div class="scraper-info">
+        <div class="scraper-name">SolarMovie <span style="color:var(--text-muted);font-weight:400;font-size:12px">v1.0.1</span></div>
+        <div class="scraper-meta">Movies · Series · English</div>
+      </div>
+      <span class="badge muted">Disabled</span>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ═══ AI SUBTITLE ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 013 3v7a3 3 0 01-6 0V5a3 3 0 013-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      AI Subtitle Translation
+    </div>
+    <div class="card" style="max-width:560px;margin-bottom:24px">
+      <div class="settings-row">
+        <div><div class="settings-label">Enable AI Translation</div><div class="settings-desc">Automatically translate subtitles while watching</div></div>
+        <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">Auto-select</div><div class="settings-desc">Automatically pick subtitles for translation</div></div>
+        <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+      </div>
+      <div class="settings-row" style="border-bottom:none">
+        <div><div class="settings-label">Remove HI</div><div class="settings-desc">Strip hearing-impaired audio descriptions [SDH]</div></div>
+        <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+      </div>
+    </div>
+    <h2 class="sub">Select AI Model</h2>
+    <div style="max-width:560px">
+      <div class="model-option selected">
+        <div class="model-name">Groq — Llama 3.3 70B <span class="badge green" style="margin-right:8px">Recommended</span></div>
+        <div class="model-desc">Fastest · Free · Great quality for subtitles</div>
+      </div>
+      <div class="model-option">
+        <div class="model-name">Google — Gemini Flash 2.5</div>
+        <div class="model-desc">Fast · Free · Excellent multilingual support</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-sep"></div>
+
+  <!-- ═══ SETTINGS ═══ -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M4.93 4.93a10 10 0 000 14.14"/></svg>
+      Settings
+    </div>
+    <div class="card" style="max-width:500px">
+      <div class="settings-row">
+        <div><div class="settings-label">App Language</div></div>
+        <span class="badge gold">English</span>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">OLED Mode</div><div class="settings-desc">Pure black background to save battery</div></div>
+        <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div></label>
+      </div>
+      <div class="settings-row" style="border-bottom:none">
+        <div><div class="settings-label">Skip Profile Selection</div><div class="settings-desc">Launch directly with the active profile</div></div>
+        <label class="toggle"><input type="checkbox"><div class="toggle-track"></div></label>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:60px"></div>
+</div>
+
+</body>
+</html>

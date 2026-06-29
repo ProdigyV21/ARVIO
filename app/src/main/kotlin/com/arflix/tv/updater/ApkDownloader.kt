@@ -1,5 +1,8 @@
 package com.arflix.tv.updater
 
+import android.content.Context
+import com.arflix.tv.R
+import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -9,6 +12,7 @@ import javax.inject.Singleton
 
 @Singleton
 class ApkDownloader @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient
 ) {
     suspend fun download(
@@ -29,10 +33,10 @@ class ApkDownloader @Inject constructor(
             val request = Request.Builder().url(url).build()
             downloadClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    error("Download failed: HTTP ${response.code}")
+                    error(context.getString(R.string.update_error_download_http, response.code))
                 }
 
-                val body = response.body ?: error("Empty download body")
+                val body = response.body ?: error(context.getString(R.string.update_error_empty_download_body))
                 val total = body.contentLength().takeIf { it > 0L }
                 body.byteStream().use { input ->
                     FileOutputStream(destinationFile).use { output ->

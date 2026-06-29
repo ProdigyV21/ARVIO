@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
 
 /**
@@ -231,13 +232,27 @@ object AvatarRegistry {
 }
 
 /**
+ * Display-only localization of avatar category headers.
+ * The Map keys in [AvatarRegistry.categories] stay English (used as logic keys);
+ * only the shown header label is translated. Unknown categories pass through.
+ */
+@Composable
+fun avatarCategoryLabel(raw: String): String = when (raw) {
+    "Animals" -> stringResource(R.string.avatar_cat_animals)
+    "Characters" -> stringResource(R.string.avatar_cat_characters)
+    "Media" -> stringResource(R.string.avatar_cat_media)
+    "Nature" -> stringResource(R.string.avatar_cat_nature)
+    else -> raw
+}
+
+/**
  * Renders an avatar image from drawable resources.
  */
 @Composable
 fun AvatarIcon(avatarId: Int, modifier: Modifier = Modifier) {
     Image(
         painter = painterResource(id = AvatarRegistry.getDrawableRes(avatarId)),
-        contentDescription = "Avatar",
+        contentDescription = stringResource(R.string.component_avatar),
         modifier = modifier.fillMaxSize(),
         contentScale = ContentScale.Fit
     )

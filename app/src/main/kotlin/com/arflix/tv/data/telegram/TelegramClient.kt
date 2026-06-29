@@ -2,6 +2,7 @@ package com.arflix.tv.data.telegram
 
 import android.content.Context
 import android.util.Log
+import com.arflix.tv.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +54,7 @@ class TelegramClient @Inject constructor(
             if (client != null) return@launch
             stepLog("checking library availability")
             if (!isAvailable) {
-                _authState.value = TelegramAuthState.Error("TDLib not available on this device")
+                _authState.value = TelegramAuthState.Error(context.getString(R.string.telegram_tdlib_unavailable))
                 return@launch
             }
             stepLog("library loaded OK")
@@ -71,7 +72,7 @@ class TelegramClient @Inject constructor(
             } catch (e: Throwable) {
                 Log.e(TAG, "TDLib Client.create failed", e)
                 stepLog("EXCEPTION: ${e.message}")
-                _authState.value = TelegramAuthState.Error("TDLib failed to start: ${e.message}")
+                _authState.value = TelegramAuthState.Error(context.getString(R.string.telegram_tdlib_failed, e.message ?: ""))
             }
         }
     }

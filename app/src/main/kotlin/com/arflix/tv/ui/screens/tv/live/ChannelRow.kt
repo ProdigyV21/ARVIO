@@ -42,11 +42,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 
 /**
@@ -207,7 +209,7 @@ fun ChannelRow(
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Filled.History,
-                        contentDescription = "Catchup available",
+                        contentDescription = stringResource(R.string.live_cd_catchup_available),
                         tint = LiveColors.Accent.copy(alpha = 0.8f),
                         modifier = Modifier.size(11.dp),
                     )
@@ -233,7 +235,7 @@ fun ChannelRow(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            SmallPillBadge(if (variantCount > 1) "${channel.quality.label} ${variantCount}x" else channel.quality.label)
+            SmallPillBadge(if (variantCount > 1) stringResource(R.string.live_label_quality_variants, channel.quality.label, variantCount) else channel.quality.label)
             SmallPillBadge(channel.lang)
         }
     }

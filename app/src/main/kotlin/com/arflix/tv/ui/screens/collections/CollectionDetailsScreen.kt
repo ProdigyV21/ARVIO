@@ -39,6 +39,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,7 @@ import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
 import androidx.tv.foundation.lazy.grid.itemsIndexed
 import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
 import com.arflix.tv.data.model.CatalogSourceType
@@ -66,8 +69,10 @@ import com.arflix.tv.data.model.CollectionSourceKind
 import com.arflix.tv.data.model.CollectionTileShape
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.MediaRepository
+import com.arflix.tv.data.repository.SportsRepository
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
@@ -89,6 +94,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class CollectionTab { MOVIES, SERIES }
+
+/**
+ * Sentinel stored in [CollectionDetailsUiState.error] when a collection page fails to load.
+ * The ViewModel has no Context, so the human-readable message is resolved with
+ * [stringResource] at the @Composable display point (see CollectionDetailsScreen).
+ */
+private const val COLLECTION_LOAD_FAILED_ERROR = "__collection_load_failed__"
 
 data class CollectionDetailsUiState(
     val catalog: CatalogConfig? = null,
@@ -113,7 +125,8 @@ data class CollectionDetailsUiState(
 @HiltViewModel
 class CollectionDetailsViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
-    private val mediaRepository: MediaRepository
+    private val mediaRepository: MediaRepository,
+    private val sportsRepository: SportsRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(CollectionDetailsUiState())
     val uiState: StateFlow<CollectionDetailsUiState> = _uiState.asStateFlow()
@@ -137,7 +150,8 @@ class CollectionDetailsViewModel @Inject constructor(
             if (current.catalog?.id == normalizedCatalogId && !current.isLoadingMovies && !current.isLoadingSeries) return@launch
 
             _uiState.value = CollectionDetailsUiState(isLoadingMovies = true, isLoadingSeries = true)
-            val catalog = catalogRepository.getCatalogs().firstOrNull { it.id == normalizedCatalogId || it.id == catalogId }
+            val catalog = sportsRepository.sportsCollectionCatalog(normalizedCatalogId)
+                ?: catalogRepository.getCatalogs().firstOrNull { it.id == normalizedCatalogId || it.id == catalogId }
                 ?: syntheticTmdbCollectionCatalog(normalizedCatalogId)
             if (catalog == null) {
                 _uiState.value = CollectionDetailsUiState(
@@ -212,31 +226,28 @@ class CollectionDetailsViewModel @Inject constructor(
     }
 
     private suspend fun loadInitialTab(catalog: CatalogConfig, tab: CollectionTab) {
-        val page = runCatching {
-            mediaRepository.loadCollectionCatalogPage(
-                catalogForTab(catalog, tab),
-                offset = 0,
-                limit = FIRST_PAGE
-            )
-        }.getOrNull()
+        val page = runCatching { loadCollectionPage(catalog, tab, offset = 0, limit = FIRST_PAGE) }.getOrNull()
         val pageItems = when (tab) {
             CollectionTab.MOVIES -> page?.items.orEmpty().filter { it.mediaType == MediaType.MOVIE }
             CollectionTab.SERIES -> page?.items.orEmpty().filter { it.mediaType == MediaType.TV }
         }
+        val decoratedCatalog = decorateSportsCatalogWithArtwork(catalog, pageItems)
         _uiState.value = when (tab) {
             CollectionTab.MOVIES -> _uiState.value.copy(
+                catalog = decoratedCatalog,
                 movieItems = pageItems,
                 isLoadingMovies = false,
                 hasMoreMovies = page?.hasMore == true,
                 loadedMovieOffset = pageItems.size,
-                error = _uiState.value.error ?: if (page == null) "Failed to load collection" else null
+                error = _uiState.value.error ?: if (page == null) COLLECTION_LOAD_FAILED_ERROR else null
             )
             CollectionTab.SERIES -> _uiState.value.copy(
+                catalog = decoratedCatalog,
                 seriesItems = pageItems,
                 isLoadingSeries = false,
                 hasMoreSeries = page?.hasMore == true,
                 loadedSeriesOffset = pageItems.size,
-                error = _uiState.value.error ?: if (page == null) "Failed to load collection" else null
+                error = _uiState.value.error ?: if (page == null) COLLECTION_LOAD_FAILED_ERROR else null
             )
         }
         preloadLogos(pageItems.take(2))
@@ -270,13 +281,7 @@ class CollectionDetailsViewModel @Inject constructor(
                 CollectionTab.MOVIES -> state.loadedMovieOffset
                 CollectionTab.SERIES -> state.loadedSeriesOffset
             }
-            val next = runCatching {
-                mediaRepository.loadCollectionCatalogPage(
-                    pageCatalog,
-                    offset = nextOffset,
-                    limit = PAGE_STEP
-                )
-            }.getOrNull()
+            val next = runCatching { loadCollectionPage(pageCatalog, tab, offset = nextOffset, limit = PAGE_STEP) }.getOrNull()
             val freshItems = when (tab) {
                 CollectionTab.MOVIES -> next?.items.orEmpty().filter { it.mediaType == MediaType.MOVIE }
                 CollectionTab.SERIES -> next?.items.orEmpty().filter { it.mediaType == MediaType.TV }
@@ -309,6 +314,7 @@ class CollectionDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             val current = _cardLogoUrls.value.toMutableMap()
             val missing = items
+                .filterNot { item -> SportsAddonCapabilities.isSportsEventStatus(item.status) }
                 .filter { item ->
                     val key = "${item.mediaType}_${item.id}"
                     key !in current
@@ -342,6 +348,68 @@ class CollectionDetailsViewModel @Inject constructor(
             if (fetched.isNotEmpty()) {
                 _cardLogoUrls.value = (_cardLogoUrls.value + fetched).toMap()
             }
+        }
+    }
+
+    fun openSportsCollectionItem(
+        item: MediaItem,
+        onUnavailable: () -> Unit,
+        onNavigateToPlayer: (MediaType, Int, String, String?, String?) -> Unit
+    ) {
+        val status = item.status.orEmpty()
+        if (!SportsAddonCapabilities.isSportsEventStatus(status)) return
+        if (!item.badge.equals("LIVE", ignoreCase = true)) {
+            onUnavailable()
+            return
+        }
+        viewModelScope.launch {
+            val playback = sportsRepository.resolvePlayback(status, item.title)
+            if (playback == null) {
+                onUnavailable()
+                return@launch
+            }
+            onNavigateToPlayer(
+                MediaType.TV,
+                playback.mediaId,
+                playback.streamUrl,
+                playback.addonId,
+                playback.sourceName
+            )
+        }
+    }
+
+    private suspend fun loadCollectionPage(
+        catalog: CatalogConfig,
+        tab: CollectionTab,
+        offset: Int,
+        limit: Int
+    ): MediaRepository.CategoryPageResult {
+        return if (SportsAddonCapabilities.isSportsCollectionCatalogId(catalog.id)) {
+            sportsRepository.loadSportsCollectionPage(catalog.id, offset = offset, limit = limit)
+        } else {
+            mediaRepository.loadCollectionCatalogPage(
+                catalogForTab(catalog, tab),
+                offset = offset,
+                limit = limit
+            )
+        }
+    }
+
+    private fun decorateSportsCatalogWithArtwork(
+        catalog: CatalogConfig,
+        items: List<MediaItem>
+    ): CatalogConfig {
+        if (!SportsAddonCapabilities.isSportsCollectionCatalogId(catalog.id)) return catalog
+        val hero = items.firstOrNull { !it.backdrop.isNullOrBlank() }?.backdrop
+            ?: items.firstOrNull { it.image.isNotBlank() }?.image
+        return if (hero.isNullOrBlank()) {
+            catalog
+        } else {
+            catalog.copy(
+                collectionCoverImageUrl = catalog.collectionCoverImageUrl ?: hero,
+                collectionHeroImageUrl = catalog.collectionHeroImageUrl ?: hero,
+                collectionFocusGifUrl = catalog.collectionFocusGifUrl ?: hero
+            )
         }
     }
 
@@ -379,6 +447,7 @@ fun CollectionDetailsScreen(
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     viewModel: CollectionDetailsViewModel = hiltViewModel(),
     onNavigateToDetails: (MediaType, Int) -> Unit,
+    onNavigateToPlayer: (MediaType, Int, String, String?, String?) -> Unit,
     onNavigateToHome: () -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToWatchlist: () -> Unit,
@@ -389,10 +458,12 @@ fun CollectionDetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cardLogoUrls by viewModel.cardLogoUrls.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     LaunchedEffect(catalogId) { viewModel.load(catalogId) }
     BackHandler(onBack = onBack)
 
     val rowKey = remember(catalogId) { "collection:$catalogId" }
+    val isSportsCollection = SportsAddonCapabilities.isSportsCollectionCatalogId(uiState.catalog?.id ?: catalogId)
     val usePosterCards = uiState.catalog?.collectionGroup != CollectionGroupKind.GENRE &&
         rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
     val configuration = LocalConfiguration.current
@@ -571,8 +642,29 @@ fun CollectionDetailsScreen(
             selectedTab = selectedTab,
             moviesTabFocusRequester = moviesTabFocusRequester,
             seriesTabFocusRequester = seriesTabFocusRequester,
+            isSportsCollection = isSportsCollection,
             onTabSelected = { selectedTab = it },
-            onItemClick = { onNavigateToDetails(it.mediaType, it.id) },
+            onItemClick = { item ->
+                if (SportsAddonCapabilities.isSportsEventStatus(item.status)) {
+                    viewModel.openSportsCollectionItem(
+                        item = item,
+                        onUnavailable = {
+                            android.widget.Toast.makeText(
+                                context,
+                                if (item.badge.equals("LIVE", ignoreCase = true)) {
+                                    context.getString(R.string.home_sports_playback_failed)
+                                } else {
+                                    context.getString(R.string.home_sports_event_not_live)
+                                },
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        onNavigateToPlayer = onNavigateToPlayer
+                    )
+                } else {
+                    onNavigateToDetails(item.mediaType, item.id)
+                }
+            },
             onItemFocused = { item, index ->
                 viewModel.preloadLogos(listOf(item))
                 when (activeTab) {
@@ -584,7 +676,11 @@ fun CollectionDetailsScreen(
             onNearEnd = { viewModel.loadMoreIfNeeded(activeTab) },
             isLoading = isTabLoading,
             isLoadingMore = isTabLoadingMore,
-            emptyMessage = uiState.error ?: "Nothing to show here yet.",
+            emptyMessage = when (uiState.error) {
+                null -> stringResource(R.string.collection_empty)
+                COLLECTION_LOAD_FAILED_ERROR -> stringResource(R.string.collection_failed_load)
+                else -> uiState.error!!
+            },
             topContentPadding = if (isMobile) 18.dp else if (usePosterCards) 22.dp else 10.dp
         )
     }
@@ -654,6 +750,7 @@ private fun CollectionTabBar(
     selectedTab: CollectionTab,
     moviesTabFocusRequester: FocusRequester,
     seriesTabFocusRequester: FocusRequester,
+    isSportsCollection: Boolean,
     onTabSelected: (CollectionTab) -> Unit
 ) {
     val showMovies = hasMovies || !hasSeries
@@ -666,9 +763,18 @@ private fun CollectionTabBar(
             .padding(start = 42.dp, end = 42.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (isSportsCollection) {
+            CollectionTabChip(
+                label = "Live & Upcoming",
+                isSelected = true,
+                focusRequester = seriesTabFocusRequester,
+                onClick = { onTabSelected(CollectionTab.SERIES) }
+            )
+            return@Row
+        }
         if (showMovies) {
             CollectionTabChip(
-                label = "Movies",
+                label = stringResource(R.string.movies),
                 isSelected = selectedTab == CollectionTab.MOVIES || onlyOne,
                 focusRequester = moviesTabFocusRequester,
                 onClick = { onTabSelected(CollectionTab.MOVIES) }
@@ -676,7 +782,7 @@ private fun CollectionTabBar(
         }
         if (showSeries) {
             CollectionTabChip(
-                label = "Series",
+                label = stringResource(R.string.series),
                 isSelected = selectedTab == CollectionTab.SERIES || onlyOne,
                 focusRequester = seriesTabFocusRequester,
                 onClick = { onTabSelected(CollectionTab.SERIES) }
@@ -755,6 +861,7 @@ private fun CollectionItemsGrid(
     selectedTab: CollectionTab,
     moviesTabFocusRequester: FocusRequester,
     seriesTabFocusRequester: FocusRequester,
+    isSportsCollection: Boolean,
     onTabSelected: (CollectionTab) -> Unit,
     onItemClick: (MediaItem) -> Unit,
     onItemFocused: (MediaItem, Int) -> Unit,
@@ -821,6 +928,7 @@ private fun CollectionItemsGrid(
                 selectedTab = selectedTab,
                 moviesTabFocusRequester = moviesTabFocusRequester,
                 seriesTabFocusRequester = seriesTabFocusRequester,
+                isSportsCollection = isSportsCollection,
                 onTabSelected = onTabSelected
             )
         }

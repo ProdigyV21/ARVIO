@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import androidx.datastore.preferences.core.edit
 import com.arflix.tv.BuildConfig
+import com.arflix.tv.R
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.ProxyHeaders
 import com.arflix.tv.data.model.StreamBehaviorHints
@@ -113,14 +114,14 @@ internal data class HomeServerCandidateInfo(
 internal object HomeServerMatcher {
     fun normalizeTitle(title: String): String {
         val ascii = Normalizer.normalize(title, Normalizer.Form.NFD)
-            .replace(HomeServerRepositoryRegexes.DIACRITICS_REGEX, "")
+            .replace(DIACRITICS_REGEX, "")
         return ascii
             .lowercase(Locale.US)
             .replace("&", " and ")
-            .replace(HomeServerRepositoryRegexes.NON_ALPHA_NUM_REGEX, " ")
-            .replace(HomeServerRepositoryRegexes.ARTICLES_REGEX, " ")
+            .replace(NON_ALPHA_NUM_REGEX, " ")
+            .replace(ARTICLES_REGEX, " ")
             .trim()
-            .replace(HomeServerRepositoryRegexes.MULTI_SPACE_REGEX, " ")
+            .replace(MULTI_SPACE_REGEX, " ")
     }
 
     fun score(
@@ -180,8 +181,7 @@ class HomeServerRepository @Inject constructor(
         const val ADDON_NAME = "Home Server"
         const val CONNECTION_KEY_NAME = "home_server_connection_v1"
         const val CATALOG_SOURCE_REF_PREFIX = "home_server_catalog|"
-        private const val HOME_SERVER_TOKEN_KEY_ALIAS = "arvio_home_server_tokens_v1"
-        private const val SECURE_TOKEN_PREFIX = "enc:v1:"
+        private const val HOME_SERVER_SECRET_ALIAS = "arvio_home_server_credentials_v1"
         private const val SOURCE_CACHE_MAX_ENTRIES = 128
         private const val SOURCE_CACHE_TTL_MS = 30L * 60L * 1000L
 
@@ -271,8 +271,8 @@ class HomeServerRepository @Inject constructor(
                 val serverUrl = normalizeServerUrl(rawUrl)
                 val trimmedUsername = username.trim()
                 val trimmedDisplayName = displayName.trim()
-                require(serverUrl.isNotBlank()) { "Enter a valid server URL" }
-                require(password.isNotBlank()) { "Enter a password or token" }
+                require(serverUrl.isNotBlank()) { context.getString(R.string.homeserver_enter_url) }
+                require(password.isNotBlank()) { context.getString(R.string.homeserver_enter_password) }
 
                 val publicInfo = fetchPublicInfo(serverUrl)
                 val detectedKind = publicInfo.serverKind
@@ -290,8 +290,8 @@ class HomeServerRepository @Inject constructor(
                     return@runCatching connection
                 }
 
-                require(trimmedUsername.isNotBlank()) { "Enter a username" }
-                val auth = authenticate(serverUrl, trimmedUsername, password, detectedKind)
+                require(trimmedUsername.isNotBlank()) { context.getString(R.string.homeserver_enter_username) }
+                val auth = authenticate(serverUrl, trimmedUsername, password)
                 val connectionShell = HomeServerConnection(
                     enabled = true,
                     connectionId = createConnectionId(serverUrl, detectedKind, auth.userId.ifBlank { trimmedUsername }),
@@ -338,7 +338,7 @@ class HomeServerRepository @Inject constructor(
     suspend fun testConnections(): Result<List<HomeServerConnection>> = withContext(Dispatchers.IO) {
         runCatching {
             val current = currentConnections()
-            require(current.isNotEmpty()) { "No Home Server connected" }
+            require(current.isNotEmpty()) { context.getString(R.string.homeserver_none_connected) }
             val refreshed = current.map { refreshConnection(it) }
             saveConnections(refreshed)
             refreshed
@@ -362,7 +362,7 @@ class HomeServerRepository @Inject constructor(
                 ?.addQueryParameter("X-Plex-Product", "ARVIO")
                 ?.build()
                 ?.toString()
-                ?: error("Invalid code sign-in URL")
+                ?: error(context.getString(R.string.homeserver_invalid_code_url))
             val request = Request.Builder()
                 .url(url)
                 .post(ByteArray(0).toRequestBody(null))
@@ -371,12 +371,12 @@ class HomeServerRepository @Inject constructor(
             okHttpClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    error("Code sign in failed (${response.code})")
+                    error(context.getString(R.string.homeserver_code_signin_failed_code, response.code))
                 }
                 val json = JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
                 val id = json.string("id").ifBlank { json.string("pinId") }
                 val code = json.string("code")
-                require(id.isNotBlank() && code.isNotBlank()) { "Server did not return an activation code" }
+                require(id.isNotBlank() && code.isNotBlank()) { context.getString(R.string.homeserver_no_activation_code) }
                 PlexPinAuthSession(
                     id = id,
                     code = code,
@@ -395,7 +395,7 @@ class HomeServerRepository @Inject constructor(
                 ?.addQueryParameter("X-Plex-Client-Identifier", deviceId())
                 ?.build()
                 ?.toString()
-                ?: error("Invalid code sign-in URL")
+                ?: error(context.getString(R.string.homeserver_invalid_code_url))
             val request = Request.Builder()
                 .url(url)
                 .get()
@@ -404,7 +404,7 @@ class HomeServerRepository @Inject constructor(
             okHttpClient.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    error("Code sign in polling failed (${response.code})")
+                    error(context.getString(R.string.homeserver_code_poll_failed, response.code))
                 }
                 val json = JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
                 json.string("authToken")
@@ -420,7 +420,8 @@ class HomeServerRepository @Inject constructor(
 
     suspend fun currentConnections(): List<HomeServerConnection> {
         val profileId = profileManager.getProfileId()
-        return currentConnectionsForProfile(profileId, migratePlainTokens = true)
+        val prefs = context.settingsDataStore.data.first()
+        return parseConnections(prefs[connectionKeyFor(profileId)])
     }
 
     suspend fun hasUsableConnections(): Boolean = currentConnections().any { it.isUsable }
@@ -481,8 +482,12 @@ class HomeServerRepository @Inject constructor(
         val sources = connections
             .flatMap { connection ->
                 runCatching {
-                    val item = findBestMovie(connection, imdbId, title, year, tmdbId) ?: return@runCatching emptyList()
-                    buildStreamSources(connection, item)
+                    val items = if (connection.serverKind == HomeServerKind.PLEX) {
+                        findMovieMatches(connection, imdbId, title, year, tmdbId)
+                    } else {
+                        listOfNotNull(findBestMovie(connection, imdbId, title, year, tmdbId))
+                    }
+                    items.flatMap { item -> buildStreamSources(connection, item) }
                 }.getOrDefault(emptyList())
             }
             .distinctBy { "${it.addonId}|${it.source}|${it.url}" }
@@ -518,10 +523,18 @@ class HomeServerRepository @Inject constructor(
                 runCatching {
                     val series = findBestSeries(connection, imdbId, title, null, tmdbId, tvdbId)
                         ?: return@runCatching emptyList()
-                    val episodeItem = findEpisode(connection, series.id, season, episode)
-                        ?: findEpisodeBySearch(connection, title, season, episode, imdbId, tmdbId, tvdbId)
-                        ?: return@runCatching emptyList()
-                    buildStreamSources(connection, episodeItem)
+                    val episodeItems = if (connection.serverKind == HomeServerKind.PLEX) {
+                        findEpisodes(connection, series.id, season, episode)
+                            .ifEmpty {
+                                listOfNotNull(findEpisodeBySearch(connection, title, season, episode, imdbId, tmdbId, tvdbId))
+                            }
+                    } else {
+                        listOfNotNull(
+                            findEpisode(connection, series.id, season, episode)
+                                ?: findEpisodeBySearch(connection, title, season, episode, imdbId, tmdbId, tvdbId)
+                        )
+                    }
+                    episodeItems.flatMap { episodeItem -> buildStreamSources(connection, episodeItem) }
                 }.getOrDefault(emptyList())
             }
             .distinctBy { "${it.addonId}|${it.source}|${it.url}" }
@@ -549,19 +562,19 @@ class HomeServerRepository @Inject constructor(
         saveConnectionsForProfile(profileManager.getProfileId(), connections)
     }
 
-    private suspend fun saveConnectionsForProfile(profileId: String, connections: List<HomeServerConnection>) {
+    private suspend fun saveConnectionsForProfile(
+        profileId: String,
+        connections: List<HomeServerConnection>
+    ) {
         context.settingsDataStore.edit { prefs ->
             prefs[connectionKeyFor(profileId)] = gson.toJson(
-                HomeServerProfileConfig(connections = connections.map { it.sanitized().withEncryptedTokens() })
+                HomeServerProfileConfig(connections = connections.map { it.sanitized().encryptedForStorage() })
             )
         }
     }
 
-    private fun connectionKeyFor(profileId: String) =
-        profileManager.profileStringKeyFor(profileId, CONNECTION_KEY_NAME)
-
     suspend fun exportCloudConnectionsJsonForProfile(profileId: String): String {
-        val connections = currentConnectionsForProfile(profileId, migratePlainTokens = true)
+        val connections = currentConnectionsForProfile(profileId)
         if (connections.isEmpty()) return ""
         return gson.toJson(HomeServerProfileConfig(connections = connections.map { it.sanitized() }))
     }
@@ -574,17 +587,13 @@ class HomeServerRepository @Inject constructor(
         saveConnectionsForProfile(profileId, parseConnections(json))
     }
 
-    private suspend fun currentConnectionsForProfile(
-        profileId: String,
-        migratePlainTokens: Boolean
-    ): List<HomeServerConnection> {
-        val raw = context.settingsDataStore.data.first()[connectionKeyFor(profileId)]
-        val connections = parseConnections(raw)
-        if (migratePlainTokens && raw.hasPlainHomeServerTokens()) {
-            saveConnectionsForProfile(profileId, connections)
-        }
-        return connections
+    private suspend fun currentConnectionsForProfile(profileId: String): List<HomeServerConnection> {
+        val prefs = context.settingsDataStore.data.first()
+        return parseConnections(prefs[connectionKeyFor(profileId)])
     }
+
+    private fun connectionKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, CONNECTION_KEY_NAME)
 
     private fun parseConnection(json: String?): HomeServerConnection? {
         return parseConnections(json).firstOrNull()
@@ -606,51 +615,25 @@ class HomeServerRepository @Inject constructor(
                 else -> emptyList()
             }
             connections
-                .map { it.sanitized() }
-                .map { it.withDecryptedTokens() }
+                .map { it.sanitized().decryptedForUse() }
                 .filter { it.serverUrl.isNotBlank() || it.accessToken.isNotBlank() }
                 .distinctBy { connectionIdentity(it) }
         }.getOrDefault(emptyList())
     }
 
-    private fun String?.hasPlainHomeServerTokens(): Boolean {
-        if (isNullOrBlank()) return false
-        return parseConnections(this).any { connection ->
-            val rawAccessToken = tokenValueFromRawJson(this, connection.connectionId, "accessToken")
-            val rawAccountToken = tokenValueFromRawJson(this, connection.connectionId, "accountToken")
-            rawAccessToken.isPlainToken() || rawAccountToken.isPlainToken()
-        }
+    private fun HomeServerConnection.encryptedForStorage(): HomeServerConnection {
+        return copy(
+            accessToken = SecureStorage.encrypt(accessToken.orEmpty(), HOME_SERVER_SECRET_ALIAS),
+            accountToken = SecureStorage.encrypt(accountToken.orEmpty(), HOME_SERVER_SECRET_ALIAS)
+        )
     }
 
-    private fun tokenValueFromRawJson(json: String, connectionId: String, fieldName: String): String {
-        return runCatching {
-            val root = JsonParser().parse(json)
-            val candidates = when {
-                root.isJsonObject && root.asJsonObject.has("connections") -> root.asJsonObject
-                    .getAsJsonArray("connections")
-                    .toList()
-                root.isJsonArray -> root.asJsonArray.toList()
-                root.isJsonObject -> listOf(root)
-                else -> emptyList()
-            }
-            candidates
-                .mapNotNull { it.asJsonObjectOrNull() }
-                .firstOrNull { obj ->
-                    obj.string("connectionId").ifBlank {
-                        createConnectionId(
-                            obj.string("serverUrl"),
-                            runCatching { HomeServerKind.valueOf(obj.string("serverKind")) }.getOrDefault(HomeServerKind.UNKNOWN),
-                            obj.string("userId").ifBlank { obj.string("userName") }
-                        )
-                    } == connectionId
-                }
-                ?.string(fieldName)
-                .orEmpty()
-        }.getOrDefault("")
+    private fun HomeServerConnection.decryptedForUse(): HomeServerConnection {
+        return copy(
+            accessToken = SecureStorage.decrypt(accessToken.orEmpty(), HOME_SERVER_SECRET_ALIAS).orEmpty(),
+            accountToken = SecureStorage.decrypt(accountToken.orEmpty(), HOME_SERVER_SECRET_ALIAS).orEmpty()
+        )
     }
-
-    private fun String.isPlainToken(): Boolean =
-        isNotBlank() && !startsWith(SECURE_TOKEN_PREFIX)
 
     private fun HomeServerConnection.sanitized(): HomeServerConnection {
         return HomeServerConnection(
@@ -679,33 +662,9 @@ class HomeServerRepository @Inject constructor(
         )
     }
 
-    private fun HomeServerConnection.withEncryptedTokens(): HomeServerConnection =
-        copy(
-            accessToken = encryptToken(accessToken),
-            accountToken = encryptToken(accountToken)
-        )
-
-    private fun HomeServerConnection.withDecryptedTokens(): HomeServerConnection =
-        copy(
-            accessToken = decryptToken(accessToken),
-            accountToken = decryptToken(accountToken)
-        )
-
-    private fun encryptToken(value: String): String {
-        val trimmed = value.trim()
-        if (trimmed.isBlank() || trimmed.startsWith(SECURE_TOKEN_PREFIX)) return trimmed
-        return SecureStorage.encrypt(trimmed, HOME_SERVER_TOKEN_KEY_ALIAS)
-    }
-
-    private fun decryptToken(value: String): String {
-        val trimmed = value.trim()
-        if (trimmed.isBlank()) return ""
-        return SecureStorage.decrypt(trimmed, HOME_SERVER_TOKEN_KEY_ALIAS).orEmpty()
-    }
-
     private fun createConnectionId(serverUrl: String, kind: HomeServerKind, userIdentity: String): String {
         return "${kind.name}:${serverUrl.trimEnd('/').lowercase(Locale.US)}:${userIdentity.lowercase(Locale.US)}"
-            .replace(HomeServerRepositoryRegexes.CONNECTION_ID_SANITIZER_REGEX, "_")
+            .replace(CONNECTION_ID_SANITIZER_REGEX, "_")
     }
 
     private fun connectionIdentity(connection: HomeServerConnection): String {
@@ -841,25 +800,17 @@ class HomeServerRepository @Inject constructor(
             ?: "https://app.plex.tv/auth"
     }
 
-    private fun requestBuilder(
-        url: String,
-        connection: HomeServerConnection? = null,
-        serverKind: HomeServerKind? = connection?.serverKind
-    ): Request.Builder {
+    private fun requestBuilder(url: String, connection: HomeServerConnection? = null): Request.Builder {
         val builder = Request.Builder()
             .url(url)
             .header("Accept", "application/json")
             .header("User-Agent", "ARVIO/${BuildConfig.VERSION_NAME}")
-        val kind = serverKind ?: connection?.serverKind
-        if (kind == HomeServerKind.PLEX && connection != null) {
+        if (connection?.serverKind == HomeServerKind.PLEX) {
             plexHeaders(connection.accessToken).forEach { (key, value) -> builder.header(key, value) }
         } else {
-            builder.header("Authorization", authHeader(connection?.accessToken))
-            if (kind == HomeServerKind.EMBY) {
-                builder.header("X-Emby-Authorization", authHeader(connection?.accessToken))
-                connection?.accessToken?.takeIf { it.isNotBlank() }?.let { token ->
-                    builder.header("X-Emby-Token", token)
-                }
+            builder.header("X-Emby-Authorization", authHeader(connection?.accessToken))
+            if (connection != null) {
+                builder.header("X-Emby-Token", connection.accessToken)
             }
         }
         return builder
@@ -867,14 +818,11 @@ class HomeServerRepository @Inject constructor(
 
     private fun playbackHeaders(connection: HomeServerConnection): Map<String, String> {
         if (connection.serverKind == HomeServerKind.PLEX) return plexHeaders(connection.accessToken)
-        return buildMap {
-            put("User-Agent", "ARVIO/${BuildConfig.VERSION_NAME}")
-            put("Authorization", authHeader(connection.accessToken))
-            if (connection.serverKind == HomeServerKind.EMBY) {
-                put("X-Emby-Authorization", authHeader(connection.accessToken))
-                put("X-Emby-Token", connection.accessToken)
-            }
-        }
+        return mapOf(
+            "User-Agent" to "ARVIO/${BuildConfig.VERSION_NAME}",
+            "X-Emby-Authorization" to authHeader(connection.accessToken),
+            "X-Emby-Token" to connection.accessToken
+        )
     }
 
     private fun buildUrl(
@@ -882,7 +830,7 @@ class HomeServerRepository @Inject constructor(
         path: String,
         query: Map<String, String?> = emptyMap()
     ): String {
-        val base = baseUrl.toHttpUrlOrNull() ?: error("Invalid server URL")
+        val base = baseUrl.toHttpUrlOrNull() ?: error(context.getString(R.string.homeserver_invalid_url))
         val builder = base.newBuilder()
         path.trim('/').split('/').filter { it.isNotBlank() }.forEach { builder.addPathSegment(it) }
         query.forEach { (key, value) ->
@@ -920,7 +868,7 @@ class HomeServerRepository @Inject constructor(
         okHttpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                error("Server request failed (${response.code})")
+                error(context.getString(R.string.homeserver_request_failed, response.code))
             }
             return JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
         }
@@ -931,26 +879,21 @@ class HomeServerRepository @Inject constructor(
         okHttpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                error("Server request failed (${response.code})")
+                error(context.getString(R.string.homeserver_request_failed, response.code))
             }
             return body
         }
     }
 
-    private fun postJson(
-        url: String,
-        bodyJson: JsonObject,
-        connection: HomeServerConnection? = null,
-        serverKind: HomeServerKind? = connection?.serverKind
-    ): JsonObject {
-        val request = requestBuilder(url, connection, serverKind)
+    private fun postJson(url: String, bodyJson: JsonObject, connection: HomeServerConnection? = null): JsonObject {
+        val request = requestBuilder(url, connection)
             .post(gson.toJson(bodyJson).toRequestBody(jsonMediaType))
             .header("Content-Type", "application/json")
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                error("Server sign in failed (${response.code})")
+                error(context.getString(R.string.homeserver_signin_failed_code, response.code))
             }
             return JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
         }
@@ -997,18 +940,13 @@ class HomeServerRepository @Inject constructor(
         )
     }
 
-    private fun authenticate(
-        serverUrl: String,
-        username: String,
-        password: String,
-        serverKind: HomeServerKind
-    ): AuthResponse {
+    private fun authenticate(serverUrl: String, username: String, password: String): AuthResponse {
         val body = JsonObject().apply {
             addProperty("Username", username)
             addProperty("Pw", password)
             addProperty("Password", password)
         }
-        val response = postJson(buildUrl(serverUrl, "/Users/AuthenticateByName"), body, serverKind = serverKind)
+        val response = postJson(buildUrl(serverUrl, "/Users/AuthenticateByName"), body)
         val user = response.obj("User")
         return AuthResponse(
             accessToken = response.string("AccessToken"),
@@ -1018,7 +956,7 @@ class HomeServerRepository @Inject constructor(
             userName = user?.string("Name").orEmpty()
         ).also {
             require(it.accessToken.isNotBlank() && it.userId.isNotBlank()) {
-                "Server sign in did not return a playable account"
+                context.getString(R.string.homeserver_no_playable_account)
             }
         }
     }
@@ -1048,7 +986,7 @@ class HomeServerRepository @Inject constructor(
     ): HomeServerConnection {
         val trimmedAccountToken = accountToken.trim()
         val trimmedDisplayName = displayName.trim()
-        require(trimmedAccountToken.isNotBlank()) { "Missing account token" }
+        require(trimmedAccountToken.isNotBlank()) { context.getString(R.string.homeserver_missing_token) }
 
         val normalizedPreferredUrl = normalizeServerUrl(preferredServerUrl)
         val preferredIdentity = preferredInfo?.takeIf { it.serverId.isNotBlank() }
@@ -1083,7 +1021,7 @@ class HomeServerRepository @Inject constructor(
                 .takeIf { it.isNotBlank() }
             ?: trimmedAccountToken
         val candidateUrls = plexCandidateServerUrls(normalizedPreferredUrl, targetDevice)
-        require(candidateUrls.isNotEmpty()) { "No reachable server URL found for this account" }
+        require(candidateUrls.isNotEmpty()) { context.getString(R.string.homeserver_no_reachable_url) }
 
         var lastError: Throwable? = null
         candidateUrls.forEach { candidateUrl ->
@@ -1109,7 +1047,7 @@ class HomeServerRepository @Inject constructor(
                 ?: return@forEach
             val expectedServerId = targetServerId.ifBlank { preferredIdentity?.serverId.orEmpty() }
             if (expectedServerId.isNotBlank() && info.serverId.isNotBlank() && expectedServerId != info.serverId) {
-                lastError = IllegalStateException("Server identity did not match the selected account server")
+                lastError = IllegalStateException(context.getString(R.string.homeserver_identity_mismatch))
                 return@forEach
             }
             val shell = candidate.copy(
@@ -1134,7 +1072,7 @@ class HomeServerRepository @Inject constructor(
         }
 
         val message = lastError?.message?.takeIf { it.isNotBlank() }
-        error(message ?: "No accessible libraries found for this account")
+        error(message ?: context.getString(R.string.homeserver_no_libraries))
     }
 
     private fun fetchPlexResources(accountToken: String): List<PlexResourceDevice> {
@@ -1161,7 +1099,7 @@ class HomeServerRepository @Inject constructor(
     }
 
     private fun parsePlexResourcesXml(xml: String): List<PlexResourceDevice> {
-        return HomeServerRepositoryRegexes.PLEX_DEVICE_REGEX.findAll(xml)
+        return PLEX_DEVICE_REGEX.findAll(xml)
             .map { match ->
                 val attrs = match.groupValues.getOrNull(1).orEmpty()
                     .ifBlank { match.groupValues.getOrNull(3).orEmpty() }
@@ -1173,7 +1111,7 @@ class HomeServerRepository @Inject constructor(
                     clientIdentifier = attrs.xmlAttribute("clientIdentifier"),
                     accessToken = attrs.xmlAttribute("accessToken"),
                     owned = attrs.xmlBooleanAttribute("owned"),
-                    connections = HomeServerRepositoryRegexes.PLEX_CONNECTION_REGEX.findAll(body)
+                    connections = PLEX_CONNECTION_REGEX.findAll(body)
                         .map { connection ->
                             val connectionAttrs = connection.groupValues.getOrNull(1).orEmpty()
                             PlexResourceConnection(
@@ -1249,7 +1187,7 @@ class HomeServerRepository @Inject constructor(
     }
 
     private fun refreshConnection(connection: HomeServerConnection): HomeServerConnection {
-        require(connection.isUsable) { "${connection.serverName.ifBlank { "Home Server" }} is disabled or incomplete" }
+        require(connection.isUsable) { context.getString(R.string.homeserver_disabled_incomplete) }
         if (connection.serverKind == HomeServerKind.PLEX) {
             val accountToken = connection.accountToken.ifBlank { connection.accessToken }
             val refreshed = buildPlexConnection(
@@ -1304,7 +1242,7 @@ class HomeServerRepository @Inject constructor(
                     if (id.isBlank()) return@mapNotNull null
                     HomeServerCollection(
                         id = id,
-                        name = directory.string("title").ifBlank { directory.string("name") }.ifBlank { "Library $id" },
+                        name = directory.string("title").ifBlank { directory.string("name") }.ifBlank { context.getString(R.string.library_named, id) },
                         type = directory.string("type"),
                         enabled = true
                     )
@@ -1319,7 +1257,7 @@ class HomeServerRepository @Inject constructor(
                 if (id.isBlank()) return@mapNotNull null
                 HomeServerCollection(
                     id = id,
-                    name = item.string("Name").ifBlank { "Library" },
+                    name = item.string("Name").ifBlank { context.getString(R.string.library_default) },
                     type = item.string("CollectionType"),
                     enabled = true
                 )
@@ -1328,7 +1266,7 @@ class HomeServerRepository @Inject constructor(
 
     private fun HomeServerConnection.toCatalogCandidate(collection: HomeServerCollection): HomeServerCatalogCandidate {
         val connectionLabel = displayLabel()
-        val collectionLabel = collection.name.ifBlank { "Library" }
+        val collectionLabel = collection.name.ifBlank { context.getString(R.string.library_default) }
         val title = if (collectionLabel.contains(connectionLabel, ignoreCase = true)) {
             collectionLabel
         } else {
@@ -1507,6 +1445,16 @@ class HomeServerRepository @Inject constructor(
         year: Int?,
         tmdbId: Int?
     ): HomeServerItem? {
+        return findMovieMatches(connection, imdbId, title, year, tmdbId).firstOrNull()
+    }
+
+    private fun findMovieMatches(
+        connection: HomeServerConnection,
+        imdbId: String?,
+        title: String,
+        year: Int?,
+        tmdbId: Int?
+    ): List<HomeServerItem> {
         val candidates = linkedMapOf<String, HomeServerItem>()
         providerQueries(imdbId, tmdbId, null).forEach { providerId ->
             queryItems(
@@ -1516,18 +1464,50 @@ class HomeServerRepository @Inject constructor(
             ).forEach { candidates[it.id] = it }
         }
         val bestById = bestCandidate(candidates.values, title, year, imdbId, tmdbId, null)
-        if (bestById != null && HomeServerMatcher.score(title, year, imdbId, tmdbId, null, bestById.info()) >= 900) {
-            return bestById
-        }
+        val bestByIdScore = bestById?.let {
+            HomeServerMatcher.score(title, year, imdbId, tmdbId, null, it.info())
+        } ?: 0
 
-        if (title.isNotBlank()) {
+        if (title.isNotBlank() && (connection.serverKind == HomeServerKind.PLEX || bestByIdScore < 900)) {
             queryItems(
                 connection,
                 itemTypes = "Movie",
                 query = mapOf("SearchTerm" to title, "Limit" to "25")
             ).forEach { candidates[it.id] = it }
         }
-        return bestCandidate(candidates.values, title, year, imdbId, tmdbId, null)
+        return matchingMovieCandidates(candidates.values, title, year, imdbId, tmdbId)
+    }
+
+    private fun matchingMovieCandidates(
+        candidates: Collection<HomeServerItem>,
+        title: String,
+        year: Int?,
+        imdbId: String?,
+        tmdbId: Int?
+    ): List<HomeServerItem> {
+        val scored = candidates
+            .map { item -> item to HomeServerMatcher.score(title, year, imdbId, tmdbId, null, item.info()) }
+            .filter { (_, score) -> HomeServerMatcher.isAcceptable(score) }
+        val bestScore = scored.maxOfOrNull { (_, score) -> score } ?: return emptyList()
+        return scored
+            .filter { (item, score) ->
+                score == bestScore || isLikelySameMovieVersion(item, title, year)
+            }
+            .sortedByDescending { (_, score) -> score }
+            .map { (item, _) -> item }
+            .distinctBy { it.id }
+    }
+
+    private fun isLikelySameMovieVersion(
+        item: HomeServerItem,
+        title: String,
+        year: Int?
+    ): Boolean {
+        val requestedTitle = HomeServerMatcher.normalizeTitle(title)
+        val candidateTitle = HomeServerMatcher.normalizeTitle(item.name)
+        if (requestedTitle.isBlank() || requestedTitle != candidateTitle) return false
+        val candidateYear = item.productionYear ?: return true
+        return year == null || abs(year - candidateYear) <= 1
     }
 
     private fun findBestSeries(
@@ -1599,6 +1579,15 @@ class HomeServerRepository @Inject constructor(
         season: Int,
         episode: Int
     ): HomeServerItem? {
+        return findEpisodes(connection, seriesId, season, episode).firstOrNull()
+    }
+
+    private fun findEpisodes(
+        connection: HomeServerConnection,
+        seriesId: String,
+        season: Int,
+        episode: Int
+    ): List<HomeServerItem> {
         if (connection.serverKind == HomeServerKind.PLEX) {
             val leaves = getJson(
                 buildUrl(
@@ -1608,7 +1597,9 @@ class HomeServerRepository @Inject constructor(
                 ),
                 connection
             ).metadataItems(connection.serverKind)
-            return leaves.firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
+            return leaves
+                .filter { it.parentIndexNumber == season && it.indexNumber == episode }
+                .distinctBy { it.id }
         }
 
         val byShowEndpoint = getJson(
@@ -1623,17 +1614,19 @@ class HomeServerRepository @Inject constructor(
             ),
             connection
         ).items()
-        return byShowEndpoint.firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
-            ?: queryItems(
-                connection,
-                itemTypes = "Episode",
-                query = mapOf(
-                    "SeriesId" to seriesId,
-                    "ParentIndexNumber" to season.toString(),
-                    "IndexNumber" to episode.toString(),
-                    "Limit" to "10"
-                )
-            ).firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
+        return listOfNotNull(
+            byShowEndpoint.firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
+                ?: queryItems(
+                    connection,
+                    itemTypes = "Episode",
+                    query = mapOf(
+                        "SeriesId" to seriesId,
+                        "ParentIndexNumber" to season.toString(),
+                        "IndexNumber" to episode.toString(),
+                        "Limit" to "10"
+                    )
+                ).firstOrNull { it.parentIndexNumber == season && it.indexNumber == episode }
+        )
     }
 
     private fun findEpisodeBySearch(
@@ -1950,7 +1943,8 @@ class HomeServerRepository @Inject constructor(
     }
 
     private fun HomeServerMediaSource.identityKey(): String {
-        return id.takeIf { it.isNotBlank() }
+        return variantKey.takeIf { it.isNotBlank() }
+            ?: id.takeIf { it.isNotBlank() }
             ?: key.takeIf { it.isNotBlank() }
             ?: path.takeIf { it.isNotBlank() }
             ?: name.takeIf { it.isNotBlank() }
@@ -1978,13 +1972,8 @@ class HomeServerRepository @Inject constructor(
             val parsed = absolute.toHttpUrlOrNull() ?: return absolute
             return parsed.newBuilder()
                 .apply {
-                    if (connection.serverKind == HomeServerKind.EMBY) {
-                        if (parsed.queryParameter("api_key").isNullOrBlank()) {
-                            addQueryParameter("api_key", connection.accessToken)
-                        }
-                    } else {
-                        removeAllQueryParameters("api_key")
-                        removeAllQueryParameters("apiKey")
+                    if (parsed.queryParameter("api_key").isNullOrBlank()) {
+                        addQueryParameter("api_key", connection.accessToken)
                     }
                 }
                 .build()
@@ -2000,7 +1989,7 @@ class HomeServerRepository @Inject constructor(
                 "Static" to "true",
                 "MediaSourceId" to id,
                 "DeviceId" to deviceId(),
-                "api_key" to connection.accessToken.takeIf { connection.serverKind == HomeServerKind.EMBY },
+                "api_key" to connection.accessToken,
                 "Tag" to eTag.takeIf { it.isNotBlank() }
             )
         )
@@ -2095,7 +2084,7 @@ class HomeServerRepository @Inject constructor(
             ?.trim()
             ?.lowercase(Locale.US)
             ?.replace("matroska", "mkv")
-            ?.replace(HomeServerRepositoryRegexes.NON_ALPHA_NUM_STRICT_REGEX, "")
+            ?.replace(NON_ALPHA_NUM_STRICT_REGEX, "")
             .orEmpty()
         return normalized.takeIf { it.isNotBlank() && it.length <= 5 }
     }
@@ -2229,6 +2218,16 @@ class HomeServerRepository @Inject constructor(
             val audioStream = streams.firstOrNull { stream ->
                 stream.string("streamType") == "2" || stream.string("type").equals("audio", ignoreCase = true)
             }
+            val variantKey = listOfNotNull(
+                parentMedia?.string("id")?.takeIf { it.isNotBlank() },
+                parentMedia?.string("bitrate")?.takeIf { it.isNotBlank() },
+                string("id").takeIf { it.isNotBlank() },
+                string("key").takeIf { it.isNotBlank() },
+                string("file").takeIf { it.isNotBlank() },
+                long("size")?.toString(),
+                width.takeIf { it > 0 }?.toString(),
+                height.takeIf { it > 0 }?.toString()
+            ).joinToString("|")
             return HomeServerMediaSource(
                 id = string("id"),
                 key = string("key"),
@@ -2242,6 +2241,7 @@ class HomeServerRepository @Inject constructor(
                 transcodingUrl = "",
                 videoWidth = width,
                 videoHeight = height,
+                variantKey = variantKey,
                 videoCodec = videoStream?.string("codec").orEmpty().ifBlank { parentMedia?.string("videoCodec").orEmpty() },
                 videoProfile = videoStream?.string("profile").orEmpty().ifBlank { parentMedia?.string("videoProfile").orEmpty() },
                 audioCodec = audioStream?.string("codec").orEmpty().ifBlank { parentMedia?.string("audioCodec").orEmpty() },
@@ -2284,28 +2284,9 @@ class HomeServerRepository @Inject constructor(
     private fun JsonElement.asStringOrNull(): String? =
         runCatching { takeUnless { it.isJsonNull }?.asString }.getOrNull()
 
-    private val xmlAttributeRegexCache = java.util.concurrent.ConcurrentHashMap<String, Regex>()
-
     private fun String.xmlAttribute(name: String): String {
-        val target = "$name="
-        var index = this.indexOf(target)
-        // Ensure word boundary check to avoid substring matches
-        while (index != -1) {
-            if (index == 0 || !(this[index - 1].isLetterOrDigit() || this[index - 1] == '_')) {
-                val valueStart = index + target.length
-                if (valueStart < this.length) {
-                    val quote = this[valueStart]
-                    if (quote == '"' || quote == '\'') {
-                        val valueEnd = this.indexOf(quote, valueStart + 1)
-                        if (valueEnd != -1) {
-                            return this.substring(valueStart + 1, valueEnd).xmlDecoded()
-                        }
-                    }
-                }
-            }
-            index = this.indexOf(target, index + target.length)
-        }
-        return ""
+        val pattern = Regex("""\b${Regex.escape(name)}=["']([^"']*)["']""")
+        return pattern.find(this)?.groupValues?.getOrNull(1).orEmpty().xmlDecoded()
     }
 
     private fun String.xmlBooleanAttribute(name: String): Boolean {
@@ -2392,6 +2373,7 @@ class HomeServerRepository @Inject constructor(
         val transcodingUrl: String,
         val videoWidth: Int,
         val videoHeight: Int,
+        val variantKey: String = "",
         val videoCodec: String = "",
         val videoProfile: String = "",
         val audioCodec: String = "",
@@ -2404,17 +2386,14 @@ class HomeServerRepository @Inject constructor(
 }
 
 
-
-private object HomeServerRepositoryRegexes {
-    val DIACRITICS_REGEX = Regex("\\p{Mn}+")
-    val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
-    val ARTICLES_REGEX = Regex("\\b(the|a|an)\\b")
-    val MULTI_SPACE_REGEX = Regex("\\s+")
-    val CONNECTION_ID_SANITIZER_REGEX = Regex("[^a-z0-9:._-]+")
-    val NON_ALPHA_NUM_STRICT_REGEX = Regex("[^a-z0-9]")
-    val PLEX_DEVICE_REGEX = Regex(
-        """<Device\b([^>]*)>(.*?)</Device>|<Device\b([^>]*)/>""",
-        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-    )
-    val PLEX_CONNECTION_REGEX = Regex("""<Connection\b([^>]*)/?\s*>""", RegexOption.IGNORE_CASE)
-}
+private val DIACRITICS_REGEX = Regex("\\p{Mn}+")
+private val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
+private val ARTICLES_REGEX = Regex("\\b(the|a|an)\\b")
+private val MULTI_SPACE_REGEX = Regex("\\s+")
+private val CONNECTION_ID_SANITIZER_REGEX = Regex("[^a-z0-9:._-]+")
+private val NON_ALPHA_NUM_STRICT_REGEX = Regex("[^a-z0-9]")
+private val PLEX_DEVICE_REGEX = Regex(
+    """<Device\b([^>]*)>(.*?)</Device>|<Device\b([^>]*)/>""",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+)
+private val PLEX_CONNECTION_REGEX = Regex("""<Connection\b([^>]*)/?\s*>""", RegexOption.IGNORE_CASE)

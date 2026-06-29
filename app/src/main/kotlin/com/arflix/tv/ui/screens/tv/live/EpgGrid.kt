@@ -45,11 +45,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
@@ -57,11 +59,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
-private const val EpgPastWindowMinutes = 48 * 60
-private const val EpgFutureWindowMinutes = 24 * 60
-private const val CompactEpgPastWindowMinutes = 48 * 60
-private const val CompactEpgFutureWindowMinutes = 12 * 60
-private const val ChannelWindowPrefetchThreshold = 18
+private const val EpgPastWindowMinutes = 2 * 60
+// Past 48h + future 48h: the guide shows a full ±48h span so users can scroll back
+// for catch-up and forward to plan. The SQLite guide index keeps a wider window
+// (past 48h / future 96h) so this data is already available without a refetch.
+private const val EpgFutureWindowMinutes = 10 * 60
+private const val CompactEpgPastWindowMinutes = 90
+private const val CompactEpgFutureWindowMinutes = 6 * 60
+private const val ChannelWindowPrefetchThreshold = 10
 
 enum class EpgGridFocusMode {
     ChannelList,
@@ -90,6 +95,7 @@ fun EpgGrid(
     focusSelectedChannelSignal: Int,
     focusEpgSignal: Int = 0,
     focusMode: EpgGridFocusMode = EpgGridFocusMode.ChannelList,
+    scrollResetKey: String = "",
     onChannelSelect: (EnrichedChannel, IptvProgram?) -> Unit,
     onProgramSelect: (EnrichedChannel, IptvProgram?) -> Unit = onChannelSelect,
     onChannelFocused: (EnrichedChannel) -> Unit = {},
@@ -165,6 +171,16 @@ fun EpgGrid(
     var didPositionInitialSelection by remember(channels) { mutableStateOf(false) }
     var activeChannelFocusId by remember(channels) { mutableStateOf(selectedChannelId) }
     var pendingChannelFocusId by remember(channels) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(scrollResetKey, channelWindowIdentity) {
+        if (channels.isEmpty()) return@LaunchedEffect
+        channelListState.scrollToItem(0)
+        activeChannelFocusId = selectedChannelId
+            ?.takeIf { it in channelIndexById }
+            ?: channels.firstOrNull()?.id
+        pendingChannelFocusId = null
+        didPositionInitialSelection = true
+    }
 
     val scope = rememberCoroutineScope()
     fun requestProgramFocus(rowIdx: Int, targetIdx: Int): Boolean {
@@ -338,12 +354,12 @@ fun EpgGrid(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("CHANNELS", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
+                    Text(stringResource(R.string.live_label_channels), style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
                     Text(safeTotalChannelCount.toString(),
                         style = LiveType.NumberMono.copy(color = LiveColors.FgDim))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("CH", style = LiveType.SectionTag.copy(color = LiveColors.Accent))
+                    Text(stringResource(R.string.live_badge_ch), style = LiveType.SectionTag.copy(color = LiveColors.Accent))
                     Text(
                         selectedChannel?.number?.toString() ?: "—",
                         style = LiveType.NumberMono.copy(color = LiveColors.Accent),
@@ -391,7 +407,7 @@ fun EpgGrid(
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = "NOW " + formatClock(clockTickMillis),
+                            text = stringResource(R.string.live_label_now_time, formatClock(clockTickMillis)),
                             style = LiveType.Badge.copy(color = LiveColors.Bg),
                         )
                     }
@@ -419,7 +435,7 @@ fun EpgGrid(
                         }
                         if (focusMode == EpgGridFocusMode.Epg) {
                             onExitEpg(selectedChannel)
-                            selectedChannelFocusRequester.requestFocus()
+                            runCatching { selectedChannelFocusRequester.requestFocus() }
                         } else {
                             onMoveLeftFromChannels()
                         }
@@ -434,7 +450,7 @@ fun EpgGrid(
                 ) {
                     itemsIndexed(
                         channels,
-                        key = { _, ch -> ch.id },
+                        key = { index, ch -> "${ch.id}#$index" },
                         contentType = { _, _ -> "channelRowAndPrograms" }
                     ) { idx, ch ->
                         val channelFocusRequester = remember(ch.id) { FocusRequester() }
@@ -531,16 +547,17 @@ fun EpgGrid(
                                 val rowHasGuideIdentity = !ch.source.epgId.isNullOrBlank() ||
                                     !ch.source.tvgName.isNullOrBlank()
                                 val placeholderTitle = when {
-                                    isGuideLoading -> "Loading guide..."
-                                    !rowHasGuideIdentity -> "No programme data"
-                                    hasGuideSource && guideAttempted -> "No guide data matched"
-                                    hasGuideSource -> "Guide pending..."
-                                    else -> "No guide source"
+                                    isGuideLoading -> stringResource(R.string.live_placeholder_loading_guide)
+                                    !rowHasGuideIdentity -> stringResource(R.string.live_empty_no_programme)
+                                    hasGuideSource && guideAttempted -> stringResource(R.string.live_placeholder_no_guide_matched)
+                                    hasGuideSource -> stringResource(R.string.live_placeholder_guide_pending)
+                                    else -> stringResource(R.string.live_placeholder_no_guide_source)
                                 }
                                 ProgramsRow(
                                     channel = ch,
                                     programs = rowPrograms,
                                     placeholderTitle = placeholderTitle,
+                                    noProgrammeData = stringResource(R.string.live_empty_no_programme),
                                     clockTickMillis = clockTickMillis,
                                     windowStartMillis = windowStartMillis,
                                     windowEndMillis = windowEndMillis,
@@ -611,6 +628,7 @@ private fun ProgramsRow(
     channel: EnrichedChannel,
     programs: List<IptvProgram>,
     placeholderTitle: String,
+    noProgrammeData: String,
     clockTickMillis: Long,
     windowStartMillis: Long,
     windowEndMillis: Long,
@@ -642,8 +660,14 @@ private fun ProgramsRow(
                 }
             ),
     ) {
-        val placements = remember(programs, placeholderTitle, windowStartMillis, windowEndMillis, nowMillis) {
-            buildProgramPlacements(programs, windowStartMillis, windowEndMillis, nowMillis, placeholderTitle)
+        // Placement geometry (cell offsets/widths + gap placeholders) does NOT depend
+        // on the clock, so it is keyed only on the programmes and window. This stops the
+        // whole row's layout from being rebuilt on every 30s clock tick — the recompute
+        // storm that made dpad navigation hitch. The now/past state is derived cheaply
+        // per render from `nowMillis` via ProgramPlacement.isNow()/isPast(), and the
+        // placeholder anchor refreshes whenever `windowStartMillis` rounds forward.
+        val placements = remember(programs, placeholderTitle, noProgrammeData, windowStartMillis, windowEndMillis) {
+            buildProgramPlacements(programs, windowStartMillis, windowEndMillis, nowMillis, placeholderTitle, noProgrammeData)
         }
         val focusablePlacementIndices = remember(placements, channel.catchupDays, nowMillis, epgMode) {
             if (!epgMode) return@remember emptyList()
@@ -686,26 +710,28 @@ private fun ProgramsRow(
                 val isCatchupSupported = placement.isCatchupSupported(channel, nowMillis)
                 val focusableIndex = focusableIndexByPlacementIndex[placementIndex] ?: -1
                 val isFocusable = focusableIndex >= 0
+                val placementIsNow = placement.isNow(nowMillis)
+                val placementIsPast = placement.isPast(nowMillis)
                 ProgramCell(
                     program = placement.program,
                     clockTickMillis = clockTickMillis,
                     width = width,
-                    isNow = placement.isNow,
-                    isPast = placement.isPast,
-                    isFocusTarget = placement.isNow,
+                    isNow = placementIsNow,
+                    isPast = placementIsPast,
+                    isFocusTarget = placementIsNow,
                     focusable = isFocusable,
                     isCatchupSupported = isCatchupSupported,
                     onClick = {
-                        if (placement.isPast && isCatchupSupported) {
+                        if (placementIsPast && isCatchupSupported) {
                             onClick(placement.program)
-                        } else if (!placement.isPast) {
+                        } else if (!placementIsPast) {
                             onClick(null)
                         }
                     },
                     onFocused = onFocused,
                     onMoveLeft = {
                         if (focusableIndex > 0) {
-                            rowFocusRequesters[focusableIndex - 1].requestFocus()
+                            runCatching { rowFocusRequesters[focusableIndex - 1].requestFocus() }
                             true
                         } else {
                             onMoveLeftFromStart()
@@ -713,7 +739,7 @@ private fun ProgramsRow(
                     },
                     onMoveRight = {
                         if (focusableIndex in 0 until rowFocusRequesters.lastIndex) {
-                            rowFocusRequesters[focusableIndex + 1].requestFocus()
+                            runCatching { rowFocusRequesters[focusableIndex + 1].requestFocus() }
                             true
                         } else {
                             false
@@ -806,11 +832,13 @@ private data class ProgramPlacement(
     val program: IptvProgram,
     val startMin: Int,
     val durationMin: Int,
-    val isNow: Boolean,
-    val isPast: Boolean,
+    val startMillis: Long,
+    val endMillis: Long,
     val isPlaceholder: Boolean = false,
 ) {
     val endMin: Int get() = startMin + durationMin
+    fun isNow(nowMs: Long): Boolean = nowMs in startMillis until endMillis
+    fun isPast(nowMs: Long): Boolean = endMillis <= nowMs
 }
 
 private data class ProgramFocusTarget(val startMin: Int, val endMin: Int) {
@@ -841,18 +869,19 @@ private fun effectiveCatchupDays(channel: EnrichedChannel): Int {
 }
 
 private fun ProgramPlacement.canFocus(channel: EnrichedChannel, nowMillis: Long): Boolean =
-    !isPast || isCatchupSupported(channel, nowMillis)
+    !isPlaceholder && (!isPast(nowMillis) || isCatchupSupported(channel, nowMillis))
 
 private fun buildProgramPlacements(
     programs: List<IptvProgram>,
     windowStartMillis: Long,
     windowEndMillis: Long,
     nowMillis: Long,
-    placeholderTitle: String = "No Information",
+    placeholderTitle: String = "",
+    noProgrammeData: String = placeholderTitle,
 ): List<ProgramPlacement> {
     val placements = mutableListOf<ProgramPlacement>()
     var cursor = windowStartMillis
-    val gapTitle = if (programs.isEmpty()) placeholderTitle else "No programme data"
+    val gapTitle = if (programs.isEmpty()) placeholderTitle else noProgrammeData
 
     programs.forEach { program ->
         // 1. Fill gap before this program
@@ -881,8 +910,8 @@ private fun buildProgramPlacements(
                 program = program,
                 startMin = ((clampedStart - windowStartMillis) / 60_000L).toInt(),
                 durationMin = ((clampedEnd - clampedStart) / 60_000L).toInt().coerceAtLeast(1),
-                isNow = nowMillis in clampedStart until clampedEnd,
-                isPast = clampedEnd <= nowMillis
+                startMillis = clampedStart,
+                endMillis = clampedEnd,
             )
             cursor = clampedEnd
         }
@@ -925,8 +954,9 @@ private fun addPlaceholderPlacement(
         program = IptvProgram(title, startUtcMillis = placeholderStart, endUtcMillis = placeholderEnd),
         startMin = ((placeholderStart - windowStartMillis) / 60_000L).toInt(),
         durationMin = ((placeholderEnd - placeholderStart) / 60_000L).toInt().coerceAtLeast(1),
-        isNow = nowMillis in placeholderStart until placeholderEnd,
-        isPast = placeholderEnd <= nowMillis,
+        startMillis = placeholderStart,
+        endMillis = placeholderEnd,
         isPlaceholder = true,
     )
 }
+

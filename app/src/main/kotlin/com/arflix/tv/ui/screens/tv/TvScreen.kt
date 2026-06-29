@@ -1542,7 +1542,7 @@ private fun CategoryRail(
         verticalArrangement = Arrangement.spacedBy(1.dp),
         modifier = modifier.arvioDpadFocusGroup()
     ) {
-        itemsIndexed(groups, key = { _, group -> group }, contentType = { _, _ -> "category_group" }) { index, group ->
+        itemsIndexed(groups, key = { index, group -> "$group#$index" }, contentType = { _, _ -> "category_group" }) { index, group ->
             GroupRailItem(
                 name = group,
                 isFocused = isFocused && index == focusedGroupIndex,
@@ -1883,7 +1883,7 @@ private fun GuidePanel(
             ) {
                 itemsIndexed(
                     channels,
-                    key = { _, ch -> ch.id },
+                    key = { index, ch -> "${ch.id}#$index" },
                     contentType = { _, _ -> "guide_channel_row" }
                 ) { index, channel ->
                     val focused = guideFocused && index == focusedChannelIndex

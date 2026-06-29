@@ -27,7 +27,7 @@ class TelegramSearchMatcher @Inject constructor() {
         fileName: String,
         caption: String,
         title: String,
-        hebrewTitle: String? = null,
+        localizedTitle: String? = null,
         englishTitle: String? = null,
         year: Int?,
         season: Int?,
@@ -36,15 +36,15 @@ class TelegramSearchMatcher @Inject constructor() {
         val combined = "$fileName $caption"
         val normalizedCombined = normalize(combined)
         val normalizedTitle = normalize(title)
-        val normalizedHebrew = hebrewTitle?.let { normalize(it) }
+        val normalizedLocalized = localizedTitle?.let { normalize(it) }
         val normalizedEnglish = englishTitle?.let { normalize(it) }
 
-        // Primary match: TMDB English title, TMDB Hebrew title, or app title (in that priority)
+        // Primary match: TMDB English title, TMDB localized title, or app title (in that priority)
         val engMatch = normalizedEnglish != null && normalizedEnglish.isNotBlank() && normalizedCombined.contains(normalizedEnglish)
-        val hebMatch = normalizedHebrew != null && normalizedHebrew.isNotBlank() && normalizedCombined.contains(normalizedHebrew)
+        val locMatch = normalizedLocalized != null && normalizedLocalized.isNotBlank() && normalizedCombined.contains(normalizedLocalized)
         val appMatch = normalizedCombined.contains(normalizedTitle)
 
-        if (!engMatch && !hebMatch && !appMatch) return 0
+        if (!engMatch && !locMatch && !appMatch) return 0
 
         var score = 60
 
@@ -101,25 +101,31 @@ class TelegramSearchMatcher @Inject constructor() {
         return m.groupValues[1].toIntOrNull()
     }
 
-    fun buildMovieQueries(title: String, year: Int?, hebrewTitle: String? = null, englishTitle: String? = null): List<String> {
+    fun buildMovieQueries(title: String, year: Int?, localizedTitle: String? = null, englishTitle: String? = null): List<String> {
         // Prefer TMDB English title as primary; fall back to app title
         val primary = englishTitle?.let { cleanTitle(it) } ?: cleanTitle(title)
-        val hebrew = hebrewTitle?.let { cleanTitle(it) }
+        val localized = localizedTitle?.let { cleanTitle(it) }
         val queries = mutableListOf<String>()
         if (year != null) queries.add("$primary $year")
         queries.add(primary)
-        if (hebrew != null && !hebrew.equals(primary, ignoreCase = true)) {
-            if (year != null) queries.add("$hebrew $year")
-            queries.add(hebrew)
+        if (localized != null && !localized.equals(primary, ignoreCase = true)) {
+            if (year != null) queries.add("$localized $year")
+            queries.add(localized)
         }
         return queries.distinct()
     }
 
-    fun buildSeriesQueries(title: String, season: Int, episode: Int, hebrewTitle: String? = null, englishTitle: String? = null): List<String> {
-        // Prefer TMDB English as primary for English patterns; TMDB Hebrew for Hebrew patterns
+    fun buildSeriesQueries(
+        title: String,
+        season: Int,
+        episode: Int,
+        localizedTitle: String? = null,
+        englishTitle: String? = null,
+        languageCode: String = "en"
+    ): List<String> {
         val engBase = englishTitle?.let { cleanTitle(it) } ?: cleanTitle(title)
-        val hebBase = hebrewTitle?.let { cleanTitle(it) }
-        val titlesAreSame = hebBase == null || hebBase.equals(engBase, ignoreCase = true)
+        val locBase = localizedTitle?.let { cleanTitle(it) }
+        val titlesAreSame = locBase == null || locBase.equals(engBase, ignoreCase = true)
         val s = season.toString()
         val e = episode.toString()
         val s2 = season.toString().padStart(2, '0')
@@ -127,16 +133,28 @@ class TelegramSearchMatcher @Inject constructor() {
 
         val queries = mutableListOf<String>()
 
-        // Hebrew patterns with Hebrew title (or engBase if same)
-        val hebTitle = if (titlesAreSame) engBase else hebBase!!
-        queries += listOf(
-            "$hebTitle ע$s פ$e",
-            "$hebTitle ע${s}פ${e}",
-            "$hebTitle עונה $s פרק $e",
-        )
-        if (season == 1) queries += listOf("$hebTitle פ$e", "$hebTitle פרק $e")
+        // Hebrew-specific episode markers — only for Hebrew users
+        if (languageCode == "he") {
+            val hebTitle = if (titlesAreSame) engBase else locBase ?: engBase
+            queries += listOf(
+                "$hebTitle ע$s פ$e",
+                "$hebTitle ע${s}פ${e}",
+                "$hebTitle עונה $s פרק $e",
+            )
+            if (season == 1) queries += listOf("$hebTitle פ$e", "$hebTitle פרק $e")
+        }
 
-        // English patterns with English title
+        // Localized title with English S/E patterns (any non-English language)
+        if (!titlesAreSame) {
+            queries += listOf(
+                "$locBase s${s}e${e}",
+                "$locBase s${s2}e${e2}",
+                "$locBase s$s e$e",
+                "$locBase s$s2 e$e2",
+            )
+        }
+
+        // English patterns
         queries += listOf(
             "$engBase s${s}e${e}",
             "$engBase s${s2}e${e2}",

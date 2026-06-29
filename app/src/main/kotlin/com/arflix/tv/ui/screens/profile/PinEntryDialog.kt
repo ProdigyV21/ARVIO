@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,13 +42,14 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.PinUtil
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PinEntryDialog(
-    title: String = "Enter PIN",
+    title: String = stringResource(R.string.profile_enter_pin),
     onPinConfirmed: (String) -> Unit,
     onDismiss: () -> Unit,
     isSetup: Boolean = false,
@@ -57,6 +59,8 @@ fun PinEntryDialog(
     var confirmPin by remember { mutableStateOf("") }
     var isConfirmingSetup by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf(pinError) }
+    val pinInvalidMessage = stringResource(R.string.profile_pin_invalid)
+    val pinMismatchMessage = stringResource(R.string.profile_pin_mismatch)
 
     LaunchedEffect(pinError) {
         errorMessage = pinError
@@ -84,15 +88,15 @@ fun PinEntryDialog(
                 // Icon + Title
                 Icon(
                     imageVector = Icons.Default.Lock,
-                    contentDescription = "PIN Entry",
+                    contentDescription = stringResource(R.string.profile_pin_entry_cd),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
 
                 Text(
                     text = when {
-                        isSetup && !isConfirmingSetup -> "Set Profile PIN"
-                        isSetup && isConfirmingSetup -> "Confirm PIN"
+                        isSetup && !isConfirmingSetup -> stringResource(R.string.set_profile_pin)
+                        isSetup && isConfirmingSetup -> stringResource(R.string.profile_confirm_pin)
                         else -> title
                     },
                     fontSize = 18.sp,
@@ -103,9 +107,9 @@ fun PinEntryDialog(
 
                 Text(
                     text = when {
-                        isSetup && !isConfirmingSetup -> "4-5 digits to lock this profile"
-                        isSetup && isConfirmingSetup -> "Re-enter PIN to confirm"
-                        else -> "Enter PIN to unlock"
+                        isSetup && !isConfirmingSetup -> stringResource(R.string.profile_pin_setup_hint)
+                        isSetup && isConfirmingSetup -> stringResource(R.string.profile_pin_reenter)
+                        else -> stringResource(R.string.enter_pin_to_unlock)
                     },
                     fontSize = 12.sp,
                     color = Color(0xFFB0B0B0),
@@ -204,7 +208,7 @@ fun PinEntryDialog(
                         )
 
                         PinKeyButton(
-                            label = "Clear",
+                            label = stringResource(R.string.profile_clear),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp),
@@ -255,7 +259,7 @@ fun PinEntryDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     PinActionButton(
-                        label = "Cancel",
+                        label = stringResource(R.string.cancel),
                         onClick = onDismiss,
                         containerColor = Color(0xFF2A2A2A),
                         modifier = Modifier
@@ -264,17 +268,17 @@ fun PinEntryDialog(
                     )
 
                     PinActionButton(
-                        label = "OK",
+                        label = stringResource(R.string.confirm),
                         onClick = {
                             val current = if (isSetup && isConfirmingSetup) confirmPin else pinInput
                             if (!PinUtil.isValidPin(current)) {
-                                errorMessage = "PIN must be 4-5 digits"
+                                errorMessage = pinInvalidMessage
                             } else if (isSetup) {
                                 if (!isConfirmingSetup) {
                                     isConfirmingSetup = true
                                 } else {
                                     if (pinInput != confirmPin) {
-                                        errorMessage = "PINs do not match"
+                                        errorMessage = pinMismatchMessage
                                         confirmPin = ""
                                         isConfirmingSetup = false
                                     } else {

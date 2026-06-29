@@ -33,10 +33,30 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideTmdbApi(okHttpClient: OkHttpClient): TmdbApi {
+    fun provideTmdbApi(okHttpClient: OkHttpClient, @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context): TmdbApi {
+        val tmdbClient = okHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val originalHttpUrl = original.url
+
+                val langPrefs = context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
+                val lang = langPrefs.getString("locale_tag", "en-US") ?: "en-US"
+
+                // Only inject if it's not the default English. Map "iw" to "he".
+                val urlBuilder = originalHttpUrl.newBuilder()
+                if (lang != "en-US") {
+                    val tmdbLang = lang.replace("iw", "he").replace('_', '-')
+                    urlBuilder.setQueryParameter("language", tmdbLang)
+                }
+
+                val requestBuilder = original.newBuilder().url(urlBuilder.build())
+                chain.proceed(requestBuilder.build())
+            }
+            .build()
+
         return Retrofit.Builder()
             .baseUrl(Constants.TMDB_BASE_URL)
-            .client(okHttpClient)
+            .client(tmdbClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(TmdbApi::class.java)

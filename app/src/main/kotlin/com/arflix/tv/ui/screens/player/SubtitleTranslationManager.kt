@@ -77,10 +77,9 @@ class SubtitleTranslationManager(
             val result = service.translateBatch(texts, targetLanguage)
             if (!result.success) {
                 onBatchResult?.invoke(false, result.errorMessage)
-                // On rate-limit or error, complete deferreds with original text so the caller
-                // doesn't hang, then back off before accepting more requests.
+                // On error: complete deferreds with original text so the caller doesn't hang,
+                // but do NOT cache — the next render will retry rather than permanently show English.
                 batch.forEachIndexed { i, item ->
-                    cache[item.text] = item.text
                     inFlight.remove(item.text)
                     item.deferred.complete(item.text)
                 }
@@ -100,6 +99,8 @@ class SubtitleTranslationManager(
     }
 
     fun getCached(text: String): String? = cache[text]
+
+    fun isInFlight(text: String): Boolean = inFlight.containsKey(text)
 
     suspend fun translate(text: String): String {
         cache[text]?.let { return it }

@@ -7,6 +7,7 @@ import android.content.pm.PackageInstaller
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import com.arflix.tv.R
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -62,7 +63,7 @@ class ApkInstallReceiver : BroadcastReceiver() {
                     // Some Android TV forks (particularly Chinese AOSP variants) don't
                     // handle the system confirm intent correctly. Log but don't crash.
                     Log.e(TAG, "Failed to launch install confirmation Activity: ${e.message}", e)
-                    showToast(context, "Update install requires manual confirmation. Please install from Downloads.")
+                    showToast(context, context.getString(R.string.update_install_manual_confirm))
                 }
             }
 
@@ -81,13 +82,13 @@ class ApkInstallReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE_STORAGE -> {
                 Log.e(TAG, "Update install failed: status=$status message=$message")
                 val userMessage = when (status) {
-                    PackageInstaller.STATUS_FAILURE_ABORTED -> "Update cancelled."
-                    PackageInstaller.STATUS_FAILURE_BLOCKED -> "Update blocked by system policy."
-                    PackageInstaller.STATUS_FAILURE_CONFLICT -> "Update conflicts with installed version. Try uninstalling first."
-                    PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "Update not compatible with this device."
-                    PackageInstaller.STATUS_FAILURE_INVALID -> "Update package is invalid or corrupted."
-                    PackageInstaller.STATUS_FAILURE_STORAGE -> "Not enough storage to install update."
-                    else -> message ?: "Update install failed."
+                    PackageInstaller.STATUS_FAILURE_ABORTED -> context.getString(R.string.update_install_cancelled)
+                    PackageInstaller.STATUS_FAILURE_BLOCKED -> context.getString(R.string.update_install_blocked)
+                    PackageInstaller.STATUS_FAILURE_CONFLICT -> context.getString(R.string.update_install_conflict)
+                    PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> context.getString(R.string.update_install_incompatible)
+                    PackageInstaller.STATUS_FAILURE_INVALID -> context.getString(R.string.update_install_invalid)
+                    PackageInstaller.STATUS_FAILURE_STORAGE -> context.getString(R.string.update_install_storage)
+                    else -> message ?: context.getString(R.string.update_install_failed)
                 }
                 updateStatusManager.updateStatus(UpdateStatus.Failure(userMessage))
                 showToast(context, userMessage)

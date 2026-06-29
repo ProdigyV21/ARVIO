@@ -1,7 +1,9 @@
 package com.arflix.tv.ui.screens.profile
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.ProfileColors
 import com.arflix.tv.data.repository.CloudSyncRepository
@@ -17,6 +19,7 @@ import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.ui.components.ToastType
 import com.arflix.tv.util.PinUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +60,7 @@ data class ProfileUiState(
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val authRepository: AuthRepository,
     private val profileRepository: ProfileRepository,
     private val profileManager: ProfileManager,
@@ -124,7 +128,15 @@ class ProfileViewModel @Inject constructor(
                 }
 
                 lastInitialRestoreUserId = userId
-                _uiState.value = _uiState.value.copy(isLoading = true)
+                // Keep profile selector responsive while cloud restore runs. If we
+                // already have local profiles, only show them first and restore in
+                // the background.
+                val hasLocalProfiles = runCatching { profileRepository.getProfiles() }
+                    .getOrNull()
+                    ?.isNotEmpty() == true
+                if (!hasLocalProfiles) {
+                    _uiState.value = _uiState.value.copy(isLoading = true)
+                }
 
                 var restoreResult = withContext(Dispatchers.IO) {
                     withTimeoutOrNull(18_000L) {
@@ -217,23 +229,15 @@ class ProfileViewModel @Inject constructor(
                     runCatching { iptvRepository.warmupFromCacheOnly() }
                 }
 
-                // Pull cloud state before the profile screen is allowed to disappear.
-                // If this is launched in this ViewModel after navigation, the job can
-                // be cancelled and profile-scoped Trakt tokens never restore.
-                val restoreResult = withContext(Dispatchers.IO) {
-                    runCatching { cloudSyncRepository.pullFromCloud() }.getOrNull()
-                }
-                if (restoreResult != CloudSyncRepository.RestoreResult.FAILED &&
-                    profileRepository.getActiveProfileId() == profile.id
-                ) {
-                    viewModelScope.launch(Dispatchers.IO) {
+                // Pull cloud state and push immediately, but in background so navigation stays
+                // instant and responsive after active profile is set.
+                viewModelScope.launch(Dispatchers.IO) {
+                    val restoreResult = runCatching { cloudSyncRepository.pullFromCloud() }.getOrNull()
+                    if (restoreResult != CloudSyncRepository.RestoreResult.FAILED &&
+                        profileRepository.getActiveProfileId() == profile.id
+                    ) {
                         runCatching { cloudSyncRepository.pushToCloud(force = true) }
                     }
-                }
-
-                viewModelScope.launch(Dispatchers.IO) {
-                    if (profileRepository.getActiveProfileId() != profile.id) return@launch
-                    runCatching { iptvRepository.warmupFromCacheOnly() }
                 }
 
                 viewModelScope.launch(Dispatchers.IO) {
@@ -348,11 +352,11 @@ class ProfileViewModel @Inject constructor(
                         )
                     )
                 }.onFailure {
-                    showToast("Could not import avatar image", ToastType.ERROR)
+                    showToast(context.getString(R.string.profile_avatar_import_failed), ToastType.ERROR)
                 }
             }
             _uiState.value = _uiState.value.copy(showAddDialog = false)
-            showToast("Profile created successfully", ToastType.SUCCESS)
+            showToast(context.getString(R.string.profile_created_success), ToastType.SUCCESS)
             runCatching { cloudSyncRepository.pushToCloud(force = true) }
         }
     }
@@ -408,7 +412,7 @@ class ProfileViewModel @Inject constructor(
                         avatarImageStoragePath = imported.storagePath
                     )
                 }.onFailure {
-                    showToast("Could not import avatar image", ToastType.ERROR)
+                    showToast(context.getString(R.string.profile_avatar_import_failed), ToastType.ERROR)
                     return@launch
                 }
             } else if (!state.useCustomAvatarImage) {
@@ -421,7 +425,7 @@ class ProfileViewModel @Inject constructor(
 
             profileRepository.updateProfile(updatedProfile)
             _uiState.value = _uiState.value.copy(editingProfile = null)
-            showToast("Profile updated", ToastType.SUCCESS)
+            showToast(context.getString(R.string.profile_updated), ToastType.SUCCESS)
             runCatching { cloudSyncRepository.pushToCloud(force = true) }
         }
     }
@@ -454,7 +458,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             val activeId = _uiState.value.activeProfile?.id
             profileRepository.deleteProfile(profile.id)
-            showToast("Profile deleted", ToastType.SUCCESS)
+            showToast(context.getString(R.string.profile_deleted), ToastType.SUCCESS)
             if (activeId == profile.id) {
                 traktRepository.clearAllProfileCaches()
                 watchHistoryRepository.clearProfileCaches()
@@ -545,7 +549,7 @@ class ProfileViewModel @Inject constructor(
             profileRepository.updateProfile(updatedProfile)
             _uiState.value = _uiState.value.copy(editingProfile = updatedProfile)
             hidePinDialog()
-            showToast("Profile PIN set successfully", ToastType.SUCCESS)
+            showToast(context.getString(R.string.profile_pin_set_success), ToastType.SUCCESS)
             runCatching { cloudSyncRepository.pushToCloud(force = true) }
         }
     }

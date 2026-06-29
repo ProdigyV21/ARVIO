@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.R
 import com.arflix.tv.server.AiKeyConfigServer
 import com.arflix.tv.ui.screens.player.SubtitleAiModel
 import com.arflix.tv.util.DeviceIpAddress
@@ -125,6 +126,7 @@ data class SettingsUiState(
     val showCloudEmailPasswordDialog: Boolean = false,
     val isCloudAuthWorking: Boolean = false,
     val isForceCloudSyncing: Boolean = false,
+    val lastCloudSyncStatus: String? = null,
     val shouldSwitchProfile: Boolean = false,
     // Trakt
     val isTraktAuthenticated: Boolean = false,
@@ -506,9 +508,9 @@ class SettingsViewModel @Inject constructor(
 
             val subtitleOptions = loadSubtitleOptions(defaultSub)
             val audioLanguageOptions = loadAudioLanguageOptions(defaultAudio)
-            val existingCatalogs = _uiState.value.catalogs.ifEmpty {
-                mediaRepository.getDefaultCatalogConfigs()
-            }
+            val existingCatalogs = visibleCatalogs(
+                catalogRepository.ensurePreinstalledDefaults(mediaRepository.getDefaultCatalogConfigs())
+            )
 
             val currentState = _uiState.value
             _uiState.value = currentState.copy(
@@ -740,7 +742,7 @@ class SettingsViewModel @Inject constructor(
                 is SyncResult.Error -> {
                     if (!silent) {
                         _uiState.value = _uiState.value.copy(
-                            toastMessage = "Sync failed: ${result.message}",
+                            toastMessage = context.getString(R.string.sync_failed, result.message),
                             toastType = ToastType.ERROR
                         )
                     }
@@ -770,7 +772,7 @@ class SettingsViewModel @Inject constructor(
                 }
                 is SyncResult.Error -> {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = "Sync failed: ${result.message}",
+                        toastMessage = context.getString(R.string.sync_failed, result.message),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -1533,6 +1535,31 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun moveAddonUp(addonId: String) {
+        moveAddon(addonId, moveUp = true)
+    }
+
+    fun moveAddonDown(addonId: String) {
+        moveAddon(addonId, moveUp = false)
+    }
+
+    private fun moveAddon(addonId: String, moveUp: Boolean) {
+        viewModelScope.launch {
+            val moved = if (moveUp) {
+                streamRepository.moveAddonUp(addonId)
+            } else {
+                streamRepository.moveAddonDown(addonId)
+            }
+            if (!moved) return@launch
+            val addonsAfterMove = streamRepository.installedAddons.first()
+            runCatching {
+                catalogRepository.syncAddonCatalogs(addonsAfterMove)
+            }
+            _uiState.value = _uiState.value.copy(addons = addonsAfterMove)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
     fun addCustomAddon(url: String) {
         viewModelScope.launch {
             val result = streamRepository.addCustomAddon(url)
@@ -1556,7 +1583,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message?.takeIf { it.isNotBlank() } ?: "Failed to add addon",
+                    toastMessage = error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.addon_failed_add),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1660,12 +1687,8 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeCatalogs() {
         viewModelScope.launch {
-            catalogRepository.observeCatalogs().collect { catalogs ->
-                val effectiveCatalogs = if (catalogs.isEmpty()) {
-                    catalogRepository.ensurePreinstalledDefaults(mediaRepository.getDefaultCatalogConfigs())
-                } else {
-                    catalogs
-                }
+            catalogRepository.observeCatalogs().collect {
+                val effectiveCatalogs = catalogRepository.ensurePreinstalledDefaults(mediaRepository.getDefaultCatalogConfigs())
                 val visible = visibleCatalogs(effectiveCatalogs)
                 if (_uiState.value.catalogs != visible) {
                     _uiState.value = _uiState.value.copy(catalogs = visible)
@@ -1693,7 +1716,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to add catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_failed_add),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1735,7 +1758,7 @@ class SettingsViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     catalogSearchResults = emptyList(),
                     isCatalogSearching = false,
-                    catalogSearchError = error.message ?: "Failed to search catalogs"
+                    catalogSearchError = error.message ?: context.getString(R.string.catalog_failed_search)
                 )
             }
         }
@@ -1763,7 +1786,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to add catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_failed_add),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1781,7 +1804,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to update catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_failed_update),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1802,7 +1825,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to remove catalog",
+                    toastMessage = error.message ?: context.getString(R.string.catalog_failed_remove),
                     toastType = ToastType.ERROR
                 )
             }
@@ -1975,7 +1998,7 @@ class SettingsViewModel @Inject constructor(
                     iptvError = null,
                     iptvStatusMessage = doneMsg,
                     iptvStatusType = if (snapshot.epgWarning != null) ToastType.INFO else ToastType.SUCCESS,
-                    iptvProgressText = "Done",
+                    iptvProgressText = context.getString(R.string.done),
                     iptvProgressPercent = 100,
                     toastMessage = if (showToast) {
                         if (configured) "IPTV configured (${snapshot.channels.size} channels)" else "IPTV refreshed (${snapshot.channels.size} channels)"
@@ -2065,7 +2088,7 @@ class SettingsViewModel @Inject constructor(
                     clearCloudAuthSession()
                     _uiState.value = _uiState.value.copy(
                         isCloudAuthWorking = false,
-                        toastMessage = error.message ?: "Failed to start cloud login",
+                        toastMessage = error.message ?: context.getString(R.string.cloud_login_failed_start),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -2104,7 +2127,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         showCloudEmailPasswordDialog = false,
                         isCloudAuthWorking = false,
-                        toastMessage = error.message ?: "Failed to start cloud sign-in",
+                        toastMessage = error.message ?: context.getString(R.string.cloud_signin_failed_start),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -2121,7 +2144,8 @@ class SettingsViewModel @Inject constructor(
         createAccount: Boolean
     ) {
         val trimmedEmail = AuthEmailValidator.normalize(email)
-        AuthEmailValidator.validate(trimmedEmail, rejectDisposable = createAccount)?.let { message ->
+        AuthEmailValidator.validate(trimmedEmail, rejectDisposable = createAccount)?.let { messageRes ->
+            val message = context.getString(messageRes)
             _uiState.value = _uiState.value.copy(
                 toastMessage = message,
                 toastType = ToastType.ERROR
@@ -2142,7 +2166,7 @@ class SettingsViewModel @Inject constructor(
             if (sessionReady.isFailure) {
                 clearCloudAuthSession()
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = sessionReady.exceptionOrNull()?.message ?: "Cloud sign-in could not start. Try again.",
+                    toastMessage = sessionReady.exceptionOrNull()?.message ?: context.getString(R.string.cloud_signin_could_not_start),
                     toastType = ToastType.ERROR,
                     isCloudAuthWorking = false
                 )
@@ -2175,7 +2199,7 @@ class SettingsViewModel @Inject constructor(
                 startCloudPolling()
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message ?: "Failed to link TV",
+                    toastMessage = error.message ?: context.getString(R.string.tv_link_failed),
                     toastType = ToastType.ERROR,
                     isCloudAuthWorking = false
                 )
@@ -2207,7 +2231,7 @@ class SettingsViewModel @Inject constructor(
                         if (access.isNullOrBlank() || refresh.isNullOrBlank()) {
                             _uiState.value = _uiState.value.copy(
                                 isCloudAuthWorking = false,
-                                toastMessage = status.message ?: "Approved, but tokens were missing. Try again.",
+                                toastMessage = status.message ?: context.getString(R.string.tv_link_approved_no_tokens),
                                 toastType = ToastType.ERROR
                             )
                             return@launch
@@ -2259,7 +2283,7 @@ class SettingsViewModel @Inject constructor(
                         } else {
                             _uiState.value = _uiState.value.copy(
                                 isCloudAuthWorking = false,
-                                toastMessage = tokenImport.exceptionOrNull()?.message ?: "Failed to import session tokens",
+                                toastMessage = tokenImport.exceptionOrNull()?.message ?: context.getString(R.string.cloud_failed_import_tokens),
                                 toastType = ToastType.ERROR
                             )
                             return@launch
@@ -2272,7 +2296,7 @@ class SettingsViewModel @Inject constructor(
                             showCloudEmailPasswordDialog = false,
                             cloudUserCode = null,
                             cloudVerificationUrl = null,
-                            toastMessage = status.message ?: "Cloud sign-in expired. Try again.",
+                            toastMessage = status.message ?: context.getString(R.string.cloud_signin_expired),
                             toastType = ToastType.ERROR
                         )
                         clearCloudAuthSession(cancelPolling = false)
@@ -2281,7 +2305,7 @@ class SettingsViewModel @Inject constructor(
                     TvDeviceAuthStatusType.ERROR -> {
                         _uiState.value = _uiState.value.copy(
                             isCloudAuthWorking = false,
-                            toastMessage = status.message ?: "Cloud sign-in failed. Try again.",
+                            toastMessage = status.message ?: context.getString(R.string.cloud_signin_failed),
                             toastType = ToastType.ERROR
                         )
                         return@launch
@@ -2369,8 +2393,8 @@ class SettingsViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isHomeServerConnecting = false,
-                    homeServerError = error.message ?: "Home Server connection failed",
-                    toastMessage = error.message ?: "Home Server connection failed",
+                    homeServerError = error.message ?: context.getString(R.string.homeserver_connection_failed),
+                    toastMessage = error.message ?: context.getString(R.string.homeserver_connection_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2411,8 +2435,8 @@ class SettingsViewModel @Inject constructor(
                     isHomeServerConnecting = false,
                     plexHomeServerAuth = null,
                     isPlexHomeServerPolling = false,
-                    homeServerError = error.message ?: "Code sign in failed",
-                    toastMessage = error.message ?: "Code sign in failed",
+                    homeServerError = error.message ?: context.getString(R.string.homeserver_code_signin_failed),
+                    toastMessage = error.message ?: context.getString(R.string.homeserver_code_signin_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2469,8 +2493,8 @@ class SettingsViewModel @Inject constructor(
                         isHomeServerConnecting = false,
                         plexHomeServerAuth = null,
                         isPlexHomeServerPolling = false,
-                        homeServerError = error.message ?: "Server connection failed",
-                        toastMessage = error.message ?: "Server connection failed",
+                        homeServerError = error.message ?: context.getString(R.string.homeserver_server_connection_failed),
+                        toastMessage = error.message ?: context.getString(R.string.homeserver_server_connection_failed),
                         toastType = ToastType.ERROR
                     )
                     return@launch
@@ -2526,8 +2550,8 @@ class SettingsViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isHomeServerConnecting = false,
-                    homeServerError = error.message ?: "Home Server test failed",
-                    toastMessage = error.message ?: "Home Server test failed",
+                    homeServerError = error.message ?: context.getString(R.string.homeserver_test_failed),
+                    toastMessage = error.message ?: context.getString(R.string.homeserver_test_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2582,7 +2606,7 @@ class SettingsViewModel @Inject constructor(
                 )
             } else if (!silent && result.isFailure) {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = result.exceptionOrNull()?.message ?: "Cloud sync failed",
+                    toastMessage = result.exceptionOrNull()?.message ?: context.getString(R.string.cloud_sync_failed),
                     toastType = ToastType.ERROR
                 )
             }
@@ -2602,6 +2626,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isForceCloudSyncing = true,
+                lastCloudSyncStatus = "Starting cloud upload...",
                 toastMessage = "Forcing cloud sync...",
                 toastType = ToastType.INFO
             )
@@ -2609,7 +2634,8 @@ class SettingsViewModel @Inject constructor(
             if (!ensureCloudSyncSession()) {
                 _uiState.value = _uiState.value.copy(
                     isForceCloudSyncing = false,
-                    toastMessage = "Sign in to ARVIO Cloud first",
+                    lastCloudSyncStatus = "Cloud session expired. Reconnect ARVIO Cloud, then sync again.",
+                    toastMessage = "Reconnect ARVIO Cloud to sync",
                     toastType = ToastType.INFO
                 )
                 return@launch
@@ -2624,6 +2650,7 @@ class SettingsViewModel @Inject constructor(
             if (pushResult == null) {
                 _uiState.value = _uiState.value.copy(
                     isForceCloudSyncing = false,
+                    lastCloudSyncStatus = "Upload timed out before cloud confirmed it",
                     toastMessage = "Cloud sync upload timed out - try again",
                     toastType = ToastType.ERROR
                 )
@@ -2636,9 +2663,11 @@ class SettingsViewModel @Inject constructor(
                 }
             }
             if (pushResult == null || pushResult.isFailure) {
+                val uploadError = pushResult?.exceptionOrNull()?.message ?: context.getString(R.string.cloud_sync_failed_upload)
                 _uiState.value = _uiState.value.copy(
                     isForceCloudSyncing = false,
-                    toastMessage = pushResult?.exceptionOrNull()?.message ?: "Cloud sync failed while uploading",
+                    lastCloudSyncStatus = "Upload failed: ${uploadError.take(120)}",
+                    toastMessage = uploadError,
                     toastType = ToastType.ERROR
                 )
                 return@launch
@@ -2664,6 +2693,11 @@ class SettingsViewModel @Inject constructor(
 
             _uiState.value = _uiState.value.copy(
                 isForceCloudSyncing = false,
+                lastCloudSyncStatus = when (restoreResult) {
+                    CloudRestoreResult.RESTORED -> "Cloud sync complete and verified"
+                    CloudRestoreResult.NO_BACKUP -> "Cloud upload complete; no remote restore was needed"
+                    CloudRestoreResult.FAILED -> "Upload complete, but restore failed"
+                },
                 toastMessage = when (restoreResult) {
                     CloudRestoreResult.RESTORED -> "Cloud sync complete"
                     CloudRestoreResult.NO_BACKUP -> "Cloud sync complete (no backup to restore)"
@@ -2679,14 +2713,13 @@ class SettingsViewModel @Inject constructor(
     }
 
     private suspend fun ensureCloudSyncSession(): Boolean {
+        if (authRepository.hasValidCloudSyncSession()) {
+            return true
+        }
         if (authRepository.getCurrentUserIdForSync().isNullOrBlank()) {
             authRepository.checkAuthState()
         }
-        if (authRepository.getCurrentUserIdForSync().isNullOrBlank()) {
-            authRepository.getAccessToken()
-            authRepository.checkAuthState()
-        }
-        return authRepository.getCurrentUserIdForSync().isNullOrBlank().not()
+        return authRepository.hasValidCloudSyncSession()
     }
 
     private suspend fun restoreCloudStateToLocalInternal(
@@ -2765,7 +2798,7 @@ class SettingsViewModel @Inject constructor(
             }.onFailure { error ->
                 if (showNoUpdateFeedback) {
                     _uiState.value = _uiState.value.copy(
-                        toastMessage = error.message ?: "Failed to check for updates",
+                        toastMessage = error.message ?: context.getString(R.string.update_check_failed),
                         toastType = ToastType.ERROR
                     )
                 }
@@ -2823,7 +2856,7 @@ class SettingsViewModel @Inject constructor(
                 installAppUpdateOrRequestPermission()
             }.onFailure { error ->
                 updateStatusManager.updateStatus(
-                    com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: "Download failed", update)
+                    com.arflix.tv.updater.UpdateStatus.Failure(error.message ?: context.getString(R.string.update_download_failed), update)
                 )
             }
         }
@@ -3025,6 +3058,10 @@ class SettingsViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             cancelCloudAuth()
+            _uiState.value = _uiState.value.copy(
+                toastMessage = "Signing out...",
+                toastType = ToastType.INFO
+            )
             authRepository.signOut()
             _uiState.value = _uiState.value.copy(
                 toastMessage = "Signed out",

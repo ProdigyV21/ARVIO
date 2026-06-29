@@ -33,11 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -131,7 +133,7 @@ fun FullscreenHud(
                     ChannelLogo(channel = channel, size = 40.dp)
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = "CH ${channel.number}",
+                            text = stringResource(R.string.live_label_ch, channel.number),
                             style = LiveType.SectionTag.copy(color = LiveColors.FgMute),
                         )
                         Text(
@@ -189,7 +191,7 @@ fun FullscreenHud(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(
-                            text = if (isCatchupMode) "CATCHUP" else "NOW",
+                            text = if (isCatchupMode) stringResource(R.string.live_badge_catchup) else stringResource(R.string.live_badge_now),
                             style = LiveType.SectionTag.copy(color = LiveColors.Accent),
                         )
                         Text(
@@ -209,13 +211,13 @@ fun FullscreenHud(
                             )
                         }
                         if (onGuideClick != null) {
-                            HudActionButton("GUIDE", onGuideClick)
+                            HudActionButton(stringResource(R.string.live_btn_guide), onGuideClick)
                         }
                     }
                     Text(
                         text = now?.title
                             ?: channel?.name
-                            ?: "No programme data",
+                            ?: stringResource(R.string.live_empty_no_programme),
                         style = LiveType.ProgramTitle.copy(
                             color = LiveColors.Fg,
                             fontSize = 18.sp,
@@ -258,12 +260,12 @@ fun FullscreenHud(
                         ) {
                             HudIconButton(
                                 icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                contentDescription = if (isPlaying) stringResource(R.string.live_cd_pause) else stringResource(R.string.play),
                                 emphasis = true,
                                 onClick = { onPlayPauseClick?.invoke() },
                             )
                             Spacer(Modifier.width(14.dp))
-                            HudActionButton("LIVE", onClick = { onGoLiveClick?.invoke() })
+                            HudActionButton(stringResource(R.string.live_badge_live), onClick = { onGoLiveClick?.invoke() })
                         }
                     } else if (next != null) {
                         Box(
@@ -276,7 +278,7 @@ fun FullscreenHud(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Text("NEXT", style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
+                            Text(stringResource(R.string.live_badge_next), style = LiveType.SectionTag.copy(color = LiveColors.FgMute))
                             Text(
                                 text = formatClock(next.startUtcMillis),
                                 style = LiveType.TimeMono.copy(color = LiveColors.FgDim),
@@ -308,7 +310,7 @@ fun FullscreenHud(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Go Back",
+                        contentDescription = stringResource(R.string.back),
                         tint = Color.White,
                         modifier = Modifier.size(24.dp),
                     )

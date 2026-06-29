@@ -26,10 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
@@ -182,7 +184,7 @@ fun PlayerInfoBar(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "LIVE",
+                    text = stringResource(R.string.component_badge_live),
                     style = ArflixTypography.badge,
                     color = Color.White
                 )

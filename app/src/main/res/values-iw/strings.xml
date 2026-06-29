@@ -225,4 +225,6 @@
     <string name="ai_key_saved_title">מפתח API נשמר</string>
     <string name="ai_key_saved_subtitle">תרגום AI מוכן לשימוש</string>
     <string name="ai_qr_scan_hint">סרוק עם הטלפון — בחר Groq או Gemini</string>
+    <string name="plugin_prefix">Plugin: </string>
+    <string name="plugins_loading">פלאגינים: %1$s</string>
 </resources>

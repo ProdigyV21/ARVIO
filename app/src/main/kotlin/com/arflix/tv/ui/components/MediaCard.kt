@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
+import com.arflix.tv.R
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
@@ -129,7 +131,8 @@ fun MediaCard(
     val collectionFocusUrl = if (isCollectionTile) {
         item.backdrop?.takeIf { it.isNotBlank() && it != item.image }
     } else null
-    val showCollectionTitleOverlay = isCollectionTile && showTitle
+    val isSportsCollectionTile = item.status?.startsWith("collection:sports_collection:") == true
+    val showCollectionTitleOverlay = isCollectionTile && showTitle && !isSportsCollectionTile
     val isGenreCollectionTile = item.collectionGroup == CollectionGroupKind.GENRE
     val rawImageUrl = if (visualFocused && enableFocusedImageSwap) {
         explicitFocusUrl ?: collectionFocusUrl ?: baseImageUrl
@@ -301,7 +304,7 @@ fun MediaCard(
                 if (logoRequest != null && isLandscape && !isCollectionTile) {
                     AsyncImage(
                         model = logoRequest,
-                        contentDescription = "${item.title} logo",
+                        contentDescription = stringResource(R.string.component_media_logo, item.title),
                         contentScale = ContentScale.Fit,
                         alignment = if (isLandscape) Alignment.BottomStart else Alignment.BottomCenter,
                         modifier = Modifier
@@ -367,7 +370,7 @@ fun MediaCard(
                 if (showProgress) {
                     // Top-right: time remaining or "New Episode" badge
                     val topRightLabel = item.timeRemainingLabel
-                        ?: if (item.mediaType == MediaType.TV && item.progress == 0 && !item.isWatched) "New Episode" else null
+                        ?: if (item.mediaType == MediaType.TV && item.progress == 0 && !item.isWatched) stringResource(R.string.component_badge_new_episode) else null
                     if (topRightLabel != null) {
                         Box(
                             modifier = Modifier
@@ -392,7 +395,8 @@ fun MediaCard(
                         val epsRemaining = item.totalEpisodes - (item.watchedEpisodes ?: 0)
                         if (epsRemaining > 0) {
                             val epsLabel = if (isLandscape) {
-                                if (epsRemaining == 1) "1 ep left" else "$epsRemaining eps left"
+                                if (epsRemaining == 1) stringResource(R.string.component_ep_left_one)
+                                else stringResource(R.string.component_eps_left, epsRemaining)
                             } else {
                                 epsRemaining.toString()
                             }
@@ -433,7 +437,11 @@ fun MediaCard(
                                 .padding(horizontal = ArvioSkin.spacing.x2, vertical = ArvioSkin.spacing.x1),
                         ) {
                             Text(
-                                text = "S${nextEpisode.seasonNumber} • E${nextEpisode.episodeNumber}",
+                                text = stringResource(
+                                    R.string.component_season_episode_marker,
+                                    nextEpisode.seasonNumber,
+                                    nextEpisode.episodeNumber
+                                ),
                                 style = ArvioSkin.typography.badge,
                                 color = ArvioSkin.colors.textPrimary,
                             )
@@ -448,8 +456,20 @@ fun MediaCard(
 
             Text(
                 text = item.title,
-                style = if (isMobile) ArvioSkin.typography.cardTitle.copy(fontSize = 14.sp)
-                        else ArvioSkin.typography.cardTitle,
+                style = if (isMobile) ArvioSkin.typography.cardTitle.copy(
+                    fontSize = 14.sp,
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 6f
+                    )
+                ) else ArvioSkin.typography.cardTitle.copy(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 6f
+                    )
+                ),
                 color = if (visualFocused) {
                     ArvioSkin.colors.textPrimary
                 } else {
@@ -461,21 +481,30 @@ fun MediaCard(
 
             // Prefer release date (or year) under the title. Fall back to the
             // explicit subtitle or media-type label only when neither is set.
-            val subtitle = remember(item.subtitle, item.releaseDate, item.year, item.mediaType) {
+            val tvSeriesLabel = stringResource(R.string.component_label_tv_series)
+            val movieLabel = stringResource(R.string.movie)
+            val mediaLabel = stringResource(R.string.component_label_media)
+            val subtitle = remember(item.subtitle, item.releaseDate, item.year, item.mediaType, tvSeriesLabel, movieLabel, mediaLabel) {
                 val release = item.releaseDate?.takeIf { it.isNotBlank() }
                     ?: item.year.takeIf { it.isNotBlank() }
                 release
                     ?: item.subtitle.ifBlank {
                         when (item.mediaType) {
-                            MediaType.TV -> "TV Series"
-                            MediaType.MOVIE -> "Movie"
-                            else -> "Media"
+                            MediaType.TV -> tvSeriesLabel
+                            MediaType.MOVIE -> movieLabel
+                            else -> mediaLabel
                         }
                     }
             }
             Text(
                 text = subtitle,
-                style = ArvioSkin.typography.caption,
+                style = ArvioSkin.typography.caption.copy(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                ),
                 color = ArvioSkin.colors.textMuted.copy(alpha = 0.85f),
                 maxLines = subtitleMaxLines,
                 overflow = TextOverflow.Ellipsis,
@@ -621,7 +650,13 @@ fun PosterCard(
 
             Text(
                 text = item.title,
-                style = ArvioSkin.typography.caption,
+                style = ArvioSkin.typography.caption.copy(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = androidx.compose.ui.graphics.Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                ),
                 color = ArvioSkin.colors.textPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -630,7 +665,13 @@ fun PosterCard(
             if (item.year.isNotBlank()) {
                 Text(
                     text = item.year,
-                    style = ArvioSkin.typography.caption,
+                    style = ArvioSkin.typography.caption.copy(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = androidx.compose.ui.graphics.Color.Black,
+                            offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                            blurRadius = 4f
+                        )
+                    ),
                     color = ArvioSkin.colors.textMuted.copy(alpha = 0.65f),
                 )
             }

@@ -144,6 +144,7 @@ import com.arflix.tv.ui.components.ToastType
 import com.arflix.tv.ui.components.NextEpisodeOverlay
 import com.arflix.tv.ui.components.StreamSelector
 import com.arflix.tv.ui.components.WaveLoadingDots
+import com.arflix.tv.ui.components.PlaybackQualityBadgeRow
 import androidx.compose.ui.text.style.TextOverflow
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.settingsDataStore
@@ -278,8 +279,14 @@ fun PlayerScreen(
                     Build.MODEL.contains("Box R", ignoreCase = true)
                 )
     }
-    val allowExceedCodecCapabilities = remember(preferExtensionDecoder) {
+    val allowVideoExceedCodecCapabilities = remember(deviceType, preferExtensionDecoder) {
+        !preferExtensionDecoder && !deviceType.isTouchDevice()
+    }
+    val allowAudioExceedCodecCapabilities = remember(preferExtensionDecoder) {
         !preferExtensionDecoder
+    }
+    val allowRendererExceedCodecCapabilities = remember(deviceType, preferExtensionDecoder) {
+        !preferExtensionDecoder && !deviceType.isTouchDevice()
     }
 
     // Keep playback in landscape while the player is visible, regardless of the
@@ -322,6 +329,7 @@ fun PlayerScreen(
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(true) }
     var hasPlaybackStarted by remember { mutableStateOf(false) }  // Track if playback has actually started
+    var firstVideoFrameRendered by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
@@ -515,20 +523,23 @@ fun PlayerScreen(
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
+        val rewindLabel = context.getString(R.string.player_cd_rewind)
+        val forwardLabel = context.getString(R.string.player_cd_forward)
+        val playPauseLabel = if (isPlaying) context.getString(R.string.player_cd_pause) else context.getString(R.string.play)
         val actions = listOf(
             RemoteAction(
                 vectorToDrawableIcon(pipRewindPainter),
-                "Rewind 10s", "Rewind 10s", makeIntent(PIP_ACTION_REWIND, 10)
+                rewindLabel, rewindLabel, makeIntent(PIP_ACTION_REWIND, 10)
             ),
             RemoteAction(
                 vectorToDrawableIcon(if (isPlaying) pipPausePainter else pipPlayPainter),
-                if (isPlaying) "Pause" else "Play",
-                if (isPlaying) "Pause" else "Play",
+                playPauseLabel,
+                playPauseLabel,
                 makeIntent(PIP_ACTION_PLAY_PAUSE, 11)
             ),
             RemoteAction(
                 vectorToDrawableIcon(pipForwardPainter),
-                "Forward 10s", "Forward 10s", makeIntent(PIP_ACTION_FORWARD, 12)
+                forwardLabel, forwardLabel, makeIntent(PIP_ACTION_FORWARD, 12)
             )
         )
         return PictureInPictureParams.Builder()
@@ -584,6 +595,9 @@ fun PlayerScreen(
         pendingStartupFailoverMessage = null
         pendingStartupFailureRecorded = false
         dvStartupFallbackStage = 0
+        blackVideoRecoveryStage = 0
+        blackVideoReadySinceMs = null
+        firstVideoFrameRendered = false
         rebufferRecoverAttempted = false
         longRebufferCount = 0
         autoAdvanceAttempts = 0
@@ -806,12 +820,13 @@ fun PlayerScreen(
                         .setAllowAudioMixedMimeTypeAdaptiveness(true)
                         // Disable HDR requirement - play HDR as SDR if needed
                         .setForceLowestBitrate(false)
-                        // Keep strict caps only for the Amlogic/SEI TV decoder workaround.
-                        // Phones/tablets and other devices need the older permissive path so
-                        // home-server files with DTS/TrueHD/Atmos/EAC3 tracks still get audio.
-                        .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
-                        .setExceedAudioConstraintsIfNecessary(allowExceedCodecCapabilities)
-                        .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
+                        // Phones/tablets must not pick a video track above the hardware renderer's
+                        // capability: that can produce audio/subtitles with a permanently black
+                        // video surface on 4K remux/DV files. Keep audio permissive for DTS/TrueHD
+                        // style tracks, but keep video renderer selection strict on touch devices.
+                        .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
+                        .setExceedAudioConstraintsIfNecessary(allowAudioExceedCodecCapabilities)
+                        .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
                         .build()
                 }
             )
@@ -848,6 +863,7 @@ fun PlayerScreen(
 
                     override fun onRenderedFirstFrame() {
                         if (playerReleasedAtomic.get()) return
+                        firstVideoFrameRendered = true
                         markPlaybackStarted("first_frame")
                     }
 
@@ -910,8 +926,8 @@ fun PlayerScreen(
                                 selector?.let {
                                     it.parameters = it.buildUponParameters()
                                         .setPreferredVideoMimeType(preferredMime)
-                                        .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
-                                        .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
+                                        .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
+                                        .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
                                         .build()
                                 }
                                 dvStartupFallbackStage += 1
@@ -1089,6 +1105,9 @@ fun PlayerScreen(
                                     val label = format.label ?: matched?.label ?: getFullLanguageName(lang)
                                     val isExternal = matched?.url?.isNotBlank() == true
                                     val isForced = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0
+                                    // Image-based subtitle tracks (PGS/VOBSUB/DVB) carry no text — they
+                                    // can't be AI-translated, so flag them to exclude as a translation source.
+                                    val isBitmap = isBitmapSubtitleMime(format.sampleMimeType)
                                     textTracks.add(Subtitle(
                                         id = matched?.id ?: formatTrackId.ifBlank { "embedded_${groupIndex}_$i" },
                                         url = matched?.url.orEmpty(),
@@ -1099,6 +1118,7 @@ fun PlayerScreen(
                                         groupIndex = groupIndex,
                                         trackIndex = i,
                                         isForced = isForced,
+                                        isBitmap = isBitmap,
                                     ))
                                 }
                             }
@@ -1351,6 +1371,7 @@ fun PlayerScreen(
             val prepareStartMs = streamSelectedTime ?: System.currentTimeMillis()
             bufferingStartTime = null
             hasPlaybackStarted = false  // Reset for new stream
+            firstVideoFrameRendered = false
             readyPlayingSinceMs = null
             playbackIssueReported = false
             rebufferRecoverAttempted = false
@@ -1398,6 +1419,16 @@ fun PlayerScreen(
                 dvStartupFallbackStage = 0
                 blackVideoRecoveryStage = 0
                 blackVideoReadySinceMs = null
+                firstVideoFrameRendered = false
+                val selector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+                selector?.let {
+                    it.parameters = it.buildUponParameters()
+                        .setPreferredVideoMimeType(null)
+                        .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
+                        .setExceedAudioConstraintsIfNecessary(allowAudioExceedCodecCapabilities)
+                        .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
+                        .build()
+                }
             }
             httpDataSourceFactory.setDefaultRequestProperties(baseRequestHeaders + streamHeaders)
 
@@ -1406,7 +1437,11 @@ fun PlayerScreen(
 
             // Only add the selected subtitle to ExoPlayer (not all 30+).
             // Loading all external subs slows down preparation and causes non-UTF8 subs to fail.
+            val isHlsStream = isLikelyHlsPlaybackUrl(url, latestUiState.selectedStream)
             val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
+            if (isHlsStream) {
+                mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            }
             val mediaItem = mediaItemBuilder.build()
 
             // Use protocol-specific media source for faster startup:
@@ -1416,7 +1451,7 @@ fun PlayerScreen(
             val isHeavy = isLikelyHeavyStream(latestUiState.selectedStream)
             val isRemoteHttp = urlLower.startsWith("http://") || urlLower.startsWith("https://")
             val mediaSource: MediaSource = when {
-                urlLower.contains(".m3u8") || urlLower.contains("/hls") || urlLower.contains("format=hls") ->
+                isHlsStream ->
                     hlsFactory.createMediaSource(mediaItem)
                 urlLower.contains(".mpd") || urlLower.contains("/dash") || urlLower.contains("format=dash") ->
                     dashFactory.createMediaSource(mediaItem)
@@ -1426,11 +1461,10 @@ fun PlayerScreen(
                 else -> mediaSourceFactory.createMediaSource(mediaItem)
             }
 
-            // Source-switch hardening: stop+clear before loading next source.
+            // Keep the old frame visible while the next source prepares. Clearing
+            // media items here created a black gap before autoplay/manual sources.
             runCatching {
                 exoPlayer.playWhenReady = false
-                exoPlayer.stop()
-                exoPlayer.clearMediaItems()
             }
 
             val resumePosition = uiState.savedPosition
@@ -1529,10 +1563,13 @@ fun PlayerScreen(
             val currentPosition = exoPlayer.currentPosition
             val wasPlaying = exoPlayer.isPlaying
             val subtitleConfigs = buildExternalSubtitleConfigurations(listOf(subtitle))
-            val mediaItem = MediaItem.Builder()
+            val mediaItemBuilder = MediaItem.Builder()
                 .setUri(Uri.parse(url))
                 .setSubtitleConfigurations(subtitleConfigs)
-                .build()
+            if (isLikelyHlsPlaybackUrl(url, latestUiState.selectedStream)) {
+                mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            }
+            val mediaItem = mediaItemBuilder.build()
             exoPlayer.setMediaItem(mediaItem, currentPosition)
             exoPlayer.prepare()
             if (wasPlaying) exoPlayer.play()
@@ -1774,19 +1811,22 @@ fun PlayerScreen(
             val hasVideoTrack = exoPlayer.currentTracks.groups.any { group ->
                 group.type == C.TRACK_TYPE_VIDEO && group.length > 0
             }
-            val hasVideoOutput = exoPlayer.videoSize.width > 0 && exoPlayer.videoSize.height > 0
             val blackVideoState =
                 uiState.selectedStreamUrl != null &&
                     exoPlayer.playbackState == Player.STATE_READY &&
                     exoPlayer.playWhenReady &&
                     hasVideoTrack &&
-                    !hasVideoOutput
+                    !firstVideoFrameRendered
             if (blackVideoState) {
                 if (blackVideoReadySinceMs == null) {
                     blackVideoReadySinceMs = loopNowMs
                 } else {
                     val stuckMs = loopNowMs - (blackVideoReadySinceMs ?: 0L)
-                    val thresholdMs = if (blackVideoRecoveryStage == 0) 6_500L else 9_000L
+                    val thresholdMs = when (blackVideoRecoveryStage) {
+                        0 -> 4_500L
+                        1 -> 7_000L
+                        else -> 9_000L
+                    }
                     if (stuckMs >= thresholdMs && blackVideoRecoveryStage < 2) {
                         val selector = exoPlayer.trackSelector as? androidx.media3.exoplayer.trackselection.DefaultTrackSelector
                         val preferredMime = if (blackVideoRecoveryStage == 0) {
@@ -1797,35 +1837,52 @@ fun PlayerScreen(
                         selector?.let {
                             it.parameters = it.buildUponParameters()
                                 .setPreferredVideoMimeType(preferredMime)
-                                .setExceedRendererCapabilitiesIfNecessary(allowExceedCodecCapabilities)
-                                .setExceedVideoConstraintsIfNecessary(allowExceedCodecCapabilities)
+                                .setExceedRendererCapabilitiesIfNecessary(allowRendererExceedCodecCapabilities)
+                                .setExceedVideoConstraintsIfNecessary(allowVideoExceedCodecCapabilities)
                                 .build()
                         }
                         val resumeAt = exoPlayer.currentPosition.coerceAtLeast(0L)
                         val keepPlaying = exoPlayer.playWhenReady
+                        playbackStartupDiag(
+                            "black video recovery stage=$blackVideoRecoveryStage preferred=$preferredMime " +
+                                "size=${exoPlayer.videoSize.width}x${exoPlayer.videoSize.height}"
+                        )
                         exoPlayer.seekTo(resumeAt)
                         exoPlayer.prepare()
                         exoPlayer.playWhenReady = keepPlaying
                         blackVideoRecoveryStage += 1
                         blackVideoReadySinceMs = loopNowMs
+                    } else if (stuckMs >= thresholdMs && blackVideoRecoveryStage >= 2 && !startupHardFailureReported) {
+                        playbackStartupDiag(
+                            "black video failure no_first_frame elapsedMs=$stuckMs " +
+                                "state=${exoPlayer.playbackState} failovers=$autoAdvanceAttempts"
+                        )
+                        if (allowStartupSourceFallback &&
+                            !userSelectedSourceManually &&
+                            tryAdvanceToNextStream()
+                        ) {
+                            continue
+                        }
+                        startupHardFailureReported = true
+                        playbackIssueReported = true
+                        viewModel.onSelectedStreamPlaybackFailure()
+                        viewModel.reportPlaybackError(
+                            "Video could not render on this device. Try another source."
+                        )
                     }
                 }
             } else {
                 blackVideoReadySinceMs = null
             }
 
-            // Mark playback as started as soon as the player is actually playing.
-            val readyPlayingGraceElapsed = readyPlayingSinceMs?.let { loopNowMs - it >= 900L } == true
+            // Mark playback as started only after a real first frame for video sources.
+            // Audio-only streams can still start from READY/isPlaying.
             if (!hasPlaybackStarted &&
                 readyAndPlaying &&
-                (!hasVideoTrack || hasVideoOutput || readyPlayingGraceElapsed)
+                (!hasVideoTrack || firstVideoFrameRendered)
             ) {
                 markPlaybackStarted(
-                    if (readyPlayingGraceElapsed && hasVideoTrack && !hasVideoOutput) {
-                        "ready_playing_grace"
-                    } else {
-                        "ready_playing_poll"
-                    }
+                    if (hasVideoTrack) "ready_playing_after_first_frame" else "ready_playing_audio_only"
                 )
             }
 
@@ -2034,6 +2091,10 @@ fun PlayerScreen(
         }
         aspectIndicatorTrigger++
     }
+
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
+    ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -2666,7 +2727,7 @@ fun PlayerScreen(
                     modifier = Modifier.size(12.dp)
                 )
                 Text(
-                    text = "AI Translating",
+                    text = stringResource(R.string.player_ai_translating),
                     style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f)
                 )
@@ -2770,7 +2831,7 @@ fun PlayerScreen(
                                 ) {
                                     Icon(
                                         imageVector = if (isCasting) Icons.Default.CastConnected else Icons.Default.Cast,
-                                        contentDescription = if (isCasting) "Stop casting" else "Cast to TV",
+                                        contentDescription = if (isCasting) stringResource(R.string.player_cd_stop_casting) else stringResource(R.string.player_cd_cast_to_tv),
                                         tint = if (isCasting) playerAccent else Color.White.copy(alpha = 0.85f),
                                         modifier = Modifier.size(22.dp)
                                     )
@@ -2917,7 +2978,7 @@ fun PlayerScreen(
                         Spacer(modifier = Modifier.width(gap))
 
                         // Subtitle settings (delay, size, vertical position)
-                        PlayerIconButton(icon = Icons.Default.Tune, contentDescription = "Subtitle Settings",
+                        PlayerIconButton(icon = Icons.Default.Tune, contentDescription = stringResource(R.string.subtitle_settings_title),
                             focusRequester = subtitleSettingsBtnFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = {
@@ -2949,7 +3010,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(wideGap))
 
                             // Rewind 10s
-                            PlayerIconButton(icon = Icons.Default.Replay10, contentDescription = "Rewind 10s",
+                            PlayerIconButton(icon = Icons.Default.Replay10, contentDescription = stringResource(R.string.player_cd_rewind),
                                 focusRequester = rewindButtonFocusRequester, size = midBtn, iconSize = midIcon,
                                 onFocusChanged = {},
                                 onClick = { queueControlsSeek(-10_000L) },
@@ -2964,7 +3025,7 @@ fun PlayerScreen(
 
                         // Play/Pause - center, largest
                         PlayerIconButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            contentDescription = if (isPlaying) stringResource(R.string.player_cd_pause) else stringResource(R.string.play),
                             focusRequester = playButtonFocusRequester, size = bigBtn, iconSize = bigIcon,
                             onFocusChanged = { if (it) focusedButton = 0 },
                             onClick = {
@@ -2984,7 +3045,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(gap))
 
                             // Forward 10s - own focus requester
-                            PlayerIconButton(icon = Icons.Default.Forward10, contentDescription = "Forward 10s",
+                            PlayerIconButton(icon = Icons.Default.Forward10, contentDescription = stringResource(R.string.player_cd_forward),
                                 focusRequester = forwardButtonFocusRequester, size = midBtn, iconSize = midIcon,
                                 onFocusChanged = {},
                                 onClick = { queueControlsSeek(10_000L) },
@@ -2998,7 +3059,7 @@ fun PlayerScreen(
                         }
 
                         // Aspect Ratio
-                        PlayerIconButton(icon = Icons.Default.AspectRatio, contentDescription = "Aspect: $aspectModeLabel",
+                        PlayerIconButton(icon = Icons.Default.AspectRatio, contentDescription = stringResource(R.string.player_cd_aspect, aspectModeLabel),
                             focusRequester = aspectButtonFocusRequester, size = smallBtn, iconSize = smallIcon,
                             onFocusChanged = {},
                             onClick = cycleAspectRatio,
@@ -3033,7 +3094,7 @@ fun PlayerScreen(
                             Spacer(modifier = Modifier.width(gap))
                             PlayerIconButton(
                                 icon = Icons.Default.PictureInPicture,
-                                contentDescription = "Picture in Picture",
+                                contentDescription = stringResource(R.string.player_cd_pip),
                                 focusRequester = pipButtonFocusRequester,
                                 size = smallBtn, iconSize = smallIcon,
                                 onFocusChanged = {},
@@ -3044,6 +3105,14 @@ fun PlayerScreen(
                             )
                         }
                     }
+
+
+                    // Quality badges (4K · DV · Atmos etc.) — shown above the seekbar
+                    // while controls are visible so the user always knows what is playing.
+                    PlaybackQualityBadgeRow(
+                        stream = uiState.selectedStream,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
 
                     Spacer(modifier = Modifier.height(if (isTouchDevice) 4.dp else 6.dp))
 
@@ -3216,6 +3285,7 @@ fun PlayerScreen(
             selectedStream = uiState.selectedStream,
             isLoading = uiState.isLoadingStreams,
             hasStreamingAddons = !uiState.isSetupError,
+            addonOrderedIds = uiState.addonOrderedIds,
             title = uiState.title,
             subtitle = if (seasonNumber != null && episodeNumber != null) {
                 "S$seasonNumber E$episodeNumber"
@@ -3309,7 +3379,7 @@ fun PlayerScreen(
                         currentVolume < maxVolume / 2 -> Icons.Default.VolumeDown
                         else -> Icons.Default.VolumeUp
                     },
-                    contentDescription = "Volume",
+                    contentDescription = stringResource(R.string.player_cd_volume),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp)
                 )
@@ -3330,7 +3400,7 @@ fun PlayerScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (isMuted) "Muted" else "${currentVolume * 100 / maxVolume}%",
+                    text = if (isMuted) stringResource(R.string.player_muted) else "${currentVolume * 100 / maxVolume}%",
                     style = ArflixTypography.caption,
                     color = Color.White
                 )
@@ -3466,7 +3536,7 @@ fun PlayerScreen(
                     ) {
                         Icon(
                             imageVector = if (isSetup) Icons.Default.Settings else Icons.Default.ErrorOutline,
-                            contentDescription = if (isSetup) "Setup" else "Error",
+                            contentDescription = if (isSetup) stringResource(R.string.player_cd_setup) else stringResource(R.string.player_cd_error),
                             tint = accentColor,
                             modifier = Modifier.size(40.dp)
                         )
@@ -3475,7 +3545,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Text(
-                        text = if (isSetup) "Addon Setup Required" else "Playback Error",
+                        text = if (isSetup) stringResource(R.string.player_addon_setup_required) else stringResource(R.string.player_playback_error),
                         style = ArflixTypography.sectionTitle,
                         color = TextPrimary
                     )
@@ -3483,7 +3553,7 @@ fun PlayerScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = uiState.error ?: "An unknown error occurred",
+                        text = uiState.error ?: stringResource(R.string.player_error_generic),
                         style = ArflixTypography.body,
                         color = TextSecondary,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -3523,6 +3593,7 @@ fun PlayerScreen(
                 }
             }
         }
+    }
     }
 }
 
@@ -3665,11 +3736,6 @@ private fun PulsingLogo(
                     AsyncImage(
                         model = logoUrl, contentDescription = title, contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxWidth(0.76f).height(152.dp)
-                    )
-                } else {
-                    Text(
-                        title, style = ArflixTypography.sectionTitle.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold),
-                        color = Color.White
                     )
                 }
             }
@@ -3879,6 +3945,18 @@ private fun nativeAudioLanguageHints(preferredCode: String): List<String> {
         "Czech" -> listOf("čeština", "cesky", "dabing")
         else -> emptyList()
     }
+}
+
+/**
+ * True if the subtitle MIME type is an image/bitmap format (PGS, VOBSUB, DVB).
+ * These tracks render as images and carry no text, so they can't be AI-translated.
+ */
+private fun isBitmapSubtitleMime(mimeType: String?): Boolean {
+    val mime = mimeType?.lowercase()?.trim() ?: return false
+    return mime == MimeTypes.APPLICATION_PGS ||      // application/pgs (Blu-ray)
+        mime == MimeTypes.APPLICATION_VOBSUB ||      // application/vobsub (DVD)
+        mime == MimeTypes.APPLICATION_DVBSUBS ||     // application/dvbsubs
+        mime.contains("pgs") || mime.contains("vobsub") || mime.contains("dvbsub")
 }
 
 /**
@@ -4993,6 +5071,36 @@ private fun parseSizeToBytes(sizeStr: String): Long {
         else -> 1.0
     }
     return (number * multiplier).toLong()
+}
+
+private fun isLikelyHlsPlaybackUrl(url: String, stream: StreamSource?): Boolean {
+    val urlLower = url.lowercase()
+    if (urlLower.contains(".m3u8") ||
+        urlLower.contains("/hls") ||
+        urlLower.contains("format=hls")
+    ) {
+        return true
+    }
+
+    val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+    val host = uri.host.orEmpty().lowercase()
+    val path = uri.path.orEmpty().lowercase()
+    val streamText = buildString {
+        append(stream?.addonId.orEmpty())
+        append(' ')
+        append(stream?.addonName.orEmpty())
+        append(' ')
+        append(stream?.source.orEmpty())
+        append(' ')
+        append(stream?.quality.orEmpty())
+    }.lowercase()
+
+    // Sports live TV addons such as Highfly proxy the real .m3u8 behind
+    // /playlist/<token>, so extension sniffing would otherwise choose the
+    // progressive parser and fail with an unsupported container error.
+    val looksLikeSportsPlaylist = path.startsWith("/playlist/") &&
+        (host.contains("highfly") || streamText.contains("highfly") || streamText.contains("sports"))
+    return looksLikeSportsPlaylist
 }
 
 private fun isLikelyHeavyStream(stream: StreamSource?): Boolean {

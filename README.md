@@ -25,6 +25,7 @@ It is not intended as an advertising page, download landing page, or content dis
 - Optional per-profile Trakt.tv integration for watchlist, history, progress, and continue watching
 - Catalog management with manual URLs and public Trakt/MDBList list discovery
 - Home-server source and catalog support for user-owned Jellyfin, Emby, and Plex libraries
+- Optional Telegram integration for searching video files in your own connected channels and groups
 - Third-party addon support for user-configured sources
 - Watchlist and continue-watching state with profile isolation
 - Subtitle and audio track selection, subtitle language filtering, and AI subtitle tools
@@ -157,7 +158,7 @@ Smoke-test startup, profile switching, playback, stream fallback, subtitle/audio
 
 ## Privacy
 
-See [PRIVACY.md](PRIVACY.md) for the privacy policy. Cloud account and synced data deletion is available at [auth.arvio.tv/delete-account](https://auth.arvio.tv/delete-account).
+See [PRIVACY.md](PRIVACY.md) for the privacy policy. Cloud account and synced data deletion is available at [auth.arvio.tv/delete](https://auth.arvio.tv/delete).
 
 ## License
 

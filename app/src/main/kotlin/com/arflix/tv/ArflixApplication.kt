@@ -104,7 +104,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             CrashlyticsProvider.initialize()
         }
         // Initialize active profile asynchronously to avoid blocking cold start.
-        // Wire realtime push notification
+        // Wire realtime push notification when realtime is enabled.
         cloudSyncRepository.onPushCompleted = { realtimeSyncManager.markPush() }
 
         appScope.launch {
@@ -114,7 +114,9 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
             delay(2_500L)
             cloudSyncCoordinator.start()
             if (!authRepository.getCurrentUserId().isNullOrBlank()) {
-                realtimeSyncManager.start()
+                if (BuildConfig.ENABLE_REALTIME_CLOUD_SYNC) {
+                    realtimeSyncManager.start()
+                }
                 // Pull early enough that reopening the app feels like an actual
                 // sync, while still letting the first frame and profile bootstrap land.
                 delay(3_000L)
@@ -137,7 +139,9 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
                         delay(2_000L)
                         if (!authRepository.getCurrentUserId().isNullOrBlank()) {
                             cloudSyncCoordinator.start()
-                            realtimeSyncManager.start()
+                            if (BuildConfig.ENABLE_REALTIME_CLOUD_SYNC) {
+                                realtimeSyncManager.start()
+                            }
                             runCatching { cloudSyncRepository.pullFromCloud() }
                         }
                     }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.arflix.tv.R
 import com.arflix.tv.data.api.*
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.util.Constants
@@ -26,12 +27,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import retrofit2.HttpException
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
@@ -65,8 +60,6 @@ class TraktSyncService @Inject constructor(
     private val gson = Gson()
     private val clientId = Constants.TRAKT_CLIENT_ID
     private val clientSecret = Constants.TRAKT_CLIENT_SECRET
-    private val authHttpClient by lazy { OkHttpClient() }
-    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     // Sync progress state
     private val _syncProgress = MutableStateFlow(SyncProgress())
@@ -112,7 +105,7 @@ class TraktSyncService @Inject constructor(
 
     suspend fun performFullSync(): SyncResult = withContext(Dispatchers.IO) {
         if (_isSyncing.value) {
-            return@withContext SyncResult.Error("Sync already in progress")
+            return@withContext SyncResult.Error(context.getString(R.string.sync_in_progress))
         }
 
         _isSyncing.value = true
@@ -128,7 +121,7 @@ class TraktSyncService @Inject constructor(
 
             if (hasSupabase) {
                 try {
-                    val supabaseUserId = userId ?: return@withContext SyncResult.Error("Not logged in")
+                    val supabaseUserId = userId ?: return@withContext SyncResult.Error(context.getString(R.string.error_not_logged_in))
                     updateSyncState(supabaseUserId, syncInProgress = true, lastError = null)
                 } catch (e: Exception) {
                 }
@@ -305,7 +298,7 @@ class TraktSyncService @Inject constructor(
             } catch (_: Exception) {
             }
 
-            SyncResult.Error(e.message ?: "Unknown error")
+            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown))
         } finally {
             _isSyncing.value = false
         }
@@ -318,7 +311,7 @@ class TraktSyncService @Inject constructor(
 
     suspend fun performIncrementalSync(): SyncResult = withContext(Dispatchers.IO) {
         if (_isSyncing.value) {
-            return@withContext SyncResult.Error("Sync already in progress")
+            return@withContext SyncResult.Error(context.getString(R.string.sync_in_progress))
         }
 
         _isSyncing.value = true
@@ -333,7 +326,7 @@ class TraktSyncService @Inject constructor(
                 _isSyncing.value = false
                 return@withContext performFullSync()
             }
-            val safeUserId = userId ?: return@withContext SyncResult.Error("Not logged in")
+            val safeUserId = userId ?: return@withContext SyncResult.Error(context.getString(R.string.error_not_logged_in))
 
             var syncState: SyncStateRecord? = null
             try {
@@ -479,7 +472,7 @@ class TraktSyncService @Inject constructor(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
             )
-            SyncResult.Error(e.message ?: "Unknown error")
+            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown))
         } finally {
             _isSyncing.value = false
         }
@@ -1763,7 +1756,7 @@ class TraktSyncService @Inject constructor(
         operation: String,
         block: suspend (String) -> T
     ): T {
-        val auth = getAuthHeader() ?: throw IllegalStateException("Not authenticated with Trakt")
+        val auth = getAuthHeader() ?: throw IllegalStateException(context.getString(R.string.trakt_not_authenticated))
         return try {
             block(auth)
         } catch (e: HttpException) {
@@ -1780,6 +1773,9 @@ class TraktSyncService @Inject constructor(
         operation: String,
         block: suspend (String) -> T
     ): T {
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            throw IllegalStateException("Legacy Supabase Trakt sync is disabled in Netlify mode")
+        }
         // Try getting auth, force-refresh if initial attempt fails
         var auth = getSupabaseAuth()
         if (auth == null) {
@@ -1788,7 +1784,7 @@ class TraktSyncService @Inject constructor(
             }
             auth = if (!refreshed.isNullOrBlank()) "Bearer $refreshed" else null
         }
-        if (auth == null) throw IllegalStateException("Supabase auth failed")
+        if (auth == null) throw IllegalStateException(context.getString(R.string.sync_supabase_auth_failed))
         return try {
             block(auth)
         } catch (e: HttpException) {
@@ -1846,58 +1842,16 @@ class TraktSyncService @Inject constructor(
     }
 
     private suspend fun refreshTraktToken(refreshToken: String): TraktToken {
-        return if (clientSecret.isBlank()) {
-            refreshTraktTokenViaProxy(refreshToken)
-        } else {
-            runCatching {
-                traktApi.refreshToken(
-                    RefreshTokenRequest(
-                        refreshToken = refreshToken,
-                        clientId = clientId,
-                        clientSecret = clientSecret
-                    )
-                )
-            }.getOrElse {
-                refreshTraktTokenViaProxy(refreshToken)
-            }
+        if (clientSecret.isBlank()) {
+            throw IllegalStateException("Trakt credentials missing in this APK")
         }
-    }
-
-    private suspend fun refreshTraktTokenViaProxy(refreshToken: String): TraktToken = withContext(Dispatchers.IO) {
-        val url = Constants.TRAKT_PROXY_URL.toHttpUrl().newBuilder()
-            .addQueryParameter("path", "/oauth/token")
-            .addQueryParameter("method", "POST")
-            .build()
-        val payload = JSONObject()
-            .put("refresh_token", refreshToken)
-            .put("grant_type", "refresh_token")
-            .toString()
-        val request = Request.Builder()
-            .url(url)
-            .header("apikey", Constants.SUPABASE_ANON_KEY)
-            .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
-            .post(payload.toRequestBody(jsonMediaType))
-            .build()
-
-        authHttpClient.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                throw IllegalStateException(parseTraktProxyError(responseBody, "Trakt token refresh failed"))
-            }
-            gson.fromJson(responseBody, TraktToken::class.java)
-                ?: throw IllegalStateException("Trakt token refresh response was empty")
-        }
-    }
-
-    private fun parseTraktProxyError(body: String, fallback: String): String {
-        return runCatching {
-            val json = JSONObject(body)
-            json.optString("error_description").ifBlank {
-                json.optString("error").ifBlank {
-                    json.optString("message").ifBlank { fallback }
-                }
-            }
-        }.getOrDefault(fallback)
+        return traktApi.refreshToken(
+            RefreshTokenRequest(
+                refreshToken = refreshToken,
+                clientId = clientId,
+                clientSecret = clientSecret
+            )
+        )
     }
 
     private suspend fun saveToken(token: TraktToken) {

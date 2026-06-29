@@ -109,6 +109,46 @@ internal class IptvEpgIndex(context: Context) : SQLiteOpenHelper(
         }
     }
 
+    /**
+     * Load the full list of programmes that overlap [startMs, endMs) for the given
+     * channels, sorted by start time and de-duplicated.
+     *
+     * Unlike [loadNowNext] this does NOT compact the result into a now/next slice —
+     * the Live TV guide grid needs every programme in the visible window (e.g. the
+     * full past-48h / future-48h span) so it can lay out cells across the timeline.
+     */
+    fun loadWindow(
+        sourceKey: String,
+        channelIds: Set<String>,
+        startMs: Long,
+        endMs: Long
+    ): Map<String, List<IptvProgram>> {
+        if (sourceKey.isBlank() || channelIds.isEmpty() || endMs <= startMs) return emptyMap()
+        val grouped = LinkedHashMap<String, MutableList<IptvProgram>>()
+
+        readableDatabase.useQueryChunks(
+            sourceKey = sourceKey,
+            channelIds = channelIds,
+            startBound = startMs,
+            endBound = endMs
+        ) { channelId, program ->
+            grouped.getOrPut(channelId) { mutableListOf() }.add(program)
+        }
+
+        if (grouped.isEmpty()) return emptyMap()
+        return buildMap {
+            grouped.forEach { (channelId, programs) ->
+                val sorted = programs
+                    .asSequence()
+                    .filter { it.endUtcMillis > it.startUtcMillis }
+                    .distinctBy { "${it.startUtcMillis}|${it.endUtcMillis}|${it.title}" }
+                    .sortedBy { it.startUtcMillis }
+                    .toList()
+                if (sorted.isNotEmpty()) put(channelId, sorted)
+            }
+        }
+    }
+
     fun countChannelsWithPrograms(sourceKey: String): Int {
         if (sourceKey.isBlank()) return 0
         return readableDatabase.rawQuery(
@@ -317,12 +357,18 @@ internal class IptvEpgIndex(context: Context) : SQLiteOpenHelper(
 
     private companion object {
         const val DATABASE_NAME = "arvio_iptv_epg_index.db"
-        const val DATABASE_VERSION = 1
+        // v2: drops the guide table on upgrade. A previous build's full-guide backfill
+        // bloated it with up to 336 programmes/channel; loading 360 such channels into
+        // memory churned the heap and crashed the Live TV page. Recreating it clears
+        // that, and the reduced caps below keep per-channel memory bounded.
+        const val DATABASE_VERSION = 2
         const val MAX_SQL_ARGS = 900
-        const val MAX_DESCRIPTION_CHARS = 320
-        const val MAX_UPCOMING_PROGRAMS = 96
-        const val MAX_RECENT_PROGRAMS = 240
+        const val MAX_DESCRIPTION_CHARS = 200
+        // ±48h of guide needs only ~24-48 programmes each way. Keeping 96+240 held far
+        // more in memory than the grid ever shows.
+        const val MAX_UPCOMING_PROGRAMS = 48
+        const val MAX_RECENT_PROGRAMS = 48
         const val DEFAULT_PAST_WINDOW_MS = 48L * 60L * 60_000L
-        const val DEFAULT_FUTURE_WINDOW_MS = 96L * 60L * 60_000L
+        const val DEFAULT_FUTURE_WINDOW_MS = 48L * 60L * 60_000L
     }
 }

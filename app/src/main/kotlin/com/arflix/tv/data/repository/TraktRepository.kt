@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.arflix.tv.R
 import com.arflix.tv.data.api.*
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
@@ -19,9 +20,6 @@ import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.traktDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.postgrest.Postgrest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Deferred
@@ -44,11 +42,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import retrofit2.HttpException
 import java.text.Normalizer
 import java.text.SimpleDateFormat
@@ -80,20 +75,9 @@ class TraktRepository @Inject constructor(
 ) {
     private val gson = Gson()
     private val watchlistHttpClient by lazy { okHttpClient }
-    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     // Lazy sync service to avoid circular dependency
     private val syncService: TraktSyncService by lazy { syncServiceProvider.get() }
-
-    // Supabase client for profile sync (lazy to avoid startup overhead)
-    private val supabase: SupabaseClient by lazy {
-        createSupabaseClient(
-            supabaseUrl = Constants.SUPABASE_URL,
-            supabaseKey = Constants.SUPABASE_ANON_KEY
-        ) {
-            install(Postgrest)
-        }
-    }
 
     // User ID key for Supabase sync (shared across profiles)
     private val USER_ID_KEY = stringPreferencesKey("user_id")
@@ -194,8 +178,6 @@ class TraktRepository @Inject constructor(
 
     suspend fun pollForToken(deviceCode: String): TraktToken {
         val token = requestTraktToken(
-            path = "/oauth/device/token",
-            payload = JSONObject().put("code", deviceCode),
             directFallback = {
                 traktApi.pollToken(
                     TokenPollRequest(
@@ -211,16 +193,12 @@ class TraktRepository @Inject constructor(
     }
 
     private suspend fun requestTraktToken(
-        path: String,
-        payload: JSONObject,
         directFallback: suspend () -> TraktToken
     ): TraktToken {
-        return if (clientSecret.isBlank()) {
-            requestTraktTokenViaProxy(path, payload)
-        } else {
-            runCatching { directFallback() }
-                .getOrElse { requestTraktTokenViaProxy(path, payload) }
+        if (clientSecret.isBlank()) {
+            throw IllegalStateException("Trakt credentials missing in this APK")
         }
+        return directFallback()
     }
 
     private fun isPermanentTokenRefreshFailure(e: Throwable): Boolean {
@@ -242,53 +220,8 @@ class TraktRepository @Inject constructor(
         clearProfileScopedMemoryCaches(clearPreloaded = false)
     }
 
-    private suspend fun requestTraktTokenViaProxy(path: String, payload: JSONObject): TraktToken = withContext(Dispatchers.IO) {
-        val url = Constants.TRAKT_PROXY_URL.toHttpUrl().newBuilder()
-            .addQueryParameter("path", path)
-            .addQueryParameter("method", "POST")
-            .build()
-        val request = Request.Builder()
-            .url(url)
-            .header("apikey", Constants.SUPABASE_ANON_KEY)
-            .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
-            .post(payload.toString().toRequestBody(jsonMediaType))
-            .build()
-
-        watchlistHttpClient.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val error = parseTraktProxyError(responseBody, "Trakt token request failed")
-                if (
-                    path == "/oauth/device/token" &&
-                    response.code == 400 &&
-                    (error == "Trakt token request failed" || responseBody.contains("\"status\":400"))
-                ) {
-                    throw IllegalStateException("authorization_pending")
-                }
-                throw IllegalStateException(error)
-            }
-            gson.fromJson(responseBody, TraktToken::class.java)
-                ?: throw IllegalStateException("Trakt token response was empty")
-        }
-    }
-
-    private fun parseTraktProxyError(body: String, fallback: String): String {
-        return runCatching {
-            val json = JSONObject(body)
-            json.optString("error_description").ifBlank {
-                json.optString("error").ifBlank {
-                    json.optString("message").ifBlank { fallback }
-                }
-            }
-        }.getOrDefault(fallback)
-    }
-
     private suspend fun refreshTraktToken(refreshToken: String): TraktToken {
         return requestTraktToken(
-            path = "/oauth/token",
-            payload = JSONObject()
-                .put("refresh_token", refreshToken)
-                .put("grant_type", "refresh_token"),
             directFallback = {
                 traktApi.refreshToken(
                     RefreshTokenRequest(
@@ -2434,10 +2367,12 @@ class TraktRepository @Inject constructor(
             return false to null
         }
         val watchlist = fetchAllWatchlistItems(auth)
-        val items = hydrateWatchlistItems(watchlist)
+        val items = watchlist
+            .mapIndexedNotNull { index, item -> mapWatchlistItemFast(item, sourceOrder = index) }
+            .sortedWith(compareBy<MediaItem> { it.sourceOrder }.thenByDescending { it.addedAt })
         AppLogger.breadcrumb(
             tag = "Trakt",
-            message = "watchlist_hydrated raw=${watchlist.size} hydrated=${items.size}",
+            message = "watchlist_mapped raw=${watchlist.size} mapped=${items.size}",
             severity = if (watchlist.isNotEmpty() && items.isEmpty()) "warning" else "info"
         )
         return true to WatchlistSyncResult(items = items, rawCount = watchlist.size)
@@ -2638,35 +2573,37 @@ class TraktRepository @Inject constructor(
         }
     }
 
-    private suspend fun mapWatchlistItemFast(item: TraktWatchlistItem): MediaItem? {
+    private fun mapWatchlistItemFast(item: TraktWatchlistItem, sourceOrder: Int): MediaItem? {
         val listedAtMs = parseTraktListedAtMs(item.listedAt)
         return when (item.type) {
             "movie" -> item.movie?.let { movie ->
-                val tmdbId = resolveWatchlistMovieTmdbId(movie) ?: return null
+                val tmdbId = movie.ids.tmdb?.takeIf { it > 0 } ?: return null
                 MediaItem(
                     id = tmdbId,
                     title = movie.title,
-                    subtitle = "Movie",
+                    subtitle = context.getString(R.string.movie),
                     overview = "",
                     year = movie.year?.toString().orEmpty(),
                     mediaType = MediaType.MOVIE,
                     image = "",
                     backdrop = null,
-                    addedAt = listedAtMs
+                    addedAt = listedAtMs,
+                    sourceOrder = sourceOrder
                 )
             }
             "show" -> item.show?.let { show ->
-                val tmdbId = resolveWatchlistShowTmdbId(show) ?: return null
+                val tmdbId = show.ids.tmdb?.takeIf { it > 0 } ?: return null
                 MediaItem(
                     id = tmdbId,
                     title = show.title,
-                    subtitle = "TV Series",
+                    subtitle = context.getString(R.string.component_label_tv_series),
                     overview = "",
                     year = show.year?.toString().orEmpty(),
                     mediaType = MediaType.TV,
                     image = "",
                     backdrop = null,
-                    addedAt = listedAtMs
+                    addedAt = listedAtMs,
+                    sourceOrder = sourceOrder
                 )
             }
             else -> null
@@ -2712,7 +2649,7 @@ class TraktRepository @Inject constructor(
                     MediaItem(
                         id = details.id,
                         title = details.title,
-                        subtitle = "Movie",
+                        subtitle = context.getString(R.string.movie),
                         overview = details.overview ?: "",
                         year = details.releaseDate?.take(4) ?: "",
                         tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
@@ -2733,7 +2670,7 @@ class TraktRepository @Inject constructor(
                     MediaItem(
                         id = details.id,
                         title = details.name,
-                        subtitle = "TV Series",
+                        subtitle = context.getString(R.string.component_label_tv_series),
                         overview = details.overview ?: "",
                         year = details.firstAirDate?.take(4) ?: "",
                         tmdbRating = String.format(Locale.US, "%.1f", details.voteAverage),
@@ -2761,7 +2698,7 @@ class TraktRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = movie.title,
-            subtitle = "Movie",
+            subtitle = context.getString(R.string.movie),
             overview = "",
             year = movie.year?.toString().orEmpty(),
             mediaType = MediaType.MOVIE,
@@ -2781,7 +2718,7 @@ class TraktRepository @Inject constructor(
         return MediaItem(
             id = tmdbId,
             title = show.title,
-            subtitle = "TV Series",
+            subtitle = context.getString(R.string.component_label_tv_series),
             overview = "",
             year = show.year?.toString().orEmpty(),
             mediaType = MediaType.TV,
@@ -3847,7 +3784,7 @@ data class ContinueWatchingItem(
     val totalEpisodes: Int = 0,
     val watchedEpisodes: Int = 0
 ) {
-    fun toMediaItem(): MediaItem {
+    fun toMediaItem(context: Context? = null): MediaItem {
         val effectiveDurationSeconds = durationSeconds.takeIf { it > 0L } ?: parseRuntimeLabelSeconds(duration)
         val showPlaybackProgress = !isUpNext && progress in 1..94
         val resumeSeconds = when {
@@ -3862,13 +3799,23 @@ data class ContinueWatchingItem(
         val resumeLabel = resumeSeconds.takeIf { it > 0L }?.let { formatResumeClock(it) }
 
         val subtitle = if (mediaType == MediaType.TV && season != null && episode != null) {
-            val base = "Continue S${season}.E${episode}"
-            if (!resumeLabel.isNullOrBlank()) "$base from $resumeLabel" else base
+            val base = context?.getString(R.string.continue_season_episode, season, episode)
+                ?: "Continue S${season}E${episode}"
+            if (!resumeLabel.isNullOrBlank()) {
+                context?.getString(R.string.continue_from, resumeLabel) ?: "$base from $resumeLabel"
+            } else {
+                base
+            }
         } else {
             if (mediaType == MediaType.MOVIE) {
-                if (!resumeLabel.isNullOrBlank()) "Continue from $resumeLabel" else "Continue"
+                if (!resumeLabel.isNullOrBlank()) {
+                    context?.getString(R.string.continue_from, resumeLabel)
+                        ?: "Continue from $resumeLabel"
+                } else {
+                    context?.getString(R.string.continue_label) ?: "Continue"
+                }
             } else {
-                "TV Series"
+                context?.getString(R.string.component_label_tv_series) ?: "TV Series"
             }
         }
 

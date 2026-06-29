@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import android.content.Context
 import android.os.Build
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.arflix.tv.BuildConfig
 import com.arflix.tv.util.AppLogger
@@ -33,9 +34,17 @@ class AppUsageAnalyticsRepository @Inject constructor(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     suspend fun recordAppOpen() = withContext(Dispatchers.IO) {
-        if (Constants.SUPABASE_URL.isBlank() || Constants.SUPABASE_ANON_KEY.isBlank()) return@withContext
+        if (!Constants.USE_NETLIFY_CLOUD_SYNC &&
+            (Constants.SUPABASE_URL.isBlank() || Constants.SUPABASE_ANON_KEY.isBlank())
+        ) return@withContext
 
         runCatching {
+            val now = System.currentTimeMillis()
+            val lastSentAt = context.settingsDataStore.data.first()[LAST_APP_OPEN_SENT_AT_KEY] ?: 0L
+            if (now - lastSentAt < APP_OPEN_MIN_INTERVAL_MS) {
+                return@runCatching
+            }
+
             withTimeoutOrNull(AUTH_STATE_WAIT_MS) {
                 authRepository.authState.first { it !is AuthState.Loading }
             }
@@ -61,20 +70,40 @@ class AppUsageAnalyticsRepository @Inject constructor(
                 .put("distribution", if (BuildConfig.SELF_UPDATE_ENABLED) "sideload" else "play")
                 .put("metadata", metadata)
 
+            if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+                authRepository.getCurrentUserIdForSync()?.takeIf { it.isNotBlank() }?.let { userId ->
+                    payload.put("user_id", userId)
+                }
+                authRepository.getCurrentUserEmail()?.takeIf { it.isNotBlank() }?.let { email ->
+                    payload.put("email", email)
+                }
+            }
+
             val requestBuilder = Request.Builder()
                 .url(Constants.APP_USAGE_EVENT_URL)
-                .header("apikey", Constants.SUPABASE_ANON_KEY)
-                .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
                 .post(payload.toString().toRequestBody(jsonMediaType))
 
-            if (accessToken.isNotBlank()) {
-                requestBuilder.header("x-user-token", accessToken)
+            if (!Constants.USE_NETLIFY_CLOUD_SYNC) {
+                requestBuilder
+                    .header("apikey", Constants.SUPABASE_ANON_KEY)
+                    .header("Authorization", "Bearer ${Constants.SUPABASE_ANON_KEY}")
+                if (accessToken.isNotBlank()) {
+                    requestBuilder.header("x-user-token", accessToken)
+                }
+            } else {
+                requestBuilder
+                    .header("apikey", Constants.APP_ANON_KEY)
+                    .header("Authorization", "Bearer ${Constants.APP_ANON_KEY}")
+                    .header("Cache-Control", "no-cache, no-store")
             }
 
             okHttpClient.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     throw IllegalStateException("Usage event failed: HTTP ${response.code}")
                 }
+            }
+            context.settingsDataStore.edit { prefs ->
+                prefs[LAST_APP_OPEN_SENT_AT_KEY] = now
             }
         }.onFailure { error ->
             AppLogger.w(TAG, "App usage analytics event failed", error)
@@ -102,6 +131,8 @@ class AppUsageAnalyticsRepository @Inject constructor(
     private companion object {
         const val TAG = "AppUsageAnalytics"
         const val AUTH_STATE_WAIT_MS = 10_000L
+        const val APP_OPEN_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000L
         val INSTALL_ID_KEY = stringPreferencesKey("analytics_install_id_v1")
+        val LAST_APP_OPEN_SENT_AT_KEY = longPreferencesKey("analytics_last_app_open_sent_at_v1")
     }
 }

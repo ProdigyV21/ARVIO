@@ -26,9 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.R
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
 import kotlinx.coroutines.delay
@@ -133,7 +135,7 @@ fun Screensaver(
                     .offset(y = (-20).dp)
             ) {
                 Text(
-                    text = "Press any key to continue",
+                    text = stringResource(R.string.component_screensaver_hint),
                     style = ArflixTypography.caption,
                     color = Color.White.copy(alpha = 0.3f)
                 )

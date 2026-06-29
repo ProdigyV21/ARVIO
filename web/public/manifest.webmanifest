@@ -1,0 +1,10 @@
+{
+  "name": "ARVIO",
+  "short_name": "ARVIO",
+  "description": "ARVIO media hub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#02070c",
+  "theme_color": "#02070c",
+  "icons": []
+}

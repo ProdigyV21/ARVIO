@@ -23,6 +23,7 @@ object SecureStorage {
 
     fun encrypt(plainText: String, alias: String): String {
         if (plainText.isBlank()) return plainText
+        if (plainText.startsWith(PREFIX)) return plainText
         return runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(alias))

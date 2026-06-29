@@ -293,6 +293,8 @@ private fun localizedCategoryTitle(category: Category): String = when (category.
     "collection_row_franchise" -> stringResource(R.string.franchises)
     "collection_row_network"   -> stringResource(R.string.networks)
     "collection_row_featured"  -> stringResource(R.string.featured)
+    "top10_movies_today"       -> if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) "10 הסרטים הנצפים היום" else stringResource(R.string.home_top10_movies_today)
+    "top10_shows_today"        -> if (androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl) "10 הסדרות הנצפות היום" else stringResource(R.string.home_top10_shows_today)
     else                       -> category.title
 }
 
@@ -545,6 +547,7 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToTv: (channelId: String?, streamUrl: String?) -> Unit = { _, _ -> },
+    onNavigateToPlayer: (MediaType, Int, String, String?, String?) -> Unit = { _, _, _, _, _ -> },
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onExitApp: () -> Unit = {}
@@ -598,10 +601,14 @@ fun HomeScreen(
         }
     }
 
-    val rawDisplayCategories = if (uiState.categories.isNotEmpty()) {
+    val rawDisplayCategoriesBase = if (uiState.categories.isNotEmpty()) {
         uiState.categories
     } else {
         preloadedCategories
+    }
+    val sportsHomeRows by viewModel.sportsHomeRows.collectAsStateWithLifecycle()
+    val rawDisplayCategories = remember(rawDisplayCategoriesBase, sportsHomeRows) {
+        viewModel.withSportsHomeRows(rawDisplayCategoriesBase, sportsHomeRows)
     }
     val displayCategories = remember(rawDisplayCategories) {
         deduplicateHomeCategories(rawDisplayCategories)
@@ -621,6 +628,13 @@ fun HomeScreen(
     val latestDisplayHeroItem by rememberUpdatedState(displayHeroItem)
 
     val context = LocalContext.current
+    val openSportsHomeItem: (MediaItem) -> Unit = { item ->
+        viewModel.openSportsHomeItem(
+            item = item,
+            onNavigateToSettings = onNavigateToSettings,
+            onNavigateToPlayer = onNavigateToPlayer
+        )
+    }
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
     val backdropSize = remember(configuration, density) {
@@ -1099,7 +1113,9 @@ fun HomeScreen(
             heroOverviewOverride = displayHeroOverview,
             onPlay = {
                 displayHeroItem?.let { item ->
-                    if (viewModel.isIptvItem(item)) {
+                    if (viewModel.isSportsHomeItem(item)) {
+                        openSportsHomeItem(item)
+                    } else if (viewModel.isIptvItem(item)) {
                         onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
                     } else if (viewModel.isCollectionItem(item)) {
                         onNavigateToCollection(item.status?.removePrefix("collection:").orEmpty())
@@ -1110,7 +1126,9 @@ fun HomeScreen(
             },
             onDetails = {
                 displayHeroItem?.let { item ->
-                    if (viewModel.isIptvItem(item)) {
+                    if (viewModel.isSportsHomeItem(item)) {
+                        openSportsHomeItem(item)
+                    } else if (viewModel.isIptvItem(item)) {
                         onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
                     } else if (viewModel.isCollectionItem(item)) {
                         onNavigateToCollection(item.status?.removePrefix("collection:").orEmpty())
@@ -1137,6 +1155,8 @@ fun HomeScreen(
             onNavigateToWatchlist = onNavigateToWatchlist,
             onNavigateToTv = onNavigateToTv,
             getIptvStreamUrl = { itemId -> viewModel.getIptvStreamUrl(itemId) },
+            isSportsHomeItem = { item -> viewModel.isSportsHomeItem(item) },
+            onSportsHomeItemClick = openSportsHomeItem,
             onNavigateToSettings = onNavigateToSettings,
             onSwitchProfile = onSwitchProfile,
             onExitApp = onExitApp,
@@ -1188,7 +1208,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = uiState.error ?: "Please check your connection",
+                        text = uiState.error ?: stringResource(R.string.home_please_check_connection),
                         style = ArflixTypography.body,
                         color = TextSecondary
                     )
@@ -1216,14 +1236,18 @@ fun HomeScreen(
                     isWatched = item.isWatched,
                     isContinueWatching = contextMenuIsContinueWatching,
                     onPlay = {
-                        if (viewModel.isIptvItem(item)) {
+                        if (viewModel.isSportsHomeItem(item)) {
+                            openSportsHomeItem(item)
+                        } else if (viewModel.isIptvItem(item)) {
                             onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
                         } else {
                             onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
                         }
                     },
                     onViewDetails = {
-                        if (viewModel.isIptvItem(item)) {
+                        if (viewModel.isSportsHomeItem(item)) {
+                            openSportsHomeItem(item)
+                        } else if (viewModel.isIptvItem(item)) {
                             onNavigateToTv(viewModel.getIptvChannelId(item), viewModel.getIptvStreamUrl(item.id))
                         } else {
                             onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
@@ -1550,7 +1574,7 @@ private fun HeroSection(
                                     AsyncImage(
                                         model = networkLogoRequest,
                                         imageLoader = metadataLogoImageLoader,
-                                        contentDescription = "Primary streaming provider",
+                                        contentDescription = stringResource(R.string.home_cd_primary_provider),
                                         contentScale = ContentScale.Fit,
                                         modifier = Modifier
                                             .height(16.dp)
@@ -1593,7 +1617,7 @@ private fun HeroSection(
 
                                 if (hasBudgetMetadata) {
                                     Text(
-                                        text = "Budget $budgetText",
+                                        text = "${stringResource(R.string.budget)} $budgetText",
                                         style = ArflixTypography.caption.copy(
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Medium,
@@ -1690,7 +1714,7 @@ private fun TopRankRibbon(
             .size(targetPx, targetPx)
             .allowHardware(true)
             .build(),
-        contentDescription = "Rank #$clamped",
+        contentDescription = stringResource(R.string.home_cd_rank, clamped),
         contentScale = ContentScale.Fit,
         modifier = modifier
             .width(width)
@@ -1723,24 +1747,28 @@ private fun HomeHeroLayer(
         val buttonsBottomPadding = contentRowTopPadding - 10.dp
         val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 34.dp else 34.dp
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = AppTopBarContentTopInset)
-                .zIndex(3f)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
         ) {
-            heroItem?.let { item ->
-                if (!item.status.orEmpty().startsWith("collection:")) {
-                    HeroSection(
-                        item = item,
-                        logoUrl = heroLogoUrl,
-                        overviewOverride = heroOverviewOverride,
-                        showBudget = showBudget,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = contentStartPadding, end = 400.dp)
-                            .offset(y = -heroBottomPadding)
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = AppTopBarContentTopInset)
+                    .zIndex(3f)
+            ) {
+                heroItem?.let { item ->
+                    if (!item.status.orEmpty().startsWith("collection:")) {
+                        HeroSection(
+                            item = item,
+                            logoUrl = heroLogoUrl,
+                            overviewOverride = heroOverviewOverride,
+                            showBudget = showBudget,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = contentStartPadding, end = 400.dp)
+                                .offset(y = -heroBottomPadding)
+                        )
+                    }
                 }
             }
         }
@@ -2037,7 +2065,7 @@ private fun MobileHeroCarousel(
             }
             Icon(
                 imageVector = Icons.Filled.Search,
-                contentDescription = "Search",
+                contentDescription = stringResource(R.string.search),
                 tint = Color.White,
                 modifier = Modifier
                     .size(26.dp)
@@ -2165,6 +2193,8 @@ private fun HomeInputLayer(
     onNavigateToWatchlist: () -> Unit,
     onNavigateToTv: (channelId: String?, streamUrl: String?) -> Unit,
     getIptvStreamUrl: (itemId: Int) -> String?,
+    isSportsHomeItem: (MediaItem) -> Boolean = { false },
+    onSportsHomeItemClick: (MediaItem) -> Unit = {},
     onNavigateToSettings: () -> Unit,
     onSwitchProfile: () -> Unit,
     onExitApp: () -> Unit,
@@ -2174,6 +2204,7 @@ private fun HomeInputLayer(
     onOpenContextMenu: (MediaItem, Boolean) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
+    val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     var selectPressedInHome by remember { mutableStateOf(false) }
     var selectDownAtMs by remember { mutableLongStateOf(0L) }
     var rootHasFocus by remember { mutableStateOf(false) }
@@ -2295,6 +2326,42 @@ private fun HomeInputLayer(
             ) {
                 return@onPreviewKeyEvent true
             }
+
+            val moveNext = {
+                if (focusState.isSidebarFocused) {
+                    if (focusState.sidebarFocusIndex < maxSidebarIndex) {
+                        focusState.sidebarFocusIndex++
+                        focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                    }
+                    true
+                } else {
+                    val maxItems = categories.getOrNull(focusState.currentRowIndex)?.items?.size ?: 0
+                    if (focusState.currentItemIndex < maxItems - 1) {
+                        focusState.currentItemIndex++
+                        focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                    }
+                    true
+                }
+            }
+
+            val movePrev = {
+                if (!focusState.isSidebarFocused) {
+                    if (focusState.currentItemIndex == 0) {
+                        true
+                    } else {
+                        focusState.currentItemIndex--
+                        focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                        true
+                    }
+                } else {
+                    if (focusState.sidebarFocusIndex > 0) {
+                        focusState.sidebarFocusIndex--
+                        focusState.lastNavEventTime = SystemClock.elapsedRealtime()
+                    }
+                    true
+                }
+            }
+
             when (event.type) {
                 KeyEventType.KeyDown -> when (event.key) {
                     Key.Enter, Key.DirectionCenter -> {
@@ -2322,44 +2389,18 @@ private fun HomeInputLayer(
                         }
                         true
                     }
+
                     Key.DirectionLeft -> {
                         selectPressedInHome = false
                         selectDownAtMs = 0L
                         focusState.userHasNavigated = true
-                        if (!focusState.isSidebarFocused) {
-                            if (focusState.currentItemIndex == 0) {
-                                true
-                            } else {
-                                focusState.currentItemIndex--
-                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
-                                true
-                            }
-                        } else {
-                            if (focusState.sidebarFocusIndex > 0) {
-                                focusState.sidebarFocusIndex--
-                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
-                            }
-                            true
-                        }
+                        if (isRtl) moveNext() else movePrev()
                     }
                     Key.DirectionRight -> {
                         selectPressedInHome = false
                         selectDownAtMs = 0L
                         focusState.userHasNavigated = true
-                        if (focusState.isSidebarFocused) {
-                            if (focusState.sidebarFocusIndex < maxSidebarIndex) {
-                                focusState.sidebarFocusIndex++
-                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
-                            }
-                            true
-                        } else {
-                            val maxItems = categories.getOrNull(focusState.currentRowIndex)?.items?.size ?: 0
-                            if (focusState.currentItemIndex < maxItems - 1) {
-                                focusState.currentItemIndex++
-                                focusState.lastNavEventTime = SystemClock.elapsedRealtime()
-                            }
-                            true
-                        }
+                        if (isRtl) movePrev() else moveNext()
                     }
                     Key.DirectionUp -> {
                         selectPressedInHome = false
@@ -2421,9 +2462,13 @@ private fun HomeInputLayer(
                                     focusState.currentItemIndex
                                 )
                                 currentItem?.takeIf { isActionableHomeItem(it) }?.let { item ->
-                                    val currentCategory = categories.getOrNull(focusState.currentRowIndex)
-                                    val isContinue = currentCategory?.id == "continue_watching"
-                                    onOpenContextMenu(item, isContinue)
+                                    if (isSportsHomeItem(item)) {
+                                        onSportsHomeItemClick(item)
+                                    } else {
+                                        val currentCategory = categories.getOrNull(focusState.currentRowIndex)
+                                        val isContinue = currentCategory?.id == "continue_watching"
+                                        onOpenContextMenu(item, isContinue)
+                                    }
                                 }
                             }
                             true
@@ -2440,6 +2485,10 @@ private fun HomeInputLayer(
                                     focusState.currentItemIndex
                                 )
                                 currentItem?.takeIf { isActionableHomeItem(it) }?.let { item ->
+                                    if (isSportsHomeItem(item)) {
+                                        onSportsHomeItemClick(item)
+                                        return@let
+                                    }
                                     if (holdMs >= 500L) {
                                         // Long-press: open context menu
                                         val currentCategory = categories.getOrNull(focusState.currentRowIndex)
@@ -2531,6 +2580,10 @@ private fun HomeInputLayer(
                 if (!isActionableHomeItem(item)) {
                     return@HomeRowsLayer
                 }
+                if (isSportsHomeItem(item)) {
+                    onSportsHomeItemClick(item)
+                    return@HomeRowsLayer
+                }
                 val iptvId = item.status?.removePrefix("iptv:")?.takeIf { item.status?.startsWith("iptv:") == true && it.isNotBlank() }
                 val collectionId = item.status?.removePrefix("collection:")?.takeIf { item.status?.startsWith("collection:") == true && it.isNotBlank() }
                 if (iptvId != null) {
@@ -2541,7 +2594,15 @@ private fun HomeInputLayer(
                     onNavigateToDetails(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
                 }
             },
-            onItemLongClick = if (isMobile) { item, isContinue -> onOpenContextMenu(item, isContinue) } else null
+            onItemLongClick = if (isMobile) {
+                { item, isContinue ->
+                    if (isSportsHomeItem(item)) {
+                        onSportsHomeItemClick(item)
+                    } else {
+                        onOpenContextMenu(item, isContinue)
+                    }
+                }
+            } else null
         )
     }
 }
@@ -2696,27 +2757,24 @@ private fun MobileHomeRowsLayer(
                         text = localizedCategoryTitle(category),
                         style = ArflixTypography.sectionTitle.copy(
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.8f),
+                                offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                                blurRadius = 4f
+                            )
                         ),
                         color = Color.White
                     )
                 }
 
-                val rowHasMore = !isCollectionRow && categoryHasMoreMap[category.id] == true
-                val skeletonCount = if (isPortrait) 12 else 7
-                val itemsToRender = remember(category.items, rowHasMore, isPortrait) {
-                    if (rowHasMore) {
-                        category.items + List(skeletonCount) { idx ->
-                            MediaItem(
-                                id = -1000 - idx,
-                                title = "",
-                                isPlaceholder = true
-                            )
-                        }
-                    } else {
-                        category.items
-                    }
+                val rowHasMore = categoryHasMoreMap[category.id] == true
+                val isPortrait = if (isCollectionRow) {
+                    category.items.firstOrNull()?.collectionTileShape == CollectionTileShape.POSTER
+                } else {
+                    rowUsePosterCards
                 }
+                val itemsToRender = category.items
 
                 // Horizontal card row with touch scrolling
                 LazyRow(
@@ -3412,25 +3470,20 @@ private fun ContentRow(
         ) {
             Text(
                 text = localizedCategoryTitle(category),
-                style = ArflixTypography.sectionTitle.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                style = ArflixTypography.sectionTitle.copy(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.8f),
+                        offset = androidx.compose.ui.geometry.Offset(1f, 1f),
+                        blurRadius = 4f
+                    )
+                ),
                 color = Color.White
             )
         }
 
-        val skeletonCount = if (effectivePosterMode) 12 else 7
-        val itemsToRender = remember(category.items, effectiveCategoryHasMore, effectivePosterMode) {
-            if (effectiveCategoryHasMore) {
-                category.items + List(skeletonCount) { idx ->
-                    MediaItem(
-                        id = -1000 - idx,
-                        title = "",
-                        isPlaceholder = true
-                    )
-                }
-            } else {
-                category.items
-            }
-        }
+        val itemsToRender = category.items
 
         // Cards row - clipped to hide previous items when scrolling
         val clipModifier = if (isContinueWatching) Modifier else Modifier.clipToBounds()

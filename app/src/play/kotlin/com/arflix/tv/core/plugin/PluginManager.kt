@@ -64,7 +64,7 @@ class PluginManager @Inject constructor() {
         mediaType: String,
         season: Int? = null,
         episode: Int? = null
-    ): Flow<Pair<ScraperInfo, List<LocalScraperResult>>> = emptyFlow()
+    ): Flow<Pair<ScraperInfo, List<LocalScraperResult>?>> = emptyFlow()
 
     suspend fun executeScraper(
         scraper: ScraperInfo,

@@ -165,6 +165,36 @@ class WatchHistoryRepository @Inject constructor(
                 stream_title = streamTitle
             )
 
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            val profileId = currentProfileId()
+            val nowIso = Instant.now().toString()
+            val cachedEntry = entry.copy(
+                paused_at = nowIso,
+                updated_at = nowIso
+            )
+            cachedWatchHistory = listOf(cachedEntry) + cachedWatchHistory.filterNot { existing ->
+                existing.media_type == cachedEntry.media_type &&
+                    existing.show_tmdb_id == cachedEntry.show_tmdb_id &&
+                    existing.season == cachedEntry.season &&
+                    existing.episode == cachedEntry.episode
+            }
+            cachedWatchHistoryByProfile[profileId] = cachedWatchHistory
+            cachedContinueWatching = if (isEntryInProgress(cachedEntry)) {
+                listOf(cachedEntry) + cachedContinueWatchingByProfile[profileId].orEmpty().filterNot { existing ->
+                    existing.media_type == cachedEntry.media_type &&
+                        existing.show_tmdb_id == cachedEntry.show_tmdb_id
+                }
+            } else {
+                cachedContinueWatchingByProfile[profileId].orEmpty().filterNot { existing ->
+                    existing.media_type == cachedEntry.media_type &&
+                        existing.show_tmdb_id == cachedEntry.show_tmdb_id
+                }
+            }
+            cachedContinueWatchingByProfile[profileId] = cachedContinueWatching
+            runCatching { realtimeSyncManagerProvider.get().markLocalWatchHistoryWrite() }
+            return
+        }
+
         // Upsert - update if exists, insert if not.
         // Retry without stream_* fields if the Supabase schema hasn't been migrated yet.
         var saved = false
@@ -220,6 +250,9 @@ class WatchHistoryRepository @Inject constructor(
      */
     suspend fun getWatchHistory(): List<WatchHistoryEntry> {
         val profileId = currentProfileId()
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            return cachedWatchHistoryByProfile[profileId].orEmpty()
+        }
         val userId = authRepositoryProvider.get().getCurrentUserId()
             ?: return cachedWatchHistoryByProfile[profileId].orEmpty()
 
@@ -255,6 +288,9 @@ class WatchHistoryRepository @Inject constructor(
      */
     suspend fun getContinueWatching(): List<WatchHistoryEntry> {
         val profileId = currentProfileId()
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            return cachedContinueWatchingByProfile[profileId].orEmpty()
+        }
         val userId = authRepositoryProvider.get().getCurrentUserId()
         if (userId == null) return cachedContinueWatchingByProfile[profileId].orEmpty()
 
@@ -291,6 +327,14 @@ class WatchHistoryRepository @Inject constructor(
         season: Int?,
         episode: Int?
     ): WatchHistoryEntry? {
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            return cachedWatchHistoryByProfile[currentProfileId()].orEmpty().firstOrNull { entry ->
+                entry.show_tmdb_id == tmdbId &&
+                    entry.media_type == (if (mediaType == MediaType.MOVIE) "movie" else "tv") &&
+                    entry.season == season &&
+                    entry.episode == episode
+            }
+        }
         val userId = authRepositoryProvider.get().getCurrentUserId() ?: return null
 
         return try {
@@ -319,6 +363,15 @@ class WatchHistoryRepository @Inject constructor(
         mediaType: MediaType,
         tmdbId: Int
     ): WatchHistoryEntry? {
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            val mediaTypeKey = if (mediaType == MediaType.MOVIE) "movie" else "tv"
+            return cachedWatchHistoryByProfile[currentProfileId()].orEmpty()
+                .filter { it.show_tmdb_id == tmdbId && it.media_type == mediaTypeKey }
+                .filter { isEntryInProgress(it) }
+                .maxByOrNull { entry ->
+                    parseEpoch(entry.updated_at).coerceAtLeast(parseEpoch(entry.paused_at))
+                }
+        }
         val userId = authRepositoryProvider.get().getCurrentUserId() ?: return null
         val mediaTypeKey = if (mediaType == MediaType.MOVIE) "movie" else "tv"
 
@@ -353,6 +406,20 @@ class WatchHistoryRepository @Inject constructor(
         season: Int?,
         episode: Int?
     ) {
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            val profileId = currentProfileId()
+            cachedWatchHistoryByProfile[profileId] = cachedWatchHistoryByProfile[profileId].orEmpty().filterNot { entry ->
+                entry.show_tmdb_id == tmdbId &&
+                    (season == null || entry.season == season) &&
+                    (episode == null || entry.episode == episode)
+            }
+            cachedContinueWatchingByProfile[profileId] = cachedContinueWatchingByProfile[profileId].orEmpty().filterNot { entry ->
+                entry.show_tmdb_id == tmdbId &&
+                    (season == null || entry.season == season) &&
+                    (episode == null || entry.episode == episode)
+            }
+            return
+        }
         val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
 
         try {
@@ -376,6 +443,14 @@ class WatchHistoryRepository @Inject constructor(
      * Clear all watch history
      */
     suspend fun clearHistory() {
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            val profileId = currentProfileId()
+            cachedWatchHistoryByProfile.remove(profileId)
+            cachedContinueWatchingByProfile.remove(profileId)
+            cachedWatchHistory = emptyList()
+            cachedContinueWatching = emptyList()
+            return
+        }
         val userId = authRepositoryProvider.get().getCurrentUserId() ?: return
 
         try {
@@ -403,6 +478,9 @@ class WatchHistoryRepository @Inject constructor(
         operation: String,
         block: suspend (String) -> T
     ): T {
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            throw IllegalStateException("Legacy Supabase watch history is disabled in Netlify mode")
+        }
         val auth = getSupabaseAuth() ?: throw IllegalStateException("Supabase auth failed")
         return try {
             block(auth)
