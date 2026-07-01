@@ -73,6 +73,8 @@ class PluginDataStore @Inject constructor(
                 try {
                     moshi.adapter<List<PluginRepository>>(repoListType).fromJson(json) ?: emptyList()
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     emptyList()
                 }
             } ?: emptyList()
@@ -124,6 +126,8 @@ class PluginDataStore @Inject constructor(
                 try {
                     moshi.adapter<List<ScraperInfo>>(scraperListType).fromJson(json) ?: emptyList()
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     emptyList()
                 }
             } ?: emptyList()
@@ -219,6 +223,8 @@ class PluginDataStore @Inject constructor(
                 @Suppress("UNCHECKED_CAST")
                 moshi.adapter<Map<String, Map<String, Any>>>(settingsMapType).fromJson(json) ?: emptyMap()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 emptyMap()
             }
         } ?: emptyMap()
@@ -235,6 +241,8 @@ class PluginDataStore @Inject constructor(
                 moshi.adapter<Map<String, Map<String, Any>>>(settingsMapType).fromJson(json)?.toMutableMap()
                     ?: mutableMapOf()
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 mutableMapOf()
             }
         } ?: mutableMapOf()

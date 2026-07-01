@@ -119,6 +119,8 @@ class TelegramSourceResolver @Inject constructor(
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         Log.e(TAG, "Search failed for '$query'", e)
                         emptyList()
                     }
@@ -227,6 +229,8 @@ class TelegramSourceResolver @Inject constructor(
             } else null
             englishTitle to localizedTitle
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Log.w(TAG, "Failed to fetch titles for $imdbId: ${e.message}")
             null to null
         }

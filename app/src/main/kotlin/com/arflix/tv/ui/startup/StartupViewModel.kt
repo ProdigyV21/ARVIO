@@ -78,6 +78,8 @@ class StartupViewModel @Inject constructor(
                 updateProgress(1.0f, "Ready!")
 
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 _state.value = _state.value.copy(
                     isLoading = false,
                     isReady = true,
@@ -128,6 +130,8 @@ class StartupViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 // Hero logo preload failed
             }
         }

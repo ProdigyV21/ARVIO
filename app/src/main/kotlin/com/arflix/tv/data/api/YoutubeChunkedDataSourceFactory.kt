@@ -123,6 +123,8 @@ class YoutubeChunkedDataSourceFactory(
                     openNextChunk()
                     upstream.read(buffer, offset, length)
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     Log.w(TAG, "Failed to open next chunk at $currentChunkStart: ${e.message}")
                     C.RESULT_END_OF_INPUT
                 }

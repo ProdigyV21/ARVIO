@@ -423,6 +423,8 @@ class RealtimeSyncManager @Inject constructor(
                 }
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Log.w(TAG, "Failed to parse realtime message: ${e.message}")
         }
     }
@@ -553,6 +555,8 @@ class RealtimeSyncManager @Inject constructor(
                         connectWebSocket()
                     }
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     Log.w(TAG, "Token refresh check failed: ${e.message}")
                 }
             }

@@ -124,6 +124,8 @@ class TraktSyncService @Inject constructor(
                     val supabaseUserId = userId ?: return@withContext SyncResult.Error(context.getString(R.string.error_not_logged_in))
                     updateSyncState(supabaseUserId, syncInProgress = true, lastError = null)
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 }
             }
 
@@ -155,6 +157,8 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedMovies(auth, records = chunk)
                             }
                         } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         }
                     }
                 }
@@ -203,6 +207,8 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedEpisodes(auth, records = chunk)
                             }
                         } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         }
                     }
                 }
@@ -234,6 +240,8 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.upsertWatchHistory(auth = auth, item = record)
                             }
                         } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         }
                     }
                 }
@@ -241,6 +249,8 @@ class TraktSyncService @Inject constructor(
                 try {
                     cleanupTraktPlaybackProgress(localUserId, progressRecords)
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 }
             }
             flushOutbox()
@@ -264,6 +274,8 @@ class TraktSyncService @Inject constructor(
                         syncInProgress = false
                     )
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     // Silently ignore - sync data is already cached locally
                 }
             }
@@ -281,6 +293,8 @@ class TraktSyncService @Inject constructor(
             SyncResult.Success(totalMovies, totalEpisodes)
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             _syncProgress.value = SyncProgress(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
@@ -339,6 +353,8 @@ class TraktSyncService @Inject constructor(
                 }
                 syncState = syncStates.firstOrNull()
             } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             }
 
             if (syncState == null || (syncState.lastTraktActivitiesJson == null && syncState.lastTraktActivities == null)) {
@@ -375,6 +391,8 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedMovies(auth, records = chunk)
                             }
                         } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         }
                     }
                 }
@@ -400,6 +418,8 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.bulkUpsertWatchedEpisodes(auth, records = chunk)
                             }
                         } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         }
                     }
                 }
@@ -433,6 +453,8 @@ class TraktSyncService @Inject constructor(
                                 supabaseApi.upsertWatchHistory(auth = auth, item = record)
                             }
                         } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         }
                     }
                 }
@@ -440,6 +462,8 @@ class TraktSyncService @Inject constructor(
                 try {
                     cleanupTraktPlaybackProgress(safeUserId, progressRecords)
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 }
             }
 
@@ -455,6 +479,8 @@ class TraktSyncService @Inject constructor(
                     syncInProgress = false
                 )
             } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             }
 
             _syncProgress.value = SyncProgress(
@@ -468,6 +494,8 @@ class TraktSyncService @Inject constructor(
             SyncResult.Success(moviesUpdated, episodesUpdated)
 
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             _syncProgress.value = SyncProgress(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
@@ -512,6 +540,8 @@ class TraktSyncService @Inject constructor(
                     )
                     true
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     false
                 }
             } else {
@@ -547,6 +577,8 @@ class TraktSyncService @Inject constructor(
 
             traktSyncOk || hasSupabase
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             false
         }
     }
@@ -614,6 +646,8 @@ class TraktSyncService @Inject constructor(
                     )
                     true
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     false
                 }
             } else {
@@ -654,6 +688,8 @@ class TraktSyncService @Inject constructor(
 
             traktSyncOk || userId != null
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             false
         }
     }
@@ -726,6 +762,8 @@ class TraktSyncService @Inject constructor(
 
             traktAuth != null || hasSupabase
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             false
         }
     }
@@ -775,6 +813,8 @@ class TraktSyncService @Inject constructor(
 
             traktAuth != null || hasSupabase
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             false
         }
     }
@@ -829,6 +869,8 @@ class TraktSyncService @Inject constructor(
             }
             true
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             false
         }
     }
@@ -875,6 +917,8 @@ class TraktSyncService @Inject constructor(
             }
             allRecords.filter { recordBelongsToActiveProfile(it.profileId) }.map { it.tmdbId }.toSet()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptySet()
         }
     }
@@ -945,6 +989,8 @@ class TraktSyncService @Inject constructor(
             }
             keys
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptySet()
         }
     }
@@ -976,6 +1022,8 @@ class TraktSyncService @Inject constructor(
             }
             keys
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptySet()
         }
     }
@@ -1000,6 +1048,8 @@ class TraktSyncService @Inject constructor(
                 )
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptyList()
         }
     }
@@ -1025,6 +1075,8 @@ class TraktSyncService @Inject constructor(
             val completionThreshold = Constants.WATCHED_THRESHOLD / 100f
             records.filter { it.progress > 0f && it.progress < completionThreshold }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptyList()
         }
     }
@@ -1047,6 +1099,8 @@ class TraktSyncService @Inject constructor(
             }
             syncStates.firstOrNull()?.lastSyncAt
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -1127,6 +1181,8 @@ class TraktSyncService @Inject constructor(
 
                 page++
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 consecutiveErrors++
                 if (consecutiveErrors > maxRetries) {
                     break
@@ -1166,6 +1222,8 @@ class TraktSyncService @Inject constructor(
 
                 page++
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 consecutiveErrors++
                 if (consecutiveErrors > maxRetries) {
                     break
@@ -1413,6 +1471,8 @@ class TraktSyncService @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+
                     }
                 }
             }
@@ -1559,6 +1619,8 @@ class TraktSyncService @Inject constructor(
                                 )
                             }
                         } catch (e: Exception) {
+                           if (e is kotlinx.coroutines.CancellationException) throw e
+
                             if (e is kotlinx.coroutines.CancellationException) throw e
                         }
                     }
@@ -1660,6 +1722,8 @@ class TraktSyncService @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 false
             }
 
@@ -1693,6 +1757,8 @@ class TraktSyncService @Inject constructor(
                     traktApi.removePlaybackItem(auth, clientId, "2", item.id)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 outboxRepository.enqueue(
                     TraktOutboxItem(
                         action = TraktOutboxAction.REMOVE_PLAYBACK_ITEM,
@@ -1701,6 +1767,8 @@ class TraktSyncService @Inject constructor(
                 )
             }
         } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+
         }
     }
 
@@ -1837,6 +1905,8 @@ class TraktSyncService @Inject constructor(
             saveToken(newToken)
             newToken.accessToken
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }

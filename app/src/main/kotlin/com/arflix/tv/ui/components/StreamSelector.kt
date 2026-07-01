@@ -882,6 +882,7 @@ private fun OledSourceSelectorTv(
     }
 }
 
+@androidx.compose.runtime.Immutable
 private data class SourcePresentation(
     val stream: StreamSource,
     val title: String,
@@ -904,6 +905,7 @@ private data class SourcePresentation(
     val description: String? = null
 )
 
+@androidx.compose.runtime.Immutable
 private data class SourceBadge(
     val text: String,
     val imageUrl: String? = null

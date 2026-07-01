@@ -305,7 +305,8 @@ class SearchViewModel @Inject constructor(
                 val top = (personItems.take(24) + movies.take(16) + tv.take(16)).distinctBy { "${it.mediaType}_${it.id}" }
                 val logos = withContext(Dispatchers.IO) { top.map { item -> async { val k = "${item.mediaType}_${item.id}"; val l = runCatching { mediaRepository.getLogoUrl(item.mediaType, item.id) }.getOrNull(); if (l.isNullOrBlank()) null else k to l } }.awaitAll().filterNotNull().toMap() }
                 _uiState.value = _uiState.value.copy(isLoading = false, results = sorted, movieResults = movies, tvResults = tv, personResults = peopleRows, cardLogoUrls = logos)
-            } catch (e: Exception) { _uiState.value = _uiState.value.copy(isLoading = false, error = e.message) }
+            } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e
+ _uiState.value = _uiState.value.copy(isLoading = false, error = e.message) }
         }
     }
 
@@ -351,7 +352,8 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 _uiState.value = _uiState.value.copy(isLoading = false, aiResults = if (sq.limit != null) items.take(sq.limit) else items)
-            } catch (e: Exception) { _uiState.value = _uiState.value.copy(isLoading = false, error = e.message) }
+            } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e
+ _uiState.value = _uiState.value.copy(isLoading = false, error = e.message) }
         }
     }
 

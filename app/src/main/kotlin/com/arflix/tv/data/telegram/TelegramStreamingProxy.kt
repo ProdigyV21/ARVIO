@@ -207,6 +207,8 @@ class TelegramStreamingProxy @Inject constructor(
             val end = parts.getOrNull(1)?.toLongOrNull()
             Pair(start, end)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Pair(null, null)
         }
     }

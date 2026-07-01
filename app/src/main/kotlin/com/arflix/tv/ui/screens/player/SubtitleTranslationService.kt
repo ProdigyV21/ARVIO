@@ -126,6 +126,8 @@ class SubtitleTranslationService(
 
                 parseTranslationResult(lines, targetLanguage, rawText, NL)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 Log.e(TAG, "translateGroq exception: ${e.message}", e)
                 TranslationResult(lines, false, e.message)
             }
@@ -193,6 +195,8 @@ class SubtitleTranslationService(
 
                 parseTranslationResult(lines, targetLanguage, rawText, NL)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 Log.e(TAG, "translateGemini exception: ${e.message}", e)
                 TranslationResult(lines, false, e.message)
             }

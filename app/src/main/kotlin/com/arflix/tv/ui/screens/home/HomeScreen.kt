@@ -336,6 +336,7 @@ private fun homeRowItemKey(item: MediaItem): String {
     return "${item.mediaType.name}-${item.id}$episodeSuffix"
 }
 
+@androidx.compose.runtime.Immutable
 private data class HomeFocusedHeroSnapshot(
     val rowIndex: Int,
     val itemIndex: Int,
@@ -359,6 +360,7 @@ private fun isActionableHomeItem(item: MediaItem?): Boolean {
     return item != null && item.id > 0 && !item.isPlaceholder
 }
 
+@androidx.compose.runtime.Immutable
 private data class HomeHeroPlaybackHandles(
     val player: ExoPlayer,
     val hlsFactory: HlsMediaSource.Factory

@@ -2019,6 +2019,8 @@ class MediaRepository @Inject constructor(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptyList()
         }
     }
@@ -2872,6 +2874,8 @@ class MediaRepository @Inject constructor(
             try {
                 traktRepository.getWatchedEpisodesForShow(tvId)
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 emptySet<String>()
             }
         }
@@ -2956,6 +2960,8 @@ class MediaRepository @Inject constructor(
         val recommendations = try {
             tmdbApi.getRecommendations(type, mediaId, apiKey, language = contentLanguage)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
 
@@ -3007,6 +3013,8 @@ class MediaRepository @Inject constructor(
             logoCache[cacheKey] = CacheEntry(url, System.currentTimeMillis())
             url
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -3041,6 +3049,8 @@ class MediaRepository @Inject constructor(
                 ?: results.find { it.site == "YouTube" }
             trailer?.key
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -3203,6 +3213,8 @@ class MediaRepository @Inject constructor(
                 Category(id = categoryId, title = title, items = items.take(20))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -3237,6 +3249,8 @@ class MediaRepository @Inject constructor(
             reviewsCache[cacheKey] = CacheEntry(reviews, System.currentTimeMillis())
             reviews
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             emptyList()
         }
     }
@@ -3769,6 +3783,8 @@ private fun formatDate(dateStr: String): String {
         val date = inputFormat.parse(dateStr)
         date?.let { outputFormat.format(it) } ?: dateStr
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+
         dateStr
     }
 }

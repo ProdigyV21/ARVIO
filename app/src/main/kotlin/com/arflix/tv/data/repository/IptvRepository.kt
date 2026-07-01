@@ -1174,7 +1174,8 @@ class IptvRepository @Inject constructor(
             if (pattern in setOf("Y", "m", "d", "H", "M", "S")) {
                 return@replace match.value
             }
-            try { Result.success(dateTime.format(IptvRepoDateRegexes.formatterFor(pattern))) } catch (e: Exception) { Result.failure<String>(e) }
+            try { Result.success(dateTime.format(IptvRepoDateRegexes.formatterFor(pattern))) } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e
+ Result.failure<String>(e) }
                 .getOrDefault(match.value)
         }
     }

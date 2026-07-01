@@ -91,6 +91,8 @@ private fun formatBirthday(dateStr: String?): String {
         val date = inputFormat.parse(dateStr)
         date?.let { outputFormat.format(it) } ?: dateStr
     } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+
         dateStr
     }
 }

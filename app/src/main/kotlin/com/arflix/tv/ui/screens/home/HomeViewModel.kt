@@ -826,7 +826,8 @@ class HomeViewModel @Inject constructor(
      *                     If false, only re-derive from cached program data (free, no network).
      */
     private fun refreshFavoriteTvEpg(networkFetch: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
+        activeEpgRefreshJob?.cancel()
+        activeEpgRefreshJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val categories = _uiState.value.categories
                 val favTvIndex = categories.indexOfFirst { it.id == FAVORITE_TV_CATEGORY_ID }
@@ -886,6 +887,7 @@ class HomeViewModel @Inject constructor(
     /** Start periodic EPG refresh for the Favorite TV home row. */
     private fun startEpgRefreshTimer() {
         epgRefreshJob?.cancel()
+        activeEpgRefreshJob?.cancel()
         epgRefreshJob = viewModelScope.launch {
             // Initial delay — let home data + IPTV warmup finish first
             delay(if (isLowRamDevice) 10_000L else 5_000L)
@@ -981,6 +983,7 @@ class HomeViewModel @Inject constructor(
     /** Network refresh: fetch fresh short EPG for favorite channels (Xtream only). */
     private val EPG_NETWORK_REFRESH_MS = 5 * 60_000L
     private var epgRefreshJob: Job? = null
+    private var activeEpgRefreshJob: Job? = null
     private var lastEpgNetworkRefreshMs: Long = 0L
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -1181,6 +1184,7 @@ class HomeViewModel @Inject constructor(
         startupCatalogWarmupJob?.cancel()
         customCatalogsJob?.cancel()
         epgRefreshJob?.cancel()
+        activeEpgRefreshJob?.cancel()
         lastContinueWatchingItems = emptyList()
         lastContinueWatchingUpdateMs = 0L
         lastResolvedBaseCategories = emptyList()

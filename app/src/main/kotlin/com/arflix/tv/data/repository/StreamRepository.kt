@@ -647,6 +647,8 @@ class StreamRepository @Inject constructor(
 
             Result.success(newAddon)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -957,6 +959,8 @@ class StreamRepository @Inject constructor(
                 acc
             }.values.toList()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -2119,6 +2123,8 @@ class StreamRepository @Inject constructor(
                     val addonStreams = try {
                         fetchMovieStreamsFromAddon(addon, imdbId)
                     } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         Log.e(TAG, "[StreamFetch][Movie] stremio addon ${addon.id} failed", e)
                         AppLogger.recordException(
                             throwable = e,
@@ -2143,6 +2149,8 @@ class StreamRepository @Inject constructor(
                     val telegramStreams = try {
                         telegramSourceResolver.resolve(title = title, year = year, imdbId = imdbId, isMovie = true)
                     } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         Log.e(TAG, "[StreamFetch][Movie] telegram resolve failed", e)
                         emptyList()
                     }
@@ -2537,6 +2545,8 @@ class StreamRepository @Inject constructor(
                             airDate = airDate
                         )
                     } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         Log.e(TAG, "[StreamFetch][Episode] stremio addon ${addon.id} failed", e)
                         AppLogger.recordException(
                             throwable = e,
@@ -2570,6 +2580,8 @@ class StreamRepository @Inject constructor(
                             isMovie = false
                         )
                     } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         Log.e(TAG, "[StreamFetch][Episode] telegram resolve failed", e)
                         emptyList()
                     }
@@ -3139,6 +3151,8 @@ class StreamRepository @Inject constructor(
             )
             null
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             AppLogger.breadcrumb(
                 tag = "Sources",
                 message = "playback_resolve_exception kind=${sourceKind(stream)} addon=${stream.addonId.ifBlank { "unknown" }} error=${e::class.java.simpleName}",

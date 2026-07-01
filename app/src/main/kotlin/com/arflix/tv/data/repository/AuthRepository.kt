@@ -471,6 +471,8 @@ class AuthRepository @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             }
 
             // Second try: Import from cached tokens
@@ -487,6 +489,8 @@ class AuthRepository @Inject constructor(
                         storeSession(session)
                     }
                 } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 }
             }
 
@@ -528,6 +532,8 @@ class AuthRepository @Inject constructor(
                 _authState.value = AuthState.NotAuthenticated
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             _authState.value = AuthState.NotAuthenticated
         }
     }
@@ -583,6 +589,8 @@ class AuthRepository @Inject constructor(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             val message = safeErrorMessage(e, context.getString(R.string.auth_signin_failed))
             _authState.value = AuthState.Error(message)
             AppLogger.breadcrumb("Auth", "email_sign_in_failed ${e::class.java.simpleName}", severity = "warning")
@@ -611,6 +619,8 @@ class AuthRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             val message = safeErrorMessage(e, context.getString(R.string.auth_signup_failed))
             _authState.value = AuthState.Error(message)
             AppLogger.recordException(
@@ -748,6 +758,8 @@ class AuthRepository @Inject constructor(
                 Result.failure(Exception(message))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             val message = safeErrorMessage(e, context.getString(R.string.auth_signin_failed))
             _authState.value = AuthState.Error(message)
             AppLogger.recordException(
@@ -844,6 +856,8 @@ class AuthRepository @Inject constructor(
             _authState.value = AuthState.Error(context.getString(R.string.auth_failed_parse_google))
             Result.failure(e)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             _authState.value = AuthState.Error(e.message ?: context.getString(R.string.auth_google_failed))
             Result.failure(e)
         }
@@ -912,6 +926,8 @@ class AuthRepository @Inject constructor(
 
             result
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -934,6 +950,8 @@ class AuthRepository @Inject constructor(
             traktRepositoryProvider.get().setUserId(userId)
             traktRepositoryProvider.get().syncLocalTokensToProfileIfNeeded()
         } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+
         }
 
         return UserProfile(
@@ -977,6 +995,8 @@ class AuthRepository @Inject constructor(
             _userProfile.value = profile
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1089,6 +1109,8 @@ class AuthRepository @Inject constructor(
             storeSession(refreshed)
             refreshed.accessToken
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -1131,6 +1153,8 @@ class AuthRepository @Inject constructor(
                     accessToken
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 null
             }
         }
@@ -1147,6 +1171,8 @@ class AuthRepository @Inject constructor(
                 supabase.auth.loadFromStorage(false)
                 session = supabase.auth.currentSessionOrNull()
             } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             }
         }
         if (session != null && !isSessionExpired(session)) {
@@ -1165,6 +1191,8 @@ class AuthRepository @Inject constructor(
             storeSession(refreshed)
             refreshed
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -1204,6 +1232,8 @@ class AuthRepository @Inject constructor(
             val now = Clock.System.now().epochSeconds
             exp <= now + bufferSeconds
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             true
         }
     }
@@ -1215,6 +1245,8 @@ class AuthRepository @Inject constructor(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+
         }
 
         // 2. Also save tokens directly (fallback for manual restoration)
@@ -1263,6 +1295,8 @@ class AuthRepository @Inject constructor(
             )
             JSONObject(payload)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             null
         }
     }
@@ -1310,6 +1344,8 @@ class AuthRepository @Inject constructor(
 
             Result.success(row?.addons)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1355,6 +1391,8 @@ class AuthRepository @Inject constructor(
             )
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1392,6 +1430,8 @@ class AuthRepository @Inject constructor(
             _userProfile.value = currentProfile.copy(default_subtitle = subtitle)
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1429,6 +1469,8 @@ class AuthRepository @Inject constructor(
             _userProfile.value = currentProfile.copy(auto_play_next = autoPlayNext)
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1681,6 +1723,8 @@ class AuthRepository @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1724,6 +1768,8 @@ class AuthRepository @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1896,6 +1942,8 @@ class AuthRepository @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1929,6 +1977,8 @@ class AuthRepository @Inject constructor(
                 }
             )
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1965,6 +2015,8 @@ class AuthRepository @Inject constructor(
             }
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -1990,6 +2042,8 @@ class AuthRepository @Inject constructor(
                 }
             )
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }
@@ -2025,6 +2079,8 @@ class AuthRepository @Inject constructor(
             )
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Result.failure(e)
         }
     }

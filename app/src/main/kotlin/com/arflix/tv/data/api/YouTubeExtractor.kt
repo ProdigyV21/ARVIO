@@ -182,6 +182,8 @@ class InAppYouTubeExtractor @Inject constructor() {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             Log.w(TAG, "[$videoId] extraction failed: ${e.message}")
             null
         }
@@ -221,6 +223,8 @@ class InAppYouTubeExtractor @Inject constructor() {
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+
                         val msg = e.message.orEmpty()
                         if (msg.contains("401") || msg.contains("403")) keyRejected = true
                         null

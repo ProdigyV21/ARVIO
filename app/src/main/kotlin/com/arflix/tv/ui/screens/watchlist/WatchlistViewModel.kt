@@ -228,6 +228,8 @@ class WatchlistViewModel @Inject constructor(
                     enrichLocalWatchlistInBackground()
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 AppLogger.recordException(
                     throwable = e,
                     context = watchlistDiagnosticContext("refresh")
@@ -290,6 +292,8 @@ class WatchlistViewModel @Inject constructor(
                         )
                     }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 AppLogger.recordException(
                     throwable = e,
                     context = watchlistDiagnosticContext(

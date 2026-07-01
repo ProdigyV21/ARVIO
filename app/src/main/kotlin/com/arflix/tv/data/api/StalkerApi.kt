@@ -40,6 +40,8 @@ class StalkerApi(
             token = parsed?.js?.token ?: return false
             true
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             System.err.println("[Stalker] Handshake failed: ${e.message}")
             false
         }
@@ -93,6 +95,8 @@ class StalkerApi(
                 page++
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             System.err.println("[Stalker] Get channels failed: ${e.message}")
         }
         return channels
@@ -107,6 +111,8 @@ class StalkerApi(
             val parsed = gson.fromJson(response, StalkerLinkResponse::class.java)
             parsed?.js?.cmd?.replace("ffmpeg ", "")?.trim()
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
             System.err.println("[Stalker] Resolve stream failed: ${e.message}")
             null
         }

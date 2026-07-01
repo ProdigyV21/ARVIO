@@ -40,6 +40,8 @@ class DataStoreSessionManager(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 AppLogger.e(TAG, "Failed to save session", e)
                 throw e
             }
@@ -58,6 +60,8 @@ class DataStoreSessionManager(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+               if (e is kotlinx.coroutines.CancellationException) throw e
+
                 if (e is CancellationException) throw e
                 AppLogger.e(TAG, "Failed to load session", e)
                 // Clear corrupted data
@@ -79,6 +83,8 @@ class DataStoreSessionManager(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+
                 AppLogger.e(TAG, "Failed to delete session", e)
                 throw e
             }

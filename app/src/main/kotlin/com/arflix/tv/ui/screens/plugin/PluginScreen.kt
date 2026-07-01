@@ -43,7 +43,8 @@ fun PluginScreen(
         kotlinx.coroutines.delay(100)
         try {
             addButtonFocusRequester.requestFocus()
-        } catch (e: Exception) {}
+        } catch (e: Exception) {if (e is kotlinx.coroutines.CancellationException) throw e
+}
     }
 
     Column(
@@ -169,11 +170,13 @@ fun PluginScreen(
             onSave = { url ->
                 viewModel.onEvent(PluginUiEvent.AddRepository(url))
                 showAddDialog = false
-                try { addButtonFocusRequester.requestFocus() } catch (e: Exception) {}
+                try { addButtonFocusRequester.requestFocus() } catch (e: Exception) {if (e is kotlinx.coroutines.CancellationException) throw e
+}
             },
             onDismiss = {
                 showAddDialog = false
-                try { addButtonFocusRequester.requestFocus() } catch (e: Exception) {}
+                try { addButtonFocusRequester.requestFocus() } catch (e: Exception) {if (e is kotlinx.coroutines.CancellationException) throw e
+}
             }
         )
     }

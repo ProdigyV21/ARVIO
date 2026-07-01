@@ -277,6 +277,8 @@ private fun generateQrBitmap(content: String, size: Int): Bitmap? = try {
     }
     bmp
 } catch (e: Exception) {
+    if (e is kotlinx.coroutines.CancellationException) throw e
+
     null
 }
 
