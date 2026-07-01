@@ -1212,6 +1212,8 @@ class AuthRepository @Inject constructor(
         // 1. Explicitly save through session manager (for Supabase SDK auto-restore)
         try {
             sessionManager.saveSession(session)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
         }
 

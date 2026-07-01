@@ -593,7 +593,7 @@ class SportsRepository @Inject constructor(
 
     private fun parseSizeToBytes(sizeStr: String): Long {
         if (sizeStr.isBlank()) return 0L
-        val match = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(TB|GB|MB|KB)""")
+        val match = SportsRepoRegexes.SIZE_REGEX
             .find(sizeStr.replace(",", "."))
             ?: return 0L
         val value = match.groupValues[1].toDoubleOrNull() ?: return 0L
@@ -614,4 +614,8 @@ class SportsRepository @Inject constructor(
         fun drawable(name: String): String =
             "android.resource://com.arvio.tv/drawable/$name"
     }
+}
+
+private object SportsRepoRegexes {
+    val SIZE_REGEX = Regex("""(?i)(\d+(?:[.,]\d+)?)\s*(TB|GB|MB|KB)""")
 }
