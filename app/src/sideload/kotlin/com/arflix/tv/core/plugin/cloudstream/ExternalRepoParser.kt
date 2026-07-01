@@ -2,6 +2,7 @@ package com.arflix.tv.core.plugin.cloudstream
 
 import android.util.Log
 import com.arflix.tv.domain.model.ExternalPluginEntry
+import com.arflix.tv.domain.model.MetaRepoEntry
 import com.arflix.tv.domain.model.ExternalRepoManifest
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
@@ -149,5 +150,71 @@ class ExternalRepoParser @Inject constructor(
         val path = url.substringAfter("://").substringBefore("?")
         val segments = path.split("/").filter { it.isNotBlank() }
         return segments.lastOrNull()?.removeSuffix(".json") ?: "External Repository"
+    }
+
+    /**
+     * Checks if a URL points to a CloudStream meta-repo manifest (contains `pluginLists`).
+     * Returns the parsed manifest, or null if this is not a meta-repo.
+     */
+    suspend fun tryParseMetaRepo(url: String): ExternalRepoManifest? = withContext(Dispatchers.IO) {
+        val body = fetchBody(url) ?: return@withContext null
+        val trimmed = body.trim()
+        if (!trimmed.contains("\"pluginLists\"")) return@withContext null
+        try {
+            val manifest = repoManifestAdapter.fromJson(trimmed)
+            if (manifest != null && manifest.pluginLists.isNotEmpty()) manifest else null
+        } catch (e: Exception) {
+            Log.d(TAG, "tryParseMetaRepo: not a meta-repo manifest: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Resolves a CloudStream meta-repo manifest into a list of [MetaRepoEntry] objects.
+     * Each entry corresponds to one URL in `pluginLists`, with its plugin count pre-fetched.
+     * Fetches all plugin lists in parallel.
+     */
+    suspend fun resolveMetaRepoEntries(
+        metaRepoUrl: String,
+        manifest: ExternalRepoManifest
+    ): List<MetaRepoEntry> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            manifest.pluginLists.map { listUrl ->
+                async {
+                    val resolvedUrl = resolveUrl(metaRepoUrl, listUrl)
+                    val plugins = fetchPluginList(resolvedUrl) ?: emptyList()
+                    val inferredName = inferSubRepoName(resolvedUrl)
+                    val firstIcon = plugins.firstOrNull { !it.iconUrl.isNullOrBlank() }?.iconUrl
+                    MetaRepoEntry(
+                        name = inferredName,
+                        pluginsUrl = resolvedUrl,
+                        pluginCount = plugins.size,
+                        iconUrl = firstIcon
+                    )
+                }
+            }.awaitAll()
+        }
+    }
+
+    /**
+     * Infers a human-readable sub-repo name from a plugins.json URL.
+     * e.g. "https://raw.githubusercontent.com/user/my-repo/builds/plugins.json" → "user / my-repo"
+     */
+    private fun inferSubRepoName(url: String): String {
+        return try {
+            val path = url.substringAfter("://").substringBefore("?")
+            val segments = path.split("/").filter { it.isNotBlank() }
+            when {
+                // GitHub raw: raw.githubusercontent.com/USER/REPO/branch/file
+                url.contains("raw.githubusercontent.com") && segments.size >= 3 ->
+                    "${segments[1]} / ${segments[2]}"
+                // GitLab or generic: take last two meaningful segments before filename
+                segments.size >= 3 -> "${segments[segments.size - 3]} / ${segments[segments.size - 2]}"
+                segments.size >= 2 -> "${segments[segments.size - 2]} / ${segments.last().removeSuffix(".json")}"
+                else -> segments.lastOrNull()?.removeSuffix(".json") ?: "Repository"
+            }
+        } catch (_: Exception) {
+            "Repository"
+        }
     }
 }

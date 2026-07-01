@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.arflix.tv.core.plugin.TestDiagnostics
 import com.arflix.tv.domain.model.LocalScraperResult
 import com.arflix.tv.domain.model.PluginRepository
+import com.arflix.tv.domain.model.MetaRepoEntry
 import com.arflix.tv.domain.model.ScraperInfo
 
 data class PluginUiState(
@@ -26,7 +27,9 @@ data class PluginUiState(
     // Pending change from phone
     val pendingRepoChange: PendingRepoChangeInfo? = null,
     // Pending scraper enable confirmation
-    val pendingScraperEnable: PendingScraperEnableInfo? = null
+    val pendingScraperEnable: PendingScraperEnableInfo? = null,
+    // Meta-repo browser: non-null when user has added a meta-repo URL and we resolved its sub-repos
+    val metaRepoBrowseResult: MetaRepoBrowseResult? = null
 )
 
 data class PendingRepoChangeInfo(
@@ -60,4 +63,15 @@ sealed interface PluginUiEvent {
     object RejectPendingRepoChange : PluginUiEvent
     object ConfirmPendingScraperEnable : PluginUiEvent
     object DismissPendingScraperEnable : PluginUiEvent
+    data class BrowseMetaRepo(val url: String) : PluginUiEvent
+    data class InstallMetaRepoEntry(val entry: MetaRepoEntry) : PluginUiEvent
+    object DismissMetaRepoBrowser : PluginUiEvent
 }
+
+data class MetaRepoBrowseResult(
+    val metaRepoUrl: String,
+    val metaRepoName: String,
+    val entries: List<MetaRepoEntry>,
+    val installing: Set<String> = emptySet(),  // pluginsUrls currently being installed
+    val installed: Set<String> = emptySet()    // pluginsUrls already installed this session
+)

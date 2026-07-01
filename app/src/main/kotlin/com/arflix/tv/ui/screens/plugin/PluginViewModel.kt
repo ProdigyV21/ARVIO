@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 
 import com.arflix.tv.core.plugin.PluginManager
+import com.arflix.tv.domain.model.MetaRepoEntry
 
 
 
@@ -101,6 +102,9 @@ class PluginViewModel @Inject constructor(
             PluginUiEvent.RejectPendingRepoChange -> rejectPendingRepoChange()
             PluginUiEvent.ConfirmPendingScraperEnable -> confirmPendingScraperEnable()
             PluginUiEvent.DismissPendingScraperEnable -> dismissPendingScraperEnable()
+            is PluginUiEvent.BrowseMetaRepo -> browseMetaRepo(event.url)
+            is PluginUiEvent.InstallMetaRepoEntry -> installMetaRepoEntry(event.entry)
+            PluginUiEvent.DismissMetaRepoBrowser -> _uiState.update { it.copy(metaRepoBrowseResult = null) }
         }
     }
 
@@ -272,8 +276,58 @@ class PluginViewModel @Inject constructor(
         return url.trim().trimEnd('/').lowercase()
     }
 
+    private fun browseMetaRepo(url: String) {
+        if (url.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAddingRepo = true, errorMessage = null) }
+            val entries = pluginManager.browseMetaRepo(url)
+            if (entries == null) {
+                addRepository(url)
+            } else {
+                val alreadyInstalledUrls = _uiState.value.repositories.map { it.url }.toSet()
+                _uiState.update {
+                    it.copy(
+                        isAddingRepo = false,
+                        metaRepoBrowseResult = MetaRepoBrowseResult(
+                            metaRepoUrl = url,
+                            metaRepoName = url.substringAfter("://").substringBefore("/"),
+                            entries = entries,
+                            installed = alreadyInstalledUrls.intersect(entries.map { e -> e.pluginsUrl }.toSet())
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun installMetaRepoEntry(entry: MetaRepoEntry) {
+        viewModelScope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    metaRepoBrowseResult = state.metaRepoBrowseResult?.copy(
+                        installing = state.metaRepoBrowseResult.installing + entry.pluginsUrl
+                    )
+                )
+            }
+            val result = pluginManager.addSubRepository(entry)
+            _uiState.update { state ->
+                val browse = state.metaRepoBrowseResult ?: return@update state
+                state.copy(
+                    metaRepoBrowseResult = browse.copy(
+                        installing = browse.installing - entry.pluginsUrl,
+                        installed = if (result.isSuccess) browse.installed + entry.pluginsUrl
+                                    else browse.installed
+                    ),
+                    errorMessage = result.exceptionOrNull()?.message?.let {
+                        "Failed to install ${entry.name}: $it"
+                    }
+                )
+            }
+        }
+    }
+
     private fun startQrMode() {}
-        fun stopQrMode() {}
+    fun stopQrMode() {}
     private fun confirmPendingRepoChange() {}
     private fun rejectPendingRepoChange() {}
     override fun onCleared() {

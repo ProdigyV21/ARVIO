@@ -1,4 +1,7 @@
 package com.arflix.tv.ui.screens.plugin
+import com.arflix.tv.domain.model.MetaRepoEntry
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -167,7 +170,7 @@ fun PluginScreen(
     if (showAddDialog) {
         AddRepoDialog(
             onSave = { url ->
-                viewModel.onEvent(PluginUiEvent.AddRepository(url))
+                viewModel.onEvent(PluginUiEvent.BrowseMetaRepo(url))
                 showAddDialog = false
                 try { addButtonFocusRequester.requestFocus() } catch (e: Exception) {}
             },
@@ -175,6 +178,16 @@ fun PluginScreen(
                 showAddDialog = false
                 try { addButtonFocusRequester.requestFocus() } catch (e: Exception) {}
             }
+        )
+    }
+
+    // Meta-repo browser dialog
+    val metaBrowse = uiState.metaRepoBrowseResult
+    if (metaBrowse != null) {
+        MetaRepoBrowserDialog(
+            result = metaBrowse,
+            onInstall = { entry -> viewModel.onEvent(PluginUiEvent.InstallMetaRepoEntry(entry)) },
+            onDismiss = { viewModel.onEvent(PluginUiEvent.DismissMetaRepoBrowser) }
         )
     }
 }
@@ -278,6 +291,95 @@ fun AddRepoDialog(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetaRepoBrowserDialog(
+    result: MetaRepoBrowseResult,
+    onInstall: (com.arflix.tv.domain.model.MetaRepoEntry) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = true, usePlatformDefaultWidth = false)
+    ) {
+        androidx.compose.foundation.layout.Box(
+            modifier = androidx.compose.ui.Modifier
+                .fillMaxWidth(0.9f)
+                .background(Color(0xFF1A1A1A), androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .padding(24.dp)
+        ) {
+            androidx.compose.foundation.layout.Column {
+                Text(
+                    "CloudStream Repository",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White
+                )
+                Text(
+                    "${result.entries.size} sub-repositories found",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = androidx.compose.ui.Modifier.weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(result.entries) { entry ->
+                        val isInstalling = entry.pluginsUrl in result.installing
+                        val isInstalled  = entry.pluginsUrl in result.installed
+                        Surface(
+                            onClick = {
+                                if (!isInstalling && !isInstalled) onInstall(entry)
+                            },
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color.White.copy(alpha = 0.06f),
+                                focusedContainerColor = Color(0xFF3D1A3A)
+                            ),
+                            shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)),
+                            modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                        ) {
+                            androidx.compose.foundation.layout.Row(
+                                modifier = androidx.compose.ui.Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.foundation.layout.Column(
+                                    modifier = androidx.compose.ui.Modifier.weight(1f)
+                                ) {
+                                    Text(entry.name, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "${entry.pluginCount} scrapers",
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                when {
+                                    isInstalled  -> Text("✓ Added",     color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodySmall)
+                                    isInstalling -> Text("Installing…",  color = Color(0xFFE91E63), style = MaterialTheme.typography.bodySmall)
+                                    else         -> Text("ADD",          color = Color(0xFFE91E63), style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+                Surface(
+                    onClick = onDismiss,
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = Color.White.copy(alpha = 0.08f),
+                        focusedContainerColor = Color.White.copy(alpha = 0.18f)
+                    ),
+                    shape = ClickableSurfaceDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+                    modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+                ) {
+                    Text("Close", color = Color.White, style = MaterialTheme.typography.bodyMedium,
+                        modifier = androidx.compose.ui.Modifier.padding(12.dp))
                 }
             }
         }

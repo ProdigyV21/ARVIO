@@ -150,3 +150,14 @@ data class ExternalPluginEntry(
     val fileSize: Long? = null,
     val repositoryUrl: String? = null
 )
+
+/**
+ * A single sub-repository resolved from a CloudStream meta-repo manifest.
+ * Each entry corresponds to one URL in the top-level `pluginLists` array.
+ */
+data class MetaRepoEntry(
+    val name: String,
+    val pluginsUrl: String,
+    val pluginCount: Int,
+    val iconUrl: String? = null
+)

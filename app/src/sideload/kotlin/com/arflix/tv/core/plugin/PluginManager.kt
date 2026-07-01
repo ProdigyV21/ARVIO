@@ -10,6 +10,7 @@ import com.arflix.tv.data.local.PluginDataStore
 import com.arflix.tv.data.repository.CloudSyncInvalidationBus
 import com.arflix.tv.data.repository.CloudSyncScope
 import com.arflix.tv.domain.model.ExternalPluginEntry
+import com.arflix.tv.domain.model.MetaRepoEntry
 import com.arflix.tv.domain.model.LocalScraperResult
 import com.arflix.tv.domain.model.PluginManifest
 import com.arflix.tv.domain.model.PluginRepository
@@ -273,6 +274,28 @@ class PluginManager @Inject constructor(
         pluginsEnabled
     ) { scraperList, enabled ->
         if (enabled) scraperList.filter { it.enabled } else emptyList()
+    }
+
+    /**
+     * Checks whether [url] points to a CloudStream meta-repo manifest
+     * (a JSON file containing a `pluginLists` array of sub-repo URLs).
+     *
+     * Returns the list of [MetaRepoEntry] objects (one per sub-repo) so the
+     * caller can show a selection UI before committing any installations,
+     * or null if the URL is NOT a meta-repo.
+     */
+    suspend fun browseMetaRepo(url: String): List<MetaRepoEntry>? = withContext(Dispatchers.IO) {
+        val sanitized = sanitizeScheme(url).trimEnd('/')
+        val manifest = externalRepoParser.tryParseMetaRepo(sanitized) ?: return@withContext null
+        externalRepoParser.resolveMetaRepoEntries(sanitized, manifest)
+    }
+
+    /**
+     * Installs a single sub-repository from a meta-repo browsing result.
+     * The [entry] is one item returned by [browseMetaRepo].
+     */
+    suspend fun addSubRepository(entry: MetaRepoEntry): Result<PluginRepository> {
+        return addRepository(entry.pluginsUrl)
     }
 
     /**
