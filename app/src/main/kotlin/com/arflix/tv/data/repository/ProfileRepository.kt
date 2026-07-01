@@ -1,5 +1,7 @@
 package com.arflix.tv.data.repository
 
+import com.arflix.tv.util.AppLogger
+
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -231,7 +233,8 @@ class ProfileRepository @Inject constructor(
         if (json.isNullOrBlank()) return emptyList()
         return try {
             gson.fromJson<List<Profile>>(json, profileListType) ?: emptyList()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.e("ProfileRepository", "Error getting profiles from network", e)
             emptyList()
         }
     }

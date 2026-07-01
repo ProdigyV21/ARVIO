@@ -2128,7 +2128,7 @@ class TraktRepository @Inject constructor(
             return@coroutineScope if (item.mediaType == MediaType.TV) {
                 val details = try {
                     tmdbApi.getTvDetails(item.id, apiKey)
-                } catch (_: Exception) { null }
+                } catch (e: Exception) { AppLogger.e("TraktRepository", "Silently returning null", e); null }
 
                 // Get current season info for episode title and aired-episode counts.
                 val seasonDetails = if (item.season != null && item.episode != null && (item.episodeTitle.isNullOrEmpty() || needsEpisodeCounts)) {
@@ -2142,7 +2142,7 @@ class TraktRepository @Inject constructor(
                             launch {
                                 val result = try {
                                     tmdbApi.getTvSeason(item.id, item.season, apiKey)
-                                } catch (_: Exception) { null }
+                                } catch (e: Exception) { AppLogger.e("TraktRepository", "Silently returning null", e); null }
                                 newDeferred.complete(result)
                             }
                             newDeferred
@@ -2152,7 +2152,7 @@ class TraktRepository @Inject constructor(
                         }
 
                         deferredSeason.await()
-                    } catch (_: Exception) { null }
+                    } catch (e: Exception) { AppLogger.e("TraktRepository", "Silently returning null", e); null }
                 } else null
                 val episodeInfo = seasonDetails?.episodes?.find { it.episodeNumber == item.episode }
 
@@ -2194,7 +2194,7 @@ class TraktRepository @Inject constructor(
             } else {
                 val details = try {
                     tmdbApi.getMovieDetails(item.id, apiKey)
-                } catch (_: Exception) { null }
+                } catch (e: Exception) { AppLogger.e("TraktRepository", "Silently returning null", e); null }
 
                 // Build full URLs for images
                 val backdropUrl = details?.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" }

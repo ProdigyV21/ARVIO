@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import com.arflix.tv.data.api.SupabaseApi
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.util.Constants
+import com.arflix.tv.util.AppLogger
 import kotlinx.serialization.Serializable
 import retrofit2.HttpException
 import java.time.Instant
@@ -211,7 +212,8 @@ class WatchHistoryRepository @Inject constructor(
                 }
                 saved = true
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Error in watch history operation", e)
         }
 
         // Mark the local write timestamp on the realtime manager so the incoming
@@ -271,7 +273,8 @@ class WatchHistoryRepository @Inject constructor(
             cachedWatchHistory = result
             cachedWatchHistoryByProfile[profileId] = result
             result
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Error getting watch history, returning cache", e)
             cachedWatchHistoryByProfile[profileId].orEmpty()
         }
     }
@@ -312,8 +315,8 @@ class WatchHistoryRepository @Inject constructor(
             cachedContinueWatching = result
             cachedContinueWatchingByProfile[profileId] = result
             result
-        } catch (_: Exception) {
-            // Return cached data instead of empty list on failure
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Error getting continue watching, returning cache", e)
             cachedContinueWatchingByProfile[profileId].orEmpty()
         }
     }
@@ -351,7 +354,8 @@ class WatchHistoryRepository @Inject constructor(
                 )
             }
             filterByProfile(records.map { it.toEntry() }).firstOrNull()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Error returning null fallback", e)
             null
         }
     }
@@ -393,7 +397,8 @@ class WatchHistoryRepository @Inject constructor(
                 .maxByOrNull { entry ->
                     parseEpoch(entry.updated_at).coerceAtLeast(parseEpoch(entry.paused_at))
                 }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Error returning null fallback", e)
             null
         }
     }
@@ -434,8 +439,8 @@ class WatchHistoryRepository @Inject constructor(
                     episode = episode?.let { "eq.$it" }
                 )
             }
-        } catch (_: Exception) {
-            // Silently handle errors
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Silently handled error", e)
         }
     }
 
@@ -462,8 +467,8 @@ class WatchHistoryRepository @Inject constructor(
                     source = profileHistorySourceFilter()
                 )
             }
-        } catch (_: Exception) {
-            // Silently handle errors
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Silently handled error", e)
         }
     }
 
@@ -508,7 +513,8 @@ class WatchHistoryRepository @Inject constructor(
         if (value.isNullOrBlank()) return 0L
         return try {
             Instant.parse(value).toEpochMilli()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            AppLogger.e("WatchHistoryRepository", "Error parsing date, fallback 0L", e)
             0L
         }
     }
