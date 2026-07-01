@@ -69,6 +69,14 @@
 
         </activity>
 
+        <!-- Crash Report Activity -->
+        <activity
+            android:name=".ui.screens.crash.CrashReportActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+            android:exported="false"
+            android:process=":crash"
+            android:theme="@style/Theme.ArflixTV" />
+
         <!-- Disable default WorkManager initialization for Hilt -->
         <provider
             android:name="androidx.startup.InitializationProvider"
