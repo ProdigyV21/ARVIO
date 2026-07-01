@@ -3426,17 +3426,20 @@ class HomeViewModel @Inject constructor(
     private suspend fun preloadStartupContinueWatchingItems(): List<ContinueWatchingItem> {
         val isTraktAuthenticated = runCatching { traktRepository.isAuthenticated.first() }.getOrDefault(false)
         val items = if (isTraktAuthenticated) {
-            runCatching { traktRepository.preloadContinueWatchingCache() }
-                .onFailure { error ->
-                    AppLogger.recordException(
-                        throwable = error,
-                        context = mapOf(
-                            "error_area" to "ContinueWatching",
-                            "cw_phase" to "preload_trakt_cache"
-                        )
+            try {
+                traktRepository.preloadContinueWatchingCache()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (error: Exception) {
+                AppLogger.recordException(
+                    throwable = error,
+                    context = mapOf(
+                        "error_area" to "ContinueWatching",
+                        "cw_phase" to "preload_trakt_cache"
                     )
-                }
-                .getOrDefault(emptyList())
+                )
+                emptyList()
+            }
         } else {
             val historyItems = loadContinueWatchingFromHistoryStable()
             if (historyItems.isNotEmpty()) {

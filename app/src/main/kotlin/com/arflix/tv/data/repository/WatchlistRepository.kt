@@ -129,6 +129,8 @@ class WatchlistRepository @Inject constructor(
                 }
                 cacheLoaded = true
             }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Exception) {
             AppLogger.recordException(
                 throwable = error,
@@ -347,6 +349,8 @@ class WatchlistRepository @Inject constructor(
                 LocalWatchlistItem::class.java
             ).type
             gson.fromJson<List<LocalWatchlistItem>>(json, type) ?: emptyList()
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Exception) {
             AppLogger.recordException(
                 throwable = error,
@@ -456,6 +460,8 @@ class WatchlistRepository @Inject constructor(
             ).type
             (gson.fromJson<List<LocalWatchlistItem>>(json, type) ?: emptyList())
                 .sortedWith(compareBy<LocalWatchlistItem> { it.sourceOrder }.thenByDescending { it.addedAt })
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Exception) {
             AppLogger.recordException(
                 throwable = error,
@@ -490,6 +496,8 @@ class WatchlistRepository @Inject constructor(
             } else {
                 enrichMovie(item.tmdbId, apiKey, item.addedAt, item.sourceOrder)
             }
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
         } catch (error: Exception) {
             AppLogger.breadcrumb(
                 tag = "Watchlist",

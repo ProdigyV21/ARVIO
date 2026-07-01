@@ -847,7 +847,7 @@ class CatalogRepository @Inject constructor(
         if (normalized.isBlank()) {
             return CatalogValidationResult(isValid = false, error = "URL is required")
         }
-        val uri = runCatching { URI(normalized) }.getOrNull()
+        val uri = try { URI(normalized) } catch (e: Exception) { null }
             ?: return CatalogValidationResult(isValid = false, error = "Invalid URL format")
         val host = uri.host?.lowercase()
             ?: return CatalogValidationResult(isValid = false, error = "Invalid host")
@@ -938,7 +938,7 @@ class CatalogRepository @Inject constructor(
     private suspend fun resolveTraktMetadata(url: String): ResolvedCatalog? {
         return when (val parsed = CatalogUrlParser.parseTrakt(url)) {
             is ParsedCatalogUrl.TraktUserList -> {
-                runCatching {
+                try {
                     val summary = traktApi.getUserListSummary(
                         clientId = Constants.TRAKT_CLIENT_ID,
                         username = parsed.username,
@@ -948,10 +948,14 @@ class CatalogRepository @Inject constructor(
                         title = summary.name.ifBlank { parsed.listId.replace('-', ' ') },
                         sourceRef = "trakt_user:${parsed.username}:${parsed.listId}"
                     )
-                }.getOrNull()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
             }
             is ParsedCatalogUrl.TraktList -> {
-                runCatching {
+                try {
                     val summary = traktApi.getListSummary(
                         clientId = Constants.TRAKT_CLIENT_ID,
                         listId = parsed.listId
@@ -960,7 +964,11 @@ class CatalogRepository @Inject constructor(
                         title = summary.name.ifBlank { parsed.listId.replace('-', ' ') },
                         sourceRef = "trakt_list:${parsed.listId}"
                     )
-                }.getOrNull()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
             }
             else -> null
         }
@@ -991,8 +999,7 @@ class CatalogRepository @Inject constructor(
     }
 
     private fun extractMdblistSlugTitle(url: String): String? {
-        val pathSegments = runCatching { URI(url).path.trim('/') }
-            .getOrNull()
+        val pathSegments = try { URI(url).path.trim('/') } catch (e: Exception) { null }
             ?.split('/')
             ?.filter { it.isNotBlank() }
             .orEmpty()
@@ -1012,26 +1019,30 @@ class CatalogRepository @Inject constructor(
                 .url(url)
                 .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
                 .build()
-            runCatching {
+            try {
                 okHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use null
                     response.body?.string()
                 }
-            }.getOrNull()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
     private fun parseCatalogsJson(json: String?): List<CatalogConfig> {
         if (json.isNullOrBlank()) return emptyList()
-        val strict = runCatching {
+        val strict = try {
             gson.fromJson<List<CatalogConfig>>(json, listType) ?: emptyList()
-        }.getOrElse { emptyList() }
+        } catch (e: Exception) { emptyList() }
             .mapNotNull { normalizeCatalogConfig(it) }
         if (strict.isNotEmpty()) return strict
 
         // Legacy/compat parse: recover from older/partial enum values so existing
         // custom catalogs don't disappear after app updates.
-        return runCatching {
+        return try {
             val rawType = TypeToken.getParameterized(List::class.java, TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type).type
             val rawList = gson.fromJson<List<Map<String, Any?>>>(json, rawType).orEmpty()
             rawList.mapNotNull { row ->
@@ -1105,7 +1116,7 @@ class CatalogRepository @Inject constructor(
                     )
                 )
             }
-        }.getOrElse { emptyList() }
+        } catch (e: Exception) { emptyList() }
     }
 
     private fun normalizeCatalogConfig(config: CatalogConfig): CatalogConfig? {
@@ -1121,9 +1132,9 @@ class CatalogRepository @Inject constructor(
             .getOrDefault(CatalogKind.STANDARD)
         val safeCollectionSources = config.collectionSources.orEmpty()
         val safeRequiredAddonUrls = config.requiredAddonUrls.orEmpty()
-        val normalizedCollectionTileShape = runCatching {
+        val normalizedCollectionTileShape = try {
             CollectionTileShape.valueOf(config.collectionTileShape.name)
-        }.getOrDefault(CollectionTileShape.LANDSCAPE)
+        } catch (e: Exception) { CollectionTileShape.LANDSCAPE }
         val normalizedAddonId = config.addonId?.trim().takeUnless { it.isNullOrBlank() }
             ?: sourceRefAddon?.first
         val normalizedAddonType = normalizeAddonCatalogType(config.addonCatalogType)

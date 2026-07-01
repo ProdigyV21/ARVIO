@@ -68,7 +68,7 @@ class AnimeScoreRepository @Inject constructor(
         if (cached != null || malIdCache.containsKey(imdbId)) return cached
 
         val resolved = withTimeoutOrNull(2_000L) {
-            runCatching { armApi.resolve(imdbId).firstOrNull()?.myanimelist }.getOrNull()
+            try { armApi.resolve(imdbId).firstOrNull()?.myanimelist } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
         }
         malIdCache[imdbId] = resolved
         return resolved
@@ -79,7 +79,7 @@ class AnimeScoreRepository @Inject constructor(
         if (cached != null || scoreCache.containsKey(malId)) return cached
 
         val score = withTimeoutOrNull(2_000L) {
-            runCatching { jikanApi.getAnime(malId).data?.score }.getOrNull()
+            try { jikanApi.getAnime(malId).data?.score } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
         }
         scoreCache[malId] = score
         return score

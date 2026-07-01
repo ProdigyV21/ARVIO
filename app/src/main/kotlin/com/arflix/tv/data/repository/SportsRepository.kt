@@ -192,18 +192,17 @@ class SportsRepository @Inject constructor(
         val baseUrl = addonBaseUrl(addon) ?: return@withContext null
         val requestUrl = "$baseUrl/stream/${encodePathSegment(parsed.type)}/${encodePathSegment(parsed.eventId)}.json"
 
-        val streams = runCatching { streamApi.getAddonStreams(requestUrl).streams.orEmpty() }
-            .onFailure { error ->
-                AppLogger.recordException(
-                    throwable = error,
-                    context = mapOf(
-                        "error_area" to "SportsRepository",
-                        "sports_phase" to "resolve_stream",
-                        "addon_id" to addon.id
-                    )
+        val streams = try { streamApi.getAddonStreams(requestUrl).streams.orEmpty() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
+            AppLogger.recordException(
+                throwable = e,
+                context = mapOf(
+                    "error_area" to "SportsRepository",
+                    "sports_phase" to "resolve_stream",
+                    "addon_id" to addon.id
                 )
-            }
-            .getOrDefault(emptyList())
+            )
+            emptyList()
+        }
 
         val source = streams.asSequence()
             .mapNotNull { stream -> stream.toStreamSource(addon, fallbackTitle = title) }

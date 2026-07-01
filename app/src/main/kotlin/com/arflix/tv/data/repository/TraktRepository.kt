@@ -1642,11 +1642,15 @@ class TraktRepository @Inject constructor(
         // this returns null because tokens haven't loaded from DataStore yet,
         // causing the code to incorrectly fall back to local CW for Trakt
         // profiles. That loaded cloud-synced non-Trakt items into the CW row.
-        val hasTraktToken = runCatching {
+        val hasTraktToken = try {
             val prefs = context.traktDataStore.data.first()
             val tokenKey = profileManager.profileStringKey("trakt_access_token")
             !prefs[tokenKey].isNullOrBlank()
-        }.getOrDefault(false)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
 
         if (!hasTraktToken) {
             // Profile genuinely has no Trakt — use local CW
@@ -1882,7 +1886,7 @@ class TraktRepository @Inject constructor(
         // The previous code used refreshTokenIfNeeded() == null which could
         // incorrectly trigger for Trakt users on network errors, polluting
         // the Trakt CW cache with local-only items.
-        val isTraktAuth = runCatching { isAuthenticated.first() }.getOrDefault(false)
+        val isTraktAuth = try { isAuthenticated.first() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { false }
         if (!isTraktAuth) {
             cachedContinueWatching = trimmed
         }
@@ -2227,7 +2231,7 @@ class TraktRepository @Inject constructor(
         cachedContinueWatching = cachedContinueWatching.filterNot {
             it.id == item.id && it.mediaType == item.mediaType
         }
-        val activeProfileId = runCatching { profileManager.getProfileIdSync() }.getOrNull()
+        val activeProfileId = try { profileManager.getProfileIdSync() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
         if (!activeProfileId.isNullOrBlank()) {
             preloadedProfileCache[activeProfileId] = preloadedProfileCache[activeProfileId]
                 ?.filterNot { it.id == item.id && it.mediaType == item.mediaType }

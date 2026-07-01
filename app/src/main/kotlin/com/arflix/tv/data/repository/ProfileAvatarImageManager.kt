@@ -108,7 +108,7 @@ class ProfileAvatarImageManager @Inject constructor(
     fun readInlineBase64(profile: Profile): String? {
         val file = ProfileAvatarFiles.localFile(context, profile) ?: return null
         if (!file.exists() || file.length() <= 0L) return null
-        return runCatching { Base64.encodeToString(file.readBytes(), Base64.NO_WRAP) }.getOrNull()
+        return try { Base64.encodeToString(file.readBytes(), Base64.NO_WRAP) } catch (e: Exception) { null }
     }
 
     fun clearLocalAvatar(profileId: String) {
