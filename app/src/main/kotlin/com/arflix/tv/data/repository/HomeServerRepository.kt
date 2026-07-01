@@ -2284,8 +2284,10 @@ class HomeServerRepository @Inject constructor(
     private fun JsonElement.asStringOrNull(): String? =
         runCatching { takeUnless { it.isJsonNull }?.asString }.getOrNull()
 
+    private val xmlAttributeRegexCache = java.util.concurrent.ConcurrentHashMap<String, Regex>()
+
     private fun String.xmlAttribute(name: String): String {
-        val pattern = Regex("""\b${Regex.escape(name)}=["']([^"']*)["']""")
+        val pattern = xmlAttributeRegexCache.getOrPut(name) { Regex("""\b${Regex.escape(name)}=["']([^"']*)["']""") }
         return pattern.find(this)?.groupValues?.getOrNull(1).orEmpty().xmlDecoded()
     }
 

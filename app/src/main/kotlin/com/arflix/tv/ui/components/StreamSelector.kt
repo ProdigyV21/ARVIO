@@ -970,6 +970,11 @@ private object StreamRegexes {
     val SIZE_PATTERN_1 = Regex("""(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB)""")
     val SIZE_PATTERN_2 = Regex("""(\d+(?:\.\d+)?)\s*(TIB|GIB|MIB|KIB)""")
     val SIZE_PATTERN_3 = Regex("""^(\d+(?:\.\d+)?)$""")
+    val EXTENSION_REMOVAL = Regex("""\.(mkv|mp4|avi|mov|ts)$""", RegexOption.IGNORE_CASE)
+    val YEAR_REMOVAL = Regex("""\b(19|20)\d{2}\b.*""")
+    val SIZE_LINE_PATTERN = Regex("""^[╰└].*\d+(\.\d+)?\s*(GB|MB|KB|TB).*$""", RegexOption.IGNORE_CASE)
+    val CHANNEL_TAG_PATTERN = Regex("""^\[.+]$""")
+    val MD_NOISE = Regex("""[`*_]{1,4}""")
 }
 
 private fun sourceTabId(stream: StreamSource): String {
@@ -1082,9 +1087,9 @@ private fun cleanSourceDisplayTitle(raw: String): String {
     if (oneLine.length <= 92) return oneLine.ifBlank { "Unknown source" }
 
     val withoutExtension = oneLine
-        .replace(Regex("""\.(mkv|mp4|avi|mov|ts)$""", RegexOption.IGNORE_CASE), "")
+        .replace(StreamRegexes.EXTENSION_REMOVAL, "")
     val compact = withoutExtension
-        .replace(Regex("""\b(19|20)\d{2}\b.*"""), "")
+        .replace(StreamRegexes.YEAR_REMOVAL, "")
         .replace('.', ' ')
         .replace('_', ' ')
         .replace(StreamRegexes.WHITESPACE, " ")
@@ -1241,19 +1246,16 @@ private fun presentSource(stream: StreamSource): SourcePresentation {
 
 private fun cleanStreamDescription(raw: String?, title: String): String? {
     if (raw.isNullOrBlank()) return null
-    val sizeLinePattern = Regex("""^[╰└].*\d+(\.\d+)?\s*(GB|MB|KB|TB).*$""", RegexOption.IGNORE_CASE)
-    val channelTagPattern = Regex("""^\[.+]$""")
-    val mdNoise = Regex("""[`*_]{1,4}""")
     val cleaned = raw.lines()
         .map { it.trim() }
         .filter { line ->
             line.isNotBlank() &&
             line != "None" &&
             !line.equals(title, ignoreCase = true) &&
-            !sizeLinePattern.matches(line) &&
-            !channelTagPattern.matches(line)
+            !StreamRegexes.SIZE_LINE_PATTERN.matches(line) &&
+            !StreamRegexes.CHANNEL_TAG_PATTERN.matches(line)
         }
-        .joinToString("\n") { line -> line.replace(mdNoise, "").trim() }
+        .joinToString("\n") { line -> line.replace(StreamRegexes.MD_NOISE, "").trim() }
         .trim()
     return cleaned.takeIf { it.isNotBlank() }
 }

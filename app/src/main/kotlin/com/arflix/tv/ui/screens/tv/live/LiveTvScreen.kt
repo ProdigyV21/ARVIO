@@ -108,6 +108,9 @@ import java.util.concurrent.TimeUnit
 
 private object LiveTvScreenRegexes {
     val IPTV_URL_REDACT_REGEX = Regex("""(?i)(/(?:live|movie|series|timeshift)/)([^/]+)/([^/]+)(/)""")
+    val QUALITY_REMOVAL = Regex("""(?i)\b(?:4k|uhd|fhd|hd|sd|1080p|720p|60fps)\b""")
+    val MULTI_SPACE = Regex("""\s+""")
+    val QUERY_SECRETS = Regex("""(?i)([?&](?:username|user|uname|password|pass|pwd)=)[^&]+""")
 }
 
 private enum class LiveTvFocusZone {
@@ -278,8 +281,8 @@ private fun EnrichedChannel.guideFallbackKeys(): List<String> {
         "name",
         name
             .substringAfter('|', missingDelimiterValue = name)
-            .replace(Regex("""(?i)\b(?:4k|uhd|fhd|hd|sd|1080p|720p|60fps)\b"""), " ")
-            .replace(Regex("""\s+"""), " ")
+            .replace(LiveTvScreenRegexes.QUALITY_REMOVAL, " ")
+            .replace(LiveTvScreenRegexes.MULTI_SPACE, " ")
             .trim()
     )
 
@@ -2932,9 +2935,8 @@ private fun httpResponseCode(error: PlaybackException): Int? {
 }
 
 private fun redactPlaybackUrl(url: String): String {
-    val withoutQuerySecrets = Regex(
-        pattern = """(?i)([?&](?:username|user|uname|password|pass|pwd)=)[^&]+"""
-    ).replace(url) { match -> "${match.groupValues[1]}***" }
+    val withoutQuerySecrets = LiveTvScreenRegexes.QUERY_SECRETS
+        .replace(url) { match -> "${match.groupValues[1]}***" }
 
     return LiveTvScreenRegexes.IPTV_URL_REDACT_REGEX
         .replace(withoutQuerySecrets) { match ->
