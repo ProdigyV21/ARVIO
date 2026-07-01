@@ -747,7 +747,6 @@ class IptvRepository @Inject constructor(
             return null
         }
         return listOf(Base64.DEFAULT, Base64.URL_SAFE or Base64.NO_WRAP)
-            .asSequence()
             .mapNotNull { flags ->
                 runCatching { String(Base64.decode(trimmed, flags), StandardCharsets.UTF_8).trim() }.getOrNull()
             }
