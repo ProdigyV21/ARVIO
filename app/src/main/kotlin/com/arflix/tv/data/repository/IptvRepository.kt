@@ -8498,3 +8498,12 @@ class IptvRepository @Inject constructor(
 
     }
 }
+
+
+private object IptvRepositoryRegexes {
+    val DURATION_PLACEHOLDER_REGEX = Regex("""\$\{duration:(\d+)\}|\{duration:(\d+)\}""")
+    val IPTV_URL_REDACT_SECRETS_REGEX = Regex("""(?i)([?&](?:username|user|uname|password|pass|pwd)=)[^&]+""")
+    val IPTV_URL_REDACT_PATH_REGEX = Regex("""(?i)(/(?:live|movie|series|timeshift)/)([^/]+)/([^/]+)(/)""")
+    val RESOLUTION_TAG_REGEX = Regex("""\b(4K|UHD|FHD|HD|SD|2160P?|1080P?|720P?|576P?|480P?)\b""", RegexOption.IGNORE_CASE)
+    val BRACKET_PAREN_REGEX = Regex("""\[[^\]]*]|\([^)]*\)""")
+}
