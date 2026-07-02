@@ -488,6 +488,7 @@ fun SearchScreen(
                         end = if (isTouchDevice) 0.dp else 22.dp,
                         bottom = if (isCompactHeight) 6.dp else 8.dp
                     ),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SearchInputBar(
@@ -544,6 +545,7 @@ fun SearchScreen(
                     focusedFilterIndex = focusedFilterIndex,
                     filtersFocusRequester = filtersFocusRequester,
                     isTouchDevice = isTouchDevice,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
                     isRtl = isRtl,
                     onFocused = { index ->
                         focusZone = FocusZone.FILTERS
@@ -742,6 +744,7 @@ private fun DiscoverFilterStrip(
     focusedFilterIndex: Int,
     filtersFocusRequester: FocusRequester,
     isTouchDevice: Boolean,
+    modifier: Modifier = Modifier,
     isRtl: Boolean = false,
     onFocused: (Int) -> Unit,
     onMoveUp: () -> Unit,
@@ -763,8 +766,7 @@ private fun DiscoverFilterStrip(
 
     LazyRow(
         state = rowState,
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .padding(bottom = if (isTouchDevice) 10.dp else 8.dp)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -780,8 +782,8 @@ private fun DiscoverFilterStrip(
             .arvioDpadFocusGroup(),
         horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 7.dp else 9.dp),
         contentPadding = PaddingValues(
-            start = if (isTouchDevice) 0.dp else 22.dp,
-            end = if (isTouchDevice) 6.dp else 40.dp,
+            start = if (isTouchDevice) 12.dp else 22.dp,
+            end = if (isTouchDevice) 12.dp else 22.dp,
             top = 4.dp,
             bottom = 4.dp
         )
