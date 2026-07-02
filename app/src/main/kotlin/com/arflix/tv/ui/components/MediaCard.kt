@@ -98,6 +98,7 @@ fun MediaCard(
         PlaceholderCard(
             width = width,
             isLandscape = isLandscape,
+            showTitle = showTitle,
             modifier = modifier
         )
         return
@@ -522,6 +523,7 @@ fun MediaCard(
 private fun PlaceholderCard(
     width: Dp,
     isLandscape: Boolean,
+    showTitle: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val aspectRatio = if (isLandscape) 16f / 9f else 2f / 3f
@@ -542,25 +544,27 @@ private fun PlaceholderCard(
             )
         }
 
-        Spacer(modifier = Modifier.height(ArvioSkin.spacing.x2))
+        if (showTitle) {
+            Spacer(modifier = Modifier.height(ArvioSkin.spacing.x2))
 
-        // Title skeleton
-        SkeletonBox(
-            modifier = Modifier
-                .fillMaxWidth(0.7f)
-                .height(14.dp)
-                .clip(rememberArvioCardShape(ArvioSkin.radius.sm))
-        )
+            // Title skeleton
+            SkeletonBox(
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .height(14.dp)
+                    .clip(rememberArvioCardShape(ArvioSkin.radius.sm))
+            )
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-        // Subtitle skeleton
-        SkeletonBox(
-            modifier = Modifier
-                .fillMaxWidth(0.5f)
-                .height(12.dp)
-                .clip(rememberArvioCardShape(ArvioSkin.radius.sm))
-        )
+            // Subtitle skeleton
+            SkeletonBox(
+                modifier = Modifier
+                    .fillMaxWidth(0.5f)
+                    .height(12.dp)
+                    .clip(rememberArvioCardShape(ArvioSkin.radius.sm))
+            )
+        }
     }
 }
 
@@ -585,6 +589,7 @@ fun PosterCard(
         PlaceholderCard(
             width = width,
             isLandscape = false,
+            showTitle = false,
             modifier = modifier
         )
         return

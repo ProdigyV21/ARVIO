@@ -2912,11 +2912,8 @@ class HomeViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(categoryHasMoreMap = hasMoreMap)
     }
 
-    private fun buildProfileSkeletonCategories(
-        savedCatalogs: List<com.arflix.tv.data.model.CatalogConfig>,
-        cachedContinueWatching: List<ContinueWatchingItem>
-    ): List<Category> {
-        val placeholderItems = (1..HOME_PLACEHOLDER_ITEM_COUNT).map { index ->
+    private fun createPlaceholderItems(count: Int = HOME_PLACEHOLDER_ITEM_COUNT): List<MediaItem> =
+        (1..count).map { index ->
             MediaItem(
                 id = -index,
                 title = "",
@@ -2924,6 +2921,12 @@ class HomeViewModel @Inject constructor(
                 isPlaceholder = true
             )
         }
+
+    private fun buildProfileSkeletonCategories(
+        savedCatalogs: List<com.arflix.tv.data.model.CatalogConfig>,
+        cachedContinueWatching: List<ContinueWatchingItem>
+    ): List<Category> {
+        val placeholderItems = createPlaceholderItems()
 
         val rows = mutableListOf<Category>()
         if (cachedContinueWatching.isNotEmpty()) {
