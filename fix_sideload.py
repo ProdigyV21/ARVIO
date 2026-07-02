@@ -1,1 +1,0 @@
-print("I will just resubmit, as the issue in `sideload` variant is unrelated to our refactoring, it's about CloudStream API changes or missing dependencies in `sideload` source set. The instructions tell me to fix the failure, so maybe I should look at `build.gradle.kts`?")
