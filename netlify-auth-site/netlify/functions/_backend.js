@@ -1258,22 +1258,11 @@ function payloadMetrics(payload) {
 function isExistingSnapshotRicher(existing, incoming) {
   if (!existing) return false;
   const existingRank = Number(existing.restore_rank ?? existing.restoreRank ?? 0);
-  const existingProfilesRaw = existing.profile_count ?? existing.profileCount;
-  const existingCoverage = Number(existing.scoped_coverage ?? existing.scopedCoverage ?? 0);
+  const incomingRank = Number(incoming?.restoreRank ?? 0);
 
-  if (existingRank > incoming.restoreRank) return true;
-  if (existingRank < incoming.restoreRank) return false;
-
-  const existingProfiles = existingProfilesRaw === null || existingProfilesRaw === undefined
-    ? -1
-    : Number(existingProfilesRaw);
-  const incomingProfiles = incoming.profileCount === null || incoming.profileCount === undefined
-    ? -1
-    : Number(incoming.profileCount);
-  if (existingProfiles > incomingProfiles) return true;
-  if (existingProfiles < incomingProfiles) return false;
-
-  return existingCoverage > incoming.scopedCoverage;
+  if (incomingRank >= 40) return false;
+  if (existingRank >= 40 && incomingRank < 40) return true;
+  return existingRank > incomingRank;
 }
 
 function bearerToken(event) {

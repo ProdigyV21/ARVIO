@@ -418,11 +418,7 @@ begin
     v_existing_coverage := public.account_sync_scoped_coverage(v_existing_payload_json);
 
     v_keep_existing :=
-      v_existing_rank >= 70 and (
-        v_incoming_rank < v_existing_rank or
-        v_incoming_profile_count < v_existing_profile_count or
-        v_incoming_coverage < v_existing_coverage
-      );
+      v_incoming_rank < 40 and v_existing_rank >= 40;
   end if;
 
   if v_keep_existing then

@@ -140,19 +140,9 @@ class CloudSyncRepository @Inject constructor(
     private fun shouldRestoreRemoteBeforePush(localPayload: String, remotePayload: String): Boolean {
         val localRank = accountSyncPayloadRestoreRank(localPayload)
         val remoteRank = accountSyncPayloadRestoreRank(remotePayload)
-        val localProfileCount = cloudPayloadProfileCount(localPayload)
-        val remoteProfileCount = cloudPayloadProfileCount(remotePayload)
 
-        if (
-            localProfileCount != null &&
-            remoteProfileCount != null &&
-            remoteProfileCount > localProfileCount &&
-            remoteRank >= localRank
-        ) {
-            return true
-        }
-
-        return remoteRank >= 70 && localRank < 70
+        if (localRank >= 40) return false
+        return remoteRank >= 40 && localRank < 40
     }
 
     private fun mergeAddonsForSharedRestore(addonLists: Iterable<List<Addon>>): List<Addon> {
@@ -658,7 +648,7 @@ class CloudSyncRepository @Inject constructor(
     // ══════════════════════════════════════════════════════════
 
     suspend fun pushToCloud(force: Boolean = false): Result<Unit> = cloudSyncMutex.withLock {
-        pushToCloudLocked(force = force)
+        pushToCloudLocked(force = force, allowRemoteRestoreBeforePush = !force)
     }
 
     suspend fun pushLocalSnapshotToCloud(): Result<Unit> = cloudSyncMutex.withLock {
