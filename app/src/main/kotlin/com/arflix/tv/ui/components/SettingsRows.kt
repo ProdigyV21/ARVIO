@@ -40,7 +40,9 @@ import com.arflix.tv.ui.skin.resolveAccentColor
  *  The stored/compared value stays English; only the shown label is translated.
  *  Unknown values (720p, 4K, language/DNS names) pass through unchanged. */
 @Composable
-internal fun localizeSettingValue(value: String): String = when (value) {
+internal fun localizeSettingValue(value: String?): String {
+    val safeValue = value ?: return ""
+    return when (safeValue) {
     "Off" -> stringResource(R.string.off)
     "On" -> stringResource(R.string.on)
     "Auto" -> stringResource(R.string.auto)
@@ -74,7 +76,8 @@ internal fun localizeSettingValue(value: String): String = when (value) {
     "System DNS" -> stringResource(R.string.settings_dns_system)
     "12-hour" -> stringResource(R.string.settings_clock_12h)
     "24-hour" -> stringResource(R.string.settings_clock_24h)
-    else -> value
+    else -> safeValue
+    }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -83,7 +86,7 @@ fun SettingsRow(
     icon: ImageVector,
     title: String,
     subtitle: String = "",
-    value: String,
+    value: String?,
     isFocused: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -140,7 +143,8 @@ fun SettingsRow(
         }
         Spacer(modifier = Modifier.width(12.dp))
 
-        if (value.isNotBlank()) {
+        val safeValue = value.orEmpty()
+        if (safeValue.isNotBlank()) {
             Box(
                 modifier = Modifier
                     .background(Pink.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
@@ -149,7 +153,7 @@ fun SettingsRow(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = localizeSettingValue(value).uppercase(),
+                    text = localizeSettingValue(safeValue).uppercase(),
                     style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
                     color = Pink,
                     maxLines = 1,

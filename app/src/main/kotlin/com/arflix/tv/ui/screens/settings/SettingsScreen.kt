@@ -248,8 +248,9 @@ private fun openExternalUrl(context: Context, url: String) {
 }
 
 @Composable
-private fun formatUserAgentPreview(value: String, maxLength: Int): String {
-    val displayValue = value.ifBlank { stringResource(R.string.settings_ua_default) }
+private fun formatUserAgentPreview(value: String?, maxLength: Int): String {
+    val safeValue = value.orEmpty()
+    val displayValue = safeValue.ifBlank { stringResource(R.string.settings_ua_default) }
     val preview = displayValue.take(maxLength)
     return if (displayValue.length > maxLength) "$preview..." else preview
 }
@@ -3980,7 +3981,7 @@ private fun MobileSettingsRow(
     icon: ImageVector,
     title: String,
     subtitle: String = "",
-    value: String,
+    value: String?,
     isFocused: Boolean = false,
     showDivider: Boolean = true,
     onClick: () -> Unit
@@ -4021,10 +4022,11 @@ private fun MobileSettingsRow(
                     }
                 }
             }
-            if (value.isNotEmpty()) {
+            val safeValue = value.orEmpty()
+            if (safeValue.isNotEmpty()) {
                 Spacer(modifier = Modifier.width(16.dp))
-                if (value == "On" || value == "Off") {
-                    val isChecked = value == "On"
+                if (safeValue == "On" || safeValue == "Off") {
+                    val isChecked = safeValue == "On"
                     Box(
                         modifier = Modifier
                             .width(44.dp)
@@ -4047,7 +4049,7 @@ private fun MobileSettingsRow(
                     }
                 } else {
                     Text(
-                        text = localizeSettingValue(value),
+                        text = localizeSettingValue(safeValue),
                         style = ArflixTypography.caption.copy(
                             fontSize = 13.sp,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
