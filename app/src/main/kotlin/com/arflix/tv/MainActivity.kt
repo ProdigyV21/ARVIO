@@ -205,6 +205,21 @@ class MainActivity : ComponentActivity() {
         overridePendingTransition(0, 0)
         pendingLauncherRequest = parseLauncherRequest(intent)
 
+        val crashPrefs = getSharedPreferences("arvio_crash_store", Context.MODE_PRIVATE)
+        if (crashPrefs.getBoolean("has_pending_crash_report", false)) {
+            val crashId = crashPrefs.getString("last_crash_id", "N/A")
+            val crashMsg = crashPrefs.getString("last_crash_msg", "Unexpected error")
+            val crashTime = crashPrefs.getLong("last_crash_time", System.currentTimeMillis())
+            crashPrefs.edit().putBoolean("has_pending_crash_report", false).commit()
+
+            val crashIntent = android.content.Intent(this, com.arflix.tv.ui.screens.crash.CrashReportActivity::class.java).apply {
+                putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_ID, crashId)
+                putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_MSG, crashMsg)
+                putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_TIME, crashTime)
+            }
+            startActivity(crashIntent)
+        }
+
         // Set orientation based on device type
         requestedOrientation = when (initialDeviceType) {
             DeviceType.TV -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE

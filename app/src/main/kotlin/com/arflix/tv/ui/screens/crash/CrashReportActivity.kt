@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -86,6 +90,15 @@ fun CrashReportScreen(
     val deviceType = detectDeviceType(context)
     val hasTouch = deviceHasTouchScreen(context)
     val isTv = deviceType == DeviceType.TV || !hasTouch
+
+    val restartFocusRequester = remember { FocusRequester() }
+    var isRestartFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTv) {
+        if (isTv) {
+            runCatching { restartFocusRequester.requestFocus() }
+        }
+    }
 
     val timeString = remember(crashTime) {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -226,9 +239,21 @@ fun CrashReportScreen(
 
                 Button(
                     onClick = onRestartApp,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F0D0)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isRestartFocused) Color.White else Color(0xFF00F0D0)
+                    ),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(if (isTv) 0.6f else 1f)
+                    modifier = Modifier
+                        .weight(if (isTv) 0.6f else 1f)
+                        .focusRequester(restartFocusRequester)
+                        .onFocusChanged { isRestartFocused = it.isFocused }
+                        .then(
+                            if (isRestartFocused) {
+                                Modifier.border(2.dp, Color(0xFF00F0D0), RoundedCornerShape(8.dp))
+                            } else {
+                                Modifier
+                            }
+                        )
                 ) {
                     Text("Restart ARVIO", color = Color.Black, fontWeight = FontWeight.Bold)
                 }

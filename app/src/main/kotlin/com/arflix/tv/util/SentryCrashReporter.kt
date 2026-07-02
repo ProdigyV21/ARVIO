@@ -55,12 +55,15 @@ object SentryCrashReporter : AppLogger.CrashContextProvider {
                         } else {
                             event.message?.formatted ?: "Crash event"
                         }
-                        prefs.edit()
+                        val editor = prefs.edit()
                             .putString("last_crash_id", eventId)
                             .putString("last_crash_msg", msg)
                             .putLong("last_crash_time", System.currentTimeMillis())
                             .putString("last_crash_version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                            .commit()
+                        if (event.isCrashed == true || event.level == SentryLevel.FATAL) {
+                            editor.putBoolean("has_pending_crash_report", true)
+                        }
+                        editor.commit()
                     }
                     event.setUser(null)
                     event.setServerName(null)

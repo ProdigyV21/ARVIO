@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ARVIO Crash Diagnostics</title>
+  <meta name="description" content="Report ARVIO app diagnostics and crashes to our Discord bug channel.">
+  <link rel="icon" href="../assets/arvio-icon-512.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050505;
+      --card-bg: rgba(18, 20, 26, 0.92);
+      --border: rgba(255, 255, 255, 0.14);
+      --text-main: #ffffff;
+      --text-muted: #a0a6b2;
+      --accent: #5865f2;
+      --accent-success: #10b981;
+      --code-bg: rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(900px 600px at 50% -10%, rgba(13, 240, 194, 0.16), transparent 60%),
+                  radial-gradient(900px 600px at 50% 110%, rgba(88, 101, 242, 0.14), transparent 60%),
+                  var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: var(--text-main);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 36px 28px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+      text-align: center;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .icon-wrap {
+      width: 68px;
+      height: 68px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+      font-size: 34px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      font-weight: 750;
+      color: #fff;
+    }
+    .subtitle {
+      margin: 0 0 24px;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .report-box {
+      background: var(--code-bg);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      padding: 18px;
+      text-align: left;
+      margin-bottom: 26px;
+    }
+    .report-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #0df0c2;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    pre {
+      margin: 0;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+      color: #e0e4eb;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .btn-copy {
+      width: 100%;
+      padding: 16px 22px;
+      border-radius: 14px;
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 650;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 8px 24px rgba(88, 101, 242, 0.4);
+      margin-bottom: 16px;
+    }
+    .btn-copy.copied {
+      background: var(--accent-success);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+    }
+    .link-direct {
+      color: var(--text-muted);
+      font-size: 14px;
+      text-decoration: none;
+      display: inline-block;
+      padding: 6px 12px;
+      transition: color 0.2s ease;
+    }
+    .link-direct:hover {
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-wrap">🚨</div>
+    <h1>ARVIO Crash Diagnostics</h1>
+    <p class="subtitle">
+      Tap below to instantly copy this bug report to your phone clipboard and open the ARVIO Discord bug channel.
+    </p>
+
+    <div class="report-box">
+      <div class="report-label">Formatted Bug Report</div>
+      <pre id="report-text">Loading diagnostic report...</pre>
+    </div>
+
+    <button id="copy-btn" class="btn-copy">Copy Report &amp; Open Discord</button>
+
+    <div>
+      <a href="https://discord.gg/UavuEYMfQ4" class="link-direct">Open Discord Without Copying &rarr;</a>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id") || "N/A";
+      const version = params.get("v") || params.get("version") || "1.0";
+      const error = params.get("err") || params.get("error") || "Unexpected crash";
+      const timeParam = params.get("t") || params.get("time");
+
+      let timeStr = "Just now";
+      if (timeParam) {
+        const parsed = parseInt(timeParam, 10);
+        if (!isNaN(parsed)) {
+          timeStr = new Date(parsed).toLocaleString();
+        } else {
+          timeStr = timeParam;
+        }
+      } else {
+        timeStr = new Date().toLocaleString();
+      }
+
+      const sentryLink = id !== "N/A" ? "https://sentry.io/issues/?query=id%3A" + encodeURIComponent(id) : "N/A";
+
+      const reportText = "**🚨 ARVIO Crash Report**\n" +
+        "**Crash ID:** `" + id + "`\n" +
+        "**Sentry Link:** " + sentryLink + "\n" +
+        "**Version:** " + version + "\n" +
+        "**Time:** " + timeStr + "\n" +
+        "**Error:** " + error;
+
+      const preEl = document.getElementById("report-text");
+      if (preEl) {
+        preEl.textContent = reportText;
+      }
+
+      const btnEl = document.getElementById("copy-btn");
+      if (btnEl) {
+        btnEl.addEventListener("click", async function() {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(reportText);
+            } else {
+              const textArea = document.createElement("textarea");
+              textArea.value = reportText;
+              document.body.appendChild(textArea);
+              textArea.select();
+              document.execCommand("copy");
+              document.body.removeChild(textArea);
+            }
+          } catch (e) {
+            // ignore fallback failure
+          }
+
+          btnEl.textContent = "Copied! Redirecting to Discord...";
+          btnEl.classList.add("copied");
+
+          setTimeout(function() {
+            window.location.href = "https://discord.gg/UavuEYMfQ4";
+          }, 700);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

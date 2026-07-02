@@ -108,20 +108,14 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
                 val prefs = getSharedPreferences("arvio_crash_store", android.content.Context.MODE_PRIVATE)
-                val eventId = prefs.getString("last_crash_id", null) ?: java.util.UUID.randomUUID().toString()
+                val fallbackId = java.util.UUID.randomUUID().toString()
                 prefs.edit()
-                    .putString("last_crash_id", eventId)
+                    .putString("last_crash_id", fallbackId)
                     .putString("last_crash_msg", "${throwable::class.java.simpleName}: ${throwable.message?.take(200) ?: ""}")
                     .putLong("last_crash_time", System.currentTimeMillis())
                     .putString("last_crash_version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                    .putBoolean("has_pending_crash_report", true)
                     .commit()
-
-                val crashIntent = android.content.Intent(this, com.arflix.tv.ui.screens.crash.CrashReportActivity::class.java).apply {
-                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_ID, eventId)
-                    putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_MSG, "${throwable::class.java.simpleName}: ${throwable.message?.take(200) ?: ""}")
-                }
-                startActivity(crashIntent)
             } catch (_: Throwable) {
             } finally {
                 defaultHandler?.uncaughtException(thread, throwable) ?: android.os.Process.killProcess(android.os.Process.myPid())

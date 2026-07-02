@@ -11,7 +11,7 @@ function ReportContent() {
   const version = searchParams.get("v") || searchParams.get("version") || "1.0";
   const error = searchParams.get("err") || searchParams.get("error") || "Unexpected crash";
   const timeParam = searchParams.get("t") || searchParams.get("time");
-  
+
   const [copied, setCopied] = useState(false);
   const [timeStr, setTimeStr] = useState("Just now");
 
