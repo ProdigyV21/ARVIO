@@ -401,31 +401,6 @@ private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHan
     )
 }
 
-private suspend fun androidx.compose.foundation.lazy.LazyListState.animateHomeScrollDelta(
-    deltaPx: Float,
-    durationMillis: Int
-) {
-    if (abs(deltaPx) <= 1f) return
-    scroll(scrollPriority = MutatePriority.PreventUserInput) {
-        var previousValue = 0f
-        animate(
-            initialValue = 0f,
-            targetValue = deltaPx,
-            animationSpec = spring(
-                dampingRatio = 0.85f,
-                stiffness = 200f
-            )
-        ) { value, _ ->
-            val step = value - previousValue
-            if (abs(step) > 0.01f) {
-                scrollBy(step)
-            }
-            previousValue = value
-        }
-    }
-}
-
-
 
 @Composable
 private fun HomeBackdropCrossfade(
@@ -3010,37 +2985,7 @@ private fun TvHomeRowsLayer(
             if (initialPlacement || jumpDistance > 7) {
                 listState.scrollToItem(index = targetIndex, scrollOffset = 0)
             } else {
-                if (smoothScrolling) {
-                    val visibleTarget = listState.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.index == targetIndex }
-                    val deltaPx = if (visibleTarget != null) {
-                        visibleTarget.offset.toFloat()
-                    } else {
-                        if (targetIndex < currentIndex) {
-                            val intermediateSum = (targetIndex until currentIndex).sumOf { idx ->
-                                categoryHeightsPx.getOrNull(idx)?.toDouble() ?: (202.0 * density.density)
-                            }.toFloat()
-                            -(intermediateSum + currentOffset)
-                        } else {
-                            val intermediateSum = (currentIndex until targetIndex).sumOf { idx ->
-                                categoryHeightsPx.getOrNull(idx)?.toDouble() ?: (202.0 * density.density)
-                            }.toFloat()
-                            intermediateSum - currentOffset
-                        }
-                    }
-                    listState.animateHomeScrollDelta(
-                        deltaPx = deltaPx,
-                        durationMillis = if (jumpDistance >= 3) 180 else 150
-                    )
-                    if (
-                        listState.firstVisibleItemIndex != targetIndex ||
-                        abs(listState.firstVisibleItemScrollOffset) > 6
-                    ) {
-                        listState.scrollToItem(index = targetIndex, scrollOffset = 0)
-                    }
-                } else {
-                    listState.animateScrollToItem(index = targetIndex, scrollOffset = 0)
-                }
+                listState.animateScrollToItem(index = targetIndex, scrollOffset = 0)
             }
             lastAppliedTargetIndex = targetIndex
         }
@@ -3477,27 +3422,7 @@ private fun ContentRow(
             targetOutsideViewport ||
             offsetDelta > 1
         ) {
-            if (smoothScrolling) {
-                val deltaPx = ((scrollTargetIndex - currentFirstIndex) * itemSpanPx) + (extraOffset - currentFirstOffset)
-                rowState.animateHomeScrollDelta(
-                    deltaPx = deltaPx,
-                    durationMillis = when {
-                        isFastScrolling -> 115
-                        jumpDistance >= 3 -> 180
-                        else -> 150
-                    }
-                )
-                if (
-                    !isFastScrolling && (
-                        rowState.firstVisibleItemIndex != scrollTargetIndex ||
-                            abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 6
-                        )
-                ) {
-                    rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-                }
-            } else {
-                rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-            }
+            rowState.animateScrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         } else {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
         }
