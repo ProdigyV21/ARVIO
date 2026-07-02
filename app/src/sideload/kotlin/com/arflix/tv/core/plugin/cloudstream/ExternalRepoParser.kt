@@ -52,6 +52,10 @@ class ExternalRepoParser @Inject constructor(
      * Returns null if the content doesn't match any known external format.
      */
     suspend fun tryParse(url: String, fallbackName: String? = null): ExternalRepoParseResult? = withContext(Dispatchers.IO) {
+        if (url.startsWith("http://", ignoreCase = true)) {
+            Log.e(TAG, "Insecure HTTP URLs are not allowed: $url")
+            return@withContext null
+        }
         val body = fetchBody(url) ?: return@withContext null
         val trimmed = body.trim()
 
@@ -112,6 +116,10 @@ class ExternalRepoParser @Inject constructor(
     }
 
     private fun fetchBody(url: String): String? {
+        if (url.startsWith("http://", ignoreCase = true)) {
+            Log.e(TAG, "Insecure HTTP URLs are not allowed: $url")
+            return null
+        }
         return try {
             val request = Request.Builder()
                 .url(url)
@@ -131,7 +139,10 @@ class ExternalRepoParser @Inject constructor(
     }
 
     private fun resolveUrl(baseUrl: String, relativeUrl: String): String {
-        if (relativeUrl.startsWith("http://") || relativeUrl.startsWith("https://")) {
+        if (relativeUrl.startsWith("http://", ignoreCase = true)) {
+            throw IllegalArgumentException("Insecure HTTP URLs are not allowed: $relativeUrl")
+        }
+        if (relativeUrl.startsWith("https://", ignoreCase = true)) {
             return relativeUrl
         }
         val base = baseUrl.substringBeforeLast("/")

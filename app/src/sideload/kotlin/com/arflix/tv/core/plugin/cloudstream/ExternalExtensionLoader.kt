@@ -200,7 +200,11 @@ class ExternalExtensionLoader @Inject constructor(
      * Download a .cs3 DEX file for the given scraper.
      * Returns the local file path, or null on failure.
      */
-    suspend fun downloadExtension(scraperId: String, downloadUrl: String): File? = withContext(Dispatchers.IO) {
+    suspend fun downloadExtension(scraperId: String, downloadUrl: String, expectedChecksum: String? = null): File? = withContext(Dispatchers.IO) {
+        if (downloadUrl.startsWith("http://", ignoreCase = true)) {
+            Log.e(TAG, "Insecure HTTP URLs are not allowed: $downloadUrl")
+            return@withContext null
+        }
         com.arflix.tv.core.runtime.PluginRuntimeHooks.ensureCloudstreamInitialized()
         try {
             val targetFile = File(extensionsDir, "${safeFileName(scraperId)}.cs3")
@@ -236,6 +240,17 @@ class ExternalExtensionLoader @Inject constructor(
                 }
 
                 targetFile.writeBytes(bytes)
+
+                if (expectedChecksum != null) {
+                    val digest = java.security.MessageDigest.getInstance("SHA-256")
+                    val hashBytes = digest.digest(bytes)
+                    val hexString = hashBytes.joinToString("") { "%02x".format(it) }
+                    if (!hexString.equals(expectedChecksum, ignoreCase = true)) {
+                        Log.e(TAG, "Checksum mismatch for $scraperId. Expected: $expectedChecksum, Actual: $hexString")
+                        targetFile.delete()
+                        return@withContext null
+                    }
+                }
 
                 // Fix for Android API 28+: DEX files must be read-only
                 // Writing writable DEX files is blocked on newer Android versions

@@ -1061,7 +1061,7 @@ class PluginManager @Inject constructor(
                     try {
                         val scraperId = "$repoId:${plugin.internalName}"
 
-                        val file = externalExtensionLoader.downloadExtension(scraperId, plugin.url)
+                        val file = externalExtensionLoader.downloadExtension(scraperId, plugin.url, plugin.checksum)
                         if (file == null) {
                             Log.e(TAG, "Failed to download extension: ${plugin.name}")
                             return@withPermit

@@ -148,5 +148,6 @@ data class ExternalPluginEntry(
     val iconUrl: String? = null,
     val url: String,
     val fileSize: Long? = null,
-    val repositoryUrl: String? = null
+    val repositoryUrl: String? = null,
+    val checksum: String? = null
 )
