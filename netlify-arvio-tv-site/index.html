@@ -1544,7 +1544,7 @@
   }
   .compare-cell:first-child { border-left: 0; color: var(--ink); font-weight: 500; }
   .compare-row.head .compare-cell {
-    background: oklch(0.18 0.012 60);
+    background: var(--bg-3);
     color: var(--ink-2);
     font-size: 11px;
     text-transform: uppercase;
@@ -1553,7 +1553,7 @@
     padding: 16px 20px;
   }
   .compare-row.head .compare-cell.us { color: var(--accent); }
-  .compare-cell.us { background: oklch(0.20 0.025 60 / 0.5); color: var(--ink); font-weight: 500; }
+  .compare-cell.us { background: color-mix(in oklch, var(--accent) 15%, var(--bg-2)); color: var(--ink); font-weight: 500; }
   .compare-mark {
     width: 18px; height: 18px; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center;
@@ -1587,7 +1587,7 @@
     border: 1px solid var(--line);
     border-radius: 20px;
     background:
-      linear-gradient(180deg, oklch(0.20 0.012 60 / 0.6), oklch(0.16 0.010 60 / 0.4));
+      linear-gradient(180deg, color-mix(in oklch, var(--accent) 6%, var(--bg-2)), var(--bg));
     overflow: hidden;
   }
   .setup-step::before {
@@ -1598,15 +1598,15 @@
     font-family: var(--font-display);
     font-size: 80px;
     font-weight: 200;
-    color: oklch(0.30 0.015 60);
+    color: color-mix(in oklch, var(--ink) 10%, transparent);
     line-height: 1;
     letter-spacing: -0.04em;
   }
-  .setup-step:nth-child(1)::before { color: oklch(0.50 0.16 60 / 0.4); }
+  .setup-step:nth-child(1)::before { color: color-mix(in oklch, var(--accent) 25%, transparent); }
   .setup-icon {
     width: 48px; height: 48px;
     border-radius: 12px;
-    background: oklch(0.22 0.018 60);
+    background: var(--bg-3);
     border: 1px solid var(--line);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent);
@@ -1663,7 +1663,7 @@
     border-radius: 20px;
     background:
       linear-gradient(180deg, color-mix(in oklch, var(--accent) 7%, transparent), transparent 42%),
-      oklch(0.15 0.010 60 / 0.88);
+      var(--bg-2);
     padding: 32px;
     box-shadow: 0 24px 70px -45px color-mix(in oklch, var(--accent) 45%, black);
   }
@@ -2029,7 +2029,7 @@
     }
     .compare-cell:first-child {
       border-top: 0;
-      background: oklch(0.18 0.012 60);
+      background: var(--bg-3);
       font-size: 15px;
     }
     .compare-cell:not(:first-child)::before {
