@@ -892,6 +892,7 @@ fun SettingsScreen(
                                                 20 -> viewModel.setOledBlackBackground(!uiState.oledBlackBackground)
                                                 21 -> viewModel.cycleClockFormat()
                                                 22 -> viewModel.setShowBudget(!uiState.showBudget)
+                                                 36 -> viewModel.setSmoothScrolling(!uiState.smoothScrolling)
                                                 23 -> viewModel.setSpoilerBlurEnabled(!uiState.spoilerBlurEnabled)
                                                 24 -> viewModel.cycleAccentColor()
                                                 25 -> openDnsProviderPicker()
@@ -3828,8 +3829,17 @@ private fun MobileSettingsSubPage(
                         title = stringResource(R.string.accent_color),
                         value = uiState.accentColor,
                         isFocused = false,
-                        showDivider = false,
+                        showDivider = true,
                         onClick = { viewModel.cycleAccentColor() }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Palette,
+                        title = stringResource(R.string.smooth_scrolling),
+                        subtitle = stringResource(R.string.smooth_scrolling_desc),
+                        value = if (uiState.smoothScrolling) "On" else "Off",
+                        isFocused = false,
+                        showDivider = false,
+                        onClick = { viewModel.setSmoothScrolling(!uiState.smoothScrolling) }
                     )
                 }
             }
@@ -4810,6 +4820,7 @@ private fun TvGeneralSettingsRows(
                 20 -> SettingsToggleRow(stringResource(R.string.oled_black_background), stringResource(R.string.oled_black_background_desc), oledBlackBackground, focusedIndex == localIndex, onOledBlackBackgroundToggle, Modifier.settingsFocusSlot(localIndex))
                 21 -> SettingsRow(Icons.Default.Schedule, stringResource(R.string.clock_format), stringResource(R.string.clock_format_desc), if (clockFormat == "12h") "12-hour" else "24-hour", focusedIndex == localIndex, onClockFormatClick, Modifier.settingsFocusSlot(localIndex))
                 22 -> SettingsToggleRow(stringResource(R.string.show_budget), stringResource(R.string.show_budget_desc), showBudget, focusedIndex == localIndex, onShowBudgetToggle, Modifier.settingsFocusSlot(localIndex))
+                36 -> SettingsToggleRow(stringResource(R.string.smooth_scrolling), stringResource(R.string.smooth_scrolling_desc), smoothScrolling, focusedIndex == localIndex, onSmoothScrollingToggle, Modifier.settingsFocusSlot(localIndex))
                 23 -> SettingsToggleRow(stringResource(R.string.spoiler_blur), stringResource(R.string.spoiler_blur_desc), spoilerBlurEnabled, focusedIndex == localIndex, onSpoilerBlurToggle, Modifier.settingsFocusSlot(localIndex))
                 24 -> SettingsRow(Icons.Default.Palette, stringResource(R.string.accent_color), stringResource(R.string.accent_color_desc), accentColor, focusedIndex == localIndex, onAccentColorClick, Modifier.settingsFocusSlot(localIndex))
                 25 -> SettingsRow(Icons.Default.Language, stringResource(R.string.dns_provider), stringResource(R.string.dns_desc), dnsProvider, focusedIndex == localIndex, onDnsProviderClick, Modifier.settingsFocusSlot(localIndex))
