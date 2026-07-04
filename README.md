@@ -86,6 +86,7 @@ Requirements:
 Use the tracked Gradle wrapper:
 
 ```bash
+chmod +x gradlew
 ./gradlew :app:assemblePlayDebug
 ./gradlew :app:assembleSideloadDebug
 ```
