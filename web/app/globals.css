@@ -212,12 +212,6 @@ button {
   transform: scale(1.045);
 }
 
-.top-clock {
-  font-size: clamp(30px, 2.4vw, 46px);
-  font-weight: 350;
-  color: rgba(255, 255, 255, 0.86);
-}
-
 .content {
   min-height: 100vh;
   position: relative;
@@ -1295,8 +1289,7 @@ input:focus {
     grid-template-columns: 76px 1fr auto;
   }
 
-  .profile-name,
-  .top-clock {
+  .profile-name {
     display: none;
   }
 
@@ -3318,8 +3311,7 @@ select:focus {
     padding-inline: 14px;
   }
 
-  .profile-name-text,
-  .top-clock {
+  .profile-name-text {
     display: none;
   }
 
@@ -5004,7 +4996,6 @@ button,
 
   .sidebar::after,
   .profile-name-text,
-  .top-clock,
   .nav-item span {
     display: none !important;
   }

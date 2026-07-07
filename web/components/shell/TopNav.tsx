@@ -15,7 +15,6 @@ const nav = [
 
 export function TopNav() {
   const { section, setSection, switchProfile, activeProfile, avatarImages, settings, closeDetails, selected } = useApp();
-  const [clock, setClock] = useState("");
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -25,18 +24,6 @@ export function TopNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    const updateClock = () => {
-      setClock(new Intl.DateTimeFormat([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: settings.clockFormat === "12h"
-      }).format(new Date()));
-    };
-    updateClock();
-    const timer = window.setInterval(updateClock, 30_000);
-    return () => window.clearInterval(timer);
-  }, [settings.clockFormat]);
 
   return (
     <aside className={`sidebar ${scrolled ? "is-scrolled" : ""}`} aria-label="ARVIO navigation">
@@ -77,7 +64,7 @@ export function TopNav() {
         >
           <Settings size={26} />
         </button>
-        <span className="top-clock" suppressHydrationWarning>{clock}</span>
+
       </div>
     </aside>
   );
