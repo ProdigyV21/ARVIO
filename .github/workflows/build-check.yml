@@ -33,6 +33,20 @@ jobs:
             printf '%s' "$LOCAL_PROPERTIES_BASE64" | base64 --decode > local.properties
           fi
 
+      - name: Prepare secrets.properties
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        run: |
+          echo "SUPABASE_URL=${SUPABASE_URL:-https://your-project.supabase.co}" > secrets.properties
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-your-supabase-anon-key}" >> secrets.properties
+          echo "TMDB_API_KEY=${TMDB_API_KEY:-your-tmdb-api-key}" >> secrets.properties
+          echo "TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID:-your-trakt-client-id}" >> secrets.properties
+          echo "TRAKT_CLIENT_SECRET=${TRAKT_CLIENT_SECRET:-your-trakt-client-secret}" >> secrets.properties
+
       - name: Create CI keystore
         run: |
           keytool -genkeypair -keystore arvio.jks -alias arvio \
@@ -41,3 +55,11 @@ jobs:
 
       - name: Build
         run: ./gradlew assembleSideloadDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: arvio-sideload-debug-apk
+          path: app/build/outputs/apk/sideload/debug/*.apk
+          if-no-files-found: error
+
