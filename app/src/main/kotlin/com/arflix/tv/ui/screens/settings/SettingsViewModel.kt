@@ -97,6 +97,7 @@ data class SettingsUiState(
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
     val autoPlaySingleSource: Boolean = true,
+    val autoSkipFailedSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val dnsProvider: String = "System DNS",
     val dnsProviderOptions: List<String> = listOf("System DNS", "Cloudflare", "Google", "AdGuard"),
@@ -258,6 +259,7 @@ class SettingsViewModel @Inject constructor(
     private fun autoPlayNextKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
     private fun autoPlaySingleSourceKeyFor(profileId: String) = profileManager.profileBooleanKeyFor(profileId, "auto_play_single_source")
+    private fun autoSkipFailedSourceKey() = profileManager.profileBooleanKey("auto_skip_failed_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
     private fun autoPlayMinQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
     private fun trailerAutoPlayKey() = profileManager.profileBooleanKey("trailer_auto_play")
@@ -442,6 +444,7 @@ class SettingsViewModel @Inject constructor(
             if (prefs[autoPlayNextKey()] == null) {
                 context.settingsDataStore.edit { it[autoPlayNextKey()] = true }
             }
+            val autoSkipFailedSource = prefs[autoSkipFailedSourceKey()] ?: true
             val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
             val trailerAutoPlay = prefs[trailerAutoPlayKey()] ?: false
             val trailerSoundEnabled = prefs[trailerSoundEnabledKey()] ?: false
@@ -529,6 +532,7 @@ class SettingsViewModel @Inject constructor(
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
                 autoPlaySingleSource = autoPlaySingleSource,
+                autoSkipFailedSource = autoSkipFailedSource,
                 autoPlayMinQuality = autoPlayMinQuality,
                 trailerAutoPlay = trailerAutoPlay,
                 trailerSoundEnabled = trailerSoundEnabled,
@@ -994,6 +998,16 @@ class SettingsViewModel @Inject constructor(
                 prefs[autoPlaySingleSourceKey()] = enabled
             }
             _uiState.value = _uiState.value.copy(autoPlaySingleSource = enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun setAutoSkipFailedSource(enabled: Boolean) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[autoSkipFailedSourceKey()] = enabled
+            }
+            _uiState.value = _uiState.value.copy(autoSkipFailedSource = enabled)
             syncLocalStateToCloud(silent = true)
         }
     }

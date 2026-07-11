@@ -261,6 +261,7 @@ class CloudSyncRepository @Inject constructor(
         val frameRateMatchingMode: String = "Off",
         val autoPlayNext: Boolean = true,
         val autoPlaySingleSource: Boolean = true,
+        val autoSkipFailedSource: Boolean = true,
         val autoPlayMinQuality: String = "Any",
         val trailerAutoPlay: Boolean = false,
         val trailerSoundEnabled: Boolean = false,
@@ -365,6 +366,7 @@ class CloudSyncRepository @Inject constructor(
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
     private fun autoPlaySingleSourceKey() = profileManager.profileBooleanKey("auto_play_single_source")
+    private fun autoSkipFailedSourceKey() = profileManager.profileBooleanKey("auto_skip_failed_source")
     private fun autoPlayMinQualityKey() = profileManager.profileStringKey("auto_play_min_quality")
     private fun includeSpecialsKey() = profileManager.profileBooleanKey("include_specials")
 
@@ -458,6 +460,7 @@ class CloudSyncRepository @Inject constructor(
                         ),
                         autoPlayNext = prefs[autoPlayNextKeyFor(profile.id)] ?: true,
                         autoPlaySingleSource = prefs[autoPlaySingleSourceKeyFor(profile.id)] ?: true,
+                        autoSkipFailedSource = prefs[autoSkipFailedSourceKeyFor(profile.id)] ?: true,
                         autoPlayMinQuality = normalizeAutoPlayMinQuality(
                             prefs[autoPlayMinQualityKeyFor(profile.id)] ?: "Any"
                         ),
@@ -476,6 +479,7 @@ class CloudSyncRepository @Inject constructor(
         root.put("frameRateMatchingMode", prefs[frameRateMatchingModeKey()] ?: "Off")
         root.put("autoPlayNext", prefs[autoPlayNextKey()] ?: true)
         root.put("autoPlaySingleSource", prefs[autoPlaySingleSourceKey()] ?: true)
+        root.put("autoSkipFailedSource", prefs[autoSkipFailedSourceKey()] ?: true)
         root.put("autoPlayMinQuality", normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()] ?: "Any"))
         root.put("includeSpecials", prefs[includeSpecialsKey()] ?: false)
         root.put("dnsProvider", globalDnsProvider)
@@ -993,6 +997,7 @@ class CloudSyncRepository @Inject constructor(
         val fallbackFrameRateMatchingMode = normalizeFrameRateMode(root.optString("frameRateMatchingMode", "Off"))
         val fallbackAutoPlayNext = root.optBoolean("autoPlayNext", true)
         val fallbackAutoPlaySingleSource = root.optBoolean("autoPlaySingleSource", true)
+        val fallbackAutoSkipFailedSource = root.optBoolean("autoSkipFailedSource", true)
         val fallbackAutoPlayMinQuality = normalizeAutoPlayMinQuality(root.optString("autoPlayMinQuality", "Any"))
         val fallbackIncludeSpecials = root.optBoolean("includeSpecials", false)
         val fallbackSubtitleSettingsUpdatedAt = root.optLong("subtitleSettingsUpdatedAt", 0L)
@@ -1130,6 +1135,7 @@ class CloudSyncRepository @Inject constructor(
                         prefs[frameRateMatchingModeKeyFor(profileId)] = normalizeFrameRateMode(state.frameRateMatchingMode)
                         prefs[autoPlayNextKeyFor(profileId)] = state.autoPlayNext
                         prefs[autoPlaySingleSourceKeyFor(profileId)] = state.autoPlaySingleSource
+                        prefs[autoSkipFailedSourceKeyFor(profileId)] = state.autoSkipFailedSource
                         prefs[autoPlayMinQualityKeyFor(profileId)] = normalizeAutoPlayMinQuality(state.autoPlayMinQuality)
                         prefs[includeSpecialsKeyFor(profileId)] = state.includeSpecials
                     }
@@ -1166,6 +1172,7 @@ class CloudSyncRepository @Inject constructor(
                 prefs[frameRateMatchingModeKeyFor(activeProfileId)] = fallbackFrameRateMatchingMode
                 prefs[autoPlayNextKeyFor(activeProfileId)] = fallbackAutoPlayNext
                 prefs[autoPlaySingleSourceKeyFor(activeProfileId)] = fallbackAutoPlaySingleSource
+                prefs[autoSkipFailedSourceKeyFor(activeProfileId)] = fallbackAutoSkipFailedSource
                 prefs[autoPlayMinQualityKeyFor(activeProfileId)] = fallbackAutoPlayMinQuality
                 prefs[includeSpecialsKeyFor(activeProfileId)] = fallbackIncludeSpecials
                 prefs[dnsProviderKeyFor(activeProfileId)] = root.optString("dnsProvider", "system").ifBlank { "system" }

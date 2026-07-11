@@ -119,6 +119,8 @@ data class PlayerUiState(
     // "auto_play_next" DataStore setting so the player can respect the toggle
     // and so the post-episode overlay can show a Continue/Cancel prompt.
     val autoPlayNext: Boolean = true,
+    // Auto-skip to next source after 5 s on a playback error (mirrors profile setting)
+    val autoSkipFailedSource: Boolean = true,
     // Volume boost in decibels. 0 = disabled, up to 15 dB. The player observes this
     // and attaches a LoudnessEnhancer to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
@@ -377,6 +379,7 @@ class PlayerViewModel @Inject constructor(
     private fun secondarySubtitleKey() = profileManager.profileStringKey("secondary_subtitle")
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
+    private fun autoSkipFailedSourceKey() = profileManager.profileBooleanKey("auto_skip_failed_source")
     private fun showLoadingStatsKey() = profileManager.profileBooleanKey("show_loading_stats")
     private val gson = Gson()
     private val knownLanguageCodes = setOf(
@@ -520,6 +523,7 @@ class PlayerViewModel @Inject constructor(
             val subStylized = prefs[profileManager.profileBooleanKey("subtitle_stylized")] ?: true
             val subOffset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
             val autoPlayNext = prefs[autoPlayNextKey()] ?: true
+            val autoSkipFailedSource = prefs[autoSkipFailedSourceKey()] ?: true
             val showLoadingStats = prefs[showLoadingStatsKey()] ?: true
             val volumeBoostDb = prefs[profileManager.profileStringKey("volume_boost_db")]
                 ?.toIntOrNull()?.coerceIn(0, 15) ?: 0
@@ -567,6 +571,7 @@ class PlayerViewModel @Inject constructor(
                 subtitleStylized = subStylized,
                 subtitleOffset = subOffset,
                 autoPlayNext = autoPlayNext,
+                autoSkipFailedSource = autoSkipFailedSource,
                 showLoadingStats = showLoadingStats,
                 volumeBoostDb = volumeBoostDb,
                 subtitlePreloadEnabled = subtitlePreloadEnabled,

@@ -218,7 +218,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "language" -> listOf(0, 3)
         "subtitles" -> listOf(1, 2, 38, 39, 4, 5, 6, 7, 8, 9)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 13, 14, 37, 34, 16, 15, 27)
+        "playback" -> listOf(10, 11, 38, 12, 13, 14, 37, 34, 16, 15, 27)
         "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 36)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -910,6 +910,7 @@ fun SettingsScreen(
                                                 33 -> viewModel.startAiKeyServer()
                                                 34 -> viewModel.cycleTrailerDelay()
                                                 37 -> viewModel.setTrailerInCards(!uiState.trailerInCards)
+                                                38 -> viewModel.setAutoSkipFailedSource(!uiState.autoSkipFailedSource)
                                             }
                                         }
                                         "iptv" -> {
@@ -1297,6 +1298,8 @@ fun SettingsScreen(
                             onDnsProviderClick = openDnsProviderPicker,
                             onAutoPlayToggle = { viewModel.setAutoPlayNext(it) },
                             onAutoPlaySingleSourceToggle = { viewModel.setAutoPlaySingleSource(it) },
+                            autoSkipFailedSource = uiState.autoSkipFailedSource,
+                            onAutoSkipFailedSourceToggle = { viewModel.setAutoSkipFailedSource(it) },
                             onAutoPlayMinQualityClick = { viewModel.cycleAutoPlayMinQuality() },
                             trailerAutoPlay = uiState.trailerAutoPlay,
                             onTrailerAutoPlayToggle = { viewModel.setTrailerAutoPlay(it) },
@@ -3600,6 +3603,13 @@ private fun MobileSettingsSubPage(
                         onClick = { viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource) }
                     )
                     MobileSettingsRow(
+                        icon = Icons.Default.Schedule,
+                        title = "Auto-skip failed sources",
+                        value = if (uiState.autoSkipFailedSource) "On" else "Off",
+                        isFocused = false,
+                        onClick = { viewModel.setAutoSkipFailedSource(!uiState.autoSkipFailedSource) }
+                    )
+                    MobileSettingsRow(
                         icon = Icons.Default.HighQuality,
                         title = stringResource(R.string.auto_play_min_quality),
                         value = uiState.autoPlayMinQuality,
@@ -4705,6 +4715,8 @@ private fun TvGeneralSettingsRows(
     frameRateMatchingMode: String,
     autoPlayNext: Boolean,
     autoPlaySingleSource: Boolean,
+    autoSkipFailedSource: Boolean = true,
+    onAutoSkipFailedSourceToggle: (Boolean) -> Unit = {},
     autoPlayMinQuality: String,
     subtitleSize: String = "Medium",
     subtitleColor: String = "White",
@@ -4825,6 +4837,7 @@ private fun TvGeneralSettingsRows(
                 9 -> SettingsToggleRow(stringResource(R.string.filter_subtitles), stringResource(R.string.filter_subtitles_desc), filterSubtitlesByLanguage, focusedIndex == localIndex, onFilterSubtitlesByLanguageToggle, Modifier.settingsFocusSlot(localIndex))
                 10 -> SettingsToggleRow(stringResource(R.string.auto_play_next_title), stringResource(R.string.auto_play_desc), autoPlayNext, focusedIndex == localIndex, onAutoPlayToggle, Modifier.settingsFocusSlot(localIndex))
                 11 -> SettingsToggleRow(stringResource(R.string.autoplay), stringResource(R.string.autoplay_desc), autoPlaySingleSource, focusedIndex == localIndex, onAutoPlaySingleSourceToggle, Modifier.settingsFocusSlot(localIndex))
+                38 -> SettingsToggleRow("Auto-skip failed sources", "After 5 s on a broken source, skip to the next one automatically", autoSkipFailedSource, focusedIndex == localIndex, onAutoSkipFailedSourceToggle, Modifier.settingsFocusSlot(localIndex))
                 12 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.auto_play_min_quality), stringResource(R.string.auto_play_quality_desc), autoPlayMinQuality, focusedIndex == localIndex, onAutoPlayMinQualityClick, Modifier.settingsFocusSlot(localIndex))
                 13 -> SettingsToggleRow(stringResource(R.string.trailer_auto_play), stringResource(R.string.trailer_desc), trailerAutoPlay, focusedIndex == localIndex, onTrailerAutoPlayToggle, Modifier.settingsFocusSlot(localIndex))
                 14 -> SettingsToggleRow(stringResource(R.string.trailer_sound), stringResource(R.string.trailer_sound_desc), trailerSoundEnabled, focusedIndex == localIndex, onTrailerSoundEnabledToggle, Modifier.settingsFocusSlot(localIndex))
@@ -4903,6 +4916,8 @@ private fun GeneralSettings(
     frameRateMatchingMode: String,
     autoPlayNext: Boolean,
     autoPlaySingleSource: Boolean,
+    autoSkipFailedSource: Boolean = true,
+    onAutoSkipFailedSourceToggle: (Boolean) -> Unit = {},
     autoPlayMinQuality: String,
     subtitleSize: String = "Medium",
     subtitleColor: String = "White",

@@ -472,6 +472,12 @@ fun PlayerScreen(
     // Error modal focus
     var errorModalFocusIndex by remember { mutableIntStateOf(0) }
 
+    // Auto-skip failed source: countdown (-1 = inactive), cancelled flag
+    var autoSkipCountdown by remember { mutableIntStateOf(-1) }
+    var autoSkipCancelled by remember { mutableStateOf(false) }
+    // Derive from uiState so it always reflects the active profile setting reactively
+    val autoSkipEnabled = uiState.autoSkipFailedSource
+
     // Buffering watchdog - detect stuck buffering
     var bufferingStartTime by remember { mutableStateOf<Long?>(null) }
     val bufferingTimeoutMs = 25_000L // Mid-playback timeout for stuck buffering
@@ -2281,6 +2287,30 @@ fun PlayerScreen(
         }
     }
 
+    // Auto-skip countdown: when error appears and there are more streams, start a 5-second timer.
+    // autoSkipCancelled is reset each time a new error triggers a new countdown, so pressing
+    // CANCEL SKIP only cancels this countdown — not all future ones.
+    LaunchedEffect(uiState.error, autoSkipEnabled, uiState.streams.size) {
+        if (uiState.error != null && autoSkipEnabled && uiState.streams.size > 1 && !uiState.isSetupError) {
+            autoSkipCancelled = false
+            autoSkipCountdown = 5
+            while (autoSkipCountdown > 0 && !autoSkipCancelled) {
+                delay(1_000L)
+                if (!autoSkipCancelled) autoSkipCountdown--
+            }
+            // Only advance if the countdown naturally reached zero (not cancelled)
+            if (!autoSkipCancelled && uiState.error != null) {
+                val advanced = tryAdvanceToNextStream(recordCurrentFailure = false)
+                if (!advanced) autoSkipCountdown = -1
+            } else {
+                autoSkipCountdown = -1
+            }
+        } else {
+            autoSkipCountdown = -1
+        }
+    }
+
+
     // Request focus on the container when not showing controls
     LaunchedEffect(showControls, showSubtitleMenu, showSourceMenu, showNextEpisodePrompt, uiState.error) {
         if (!showControls && !showSubtitleMenu && !showSourceMenu && !showNextEpisodePrompt && uiState.error == null) {
@@ -3931,6 +3961,16 @@ fun PlayerScreen(
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
+                    // Auto-skip countdown indicator
+                    if (autoSkipCountdown > 0 && uiState.streams.size > 1 && !isSetup) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Skipping to next source in $autoSkipCountdown…",
+                            style = ArflixTypography.caption,
+                            color = TextSecondary.copy(alpha = 0.85f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
@@ -3943,6 +3983,15 @@ fun PlayerScreen(
                                 isFocused = errorModalFocusIndex == 0,
                                 isPrimary = true,
                                 onClick = { viewModel.retry() }
+                            )
+                        }
+                        if (autoSkipCountdown > 0 && uiState.streams.size > 1 && !isSetup) {
+                            ErrorButton(
+                                text = "CANCEL SKIP",
+                                icon = Icons.Default.Close,
+                                isFocused = errorModalFocusIndex == 2,
+                                isPrimary = false,
+                                onClick = { autoSkipCancelled = true; autoSkipCountdown = -1 }
                             )
                         }
                         ErrorButton(
