@@ -72,8 +72,8 @@ export function TopNav() {
       {/* Mobile Top Header (screen <= 680px) */}
       <header className={`mobile-header ${scrolled ? "is-scrolled" : ""}`}>
         <div className="mobile-brand">
-          <img src="/arvio-logo.svg" alt="" />
-          <span>ARVIO</span>
+          <img src="/arvio-logo.svg" alt="" className="mobile-brand-logo" />
+          <img src="/arvio-wordmark.svg" alt="ARVIO" className="mobile-wordmark" />
         </div>
         <button
           type="button"

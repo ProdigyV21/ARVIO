@@ -5108,16 +5108,14 @@ button,
     gap: 8px;
   }
 
-  .mobile-brand img {
-    width: 28px;
-    height: 28px;
+  .mobile-brand-logo {
+    width: 28px !important;
+    height: 28px !important;
   }
 
-  .mobile-brand span {
-    font-size: 16px;
-    font-weight: 760;
-    letter-spacing: 0.16em;
-    color: #fff;
+  .mobile-wordmark {
+    height: 14px !important;
+    width: auto !important;
   }
 
   .mobile-profile-btn {
