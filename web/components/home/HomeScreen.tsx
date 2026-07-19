@@ -26,6 +26,7 @@ export function HomeScreen() {
     });
   }, [categories]);
   const [heroLogo, setHeroLogo] = useState<string | null>(null);
+  const [displayHero, setDisplayHero] = useState<MediaItem | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seededHero = useRef(false);
   const userInteractedHero = useRef(false);
@@ -68,16 +69,44 @@ export function HomeScreen() {
     return () => window.clearInterval(timer);
   }, [heroPool, setHeroPreview]);
 
-  // Title-treatment logo for the hero.
+  // Synchronize hero changes so all content (logo, text, metadata, backdrop) updates together.
   useEffect(() => {
-    setHeroLogo(null);
-    if (!hero || hero.id <= 0) return;
+    if (!hero) {
+      setDisplayHero(null);
+      setHeroLogo(null);
+      return;
+    }
+
     let active = true;
-    void getLogoUrl({ mediaType: hero.mediaType, id: hero.id }).then((url) => {
-      if (active) setHeroLogo(url);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [hero?.id, hero?.mediaType]);
+
+    // Fast path: if no hero is currently displayed, show it immediately so there is no blank screen on first load
+    if (!displayHero) {
+      setDisplayHero(hero);
+      void getLogoUrl({ mediaType: hero.mediaType, id: hero.id })
+        .then((url) => {
+          if (active) setHeroLogo(url);
+        })
+        .catch(() => undefined);
+      return;
+    }
+
+    // Normal path: fetch the logo in the background first, then swap all content together
+    void getLogoUrl({ mediaType: hero.mediaType, id: hero.id })
+      .then((url) => {
+        if (!active) return;
+        setHeroLogo(url);
+        setDisplayHero(hero);
+      })
+      .catch(() => {
+        if (!active) return;
+        setHeroLogo(null);
+        setDisplayHero(hero);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [hero, displayHero]);
 
   const onCardFocus = (item: MediaItem) => {
     userInteractedHero.current = true;
@@ -85,37 +114,42 @@ export function HomeScreen() {
     hoverTimer.current = setTimeout(() => setHeroPreview(item), 220);
   };
 
-  const heroGenres = (hero?.genres?.length ? hero.genres : genreNamesFromIds(hero?.genreIds)).slice(0, 3);
+  const heroGenres = (displayHero?.genres?.length ? displayHero.genres : genreNamesFromIds(displayHero?.genreIds)).slice(0, 3);
   const metaBits = [
-    hero?.mediaType === "tv" ? "Series" : "Movie",
-    hero?.releaseDate?.slice(0, 4) || hero?.year || null,
-    hero?.duration || null,
+    displayHero?.mediaType === "tv" ? "Series" : "Movie",
+    displayHero?.releaseDate?.slice(0, 4) || displayHero?.year || null,
+    displayHero?.duration || null,
     ...heroGenres
   ].filter(Boolean);
 
   return (
     <div className="screen">
-      {hero && (
-        <section className="hero" style={{ backgroundImage: hero.backdrop ? `url(${hero.backdrop})` : undefined }}>
-          <div className="hero-copy">
+      {displayHero && (
+        <section className="hero" style={{ backgroundImage: displayHero.backdrop ? `url(${displayHero.backdrop})` : undefined }}>
+          <div className="hero-copy" key={displayHero.id}>
             {heroLogo ? (
-              <img className="hero-logo" src={heroLogo} alt={hero.title} />
+              <img className="hero-logo" src={heroLogo} alt={displayHero.title} />
             ) : (
-              <h2>{hero.title}</h2>
+              <h2>{displayHero.title}</h2>
             )}
             <div className="hero-meta">
-              {hero.rating && (
+              {displayHero.rating && (
                 <span className="hero-imdb">
                   <img src={IMDB_LOGO} alt="IMDb" />
-                  <b>{hero.rating}</b>
+                  <b>{displayHero.rating}</b>
                 </span>
               )}
               {metaBits.map((bit) => <span key={String(bit)}>{bit}</span>)}
             </div>
-            <p>{hero.overview || hero.subtitle || "Continue from your ARVIO library."}</p>
+            <p>
+              {(() => {
+                const desc = displayHero.overview || displayHero.subtitle || "Continue from your ARVIO library.";
+                return desc.length > 150 ? desc.slice(0, 150) + "..." : desc;
+              })()}
+            </p>
             <div className="hero-actions">
-              <button type="button" className="primary" onClick={() => openDetails(hero)}><Play size={20} fill="currentColor" /> Play</button>
-              <button type="button" className="secondary" onClick={() => openDetails(hero)}><Info size={20} /> More Info</button>
+              <button type="button" className="primary" onClick={() => openDetails(displayHero)}><Play size={20} fill="currentColor" /> Play</button>
+              <button type="button" className="secondary" onClick={() => openDetails(displayHero)}><Info size={20} /> More Info</button>
             </div>
           </div>
         </section>
