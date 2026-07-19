@@ -28,6 +28,7 @@ import {
   UserCircle,
 } from "lucide-react";
 import { Component, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { defaultCatalogs, mergeCatalogs } from "@/lib/catalogs";
 import {
   hasNetlifyBackendConfig,
@@ -345,7 +346,7 @@ function Select<T extends string>({
         <span>{selected}</span>
         <ChevronDown size={17} />
       </button>
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div
           className="option-sheet-backdrop"
           role="presentation"
@@ -382,7 +383,8 @@ function Select<T extends string>({
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
