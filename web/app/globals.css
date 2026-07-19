@@ -8293,6 +8293,8 @@ button,
   padding: 18px;
   background: rgba(0, 0, 0, 0.62);
   backdrop-filter: blur(16px);
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
 .option-sheet {
@@ -8308,6 +8310,7 @@ button,
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
+  touch-action: auto;
 }
 
 .option-sheet-head {

@@ -27,7 +27,7 @@ import {
   User,
   UserCircle,
 } from "lucide-react";
-import { Component, useState, type ReactNode } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { defaultCatalogs, mergeCatalogs } from "@/lib/catalogs";
 import {
@@ -332,6 +332,35 @@ function Select<T extends string>({
     onChange(next);
     setOpen(false);
   };
+
+  // Lock body scroll while the option sheet is open — the position:fixed
+  // technique is the only reliable way to prevent scroll-through on mobile.
+  useEffect(() => {
+    if (!open) return;
+    const scrollY = window.scrollY;
+    const { style } = document.body;
+    const prev = {
+      position: style.position,
+      top: style.top,
+      left: style.left,
+      right: style.right,
+      overflow: style.overflow,
+    };
+    style.position = "fixed";
+    style.top = `-${scrollY}px`;
+    style.left = "0";
+    style.right = "0";
+    style.overflow = "hidden";
+    return () => {
+      style.position = prev.position;
+      style.top = prev.top;
+      style.left = prev.left;
+      style.right = prev.right;
+      style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [open]);
+
   return (
     <>
       <button
