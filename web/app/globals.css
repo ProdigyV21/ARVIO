@@ -4992,8 +4992,14 @@ button,
   }
 
   .content {
-    min-height: 100dvh;
+    min-height: calc(100dvh - 56px - 62px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
     overflow-x: hidden;
+  }
+
+  .livetv-shell,
+  .settings-shell,
+  .screen:has(.search-hero) {
+    min-height: auto !important;
   }
 
   .sidebar {
@@ -5275,7 +5281,7 @@ button,
   .grid-results {
     grid-template-columns: 1fr;
     gap: 20px;
-    padding: 0 var(--phone-gutter) 96px;
+    padding: 0 var(--phone-gutter) 24px !important;
   }
 
   .grid-results .media-card {
@@ -8845,7 +8851,7 @@ button,
 @media (max-width: 560px) {
   .search-hero {
     grid-template-columns: 42px minmax(0, 1fr);
-    padding: 92px var(--phone-gutter) 20px !important;
+    padding: 16px var(--phone-gutter) 14px !important;
     gap: 10px;
   }
 
@@ -8863,7 +8869,7 @@ button,
   .screen:has(.search-hero) .grid-results,
   .screen:has(.search-hero).poster-results .grid-results {
     grid-template-columns: 1fr;
-    padding: 0 var(--phone-gutter) 96px;
+    padding: 0 var(--phone-gutter) 24px !important;
   }
 }
 
@@ -9474,7 +9480,7 @@ button,
   }
 
   .screen {
-    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    padding-bottom: 24px !important;
   }
 
   .rail {
