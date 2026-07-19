@@ -5262,7 +5262,7 @@ button,
   }
 
   .search-hero {
-    padding: 86px var(--phone-gutter) 18px;
+    padding: 16px var(--phone-gutter) 14px;
     gap: 10px;
   }
 
@@ -5292,12 +5292,22 @@ button,
   }
 
   .section-heading {
-    padding: 92px var(--phone-gutter) 20px;
+    padding: 16px var(--phone-gutter) 16px;
+  }
+
+  .section-heading .eyebrow {
+    font-size: 13px;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
   }
 
   .settings-shell {
     display: block;
-    padding: 86px var(--phone-gutter) 96px;
+    padding: 16px var(--phone-gutter) 96px;
+  }
+
+  .livetv-shell {
+    padding-top: 16px !important;
   }
 
   .settings-sidebar {
