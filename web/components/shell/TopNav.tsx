@@ -14,7 +14,7 @@ const nav = [
 ] satisfies Array<{ id: NavSection; label: string; icon: typeof Home }>;
 
 export function TopNav() {
-  const { section, setSection, switchProfile, activeProfile, avatarImages, settings, closeDetails, selected } = useApp();
+  const { view, section, setSection, switchProfile, activeProfile, avatarImages, settings, closeDetails, selected } = useApp();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -26,21 +26,77 @@ export function TopNav() {
 
 
   return (
-    <aside className={`sidebar ${scrolled ? "is-scrolled" : ""}`} aria-label="ARVIO navigation">
-      <div className="profile-cluster">
-        <button type="button" className="brand" onClick={switchProfile} aria-label="Switch profile">
-          {activeProfile ? <ProfileAvatarVisual profile={activeProfile} avatarImages={avatarImages} /> : <img src="/arvio-logo.svg" alt="" />}
+    <>
+      {/* Desktop/Tablet Sidebar / TopNav */}
+      <aside className={`sidebar ${scrolled ? "is-scrolled" : ""}`} aria-label="ARVIO navigation">
+        <div className="profile-cluster">
+          <button type="button" className="brand" onClick={switchProfile} aria-label="Switch profile">
+            {activeProfile ? <ProfileAvatarVisual profile={activeProfile} avatarImages={avatarImages} /> : <img src="/arvio-logo.svg" alt="" />}
+          </button>
+          <span className="profile-name-text">{activeProfile?.name ?? ""}</span>
+        </div>
+        <nav>
+          {nav.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                type="button"
+                key={item.id}
+                className={`nav-item ${!selected && section === item.id ? "is-active" : ""}`}
+                onClick={() => {
+                  closeDetails();
+                  setSection(item.id);
+                }}
+              >
+                <Icon size={22} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+        <div className="top-right">
+          <button
+            type="button"
+            className={`settings-gear ${!selected && section === "settings" ? "is-active" : ""}`}
+            onClick={() => {
+              closeDetails();
+              setSection("settings");
+            }}
+            aria-label="Settings"
+          >
+            <Settings size={26} />
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile Top Header (screen <= 680px) */}
+      <header className={`mobile-header ${scrolled ? "is-scrolled" : ""}`}>
+        <div className="mobile-brand">
+          <img src="/arvio-logo.svg" alt="" />
+          <span>ARVIO</span>
+        </div>
+        <button
+          type="button"
+          className={`mobile-settings-btn ${!selected && section === "settings" ? "is-active" : ""}`}
+          onClick={() => {
+            closeDetails();
+            setSection("settings");
+          }}
+          aria-label="Settings"
+        >
+          <Settings size={22} />
         </button>
-        <span className="profile-name-text">{activeProfile?.name ?? ""}</span>
-      </div>
-      <nav>
+      </header>
+
+      {/* Mobile Bottom Navigation (screen <= 680px) */}
+      <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
         {nav.map((item) => {
           const Icon = item.icon;
           return (
             <button
               type="button"
               key={item.id}
-              className={`nav-item ${!selected && section === item.id ? "is-active" : ""}`}
+              className={`mobile-nav-item ${!selected && section === item.id ? "is-active" : ""}`}
               onClick={() => {
                 closeDetails();
                 setSection(item.id);
@@ -51,21 +107,23 @@ export function TopNav() {
             </button>
           );
         })}
-      </nav>
-      <div className="top-right">
+        {/* Profile Switcher tab at bottom right */}
         <button
           type="button"
-          className={`settings-gear ${!selected && section === "settings" ? "is-active" : ""}`}
-          onClick={() => {
-            closeDetails();
-            setSection("settings");
-          }}
-          aria-label="Settings"
+          className={`mobile-nav-item mobile-profile-tab ${!selected && view === "profiles" ? "is-active" : ""}`}
+          onClick={switchProfile}
+          aria-label="Switch profile"
         >
-          <Settings size={26} />
+          <div className="mobile-avatar-container">
+            {activeProfile ? (
+              <ProfileAvatarVisual profile={activeProfile} avatarImages={avatarImages} />
+            ) : (
+              <img src="/arvio-logo.svg" alt="" />
+            )}
+          </div>
+          <span>Profile</span>
         </button>
-
-      </div>
-    </aside>
+      </nav>
+    </>
   );
 }
