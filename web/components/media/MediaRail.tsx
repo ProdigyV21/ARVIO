@@ -18,7 +18,6 @@ export function MediaRail({ category, onOpen, onFocus, posterMode }: {
     <section className={`rail ${effectivePosterMode ? "is-poster" : ""}`}>
       <div className="rail-head">
         <h3>{category.title}</h3>
-        <span>{category.items.length}</span>
       </div>
       <RailScroller className="rail-strip" ariaLabel={category.title}>
         {category.items.map((item) => (
