@@ -31,7 +31,7 @@ export function ProfileSelectionScreen() {
       <div className="profile-center">
         <div className="profile-brand-lockup">
           <img className="profile-brand-logo" src="/arvio-icon-512.png" alt="" width={56} height={56} />
-          <span className="profile-brand-word">ARVIO</span>
+          <img className="profile-wordmark" src="/arvio-wordmark.svg" alt="ARVIO" />
         </div>
         <h1 className="profile-heading">{manageMode ? "Manage Profiles" : "Who's watching?"}</h1>
 

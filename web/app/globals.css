@@ -73,17 +73,17 @@ button {
   color: #fff;
 }
 
-.app-boot img {
+.app-boot-logo {
   width: 76px;
   height: 76px;
   object-fit: contain;
   filter: drop-shadow(0 0 28px rgba(0, 213, 136, 0.26));
 }
 
-.app-boot span {
-  font-size: 18px;
-  font-weight: 760;
-  letter-spacing: 0.18em;
+.app-boot-wordmark {
+  height: 18px;
+  width: auto;
+  filter: drop-shadow(0 0 28px rgba(0, 213, 136, 0.26));
 }
 
 .sidebar {
@@ -1621,22 +1621,16 @@ input:focus {
   gap: clamp(16px, 2vw, 28px);
   margin-bottom: clamp(24px, 4vh, 42px);
 }
-.login-brand-lockup img {
-  width: clamp(68px, 7vw, 112px);
-  height: clamp(68px, 7vw, 112px);
+.login-brand-logo {
+  width: clamp(68px, 7vw, 112px) !important;
+  height: clamp(68px, 7vw, 112px) !important;
   object-fit: contain;
   filter: drop-shadow(0 0 28px rgba(0, 213, 136, 0.24));
 }
-.login-logo {
-  margin: 0;
-  font-size: clamp(54px, 6.8vw, 106px);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  background: linear-gradient(90deg, #ffffff 0%, #bdefff 48%, #00d588 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 22px 58px rgba(0, 0, 0, 0.5);
+.login-wordmark {
+  height: clamp(34px, 4.4vw, 68px) !important;
+  width: auto !important;
+  filter: drop-shadow(0 0 28px rgba(0, 213, 136, 0.24));
 }
 .login-tag {
   font-size: clamp(26px, 2.8vw, 46px);
@@ -5525,9 +5519,13 @@ button,
     min-height: auto;
   }
 
-  .login-brand-lockup img {
-    width: 62px;
-    height: 62px;
+  .login-brand-lockup .login-brand-logo {
+    width: 62px !important;
+    height: 62px !important;
+  }
+  .login-brand-lockup .login-wordmark {
+    height: 28px !important;
+    width: auto !important;
   }
 
   .login-logo {
@@ -9741,11 +9739,9 @@ button,
   box-shadow: 0 8px 30px rgba(9, 240, 199, 0.18);
 }
 
-.profile-brand-word {
-  font-size: clamp(26px, 2.6vw, 40px);
-  font-weight: 800;
-  letter-spacing: 0.3em;
-  color: #fff;
+.profile-wordmark {
+  height: clamp(28px, 3.2vw, 42px) !important;
+  width: auto !important;
 }
 
 .avatar-tile {

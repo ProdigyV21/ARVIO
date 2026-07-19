@@ -39,8 +39,8 @@ export function LoginScreen() {
       <div className="login-hero">
         <div className="login-copy">
           <div className="login-brand-lockup">
-            <img src="/arvio-logo.svg" alt="" />
-            <h1 className="login-logo">ARVIO</h1>
+            <img src="/arvio-logo.svg" alt="" className="login-brand-logo" />
+            <img src="/arvio-wordmark.svg" alt="ARVIO" className="login-wordmark" />
           </div>
           <p className="login-tag">Cloud sign-in required</p>
           <p className="login-sub">Use your ARVIO Cloud account to sync profiles, continue watching, Trakt activity, addons, catalogs, and playback settings across devices.</p>
