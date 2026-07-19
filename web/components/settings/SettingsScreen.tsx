@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   ListVideo,
   LogOut,
+  Menu,
   Network,
   Play,
   Plus,
@@ -175,29 +176,45 @@ function qualityPresetFilters(
 
 export function SettingsScreen() {
   const [section, setSection] = useState<SectionId>("accounts");
+  const [collapsed, setCollapsed] = useState(true);
+
   return (
-    <div className="settings-shell">
+    <div className={`settings-shell ${collapsed ? "sidebar-collapsed" : "sidebar-expanded"}`}>
       <aside className="settings-sidebar">
-        <h2>Settings</h2>
-        {SECTIONS.map((s) => {
-          const Icon = s.icon;
-          return (
-            <button
-              type="button"
-              key={s.id}
-              className={`settings-section-btn ${section === s.id ? "is-active" : ""}`}
-              onClick={() => {
-                setSection(s.id);
-                // Switching from a long, scrolled section (e.g. Catalogs) to a
-                // short one would otherwise leave the viewport mid-page and the
-                // panel frame visibly leaping around.
-                window.scrollTo({ top: 0 });
-              }}
-            >
-              <Icon size={18} /> <span>{s.label}</span>
-            </button>
-          );
-        })}
+        <div className="settings-sidebar-header">
+          <button
+            type="button"
+            className="settings-collapse-btn"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand settings menu" : "Collapse settings menu"}
+          >
+            <Menu size={20} />
+          </button>
+          {!collapsed && <h2>Settings</h2>}
+        </div>
+        <nav className="settings-nav">
+          {SECTIONS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <button
+                type="button"
+                key={s.id}
+                className={`settings-section-btn ${section === s.id ? "is-active" : ""}`}
+                onClick={() => {
+                  setSection(s.id);
+                  // Switching from a long, scrolled section (e.g. Catalogs) to a
+                  // short one would otherwise leave the viewport mid-page and the
+                  // panel frame visibly leaping around.
+                  window.scrollTo({ top: 0 });
+                }}
+                title={s.label}
+              >
+                <span className="settings-btn-icon"><Icon size={18} /></span>
+                {!collapsed && <span className="settings-btn-label">{s.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
       </aside>
       <div className="settings-content">
         <SettingsSectionBoundary section={section}>

@@ -77,14 +77,17 @@ export function TopNav() {
         </div>
         <button
           type="button"
-          className={`mobile-settings-btn ${!selected && section === "settings" ? "is-active" : ""}`}
-          onClick={() => {
-            closeDetails();
-            setSection("settings");
-          }}
-          aria-label="Settings"
+          className={`mobile-profile-btn ${!selected && view === "profiles" ? "is-active" : ""}`}
+          onClick={switchProfile}
+          aria-label="Switch profile"
         >
-          <Settings size={22} />
+          <div className="mobile-avatar-container">
+            {activeProfile ? (
+              <ProfileAvatarVisual profile={activeProfile} avatarImages={avatarImages} />
+            ) : (
+              <img src="/arvio-logo.svg" alt="" />
+            )}
+          </div>
         </button>
       </header>
 
@@ -107,21 +110,18 @@ export function TopNav() {
             </button>
           );
         })}
-        {/* Profile Switcher tab at bottom right */}
+        {/* Settings tab at bottom right */}
         <button
           type="button"
-          className={`mobile-nav-item mobile-profile-tab ${!selected && view === "profiles" ? "is-active" : ""}`}
-          onClick={switchProfile}
-          aria-label="Switch profile"
+          className={`mobile-nav-item ${!selected && section === "settings" ? "is-active" : ""}`}
+          onClick={() => {
+            closeDetails();
+            setSection("settings");
+          }}
+          aria-label="Settings"
         >
-          <div className="mobile-avatar-container">
-            {activeProfile ? (
-              <ProfileAvatarVisual profile={activeProfile} avatarImages={avatarImages} />
-            ) : (
-              <img src="/arvio-logo.svg" alt="" />
-            )}
-          </div>
-          <span>Profile</span>
+          <Settings size={22} />
+          <span>Settings</span>
         </button>
       </nav>
     </>
