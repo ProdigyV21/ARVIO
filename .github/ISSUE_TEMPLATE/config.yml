@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Arvio Documentation & Content Policy
+    url: https://github.com/ProdigyV21/ARVIO/blob/main/README.md
+    about: Read local setup requirements, build instructions, and Content & Source Policy rules.
+
