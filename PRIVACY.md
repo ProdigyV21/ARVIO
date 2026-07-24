@@ -77,7 +77,7 @@ We may update this policy occasionally. Changes will be posted here with an upda
 
 ## Contact
 
-For privacy questions, open an issue on GitHub or use the account deletion page above.
+For privacy questions, open an issue on GitHub or use the account deletion page above. For security vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 ---
 
