@@ -860,7 +860,23 @@
       throw new Error("This password link is no longer valid. Request a new reset email.");
     }
 
+    function validateFormInputs() {
+      const emailVal = emailEl.value.trim();
+      const passVal = passEl.value;
+      if (!emailVal || !passVal) {
+        return "Email and password are required.";
+      }
+      const emailErr = validateEmail(emailVal, false);
+      if (emailErr) return emailErr;
+      return null;
+    }
+
     signInBtn.onclick = async () => {
+      const validationError = validateFormInputs();
+      if (validationError) {
+        setStatus(validationError, "error");
+        return;
+      }
       try {
         setBusy(true);
         setStatus("Signing in...");
@@ -886,6 +902,11 @@
     };
 
     signUpBtn.onclick = async () => {
+      const validationError = validateFormInputs();
+      if (validationError) {
+        setStatus(validationError, "error");
+        return;
+      }
       try {
         setBusy(true);
         const email = requireValidEmail(emailEl.value);
