@@ -38,7 +38,17 @@ class MdbListRemoteProvider @Inject constructor(
 
     override suspend fun scrobbleStop(
         mediaType: MediaType, tmdbId: Int, progress: Float, season: Int?, episode: Int?
-    ) = repository.scrobble("stop", mediaType, tmdbId, progress, season, episode)
+    ) {
+        repository.scrobble("stop", mediaType, tmdbId, progress, season, episode)
+        if (progress >= com.arflix.tv.util.Constants.WATCHED_THRESHOLD) {
+            if (mediaType == MediaType.MOVIE) {
+                repository.markMovieWatched(tmdbId)
+            } else if (season != null && episode != null) {
+                repository.markEpisodeWatched(tmdbId, season, episode)
+            }
+            repository.clearPlayback(mediaType, tmdbId, season, episode)
+        }
+    }
 
     override suspend fun getWatchedMovies(): Set<Int> = repository.getWatchedMovies()
 

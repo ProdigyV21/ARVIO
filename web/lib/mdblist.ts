@@ -208,6 +208,9 @@ export class MdbListClient {
       body = { progress, movie: { ids: { tmdb: item.tmdbId } } };
     }
     await this.request(`scrobble/${action}`, { method: "POST", body: JSON.stringify(body) });
+    if (action === "stop" && progress >= 80) {
+      await this.addToHistory(item).catch(() => undefined);
+    }
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {
