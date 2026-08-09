@@ -1268,24 +1268,47 @@ class StreamRepository @Inject constructor(
 
     private suspend fun resolveAddonInstallUrl(rawUrl: String): String {
         val normalized = normalizeAddonInputUrl(rawUrl)
-        if (!normalized.contains("pastebin.com/raw/", ignoreCase = true)) {
+        val isRawTextManifest = normalized.contains("pastebin.com/raw/", ignoreCase = true) ||
+            normalized.contains("raw.githubusercontent.com/", ignoreCase = true) ||
+            normalized.endsWith(".txt", ignoreCase = true)
+        if (!isRawTextManifest) {
             return normalized
         }
-        val request = Request.Builder().url(normalized).build()
-        val body = runCatching {
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return normalized
-                response.body?.string().orEmpty()
-            }
-        }.getOrDefault("")
-        val link = body.lineSequence()
-            .map { it.trim() }
-            .firstOrNull { line ->
-                line.startsWith("stremio://", ignoreCase = true) ||
-                    line.startsWith("https://", ignoreCase = true) ||
-                    line.startsWith("http://", ignoreCase = true)
-            }
-        return if (link.isNullOrBlank()) normalized else normalizeAddonInputUrl(link)
+
+        val fastClient = okHttpClient.newBuilder()
+            .connectTimeout(3500, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .readTimeout(3500, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .build()
+
+        fun fetchManifestUrl(targetUrl: String): String? {
+            val request = Request.Builder().url(targetUrl).build()
+            val body = runCatching {
+                fastClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return null
+                    response.body?.string().orEmpty()
+                }
+            }.getOrNull() ?: return null
+
+            val link = body.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { line ->
+                    line.startsWith("stremio://", ignoreCase = true) ||
+                        line.startsWith("https://", ignoreCase = true) ||
+                        line.startsWith("http://", ignoreCase = true)
+                }
+            return link?.takeIf { it.isNotBlank() }?.let { normalizeAddonInputUrl(it) }
+        }
+
+        val primaryResult = fetchManifestUrl(normalized)
+        if (primaryResult != null) return primaryResult
+
+        val fallbackUrl = if (normalized.contains("pastebin.com", ignoreCase = true)) {
+            MediaRepository.STREAMING_COLLECTION_ADDON_URL
+        } else {
+            MediaRepository.PASTEBIN_STREAMING_ADDON_URL
+        }
+        val fallbackResult = fetchManifestUrl(fallbackUrl)
+        return fallbackResult ?: normalized
     }
 
     suspend fun getAddonCatalogPage(

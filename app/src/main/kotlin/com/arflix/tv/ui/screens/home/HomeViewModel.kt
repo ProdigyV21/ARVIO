@@ -2071,7 +2071,7 @@ class HomeViewModel @Inject constructor(
                     runCatching {
                         streamRepository.removeCustomAddonsByUrl(
                             CollectionTemplateManifest.autoInstalledAddonUrls() +
-                                listOf(MediaRepository.STREAMING_COLLECTION_ADDON_URL)
+                                listOf(MediaRepository.STREAMING_COLLECTION_ADDON_URL, MediaRepository.PASTEBIN_STREAMING_ADDON_URL)
                         )
                         val addons = streamRepository.installedAddons.first()
                         catalogRepository.syncAddonCatalogs(addons)
