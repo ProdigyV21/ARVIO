@@ -148,6 +148,7 @@ data class SettingsUiState(
     val syncedMovies: Int = 0,
     val syncedEpisodes: Int = 0,
     // IPTV
+    val iptvOnlyMode: Boolean = false,
     val iptvM3uUrl: String = "",
     val iptvEpgUrl: String = "",
     val iptvPlaylists: List<IptvPlaylistEntry> = emptyList(),
@@ -390,6 +391,7 @@ class SettingsViewModel @Inject constructor(
         observeAuthState()
         observeIptvConfig()
         observeIptvGroupPrefs()
+        observeIptvMode()
         initializeCatalogs()
         observeCatalogs()
         initializeUpdaterState()
@@ -411,6 +413,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private fun observeIptvMode() {
+        viewModelScope.launch {
+            catalogRepository.isIptvOnlyMode().collect { enabled ->
+                _uiState.value = _uiState.value.copy(iptvOnlyMode = enabled)
+            }
+        }
+    }
+
+    fun setIptvOnlyMode(enabled: Boolean) {
+        viewModelScope.launch {
+            catalogRepository.setIptvOnlyMode(enabled)
+            syncLocalStateToCloud(silent = true) // We sync with the cloud in case you use multiple devices
+        }
+    }
+    
     private fun initializeUpdaterState() {
         _uiState.value = _uiState.value.copy(
             isSelfUpdateSupported = appUpdateRepository.supportsSelfUpdate()

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.AddonCatalog
@@ -79,6 +80,26 @@ class CatalogRepository @Inject constructor(
     private val listType = TypeToken.getParameterized(List::class.java, CatalogConfig::class.java).type
     private val hiddenListType = TypeToken.getParameterized(List::class.java, String::class.java).type
 
+// Key for the IPTV Toggle
+    private val iptvOnlyModeKey = booleanPreferencesKey("iptv_only_mode_v1")
+
+    // Function for the UI to check whether the mode is enabled
+    fun isIptvOnlyMode(): Flow<Boolean> {
+        return context.settingsDataStore.data.map { prefs ->
+            prefs[iptvOnlyModeKey] ?: false
+        }.distinctUntilChanged()
+    }
+
+    // Function for the UI to change the mode status
+    suspend fun setIptvOnlyMode(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs ->
+            prefs[iptvOnlyModeKey] = enabled
+        }
+        // We force the catalogs to reload on the home screen
+        val activeProfile = activeProfileId()
+        invalidationBus.markDirty(CloudSyncScope.CATALOGS, activeProfile, "toggled iptv mode")
+    }
+    
     private fun decodeHiddenPreinstalled(profileId: String, prefs: Preferences): Set<String> {
         val raw = prefs[hiddenPreinstalledKey(profileId)]
         if (raw.isNullOrBlank()) return emptySet()
@@ -1371,6 +1392,9 @@ class CatalogRepository @Inject constructor(
         val hiddenPreinstalled = decodeHiddenPreinstalled(profileId, prefs)
         val hiddenAddon = decodeHiddenAddon(profileId, prefs)
         val hiddenHomeServer = decodeHiddenHomeServer(profileId, prefs)
+        
+        // 1. We read the switch's status
+        val isIptvOnly = prefs[iptvOnlyModeKey] ?: false
 
         fun CatalogConfig.isHidden(): Boolean {
             if (isPreinstalledCatalog(this) && id in hiddenPreinstalled) return true
@@ -1379,8 +1403,7 @@ class CatalogRepository @Inject constructor(
             return false
         }
 
-        // Strict profile-first lookup to avoid leaking or prioritizing
-        // catalogs from other profiles.
+        // Strict profile-first lookup
         val primary = parseCatalogsJson(prefs[catalogsKey(profileId)])
         if (primary.isNotEmpty()) {
             val base = primary
@@ -1390,7 +1413,6 @@ class CatalogRepository @Inject constructor(
                 .toMutableList()
             val existingKeys = base.map { "${it.id}|${it.sourceUrl.orEmpty()}" }.toMutableSet()
 
-            // Legacy recovery applies only to the default profile to avoid cross-profile leakage.
             if (profileId == "default") {
                 val legacyCustom = (
                     parseCatalogsJson(prefs[legacyDefaultKey]) +
@@ -1408,24 +1430,34 @@ class CatalogRepository @Inject constructor(
                     }
                 }
             }
-            return base
+            
+            // 2. We apply the filter here
+            return if (isIptvOnly) {
+                base.filter { it.sourceType == CatalogSourceType.HOME_SERVER }
+            } else {
+                base
+            }
         }
 
-        // Legacy fallback keys (pre profile-scoping).
+        // Legacy fallback keys
         val legacyDefault = parseCatalogsJson(prefs[legacyDefaultKey])
         if (legacyDefault.isNotEmpty()) {
-            return legacyDefault
+            val result = legacyDefault
                 .distinctBy { it.id }
                 .map { refreshBundledPreinstalledCatalog(it) }
                 .filterNot { it.isHidden() }
+                
+            return if (isIptvOnly) result.filter { it.sourceType == CatalogSourceType.HOME_SERVER } else result
         }
 
         val legacyGlobal = parseCatalogsJson(prefs[legacyGlobalKey])
         if (legacyGlobal.isNotEmpty()) {
-            return legacyGlobal
+            val result = legacyGlobal
                 .distinctBy { it.id }
                 .map { refreshBundledPreinstalledCatalog(it) }
                 .filterNot { it.isHidden() }
+                
+            return if (isIptvOnly) result.filter { it.sourceType == CatalogSourceType.HOME_SERVER } else result
         }
 
         return emptyList()
