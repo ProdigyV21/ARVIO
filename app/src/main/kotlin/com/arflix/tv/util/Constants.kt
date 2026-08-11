@@ -20,6 +20,7 @@ object Constants {
 
     // Edge Function proxy URLs used by backend/proxy-capable flows.
     val TMDB_PROXY_URL: String get() = "$NETLIFY_BACKEND_URL/tmdb-proxy"
+    val SIMKL_PROXY_URL: String get() = "$NETLIFY_BACKEND_URL/simkl-proxy"
     val TV_AUTH_START_URL: String get() = "$NETLIFY_BACKEND_URL/tv-auth-start"
     val TV_AUTH_STATUS_URL: String get() = "$NETLIFY_BACKEND_URL/tv-auth-status"
     val TV_AUTH_POLL_URL: String get() = "$NETLIFY_BACKEND_URL/tv-auth-poll"

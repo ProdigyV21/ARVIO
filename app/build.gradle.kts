@@ -44,7 +44,11 @@ android {
         buildConfigField("Boolean", "ENABLE_PERIODIC_CLOUD_PULL", "false")
         buildConfigField("Boolean", "ENABLE_NETLIFY_CLOUD_SYNC", "true")
         buildConfigField("Boolean", "ENABLE_SUPABASE_SYNC_MIRROR", "false")
-        buildConfigField("String", "NETLIFY_BACKEND_URL", "\"https://auth.arvio.tv/.netlify/functions\"")
+        buildConfigField(
+            "String",
+            "NETLIFY_BACKEND_URL",
+            "\"${escapeBuildConfigString(localSecretValue("NETLIFY_BACKEND_URL").ifBlank { "https://simkl-backend--arvio-auth.netlify.app/.netlify/functions" })}\""
+        )
         buildConfigField(
             "String",
             "APP_ANON_KEY",

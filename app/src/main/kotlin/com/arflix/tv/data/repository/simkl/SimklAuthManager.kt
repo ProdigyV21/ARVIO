@@ -34,13 +34,13 @@ class SimklAuthManager @Inject constructor(
     }
 
     suspend fun startPinAuth(): SimklPinResponse {
-        check(clientId.isNotBlank()) { "Simkl Client ID is missing" }
-        return simklApi.getPinCode(clientId)
+        val effectiveClientId = clientId.ifBlank { "simkl_proxy" }
+        return simklApi.getPinCode(effectiveClientId)
     }
 
     suspend fun pollPinAuth(userCode: String): Boolean {
-        check(clientId.isNotBlank()) { "Simkl Client ID is missing" }
-        val response = simklApi.pollPinToken(userCode, clientId)
+        val effectiveClientId = clientId.ifBlank { "simkl_proxy" }
+        val response = simklApi.pollPinToken(userCode, effectiveClientId)
         if (response.result.equals("OK", ignoreCase = true) && !response.accessToken.isNullOrBlank()) {
             syncProviderStore.setSimklAccessToken(response.accessToken)
             syncProviderStore.setProvider(SyncProvider.SIMKL)
