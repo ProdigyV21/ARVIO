@@ -1386,6 +1386,79 @@ async function handleTraktProxy(event) {
   }
 }
 
+const SIMKL_ALLOWED_PATHS = [
+  "/oauth/pin",
+  "/oauth/token",
+  "/scrobble/",
+  "/sync/"
+];
+
+async function handleSimklProxy(event) {
+  const preflight = options(event);
+  if (preflight) return preflight;
+  try {
+    assertAppRequest(event);
+    const pathParam = event.queryStringParameters?.path || "";
+    const method = String(event.queryStringParameters?.method || "GET").toUpperCase();
+    if (!pathParam) return json(400, { error: "Missing path parameter" });
+    if (!SIMKL_ALLOWED_PATHS.some((allowed) => pathParam.startsWith(allowed))) {
+      return json(403, { error: "Path not allowed" });
+    }
+    const clientId = process.env.SIMKL_CLIENT_ID || "";
+    const clientSecret = process.env.SIMKL_CLIENT_SECRET || "";
+    if (!clientId) throw new Error("Simkl credentials not configured");
+    const simklUrl = new URL(`https://api.simkl.com${pathParam}`);
+    Object.entries(event.queryStringParameters || {}).forEach(([key, value]) => {
+      if (key !== "path" && key !== "method" && value !== undefined && value !== null) {
+        simklUrl.searchParams.set(key, String(value));
+      }
+    });
+
+    let requestBody = undefined;
+    if (method === "POST" || method === "DELETE") {
+      let body = {};
+      try {
+        body = event.body
+          ? JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body)
+          : {};
+      } catch {
+        body = {};
+      }
+      if (pathParam.includes("/oauth/token")) {
+        body.client_id = clientId;
+        if (clientSecret) body.client_secret = clientSecret;
+      }
+      requestBody = Object.keys(body).length > 0 ? JSON.stringify(body) : undefined;
+    }
+
+    const headers = {
+      "content-type": "application/json",
+      "simkl-api-key": clientId
+    };
+    const userToken = event.headers["x-user-token"] || event.headers["X-User-Token"];
+    if (userToken) headers.authorization = `Bearer ${userToken}`;
+
+    const response = await fetch(simklUrl, { method, headers, body: requestBody });
+    const text = await response.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : { status: response.status };
+    } catch {
+      data = text ? { raw: text } : { status: response.status };
+    }
+    return {
+      statusCode: response.status,
+      headers: {
+        ...JSON_HEADERS,
+        "cache-control": "no-store"
+      },
+      body: JSON.stringify(data)
+    };
+  } catch (error) {
+    return json(502, { error: errorMessage(error) });
+  }
+}
+
 function payloadMetrics(payload) {
   const root = typeof payload === "string" ? JSON.parse(payload) : payload;
   const profiles = Array.isArray(root.profiles) ? root.profiles : null;
@@ -2314,6 +2387,7 @@ module.exports = {
   handleCloudAuthReset,
   handleTmdbProxy,
   handleTraktProxy,
+  handleSimklProxy,
   handleTvAuthApprove,
   handleTvAuthComplete,
   handleTvAuthStart,
