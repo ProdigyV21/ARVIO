@@ -1,7 +1,8 @@
 import { mdblistClient } from "./mdblist";
+import { simklClient } from "./simkl";
 import { traktClient } from "./store";
 
-export type SyncProvider = "trakt" | "mdblist" | "none";
+export type SyncProvider = "trakt" | "mdblist" | "simkl" | "none";
 
 export interface SyncMediaRef {
   mediaType: "movie" | "tv";
@@ -11,8 +12,7 @@ export interface SyncMediaRef {
 }
 
 /**
- * The read/write surface shared by Trakt and MDBList. Both clients return reads
- * in Trakt-compatible shapes, so the store's mappers work with either provider.
+ * The read/write surface shared by Trakt, MDBList, and Simkl.
  */
 export interface SyncClient {
   readonly isConnected: boolean;
@@ -27,14 +27,17 @@ export interface SyncClient {
   scrobble(action: "start" | "pause" | "stop", item: SyncMediaRef & { progress: number }): Promise<void>;
 }
 
-/** Which remote a profile is actively connected to (MDBList takes precedence). */
+/** Which remote a profile is actively connected to. */
 export function activeSyncProvider(): SyncProvider {
   if (mdblistClient.isConnected) return "mdblist";
+  if (simklClient.isConnected) return "simkl";
   if (traktClient.isConnected) return "trakt";
   return "none";
 }
 
-/** The active provider client, or the Trakt client when neither is connected. */
+/** The active provider client, or the Trakt client when none is connected. */
 export function syncClient(): SyncClient {
-  return (mdblistClient.isConnected ? mdblistClient : traktClient) as unknown as SyncClient;
+  if (mdblistClient.isConnected) return mdblistClient as unknown as SyncClient;
+  if (simklClient.isConnected) return simklClient as unknown as SyncClient;
+  return traktClient as unknown as SyncClient;
 }
