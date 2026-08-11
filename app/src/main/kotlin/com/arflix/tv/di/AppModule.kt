@@ -91,6 +91,18 @@ object AppModule {
     @Provides
     @Singleton
     @JvmStatic
+    fun provideSimklApi(okHttpClient: OkHttpClient): com.arflix.tv.data.api.SimklApi {
+        return Retrofit.Builder()
+            .baseUrl(Constants.SIMKL_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(com.arflix.tv.data.api.SimklApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @JvmStatic
     fun provideSupabaseApi(okHttpClient: OkHttpClient): SupabaseApi {
         // Supabase API client without disk cache to prevent OkHttp from returning
         // cached responses for POST/upsert operations (which silently drops writes)

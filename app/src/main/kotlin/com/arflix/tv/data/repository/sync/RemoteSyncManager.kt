@@ -19,7 +19,8 @@ import javax.inject.Singleton
 class RemoteSyncManager @Inject constructor(
     private val store: SyncProviderStore,
     private val traktProvider: TraktRemoteProvider,
-    private val mdbListProvider: MdbListRemoteProvider
+    private val mdbListProvider: MdbListRemoteProvider,
+    private val simklProvider: SimklRemoteProvider
 ) {
     /** The provider explicitly selected for this profile (may be NONE). */
     suspend fun selectedProvider(): SyncProvider = store.getProvider()
@@ -31,6 +32,7 @@ class RemoteSyncManager @Inject constructor(
     suspend fun active(): RemoteSyncProvider? {
         val candidate = when (store.getProvider()) {
             SyncProvider.MDBLIST -> mdbListProvider
+            SyncProvider.SIMKL -> simklProvider
             // TRAKT or NONE (legacy: infer Trakt from an existing token).
             SyncProvider.TRAKT, SyncProvider.NONE -> traktProvider
         }

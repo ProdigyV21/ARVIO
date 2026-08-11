@@ -143,6 +143,12 @@ data class SettingsUiState(
     val isMdbListConnected: Boolean = false,
     val mdbListConnecting: Boolean = false,
     val mdbListUsername: String? = null,
+    // Simkl (alternative remote sync provider)
+    val isSimklConnected: Boolean = false,
+    val isSimklAuthStarting: Boolean = false,
+    val isSimklPolling: Boolean = false,
+    val simklUserCode: String? = null,
+    val simklVerificationUrl: String? = null,
     // Trakt Sync
     val isSyncing: Boolean = false,
     val syncProgress: SyncProgress = SyncProgress(),
@@ -245,7 +251,8 @@ class SettingsViewModel @Inject constructor(
     private val apkDownloader: ApkDownloader,
     private val updateStatusManager: com.arflix.tv.updater.UpdateStatusManager,
     private val mdbListRepository: com.arflix.tv.data.repository.MdbListRepository,
-    private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore
+    private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore,
+    private val simklAuthManager: com.arflix.tv.data.repository.simkl.SimklAuthManager
 ) : ViewModel() {
     private fun visibleCatalogs(catalogs: List<CatalogConfig>): List<CatalogConfig> {
         return catalogs.filter { config ->
@@ -3498,6 +3505,62 @@ class SettingsViewModel @Inject constructor(
                 toastType = ToastType.SUCCESS
             )
             syncLocalStateToCloud(silent = true, force = true)
+        }
+    }
+
+    // ========== Simkl Authentication ==========
+
+    fun startSimklAuth() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSimklAuthStarting = true)
+            runCatching {
+                val pinRes = simklAuthManager.startPinAuth()
+                _uiState.value = _uiState.value.copy(
+                    isSimklAuthStarting = false,
+                    isSimklPolling = true,
+                    simklUserCode = pinRes.userCode,
+                    simklVerificationUrl = pinRes.verificationUrl
+                )
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    isSimklAuthStarting = false,
+                    toastMessage = "Simkl Auth Error: ${e.message}",
+                    toastType = ToastType.ERROR
+                )
+            }
+        }
+    }
+
+    fun pollSimklAuth() {
+        val userCode = _uiState.value.simklUserCode ?: return
+        viewModelScope.launch {
+            runCatching {
+                val success = simklAuthManager.pollPinAuth(userCode)
+                if (success) {
+                    _uiState.value = _uiState.value.copy(
+                        isSimklPolling = false,
+                        isSimklConnected = true,
+                        simklUserCode = null,
+                        simklVerificationUrl = null,
+                        toastMessage = "Connected to Simkl!",
+                        toastType = ToastType.SUCCESS
+                    )
+                }
+            }
+        }
+    }
+
+    fun disconnectSimkl() {
+        viewModelScope.launch {
+            simklAuthManager.disconnect()
+            _uiState.value = _uiState.value.copy(
+                isSimklConnected = false,
+                isSimklPolling = false,
+                simklUserCode = null,
+                simklVerificationUrl = null,
+                toastMessage = "Disconnected from Simkl",
+                toastType = ToastType.SUCCESS
+            )
         }
     }
 

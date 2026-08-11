@@ -55,6 +55,26 @@ class SyncProviderStore @Inject constructor(
         }
     }
 
+    private fun simklAccessTokenKey() = profileManager.profileStringKey("simkl_access_token")
+    private fun simklAccessTokenKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "simkl_access_token")
+
+    suspend fun getSimklAccessToken(): String? {
+        val prefs = context.traktDataStore.data.first()
+        return prefs[simklAccessTokenKey()]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun setSimklAccessToken(token: String?) {
+        context.traktDataStore.edit { prefs ->
+            val trimmed = token?.trim().orEmpty()
+            if (trimmed.isEmpty()) {
+                prefs.remove(simklAccessTokenKey())
+            } else {
+                prefs[simklAccessTokenKey()] = trimmed
+            }
+        }
+    }
+
     suspend fun getMdbListApiKey(): String? {
         val prefs = context.traktDataStore.data.first()
         return prefs[mdbListKey()]?.trim()?.takeIf { it.isNotEmpty() }
