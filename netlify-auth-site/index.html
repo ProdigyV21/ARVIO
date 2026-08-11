@@ -543,12 +543,18 @@
       if (!uri) return false;
       try {
         const url = new URL(uri);
-        return (
-          url.hostname === "arvio.tv" ||
-          url.hostname.endsWith(".arvio.tv") ||
-          url.hostname === "localhost" ||
-          url.hostname === "127.0.0.1"
-        );
+        const isLocal =
+          (url.protocol === "http:" || url.protocol === "https:") &&
+          (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+        const isArvioDomain =
+          url.protocol === "https:" &&
+          (url.hostname === "arvio.tv" || url.hostname.endsWith(".arvio.tv"));
+        const isArvioWebPreview =
+          url.protocol === "https:" &&
+          (url.hostname === "arvio-web.netlify.app" ||
+            url.hostname.endsWith("--arvio-web.netlify.app"));
+
+        return !url.username && !url.password && (isLocal || isArvioDomain || isArvioWebPreview);
       } catch {
         return false;
       }
