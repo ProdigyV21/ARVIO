@@ -71,7 +71,7 @@ function parseBody(event) {
 }
 
 function appAnonKey() {
-  return process.env.APP_ANON_KEY || "";
+  return process.env.APP_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3OiOiJzdXBhYmFzZSIsInJlZiI6InpyZHd2b3J0Y2Zub3lrbHR6dXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NDU4NzMsImV4cCI6MjA4MjMyMTg3M30.YfKZbSwxGs6_xMd6jkDtn1PKkfuyOHo9qVhUvFRddGU";
 }
 
 function assertAppRequest(event) {
@@ -1404,15 +1404,17 @@ async function handleSimklProxy(event) {
     if (!SIMKL_ALLOWED_PATHS.some((allowed) => pathParam.startsWith(allowed))) {
       return json(403, { error: "Path not allowed" });
     }
-    const clientId = process.env.SIMKL_CLIENT_ID || "";
+    const queryClientId = event.queryStringParameters?.client_id;
+    const clientId = process.env.SIMKL_CLIENT_ID || (queryClientId && queryClientId !== "simkl_proxy" ? queryClientId : "");
     const clientSecret = process.env.SIMKL_CLIENT_SECRET || "";
-    if (!clientId) throw new Error("Simkl credentials not configured");
+    if (!clientId) throw new Error("SIMKL_CLIENT_ID is not configured in Netlify environment variables");
     const simklUrl = new URL(`https://api.simkl.com${pathParam}`);
     Object.entries(event.queryStringParameters || {}).forEach(([key, value]) => {
       if (key !== "path" && key !== "method" && value !== undefined && value !== null) {
         simklUrl.searchParams.set(key, String(value));
       }
     });
+    simklUrl.searchParams.set("client_id", clientId);
 
     let requestBody = undefined;
     if (method === "POST" || method === "DELETE") {
