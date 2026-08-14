@@ -2,8 +2,12 @@ package com.arflix.tv.ui.screens.watchlist
 
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.MutatePriority
+import kotlin.math.abs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -124,15 +128,15 @@ fun WatchlistScreen(
     val contentStartPadding = if (isMobile) 16.dp else 36.dp
     val cardWidth = if (isMobile) {
         if (usePosterCards) {
-            ((screenWidth - 62.dp) / 2).coerceIn(120.dp, 160.dp)
+            ((screenWidth - 62.dp) / 2).coerceIn(112.dp, 150.dp)
         } else {
-            (screenWidth - 48.dp).coerceIn(240.dp, 340.dp)
+            ((screenWidth - 62.dp) / 2).coerceIn(138.dp, 200.dp)
         }
     } else {
         if (usePosterCards) 105.dp else 210.dp
     }
     val gridColumns = if (isMobile) {
-        if (usePosterCards) 2 else 1
+        2
     } else {
         if (usePosterCards) {
             ((screenWidth - (contentStartPadding * 2)) / (cardWidth + 14.dp)).toInt().coerceIn(5, 8)
@@ -163,8 +167,11 @@ fun WatchlistScreen(
     val selectedSourceIndex = remember(sources, uiState.selectedSourceId) {
         sources.indexOfFirst { it.id == uiState.selectedSourceId }.coerceAtLeast(0)
     }
-    val isSingleType = (uiState.movies.isNotEmpty() && uiState.series.isEmpty()) ||
+    val isMyWatchlist = uiState.selectedSourceId == WatchlistSourceItem.MyWatchlist.id
+    val isSingleType = !isMyWatchlist && (
+        (uiState.movies.isNotEmpty() && uiState.series.isEmpty()) ||
         (uiState.series.isNotEmpty() && uiState.movies.isEmpty())
+    )
     val singleTypeItems = if (uiState.movies.isNotEmpty()) uiState.movies else uiState.series
     val singleTypeTitle = if (uiState.movies.isNotEmpty()) tr("Movies") else tr("Series")
 
@@ -202,7 +209,7 @@ fun WatchlistScreen(
     }
 
     LaunchedEffect(listSelectorFocusIndex) {
-        if (listSelectorFocusIndex in 0..sources.size) {
+        if (listSelectorFocusIndex in sources.indices) {
             listSelectorRowState.animateScrollToItem(listSelectorFocusIndex)
         }
     }
@@ -212,6 +219,7 @@ fun WatchlistScreen(
         focusedItemIndex = 0
         sectionItemIndices.clear()
         gridState.scrollToItem(0)
+        watchlistColumnState.scrollToItem(0)
     }
 
     LaunchedEffect(uiState.selectedSourceId, uiState.isEmpty) {
@@ -240,13 +248,15 @@ fun WatchlistScreen(
     LaunchedEffect(focusedItemIndex, isSingleType, singleTypeItems.size, focusZone) {
         if (isSingleType && focusZone == WatchlistFocusZone.CONTENT && singleTypeItems.isNotEmpty()) {
             val safe = focusedItemIndex.coerceIn(0, singleTypeItems.lastIndex)
-            gridState.animateScrollToItem(safe)
+            val rowFirstIndex = (safe / gridColumns) * gridColumns
+            gridState.animateSmoothGridScroll(rowFirstIndex)
         }
     }
 
     LaunchedEffect(focusedSectionIndex, multiSections.size, focusZone) {
         if (!isSingleType && focusZone == WatchlistFocusZone.CONTENT && multiSections.isNotEmpty()) {
-            watchlistColumnState.animateScrollToItem(focusedSectionIndex.coerceIn(0, multiSections.lastIndex))
+            val target = focusedSectionIndex.coerceIn(0, multiSections.lastIndex)
+            watchlistColumnState.animateSmoothListScroll(target)
         }
     }
 
@@ -312,7 +322,7 @@ fun WatchlistScreen(
                                     sidebarFocusIndex = (sidebarFocusIndex + 1).coerceAtMost(maxSidebarIndex)
                                 }
                                 WatchlistFocusZone.LIST_SELECTOR -> {
-                                    listSelectorFocusIndex = (listSelectorFocusIndex + 1).coerceAtMost(sources.size)
+                                    listSelectorFocusIndex = (listSelectorFocusIndex + 1).coerceAtMost(sources.lastIndex)
                                 }
                                 WatchlistFocusZone.CONTENT -> {
                                     if (isSingleType) {
@@ -414,11 +424,8 @@ fun WatchlistScreen(
                                     }
                                 }
                                 WatchlistFocusZone.LIST_SELECTOR -> {
-                                    if (listSelectorFocusIndex < sources.size) {
-                                        val selected = sources[listSelectorFocusIndex]
+                                    sources.getOrNull(listSelectorFocusIndex)?.let { selected ->
                                         viewModel.selectSource(selected.id)
-                                    } else {
-                                        onNavigateToSettings("catalogs")
                                     }
                                 }
                                 WatchlistFocusZone.CONTENT -> {
@@ -488,9 +495,6 @@ fun WatchlistScreen(
                 contentStartPadding = contentStartPadding,
                 onSelectSource = { source ->
                     viewModel.selectSource(source.id)
-                },
-                onManageLists = {
-                    onNavigateToSettings("catalogs")
                 }
             )
 
@@ -524,11 +528,29 @@ fun WatchlistScreen(
                             onButtonClick = { onNavigateToSettings("catalogs") }
                         )
                     }
+                    isMyWatchlist -> {
+                        // Dedicated My Watchlist module: Always maintains Movies / Series horizontal rows
+                        MyWatchlistView(
+                            sections = multiSections,
+                            logoUrls = logoUrls,
+                            usePosterCards = usePosterCards,
+                            cardWidth = cardWidth,
+                            contentStartPadding = contentStartPadding,
+                            isMobile = isMobile,
+                            focusedSectionIndex = if (focusZone == WatchlistFocusZone.CONTENT) focusedSectionIndex else -1,
+                            focusedItemIndex = if (focusZone == WatchlistFocusZone.CONTENT) focusedItemIndex else -1,
+                            columnState = watchlistColumnState,
+                            onItemFocused = { secIdx, itemIdx ->
+                                focusedSectionIndex = secIdx
+                                focusedItemIndex = itemIdx
+                            },
+                            onItemClick = { item -> openDetails(item) },
+                            onItemLongPress = { item -> viewModel.removeFromWatchlist(item) }
+                        )
+                    }
                     isSingleType -> {
-                        // 2. Single-type promotion: Multi-row Grid (follows card layout mode)
+                        // Library Single-type Catalog/Server: Multi-row Grid
                         SingleTypeGridView(
-                            title = singleTypeTitle,
-                            count = singleTypeItems.size,
                             items = singleTypeItems,
                             logoUrls = logoUrls,
                             usePosterCards = usePosterCards,
@@ -541,15 +563,11 @@ fun WatchlistScreen(
                             onItemFocused = { index -> focusedItemIndex = index },
                             onItemClick = { item -> openDetails(item) },
                             onLoadMore = viewModel::loadMoreActiveSource,
-                            onItemLongPress = { item ->
-                                if (uiState.selectedSourceId == WatchlistSourceItem.MyWatchlist.id) {
-                                    viewModel.removeFromWatchlist(item)
-                                }
-                            }
+                            onItemLongPress = { }
                         )
                     }
                     else -> {
-                        // 2. Multi-section scrolling rows (Movies + Series, follows card layout mode)
+                        // Library Multi-section scrolling rows (Movies + Series)
                         MultiSectionRowsView(
                             sections = multiSections,
                             logoUrls = logoUrls,
@@ -566,11 +584,7 @@ fun WatchlistScreen(
                             },
                             onItemClick = { item -> openDetails(item) },
                             onLoadMore = viewModel::loadMoreActiveSource,
-                            onItemLongPress = { item ->
-                                if (uiState.selectedSourceId == WatchlistSourceItem.MyWatchlist.id) {
-                                    viewModel.removeFromWatchlist(item)
-                                }
-                            }
+                            onItemLongPress = { }
                         )
                     }
                 }
@@ -614,7 +628,6 @@ private fun ListSelectorRow(
     isMobile: Boolean,
     contentStartPadding: Dp,
     onSelectSource: (WatchlistSourceItem) -> Unit,
-    onManageLists: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyRow(
@@ -639,14 +652,17 @@ private fun ListSelectorRow(
                 modifier = Modifier.clickable(enabled = isMobile) { onSelectSource(source) }
             )
         }
-
+        // TODO: "Manage lists" feature has not been implemented yet.
+        // Uncomment once list creation, reordering, and deletion management is ready.
+        /*
         item(key = "manage-lists-ghost-button") {
             val isFocused = focusedIndex == sources.size
             ManageListsGhostButton(
                 focused = isFocused,
-                modifier = Modifier.clickable(enabled = isMobile) { onManageLists() }
+                modifier = Modifier.clickable(enabled = isMobile) { onManageLists?.invoke() }
             )
         }
+        */
     }
 }
 
@@ -701,6 +717,9 @@ private fun ListPill(
     }
 }
 
+/*
+// TODO: "Manage lists" feature has not been implemented yet.
+// Uncomment once list management UI / workflows are implemented.
 @Composable
 private fun ManageListsGhostButton(
     focused: Boolean,
@@ -747,6 +766,7 @@ private fun ManageListsGhostButton(
         )
     }
 }
+*/
 
 /**
  * 2. Section Header matching HomeScreen style
@@ -793,8 +813,6 @@ private fun SectionHeader(
  */
 @Composable
 private fun SingleTypeGridView(
-    title: String,
-    count: Int,
     items: List<MediaItem>,
     logoUrls: Map<String, String>,
     usePosterCards: Boolean,
@@ -809,24 +827,17 @@ private fun SingleTypeGridView(
     onLoadMore: () -> Unit,
     onItemLongPress: (MediaItem) -> Unit
 ) {
-    Column(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        state = gridState,
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 20.dp)
+            .padding(horizontal = contentStartPadding),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        userScrollEnabled = isMobile
     ) {
-        SectionHeader(title = title, count = count, startPadding = contentStartPadding)
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            state = gridState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = contentStartPadding),
-            contentPadding = PaddingValues(top = 0.dp, bottom = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            userScrollEnabled = isMobile
-        ) {
             gridItemsIndexed(
                 items = items,
                 key = { index, item -> watchlistItemKey(item, index) },
@@ -854,11 +865,46 @@ private fun SingleTypeGridView(
                 )
             }
         }
-    }
 }
 
 /**
- * 2. Multi-Section Rows View (when both Movies and Series exist)
+ * Dedicated My Watchlist module within the Library.
+ * Displays Movies and Series in clean, dedicated horizontal scrolling sections.
+ */
+@Composable
+private fun MyWatchlistView(
+    sections: List<Pair<String, List<MediaItem>>>,
+    logoUrls: Map<String, String>,
+    usePosterCards: Boolean,
+    cardWidth: Dp,
+    contentStartPadding: Dp,
+    isMobile: Boolean,
+    focusedSectionIndex: Int,
+    focusedItemIndex: Int,
+    columnState: androidx.compose.foundation.lazy.LazyListState,
+    onItemFocused: (Int, Int) -> Unit,
+    onItemClick: (MediaItem) -> Unit,
+    onItemLongPress: (MediaItem) -> Unit
+) {
+    MultiSectionRowsView(
+        sections = sections,
+        logoUrls = logoUrls,
+        usePosterCards = usePosterCards,
+        cardWidth = cardWidth,
+        contentStartPadding = contentStartPadding,
+        isMobile = isMobile,
+        focusedSectionIndex = focusedSectionIndex,
+        focusedItemIndex = focusedItemIndex,
+        columnState = columnState,
+        onItemFocused = onItemFocused,
+        onItemClick = onItemClick,
+        onLoadMore = {},
+        onItemLongPress = onItemLongPress
+    )
+}
+
+/**
+ * 2. Multi-Section Rows View (when both Movies and Series exist or for My Watchlist module)
  */
 @Composable
 private fun MultiSectionRowsView(
@@ -879,8 +925,8 @@ private fun MultiSectionRowsView(
     LazyColumn(
         state = columnState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(32.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(28.dp),
         userScrollEnabled = isMobile
     ) {
         itemsIndexed(sections, key = { _, item -> item.first }) { secIdx, (type, items) ->
@@ -901,7 +947,12 @@ private fun MultiSectionRowsView(
                     state = rowState,
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(start = contentStartPadding, end = contentStartPadding, top = 0.dp, bottom = 0.dp)
+                    contentPadding = PaddingValues(
+                        start = contentStartPadding,
+                        end = contentStartPadding,
+                        top = 8.dp,
+                        bottom = 12.dp
+                    )
                 ) {
                     itemsIndexed(
                         items = items,
@@ -1004,5 +1055,67 @@ private fun EmptyStateView(
 private fun CenteredLoading() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         LoadingIndicator(color = Pink, size = 52.dp)
+    }
+}
+
+/**
+ * Smooth, symmetric vertical grid scrolling matching up and down speeds.
+ */
+private suspend fun androidx.compose.foundation.lazy.grid.LazyGridState.animateSmoothGridScroll(
+    targetIndex: Int,
+    durationMillis: Int = 200
+) {
+    val targetItem = layoutInfo.visibleItemsInfo.find { it.index == targetIndex }
+    if (targetItem != null) {
+        val delta = targetItem.offset.y.toFloat()
+        if (abs(delta) > 1f) {
+            scroll(scrollPriority = MutatePriority.PreventUserInput) {
+                var prev = 0f
+                animate(
+                    initialValue = 0f,
+                    targetValue = delta,
+                    animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
+                ) { value, _ ->
+                    val step = value - prev
+                    if (abs(step) > 0.01f) {
+                        scrollBy(step)
+                    }
+                    prev = value
+                }
+            }
+        }
+    } else {
+        animateScrollToItem(index = targetIndex, scrollOffset = 0)
+    }
+}
+
+/**
+ * Smooth, symmetric vertical multi-section list scrolling matching up and down speeds.
+ */
+private suspend fun androidx.compose.foundation.lazy.LazyListState.animateSmoothListScroll(
+    targetIndex: Int,
+    durationMillis: Int = 220
+) {
+    val targetItem = layoutInfo.visibleItemsInfo.find { it.index == targetIndex }
+    if (targetItem != null) {
+        val delta = targetItem.offset.toFloat()
+        if (abs(delta) > 1f) {
+            scroll(scrollPriority = MutatePriority.PreventUserInput) {
+                var prev = 0f
+                animate(
+                    initialValue = 0f,
+                    targetValue = delta,
+                    animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
+                ) { value, _ ->
+                    val step = value - prev
+                    if (abs(step) > 0.01f) {
+                        scrollBy(step)
+                    }
+                    prev = value
+                }
+            }
+        }
+    } else {
+        animateScrollToItem(index = targetIndex, scrollOffset = 0)
     }
 }
