@@ -224,7 +224,7 @@ fun WatchlistScreen(
 
     LaunchedEffect(uiState.selectedSourceId, uiState.isEmpty) {
         if (focusZone == WatchlistFocusZone.CONTENT || focusZone == WatchlistFocusZone.EMPTY_STATE) {
-            focusZone = if (uiState.isEmpty) WatchlistFocusZone.EMPTY_STATE else WatchlistFocusZone.CONTENT
+            focusZone = if (uiState.isEmpty) WatchlistFocusZone.LIST_SELECTOR else WatchlistFocusZone.CONTENT
         }
     }
 
@@ -377,9 +377,7 @@ fun WatchlistScreen(
                             when (focusZone) {
                                 WatchlistFocusZone.TOP_BAR -> focusZone = WatchlistFocusZone.LIST_SELECTOR
                                 WatchlistFocusZone.LIST_SELECTOR -> {
-                                    if (uiState.isEmpty) {
-                                        focusZone = WatchlistFocusZone.EMPTY_STATE
-                                    } else {
+                                    if (!uiState.isEmpty) {
                                         focusZone = WatchlistFocusZone.CONTENT
                                     }
                                 }
@@ -511,21 +509,13 @@ fun WatchlistScreen(
                     uiState.error != null && uiState.isEmpty -> {
                         EmptyStateView(
                             title = tr("Unable to load list"),
-                            subtitle = uiState.error.orEmpty(),
-                            buttonText = tr("Manage lists"),
-                            isButtonFocused = focusZone == WatchlistFocusZone.EMPTY_STATE,
-                            isMobile = isMobile,
-                            onButtonClick = { onNavigateToSettings("catalogs") }
+                            subtitle = uiState.error.orEmpty()
                         )
                     }
                     uiState.isEmpty -> {
                         EmptyStateView(
                             title = tr("This list is empty"),
-                            subtitle = tr("Add movies and series for later"),
-                            buttonText = tr("Manage lists"),
-                            isButtonFocused = focusZone == WatchlistFocusZone.EMPTY_STATE,
-                            isMobile = isMobile,
-                            onButtonClick = { onNavigateToSettings("catalogs") }
+                            subtitle = tr("Add movies and series for later")
                         )
                     }
                     isMyWatchlist -> {
@@ -987,16 +977,16 @@ private fun MultiSectionRowsView(
 }
 
 /**
- * Empty State with CTA button
+ * Empty State with optional CTA button
  */
 @Composable
 private fun EmptyStateView(
     title: String,
     subtitle: String,
-    buttonText: String,
-    isButtonFocused: Boolean,
-    isMobile: Boolean,
-    onButtonClick: () -> Unit
+    buttonText: String? = null,
+    isButtonFocused: Boolean = false,
+    isMobile: Boolean = false,
+    onButtonClick: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -1025,28 +1015,34 @@ private fun EmptyStateView(
                 color = Color.White.copy(alpha = 0.42f),
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Box(
-                modifier = Modifier
-                    .background(
-                        if (isButtonFocused) Color.White else Color.White.copy(alpha = 0.12f),
-                        RoundedCornerShape(999.dp)
+            // TODO: "Manage lists" feature has not been implemented yet.
+            // Uncomment button once list management functionality is ready.
+            /*
+            if (buttonText != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (isButtonFocused) Color.White else Color.White.copy(alpha = 0.12f),
+                            RoundedCornerShape(999.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (isButtonFocused) Color.White else Color.White.copy(alpha = 0.22f),
+                            RoundedCornerShape(999.dp)
+                        )
+                        .clickable(enabled = isMobile) { onButtonClick() }
+                        .padding(horizontal = 20.dp, vertical = 9.dp)
+                ) {
+                    Text(
+                        text = buttonText,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isButtonFocused) Color.Black else Color.White
                     )
-                    .border(
-                        1.dp,
-                        if (isButtonFocused) Color.White else Color.White.copy(alpha = 0.22f),
-                        RoundedCornerShape(999.dp)
-                    )
-                    .clickable(enabled = isMobile) { onButtonClick() }
-                    .padding(horizontal = 20.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    text = buttonText,
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isButtonFocused) Color.Black else Color.White
-                )
+                }
             }
+            */
         }
     }
 }
