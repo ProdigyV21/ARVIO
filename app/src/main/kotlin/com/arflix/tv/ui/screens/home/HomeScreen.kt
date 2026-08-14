@@ -1345,7 +1345,7 @@ fun HomeScreen(
 
         // App Update Modal
         if (uiState.showAppUpdateDialog) {
-            com.arflix.tv.ui.components.AppUpdateModal(
+            com.arflix.tv.ui.components.AppUpdateBanner(
                 status = uiState.updateStatus,
                 onDownload = { viewModel.downloadAppUpdate() },
                 onCancelDownload = { viewModel.cancelDownloadAppUpdate() },

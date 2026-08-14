@@ -1777,10 +1777,20 @@ class HomeViewModel @Inject constructor(
                     shouldAutoOpen = true
                 }
 
+                val testUpdate = com.arflix.tv.updater.AppUpdate(
+                    tag = "1.9.984",
+                    title = "ARVIO Update",
+                    notes = "Test update banner",
+                    releaseUrl = null,
+                    assetName = "test.apk",
+                    assetUrl = "",
+                    assetSizeBytes = null
+                )
+
                 _uiState.value = _uiState.value.copy(
-                    updateStatus = status,
-                    showAppUpdateDialog = if (shouldAutoOpen) true else _uiState.value.showAppUpdateDialog,
-                    hasUpdateBadge = hasBadge && !isIgnored
+                    updateStatus = com.arflix.tv.updater.UpdateStatus.UpdateAvailable(testUpdate),
+                    showAppUpdateDialog = true,
+                    hasUpdateBadge = true
                 )
 
                 previousStatus = status
