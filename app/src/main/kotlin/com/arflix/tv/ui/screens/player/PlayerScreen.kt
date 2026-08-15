@@ -439,6 +439,8 @@ fun PlayerScreen(
     }
     var useVideoFrameSubtitleViewport by remember { mutableStateOf(false) }
     val subtitleGroups = remember(uiState.subtitles, uiState.preferredSubtitleLang, uiState.secondarySubtitleLang, uiState.selectedStream, uiState.isAiAvailable, uiState.aiTargetLanguageName) {
+        val subtitlePrefsRepo = SubtitlePrefsRepository(requireContext())
+        val subtitlePrefs = subtitlePrefsRepo.load()
         val streamSource = uiState.selectedStream?.source ?: ""
         val primaryName = getFullLanguageName(uiState.preferredSubtitleLang)
         val secondaryName = getFullLanguageName(uiState.secondarySubtitleLang)
