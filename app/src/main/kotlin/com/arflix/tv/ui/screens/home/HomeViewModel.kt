@@ -1866,14 +1866,25 @@ class HomeViewModel @Inject constructor(
                 }
 
                 // Auto-open only when we first discover a new unignored update
-                if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && previousStatus !is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && !isIgnored) {
+                if (
+                    status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable &&
+                    previousStatus !is com.arflix.tv.updater.UpdateStatus.UpdateAvailable &&
+                    !isIgnored
+                ) {
                     shouldAutoOpen = true
                 }
 
                 _uiState.value = _uiState.value.copy(
                     updateStatus = status,
-                    showAppUpdateDialog = if (shouldAutoOpen) true else _uiState.value.showAppUpdateDialog,
-                    hasUpdateBadge = hasBadge && !isIgnored
+                    showAppUpdateDialog =
+                        if (shouldAutoOpen) {
+                            true
+                        } else {
+                            _uiState.value.showAppUpdateDialog
+                        },
+                    hasUpdateBadge =
+                        status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable &&
+                                !isIgnored
                 )
 
                 previousStatus = status
