@@ -779,13 +779,30 @@ class AnimeMapper @Inject constructor(
 
         val normalizedQuery = title.lowercase().trim()
 
-        // Try to find an exact or close title match
+        // Try to find an exact or close title match.
+        //
+        // There is deliberately NO "just take the first result" fallback: Kitsu's filter[text]
+        // is a fuzzy search that always returns *something*, so an unrelated show (e.g. the
+        // Israeli drama "On Standby") would silently resolve to whatever anime happened to rank
+        // first and then be offered as that show's sources.
         val bestMatch = results.firstOrNull { anime ->
             val canonical = anime.attributes?.canonicalTitle?.lowercase()?.trim()
             val english = anime.attributes?.titles?.get("en")?.lowercase()?.trim()
             val enJp = anime.attributes?.titles?.get("en_jp")?.lowercase()?.trim()
             canonical == normalizedQuery || english == normalizedQuery || enJp == normalizedQuery
-        } ?: results.firstOrNull() // Fall back to first result
+        } ?: results.firstOrNull { anime ->
+            // Looser second pass: one title fully contains the other (handles subtitles and
+            // season suffixes like "Title 2nd Season"), still anchored on the real name.
+            listOfNotNull(
+                anime.attributes?.canonicalTitle,
+                anime.attributes?.titles?.get("en"),
+                anime.attributes?.titles?.get("en_jp")
+            ).any { raw ->
+                val candidate = raw.lowercase().trim()
+                candidate.isNotBlank() && normalizedQuery.isNotBlank() &&
+                    (candidate.contains(normalizedQuery) || normalizedQuery.contains(candidate))
+            }
+        }
 
         val kitsuId = bestMatch?.id?.toIntOrNull()
         if (kitsuId != null) {

@@ -29,6 +29,7 @@ class TelegramSearchMatcher @Inject constructor() {
         title: String,
         localizedTitle: String? = null,
         englishTitle: String? = null,
+        originalTitle: String? = null,
         year: Int?,
         season: Int?,
         episode: Int?
@@ -38,13 +39,18 @@ class TelegramSearchMatcher @Inject constructor() {
         val normalizedTitle = normalize(title)
         val normalizedLocalized = localizedTitle?.let { normalize(it) }
         val normalizedEnglish = englishTitle?.let { normalize(it) }
+        val normalizedOriginal = originalTitle?.let { normalize(it) }
 
-        // Primary match: TMDB English title, TMDB localized title, or app title (in that priority)
+        // Primary match: TMDB English title, TMDB localized title, TMDB original title, or app
+        // title. The original title matters for foreign content whose native name is the one that
+        // actually appears in file names — TMDB often has no translation, in which case the
+        // "localized" title is just the English one again.
         val engMatch = normalizedEnglish != null && normalizedEnglish.isNotBlank() && normalizedCombined.contains(normalizedEnglish)
         val locMatch = normalizedLocalized != null && normalizedLocalized.isNotBlank() && normalizedCombined.contains(normalizedLocalized)
+        val origMatch = normalizedOriginal != null && normalizedOriginal.isNotBlank() && normalizedCombined.contains(normalizedOriginal)
         val appMatch = normalizedCombined.contains(normalizedTitle)
 
-        if (!engMatch && !locMatch && !appMatch) return 0
+        if (!engMatch && !locMatch && !origMatch && !appMatch) return 0
 
         var score = 60
 
@@ -101,17 +107,28 @@ class TelegramSearchMatcher @Inject constructor() {
         return m.groupValues[1].toIntOrNull()
     }
 
-    fun buildMovieQueries(title: String, year: Int?, localizedTitle: String? = null, englishTitle: String? = null): List<String> {
+    fun buildMovieQueries(
+        title: String,
+        year: Int?,
+        localizedTitle: String? = null,
+        englishTitle: String? = null,
+        originalTitle: String? = null
+    ): List<String> {
         // Prefer TMDB English title as primary; fall back to app title
         val primary = englishTitle?.let { cleanTitle(it) } ?: cleanTitle(title)
-        val localized = localizedTitle?.let { cleanTitle(it) }
         val queries = mutableListOf<String>()
         if (year != null) queries.add("$primary $year")
         queries.add(primary)
-        if (localized != null && !localized.equals(primary, ignoreCase = true)) {
-            if (year != null) queries.add("$localized $year")
-            queries.add(localized)
-        }
+        // Localized and original are both searched: for foreign titles TMDB frequently has no
+        // translation (localized == English), and only the original name matches real files.
+        listOfNotNull(localizedTitle, originalTitle)
+            .map { cleanTitle(it) }
+            .filter { it.isNotBlank() && !it.equals(primary, ignoreCase = true) }
+            .distinct()
+            .forEach { alt ->
+                if (year != null) queries.add("$alt $year")
+                queries.add(alt)
+            }
         return queries.distinct()
     }
 
@@ -121,36 +138,49 @@ class TelegramSearchMatcher @Inject constructor() {
         episode: Int,
         localizedTitle: String? = null,
         englishTitle: String? = null,
-        languageCode: String = "en"
+        languageCode: String = "en",
+        originalTitle: String? = null
     ): List<String> {
         val engBase = englishTitle?.let { cleanTitle(it) } ?: cleanTitle(title)
-        val locBase = localizedTitle?.let { cleanTitle(it) }
-        val titlesAreSame = locBase == null || locBase.equals(engBase, ignoreCase = true)
         val s = season.toString()
         val e = episode.toString()
         val s2 = season.toString().padStart(2, '0')
         val e2 = episode.toString().padStart(2, '0')
 
+        // Every distinct name this show is known by. The original title is included because TMDB
+        // frequently has no translation for foreign content — it then returns the English name for
+        // a localized request, so `localizedTitle` alone can silently be English and the native
+        // name (the one actually used in file names and captions) is never searched.
+        val altBases = listOfNotNull(localizedTitle, originalTitle, title)
+            .map { cleanTitle(it) }
+            .filter { it.isNotBlank() && !it.equals(engBase, ignoreCase = true) }
+            .distinct()
+
         val queries = mutableListOf<String>()
 
-        // Hebrew-specific episode markers — only for Hebrew users
+        // Hebrew-specific episode markers — only for Hebrew users, and only paired with a title
+        // that is actually written in Hebrew. Pairing Hebrew markers with a Latin title produces
+        // strings like "on standby עונה 1 פרק 1" that cannot exist in any group.
         if (languageCode == "he") {
-            val hebTitle = if (titlesAreSame) engBase else locBase ?: engBase
-            queries += listOf(
-                "$hebTitle ע$s פ$e",
-                "$hebTitle ע${s}פ${e}",
-                "$hebTitle עונה $s פרק $e",
-            )
-            if (season == 1) queries += listOf("$hebTitle פ$e", "$hebTitle פרק $e")
+            val hebrewBases = altBases.filter { isHebrew(it) }
+                .ifEmpty { listOfNotNull(engBase.takeIf { isHebrew(it) }) }
+            for (hebTitle in hebrewBases) {
+                queries += listOf(
+                    "$hebTitle ע$s פ$e",
+                    "$hebTitle ע${s}פ${e}",
+                    "$hebTitle עונה $s פרק $e",
+                )
+                if (season == 1) queries += listOf("$hebTitle פ$e", "$hebTitle פרק $e")
+            }
         }
 
-        // Localized title with English S/E patterns (any non-English language)
-        if (!titlesAreSame) {
+        // Alternate titles with English S/E patterns (any non-English language)
+        for (alt in altBases) {
             queries += listOf(
-                "$locBase s${s}e${e}",
-                "$locBase s${s2}e${e2}",
-                "$locBase s$s e$e",
-                "$locBase s$s2 e$e2",
+                "$alt s${s}e${e}",
+                "$alt s${s2}e${e2}",
+                "$alt s$s e$e",
+                "$alt s$s2 e$e2",
             )
         }
 

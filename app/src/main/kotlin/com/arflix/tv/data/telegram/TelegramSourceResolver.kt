@@ -98,12 +98,17 @@ class TelegramSourceResolver @Inject constructor(
         val rawLang = context.getSharedPreferences("app_locale", android.content.Context.MODE_PRIVATE)
             .getString("locale_tag", "en-US") ?: "en-US"
         val langCode = rawLang.replace("iw", "he").substringBefore("-")
-        val (englishTitle, localizedTitle) = fetchTitles(imdbId, isMovie, langCode)
+        val titles = fetchTitles(imdbId, isMovie, langCode)
+        val englishTitle = titles.english
+        val localizedTitle = titles.localized
+        val originalTitle = titles.original
 
         val queries = if (season != null && episode != null)
-            matcher.buildSeriesQueries(title, season, episode, localizedTitle, englishTitle, langCode)
+            matcher.buildSeriesQueries(
+                title, season, episode, localizedTitle, englishTitle, langCode, originalTitle
+            )
         else
-            matcher.buildMovieQueries(title, year, localizedTitle, englishTitle)
+            matcher.buildMovieQueries(title, year, localizedTitle, englishTitle, originalTitle)
 
         val seen = mutableSetOf<Pair<String, Long>>()
         val allMessages = mutableListOf<TelegramVideoMessage>()
@@ -138,6 +143,7 @@ class TelegramSourceResolver @Inject constructor(
                     title = title,
                     localizedTitle = localizedTitle,
                     englishTitle = englishTitle,
+                    originalTitle = originalTitle,
                     year = year,
                     season = season,
                     episode = episode
@@ -203,21 +209,33 @@ class TelegramSourceResolver @Inject constructor(
         else -> 0
     }
 
-    private suspend fun fetchTitles(imdbId: String, isMovie: Boolean, langCode: String): Pair<String?, String?> {
-        if (imdbId.isBlank()) return null to null
+    /** The names a title is known by. [original] is the native name from TMDB. */
+    private data class ResolvedTitles(
+        val english: String? = null,
+        val localized: String? = null,
+        val original: String? = null
+    )
+
+    private suspend fun fetchTitles(imdbId: String, isMovie: Boolean, langCode: String): ResolvedTitles {
+        if (imdbId.isBlank()) return ResolvedTitles()
         return try {
             val findResult = tmdbApi.findByExternalId(imdbId, Constants.TMDB_API_KEY)
             val findItem = if (isMovie) findResult.movieResults.firstOrNull()
                            else findResult.tvResults.firstOrNull()
-            val tmdbId = findItem?.id ?: return null to null
+            val tmdbId = findItem?.id ?: return ResolvedTitles()
             // Always fetch English explicitly — the HTTP interceptor may inject the user's
             // content language into all TMDB calls, so findItem.title isn't always English.
-            val englishTitle = if (isMovie)
-                tmdbApi.getMovieDetails(tmdbId, Constants.TMDB_API_KEY, language = "en").title
-                    .takeIf { it.isNotBlank() }
-            else
-                tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = "en").name
-                    .takeIf { it.isNotBlank() }
+            val englishMovie = if (isMovie)
+                tmdbApi.getMovieDetails(tmdbId, Constants.TMDB_API_KEY, language = "en") else null
+            val englishTv = if (isMovie) null
+                else tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = "en")
+            val englishTitle = (englishMovie?.title ?: englishTv?.name.orEmpty())
+                .takeIf { it.isNotBlank() }
+            // Native name (e.g. Hebrew for an Israeli show). TMDB returns it regardless of the
+            // requested language, so it is the only reliable source when no translation exists —
+            // a localized request then just returns the English name again.
+            val originalTitle = (englishMovie?.originalTitle ?: englishTv?.originalName)
+                ?.takeIf { it.isNotBlank() }
             // Fetch localized title only when the user's language is not English
             val localizedTitle = if (langCode != "en") {
                 if (isMovie)
@@ -227,12 +245,12 @@ class TelegramSourceResolver @Inject constructor(
                     tmdbApi.getTvDetails(tmdbId, Constants.TMDB_API_KEY, language = langCode).name
                         .takeIf { it.isNotBlank() }
             } else null
-            englishTitle to localizedTitle
+            ResolvedTitles(english = englishTitle, localized = localizedTitle, original = originalTitle)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
 
             Log.w(TAG, "Failed to fetch titles for $imdbId: ${e.message}")
-            null to null
+            ResolvedTitles()
         }
     }
 

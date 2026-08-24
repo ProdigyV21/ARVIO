@@ -2036,7 +2036,12 @@ class StreamRepository @Inject constructor(
                 }
 
                 if (addonStreams.isEmpty() && nativeAnimeAddon) {
-                    val retryAnimeQuery = animeQuery ?: resolveAnimeQuery(NATIVE_ANIME_ID_LOOKUP_TIMEOUT_MS)
+                    // Only resolve an anime id when this item actually looked like anime. The
+                    // retry fires purely because a native-anime addon returned nothing, so without
+                    // this guard a non-anime title (an Israeli drama, say) gets run through the
+                    // Kitsu title search and is offered a completely different show's streams.
+                    val retryAnimeQuery = animeQuery
+                        ?: if (resolveAsAnime) resolveAnimeQuery(NATIVE_ANIME_ID_LOOKUP_TIMEOUT_MS) else null
                     val retryTmdbEpisodeId = if (tmdbId != null && addonSupportsIdFamily(addon, "tmdb")) {
                         "tmdb:$tmdbId:$season:$episode"
                     } else null
