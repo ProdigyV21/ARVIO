@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +41,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.annotation.StringRes
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -50,6 +52,64 @@ import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
+import com.arflix.tv.util.LocalDeviceType
+
+internal enum class AppBottomBarMode {
+    STANDARD,
+    LANDSCAPE_COMPACT,
+}
+
+internal data class AppBottomBarSpec(
+    val itemHeightDp: Int?,
+    val rowVerticalPaddingDp: Int,
+    val itemVerticalPaddingDp: Int,
+    val itemSpacingDp: Int,
+    val iconHorizontalPaddingDp: Int,
+    val iconVerticalPaddingDp: Int,
+    val iconSizeDp: Int,
+    val indicatorSizeDp: Int,
+    val labelFontSizeSp: Int,
+)
+
+internal fun appBottomBarMode(
+    isTouchDevice: Boolean,
+    smallestScreenWidthDp: Int,
+    screenWidthDp: Int,
+    screenHeightDp: Int,
+): AppBottomBarMode = if (
+    isTouchDevice &&
+    smallestScreenWidthDp < 600 &&
+    screenWidthDp > screenHeightDp
+) {
+    AppBottomBarMode.LANDSCAPE_COMPACT
+} else {
+    AppBottomBarMode.STANDARD
+}
+
+internal fun appBottomBarSpec(mode: AppBottomBarMode): AppBottomBarSpec = when (mode) {
+    AppBottomBarMode.LANDSCAPE_COMPACT -> AppBottomBarSpec(
+        itemHeightDp = 48,
+        rowVerticalPaddingDp = 2,
+        itemVerticalPaddingDp = 0,
+        itemSpacingDp = 1,
+        iconHorizontalPaddingDp = 10,
+        iconVerticalPaddingDp = 2,
+        iconSizeDp = 20,
+        indicatorSizeDp = 3,
+        labelFontSizeSp = 8,
+    )
+    AppBottomBarMode.STANDARD -> AppBottomBarSpec(
+        itemHeightDp = null,
+        rowVerticalPaddingDp = 6,
+        itemVerticalPaddingDp = 2,
+        itemSpacingDp = 2,
+        iconHorizontalPaddingDp = 14,
+        iconVerticalPaddingDp = 4,
+        iconSizeDp = 24,
+        indicatorSizeDp = 4,
+        labelFontSizeSp = 10,
+    )
+}
 
 data class BottomBarItem(
     @StringRes val labelRes: Int,
@@ -72,6 +132,15 @@ fun AppBottomBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val configuration = LocalConfiguration.current
+    val mode = appBottomBarMode(
+        isTouchDevice = LocalDeviceType.current.isTouchDevice(),
+        smallestScreenWidthDp = configuration.smallestScreenWidthDp,
+        screenWidthDp = configuration.screenWidthDp,
+        screenHeightDp = configuration.screenHeightDp,
+    )
+    val spec = appBottomBarSpec(mode)
+
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
@@ -84,7 +153,7 @@ fun AppBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(appBackgroundDark().copy(alpha = 0.95f))
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = spec.rowVerticalPaddingDp.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -96,6 +165,10 @@ fun AppBottomBar(
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .then(
+                            spec.itemHeightDp?.let { heightDp -> Modifier.heightIn(min = heightDp.dp) }
+                                ?: Modifier
+                        )
                         .clip(RoundedCornerShape(8.dp))
                         .then(
                             if (isFocused) Modifier.border(2.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
@@ -111,9 +184,12 @@ fun AppBottomBar(
                             } else false
                         }
                         .clickable { onNavigate(item.route) }
-                        .padding(vertical = 2.dp),
+                        .padding(vertical = spec.itemVerticalPaddingDp.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    verticalArrangement = Arrangement.spacedBy(
+                        space = spec.itemSpacingDp.dp,
+                        alignment = Alignment.CenterVertically,
+                    )
                 ) {
                     Box(
                         modifier = Modifier
@@ -125,7 +201,10 @@ fun AppBottomBar(
                                     else -> Color.Transparent
                                 }
                             )
-                            .padding(horizontal = 14.dp, vertical = 4.dp),
+                            .padding(
+                                horizontal = spec.iconHorizontalPaddingDp.dp,
+                                vertical = spec.iconVerticalPaddingDp.dp,
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -136,22 +215,22 @@ fun AppBottomBar(
                                 isSelected -> TextPrimary
                                 else -> TextSecondary.copy(alpha = 0.6f)
                             },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(spec.iconSizeDp.dp)
                         )
                     }
                     if (isSelected) {
                         Box(
                             modifier = Modifier
-                                .size(4.dp)
+                                .size(spec.indicatorSizeDp.dp)
                                 .clip(CircleShape)
                                 .background(if (isFocused) Color.White else TextPrimary)
                         )
                     } else {
-                        Spacer(modifier = Modifier.size(4.dp))
+                        Spacer(modifier = Modifier.size(spec.indicatorSizeDp.dp))
                     }
                     Text(
                         text = label,
-                        style = ArflixTypography.caption.copy(fontSize = 10.sp),
+                        style = ArflixTypography.caption.copy(fontSize = spec.labelFontSizeSp.sp),
                         color = when {
                             isFocused -> Color.White
                             isSelected -> TextPrimary
