@@ -4,6 +4,10 @@ internal data class PlaybackEpisodeKey(
     val mediaId: Int,
     val seasonNumber: Int,
     val episodeNumber: Int,
+    val tmdbSeasonNumber: Int = seasonNumber,
+    val tmdbEpisodeNumber: Int = episodeNumber,
+    val kitsuId: Int? = null,
+    val kitsuEpisodeNumber: Int? = null,
 )
 
 /**
@@ -18,8 +22,16 @@ internal class NextEpisodePromptGate {
     fun tryOpen(
         episode: PlaybackEpisodeKey?,
         eligible: Boolean,
+        airDateResolution: NextEpisodeAirDateResolution,
     ): Boolean {
-        if (!eligible || episode == null || handledEpisode == episode) return false
+        if (
+            !eligible ||
+            episode == null ||
+            handledEpisode == episode ||
+            airDateResolution != NextEpisodeAirDateResolution.Allowed
+        ) {
+            return false
+        }
         handledEpisode = episode
         return true
     }

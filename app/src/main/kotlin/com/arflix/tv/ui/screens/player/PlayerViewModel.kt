@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Clock
 import javax.inject.Inject
 
 private fun isSupplementalStream(stream: StreamSource): Boolean =
@@ -204,6 +205,13 @@ class PlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    private val nextEpisodeAirDateResolver = NextEpisodeAirDateResolver(
+        loadSeason = { tmdbId, seasonNumber ->
+            tmdbApi.getTvSeason(tmdbId, seasonNumber, Constants.TMDB_API_KEY)
+        },
+        clock = Clock.systemDefaultZone(),
+    )
+
     private var currentMediaType: MediaType = MediaType.MOVIE
     private var currentMediaId: Int = 0
     private var currentSeason: Int? = null
@@ -259,6 +267,11 @@ class PlayerViewModel @Inject constructor(
         }
         return fallbackAdjacentEpisodeIdentity(current, forward)
     }
+
+    internal suspend fun resolveNextEpisodeAirDate(
+        tmdbId: Int,
+        target: EpisodeIdentity,
+    ): NextEpisodeAirDateResolution = nextEpisodeAirDateResolver.resolve(tmdbId, target)
 
     // AI subtitle settings (read once per video load)
     private var aiSubtitleEnabled = false
