@@ -48,6 +48,43 @@ class PlaylistCategorySectionsTest {
     }
 
     @Test
+    fun hybridPlaylistAndStalkerKeepsUnmatchedCategoriesVisible() {
+        val config = IptvConfig(
+            playlists = listOf(
+                IptvPlaylistEntry(id = "m3u", name = "M3U playlist", m3uUrl = "https://m3u.test/list.m3u"),
+            )
+        )
+        val categories = listOf(
+            LiveCategory("m3u:movies", "Movies", 8, CategoryIcon.Movie, playlistId = "m3u"),
+            LiveCategory("stalker:news", "News", 6, CategoryIcon.Grid, playlistId = "stalker"),
+            LiveCategory("stalker:sports", "Sports", 4, CategoryIcon.Sport, playlistId = "stalker"),
+        )
+
+        val sections = buildPlaylistCategorySections(config, categories)
+
+        assertThat(sections.map { it.id }).containsExactly("m3u", "source:stalker").inOrder()
+        assertThat(sections[1].label).isEqualTo("Stalker")
+        assertThat(sections[1].categories.map { it.id })
+            .containsExactly("stalker:news", "stalker:sports")
+            .inOrder()
+    }
+
+    @Test
+    fun singlePlaylistUsesLegacyFlatCategoriesWithoutCollapsedParent() {
+        val config = IptvConfig(
+            playlists = listOf(
+                IptvPlaylistEntry(id = "only", name = "Only playlist", m3uUrl = "https://only.test/list.m3u"),
+            )
+        )
+        val categories = listOf(
+            LiveCategory("only:movies", "Movies", 8, CategoryIcon.Movie, playlistId = "only"),
+            LiveCategory("only:series", "Series", 12, CategoryIcon.Grid, playlistId = "only"),
+        )
+
+        assertThat(buildPlaylistCategorySections(config, categories)).isEmpty()
+    }
+
+    @Test
     fun pagedCountsKeepAllConfiguredPlaylistsWhenLoadedWindowContainsOnlyOne() {
         val config = IptvConfig(
             playlists = listOf(

@@ -74,11 +74,14 @@ data class PlaylistCategorySection(
 fun buildPlaylistCategorySections(
     config: IptvConfig,
     categories: List<LiveCategory>,
-): List<PlaylistCategorySection> = config.playlists
-    .asSequence()
-    .filter { it.enabled && it.id.isNotBlank() }
-    .distinctBy { it.id }
-    .mapNotNull { playlist ->
+): List<PlaylistCategorySection> {
+    val playlists = config.playlists
+        .asSequence()
+        .filter { it.enabled && it.id.isNotBlank() }
+        .distinctBy { it.id }
+        .toList()
+    val knownPlaylistIds = playlists.mapTo(HashSet()) { it.id }
+    val configuredSections = playlists.mapNotNull { playlist ->
         val providerCategories = categories.filter { it.playlistId == playlist.id }
         providerCategories.takeIf { it.isNotEmpty() }?.let {
             PlaylistCategorySection(
@@ -89,7 +92,26 @@ fun buildPlaylistCategorySections(
             )
         }
     }
-    .toList()
+    val unmatchedSections = categories
+        .filter { category -> category.playlistId.isNullOrBlank() || category.playlistId !in knownPlaylistIds }
+        .groupBy { category -> category.playlistId?.takeIf { it.isNotBlank() } ?: "other" }
+        .entries
+        .sortedWith(compareBy<Map.Entry<String, List<LiveCategory>>> { if (it.key == "stalker") 0 else 1 }.thenBy { it.key })
+        .map { (sourceId, sourceCategories) ->
+            PlaylistCategorySection(
+                id = "source:$sourceId",
+                label = when (sourceId) {
+                    "stalker" -> "Stalker"
+                    "other" -> "Other sources"
+                    else -> sourceId.replaceFirstChar { it.uppercase() }
+                },
+                count = sourceCategories.sumOf(LiveCategory::count),
+                categories = sourceCategories,
+            )
+        }
+    val sections = configuredSections + unmatchedSections
+    return sections.takeIf { it.size > 1 }.orEmpty()
+}
 
 data class PlaybackDiagnostic(
     val title: String,
