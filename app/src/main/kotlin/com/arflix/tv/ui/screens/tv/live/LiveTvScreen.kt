@@ -421,7 +421,14 @@ fun LiveTvScreen(
     val deviceType = LocalDeviceType.current
     val isTouchDevice = deviceType.isTouchDevice()
     val useTouchRail = isTouchDevice && configuration.smallestScreenWidthDp < 600
+    val miniPlayerLayout = liveTvMiniPlayerLayout(
+        isTouchDevice = isTouchDevice,
+        smallestScreenWidthDp = configuration.smallestScreenWidthDp,
+        screenWidthDp = configuration.screenWidthDp,
+        screenHeightDp = configuration.screenHeightDp,
+    )
     val compactTouchLayout = isTouchDevice && configuration.screenWidthDp < 900
+    val landscapeCompactMiniPlayer = miniPlayerLayout == LiveTvMiniPlayerLayout.LANDSCAPE_COMPACT
     val showTopBar = !isTouchDevice
     val contentTopPadding = if (showTopBar) AppTopBarHeight else 0.dp
     val coroutineScope = rememberCoroutineScope()
@@ -2439,6 +2446,7 @@ fun LiveTvScreen(
                         variantCount = playingChannel?.let { variantCountFor(it, variantGroups) } ?: 1,
                         onOpenVariants = playingChannel?.let { channel -> { openVariantPicker(channel) } },
                         compact = true,
+                        landscapeCompact = landscapeCompactMiniPlayer,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     TouchCategoryRail(

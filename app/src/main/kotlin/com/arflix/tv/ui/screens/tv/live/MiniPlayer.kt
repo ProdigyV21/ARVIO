@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +53,42 @@ import com.arflix.tv.util.formatGenreName
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
 
+internal enum class LiveTvMiniPlayerLayout {
+    STANDARD,
+    PORTRAIT_STACKED,
+    LANDSCAPE_COMPACT,
+}
+
+internal data class LandscapePhoneMiniPlayerSpec(
+    val videoWidthDp: Int,
+    val videoHeightDp: Int,
+    val outerVerticalPaddingDp: Int,
+    val showDescription: Boolean,
+    val showNextProgramme: Boolean,
+) {
+    val totalHeightDp: Int = videoHeightDp + outerVerticalPaddingDp
+}
+
+internal fun landscapePhoneMiniPlayerSpec(): LandscapePhoneMiniPlayerSpec =
+    LandscapePhoneMiniPlayerSpec(
+        videoWidthDp = 180,
+        videoHeightDp = 101,
+        outerVerticalPaddingDp = 14,
+        showDescription = false,
+        showNextProgramme = false,
+    )
+
+internal fun liveTvMiniPlayerLayout(
+    isTouchDevice: Boolean,
+    smallestScreenWidthDp: Int,
+    screenWidthDp: Int,
+    screenHeightDp: Int,
+): LiveTvMiniPlayerLayout = when {
+    !isTouchDevice || smallestScreenWidthDp >= 600 -> LiveTvMiniPlayerLayout.STANDARD
+    screenWidthDp > screenHeightDp -> LiveTvMiniPlayerLayout.LANDSCAPE_COMPACT
+    else -> LiveTvMiniPlayerLayout.PORTRAIT_STACKED
+}
+
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -66,9 +103,39 @@ fun MiniPlayerRow(
     variantCount: Int = 1,
     onOpenVariants: (() -> Unit)? = null,
     compact: Boolean = false,
+    landscapeCompact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    if (compact) {
+    if (landscapeCompact) {
+        val spec = landscapePhoneMiniPlayerSpec()
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            VideoCard(
+                exoPlayer = exoPlayer,
+                channel = channel,
+                landscapeCompact = true,
+                onFullscreenClick = onFullscreenClick,
+            )
+            InfoColumn(
+                channel = channel,
+                clockTickMillis = clockTickMillis,
+                nowNext = nowNext,
+                isFavorite = channel?.id?.let { it in favoriteSet } == true,
+                onFavoriteToggle = onFavoriteToggle,
+                variantCount = variantCount,
+                onOpenVariants = onOpenVariants,
+                landscapeCompact = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = spec.videoHeightDp.dp),
+            )
+        }
+    } else if (compact) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
@@ -126,19 +193,24 @@ private fun VideoCard(
     exoPlayer: ExoPlayer,
     channel: EnrichedChannel?,
     compact: Boolean = false,
+    landscapeCompact: Boolean = false,
     onFullscreenClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val deviceType = LocalDeviceType.current
     val isTouchDevice = deviceType.isTouchDevice()
+    val landscapeSpec = if (landscapeCompact) landscapePhoneMiniPlayerSpec() else null
 
     Box(
         modifier = modifier
             .then(
-                if (compact) {
-                    Modifier.aspectRatio(16f / 9f)
-                } else {
-                    Modifier.size(LiveDims.MiniPlayerWidth, LiveDims.MiniPlayerHeight)
+                when {
+                    compact -> Modifier.aspectRatio(16f / 9f)
+                    landscapeSpec != null -> Modifier.size(
+                        landscapeSpec.videoWidthDp.dp,
+                        landscapeSpec.videoHeightDp.dp,
+                    )
+                    else -> Modifier.size(LiveDims.MiniPlayerWidth, LiveDims.MiniPlayerHeight)
                 }
             )
             .clickable(enabled = isTouchDevice && onFullscreenClick != null) {
@@ -254,15 +326,24 @@ private fun InfoColumn(
     onFavoriteToggle: (String) -> Unit,
     variantCount: Int,
     onOpenVariants: (() -> Unit)?,
+    landscapeCompact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val landscapeSpec = if (landscapeCompact) landscapePhoneMiniPlayerSpec() else null
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(if (landscapeCompact) 5.dp else 8.dp),
     ) {
         ChannelIdentityRow(channel = channel, variantCount = variantCount, onOpenVariants = onOpenVariants)
-        NowCard(channel = channel, clockTickMillis = clockTickMillis, nowNext = nowNext)
-        NextRow(nowNext = nowNext)
+        NowCard(
+            channel = channel,
+            clockTickMillis = clockTickMillis,
+            nowNext = nowNext,
+            landscapeCompact = landscapeCompact,
+        )
+        if (landscapeSpec?.showNextProgramme != false) {
+            NextRow(nowNext = nowNext)
+        }
     }
 }
 
@@ -365,15 +446,24 @@ private fun LangBadge(text: String) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun NowCard(channel: EnrichedChannel?, clockTickMillis: Long, nowNext: IptvNowNext?) {
+private fun NowCard(
+    channel: EnrichedChannel?,
+    clockTickMillis: Long,
+    nowNext: IptvNowNext?,
+    landscapeCompact: Boolean = false,
+) {
     val now = nowNext?.now
+    val landscapeSpec = if (landscapeCompact) landscapePhoneMiniPlayerSpec() else null
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(LiveDims.CardRadius))
             .background(LiveColors.PanelRaised)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(
+                horizontal = if (landscapeCompact) 8.dp else 10.dp,
+                vertical = if (landscapeCompact) 5.dp else 8.dp,
+            ),
+        verticalArrangement = Arrangement.spacedBy(if (landscapeCompact) 2.dp else 4.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -396,12 +486,13 @@ private fun NowCard(channel: EnrichedChannel?, clockTickMillis: Long, nowNext: I
         Text(
             text = now?.title ?: channel?.name ?: stringResource(R.string.live_empty_no_programme),
             style = LiveType.ProgramTitle.copy(color = LiveColors.Fg),
-            maxLines = 2,
+            maxLines = if (landscapeCompact) 1 else 2,
             overflow = TextOverflow.Ellipsis,
         )
-        if (!now?.description.isNullOrBlank()) {
+        val description = now?.description
+        if (landscapeSpec?.showDescription != false && !description.isNullOrBlank()) {
             Text(
-                text = now!!.description!!,
+                text = description,
                 style = LiveType.BodySynopsis.copy(color = LiveColors.FgDim),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
