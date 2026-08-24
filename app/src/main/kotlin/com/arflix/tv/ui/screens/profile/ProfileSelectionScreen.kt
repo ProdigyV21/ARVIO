@@ -1,5 +1,7 @@
 package com.arflix.tv.ui.screens.profile
 
+import com.arflix.tv.ui.skin.resolveAccentColor
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
@@ -397,6 +399,7 @@ private fun ProfileAvatar(
     onDelete: () -> Unit
 ) {
     var isFocused by remember { mutableIntStateOf(0) }
+    val accentColor = resolveAccentColor(fallback = Color.White)
     val scale by animateFloatAsState(
         targetValue = if (isFocused > 0) 1.1f else 1f,
         animationSpec = tween(150),
@@ -445,7 +448,7 @@ private fun ProfileAvatar(
                     ),
                     border = ClickableSurfaceDefaults.border(
                         focusedBorder = androidx.tv.material3.Border(
-                            border = androidx.compose.foundation.BorderStroke(3.dp, Color.White),
+                            border = androidx.compose.foundation.BorderStroke(3.dp, accentColor),
                             shape = RoundedCornerShape(8.dp)
                         )
                     )
@@ -493,6 +496,7 @@ private fun AddProfileButton(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableIntStateOf(0) }
+    val accentColor = resolveAccentColor(fallback = Color.White)
     val scale by animateFloatAsState(
         targetValue = if (isFocused > 0) 1.1f else 1f,
         animationSpec = tween(150),
@@ -537,7 +541,7 @@ private fun AddProfileButton(
                         shape = RoundedCornerShape(8.dp)
                     ),
                     focusedBorder = androidx.tv.material3.Border(
-                        border = androidx.compose.foundation.BorderStroke(3.dp, Color.White),
+                        border = androidx.compose.foundation.BorderStroke(3.dp, accentColor),
                         shape = RoundedCornerShape(8.dp)
                     )
                 )
@@ -563,6 +567,7 @@ private fun ManageProfilesButton(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableIntStateOf(0) }
+    val accentColor = resolveAccentColor(fallback = Color.White)
 
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     Surface(
@@ -583,7 +588,7 @@ private fun ManageProfilesButton(
                 shape = RoundedCornerShape(4.dp)
             ),
             focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                border = androidx.compose.foundation.BorderStroke(2.dp, accentColor),
                 shape = RoundedCornerShape(4.dp)
             )
         )
@@ -605,6 +610,7 @@ private fun CloudConnectButton(
 ) {
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
+    val accentColor = resolveAccentColor(fallback = Color.White)
 
     if (isTouchDevice) {
         Row(
@@ -652,7 +658,7 @@ private fun CloudConnectButton(
                     shape = RoundedCornerShape(24.dp)
                 ),
                 focusedBorder = androidx.tv.material3.Border(
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = 0.6f)),
+                    border = androidx.compose.foundation.BorderStroke(2.dp, accentColor.copy(alpha = 0.6f)),
                     shape = RoundedCornerShape(24.dp)
                 )
             )
