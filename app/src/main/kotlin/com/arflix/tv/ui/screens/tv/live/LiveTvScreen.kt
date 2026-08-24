@@ -752,8 +752,16 @@ fun LiveTvScreen(
         enrichedState.value = current.copy(tree = tree)
     }
 
-    val providerFilters = remember(state.config, enrichedState.value.all) {
-        buildTvProviderFilters(state.config, enrichedState.value.all)
+    val providerFilters = remember(state.config, enrichedState.value.all, lastKnownPlaylistGroupCounts) {
+        buildTvProviderFilters(state.config, enrichedState.value.all, lastKnownPlaylistGroupCounts)
+    }
+    val playlistCategorySections = remember(state.config, enrichedState.value.tree.global.categories) {
+        buildPlaylistCategorySections(state.config, enrichedState.value.tree.global.categories)
+    }
+    LaunchedEffect(playlistCategorySections, selectedProviderId) {
+        if (playlistCategorySections.isNotEmpty() && selectedProviderId != "all") {
+            selectedProviderId = "all"
+        }
     }
     LaunchedEffect(providerFilters, selectedProviderId) {
         if (providerFilters.isEmpty() || providerFilters.none { it.id == selectedProviderId }) {
@@ -1593,7 +1601,9 @@ fun LiveTvScreen(
 
     fun focusProviderSwitcher() {
         noteGuideUserNavigation()
-        if (providerFilters.size <= 1) {
+        // Playlist sections replace the standalone provider selector. Route focus
+        // straight into the category rail when that selector is not composed.
+        if (playlistCategorySections.isNotEmpty() || providerFilters.size <= 1) {
             focusPlaylistSearch()
             return
         }
@@ -2415,19 +2425,21 @@ fun LiveTvScreen(
                         .fillMaxSize()
                         .padding(top = contentTopPadding),
                 ) {
-                    ProviderSelector(
-                        providers = providerFilters,
-                        selectedId = selectedProviderId,
-                        onSelect = { id ->
-                            noteGuideUserNavigation()
-                            selectedProviderId = id
-                            selectedCategoryId = "all"
-                            focusedChannelId = null
-                            epgPrefetchAnchorId = null
-                        },
-                        onMoveDown = { focusPlaylistSearch() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    if (playlistCategorySections.isEmpty()) {
+                        ProviderSelector(
+                            providers = providerFilters,
+                            selectedId = selectedProviderId,
+                            onSelect = { id ->
+                                noteGuideUserNavigation()
+                                selectedProviderId = id
+                                selectedCategoryId = "all"
+                                focusedChannelId = null
+                                epgPrefetchAnchorId = null
+                            },
+                            onMoveDown = { focusPlaylistSearch() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     MiniPlayerRow(
                         exoPlayer = exoPlayer,
                         channel = playingChannel,
@@ -2444,6 +2456,7 @@ fun LiveTvScreen(
                     TouchCategoryRail(
                         tree = visibleEnrichedState.value.tree,
                         selectedId = selectedCategoryId,
+                        playlistSections = playlistCategorySections,
                         onSelect = { id ->
                             noteGuideUserNavigation()
                             selectedCategoryId = id
@@ -2496,6 +2509,7 @@ fun LiveTvScreen(
                 CategorySidebar(
                     tree = visibleEnrichedState.value.tree,
                     selectedId = selectedCategoryId,
+                    playlistSections = playlistCategorySections,
                     expanded = sidebarExpanded,
                     listState = sidebarListState,
                     focusRequester = sidebarFocus,
@@ -2555,25 +2569,27 @@ fun LiveTvScreen(
                         .fillMaxSize()
                         .padding(top = contentTopPadding),
                 ) {
-                    ProviderSelector(
-                        providers = providerFilters,
-                        selectedId = selectedProviderId,
-                        onSelect = { id ->
-                            noteGuideUserNavigation()
-                            selectedProviderId = id
-                            selectedCategoryId = "all"
-                            focusedChannelId = null
-                            epgPrefetchAnchorId = null
-                        },
-                        focusRequester = providerFocus,
-                        onMoveUp = {
-                            topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile)
-                                .coerceIn(0, maxTopBarIndex)
-                            focusZone = LiveTvFocusZone.TOPBAR
-                        },
-                        onMoveDown = { focusPlaylistSearch() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    if (playlistCategorySections.isEmpty()) {
+                        ProviderSelector(
+                            providers = providerFilters,
+                            selectedId = selectedProviderId,
+                            onSelect = { id ->
+                                noteGuideUserNavigation()
+                                selectedProviderId = id
+                                selectedCategoryId = "all"
+                                focusedChannelId = null
+                                epgPrefetchAnchorId = null
+                            },
+                            focusRequester = providerFocus,
+                            onMoveUp = {
+                                topBarFocusIndex = topBarSelectedIndex(SidebarItem.TV, hasProfile)
+                                    .coerceIn(0, maxTopBarIndex)
+                                focusZone = LiveTvFocusZone.TOPBAR
+                            },
+                            onMoveDown = { focusPlaylistSearch() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     MiniPlayerRow(
                         exoPlayer = exoPlayer,
                         channel = playingChannel,

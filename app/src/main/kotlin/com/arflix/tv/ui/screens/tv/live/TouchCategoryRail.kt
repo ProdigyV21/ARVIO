@@ -15,9 +15,16 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +38,7 @@ private data class TouchCategoryRailItem(
     val id: String,
     val label: String,
     val count: Int,
+    val playlistSectionId: String? = null,
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -38,11 +46,22 @@ private data class TouchCategoryRailItem(
 fun TouchCategoryRail(
     tree: LiveCategoryTree,
     selectedId: String,
+    playlistSections: List<PlaylistCategorySection> = emptyList(),
     onSelect: (String) -> Unit,
     onOpenSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val items = rememberTouchRailItems(tree, selectedId)
+    var expandedPlaylistIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(selectedId, playlistSections) {
+        playlistSections.firstOrNull { section ->
+            section.categories.any { it.containsId(selectedId) }
+        }?.id?.let { sectionId ->
+            if (sectionId !in expandedPlaylistIds) {
+                expandedPlaylistIds = expandedPlaylistIds + sectionId
+            }
+        }
+    }
+    val items = rememberTouchRailItems(tree, selectedId, playlistSections, expandedPlaylistIds)
 
     LazyRow(
         modifier = modifier.fillMaxWidth(),
@@ -73,13 +92,32 @@ fun TouchCategoryRail(
         }
 
         itemsIndexed(items, key = { index, item -> "${item.id}#$index" }) { _, item ->
-            val active = selectedId == item.id
+            val sectionId = item.playlistSectionId
+            val isSectionHeader = sectionId != null
+            val isSectionOpen = sectionId != null && sectionId in expandedPlaylistIds
+            val active = if (isSectionHeader) {
+                playlistSections.firstOrNull { it.id == sectionId }
+                    ?.categories
+                    ?.any { it.containsId(selectedId) } == true
+            } else {
+                selectedId == item.id
+            }
             Box(
                 modifier = Modifier
                     .height(38.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (active) LiveColors.Accent else LiveColors.Panel)
-                    .clickable { onSelect(item.id) }
+                    .clickable {
+                        if (sectionId != null) {
+                            expandedPlaylistIds = if (isSectionOpen) {
+                                expandedPlaylistIds - sectionId
+                            } else {
+                                expandedPlaylistIds + sectionId
+                            }
+                        } else {
+                            onSelect(item.id)
+                        }
+                    }
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -87,6 +125,13 @@ fun TouchCategoryRail(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    if (isSectionHeader) {
+                        Icon(
+                            imageVector = if (isSectionOpen) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = if (active) LiveColors.Bg else LiveColors.FgDim,
+                        )
+                    }
                     Text(
                         text = item.label,
                         style = LiveType.CatLabel.copy(
@@ -112,12 +157,32 @@ fun TouchCategoryRail(
 private fun rememberTouchRailItems(
     tree: LiveCategoryTree,
     selectedId: String,
+    playlistSections: List<PlaylistCategorySection>,
+    expandedPlaylistIds: List<String>,
 ): List<TouchCategoryRailItem> {
     val base = buildList {
         tree.top.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
-        tree.global.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
-        tree.countries.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
-        tree.adult.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        if (playlistSections.isEmpty()) {
+            tree.global.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+            tree.countries.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+            tree.adult.categories.forEach { add(TouchCategoryRailItem(it.id, liveCategoryLabel(it.label), it.count)) }
+        } else {
+            playlistSections.forEach { section ->
+                add(
+                    TouchCategoryRailItem(
+                        id = "playlist-section:${section.id}",
+                        label = section.label,
+                        count = section.count,
+                        playlistSectionId = section.id,
+                    )
+                )
+                if (section.id in expandedPlaylistIds) {
+                    section.categories.forEach { category ->
+                        add(TouchCategoryRailItem(category.id, liveCategoryLabel(category.label), category.count))
+                    }
+                }
+            }
+        }
     }.distinctBy { it.id }.toMutableList()
 
     val selected = tree.byId(selectedId)

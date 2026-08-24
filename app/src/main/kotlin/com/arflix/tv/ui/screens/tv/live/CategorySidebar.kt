@@ -97,6 +97,7 @@ import kotlinx.coroutines.launch
 fun CategorySidebar(
     tree: LiveCategoryTree,
     selectedId: String,
+    playlistSections: List<PlaylistCategorySection> = emptyList(),
     expanded: Boolean,
     listState: LazyListState,
     focusRequester: FocusRequester? = null,
@@ -124,6 +125,7 @@ fun CategorySidebar(
     )
     var expandedCountry by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedAll by rememberSaveable { mutableStateOf(false) }
+    var expandedPlaylistIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var activeMenu by remember { mutableStateOf<CategoryMenuState?>(null) }
     val searchFocusRequester = remember { FocusRequester() }
     val selectedCategoryFocusRequester = remember { FocusRequester() }
@@ -229,7 +231,7 @@ fun CategorySidebar(
         }
     }
 
-    LaunchedEffect(selectedId, tree) {
+    LaunchedEffect(selectedId, tree, playlistSections) {
         val countryId = selectedCountryGroupId(selectedId, tree)
         if (countryId != null) {
             expandedCountry = countryId
@@ -237,6 +239,13 @@ fun CategorySidebar(
         val allCategory = tree.top.firstOrNull { it.id == "all" }
         if (allCategory?.children?.any { child -> child.containsId(selectedId) } == true) {
             expandedAll = true
+        }
+        playlistSections.firstOrNull { section ->
+            section.categories.any { it.containsId(selectedId) }
+        }?.id?.let { sectionId ->
+            if (sectionId !in expandedPlaylistIds) {
+                expandedPlaylistIds = expandedPlaylistIds + sectionId
+            }
         }
     }
 
@@ -391,7 +400,49 @@ fun CategorySidebar(
                     }
                 }
             }
-            if (tree.global.categories.isNotEmpty()) {
+            if (playlistSections.isNotEmpty()) {
+                playlistSections.forEach { section ->
+                    item(key = "playlist-section:${section.id}") {
+                        val isOpen = section.id in expandedPlaylistIds
+                        SidebarRow(
+                            label = section.label,
+                            count = section.count,
+                            icon = Icons.Filled.LibraryBooks,
+                            active = section.categories.any { it.containsId(selectedId) },
+                            expanded = expanded,
+                            hasChildren = true,
+                            isOpenGroup = isOpen,
+                            onFocused = { onCategoryFocused() },
+                            onClick = {
+                                expandedPlaylistIds = if (isOpen) {
+                                    expandedPlaylistIds - section.id
+                                } else {
+                                    expandedPlaylistIds + section.id
+                                }
+                            },
+                        )
+                    }
+                    if (expanded && section.id in expandedPlaylistIds) {
+                        itemsIndexed(
+                            section.categories,
+                            key = { index, cat -> "playlist:${section.id}:${cat.id}:$index" },
+                        ) { _, cat ->
+                            SidebarRow(
+                                label = liveCategoryLabel(cat.label),
+                                count = cat.count,
+                                icon = iconFor(cat),
+                                active = selectedId == cat.id,
+                                expanded = true,
+                                indent = 28.dp,
+                                focusRequester = if (selectedId == cat.id) selectedCategoryFocusRequester else null,
+                                onFocused = { onCategoryFocused() },
+                                onLongClick = { openCategoryMenu(cat, hidden = false) },
+                                onClick = { onSelect(cat.id) },
+                            )
+                        }
+                    }
+                }
+            } else if (tree.global.categories.isNotEmpty()) {
                 item { SectionHeader(liveSectionLabel(tree.global.label), expanded) }
                 itemsIndexed(tree.global.categories, key = { index, cat -> "global:${cat.id}:$index" }) { _, cat ->
                     SidebarRow(
@@ -921,7 +972,7 @@ private fun selectedCountryGroupId(
     country.id == selectedId || country.children.any { child -> child.id == selectedId }
 }?.id
 
-private fun LiveCategory.containsId(id: String): Boolean {
+internal fun LiveCategory.containsId(id: String): Boolean {
     if (this.id == id) return true
     return children.any { child -> child.containsId(id) }
 }
