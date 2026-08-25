@@ -1,0 +1,55 @@
+package androidx.compose.material.icons.filled;
+
+import androidx.compose.material.icons.Icons;
+import androidx.compose.ui.graphics.Color;
+import androidx.compose.ui.graphics.SolidColor;
+import androidx.compose.ui.graphics.StrokeCap;
+import androidx.compose.ui.graphics.StrokeJoin;
+import androidx.compose.ui.graphics.vector.ImageVector;
+import androidx.compose.ui.graphics.vector.PathBuilder;
+import androidx.compose.ui.graphics.vector.VectorKt;
+import androidx.compose.ui.unit.Dp;
+import kotlin.Metadata;
+import v.a;
+import v.b;
+import v.c;
+import v.d;
+import v.e;
+import v.f;
+
+/* JADX INFO: loaded from: classes.dex */
+@Metadata(d1 = {"\u0000\u0010\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\"\u0010\u0010\u0000\u001a\u0004\u0018\u00010\u0001X\u0082\u000e¢\u0006\u0002\n\u0000\"\u0015\u0010\u0002\u001a\u00020\u0001*\u00020\u00038F¢\u0006\u0006\u001a\u0004\b\u0004\u0010\u0005¨\u0006\u0006"}, d2 = {"_fastfood", "Landroidx/compose/ui/graphics/vector/ImageVector;", "Fastfood", "Landroidx/compose/material/icons/Icons$Filled;", "getFastfood", "(Landroidx/compose/material/icons/Icons$Filled;)Landroidx/compose/ui/graphics/vector/ImageVector;", "material-icons-extended_release"}, k = 2, mv = {1, 8, 0}, xi = 48)
+public final class FastfoodKt {
+    private static ImageVector _fastfood;
+
+    public static final ImageVector getFastfood(Icons.Filled filled) {
+        ImageVector imageVector = _fastfood;
+        if (imageVector != null) {
+            return imageVector;
+        }
+        ImageVector.Builder builder = new ImageVector.Builder("Filled.Fastfood", Dp.m5678constructorimpl(24.0f), Dp.m5678constructorimpl(24.0f), 24.0f, 24.0f, 0L, 0, false, 96, null);
+        int defaultFillType = VectorKt.getDefaultFillType();
+        SolidColor solidColor = new SolidColor(Color.INSTANCE.m3498getBlack0d7_KjU(), null);
+        int iM3803getButtKaPHkGw = StrokeCap.INSTANCE.m3803getButtKaPHkGw();
+        int iM3813getBevelLxFBmk8 = StrokeJoin.INSTANCE.m3813getBevelLxFBmk8();
+        PathBuilder pathBuilderA = a.a(18.06f, 22.99f, 1.66f);
+        pathBuilderA.curveToRelative(0.84f, 0.0f, 1.53f, -0.64f, 1.63f, -1.46f);
+        pathBuilderA.lineTo(23.0f, 5.05f);
+        c.A(pathBuilderA, -5.0f, 18.0f, 1.0f, -1.97f);
+        d.D(pathBuilderA, 4.05f, -4.97f, 0.3f, 2.34f);
+        pathBuilderA.curveToRelative(1.71f, 0.47f, 3.31f, 1.32f, 4.27f, 2.26f);
+        pathBuilderA.curveToRelative(1.44f, 1.42f, 2.43f, 2.89f, 2.43f, 5.29f);
+        b.f(pathBuilderA, 8.05f, 1.0f, 21.99f);
+        b.A(pathBuilderA, 1.0f, 21.0f, 15.03f, 0.99f);
+        pathBuilderA.curveToRelative(0.0f, 0.55f, -0.45f, 1.0f, -1.01f, 1.0f);
+        pathBuilderA.lineTo(2.01f, 22.99f);
+        pathBuilderA.curveToRelative(-0.56f, 0.0f, -1.01f, -0.45f, -1.01f, -1.0f);
+        pathBuilderA.close();
+        pathBuilderA.moveTo(16.03f, 14.99f);
+        pathBuilderA.curveToRelative(0.0f, -8.0f, -15.03f, -8.0f, -15.03f, 0.0f);
+        e.r(pathBuilderA, 15.03f, 1.02f, 17.0f, 15.0f);
+        ImageVector imageVectorBuild = ImageVector.Builder.m4024addPathoIyEayM$default(builder, f.c(pathBuilderA, 2.0f, -15.0f), defaultFillType, "", solidColor, 1.0f, null, 1.0f, 1.0f, iM3803getButtKaPHkGw, iM3813getBevelLxFBmk8, 1.0f, 0.0f, 0.0f, 0.0f, 14336, null).build();
+        _fastfood = imageVectorBuild;
+        return imageVectorBuild;
+    }
+}

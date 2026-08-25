@@ -1,0 +1,44 @@
+package androidx.compose.foundation.text;
+
+import androidx.compose.foundation.gestures.Orientation;
+import androidx.compose.ui.layout.MeasureScope;
+import androidx.compose.ui.layout.Placeable;
+import androidx.compose.ui.text.input.TransformedText;
+import kotlin.Metadata;
+import kotlin.jvm.internal.r;
+import r7.l;
+import t7.a;
+import x6.t0;
+
+/* JADX INFO: loaded from: classes.dex */
+@Metadata(d1 = {"\u0000\f\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\u0010\u0004\u001a\u00020\u0001*\u00020\u0000H\n¢\u0006\u0004\b\u0002\u0010\u0003"}, d2 = {"Landroidx/compose/ui/layout/Placeable$PlacementScope;", "Lx6/t0;", "invoke", "(Landroidx/compose/ui/layout/Placeable$PlacementScope;)V", "<anonymous>"}, k = 3, mv = {1, 8, 0})
+public final class VerticalScrollLayoutModifier$measure$1 extends r implements l<Placeable.PlacementScope, t0> {
+    final /* synthetic */ int $height;
+    final /* synthetic */ Placeable $placeable;
+    final /* synthetic */ MeasureScope $this_measure;
+    final /* synthetic */ VerticalScrollLayoutModifier this$0;
+
+    /* JADX WARN: 'super' call moved to the top of the method (can break code semantics) */
+    public VerticalScrollLayoutModifier$measure$1(MeasureScope measureScope, VerticalScrollLayoutModifier verticalScrollLayoutModifier, Placeable placeable, int i10) {
+        super(1);
+        this.$this_measure = measureScope;
+        this.this$0 = verticalScrollLayoutModifier;
+        this.$placeable = placeable;
+        this.$height = i10;
+    }
+
+    @Override // r7.l
+    public /* bridge */ /* synthetic */ Object invoke(Object obj) {
+        invoke((Placeable.PlacementScope) obj);
+        return t0.f22605a;
+    }
+
+    public final void invoke(Placeable.PlacementScope placementScope) {
+        MeasureScope measureScope = this.$this_measure;
+        int cursorOffset = this.this$0.getCursorOffset();
+        TransformedText transformedText = this.this$0.getTransformedText();
+        TextLayoutResultProxy textLayoutResultProxy = (TextLayoutResultProxy) this.this$0.getTextLayoutResultProvider().invoke();
+        this.this$0.getScrollerPosition().update(Orientation.Vertical, TextFieldScrollKt.getCursorRectInScroller(measureScope, cursorOffset, transformedText, textLayoutResultProxy != null ? textLayoutResultProxy.getValue() : null, false, this.$placeable.getWidth()), this.$height, this.$placeable.getHeight());
+        Placeable.PlacementScope.placeRelative$default(placementScope, this.$placeable, 0, a.M(-this.this$0.getScrollerPosition().getOffset()), 0.0f, 4, null);
+    }
+}

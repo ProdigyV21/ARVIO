@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:gravity="center_vertical"
+    android:paddingLeft="24dp"
+    android:paddingRight="12dp"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:splitMotionEvents="false"
+    android:paddingStart="24dp"
+    android:paddingEnd="12dp">
+    <ImageView
+        android:gravity="center"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="?attr/mediaRouteAudioTrackDrawable"
+        android:scaleType="center"/>
+    <androidx.mediarouter.app.MediaRouteVolumeSlider
+        android:id="@+id/mr_volume_slider"
+        android:clickable="true"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxHeight="48dp"
+        android:minHeight="48dp"
+        android:layout_weight="1"
+        android:contentDescription="@string/mr_controller_volume_slider"/>
+    <androidx.mediarouter.app.MediaRouteExpandCollapseButton
+        android:id="@+id/mr_group_expand_collapse"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="12dp"
+        android:visibility="gone"
+        android:layout_width="48dp"
+        android:layout_height="48dp"/>
+</LinearLayout>

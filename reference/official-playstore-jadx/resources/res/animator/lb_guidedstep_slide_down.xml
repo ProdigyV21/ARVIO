@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="@android:integer/config_shortAnimTime"
+    android:valueFrom="@dimen/lb_guidedstep_slide_ime_distance"
+    android:valueTo="0"
+    android:valueType="floatType"
+    android:propertyName="translationY"/>

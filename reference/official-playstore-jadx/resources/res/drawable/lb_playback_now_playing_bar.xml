@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/lb_playback_now_playing_bar_color"/>
+    <size
+        android:height="@dimen/lb_playback_now_playing_bar_height"
+        android:width="@dimen/lb_playback_now_playing_bar_width"/>
+</shape>

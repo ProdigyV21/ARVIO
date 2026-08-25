@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <androidx.leanback.widget.NonOverlappingView
+        android:id="@+id/lb_shadow_normal"
+        android:background="@drawable/lb_card_shadow_normal"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+    <androidx.leanback.widget.NonOverlappingView
+        android:id="@+id/lb_shadow_focused"
+        android:background="@drawable/lb_card_shadow_focused"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"/>
+</merge>

@@ -1,0 +1,127 @@
+package androidx.compose.material.icons.sharp;
+
+import androidx.compose.material.icons.Icons;
+import androidx.compose.ui.graphics.Color;
+import androidx.compose.ui.graphics.SolidColor;
+import androidx.compose.ui.graphics.StrokeCap;
+import androidx.compose.ui.graphics.StrokeJoin;
+import androidx.compose.ui.graphics.vector.ImageVector;
+import androidx.compose.ui.graphics.vector.PathBuilder;
+import androidx.compose.ui.graphics.vector.VectorKt;
+import androidx.compose.ui.unit.Dp;
+import kotlin.Metadata;
+import v.a;
+import v.b;
+import v.c;
+import v.e;
+
+/* JADX INFO: loaded from: classes.dex */
+@Metadata(d1 = {"\u0000\u0010\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\"\u0010\u0010\u0000\u001a\u0004\u0018\u00010\u0001X\u0082\u000e¢\u0006\u0002\n\u0000\"\u0015\u0010\u0002\u001a\u00020\u0001*\u00020\u00038F¢\u0006\u0006\u001a\u0004\b\u0004\u0010\u0005¨\u0006\u0006"}, d2 = {"_miscellaneousServices", "Landroidx/compose/ui/graphics/vector/ImageVector;", "MiscellaneousServices", "Landroidx/compose/material/icons/Icons$Sharp;", "getMiscellaneousServices", "(Landroidx/compose/material/icons/Icons$Sharp;)Landroidx/compose/ui/graphics/vector/ImageVector;", "material-icons-extended_release"}, k = 2, mv = {1, 8, 0}, xi = 48)
+public final class MiscellaneousServicesKt {
+    private static ImageVector _miscellaneousServices;
+
+    public static final ImageVector getMiscellaneousServices(Icons.Sharp sharp) {
+        ImageVector imageVector = _miscellaneousServices;
+        if (imageVector != null) {
+            return imageVector;
+        }
+        ImageVector.Builder builder = new ImageVector.Builder("Sharp.MiscellaneousServices", Dp.m5678constructorimpl(24.0f), Dp.m5678constructorimpl(24.0f), 24.0f, 24.0f, 0L, 0, false, 96, null);
+        int defaultFillType = VectorKt.getDefaultFillType();
+        Color.Companion companion = Color.INSTANCE;
+        SolidColor solidColor = new SolidColor(companion.m3498getBlack0d7_KjU(), null);
+        StrokeCap.Companion companion2 = StrokeCap.INSTANCE;
+        int iM3803getButtKaPHkGw = companion2.m3803getButtKaPHkGw();
+        StrokeJoin.Companion companion3 = StrokeJoin.INSTANCE;
+        int iM3813getBevelLxFBmk8 = companion3.m3813getBevelLxFBmk8();
+        PathBuilder pathBuilderR = a.r(14.02f, 13.97f, 1.7f, -2.94f);
+        pathBuilderR.curveToRelative(0.0f, 0.0f, -0.09f, -0.08f, -0.23f, -0.18f);
+        pathBuilderR.lineToRelative(-1.47f, -1.16f);
+        pathBuilderR.lineToRelative(-0.01f, 0.02f);
+        pathBuilderR.curveToRelative(0.03f, -0.24f, 0.05f, -0.47f, 0.05f, -0.71f);
+        pathBuilderR.reflectiveCurveTo(14.04f, 8.53f, 14.0f, 8.31f);
+        pathBuilderR.lineToRelative(0.01f, 0.01f);
+        pathBuilderR.lineToRelative(1.71f, -1.34f);
+        pathBuilderR.lineToRelative(-1.7f, -2.95f);
+        pathBuilderR.lineToRelative(-2.01f, 0.81f);
+        pathBuilderR.verticalLineToRelative(0.01f);
+        pathBuilderR.curveToRelative(-0.37f, -0.28f, -0.77f, -0.52f, -1.2f, -0.7f);
+        w.a.f(pathBuilderR, 0.01f, 10.52f, 2.0f, 7.11f);
+        pathBuilderR.lineTo(6.8f, 4.15f);
+        pathBuilderR.horizontalLineToRelative(0.01f);
+        pathBuilderR.curveToRelative(-0.43f, 0.18f, -0.83f, 0.42f, -1.2f, 0.7f);
+        pathBuilderR.verticalLineTo(4.84f);
+        pathBuilderR.lineTo(3.6f, 4.03f);
+        pathBuilderR.lineTo(1.9f, 6.98f);
+        pathBuilderR.lineToRelative(1.7f, 1.34f);
+        pathBuilderR.lineToRelative(0.01f, -0.01f);
+        pathBuilderR.curveTo(3.58f, 8.53f, 3.56f, 8.76f, 3.56f, 9.0f);
+        pathBuilderR.reflectiveCurveToRelative(0.02f, 0.47f, 0.05f, 0.71f);
+        pathBuilderR.lineTo(3.6f, 9.69f);
+        pathBuilderR.lineToRelative(-1.47f, 1.16f);
+        pathBuilderR.curveTo(2.0f, 10.95f, 1.9f, 11.03f, 1.9f, 11.03f);
+        pathBuilderR.lineToRelative(1.7f, 2.94f);
+        pathBuilderR.lineToRelative(2.02f, -0.8f);
+        pathBuilderR.lineTo(5.6f, 13.14f);
+        pathBuilderR.curveToRelative(0.37f, 0.29f, 0.77f, 0.53f, 1.21f, 0.71f);
+        pathBuilderR.horizontalLineTo(6.8f);
+        pathBuilderR.lineTo(7.11f, 16.0f);
+        pathBuilderR.horizontalLineToRelative(3.4f);
+        pathBuilderR.curveToRelative(0.0f, 0.0f, 0.02f, -0.13f, 0.04f, -0.3f);
+        pathBuilderR.lineToRelative(0.27f, -1.85f);
+        pathBuilderR.horizontalLineToRelative(-0.01f);
+        pathBuilderR.curveToRelative(0.44f, -0.18f, 0.84f, -0.42f, 1.21f, -0.71f);
+        b.y(pathBuilderR, 12.0f, 13.17f, 14.02f, 13.97f);
+        pathBuilderR.moveTo(8.81f, 11.0f);
+        pathBuilderR.curveToRelative(-1.1f, 0.0f, -2.0f, -0.9f, -2.0f, -2.0f);
+        pathBuilderR.reflectiveCurveToRelative(0.9f, -2.0f, 2.0f, -2.0f);
+        pathBuilderR.reflectiveCurveToRelative(2.0f, 0.9f, 2.0f, 2.0f);
+        ImageVector.Builder.m4024addPathoIyEayM$default(builder, e.u(pathBuilderR, 9.91f, 11.0f, 8.81f, 11.0f), defaultFillType, "", solidColor, 1.0f, null, 1.0f, 1.0f, iM3803getButtKaPHkGw, iM3813getBevelLxFBmk8, 1.0f, 0.0f, 0.0f, 0.0f, 14336, null);
+        int defaultFillType2 = VectorKt.getDefaultFillType();
+        SolidColor solidColor2 = new SolidColor(companion.m3498getBlack0d7_KjU(), null);
+        int iM3803getButtKaPHkGw2 = companion2.m3803getButtKaPHkGw();
+        int iM3813getBevelLxFBmk82 = companion3.m3813getBevelLxFBmk8();
+        PathBuilder pathBuilderR2 = a.r(20.98f, 17.94f, -0.01f, 0.01f);
+        pathBuilderR2.curveTo(20.99f, 17.8f, 21.0f, 17.65f, 21.0f, 17.5f);
+        pathBuilderR2.curveToRelative(0.0f, -0.15f, -0.01f, -0.3f, -0.04f, -0.44f);
+        pathBuilderR2.lineToRelative(0.01f, 0.01f);
+        pathBuilderR2.lineToRelative(1.1f, -0.86f);
+        pathBuilderR2.lineToRelative(-1.09f, -1.9f);
+        pathBuilderR2.lineToRelative(-1.29f, 0.52f);
+        pathBuilderR2.verticalLineToRelative(0.01f);
+        pathBuilderR2.curveToRelative(-0.24f, -0.18f, -0.49f, -0.33f, -0.77f, -0.45f);
+        c.A(pathBuilderR2, 0.01f, 18.73f, 13.0f, -2.19f);
+        pathBuilderR2.lineToRelative(-0.2f, 1.38f);
+        pathBuilderR2.horizontalLineToRelative(0.01f);
+        pathBuilderR2.curveToRelative(-0.28f, 0.12f, -0.53f, 0.27f, -0.77f, 0.45f);
+        pathBuilderR2.verticalLineToRelative(-0.01f);
+        pathBuilderR2.lineToRelative(-1.29f, -0.52f);
+        pathBuilderR2.lineToRelative(-1.09f, 1.9f);
+        pathBuilderR2.lineToRelative(1.09f, 0.86f);
+        pathBuilderR2.lineToRelative(0.01f, -0.01f);
+        pathBuilderR2.curveToRelative(-0.02f, 0.14f, -0.03f, 0.29f, -0.03f, 0.44f);
+        pathBuilderR2.curveToRelative(0.0f, 0.15f, 0.01f, 0.3f, 0.03f, 0.46f);
+        pathBuilderR2.lineToRelative(-0.01f, -0.01f);
+        pathBuilderR2.lineToRelative(-0.94f, 0.75f);
+        pathBuilderR2.curveToRelative(-0.08f, 0.06f, -0.15f, 0.12f, -0.15f, 0.12f);
+        pathBuilderR2.lineToRelative(1.09f, 1.89f);
+        pathBuilderR2.lineToRelative(1.3f, -0.51f);
+        pathBuilderR2.lineToRelative(-0.01f, -0.02f);
+        pathBuilderR2.curveToRelative(0.24f, 0.19f, 0.5f, 0.34f, 0.78f, 0.46f);
+        e.C(pathBuilderR2, -0.01f, 0.2f, 1.38f, 2.19f);
+        pathBuilderR2.curveToRelative(0.0f, 0.0f, 0.01f, -0.08f, 0.03f, -0.19f);
+        pathBuilderR2.lineToRelative(0.17f, -1.19f);
+        pathBuilderR2.horizontalLineToRelative(-0.01f);
+        pathBuilderR2.curveToRelative(0.28f, -0.12f, 0.54f, -0.27f, 0.78f, -0.46f);
+        pathBuilderR2.lineToRelative(-0.01f, 0.02f);
+        pathBuilderR2.lineToRelative(1.3f, 0.51f);
+        pathBuilderR2.lineToRelative(1.09f, -1.89f);
+        pathBuilderR2.curveToRelative(0.0f, 0.0f, -0.06f, -0.05f, -0.15f, -0.12f);
+        c.z(pathBuilderR2, 20.98f, 17.94f, 17.63f, 18.79f);
+        pathBuilderR2.curveToRelative(-0.71f, 0.0f, -1.29f, -0.58f, -1.29f, -1.29f);
+        pathBuilderR2.reflectiveCurveToRelative(0.58f, -1.29f, 1.29f, -1.29f);
+        pathBuilderR2.reflectiveCurveToRelative(1.29f, 0.58f, 1.29f, 1.29f);
+        ImageVector imageVectorBuild = ImageVector.Builder.m4024addPathoIyEayM$default(builder, e.u(pathBuilderR2, 18.34f, 18.79f, 17.63f, 18.79f), defaultFillType2, "", solidColor2, 1.0f, null, 1.0f, 1.0f, iM3803getButtKaPHkGw2, iM3813getBevelLxFBmk82, 1.0f, 0.0f, 0.0f, 0.0f, 14336, null).build();
+        _miscellaneousServices = imageVectorBuild;
+        return imageVectorBuild;
+    }
+}

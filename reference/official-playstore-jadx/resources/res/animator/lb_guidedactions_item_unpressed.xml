@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="@integer/lb_guidedactions_item_animation_duration"
+    android:valueTo="1"
+    android:valueType="floatType"
+    android:propertyName="alpha"/>

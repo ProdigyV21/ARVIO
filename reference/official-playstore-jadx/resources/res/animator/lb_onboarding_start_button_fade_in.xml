@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <objectAnimator
+        android:interpolator="@android:anim/decelerate_interpolator"
+        android:duration="417"
+        android:valueFrom="0"
+        android:valueTo="1"
+        android:propertyName="alpha"/>
+    <objectAnimator
+        android:interpolator="@android:anim/decelerate_interpolator"
+        android:duration="417"
+        android:valueFrom="@dimen/lb_onboarding_start_button_translation_offset"
+        android:valueTo="0dp"
+        android:propertyName="translationX"/>
+</set>

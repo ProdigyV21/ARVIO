@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Base.Theme.SplashScreen" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowLayoutInDisplayCutoutMode">1</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+    <style name="Base.Theme.SplashScreen.Light" parent="@style/Base.Theme.SplashScreen">
+    </style>
+</resources>

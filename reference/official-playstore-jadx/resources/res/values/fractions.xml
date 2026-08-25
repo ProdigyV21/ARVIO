@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <fraction name="lb_browse_header_unselect_alpha">50%</fraction>
+    <fraction name="lb_browse_rows_scale">80%</fraction>
+    <fraction name="lb_focus_zoom_factor_large">117.9993%</fraction>
+    <fraction name="lb_focus_zoom_factor_medium">113.9984%</fraction>
+    <fraction name="lb_focus_zoom_factor_small">109.9976%</fraction>
+    <fraction name="lb_focus_zoom_factor_xsmall">105.9998%</fraction>
+    <fraction name="lb_search_bar_speech_orb_max_level_zoom">143.9972%</fraction>
+    <fraction name="lb_search_orb_focused_zoom">119.9982%</fraction>
+    <fraction name="lb_view_active_level">0%</fraction>
+    <fraction name="lb_view_dimmed_level">60%</fraction>
+</resources>

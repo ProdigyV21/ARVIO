@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="line">
+            <stroke
+                android:width="@dimen/mr_cast_route_volume_seekbar_height"
+                android:color="#ffffffff"/>
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="line">
+                <stroke
+                    android:width="@dimen/mr_cast_route_volume_seekbar_height"
+                    android:color="#ffffffff"/>
+            </shape>
+        </clip>
+    </item>
+</layer-list>

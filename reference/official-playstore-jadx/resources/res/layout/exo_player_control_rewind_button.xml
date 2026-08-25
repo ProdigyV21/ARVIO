@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <Button
+        android:id="@+id/exo_rew_with_amount"
+        android:singleLine="false"
+        style="@style/ExoStyledControls.Button.Center.RewWithAmount"/>
+</merge>

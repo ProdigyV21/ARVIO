@@ -762,8 +762,8 @@ fun LiveTvScreen(
     val providerFilters = remember(state.config, enrichedState.value.all, lastKnownPlaylistGroupCounts) {
         buildTvProviderFilters(state.config, enrichedState.value.all, lastKnownPlaylistGroupCounts)
     }
-    val playlistCategorySections = remember(state.config, enrichedState.value.tree.global.categories) {
-        buildPlaylistCategorySections(state.config, enrichedState.value.tree.global.categories)
+    val playlistCategorySections = remember(state.config, enrichedState.value.tree.global.categories, hiddenGroupSet) {
+        buildPlaylistCategorySections(state.config, enrichedState.value.tree.global.categories, hiddenGroupSet)
     }
     LaunchedEffect(playlistCategorySections, selectedProviderId) {
         if (playlistCategorySections.isNotEmpty() && selectedProviderId != "all") {

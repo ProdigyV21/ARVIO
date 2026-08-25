@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<transitionSet xmlns:android="http://schemas.android.com/apk/res/android">
+    <changeBounds
+        android:interpolator="@android:interpolator/linear_out_slow_in"
+        android:duration="350"/>
+    <slide
+        android:interpolator="@android:interpolator/linear_out_slow_in"
+        android:duration="350"
+        android:slideEdge="@integer/slideEdgeEnd"/>
+</transitionSet>

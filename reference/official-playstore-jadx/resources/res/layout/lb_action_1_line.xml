@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Button xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/lb_action_button"
+    android:layout_width="wrap_content"
+    android:layout_height="@dimen/lb_action_1_line_height"
+    android:lines="1"
+    style="?attr/detailsActionButtonStyle"/>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.browser.browseractions.BrowserActionsFallbackMenuView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_gravity="center"
+    android:orientation="vertical"
+    android:id="@+id/browser_actions_menu_view"
+    android:background="@color/browser_actions_bg_grey"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:minWidth="280dp">
+    <TextView
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="@color/browser_actions_title_color"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:id="@+id/browser_actions_header_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="10dp"
+        android:maxLines="1"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"/>
+    <View
+        android:background="@color/browser_actions_divider_color"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"/>
+    <ListView
+        android:id="@+id/browser_actions_menu_items"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:divider="@null"
+        android:dividerHeight="0dp"/>
+</androidx.browser.browseractions.BrowserActionsFallbackMenuView>

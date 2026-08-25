@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="mr_dialog_fixed_width_major">50%</dimen>
+    <dimen name="mr_dialog_fixed_width_minor">70%</dimen>
+</resources>

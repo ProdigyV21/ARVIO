@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+    <View
+        android:id="@+id/search_orb"
+        android:background="@drawable/lb_search_orb"
+        android:layout_width="@dimen/lb_search_orb_size"
+        android:layout_height="@dimen/lb_search_orb_size"/>
+    <ImageView
+        android:layout_gravity="center"
+        android:id="@+id/icon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="0x7f080224"
+        android:contentDescription="@string/orb_search_action"/>
+</merge>

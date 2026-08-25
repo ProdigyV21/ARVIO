@@ -1,0 +1,26 @@
+package io.github.jan.supabase.gotrue.providers.builtin;
+
+import io.github.jan.supabase.gotrue.providers.builtin.OTP;
+import kotlin.Metadata;
+import kotlin.jvm.internal.r;
+import r7.l;
+import x6.t0;
+
+/* JADX INFO: loaded from: classes4.dex */
+@Metadata(d1 = {"\u0000\f\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\u0010\u0004\u001a\u00020\u0001*\u00020\u0000H\n¢\u0006\u0004\b\u0002\u0010\u0003"}, d2 = {"Lio/github/jan/supabase/gotrue/providers/builtin/OTP$Config;", "Lx6/t0;", "invoke", "(Lio/github/jan/supabase/gotrue/providers/builtin/OTP$Config;)V", "<anonymous>"}, k = 3, mv = {1, 9, 0})
+public final class OTP$login$otpConfig$1 extends r implements l<OTP.Config, t0> {
+    public static final OTP$login$otpConfig$1 INSTANCE = new OTP$login$otpConfig$1();
+
+    public OTP$login$otpConfig$1() {
+        super(1);
+    }
+
+    public final void invoke(OTP.Config config) {
+    }
+
+    @Override // r7.l
+    public /* bridge */ /* synthetic */ Object invoke(Object obj) {
+        invoke((OTP.Config) obj);
+        return t0.f22605a;
+    }
+}

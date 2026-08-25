@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:textAppearance="?attr/mediaRouteHeaderTextAppearance"
+    android:gravity="start"
+    android:id="@+id/mr_cast_header_name"
+    android:paddingLeft="16dp"
+    android:paddingTop="24dp"
+    android:paddingRight="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/mr_dynamic_dialog_row_height"
+    android:textAlignment="viewStart"/>

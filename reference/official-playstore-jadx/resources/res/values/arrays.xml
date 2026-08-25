@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="cast_expanded_controller_default_control_buttons">
+        <item>@id/cast_button_type_closed_caption</item>
+        <item>@id/cast_button_type_skip_previous</item>
+        <item>@id/cast_button_type_skip_next</item>
+        <item>@id/cast_button_type_mute_toggle</item>
+    </array>
+    <array name="cast_mini_controller_default_control_buttons">
+        <item>@id/cast_button_type_empty</item>
+        <item>@id/cast_button_type_empty</item>
+        <item>@id/cast_button_type_play_pause_toggle</item>
+    </array>
+    <array name="exo_controls_playback_speeds">
+        <item>0.25x</item>
+        <item>0.5x</item>
+        <item>0.75x</item>
+        <item>Normal</item>
+        <item>1.25x</item>
+        <item>1.5x</item>
+        <item>2x</item>
+    </array>
+</resources>

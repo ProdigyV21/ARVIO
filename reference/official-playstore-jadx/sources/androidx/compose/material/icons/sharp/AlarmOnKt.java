@@ -1,0 +1,57 @@
+package androidx.compose.material.icons.sharp;
+
+import androidx.compose.material.icons.Icons;
+import androidx.compose.ui.graphics.Color;
+import androidx.compose.ui.graphics.SolidColor;
+import androidx.compose.ui.graphics.StrokeCap;
+import androidx.compose.ui.graphics.StrokeJoin;
+import androidx.compose.ui.graphics.vector.ImageVector;
+import androidx.compose.ui.graphics.vector.PathBuilder;
+import androidx.compose.ui.graphics.vector.VectorKt;
+import androidx.compose.ui.unit.Dp;
+import kotlin.Metadata;
+import v.a;
+import v.b;
+import v.c;
+import v.d;
+
+/* JADX INFO: loaded from: classes.dex */
+@Metadata(d1 = {"\u0000\u0010\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\"\u0010\u0010\u0000\u001a\u0004\u0018\u00010\u0001X\u0082\u000e¢\u0006\u0002\n\u0000\"\u0015\u0010\u0002\u001a\u00020\u0001*\u00020\u00038F¢\u0006\u0006\u001a\u0004\b\u0004\u0010\u0005¨\u0006\u0006"}, d2 = {"_alarmOn", "Landroidx/compose/ui/graphics/vector/ImageVector;", "AlarmOn", "Landroidx/compose/material/icons/Icons$Sharp;", "getAlarmOn", "(Landroidx/compose/material/icons/Icons$Sharp;)Landroidx/compose/ui/graphics/vector/ImageVector;", "material-icons-extended_release"}, k = 2, mv = {1, 8, 0}, xi = 48)
+public final class AlarmOnKt {
+    private static ImageVector _alarmOn;
+
+    public static final ImageVector getAlarmOn(Icons.Sharp sharp) {
+        ImageVector imageVector = _alarmOn;
+        if (imageVector != null) {
+            return imageVector;
+        }
+        ImageVector.Builder builder = new ImageVector.Builder("Sharp.AlarmOn", Dp.m5678constructorimpl(24.0f), Dp.m5678constructorimpl(24.0f), 24.0f, 24.0f, 0L, 0, false, 96, null);
+        int defaultFillType = VectorKt.getDefaultFillType();
+        SolidColor solidColor = new SolidColor(Color.INSTANCE.m3498getBlack0d7_KjU(), null);
+        int iM3803getButtKaPHkGw = StrokeCap.INSTANCE.m3803getButtKaPHkGw();
+        int iM3813getBevelLxFBmk8 = StrokeJoin.INSTANCE.m3813getBevelLxFBmk8();
+        PathBuilder pathBuilderJ = a.j(10.54f, 14.53f, 8.41f, 12.4f);
+        pathBuilderJ.lineToRelative(-1.06f, 1.06f);
+        pathBuilderJ.lineToRelative(3.18f, 3.18f);
+        b.D(pathBuilderJ, 6.0f, -6.0f, -1.06f, -1.06f);
+        pathBuilderJ.moveTo(17.337f, 1.81f);
+        pathBuilderJ.lineToRelative(4.607f, 3.845f);
+        b.D(pathBuilderJ, -1.28f, 1.535f, -4.61f, -3.843f);
+        pathBuilderJ.moveTo(6.663f, 1.81f);
+        pathBuilderJ.lineToRelative(1.282f, 1.536f);
+        d.l(pathBuilderJ, 3.337f, 7.19f, -1.28f, -1.536f);
+        pathBuilderJ.moveTo(12.0f, 4.0f);
+        pathBuilderJ.curveToRelative(-4.97f, 0.0f, -9.0f, 4.03f, -9.0f, 9.0f);
+        pathBuilderJ.reflectiveCurveToRelative(4.03f, 9.0f, 9.0f, 9.0f);
+        pathBuilderJ.reflectiveCurveToRelative(9.0f, -4.03f, 9.0f, -9.0f);
+        pathBuilderJ.reflectiveCurveToRelative(-4.03f, -9.0f, -9.0f, -9.0f);
+        pathBuilderJ.close();
+        pathBuilderJ.moveTo(12.0f, 20.0f);
+        pathBuilderJ.curveToRelative(-3.86f, 0.0f, -7.0f, -3.14f, -7.0f, -7.0f);
+        pathBuilderJ.reflectiveCurveToRelative(3.14f, -7.0f, 7.0f, -7.0f);
+        pathBuilderJ.reflectiveCurveToRelative(7.0f, 3.14f, 7.0f, 7.0f);
+        ImageVector imageVectorBuild = ImageVector.Builder.m4024addPathoIyEayM$default(builder, c.h(pathBuilderJ, -3.14f, 7.0f, -7.0f, 7.0f), defaultFillType, "", solidColor, 1.0f, null, 1.0f, 1.0f, iM3803getButtKaPHkGw, iM3813getBevelLxFBmk8, 1.0f, 0.0f, 0.0f, 0.0f, 14336, null).build();
+        _alarmOn = imageVectorBuild;
+        return imageVectorBuild;
+    }
+}

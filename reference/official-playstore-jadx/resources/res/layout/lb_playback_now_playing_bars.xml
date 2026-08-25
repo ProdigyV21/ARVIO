@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <ImageView
+        android:id="@+id/bar1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/lb_playback_now_playing_bar_top_margin"
+        android:layout_marginRight="@dimen/lb_playback_now_playing_bar_margin"
+        android:src="@drawable/lb_playback_now_playing_bar"/>
+    <ImageView
+        android:id="@+id/bar2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/lb_playback_now_playing_bar_top_margin"
+        android:layout_marginRight="@dimen/lb_playback_now_playing_bar_margin"
+        android:src="@drawable/lb_playback_now_playing_bar"/>
+    <ImageView
+        android:id="@+id/bar3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/lb_playback_now_playing_bar_top_margin"
+        android:src="@drawable/lb_playback_now_playing_bar"/>
+</merge>

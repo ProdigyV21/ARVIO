@@ -1,0 +1,380 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:versionCode="310"
+    android:versionName="1.9.995"
+    android:compileSdkVersion="36"
+    android:compileSdkVersionCodename="16"
+    android:requiredSplitTypes="base__abi,base__density"
+    android:splitTypes=""
+    package="com.arvio.tv"
+    platformBuildVersionCode="36"
+    platformBuildVersionName="16">
+    <uses-sdk
+        android:minSdkVersion="23"
+        android:targetSdkVersion="36"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false"/>
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false"/>
+    <queries>
+        <package android:name="com.discord"/>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="discord"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data
+                android:scheme="https"
+                android:host="discord.com"/>
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService"/>
+        </intent>
+        <package android:name="com.google.android.gms.policy_cast_dynamite"/>
+    </queries>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA"/>
+    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA"/>
+    <permission
+        android:name="com.arvio.tv.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:protectionLevel="signature"/>
+    <uses-permission android:name="com.arvio.tv.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"/>
+    <application
+        android:theme="@style/Theme.ArflixTV"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:name="com.pairip.application.Application"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:supportsRtl="true"
+        android:banner="0x7f08004f"
+        android:extractNativeLibs="false"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+        android:localeConfig="@xml/locale_config"
+        android:enableOnBackInvokedCallback="true">
+        <activity
+            android:theme="@style/Theme.ArflixTV.Splash"
+            android:name="com.arflix.tv.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="smallestScreenSize|screenSize|screenLayout|orientation|keyboardHidden|keyboard"
+            android:hardwareAccelerated="true"
+            android:banner="0x7f08004f"
+            android:supportsPictureInPicture="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="arvio"
+                    android:host="install-pack"/>
+            </intent-filter>
+            <intent-filter android:label="Discord Auth Callback">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="arvio"
+                    android:host="discord"
+                    android:path="/auth"/>
+            </intent-filter>
+        </activity>
+        <profileable android:shell="true"/>
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false"/>
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="false"/>
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.arflix.tv.cast.CastOptionsProvider"/>
+        <activity
+            android:theme="@style/Theme.ArflixTV"
+            android:name="com.arflix.tv.ui.screens.crash.CrashReportActivity"
+            android:exported="false"
+            android:process=":crash"
+            android:configChanges="smallestScreenSize|screenSize|screenLayout|orientation|keyboardHidden|keyboard"/>
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:exported="false"
+            android:authorities="com.arvio.tv.androidx-startup">
+            <meta-data
+                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+                android:value="androidx.startup"/>
+        </provider>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:exported="false"
+            android:authorities="com.arvio.tv.fileprovider"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+        <activity
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:name="com.discord.socialsdk.AuthenticationActivity"
+            android:exported="true"
+            android:launchMode="singleTask"/>
+        <receiver
+            android:name="com.google.android.gms.cast.framework.media.MediaIntentReceiver"
+            android:exported="false"/>
+        <service
+            android:name="com.google.android.gms.cast.framework.ReconnectionService"
+            android:exported="false"/>
+        <service
+            android:name="androidx.credentials.playservices.CredentialProviderMetadataHolder"
+            android:enabled="true"
+            android:exported="false">
+            <meta-data
+                android:name="androidx.credentials.CREDENTIAL_PROVIDER_KEY"
+                android:value="androidx.credentials.playservices.CredentialProviderPlayServicesImpl"/>
+        </service>
+        <activity
+            android:theme="@style/Theme.Hidden"
+            android:name="androidx.credentials.playservices.HiddenActivity"
+            android:enabled="true"
+            android:exported="false"
+            android:configChanges="screenSize|screenLayout|orientation|keyboardHidden"
+            android:fitsSystemWindows="true"/>
+        <activity
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"/>
+        <service
+            android:name="com.google.android.gms.auth.api.signin.RevocationBoundService"
+            android:permission="com.google.android.gms.auth.api.signin.permission.REVOCATION_NOTIFICATION"
+            android:exported="true"
+            android:visibleToInstantApps="true"/>
+        <activity
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            android:exported="false"/>
+        <service
+            android:name="com.google.firebase.components.ComponentDiscoveryService"
+            android:exported="false"
+            android:directBootAware="true">
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.crashlytics.ktx.FirebaseCrashlyticsKtxRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.crashlytics.FirebaseCrashlyticsKtxRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.crashlytics.CrashlyticsRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.sessions.FirebaseSessionsRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsKtxRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.ktx.FirebaseCommonLegacyRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.FirebaseCommonKtxRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+            <meta-data
+                android:name="com.google.firebase.components:com.google.firebase.datatransport.TransportRegistrar"
+                android:value="com.google.firebase.components.ComponentRegistrar"/>
+        </service>
+        <service
+            android:name="com.google.firebase.sessions.SessionLifecycleService"
+            android:enabled="true"
+            android:exported="false"/>
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:exported="false"
+            android:authorities="com.arvio.tv.firebaseinitprovider"
+            android:initOrder="100"
+            android:directBootAware="true"/>
+        <service
+            android:name="androidx.work.impl.background.systemalarm.SystemAlarmService"
+            android:enabled="@bool/enable_system_alarm_service_default"
+            android:exported="false"
+            android:directBootAware="false"/>
+        <service
+            android:name="androidx.work.impl.background.systemjob.SystemJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:enabled="@bool/enable_system_job_service_default"
+            android:exported="true"
+            android:directBootAware="false"/>
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:enabled="@bool/enable_system_foreground_service_default"
+            android:exported="false"
+            android:directBootAware="false"/>
+        <receiver
+            android:name="androidx.work.impl.utils.ForceStopRunnable$BroadcastReceiver"
+            android:enabled="true"
+            android:exported="false"
+            android:directBootAware="false"/>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryChargingProxy"
+            android:enabled="false"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED"/>
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy"
+            android:enabled="false"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BATTERY_OKAY"/>
+                <action android:name="android.intent.action.BATTERY_LOW"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy"
+            android:enabled="false"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.DEVICE_STORAGE_LOW"/>
+                <action android:name="android.intent.action.DEVICE_STORAGE_OK"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$NetworkStateProxy"
+            android:enabled="false"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
+            android:enabled="false"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxyUpdateReceiver"
+            android:enabled="@bool/enable_system_alarm_service_default"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="androidx.work.impl.background.systemalarm.UpdateProxies"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+            android:permission="android.permission.DUMP"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="androidx.work.diagnostics.REQUEST_DIAGNOSTICS"/>
+            </intent-filter>
+        </receiver>
+        <provider
+            android:name="io.sentry.android.core.SentryInitProvider"
+            android:exported="false"
+            android:authorities="com.arvio.tv.SentryInitProvider"/>
+        <provider
+            android:name="io.sentry.android.core.SentryPerformanceProvider"
+            android:exported="false"
+            android:authorities="com.arvio.tv.SentryPerformanceProvider"
+            android:initOrder="200"/>
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version"/>
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            android:permission="android.permission.DUMP"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SKIP_FILE"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION"/>
+            </intent-filter>
+        </receiver>
+        <service
+            android:name="androidx.room.MultiInstanceInvalidationService"
+            android:exported="false"
+            android:directBootAware="true"/>
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            android:exported="false">
+            <meta-data
+                android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
+                android:value="cct"/>
+        </service>
+        <service
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false"/>
+        <receiver
+            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+            android:exported="false"/>
+        <provider
+            android:name="io.sentry.ndk.SentryNdkPreloadProvider"
+            android:exported="false"
+            android:authorities="com.arvio.tv.SentryNdkPreloadProvider"
+            android:initOrder="2000000000"/>
+        <activity
+            android:name="com.pairip.licensecheck.LicenseActivity"
+            android:exported="false"/>
+        <meta-data
+            android:name="com.android.vending.splits.required"
+            android:value="true"/>
+        <meta-data
+            android:name="com.android.stamp.source"
+            android:value="https://play.google.com/store"/>
+        <meta-data
+            android:name="com.android.stamp.type"
+            android:value="STAMP_TYPE_DISTRIBUTION_APK"/>
+        <meta-data
+            android:name="com.android.vending.splits"
+            android:resource="@xml/splits0"/>
+        <meta-data
+            android:name="com.android.vending.derived.apk.id"
+            android:value="3"/>
+    </application>
+    <uses-permission android:name="com.android.vending.CHECK_LICENSE"/>
+</manifest>

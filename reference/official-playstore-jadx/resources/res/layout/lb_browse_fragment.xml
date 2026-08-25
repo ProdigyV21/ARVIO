@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/browse_dummy"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <androidx.leanback.widget.BrowseFrameLayout
+        android:id="@+id/browse_frame"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:descendantFocusability="afterDescendants"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <androidx.leanback.widget.BrowseRowsFrameLayout
+            android:id="@+id/browse_container_dock"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+            <androidx.leanback.widget.ScaleFrameLayout
+                android:id="@+id/scale_frame"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"/>
+        </androidx.leanback.widget.BrowseRowsFrameLayout>
+        <FrameLayout
+            android:id="@+id/browse_headers_dock"
+            android:clipToPadding="false"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:paddingEnd="50dp"/>
+    </androidx.leanback.widget.BrowseFrameLayout>
+</FrameLayout>

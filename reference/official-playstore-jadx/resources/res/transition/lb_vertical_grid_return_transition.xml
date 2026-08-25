@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<transitionSet xmlns:android="http://schemas.android.com/apk/res/android">
+    <slide
+        android:interpolator="@android:interpolator/fast_out_linear_in"
+        android:duration="350"
+        android:slideEdge="bottom">
+        <targets>
+            <target android:excludeId="@+id/title_orb"/>
+            <target android:excludeId="@+id/title_text"/>
+            <target android:excludeId="@+id/title_badge"/>
+        </targets>
+    </slide>
+    <fade
+        android:interpolator="@android:interpolator/fast_out_linear_in"
+        android:duration="350"/>
+</transitionSet>

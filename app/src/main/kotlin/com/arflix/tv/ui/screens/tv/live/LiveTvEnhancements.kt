@@ -74,6 +74,7 @@ data class PlaylistCategorySection(
 fun buildPlaylistCategorySections(
     config: IptvConfig,
     categories: List<LiveCategory>,
+    hiddenGroups: Set<String> = emptySet(),
 ): List<PlaylistCategorySection> {
     val playlists = config.playlists
         .asSequence()
@@ -82,7 +83,12 @@ fun buildPlaylistCategorySections(
         .toList()
     val knownPlaylistIds = playlists.mapTo(HashSet()) { it.id }
     val configuredSections = playlists.mapNotNull { playlist ->
-        val providerCategories = categories.filter { it.playlistId == playlist.id }
+        val providerCategories = categories
+            .filter { it.playlistId == playlist.id }
+            .filterNot { category ->
+                val groupName = category.playlistGroupName ?: return@filterNot false
+                com.arflix.tv.data.model.PlaylistGroupKey.build(playlist.id, groupName) in hiddenGroups
+            }
         providerCategories.takeIf { it.isNotEmpty() }?.let {
             PlaylistCategorySection(
                 id = playlist.id,

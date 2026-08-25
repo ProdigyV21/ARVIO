@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android" android:constantSize="true">
+    <item
+        android:state_enabled="false"
+        android:state_pressed="true"
+        android:drawable="@android:color/transparent"/>
+    <item
+        android:state_enabled="false"
+        android:drawable="@android:color/transparent"/>
+    <item android:state_pressed="true">
+        <bitmap
+            android:gravity="center"
+            android:src="0x7f0800b0"/>
+    </item>
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="0x7f0800af"/>
+    </item>
+</selector>

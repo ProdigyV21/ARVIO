@@ -1,0 +1,45 @@
+package androidx.compose.material.icons.twotone;
+
+import androidx.compose.material.icons.Icons;
+import androidx.compose.ui.graphics.Color;
+import androidx.compose.ui.graphics.SolidColor;
+import androidx.compose.ui.graphics.StrokeCap;
+import androidx.compose.ui.graphics.StrokeJoin;
+import androidx.compose.ui.graphics.vector.ImageVector;
+import androidx.compose.ui.graphics.vector.PathBuilder;
+import androidx.compose.ui.graphics.vector.VectorKt;
+import androidx.compose.ui.unit.Dp;
+import kotlin.Metadata;
+import v.b;
+import v.c;
+import v.e;
+import w.a;
+
+/* JADX INFO: loaded from: classes.dex */
+@Metadata(d1 = {"\u0000\u0010\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\"\u0010\u0010\u0000\u001a\u0004\u0018\u00010\u0001X\u0082\u000e¢\u0006\u0002\n\u0000\"\u0015\u0010\u0002\u001a\u00020\u0001*\u00020\u00038F¢\u0006\u0006\u001a\u0004\b\u0004\u0010\u0005¨\u0006\u0006"}, d2 = {"_textRotationNone", "Landroidx/compose/ui/graphics/vector/ImageVector;", "TextRotationNone", "Landroidx/compose/material/icons/Icons$TwoTone;", "getTextRotationNone", "(Landroidx/compose/material/icons/Icons$TwoTone;)Landroidx/compose/ui/graphics/vector/ImageVector;", "material-icons-extended_release"}, k = 2, mv = {1, 8, 0}, xi = 48)
+public final class TextRotationNoneKt {
+    private static ImageVector _textRotationNone;
+
+    public static final ImageVector getTextRotationNone(Icons.TwoTone twoTone) {
+        ImageVector imageVector = _textRotationNone;
+        if (imageVector != null) {
+            return imageVector;
+        }
+        ImageVector.Builder builder = new ImageVector.Builder("TwoTone.TextRotationNone", Dp.m5678constructorimpl(24.0f), Dp.m5678constructorimpl(24.0f), 24.0f, 24.0f, 0L, 0, false, 96, null);
+        int defaultFillType = VectorKt.getDefaultFillType();
+        SolidColor solidColor = new SolidColor(Color.INSTANCE.m3498getBlack0d7_KjU(), null);
+        int iM3803getButtKaPHkGw = StrokeCap.INSTANCE.m3803getButtKaPHkGw();
+        int iM3813getBevelLxFBmk8 = StrokeJoin.INSTANCE.m3813getBevelLxFBmk8();
+        PathBuilder pathBuilderS = e.s(21.0f, 18.0f, -3.0f, -3.0f, 2.0f);
+        b.q(pathBuilderS, 5.0f, 2.0f, 13.0f, 2.0f);
+        b.C(pathBuilderS, 3.0f, -3.0f, 9.5f, 11.8f);
+        e.C(pathBuilderS, 5.0f, 0.9f, 2.2f, 2.1f);
+        pathBuilderS.lineTo(12.75f, 3.0f);
+        c.A(pathBuilderS, -1.5f, 6.5f, 14.0f, 2.1f);
+        b.C(pathBuilderS, 0.9f, -2.2f, 12.0f, 4.98f);
+        pathBuilderS.lineTo(13.87f, 10.0f);
+        ImageVector imageVectorBuild = ImageVector.Builder.m4024addPathoIyEayM$default(builder, a.h(pathBuilderS, -3.74f, 12.0f, 4.98f), defaultFillType, "", solidColor, 1.0f, null, 1.0f, 1.0f, iM3803getButtKaPHkGw, iM3813getBevelLxFBmk8, 1.0f, 0.0f, 0.0f, 0.0f, 14336, null).build();
+        _textRotationNone = imageVectorBuild;
+        return imageVectorBuild;
+    }
+}

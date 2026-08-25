@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.leanback.widget.BrowseFrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/dummy"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <FrameLayout
+        android:id="@+id/video_surface_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+    <androidx.leanback.widget.NonOverlappingFrameLayout
+        android:id="@+id/details_background_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+    <FrameLayout
+        android:id="@+id/details_fragment_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <FrameLayout
+            android:id="@+id/details_rows_dock"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"/>
+    </FrameLayout>
+</androidx.leanback.widget.BrowseFrameLayout>

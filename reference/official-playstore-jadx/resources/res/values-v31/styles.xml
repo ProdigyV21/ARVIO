@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SplashScreen" parent="@style/Base.Theme.SplashScreen.DayNight">
+        <item name="android:windowSplashScreenBackground">?attr/windowSplashScreenBackground</item>
+        <item name="android:windowSplashScreenAnimatedIcon">?attr/windowSplashScreenAnimatedIcon</item>
+        <item name="android:windowSplashScreenAnimationDuration">?attr/windowSplashScreenAnimationDuration</item>
+    </style>
+    <style name="Theme.SplashScreen.IconBackground" parent="@style/Theme.SplashScreen">
+        <item name="android:windowSplashScreenIconBackgroundColor">?attr/windowSplashScreenIconBackgroundColor</item>
+    </style>
+</resources>

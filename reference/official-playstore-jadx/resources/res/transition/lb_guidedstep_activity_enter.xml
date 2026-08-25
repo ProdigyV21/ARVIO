@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<transitionSet xmlns:android="http://schemas.android.com/apk/res/android">
+    <fade
+        android:interpolator="@android:interpolator/fast_out_linear_in"
+        android:duration="@integer/lb_guidedstep_activity_background_fade_duration_ms">
+        <targets>
+            <target android:targetId="@+id/guidedstep_background"/>
+        </targets>
+    </fade>
+    <slide
+        android:interpolator="@android:interpolator/fast_out_linear_in"
+        android:duration="350"
+        android:slideEdge="@integer/slideEdgeStart">
+        <targets>
+            <target android:targetId="@+id/guidance_icon"/>
+            <target android:targetId="@+id/guidance_title"/>
+            <target android:targetId="@+id/guidance_breadcrumb"/>
+            <target android:targetId="@+id/guidance_description"/>
+        </targets>
+    </slide>
+    <slide
+        android:interpolator="@android:interpolator/fast_out_linear_in"
+        android:duration="350"
+        android:slideEdge="@integer/slideEdgeEnd">
+        <targets>
+            <target android:targetId="@+id/action_fragment_background"/>
+            <target android:targetId="@+id/guidedactions_list_background"/>
+            <target android:targetId="@+id/guidedactions_content"/>
+            <target android:targetId="@+id/guidedactions_list"/>
+            <target android:targetId="@+id/guidedactions_sub_list"/>
+            <target android:targetId="@+id/guidedactions_sub_list_background"/>
+            <target android:targetId="@+id/guidedactions_list_background2"/>
+            <target android:targetId="@+id/guidedactions_content2"/>
+            <target android:targetId="@+id/guidedactions_list2"/>
+        </targets>
+    </slide>
+</transitionSet>

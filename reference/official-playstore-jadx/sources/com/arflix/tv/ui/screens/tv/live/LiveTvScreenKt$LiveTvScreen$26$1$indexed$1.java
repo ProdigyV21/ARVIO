@@ -1,0 +1,46 @@
+package com.arflix.tv.ui.screens.tv.live;
+
+import com.arflix.tv.data.model.IptvNowNext;
+import com.arflix.tv.ui.screens.tv.TvViewModel;
+import java.util.Map;
+import java.util.Set;
+import kotlin.Metadata;
+
+/* JADX INFO: loaded from: classes4.dex */
+@Metadata(d1 = {"\u0000\u0014\n\u0002\u0018\u0002\n\u0002\u0010$\n\u0002\u0010\u000e\n\u0002\u0018\u0002\n\u0002\b\u0002\u0010\u0004\u001a\u000e\u0012\u0004\u0012\u00020\u0002\u0012\u0004\u0012\u00020\u00030\u0001*\u00020\u0000H\n¢\u0006\u0004\b\u0004\u0010\u0005"}, d2 = {"Lka/k0;", "", "", "Lcom/arflix/tv/data/model/IptvNowNext;", "<anonymous>", "(Lka/k0;)Ljava/util/Map;"}, k = 3, mv = {2, 3, 0})
+@f7.e(c = "com.arflix.tv.ui.screens.tv.live.LiveTvScreenKt$LiveTvScreen$26$1$indexed$1", f = "LiveTvScreen.kt", l = {}, m = "invokeSuspend", v = 2)
+public final class LiveTvScreenKt$LiveTvScreen$26$1$indexed$1 extends f7.j implements r7.p<ka.k0, d7.d<? super Map<String, ? extends IptvNowNext>>, Object> {
+    final /* synthetic */ long $end;
+    final /* synthetic */ Set<String> $ids;
+    final /* synthetic */ long $start;
+    final /* synthetic */ TvViewModel $viewModel;
+    int label;
+
+    /* JADX WARN: 'super' call moved to the top of the method (can break code semantics) */
+    public LiveTvScreenKt$LiveTvScreen$26$1$indexed$1(TvViewModel tvViewModel, Set<String> set, long j10, long j11, d7.d<? super LiveTvScreenKt$LiveTvScreen$26$1$indexed$1> dVar) {
+        super(2, dVar);
+        this.$viewModel = tvViewModel;
+        this.$ids = set;
+        this.$start = j10;
+        this.$end = j11;
+    }
+
+    @Override // f7.a
+    public final d7.d<x6.t0> create(Object obj, d7.d<?> dVar) {
+        return new LiveTvScreenKt$LiveTvScreen$26$1$indexed$1(this.$viewModel, this.$ids, this.$start, this.$end, dVar);
+    }
+
+    @Override // f7.a
+    public final Object invokeSuspend(Object obj) {
+        if (this.label != 0) {
+            throw new IllegalStateException("call to 'resume' before 'invoke' with coroutine");
+        }
+        k2.c.G(obj);
+        return this.$viewModel.getIptvRepository().indexedGuideWindow(this.$ids, this.$start, this.$end);
+    }
+
+    @Override // r7.p
+    public final Object invoke(ka.k0 k0Var, d7.d<? super Map<String, IptvNowNext>> dVar) {
+        return ((LiveTvScreenKt$LiveTvScreen$26$1$indexed$1) create(k0Var, dVar)).invokeSuspend(x6.t0.f22605a);
+    }
+}

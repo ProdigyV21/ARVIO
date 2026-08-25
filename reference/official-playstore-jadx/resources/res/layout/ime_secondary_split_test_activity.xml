@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <EditText
+        android:gravity="center"
+        android:id="@+id/edit_text_id"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="200px"
+        android:text="EditText"
+        android:inputType="text"/>
+    <Button
+        android:id="@+id/hide_ime_id"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Hide Ime"
+        android:textAllCaps="false"/>
+</LinearLayout>
