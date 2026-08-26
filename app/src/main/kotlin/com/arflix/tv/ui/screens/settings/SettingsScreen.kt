@@ -1818,13 +1818,16 @@ fun SettingsScreen(
 
         // Custom Addon Input Modal
         if (showCustomAddonInput) {
+            val isValidAddonUrl = customAddonUrl.isNotBlank() &&
+                (customAddonUrl.trim().startsWith("http://", ignoreCase = true) || customAddonUrl.trim().startsWith("https://", ignoreCase = true))
             InputModal(
                 title = stringResource(R.string.add_addon),
                 fields = listOf(
                     InputField(label = stringResource(R.string.settings_label_url), value = customAddonUrl, onValueChange = { customAddonUrl = it })
                 ),
+                isConfirmEnabled = isValidAddonUrl,
                 onConfirm = {
-                    if (customAddonUrl.isNotBlank()) {
+                    if (isValidAddonUrl) {
                         viewModel.addCustomAddon(customAddonUrl.trim())
                         customAddonUrl = ""
                         showCustomAddonInput = false
@@ -10058,6 +10061,7 @@ private fun InputModal(
     title: String,
     supportingText: String? = null,
     fields: List<InputField>,
+    isConfirmEnabled: Boolean = true,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -10231,8 +10235,10 @@ private fun InputModal(
                                             true
                                         }
                                         focusedIndex == fields.size + 2 -> {
-                                            hideKeyboardAll()
-                                            onConfirm()
+                                            if (isConfirmEnabled) {
+                                                hideKeyboardAll()
+                                                onConfirm()
+                                            }
                                             true
                                         }
                                         else -> false
@@ -10534,25 +10540,26 @@ private fun InputModal(
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(
-                                color = if (isConfirmFocused) Color.White else Color.Black.copy(alpha = 0.82f),
+                                color = if (isConfirmFocused && isConfirmEnabled) Color.White else Color.Black.copy(alpha = 0.82f),
                                 shape = RoundedCornerShape(10.dp)
                             )
                             .border(
                                 width = 1.dp,
-                                color = if (isConfirmFocused) Color.White else Color.White.copy(alpha = 0.14f),
+                                color = if (isConfirmFocused && isConfirmEnabled) Color.White else Color.White.copy(alpha = 0.14f),
                                 shape = RoundedCornerShape(10.dp)
                             )
-                            .clickable {
+                            .clickable(enabled = isConfirmEnabled) {
                                 hideKeyboardAll()
                                 onConfirm()
                             }
-                            .padding(vertical = 12.dp),
+                            .padding(vertical = 12.dp)
+                            .graphicsLayer { alpha = if (isConfirmEnabled) 1f else 0.45f },
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = tr("Confirm"),
                             style = ArflixTypography.button,
-                            color = if (isConfirmFocused) Color.Black else Color.White
+                            color = if (isConfirmFocused && isConfirmEnabled) Color.Black else Color.White
                         )
                     }
                 }

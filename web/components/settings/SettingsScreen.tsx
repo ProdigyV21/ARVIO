@@ -2444,7 +2444,7 @@ function AddonsSection() {
         <button
           type="button"
           className="primary"
-          disabled={installing}
+          disabled={installing || !addonUrl.trim()}
           onClick={() => void install()}
         >
           <Plus size={18} /> {installing ? "Installing..." : "Install"}
