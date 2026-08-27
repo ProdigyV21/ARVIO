@@ -78,11 +78,14 @@ internal enum class AppBottomBarMode {
 }
 
 internal data class AppBottomBarSpec(
+    val itemHeightDp: Int?,
     val rowVerticalPaddingDp: Int,
     val itemVerticalPaddingDp: Int,
     val itemSpacingDp: Int,
     val iconHorizontalPaddingDp: Int,
+    val iconVerticalPaddingDp: Int,
     val iconSizeDp: Int,
+    val indicatorSizeDp: Int,
     val labelFontSizeSp: Int,
 )
 
@@ -103,25 +106,31 @@ internal fun appBottomBarMode(
 
 internal fun appBottomBarSpec(mode: AppBottomBarMode): AppBottomBarSpec = when (mode) {
     AppBottomBarMode.LANDSCAPE_COMPACT -> AppBottomBarSpec(
-        rowVerticalPaddingDp = 4,
-        itemVerticalPaddingDp = 4,
-        itemSpacingDp = 3,
-        iconHorizontalPaddingDp = 14,
-        iconSizeDp = 21,
-        labelFontSizeSp = 10,
+        itemHeightDp = 48,
+        rowVerticalPaddingDp = 2,
+        itemVerticalPaddingDp = 0,
+        itemSpacingDp = 1,
+        iconHorizontalPaddingDp = 10,
+        iconVerticalPaddingDp = 2,
+        iconSizeDp = 20,
+        indicatorSizeDp = 3,
+        labelFontSizeSp = 8,
     )
     AppBottomBarMode.STANDARD -> AppBottomBarSpec(
-        rowVerticalPaddingDp = 5,
-        itemVerticalPaddingDp = 4,
-        itemSpacingDp = 3,
+        itemHeightDp = null,
+        rowVerticalPaddingDp = 6,
+        itemVerticalPaddingDp = 2,
+        itemSpacingDp = 2,
         iconHorizontalPaddingDp = 14,
-        iconSizeDp = 22,
-        labelFontSizeSp = 11,
+        iconVerticalPaddingDp = 4,
+        iconSizeDp = 24,
+        indicatorSizeDp = 4,
+        labelFontSizeSp = 10,
     )
 }
 
 data class BottomBarItem(
-    @StringRes val labelRes: Int,
+    @param:StringRes val labelRes: Int,
     val icon: ImageVector,
     val route: String
 )
@@ -228,7 +237,6 @@ fun AppBottomBar(
             )
             .padding(horizontal = 8.dp, vertical = spec.rowVerticalPaddingDp.dp)
     ) {
-        // Sliding Highlight Pill positioned with coverage over keywords
         if (indicatorWidth.value > 0f) {
             val targetHeightDp = with(density) {
                 ((itemHeights[selectedIndex] ?: 0f) + 4.dp.toPx()).toDp()
@@ -337,7 +345,7 @@ fun AppBottomBar(
                         }
                         .padding(
                             horizontal = spec.iconHorizontalPaddingDp.dp,
-                            vertical = spec.itemVerticalPaddingDp.dp
+                            vertical = spec.itemVerticalPaddingDp.dp + 2.dp
                         )
                         .graphicsLayer {
                             scaleX = itemZoomScale
