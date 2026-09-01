@@ -355,6 +355,11 @@ ksp {
     // (libffmpegJNI.so) is the likely source of the Play Console warning.
     add("sideloadImplementation", "org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
 
+    // ML Kit text recognition (bundled on-device model — no Google Play Services required),
+    // used to OCR image-based (PGS/DVB) built-in subtitle cues as a fallback reference for
+    // AI subtitle auto-sync when no text-based built-in track exists.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     // Networking - Retrofit + OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")

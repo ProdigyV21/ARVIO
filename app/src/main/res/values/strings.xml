@@ -241,6 +241,8 @@
     <string name="ai_auto_select_desc">Automatically activate AI when any built in language is available</string>
     <string name="ai_find_best_match_title">Auto Find Best Subtitle Match</string>
     <string name="ai_find_best_match_desc">Auto-pick the best-synced subtitle from your addons</string>
+    <string name="ai_auto_sync_title">Auto-Sync Addon Subtitles</string>
+    <string name="ai_auto_sync_desc">Fix a selected subtitle\'s timing by AI-matching its lines to a built-in track</string>
     <string name="subtitle_preload_title">Preload Subtitles</string>
     <string name="subtitle_preload_desc">Wait for subtitles before starting the video so switching them is instant</string>
     <string name="dv_compat_title">Dolby Vision Compatibility</string>
