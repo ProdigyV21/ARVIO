@@ -16,26 +16,27 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,52 +51,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.arflix.tv.ui.components.AppBottomBar
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.content.pm.ActivityInfo
-import com.arflix.tv.util.DeviceType
-import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
-import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
-import com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY
-import com.arflix.tv.util.ACCENT_COLOR_KEY
-import com.arflix.tv.util.LocalDeviceType
-import com.arflix.tv.util.LocalHasTouchScreen
-import com.arflix.tv.util.LocalAppLanguage
-import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
-import com.arflix.tv.util.detectDeviceType
-import com.arflix.tv.util.deviceHasTouchScreen
-import com.arflix.tv.util.findActivity
-import com.arflix.tv.util.settingsDataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.stringPreferencesKey
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.delay
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.lifecycleScope
-import androidx.metrics.performance.JankStats
-import androidx.metrics.performance.PerformanceMetricsState
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Text
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.arflix.tv.data.repository.AuthRepository
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.LauncherContinueWatchingRepository
@@ -109,30 +73,52 @@ import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
-import com.arflix.tv.ui.screens.login.LoginScreen
+import com.arflix.tv.ui.components.AppBottomBar
 import com.arflix.tv.ui.startup.StartupViewModel
 import com.arflix.tv.ui.theme.ArflixTvTheme
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arflix.tv.ui.theme.appBackgroundDark
+import com.arflix.tv.util.DeviceType
+import com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY
+import com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY
+import com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY
+import com.arflix.tv.util.ACCENT_COLOR_KEY
+import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.LocalHasTouchScreen
+import com.arflix.tv.util.LocalAppLanguage
+import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
+import com.arflix.tv.util.detectDeviceType
+import com.arflix.tv.util.deviceHasTouchScreen
+import com.arflix.tv.util.findActivity
+import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.worker.TraktSyncWorker
-import dagger.hilt.android.AndroidEntryPoint
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.metrics.performance.JankStats
+import androidx.metrics.performance.PerformanceMetricsState
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import dagger.Lazy
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 private sealed interface ActiveProfileLoadState {
     data object Loading : ActiveProfileLoadState
     data class Loaded(val profile: com.arflix.tv.data.model.Profile?) : ActiveProfileLoadState
 }
 
-/**
- * Main Activity - Single activity architecture with Compose Navigation
- * Uses Android 12+ Splash Screen API for instant launch feedback
- */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -160,11 +146,6 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var mediaRepository: Lazy<MediaRepository>
 
-    // Prefetch IPTV early so the TV screen opens without a loading stall.
-    // IptvRepository is @Singleton; touching it at activity start warms the
-    // in-memory snapshot (and will trigger a disk-cache read + silent
-    // background refresh) so by the time the user navigates into the TV tab
-    // everything is already resident.
     @Inject
     lateinit var iptvRepository: Lazy<com.arflix.tv.data.repository.IptvRepository>
 
@@ -172,7 +153,6 @@ class MainActivity : ComponentActivity() {
     private var pendingLauncherRequest by mutableStateOf<LauncherContinueWatchingRequest?>(null)
     private var pendingInstallPackUrl by mutableStateOf<String?>(null)
 
-    // StartupViewModel for parallel loading during splash
     private val startupViewModel: StartupViewModel by viewModels()
 
     override fun attachBaseContext(newBase: Context) {
@@ -190,14 +170,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Install splash screen BEFORE super.onCreate()
-        // Don't use setKeepOnScreenCondition - it causes black screen on some TV devices
-        // Instead, let the splash dismiss immediately and show our Compose loading screen
         installSplashScreen()
 
-        // Detect device type before super.onCreate().
-        // The splash screen's postSplashScreenTheme is Theme.ArflixTV.Mobile (no fullscreen)
-        // which is correct for phones/tablets. On TV we override to the fullscreen Leanback theme.
         val initialDeviceType = detectDeviceType(this)
         if (initialDeviceType == DeviceType.TV) {
             setTheme(R.style.Theme_ArflixTV)
@@ -226,7 +200,6 @@ class MainActivity : ComponentActivity() {
             startActivity(crashIntent)
         }
 
-        // Initialize Discord RPC Manager
         com.arflix.tv.ui.screens.details.discord.DiscordRpcManager.init(this)
         intent?.data?.let { uri ->
             android.util.Log.d("MainActivity", "Received intent data URI in onCreate: $uri")
@@ -236,7 +209,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Set orientation based on device type
         requestedOrientation = when (initialDeviceType) {
             DeviceType.TV -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             DeviceType.TABLET -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
@@ -254,7 +226,6 @@ class MainActivity : ComponentActivity() {
                 statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
                 navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
             )
-            // Clear any FLAG_FULLSCREEN the Leanback theme may have set
             @Suppress("DEPRECATION")
             window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         }
@@ -264,7 +235,6 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            // Observe device mode override changes live from DataStore
             val deviceModeOverride by remember {
                 this@MainActivity.settingsDataStore.data.map { it[DEVICE_MODE_OVERRIDE_KEY] }
             }.collectAsStateWithLifecycle(initialValue = null)
@@ -315,12 +285,7 @@ class MainActivity : ComponentActivity() {
                 else -> initialDeviceType
             }
             val hasTouchScreen = remember { deviceHasTouchScreen(this@MainActivity) }
-            // If no touchscreen, force TV mode regardless of override setting
-            // (prevents tablet/phone UI on devices with only D-pad input)
             val effectiveDeviceType = if (!hasTouchScreen && deviceType != DeviceType.TV) DeviceType.TV else deviceType
-            // Wrap the Activity as a ContextWrapper that only overrides getResources() with
-            // localized resources. Hilt traverses ContextWrapper chains to find the Activity,
-            // so hiltViewModel() still works correctly.
             val localizedContext = remember(appLanguage) {
                 val locale = com.arflix.tv.util.appLocale(appLanguage)
                 java.util.Locale.setDefault(locale)
@@ -341,8 +306,8 @@ class MainActivity : ComponentActivity() {
                 LocalDeviceType provides effectiveDeviceType,
                 LocalHasTouchScreen provides hasTouchScreen,
                 androidx.compose.ui.platform.LocalLayoutDirection provides
-                    if (isRtl) androidx.compose.ui.unit.LayoutDirection.Rtl
-                    else androidx.compose.ui.unit.LayoutDirection.Ltr
+                        if (isRtl) androidx.compose.ui.unit.LayoutDirection.Rtl
+                        else androidx.compose.ui.unit.LayoutDirection.Ltr
             ) {
                 ArflixTvTheme(
                     oledBlackBackground = oledBlackBackground,
@@ -415,8 +380,6 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
-            // Re-apply immersive mode only for TV when window regains focus.
-            // Mobile fullscreen is managed per-screen (e.g. player).
             val currentDeviceType = detectDeviceType(this)
             if (currentDeviceType == DeviceType.TV) {
                 WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -461,9 +424,6 @@ private fun ComponentActivity.runAfterFirstDraw(block: () -> Unit) {
     })
 }
 
-/**
- * Simple ARVIO loading screen - app logo + spinner
- */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ArvioLoadingScreen() {
@@ -552,9 +512,6 @@ fun ArvioLoadingScreen() {
     }
 }
 
-/**
- * Root composable for the ARVIO app
- */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ArflixApp(
@@ -592,8 +549,8 @@ fun ArflixApp(
     }
     val activeProfile = (activeProfileState as? ActiveProfileLoadState.Loaded)?.profile
     val startupReady = skipProfileSelection != null &&
-        activeProfileState is ActiveProfileLoadState.Loaded &&
-        authState !is AuthState.Loading
+            activeProfileState is ActiveProfileLoadState.Loaded &&
+            authState !is AuthState.Loading
 
     if (!startupReady || !startupIntroComplete) {
         ArvioLoadingScreen()
@@ -602,12 +559,8 @@ fun ArflixApp(
 
     val navController = rememberNavController()
     val appCoroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-    var lastAddonsSyncKey by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(authState, activeProfile?.id) {
-        if (authState is AuthState.NotAuthenticated) {
-            lastAddonsSyncKey = null
-        }
         if (activeProfile != null) {
             launcherContinueWatchingRepository.refreshForCurrentProfile()
         } else {
@@ -631,15 +584,13 @@ fun ArflixApp(
             iptvFullscreen = false
         }
     }
-    // Hide bottom bar on player, profile selection, and login screens.
-    // TV route shows the bottom bar on mobile (touch devices) for easy navigation;
-    // the fullscreen IPTV player uses BackHandler to return to the guide.
+
     val showBottomBar = isMobile && activeProfile != null &&
-        currentRoute != null &&
-        !iptvFullscreen &&
-        !currentRoute.contains("player") &&
-        !currentRoute.contains("profile") &&
-        !currentRoute.contains("login")
+            currentRoute != null &&
+            !iptvFullscreen &&
+            !currentRoute.contains("player") &&
+            !currentRoute.contains("profile") &&
+            !currentRoute.contains("login")
 
     val isPlayerRoute = iptvFullscreen || currentRoute?.contains("player") == true
 
@@ -660,10 +611,9 @@ fun ArflixApp(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            // Background fills edge-to-edge (including behind transparent bars).
             .background(
                 brush = if (oledBlackBackground) {
                     Brush.linearGradient(colors = listOf(Color.Black, Color.Black))
@@ -677,58 +627,55 @@ fun ArflixApp(
                     )
                 }
             )
-            // On mobile, push content below the status bar (except player).
-            // Applied AFTER background so the gradient fills behind the bars.
-            // statusBarsPadding() reads live WindowInsets, so it automatically
-            // becomes 0 when the player hides the bars.
-            .then(if (isMobile && !isPlayerRoute) Modifier.statusBarsPadding() else Modifier)
     ) {
-        Box(modifier = Modifier.weight(1f)) {
-            AppNavigation(
-                navController = navController,
-                startDestination = startDestination,
-                preloadedCategories = preloadedCategories,
-                preloadedHeroItem = preloadedHeroItem,
-                preloadedHeroLogoUrl = preloadedHeroLogoUrl,
-                preloadedLogoCache = preloadedLogoCache,
-                currentProfile = activeProfile,
-                isCloudConnected = authState is AuthState.Authenticated,
-                onSwitchProfile = {
-                    appCoroutineScope.launch {
-                        traktRepository.clearAllProfileCaches()
-                        watchHistoryRepository.clearProfileCaches()
-                        watchlistRepository.clearWatchlistCache()
-                        iptvRepository.invalidateCache()
-                        profileManager.setCurrentProfileId("default")
-                        profileManager.setCurrentProfileName("default")
-                        profileRepository.clearActiveProfile()
-                    }
-                },
-                onTvFullscreenChanged = { fullscreen ->
-                    iptvFullscreen = fullscreen
-                },
-                onExitApp = onExitApp
-            )
-        }
+        AppNavigation(
+            navController = navController,
+            startDestination = startDestination,
+            preloadedCategories = preloadedCategories,
+            preloadedHeroItem = preloadedHeroItem,
+            preloadedHeroLogoUrl = preloadedHeroLogoUrl,
+            preloadedLogoCache = preloadedLogoCache,
+            currentProfile = activeProfile,
+            isCloudConnected = authState is AuthState.Authenticated,
+            onSwitchProfile = {
+                appCoroutineScope.launch {
+                    traktRepository.clearAllProfileCaches()
+                    watchHistoryRepository.clearProfileCaches()
+                    watchlistRepository.clearWatchlistCache()
+                    iptvRepository.invalidateCache()
+                    profileManager.setCurrentProfileId("default")
+                    profileManager.setCurrentProfileName("default")
+                    profileRepository.clearActiveProfile()
+                }
+            },
+            onTvFullscreenChanged = { fullscreen ->
+                iptvFullscreen = fullscreen
+            },
+            onExitApp = onExitApp
+        )
 
         if (isMobile && !isPlayerRoute) {
-            val bottomBarAlpha by androidx.compose.animation.core.animateFloatAsState(
+            val bottomBarAlpha by animateFloatAsState(
                 targetValue = if (showBottomBar) 1f else 0f,
-                animationSpec = androidx.compose.animation.core.tween(250),
+                animationSpec = tween(250),
                 label = "bottom_bar_alpha"
             )
+
             AppBottomBar(
                 currentRoute = currentRoute,
                 onNavigate = { route ->
                     if (showBottomBar) {
                         navController.navigate(route) {
-                            popUpTo("home") { inclusive = false }
+                            popUpTo(Screen.Home.route) { saveState = true }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 14.dp)
                     .graphicsLayer {
                         alpha = bottomBarAlpha
                     }
