@@ -375,6 +375,7 @@ class CloudSyncRepository @Inject constructor(
     private val subtitleAiEnabledKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_ai_enabled")
     private val subtitleAiAutoSelectKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_ai_auto_select")
     private val subtitleAiFindBestMatchKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_ai_find_best_match")
+    private val subtitleAutoSyncEnabledKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_auto_sync_enabled")
     private val subtitleAiAutoSyncKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_ai_auto_sync")
     private val subtitlePreloadEnabledKey = androidx.datastore.preferences.core.booleanPreferencesKey("subtitle_preload_enabled")
     private val dolbyVisionCompatKey = androidx.datastore.preferences.core.booleanPreferencesKey("dolby_vision_compat")
@@ -685,6 +686,7 @@ class CloudSyncRepository @Inject constructor(
         root.put("subtitleAiEnabled", prefs[subtitleAiEnabledKey] ?: false)
         root.put("subtitleAiAutoSelect", prefs[subtitleAiAutoSelectKey] ?: false)
         root.put("subtitleAiFindBestMatch", prefs[subtitleAiFindBestMatchKey] ?: false)
+        root.put("subtitleAutoSyncEnabled", prefs[subtitleAutoSyncEnabledKey] ?: true)
         root.put("subtitleAiAutoSync", prefs[subtitleAiAutoSyncKey] ?: false)
         root.put("subtitlePreloadEnabled", prefs[subtitlePreloadEnabledKey] ?: true)
         root.put("dolbyVisionCompatEnabled", prefs[dolbyVisionCompatKey] ?: true)
@@ -1473,6 +1475,9 @@ class CloudSyncRepository @Inject constructor(
                 prefs[subtitleAiFindBestMatchKey] = root.optBoolean("subtitleAiFindBestMatch", false)
                 // Only apply when the backup carries the field — older-version backups must not
                 // reset it (same rationale as subtitlePreloadEnabled below).
+                if (root.has("subtitleAutoSyncEnabled")) {
+                    prefs[subtitleAutoSyncEnabledKey] = root.optBoolean("subtitleAutoSyncEnabled", true)
+                }
                 if (root.has("subtitleAiAutoSync")) {
                     prefs[subtitleAiAutoSyncKey] = root.optBoolean("subtitleAiAutoSync", false)
                 }

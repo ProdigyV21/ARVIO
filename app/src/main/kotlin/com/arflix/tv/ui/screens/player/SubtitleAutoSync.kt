@@ -113,7 +113,7 @@ object SubtitleAutoSync {
 
     // With ≥3 anchors, how far an anchor's delay may sit from the fitted line before it's treated
     // as one bad measurement (bad LLM match, not genuine non-constant drift) rather than noise.
-    private const val DRIFT_RESIDUAL_OUTLIER_MS = 400.0
+    const val DRIFT_RESIDUAL_OUTLIER_MS = 400.0
 
     /** One measured calibration point: the delay observed at a (true) playback position. */
     data class DriftAnchorPoint(val positionMs: Long, val delayMs: Long)

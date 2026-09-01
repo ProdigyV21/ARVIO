@@ -243,6 +243,10 @@
     <string name="ai_find_best_match_desc">Auto-pick the best-synced subtitle from your addons</string>
     <string name="ai_auto_sync_title">Auto-Sync Addon Subtitles</string>
     <string name="ai_auto_sync_desc">Fix a selected subtitle\'s timing by AI-matching its lines to a built-in track</string>
+    <string name="auto_sync_master_title">Auto Sync Subtitles</string>
+    <string name="auto_sync_master_desc">Automatically pick and sync the best subtitle during playback</string>
+    <string name="auto_sync_use_ai_title">Use AI for Auto Sync</string>
+    <string name="auto_sync_use_ai_desc">Precisely sync and drift-correct subtitles by AI-matching their lines to a built-in track (needs API key)</string>
     <string name="subtitle_preload_title">Preload Subtitles</string>
     <string name="subtitle_preload_desc">Wait for subtitles before starting the video so switching them is instant</string>
     <string name="dv_compat_title">Dolby Vision Compatibility</string>

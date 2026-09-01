@@ -165,9 +165,20 @@ data class PlayerUiState(
     val isLiveAudioTranslating: Boolean = false,
     // True while "Find best match" is scanning subtitles; message shown as a transient toast.
     val isFindingBestMatch: Boolean = false,
+    // True while auto-sync's initial (anchor 1) pass displays the built-in reference track to
+    // gather its cues — the subtitle view is hidden so the viewer sees nothing until the sync
+    // lands. Display-only: cue collection listens on the player, not the view.
+    val isAutoSyncGathering: Boolean = false,
+    // Persistent top-center progress while invisible refinement/rematch work is active.
+    val backgroundAutoSyncStatus: String = "",
     val matchToast: String? = null,
     // Persistent status shown on screen for the whole duration of a "Find best match" scan.
     val matchStatusText: String = "",
+    // Auto-sync picker mode. When the master is off the picker exposes both manual modes;
+    // otherwise it exposes only the configured automatic mode.
+    val autoSyncMasterEnabled: Boolean = true,
+    val autoSyncUseAi: Boolean = false,
+    val autoSyncAiAvailable: Boolean = false,
     // Full name of the preferred subtitle language (e.g. "Hebrew") — drives the "Find Best Match"
     // menu entry. Independent of AI availability: the timing scan needs no AI/API key.
     val matchLanguageName: String = "",
@@ -280,13 +291,14 @@ class PlayerViewModel @Inject constructor(
     // AI subtitle settings (read once per video load)
     private var aiSubtitleEnabled = false
     private var aiSubtitleAutoSelect = false
-    // When true (default), activating AI first tries to auto-pick a synced addon subtitle in the
-    // user's preferred language (Find Best Match); only if nothing matches does it translate the
-    // built-in subtitle.
+    // Non-AI mode of the Auto Sync master: auto-run the timing-based match scan ("find best
+    // match") for the user's preferred language at playback start.
     private var aiFindBestMatchFirst = false
-    // AI auto-sync of addon subtitles: LLM semantic line matching against a built-in track's
+    // AI mode of the Auto Sync master: LLM semantic line matching against a built-in track's
     // cues to compute (and bake in) the delay/drift of the selected addon subtitle file.
     private var aiAutoSyncEnabled = false
+    // The Auto Sync master toggle (default ON) — off disables both automatic modes above.
+    private var autoSyncMasterEnabled = true
     // Normalized code of the user's preferred subtitle language (e.g. "he") — the target of both
     // "find best match" and AI translation. Blank when unset/disabled.
     @Volatile private var targetSubtitleLangCode = ""
@@ -303,7 +315,7 @@ class PlayerViewModel @Inject constructor(
     // Global AI subtitle DataStore keys (device-wide, not profile-scoped)
     private val aiEnabledKey = booleanPreferencesKey("subtitle_ai_enabled")
     private val aiAutoSelectKey = booleanPreferencesKey("subtitle_ai_auto_select")
-    private val aiFindBestMatchKey = booleanPreferencesKey("subtitle_ai_find_best_match")
+    private val autoSyncEnabledKey = booleanPreferencesKey("subtitle_auto_sync_enabled")
     private val aiAutoSyncKey = booleanPreferencesKey("subtitle_ai_auto_sync")
     private val subtitlePreloadKey = booleanPreferencesKey("subtitle_preload_enabled")
     private val dolbyVisionCompatPrefKey = booleanPreferencesKey("dolby_vision_compat")
@@ -436,6 +448,35 @@ class PlayerViewModel @Inject constructor(
                     ?.takeIf { it.length >= 2 && !SubtitleAutoSync.isNonDialogueMusicCue(it) }
                     ?: return@launch
                 if (autoSyncCollecting) appendAutoSyncRealtimeCue(trueMs, recognized)
+            }
+        }
+        // Stage-1 interval retention: the same appear/disappear tracking the scan uses below,
+        // but into the calibrator's per-stream reference pool (true-timed, self-cue guarded) —
+        // the rendered reference cues are ground truth the background rematch can score against.
+        if (autoSyncCollecting && timeMs >= 0) {
+            val trueMs = timeMs + (rendererSyncOffsetUsProvider?.invoke() ?: 0L) / 1000L
+            if (hasText) {
+                if (autoSyncIntervalStartMs < 0) {
+                    autoSyncIntervalStartMs = trueMs
+                    autoSyncIntervalSelfText = false
+                }
+                val addonTexts = autoSyncAddonTextsForIntervals
+                if (addonTexts != null && textSample != null &&
+                    normalizeCueTextForCompare(textSample) in addonTexts
+                ) {
+                    autoSyncIntervalSelfText = true
+                }
+            } else if (autoSyncIntervalStartMs in 0 until trueMs) {
+                val validLength = trueMs - autoSyncIntervalStartMs <= MATCH_MAX_REF_INTERVAL_MS
+                if (validLength && !autoSyncIntervalSelfText) {
+                    driftCalibrator.recordExternalReference(
+                        emptyList(), listOf(autoSyncIntervalStartMs to trueMs)
+                    )
+                }
+                autoSyncIntervalStartMs = -1L
+            } else if (autoSyncIntervalStartMs >= 0) {
+                // Position jumped backwards past the interval start (seek) — discard it.
+                autoSyncIntervalStartMs = -1L
             }
         }
         if (!collectingReference || timeMs < 0) return
@@ -680,10 +721,12 @@ class PlayerViewModel @Inject constructor(
             // Load AI subtitle settings
             aiSubtitleEnabled = prefs[aiEnabledKey] ?: false
             aiSubtitleAutoSelect = prefs[aiAutoSelectKey] ?: false
-            aiAutoSyncEnabled = prefs[aiAutoSyncKey] ?: false
-            // Auto-sync and the auto match scan are mutually exclusive (Settings enforces it,
-            // but old cloud backups may still carry both flags on) — auto-sync wins.
-            aiFindBestMatchFirst = (prefs[aiFindBestMatchKey] ?: false) && !aiAutoSyncEnabled
+            autoSyncMasterEnabled = prefs[autoSyncEnabledKey] ?: true
+            aiAutoSyncEnabled = autoSyncMasterEnabled && (prefs[aiAutoSyncKey] ?: false)
+            // The master's two mutually exclusive automatic modes: with AI, the full AI sync
+            // pipeline runs (and the match scan only as its NON_LINEAR fallback); without AI,
+            // only the timing-based match scan auto-runs.
+            aiFindBestMatchFirst = autoSyncMasterEnabled && !aiAutoSyncEnabled
             subtitlePreloadEnabled = prefs[subtitlePreloadKey] ?: true
             aiApiKey = prefs[aiApiKeyKey] ?: ""
             aiModel = runCatching {
@@ -718,6 +761,9 @@ class PlayerViewModel @Inject constructor(
                 autoPlayNext = autoPlayNext,
                 showLoadingStats = showLoadingStats,
                 volumeBoostDb = volumeBoostDb,
+                autoSyncMasterEnabled = autoSyncMasterEnabled,
+                autoSyncUseAi = aiAutoSyncEnabled,
+                autoSyncAiAvailable = aiApiKey.isNotBlank(),
                 subtitlePreloadEnabled = subtitlePreloadEnabled,
                 dolbyVisionCompatEnabled = prefs[dolbyVisionCompatPrefKey] ?: true,
                 // Nothing to preload without a preferred language — don't make the gate wait.
@@ -1717,7 +1763,11 @@ class PlayerViewModel @Inject constructor(
                         aiSourceSubtitle = null
                         _uiState.value = _uiState.value.copy(selectedSubtitle = externalMatch, isAiTranslating = false, isAiAvailable = false, aiTargetLanguageName = "")
                     }
-                    maybeAutoSyncAfterAutoSelection(externalMatch)
+                    // With "find best match first" also on and a scan about to run below, auto-sync
+                    // waits for the scan's winner instead of churning on this pre-scan pick.
+                    val scanWillFollow =
+                        aiFindBestMatchFirst && !autoMatchAttempted && !hasManualSubtitleSelection
+                    if (!scanWillFollow) maybeAutoSyncAfterAutoSelection(externalMatch)
                 }
             }
             // "Find best match first" auto-runs the scan even without AI auto-select: it verifies
@@ -3179,6 +3229,7 @@ class PlayerViewModel @Inject constructor(
                 writeCachedMatch(exactNameMatch)
                 Log.i("SubMatch", "exact release-name match — scan skipped: ${exactNameMatch.label}")
                 showMatchToast("Matched: ${exactNameMatch.label} (exact release name)")
+                maybeAutoSyncAfterMatch(exactNameMatch)
                 return@launch
             }
 
@@ -3286,6 +3337,7 @@ class PlayerViewModel @Inject constructor(
                 showMatchToast(
                     "Matched: ${best.sub.label} · ${(best.score * 100).toInt()}% ($sourceLabel)$offsetNote"
                 )
+                maybeAutoSyncAfterMatch(best.sub)
             } else {
                 // Nothing synced found (or too little dialogue) → let the caller fall back (AI translate).
                 restoreSubtitle(previousSubtitle)
@@ -3818,10 +3870,17 @@ class PlayerViewModel @Inject constructor(
     // Sessions the STARTUP auto-trigger already fired for. applyPreferredSubtitle re-runs on
     // every track/list update, so without this a FAILED run would be retried endlessly.
     private val autoSyncAutoAttemptedSessionKeys = mutableSetOf<String>()
+    // One background rematch (better-cut subtitle swap on NON_LINEAR drift) per playback.
+    private var autoSyncRematchAttempted = false
     private var autoSyncInFlightSessionKey: String? = null
     // Realtime-rendered reference cues — fallback when the buffered reflection path is empty.
     private val autoSyncRealtimeCues = mutableListOf<SubtitleSyncMatcher.TimedCue>()
     @Volatile private var autoSyncCollecting = false
+    // Stage-1 realtime interval tracking (appear/disappear of the rendered reference cue) — the
+    // measured spans are retained in the calibrator's per-stream pool for rematch scoring.
+    @Volatile private var autoSyncIntervalStartMs = -1L
+    @Volatile private var autoSyncIntervalSelfText = false
+    @Volatile private var autoSyncAddonTextsForIntervals: Set<String>? = null
     // Last applied (interceptMs, rate) — skip re-baking for negligible drift-fit refinements.
     private var autoSyncLastAppliedFit: Pair<Long, Double>? = null
     // Base identity ("provider|id-without-marker") of the subtitle the renderer-side transform
@@ -3842,10 +3901,24 @@ class PlayerViewModel @Inject constructor(
      * CURRENT position plus the rate (the renderer self-anchors and evolves it forward — its
      * render positions live in a private offset timebase the intercept can't be applied in).
      * Returns false when the renderer hook isn't available (caller falls back to file-baking).
+     *
+     * Large positive delays are refused (caller bakes instead): the renderer shifts its CLOCK
+     * back by the delay, so after a seek it asks for cues from `seekPos − delay` — cues the
+     * player flushed and won't re-deliver. The viewer then sees NO subtitles for ~delay worth
+     * of playback after every jump. Under ~2 s the gap is within normal seek-settle noise;
+     * beyond it, baking into the served file (timestamps corrected in the file itself) keeps
+     * seeks instant at the cost of one MediaItem rebuild.
      */
     private fun applyAutoSyncRendererTransform(sub: Subtitle, interceptMs: Long, rate: Double): Boolean {
         val applier = autoSyncTransformApplier ?: return false
         val baseMs = if (rate == 0.0) interceptMs else interceptMs + Math.round(rate * lastKnownPositionMs)
+        if (baseMs > RENDERER_TRANSFORM_MAX_DELAY_MS) {
+            android.util.Log.i(
+                "SubSync",
+                "renderer transform refused (delay ${baseMs}ms > ${RENDERER_TRANSFORM_MAX_DELAY_MS}ms) — baking instead"
+            )
+            return false
+        }
         applier(baseMs, rate)
         autoSyncRendererTransformKey = subtitleBaseKey(sub)
         autoSyncRendererTransformFit = interceptMs to rate
@@ -3894,6 +3967,8 @@ class PlayerViewModel @Inject constructor(
         autoSyncStartupJob = null
         autoSyncInFlightSessionKey = null
         autoSyncCollecting = false
+        autoSyncAddonTextsForIntervals = null
+        autoSyncIntervalStartMs = -1L
         synchronized(autoSyncRealtimeCues) { autoSyncRealtimeCues.clear() }
     }
 
@@ -3902,14 +3977,48 @@ class PlayerViewModel @Inject constructor(
         cancelSubtitleAutoSync("new stream")
         autoSyncCompletedSessionKeys.clear()
         autoSyncAutoAttemptedSessionKeys.clear()
+        autoSyncRematchAttempted = false
+        // Retained video-derived reference material (cue batches/intervals) is per-stream.
+        driftCalibrator.resetForNewStream()
         autoSyncLastAppliedFit = null
         clearAutoSyncRendererTransform("new stream")
     }
 
     /** Manual menu action: auto-sync the currently selected addon subtitle with AI. */
-    fun runSubtitleAutoSync() {
-        val selected = _uiState.value.selectedSubtitle
-        val original = selected?.let { resolveOriginalAddonSubtitle(it) }
+    /**
+     * Manual picker action. Every click starts a genuinely fresh run: cancel both pipelines,
+     * forget cached/session results and retained video samples, clear the live transform, and
+     * restore the original addon track before starting the selected mode.
+     */
+    private fun resetAutoSyncForManualRun(): Subtitle? {
+        val original = _uiState.value.selectedSubtitle?.let { resolveOriginalAddonSubtitle(it) }
+        cancelFindBestMatch()
+        cancelSubtitleAutoSync("manual auto-sync restart")
+        autoSyncCompletedSessionKeys.clear()
+        autoSyncAutoAttemptedSessionKeys.clear()
+        autoSyncRematchAttempted = false
+        autoMatchAttempted = false
+        autoSyncLastAppliedFit = null
+        driftCalibrator.resetForNewStream()
+        clearAutoSyncRendererTransform("manual auto-sync restart")
+        writeCachedMatch(null)
+        if (original != null) restoreSubtitle(original)
+        return original
+    }
+
+    /** Manual Auto Sync without AI: restart from zero and run the existing best-match scan. */
+    fun runSubtitleAutoSyncWithoutAi() {
+        resetAutoSyncForManualRun()
+        runFindBestMatch(isUserAction = true)
+    }
+
+    /** Manual Auto Sync with AI: restart from zero and run the existing AI pipeline. */
+    fun runSubtitleAutoSyncWithAi() {
+        if (aiApiKey.isBlank()) {
+            showMatchToast(context.getString(R.string.player_ai_no_key))
+            return
+        }
+        val original = resetAutoSyncForManualRun()
         if (original == null) {
             showMatchToast("Auto-sync needs an addon subtitle selected")
             return
@@ -3917,11 +4026,29 @@ class PlayerViewModel @Inject constructor(
         startSubtitleAutoSync(original, force = true)
     }
 
+    /** Configured-mode picker action used while the Auto Sync master is enabled. */
+    fun runSubtitleAutoSync() {
+        if (aiAutoSyncEnabled) runSubtitleAutoSyncWithAi() else runSubtitleAutoSyncWithoutAi()
+    }
+
     /** Auto-trigger (setting-gated) after the user picks an addon subtitle. */
     private fun maybeAutoSyncAfterSelection(subtitle: Subtitle) {
         if (!aiAutoSyncEnabled) return
         val original = resolveOriginalAddonSubtitle(subtitle) ?: return
         startSubtitleAutoSync(original, force = false)
+    }
+
+    /**
+     * Auto-trigger after a "Find best match" scan picked [winner]: with both features on, the
+     * scan runs first and auto-sync then verifies/refines the winner's timing. Clears the
+     * once-per-stream auto-attempt guard for the winner — any earlier automatic attempt on it
+     * (made before the scan took over and cancelled it) must not block this ordered re-run.
+     */
+    private fun maybeAutoSyncAfterMatch(winner: Subtitle) {
+        if (!aiAutoSyncEnabled) return
+        val original = resolveOriginalAddonSubtitle(winner) ?: return
+        autoSyncAutoAttemptedSessionKeys.remove(autoSyncSessionKey(original))
+        maybeAutoSyncAfterAutoSelection(original)
     }
 
     /**
@@ -3998,8 +4125,26 @@ class PlayerViewModel @Inject constructor(
                 return@launch
             }
             autoSyncStartupJob = null
+            // AI sync needs a built-in reference (text, or bitmap for OCR) and an API key.
+            // Without either, degrade to the master's non-AI mode: auto-run the match scan
+            // (it has exact-name and hearing fallbacks that need no embedded reference).
+            val hasReference = _uiState.value.subtitles.any {
+                it.isEmbedded && !it.isForced && !it.label.contains("forced", ignoreCase = true)
+            }
+            if (!hasReference || aiApiKey.isBlank()) {
+                fallbackToAutoScan(if (!hasReference) "no built-in reference track" else "no API key")
+                return@launch
+            }
             startSubtitleAutoSync(original, force = false)
         }
+    }
+
+    /** AI auto-sync can't run — behave like the master's non-AI mode instead (once per stream). */
+    private fun fallbackToAutoScan(reason: String) {
+        if (autoMatchAttempted) return
+        autoMatchAttempted = true
+        android.util.Log.i("SubSync", "AI auto-sync unavailable ($reason) — falling back to match scan")
+        findBestSubtitleMatch()
     }
 
     /** Once-per-stream identity of an addon subtitle for auto-sync guards (URL-independent). */
@@ -4068,6 +4213,8 @@ class PlayerViewModel @Inject constructor(
                 showMatchToast("Auto-sync failed: ${e.message ?: "unknown error"}")
             } finally {
                 autoSyncCollecting = false
+                autoSyncAddonTextsForIntervals = null
+                autoSyncIntervalStartMs = -1L
                 // Torn-down run (cancelled/crashed) mid-gather: put the addon subtitle back so
                 // the built-in reference can't stay stuck on screen. Only when this run is still
                 // the current one (a takeover run owns the hook and the reference track now) —
@@ -4077,6 +4224,11 @@ class PlayerViewModel @Inject constructor(
                     autoSyncRestoreOnCancel?.let { restore ->
                         autoSyncRestoreOnCancel = null
                         restore()
+                    }
+                    // Anchor-1 gather is over on every path (success, failure, cancel) — unhide
+                    // the subtitle view. Guarded so a takeover run keeps ownership of the flag.
+                    if (_uiState.value.isAutoSyncGathering) {
+                        _uiState.value = _uiState.value.copy(isAutoSyncGathering = false)
                     }
                 }
                 if (autoSyncInFlightSessionKey == sessionKey) autoSyncInFlightSessionKey = null
@@ -4133,9 +4285,14 @@ class PlayerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             selectedSubtitle = refResolved,
             isAiTranslating = false,
+            // Hide the raw reference cues (e.g. English) for the whole gather — the viewer sees
+            // nothing until the sync is applied or the addon subtitle is restored.
+            isAutoSyncGathering = true,
             subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + 1
         )
         synchronized(autoSyncRealtimeCues) { autoSyncRealtimeCues.clear() }
+        autoSyncAddonTextsForIntervals = addonTexts
+        autoSyncIntervalStartMs = -1L
         autoSyncCollecting = true
         // Torn down mid-gather (manual delay tweak, new run, …): put the addon subtitle back —
         // only if the reference track is in fact still what's displayed.
@@ -4288,13 +4445,33 @@ class PlayerViewModel @Inject constructor(
                 .filter { "${it.startMs}|${it.text}" !in usedSourceKeys }
                 .sortedBy { it.startMs }
             if (merged.size >= SubtitleAutoSync.SOURCE_LINE_COUNT) {
-                return merged.take(SubtitleAutoSync.SOURCE_LINE_COUNT)
+                val batch = merged.take(SubtitleAutoSync.SOURCE_LINE_COUNT)
+                retainStage1Reference(batch, bufferVerified = bufferedClean.isNotEmpty())
+                return batch
             }
             if (System.currentTimeMillis() - startedAt >= timeoutMs) {
-                return if (merged.size >= AUTO_SYNC_MIN_SOURCE_LINES) merged else emptyList()
+                return if (merged.size >= AUTO_SYNC_MIN_SOURCE_LINES) {
+                    retainStage1Reference(merged, bufferVerified = bufferedClean.isNotEmpty())
+                    merged
+                } else emptyList()
             }
             delay(250)
         }
+    }
+
+    /**
+     * Retains stage-1 (primary player) reference material in the calibrator's per-stream pools —
+     * with it, the background rematch and a swapped subtitle's pipeline usually need no new
+     * gathers at all. Real buffered intervals are recorded only when the buffer was VERIFIED to
+     * belong to the reference track (the self-cue guard) — addon-track intervals retained as
+     * "reference" would bias rematch scoring toward subs cut like the current one.
+     */
+    private fun retainStage1Reference(batch: List<SubtitleSyncMatcher.TimedCue>, bufferVerified: Boolean) {
+        val intervals = if (bufferVerified) {
+            runCatching { bufferedReferenceIntervalsProvider?.invoke(MATCH_BUFFERED_REF_INTERVALS) }
+                .getOrNull().orEmpty()
+        } else emptyList()
+        driftCalibrator.recordExternalReference(batch, intervals)
     }
 
     /** Anchors 2–4: background, best-effort drift-rate calibration on top of anchor 1. */
@@ -4328,28 +4505,217 @@ class PlayerViewModel @Inject constructor(
                     },
                     onFitAccepted = { interceptMs, rate ->
                         applyDriftFit(original, raw, interceptMs, rate)
+                    },
+                    onStatus = { status ->
+                        _uiState.value = _uiState.value.copy(backgroundAutoSyncStatus = status)
                     }
+                )
+                _uiState.value = _uiState.value.copy(
+                    backgroundAutoSyncStatus = "Auto-sync refinement started"
                 )
                 val outcome = driftCalibrator.run(params)
                 if (outcome == SubtitleDriftCalibrator.Outcome.NON_LINEAR) {
+                    _uiState.value = _uiState.value.copy(
+                        backgroundAutoSyncStatus =
+                            "Non-linear drift found — searching for a better subtitle…"
+                    )
+                    // NON_LINEAR is the signature of a subtitle cut for a DIFFERENT release.
+                    // Combined flow: before settling into the resync loop, look for a better-cut
+                    // addon subtitle in the background (display untouched; once per playback).
+                    // A successful swap hands the new subtitle back into this same pipeline.
+                    val swapped = if (aiAutoSyncEnabled && !autoSyncRematchAttempted) {
+                        autoSyncRematchAttempted = true
+                        runCatching {
+                            tryBackgroundRematch(original, referenceSub, params, durationMs)
+                        }.getOrElse { e ->
+                            if (e is kotlinx.coroutines.CancellationException) throw e
+                            android.util.Log.w("SubSync", "background rematch failed: ${e.message}")
+                            false
+                        }
+                    } else false
+                    if (swapped) return@launch
+                    _uiState.value = _uiState.value.copy(backgroundAutoSyncStatus = "")
+                    showMatchToast("Background match ended — no better subtitle confirmed")
                     // Stepwise timing (cuts/different edit): no line can fix it globally — keep
-                    // re-measuring the flat offset just ahead of playback every ~10 min instead.
+                    // re-measuring the flat offset just ahead of playback instead, at a cadence
+                    // the calibrator adapts to how fast the delay is actually moving. When the
+                    // movement is a plausible local slope (not a step), it is applied as a rate
+                    // so the correction extrapolates between resyncs.
                     driftCalibrator.runPeriodicResync(
                         params,
                         playbackPositionMs = { lastKnownPositionMs },
-                        currentDelayMs = { autoSyncLastAppliedFit?.first ?: anchor1DelayMs },
-                        onOffsetMeasured = { offsetMs, _ ->
-                            applyDriftFit(original, raw, offsetMs, 0.0)
+                        currentDelayAtMs = { positionMs ->
+                            autoSyncLastAppliedFit?.let { (intercept, rate) ->
+                                intercept + Math.round(rate * positionMs)
+                            } ?: anchor1DelayMs
+                        },
+                        onOffsetMeasured = { delayMs, measuredAtMs, rate ->
+                            // delay(pos) = intercept + rate·pos must equal delayMs at measuredAtMs.
+                            applyDriftFit(
+                                original, raw, delayMs - Math.round(rate * measuredAtMs), rate
+                            )
                         }
                     )
+                } else if (outcome == SubtitleDriftCalibrator.Outcome.FIT_APPLIED) {
+                    _uiState.value = _uiState.value.copy(backgroundAutoSyncStatus = "")
+                    showMatchToast("Auto-sync refinement completed")
+                } else {
+                    _uiState.value = _uiState.value.copy(backgroundAutoSyncStatus = "")
+                    showMatchToast("Auto-sync refinement ended — not enough reference dialogue")
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // Fail-safe: a failed calibration just keeps the anchor-1 flat delay.
                 android.util.Log.w("SubSync", "drift calibration failed: ${e.message}")
+            } finally {
+                if (_uiState.value.backgroundAutoSyncStatus.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(backgroundAutoSyncStatus = "")
+                }
             }
         }
+    }
+
+    /**
+     * Combined-flow steps 2–3 (runs inside the drift-calibration job, fully invisible):
+     * find-best-match against reference intervals read through the calibrator's secondary player
+     * (the displayed synced subtitle is never touched), then — on a winner — the normal AI
+     * auto-sync anchor-1 measurement of that winner (window centered on the scan's own offset).
+     * On success the winner replaces the current subtitle and re-enters the regular pipeline
+     * ([maybeStartDriftCalibration] on the new sub). Returns true when a swap happened.
+     */
+    private suspend fun tryBackgroundRematch(
+        current: Subtitle,
+        referenceSub: Subtitle,
+        currentParams: SubtitleDriftCalibrator.Params,
+        durationMs: Long
+    ): Boolean {
+        val positionMs = lastKnownPositionMs
+        val safeEndMs = durationMs - 150_000L
+        if (positionMs <= 0L || positionMs >= safeEndMs) return false
+
+        // Step 2a: reference intervals — LOCAL ONLY, like the on-screen scan. Scoring asks "does
+        // one flat offset align this candidate NEAR THE VIEWER?"; demanding a single offset
+        // across the whole retained span would be self-defeating: stage 3 only runs on content
+        // already proven NON-LINEAR, where no candidate can fit one flat offset movie-wide — so
+        // wide-span scoring failed every candidate. The winner's global behavior is verified by
+        // its own anchor pass right after the swap. Dedicated gather (bounded — a long wait here
+        // is worse than a "no match": the current sub keeps playing corrected either way) only
+        // when the local retained pool is thin.
+        currentParams.onStatus("Better-match search — collecting reference…")
+        val localWindowMs = 8 * 60_000L
+        val retained = driftCalibrator.collectedReferenceIntervals()
+            .filter { kotlin.math.abs(it.first - positionMs) <= localWindowMs }
+        val retainedSpan =
+            if (retained.size >= 2) retained.last().second - retained.first().first else 0L
+        val refIntervals = if (
+            retained.size >= MATCH_MIN_REF_INTERVALS && retainedSpan >= MATCH_FAST_ACCEPT_SPAN_MS
+        ) {
+            android.util.Log.i("SubSync", "rematch: reusing ${retained.size} local reference intervals")
+            retained
+        } else {
+            val gathered = driftCalibrator.gatherReferenceIntervals(
+                currentParams,
+                targetPositionMs = (positionMs + 30_000L).coerceAtMost(safeEndMs),
+                targetCount = MATCH_TARGET_REF_INTERVALS,
+                timeoutMs = 60_000L
+            )
+            (retained + gathered).distinct().sortedBy { it.first }
+        }
+        if (refIntervals.size < MATCH_MIN_REF_INTERVALS) {
+            android.util.Log.i("SubSync", "rematch: only ${refIntervals.size} reference intervals — skipping")
+            return false
+        }
+
+        // Step 2b: same candidate pool/ranking the match scan uses, minus the current subtitle.
+        val targetLang = targetSubtitleLangCode.ifBlank { normalizeLanguage(getDefaultSubtitle()) }
+        if (targetLang.isBlank()) return false
+        val currentBaseId = current.id.substringBefore(MATCH_OFFSET_ID_MARKER)
+        val streamSrc = _uiState.value.selectedStream?.source.orEmpty()
+        val candidates = _uiState.value.subtitles.filter {
+            !it.isEmbedded && !it.isBitmap && it.url.isNotBlank() &&
+                normalizeLanguage(it.lang) == targetLang &&
+                !(it.provider == current.provider &&
+                    it.id.substringBefore(MATCH_OFFSET_ID_MARKER) == currentBaseId)
+        }
+            .sortedByDescending { weightedSubtitleScore(streamSrc, it.id) }
+            .take(MATCH_MAX_CANDIDATES)
+        if (candidates.isEmpty()) return false
+        val loadedRaw = kotlinx.coroutines.coroutineScope {
+            candidates.map { sub -> async { sub to SubtitleSyncMatcher.loadRaw(sub.url) } }.awaitAll()
+        }
+        val loaded = loadedRaw.mapNotNull { (sub, raw) ->
+            val cues = raw?.let { SubtitleSyncMatcher.parseCues(it) }.orEmpty()
+            if (cues.isEmpty()) null else sub to cues
+        }
+        if (loaded.isEmpty()) return false
+        currentParams.onStatus("Better-match search — scoring ${loaded.size} subtitles…")
+        val scored = withContext(Dispatchers.Default) {
+            scoreCandidatesWithOffsets(loaded, refIntervals, debug = true)
+        }
+        val best = scored.maxByOrNull { it.score } ?: return false
+        val accepted = best.score >= MATCH_SUCCESS_THRESHOLD_TIMING ||
+            (best.offsetMs != 0L && best.score >= MATCH_OFFSET_CORROBORATED_ACCEPT)
+        if (!accepted) {
+            android.util.Log.i(
+                "SubSync",
+                "rematch: no better-cut candidate (best ${"%.2f".format(best.score)} ${best.sub.label})"
+            )
+            return false
+        }
+
+        // Step 3: refine the winner's offset with the normal AI anchor-1 measurement — retained
+        // reference batches only (playerless: one LLM call, seconds). Deliberately NO player
+        // fallback here: the winner already cleared the same accept bar the non-AI flow swaps on
+        // directly, so a failed/unavailable refinement just swaps with the scan's own offset —
+        // the winner's anchor pass right after verifies and corrects any residual anyway.
+        currentParams.onStatus("Better match found — verifying ${best.sub.label}…")
+        val winnerRaw = loadedRaw.firstOrNull { it.first == best.sub }?.second ?: return false
+        val winnerCues = loaded.first { it.first == best.sub }.second.sortedBy { it.startMs }
+        val winnerParams = SubtitleDriftCalibrator.Params(
+            createMediaSource = currentParams.createMediaSource,
+            referenceLangMatches = currentParams.referenceLangMatches,
+            addonCues = winnerCues,
+            matchLines = currentParams.matchLines,
+            anchor1PositionMs = positionMs,
+            anchor1DelayMs = best.offsetMs,
+            durationMs = durationMs,
+            primaryBufferMarginMs = currentParams.primaryBufferMarginMs,
+            onFitAccepted = { _, _ -> }
+        )
+        val anchor = driftCalibrator.measureFlatOffsetFromRetained(
+            winnerParams,
+            nearPositionMs = lastKnownPositionMs,
+            expectedDelayMs = best.offsetMs
+        ) ?: SubtitleAutoSync.DriftAnchorPoint(positionMs, best.offsetMs).also {
+            android.util.Log.i(
+                "SubSync",
+                "rematch: no retained batch verified ${best.sub.label} — swapping on scan offset ${best.offsetMs}ms"
+            )
+        }
+
+        // Swap — unless the user re-picked while the background work ran.
+        val selected = _uiState.value.selectedSubtitle ?: return false
+        if (selected.isEmbedded || selected.provider != current.provider ||
+            selected.id.substringBefore(MATCH_OFFSET_ID_MARKER) != currentBaseId
+        ) {
+            return false
+        }
+        clearAutoSyncRendererTransform("rematch swap")
+        val localized = localizeSubtitle(best.sub, winnerRaw, anchor.delayMs)
+        selectSubtitle(localized, isUserAction = false)
+        writeCachedMatch(best.sub, anchor.delayMs)
+        autoSyncLastAppliedFit = anchor.delayMs to 0.0
+        autoSyncCompletedSessionKeys += autoSyncSessionKey(best.sub)
+        showMatchToast(
+            "Auto-sync: switched to better-cut ${best.sub.label} — offset ${formatMatchOffset(anchor.delayMs)}"
+        )
+        // Continue the regular pipeline on the new subtitle: anchor pass → fit / resync loop
+        // (the once-per-playback rematch flag prevents any swap ping-pong).
+        maybeStartDriftCalibration(
+            best.sub, winnerRaw, winnerCues, referenceSub, anchor.positionMs, anchor.delayMs
+        )
+        return true
     }
 
     /**
@@ -5410,6 +5776,11 @@ class PlayerViewModel @Inject constructor(
         private const val AUTO_SYNC_BUFFERED_CUES = 24               // buffered cues read per poll
         private const val AUTO_SYNC_MIN_SOURCE_LINES = 3             // accept a short batch at timeout
         private const val AUTO_SYNC_MAX_ABS_OFFSET_MS = 30 * 60_000L // beyond this it's a bad match, not a real delay
+        // Renderer-side transforms shift the renderer clock BACKWARD by the delay; after a seek
+        // the flushed cue queue can't serve that shifted window, blanking subtitles for ~delay of
+        // playback. Cap the shortcut at a gap small enough to hide in seek settle; bigger delays
+        // are baked into the served file (instant after seeks, costs one MediaItem rebuild).
+        private const val RENDERER_TRANSFORM_MAX_DELAY_MS = 2_000L
         private const val AUTO_SYNC_STARTUP_REF_WAIT_MS = 45_000L    // startup trigger: wait for embedded tracks to resolve
 
         // Constant-offset rescue: a candidate that fails at offset 0 but is a perfectly-cut sub
