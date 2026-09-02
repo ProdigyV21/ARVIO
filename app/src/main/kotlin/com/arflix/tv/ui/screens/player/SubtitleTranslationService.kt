@@ -435,4 +435,231 @@ class SubtitleTranslationService(
 
         return TranslationResult(translated, true)
     }
+
+    // ── AI auto-sync: semantic line matching ──────────────────────────────────
+
+    /**
+     * Result of one auto-sync matching call: confident (sourceIndex, targetIndex) pairs into the
+     * caller's source/target line lists. [errorMessage] uses the same conventions as
+     * [TranslationResult] ("API key missing", "RATE_LIMITED", "HTTP 401 …") so the player's
+     * existing AI error toasts apply unchanged.
+     */
+    data class LineMatchResult(
+        val pairs: List<Pair<Int, Int>>,
+        val success: Boolean,
+        val errorMessage: String? = null
+    )
+
+    private fun buildAutoSyncPrompt(sourceLines: List<String>, targetLines: List<String>): String {
+        val sourceFormatted = sourceLines.mapIndexed { i, line -> "[$i] ${JSONObject.quote(line)}" }
+            .joinToString("\n")
+        val targetFormatted = targetLines.mapIndexed { i, line -> "[$i] ${JSONObject.quote(line)}" }
+            .joinToString("\n")
+        return """
+            <source_lines> are consecutive subtitle lines from the video's built-in track, in chronological order.
+            <target_lines> are subtitle lines from an external subtitle file, also in chronological order.
+            Find as many confident source/target semantic matches as you can, starting with your best one.
+            Ignore translator credits, sync warnings, or empty lines.
+            Prefer lines with distinctive, specific wording (names, numbers, uncommon phrases) over short generic lines like "Yes." or "What?", since generic lines are ambiguous to match.
+            Start with your single most confident source/target match. Then check the OTHER source lines too: for each one you can ALSO confidently match to a specific target line, include it as a separate pair. Only include pairs you genuinely believe are correct — it's fine to return just 1 pair, or up to all ${sourceLines.size}, whatever you can actually verify. Do not guess extra pairs just to fill them in.
+            Source and target subtitles are not always split 1-to-1 (one source line can correspond to two target lines or vice versa), so do not assume matches follow any fixed pattern (e.g. do not just add a constant offset to indices) — match each line independently based on its own meaning.
+
+            <source_lines>
+            $sourceFormatted
+            </source_lines>
+
+            <target_lines>
+            $targetFormatted
+            </target_lines>
+
+            Expected JSON output format:
+            {"pairs": [{"source_index": <integer>, "target_index": <integer>}, ...]}
+        """.trimIndent()
+    }
+
+    private val autoSyncSystemPrompt =
+        "You are a subtitle synchronization algorithm. Output ONLY a valid JSON object with a " +
+            "single key \"pairs\": an array of objects, each with integer keys \"source_index\" " +
+            "and \"target_index\". No markdown, explanations, or any other text."
+
+    /**
+     * Asks the configured provider to semantically match [sourceLines] (built-in reference cues)
+     * against [targetLines] (a window of addon-file lines). Returned indices are validated
+     * against both lists; out-of-range pairs are dropped.
+     */
+    suspend fun matchSubtitleLines(sourceLines: List<String>, targetLines: List<String>): LineMatchResult {
+        if (sourceLines.isEmpty() || targetLines.isEmpty()) {
+            return LineMatchResult(emptyList(), false, "No lines to match")
+        }
+        val apiKey = apiKeyProvider()
+        if (apiKey.isBlank()) return LineMatchResult(emptyList(), false, "API key missing")
+        val prompt = buildAutoSyncPrompt(sourceLines, targetLines)
+        val result = when (modelProvider()) {
+            SubtitleAiModel.GROQ_LLAMA_70B -> requestGroqMatch(prompt, apiKey)
+            SubtitleAiModel.GEMINI_FLASH_25 -> requestGeminiMatch(prompt, apiKey)
+        }
+        if (!result.success) return result
+        val valid = result.pairs.filter {
+            it.first in sourceLines.indices && it.second in targetLines.indices
+        }
+        return if (valid.isEmpty()) {
+            LineMatchResult(emptyList(), false, "AI returned no in-range subtitle line matches")
+        } else {
+            LineMatchResult(valid, true)
+        }
+    }
+
+    private fun parseMatchPairs(rawText: String): List<Pair<Int, Int>>? {
+        // With JSON response modes the payload is usually the bare object; tolerate code fences
+        // or leading text the same way extractJsonArray does, by trimming to the outer braces.
+        val candidates = buildList {
+            add(rawText.trim())
+            val start = rawText.indexOf('{')
+            val end = rawText.lastIndexOf('}')
+            if (start >= 0 && end > start) add(rawText.substring(start, end + 1))
+        }
+        for (candidate in candidates) {
+            val obj = runCatching { JSONObject(candidate) }.getOrNull() ?: continue
+            val pairsArray = obj.optJSONArray("pairs") ?: continue
+            return (0 until pairsArray.length()).mapNotNull { i ->
+                val pair = pairsArray.optJSONObject(i) ?: return@mapNotNull null
+                val s = pair.optInt("source_index", Int.MIN_VALUE)
+                val t = pair.optInt("target_index", Int.MIN_VALUE)
+                if (s == Int.MIN_VALUE || t == Int.MIN_VALUE) null else s to t
+            }
+        }
+        return null
+    }
+
+    private suspend fun requestGroqMatch(prompt: String, apiKey: String): LineMatchResult {
+        val body = JSONObject().apply {
+            put("model", GROQ_MODEL_ID)
+            put("temperature", 0.0)
+            // Matching is mechanical lookup, same as translation — keep reasoning at the floor
+            // and out of message.content (see GROQ_REASONING_* above).
+            put("reasoning_effort", GROQ_REASONING_EFFORT)
+            put("reasoning_format", GROQ_REASONING_FORMAT)
+            put("response_format", JSONObject().put("type", "json_object"))
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "system")
+                    put("content", autoSyncSystemPrompt)
+                })
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", prompt)
+                })
+            })
+        }
+        val request = Request.Builder()
+            .url(GROQ_URL)
+            .header("Authorization", "Bearer $apiKey")
+            .header("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        return withContext(Dispatchers.IO) {
+            try {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                        ?: return@withContext LineMatchResult(emptyList(), false, "Empty response (${response.code})")
+                    if (!response.isSuccessful) {
+                        val msg = if (response.code == 429) "RATE_LIMITED" else "HTTP ${response.code}: ${responseBody.take(220)}"
+                        return@withContext LineMatchResult(emptyList(), false, msg)
+                    }
+                    val content = JSONObject(responseBody)
+                        .optJSONArray("choices")?.optJSONObject(0)
+                        ?.optJSONObject("message")?.optString("content")
+                        .orEmpty()
+                    val pairs = parseMatchPairs(content)
+                        ?: return@withContext LineMatchResult(emptyList(), false, "No valid JSON pairs in response")
+                    LineMatchResult(pairs, true)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Log.e(TAG, "requestGroqMatch exception: ${e.message}", e)
+                LineMatchResult(emptyList(), false, e.message)
+            }
+        }
+    }
+
+    private suspend fun requestGeminiMatch(
+        prompt: String,
+        apiKey: String,
+        transientAttempt: Int = 0
+    ): LineMatchResult {
+        val body = JSONObject().apply {
+            put("system_instruction", JSONObject().apply {
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply { put("text", autoSyncSystemPrompt) })
+                })
+            })
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply { put("text", prompt) })
+                    })
+                })
+            })
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.0)
+                put("responseMimeType", "application/json")
+                put("thinkingConfig", JSONObject().apply { put("thinkingLevel", "minimal") })
+            })
+            // Subtitle dialogue routinely trips default safety filters (see translateGemini).
+            put("safetySettings", JSONArray().apply {
+                listOf(
+                    "HARM_CATEGORY_HARASSMENT",
+                    "HARM_CATEGORY_HATE_SPEECH",
+                    "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "HARM_CATEGORY_DANGEROUS_CONTENT"
+                ).forEach { category ->
+                    put(JSONObject().apply {
+                        put("category", category)
+                        put("threshold", "BLOCK_NONE")
+                    })
+                }
+            })
+        }
+        val request = Request.Builder()
+            .url("$GEMINI_BASE_URL?key=$apiKey")
+            .header("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        return withContext(Dispatchers.IO) {
+            try {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                        ?: return@withContext LineMatchResult(emptyList(), false, "Empty response (${response.code})")
+                    if (!response.isSuccessful) {
+                        if (response.code in GEMINI_RETRYABLE_HTTP && transientAttempt < GEMINI_MAX_TRANSIENT_RETRIES) {
+                            geminiBackoff(transientAttempt)
+                            return@withContext requestGeminiMatch(prompt, apiKey, transientAttempt + 1)
+                        }
+                        val msg = if (response.code == 429) "RATE_LIMITED" else "HTTP ${response.code}: ${responseBody.take(220)}"
+                        return@withContext LineMatchResult(emptyList(), false, msg)
+                    }
+                    val candidate = JSONObject(responseBody).optJSONArray("candidates")?.optJSONObject(0)
+                    val parts = candidate?.optJSONObject("content")?.optJSONArray("parts")
+                    val rawText = buildString {
+                        for (i in 0 until (parts?.length() ?: 0)) {
+                            val part = parts!!.getJSONObject(i)
+                            if (part.optBoolean("thought", false)) continue
+                            append(part.optString("text"))
+                        }
+                    }.trim()
+                    val pairs = rawText.takeIf { it.isNotBlank() }?.let(::parseMatchPairs)
+                        ?: return@withContext LineMatchResult(emptyList(), false, "No valid JSON pairs in response")
+                    LineMatchResult(pairs, true)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is java.io.IOException && transientAttempt < GEMINI_MAX_TRANSIENT_RETRIES) {
+                    geminiBackoff(transientAttempt)
+                    return@withContext requestGeminiMatch(prompt, apiKey, transientAttempt + 1)
+                }
+                Log.e(TAG, "requestGeminiMatch exception: ${e.message}", e)
+                LineMatchResult(emptyList(), false, e.message)
+            }
+        }
+    }
 }

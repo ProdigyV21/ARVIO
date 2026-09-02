@@ -226,13 +226,24 @@ object SubtitleSyncMatcher {
      * and any trailing cue settings. Used to bake a detected offset into the served local file so
      * the correction survives independently of the player's delay knob.
      */
-    fun shiftTimestamps(raw: String, offsetMs: Long): String {
-        if (offsetMs == 0L) return raw
+    fun shiftTimestamps(raw: String, offsetMs: Long): String = transformTimestamps(raw, offsetMs, 0.0)
+
+    /**
+     * [shiftTimestamps] generalized with a linear drift [rate] (AI auto-sync drift calibration):
+     * a cue authored at `t` should display at true video time `t' = t + offsetMs + rate·t'`
+     * (the measured delay grows linearly with the *display* position), i.e.
+     * `t' = (t + offsetMs) / (1 − rate)`. `rate = 0` reduces to the plain constant shift.
+     */
+    fun transformTimestamps(raw: String, offsetMs: Long, rate: Double): String {
+        if (offsetMs == 0L && rate == 0.0) return raw
+        val scale = 1.0 / (1.0 - rate)
         return TIME_LINE.replace(raw) { m ->
             val start = parseTimestamp(m.groupValues[1]) ?: return@replace m.value
             val end = parseTimestamp(m.groupValues[2]) ?: return@replace m.value
             val useComma = m.groupValues[1].contains(',')
-            "${formatTimestamp(start + offsetMs, useComma)} --> ${formatTimestamp(end + offsetMs, useComma)}"
+            val newStart = Math.round((start + offsetMs) * scale)
+            val newEnd = Math.round((end + offsetMs) * scale)
+            "${formatTimestamp(newStart, useComma)} --> ${formatTimestamp(newEnd, useComma)}"
         }
     }
 

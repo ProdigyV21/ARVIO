@@ -1068,12 +1068,29 @@ fun PlayerScreen(
         viewModel.bufferedCueTextsProvider = { max ->
             aiRenderersFactory.extractBufferedCueTexts(max)
         }
+        // AI auto-sync: paired (time, text) buffered cues + the active manual delay (rendered
+        // cue positions lag true video time by it).
+        viewModel.bufferedTimedCuesProvider = { max ->
+            aiRenderersFactory.extractBufferedTimedCues(max)
+        }
+        viewModel.rendererSyncOffsetUsProvider = { aiRenderersFactory.syncOffsetUs.get() }
+        // AI auto-sync applies its fit renderer-side (like the manual delay slider) — no
+        // MediaItem rebuild, no playback hiccup.
+        viewModel.autoSyncTransformApplier = { interceptMs, rate ->
+            aiRenderersFactory.setAutoSyncTransform(interceptMs, rate)
+        }
     }
     DisposableEffect(aiRenderersFactory) {
         onDispose {
             aiRenderersFactory.audioCaptureProcessor?.onChunk = null
             viewModel.bufferedReferenceIntervalsProvider = null
             viewModel.bufferedCueTextsProvider = null
+            viewModel.bufferedTimedCuesProvider = null
+            viewModel.rendererSyncOffsetUsProvider = null
+            viewModel.autoSyncTransformApplier = null
+            viewModel.driftMediaSourceProvider = null
+            viewModel.playbackDurationMsProvider = null
+            viewModel.playbackBufferedMarginMsProvider = null
             viewModel.geminiLiveService.disconnect()
         }
     }
@@ -1178,7 +1195,10 @@ fun PlayerScreen(
                         viewModel.onPlayerCues(
                             cueGroup.cues.isNotEmpty(),
                             cueGroup.presentationTimeUs / 1000L,
-                            cueGroup.cues.firstOrNull()?.text?.toString()
+                            cueGroup.cues.firstOrNull()?.text?.toString(),
+                            // Image-based (PGS/DVB) cues carry a bitmap and no text — the
+                            // auto-sync OCR fallback reads the reference lines from it.
+                            cueGroup.cues.firstNotNullOfOrNull { it.bitmap }
                         )
                     }
 
@@ -2313,17 +2333,23 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
 
-        // External subtitle side-loaded at startup ("Preload Subtitles"): switching is just a
-        // track override — no MediaItem rebuild, no visible reload. This also catches the
+        // External subtitle already attached to the current MediaItem: switching is just a track
+        // override — no MediaItem rebuild, no visible reload. Always true in preload mode
+        // ("Preload Subtitles" side-loads everything at startup); in classic mode it catches
+        // re-selecting the currently loaded sub — e.g. auto-sync restoring the addon subtitle
+        // after gathering reference cues, which must not push playback. This also catches the
         // find-best-match winner: its localized file:// copy keeps the same provider|id-based
         // track id as the attached remote entry (subtitleTrackId never hashes an id-carrying
         // sub's URL).
-        if (latestUiState.subtitlePreloadEnabled) {
+        run {
             // Match on the base id AFTER our prefix — colon-safe (addon ids may contain colons) and
             // it strips ExoPlayer's leading "periodIndex:". Exact (not contains) so a base id can't
             // mis-match its own "…#ofs" offset variant.
             val targetTrackId = subtitleTrackId(subtitle)
-            repeat(2) { attempt ->
+            // In preload mode the track list can lag right after playback starts — retry once. In
+            // classic mode a miss just means the track isn't attached: rebuild immediately.
+            val attempts = if (latestUiState.subtitlePreloadEnabled) 2 else 1
+            repeat(attempts) { attempt ->
                 val groups = exoPlayer.currentTracks.groups
                 for (gi in groups.indices) {
                     val group = groups[gi]
@@ -2353,7 +2379,7 @@ fun PlayerScreen(
                 }
                 // Track list can lag right after playback starts — one short retry before
                 // falling back to the rebuild path below.
-                if (attempt == 0) delay(400)
+                if (attempt < attempts - 1) delay(400)
             }
         }
 
@@ -2380,6 +2406,9 @@ fun PlayerScreen(
             exoPlayer.setMediaItem(mediaItem, currentPosition)
             exoPlayer.prepare()
             if (wasPlaying) exoPlayer.play()
+            // The renderer's private position timebase resets across a rebuild — re-anchor any
+            // active auto-sync drift correction in the new timebase.
+            viewModel.rearmAutoSyncRendererTransform()
 
             // Enable the subtitle track after rebuild
             exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
@@ -2478,6 +2507,36 @@ fun PlayerScreen(
     // Sync in-player subtitle delay with the renderer factory (microseconds = ms * 1000)
     LaunchedEffect(subtitleSyncOffsetMs) {
         aiRenderersFactory.syncOffsetUs.set(subtitleSyncOffsetMs * 1000L)
+        // A manual delay adjustment always wins over AI auto-sync — a pending drift refinement
+        // must not silently overwrite it later.
+        if (subtitleSyncOffsetMs != 0L) viewModel.cancelSubtitleAutoSync("manual delay adjustment")
+    }
+
+    // AI auto-sync just baked its correction into the served subtitle file — reset the manual
+    // slider so the two corrections don't stack.
+    LaunchedEffect(uiState.subtitleDelayResetNonce) {
+        if (uiState.subtitleDelayResetNonce > 0) subtitleSyncOffsetMs = 0L
+    }
+
+    // AI auto-sync drift calibration: playback geometry + a fresh media source for the invisible
+    // text-only secondary player (uncached — it must not stomp the primary's disk cache state).
+    LaunchedEffect(exoPlayer, httpDataSourceFactory) {
+        viewModel.playbackDurationMsProvider = {
+            exoPlayer.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET } ?: 0L
+        }
+        viewModel.playbackBufferedMarginMsProvider = {
+            (exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)
+        }
+        val driftMediaSourceFactory = DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(httpDataSourceFactory)
+        viewModel.driftMediaSourceProvider = provider@{
+            val url = latestUiState.selectedStreamUrl ?: return@provider null
+            val builder = MediaItem.Builder().setUri(Uri.parse(url))
+            if (isLikelyHlsPlaybackUrl(url, latestUiState.selectedStream)) {
+                builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            }
+            runCatching { driftMediaSourceFactory.createMediaSource(builder.build()) }.getOrNull()
+        }
     }
 
     // When cast starts: keep controls permanently visible.
@@ -3285,10 +3344,11 @@ fun PlayerScreen(
                                         val group = subtitleGroups.getOrNull(subtitleLangIndex - 1)
                                         val matchGroup = latestUiState.matchLanguageName.isNotBlank() &&
                                             group?.first?.equals(latestUiState.matchLanguageName, ignoreCase = true) == true
+                                        val syncGroup = groupHasSelectedAddonSubtitle(group, latestUiState.selectedSubtitle)
                                         val aiGroup = latestUiState.isAiAvailable &&
                                             latestUiState.aiTargetLanguageName.isNotBlank() &&
                                             group?.first?.equals(latestUiState.aiTargetLanguageName, ignoreCase = true) == true
-                                        val headerCount = (if (matchGroup) 1 else 0) + (if (aiGroup) 1 else 0)
+                                        val headerCount = (if (matchGroup) 1 else 0) + (if (syncGroup) 1 else 0) + (if (aiGroup) 1 else 0)
                                         val trackCount = (group?.second?.size ?: 0) + headerCount
                                         if (subtitleTrackIndex < trackCount - 1) subtitleTrackIndex++
                                     }
@@ -3359,13 +3419,20 @@ fun PlayerScreen(
                                     val aiGroup = latestUiState.isAiAvailable &&
                                         latestUiState.aiTargetLanguageName.isNotBlank() &&
                                         group?.first?.equals(latestUiState.aiTargetLanguageName, ignoreCase = true) == true
-                                    // Target-language group headers: Find Best Match first (AI-independent),
-                                    // then the AI translate entry when AI is available, then the subs.
-                                    val aiHeaderIdx = if (matchGroup) 1 else 0
+                                    val showNonAiSync = matchGroup &&
+                                        (!latestUiState.autoSyncMasterEnabled ||
+                                            !latestUiState.autoSyncUseAi ||
+                                            !latestUiState.autoSyncAiAvailable)
+                                    val showAiSync = matchGroup && latestUiState.autoSyncAiAvailable &&
+                                        (!latestUiState.autoSyncMasterEnabled || latestUiState.autoSyncUseAi)
+                                    val aiSyncHeaderIdx = if (showNonAiSync) 1 else 0
+                                    val aiHeaderIdx = aiSyncHeaderIdx + (if (showAiSync) 1 else 0)
                                     val headerCount = aiHeaderIdx + (if (aiGroup) 1 else 0)
                                     val realIdx = subtitleTrackIndex - headerCount
-                                    if (matchGroup && subtitleTrackIndex == 0) {
-                                        viewModel.runFindBestMatch()
+                                    if (showNonAiSync && subtitleTrackIndex == 0) {
+                                        viewModel.runSubtitleAutoSyncWithoutAi()
+                                    } else if (showAiSync && subtitleTrackIndex == aiSyncHeaderIdx) {
+                                        viewModel.runSubtitleAutoSyncWithAi()
                                     } else if (aiGroup && subtitleTrackIndex == aiHeaderIdx) {
                                         if (!latestUiState.isAiTranslating) viewModel.activateAiTranslation()
                                     } else {
@@ -3518,10 +3585,14 @@ fun PlayerScreen(
                         )
                         // "Find best match" without AI showing selects the built-in reference
                         // track under the hood to read its timing — hide its raw (e.g. English)
-                        // cues while the scan runs. Display-only: the scan's cue collection
-                        // listens on the player, not this view. With AI translating, the
-                        // on-screen text is the translation, so nothing is hidden.
-                        visibility = if (uiState.isFindingBestMatch && !uiState.isAiTranslating) {
+                        // cues while the scan runs. Auto-sync's initial gather does the same
+                        // reference switch and is hidden for its whole duration too. Display-only:
+                        // both flows' cue collection listens on the player, not this view. With
+                        // AI translating, the on-screen text is the translation, so nothing is
+                        // hidden.
+                        visibility = if ((uiState.isFindingBestMatch && !uiState.isAiTranslating) ||
+                            uiState.isAutoSyncGathering
+                        ) {
                             android.view.View.INVISIBLE
                         } else {
                             android.view.View.VISIBLE
@@ -3654,7 +3725,9 @@ fun PlayerScreen(
         // "Find Best Match", but its transcription is no longer displayed.)
 
         // "Find Best Match" persistent searching indicator
-        if (hasPlaybackStarted && uiState.isFindingBestMatch) {
+        if (hasPlaybackStarted &&
+            (uiState.isFindingBestMatch || uiState.backgroundAutoSyncStatus.isNotEmpty())
+        ) {
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -3674,7 +3747,11 @@ fun PlayerScreen(
                     color = androidx.compose.ui.graphics.Color(0xFF7EC8F0)
                 )
                 Text(
-                    text = uiState.matchStatusText.ifBlank { "Searching for a match…" },
+                    text = if (uiState.backgroundAutoSyncStatus.isNotEmpty()) {
+                        uiState.backgroundAutoSyncStatus
+                    } else {
+                        uiState.matchStatusText.ifBlank { "Searching for a match…" }
+                    },
                     style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f)
                 )
@@ -4302,9 +4379,13 @@ fun PlayerScreen(
                 },
                 isLiveAudioTranslating = uiState.isLiveAudioTranslating,
                 isFindingBestMatch = uiState.isFindingBestMatch,
+                autoSyncMasterEnabled = uiState.autoSyncMasterEnabled,
+                autoSyncUseAi = uiState.autoSyncUseAi,
+                autoSyncAiAvailable = uiState.autoSyncAiAvailable,
                 onToggleAi = { viewModel.activateAiTranslation() },
                 onToggleLiveAudio = { viewModel.toggleLiveAudioTranslation() },
-                onFindBestMatch = { viewModel.runFindBestMatch() },
+                onAutoSyncWithoutAi = { viewModel.runSubtitleAutoSyncWithoutAi() },
+                onAutoSyncWithAi = { viewModel.runSubtitleAutoSyncWithAi() },
                 onClose = {
                     showSubtitleMenu = false
                     showControls = true
@@ -5165,6 +5246,9 @@ private fun SubtitleMenu(
     matchLanguageName: String = "",
     isLiveAudioTranslating: Boolean = false,
     isFindingBestMatch: Boolean = false,
+    autoSyncMasterEnabled: Boolean = true,
+    autoSyncUseAi: Boolean = false,
+    autoSyncAiAvailable: Boolean = false,
     audioTracks: List<AudioTrackInfo>,
     selectedAudioIndex: Int,
     activeTab: Int,
@@ -5179,7 +5263,8 @@ private fun SubtitleMenu(
     onSelectAudio: (AudioTrackInfo) -> Unit,
     onToggleAi: () -> Unit = {},
     onToggleLiveAudio: () -> Unit = {},
-    onFindBestMatch: () -> Unit = {},
+    onAutoSyncWithoutAi: () -> Unit = {},
+    onAutoSyncWithAi: () -> Unit = {},
     onClose: () -> Unit
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -5318,7 +5403,12 @@ private fun SubtitleMenu(
                                     selectedGroup.first.equals(matchLanguageName, ignoreCase = true)
                                 val isAiGroup = isAiAvailable && aiTargetLanguageName.isNotBlank() &&
                                     selectedGroup.first.equals(aiTargetLanguageName, ignoreCase = true)
-                                val aiHeaderIdx = if (isMatchGroup) 1 else 0
+                                val showNonAiSync = isMatchGroup &&
+                                    (!autoSyncMasterEnabled || !autoSyncUseAi || !autoSyncAiAvailable)
+                                val showAiSync = isMatchGroup && autoSyncAiAvailable &&
+                                    (!autoSyncMasterEnabled || autoSyncUseAi)
+                                val aiSyncHeaderIdx = if (showNonAiSync) 1 else 0
+                                val aiHeaderIdx = aiSyncHeaderIdx + (if (showAiSync) 1 else 0)
                                 val headerCount = aiHeaderIdx + (if (isAiGroup) 1 else 0)
                                 LazyColumn(
                                     state = trackListState,
@@ -5328,15 +5418,26 @@ private fun SubtitleMenu(
                                         .padding(start = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    if (isMatchGroup) {
-                                        // First: "Find Best Match" — timing scan, works without AI.
+                                    if (showNonAiSync) {
                                         item {
                                             TrackMenuItem(
-                                                label = if (isFindingBestMatch) "Scanning…" else "Find Best Match",
-                                                subtitle = "Auto",
-                                                subtitleDetail = "Auto-pick the best-synced subtitle",
+                                                label = if (isFindingBestMatch) "Auto Sync — Scanning…" else "Auto Sync",
+                                                subtitle = "Without AI",
+                                                subtitleDetail = "Find and select the best-synced addon subtitle",
                                                 isSelected = isFindingBestMatch,
                                                 isFocused = subtitlePanelFocus == 1 && subtitleTrackIndex == 0,
+                                                onClick = { /* D-pad only */ }
+                                            )
+                                        }
+                                    }
+                                    if (showAiSync) {
+                                        item {
+                                            TrackMenuItem(
+                                                label = "Auto Sync",
+                                                subtitle = "With AI",
+                                                subtitleDetail = "AI-sync the selected addon subtitle and correct drift",
+                                                isSelected = false,
+                                                isFocused = subtitlePanelFocus == 1 && subtitleTrackIndex == aiSyncHeaderIdx,
                                                 onClick = { /* D-pad only */ }
                                             )
                                         }
@@ -5626,13 +5727,34 @@ private fun SubtitleMenu(
                                     )
                                 }
                             }
-                            if (isMatchGroup) {
-                                item(key = "mobile_find_best_match_item") {
+                            val showNonAiSync = isMatchGroup &&
+                                (!autoSyncMasterEnabled || !autoSyncUseAi || !autoSyncAiAvailable)
+                            val showAiSync = isMatchGroup && autoSyncAiAvailable &&
+                                (!autoSyncMasterEnabled || autoSyncUseAi)
+                            if (showNonAiSync) {
+                                item(key = "mobile_auto_sync_without_ai_item") {
                                     MobileTrackItem(
-                                        name = if (isFindingBestMatch) "Scanning…" else "Find Best Match",
-                                        description = "Auto",
+                                        name = if (isFindingBestMatch) "Auto Sync — Scanning…" else "Auto Sync",
+                                        description = "Without AI",
                                         isSelected = isFindingBestMatch,
-                                        onClick = { onFindBestMatch(); onClose() }
+                                        onClick = { onAutoSyncWithoutAi(); onClose() }
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp)
+                                            .height(1.dp)
+                                            .background(Color.White.copy(alpha = 0.06f))
+                                    )
+                                }
+                            }
+                            if (showAiSync) {
+                                item(key = "mobile_auto_sync_with_ai_item") {
+                                    MobileTrackItem(
+                                        name = "Auto Sync",
+                                        description = "With AI",
+                                        isSelected = false,
+                                        onClick = { onAutoSyncWithAi(); onClose() }
                                     )
                                     Box(
                                         modifier = Modifier
@@ -6039,10 +6161,21 @@ private fun subtitleBaseId(id: String): String = id.substringBefore(MATCH_OFFSET
 private fun isSameSubtitleTrack(selected: Subtitle?, rowId: String): Boolean =
     selected != null && subtitleBaseId(selected.id) == subtitleBaseId(rowId)
 
+/** True when the currently selected subtitle is an addon sub belonging to [group]. */
+private fun groupHasSelectedAddonSubtitle(
+    group: Pair<String, List<Pair<Int, Subtitle>>>?,
+    selected: Subtitle?
+): Boolean = selected != null && !selected.isEmbedded && !selected.isBitmap &&
+    group?.second?.any { (_, sub) -> isSameSubtitleTrack(selected, sub.id) } == true
+
 /** The baked-in rescue offset (ms) when [selected] is [rowId]'s shifted copy, else null. */
 private fun matchedOffsetMsFor(selected: Subtitle?, rowId: String): Long? {
     if (!isSameSubtitleTrack(selected, rowId)) return null
-    return selected!!.id.substringAfter(MATCH_OFFSET_ID_MARKER, "").toLongOrNull()?.takeIf { it != 0L }
+    // The marker payload is "<offsetMs>" or "<offsetMs>r<rateMicros>" (AI auto-sync drift) —
+    // parse only the leading signed integer.
+    val payload = selected!!.id.substringAfter(MATCH_OFFSET_ID_MARKER, "")
+    val digits = payload.takeWhile { it == '-' || it.isDigit() }
+    return digits.toLongOrNull()?.takeIf { it != 0L }
 }
 
 /** "+2.0s" / "-1.5s". */

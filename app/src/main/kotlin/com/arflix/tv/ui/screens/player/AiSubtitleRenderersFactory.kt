@@ -22,6 +22,9 @@ private object AiSubtitleRegexes {
     val MUSIC_REGEX = Regex("[♪♫]+")
 }
 
+/** Sentinel: the auto-sync drift anchor hasn't been captured on the render thread yet. */
+private const val AUTO_SYNC_ANCHOR_PENDING_US = Long.MIN_VALUE
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class AiSubtitleRenderersFactory(
     context: Context,
@@ -30,6 +33,29 @@ class AiSubtitleRenderersFactory(
 ) : DefaultRenderersFactory(context) {
 
     val syncOffsetUs = java.util.concurrent.atomic.AtomicLong(0L)
+
+    // AI auto-sync correction, applied renderer-side (no MediaItem rebuild, no hiccup) as
+    // delay(position) = baseUs + rate·(position − anchor), Nuvio's exact mechanism. The anchor
+    // self-captures at the first render call after a (re-)apply: render positions run on
+    // ExoPlayer's internal offset timebase (media position + a large private offset,
+    // MediaPeriodQueue.INITIAL_RENDERER_POSITION_OFFSET_US ≈ 1e12 µs) — mixing an app-side media
+    // position into any slope≠0 math would scale that offset by the rate (rate·1e6 seconds!) and
+    // blank the subtitles entirely. Delta-only math is immune. The rate is a Double stored as
+    // raw bits for lock-free atomicity.
+    private val autoSyncDelayBaseUs = java.util.concurrent.atomic.AtomicLong(0L)
+    private val autoSyncRateBits = java.util.concurrent.atomic.AtomicLong(0.0.toRawBits())
+    private val autoSyncRateAnchorUs = java.util.concurrent.atomic.AtomicLong(AUTO_SYNC_ANCHOR_PENDING_US)
+
+    /**
+     * Sets (or clears, with `0, 0.0`) the auto-sync correction. [delayBaseMs] must be the fitted
+     * delay AT THE CURRENT PLAYBACK POSITION (`intercept + rate·now`) — the rate then evolves it
+     * forward from the self-captured anchor, so `delay(T) = intercept + rate·T` holds exactly.
+     */
+    fun setAutoSyncTransform(delayBaseMs: Long, rate: Double) {
+        autoSyncDelayBaseUs.set(delayBaseMs * 1000L)
+        autoSyncRateBits.set(rate.toRawBits())
+        autoSyncRateAnchorUs.set(AUTO_SYNC_ANCHOR_PENDING_US)
+    }
 
     var audioCaptureProcessor: AudioCaptureProcessor? = null
         private set
@@ -59,6 +85,19 @@ class AiSubtitleRenderersFactory(
         for (renderer in offsetRenderers) {
             val texts = renderer.extractAllCueTexts()
             if (texts.isNotEmpty()) return texts.take(maxCount)
+        }
+        return emptyList()
+    }
+
+    /**
+     * Buffered cues of the currently selected text track as (startMs, endMs, text) — the paired
+     * form AI auto-sync needs: timestamps to compute offsets against the addon file, text to send
+     * to the LLM for semantic matching. Same reflection walk as the interval extractor.
+     */
+    fun extractBufferedTimedCues(maxCount: Int): List<SubtitleSyncMatcher.TimedCue> {
+        for (renderer in offsetRenderers) {
+            val cues = renderer.extractBufferedTimedCues(maxCount)
+            if (cues.isNotEmpty()) return cues
         }
         return emptyList()
     }
@@ -144,7 +183,10 @@ class AiSubtitleRenderersFactory(
                 baseRenderer = out[index],
                 translationManager = translationManager,
                 translationScope = scope,
-                syncOffsetUs = syncOffsetUs
+                syncOffsetUs = syncOffsetUs,
+                autoSyncDelayBaseUs = autoSyncDelayBaseUs,
+                autoSyncRateBits = autoSyncRateBits,
+                autoSyncRateAnchorUs = autoSyncRateAnchorUs
             )
             offsetRenderers.add(offsetRenderer)
             out[index] = offsetRenderer
@@ -327,7 +369,10 @@ private class SubtitleOffsetRenderer(
     private val baseRenderer: Renderer,
     private val translationManager: SubtitleTranslationManager,
     private val translationScope: CoroutineScope,
-    private val syncOffsetUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0L)
+    private val syncOffsetUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0L),
+    private val autoSyncDelayBaseUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0L),
+    private val autoSyncRateBits: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0.0.toRawBits()),
+    private val autoSyncRateAnchorUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(AUTO_SYNC_ANCHOR_PENDING_US)
 ) : Renderer by baseRenderer {
 
     companion object {
@@ -348,7 +393,23 @@ private class SubtitleOffsetRenderer(
         currentPositionUs = positionUs
         val prevPositionUs = lastRenderPositionUs
         val offset = syncOffsetUs.get()
-        val adjustedUs = if (offset != 0L) (positionUs - offset).coerceAtLeast(0L) else positionUs
+        var adjustedUs = if (offset != 0L) (positionUs - offset).coerceAtLeast(0L) else positionUs
+        // AI auto-sync: delay(position) = base + rate·(position − anchor). The anchor is captured
+        // HERE, from the renderer's own position, on the first render after a (re-)apply — see
+        // the timebase warning at the field declarations. Delta-only: never multiply positionUs.
+        val autoSyncBaseUs = autoSyncDelayBaseUs.get()
+        val autoSyncRate = Double.fromBits(autoSyncRateBits.get())
+        if (autoSyncBaseUs != 0L || autoSyncRate != 0.0) {
+            val driftUs = if (autoSyncRate == 0.0) {
+                0L
+            } else {
+                autoSyncRateAnchorUs.compareAndSet(AUTO_SYNC_ANCHOR_PENDING_US, positionUs)
+                val anchorUs = autoSyncRateAnchorUs.get()
+                if (anchorUs == AUTO_SYNC_ANCHOR_PENDING_US) 0L
+                else Math.round(autoSyncRate * (positionUs - anchorUs))
+            }
+            adjustedUs = (adjustedUs - autoSyncBaseUs - driftUs).coerceAtLeast(0L)
+        }
         baseRenderer.render(adjustedUs, elapsedRealtimeUs)
 
         // Detect seeks (> 5 s jump) and reset the translation window to the new position
@@ -480,8 +541,12 @@ private class SubtitleOffsetRenderer(
     }
 
     /** Buffered cue intervals (startMs, endMs) for text-carrying cues, from the modern resolver. */
-    fun extractBufferedIntervals(maxCount: Int): List<Pair<Long, Long>> {
-        val intervals = ArrayList<Pair<Long, Long>>()
+    fun extractBufferedIntervals(maxCount: Int): List<Pair<Long, Long>> =
+        extractBufferedTimedCues(maxCount).map { it.startMs to it.endMs }
+
+    /** Buffered (startMs, endMs, text) cues for text-carrying cues, from the modern resolver. */
+    fun extractBufferedTimedCues(maxCount: Int): List<SubtitleSyncMatcher.TimedCue> {
+        val timedCues = ArrayList<SubtitleSyncMatcher.TimedCue>()
         // Cue buffer timestamps are on ExoPlayer's internal stream timeline, which adds a large
         // base offset; subtract the renderer's stream offset to get 0-based media time.
         val offsetMs = readStreamOffsetUs() / 1000L
@@ -503,12 +568,14 @@ private class SubtitleOffsetRenderer(
                         else -> continue
                     }
                     for (item in items) {
-                        val (s, e) = item?.let(::intervalFromCueWrapper) ?: continue
-                        intervals.add((s - offsetMs) to (e - offsetMs))
+                        val cue = item?.let(::timedCueFromWrapper) ?: continue
+                        timedCues.add(
+                            SubtitleSyncMatcher.TimedCue(cue.startMs - offsetMs, cue.endMs - offsetMs, cue.text)
+                        )
                     }
-                    if (intervals.isNotEmpty()) break
+                    if (timedCues.isNotEmpty()) break
                 }
-                if (intervals.isEmpty()) {
+                if (timedCues.isEmpty()) {
                     // Unknown impl/field name (new media3 version?) — scan every field for a
                     // cue-carrying collection, like the text extractor already does.
                     var cls: Class<*>? = resolver.javaClass
@@ -523,10 +590,12 @@ private class SubtitleOffsetRenderer(
                                     else -> continue
                                 }
                                 for (item in items) {
-                                    val (s, e) = item?.let(::intervalFromCueWrapper) ?: continue
-                                    intervals.add((s - offsetMs) to (e - offsetMs))
+                                    val cue = item?.let(::timedCueFromWrapper) ?: continue
+                                    timedCues.add(
+                                        SubtitleSyncMatcher.TimedCue(cue.startMs - offsetMs, cue.endMs - offsetMs, cue.text)
+                                    )
                                 }
-                                if (intervals.isNotEmpty()) break@outer
+                                if (timedCues.isNotEmpty()) break@outer
                             } catch (_: Exception) {
                             }
                         }
@@ -536,7 +605,7 @@ private class SubtitleOffsetRenderer(
             }
         } catch (_: Exception) {
         }
-        return intervals.filter { it.first >= 0 }.distinct().sortedBy { it.first }.take(maxCount)
+        return timedCues.filter { it.startMs >= 0 }.distinct().sortedBy { it.startMs }.take(maxCount)
     }
 
     /** The renderer's stream offset (µs) — the base added to buffer sample timestamps. */
@@ -548,13 +617,17 @@ private class SubtitleOffsetRenderer(
         return 0L
     }
 
-    private fun intervalFromCueWrapper(obj: Any): Pair<Long, Long>? {
+    private fun timedCueFromWrapper(obj: Any): SubtitleSyncMatcher.TimedCue? {
         val cues: List<Cue>? = when (obj) {
             is CueGroup -> obj.cues
             is List<*> -> obj.filterIsInstance<Cue>()
             else -> (findField(obj.javaClass, "cues")?.get(obj) as? List<*>)?.filterIsInstance<Cue>()
         }
-        if (cues.isNullOrEmpty() || cues.none { !it.text?.toString()?.trim().isNullOrBlank() }) return null
+        if (cues.isNullOrEmpty()) return null
+        val text = cues.mapNotNull { it.text?.toString()?.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+        if (text.isBlank()) return null
 
         val startUs: Long
         val endUs: Long
@@ -574,7 +647,7 @@ private class SubtitleOffsetRenderer(
             endUs = start + dur
         }
         if (endUs <= startUs) return null
-        return (startUs / 1000L) to (endUs / 1000L)
+        return SubtitleSyncMatcher.TimedCue(startUs / 1000L, endUs / 1000L, text)
     }
 
     private fun extractFromCollectionOrMap(v: Any, texts: MutableSet<String>, removeHI: Boolean): Int {
