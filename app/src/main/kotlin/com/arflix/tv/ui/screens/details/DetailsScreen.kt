@@ -152,23 +152,24 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.data.repository.MdbExternalRating
 import com.arflix.tv.network.OkHttpProvider
-import com.arflix.tv.ui.components.EpisodeContextMenu
-import com.arflix.tv.ui.components.KeepScreenOn
-import com.arflix.tv.ui.components.SeasonContextMenu
-import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.CardLayoutMode
+import com.arflix.tv.ui.components.ContentRatingChip
+import com.arflix.tv.ui.components.EpisodeContextMenu
+import com.arflix.tv.ui.components.KeepScreenOn
+import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.PersonModal
 import com.arflix.tv.ui.components.PosterCard
-import com.arflix.tv.ui.components.resolveDetailsBackdropHeightDp
-import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
+import com.arflix.tv.ui.components.SeasonContextMenu
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.SkeletonDetailsPage
 import com.arflix.tv.ui.components.SkeletonEpisodeCard
 import com.arflix.tv.ui.components.StreamSelector
 import com.arflix.tv.ui.components.TrailerPlayer
+import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
+import com.arflix.tv.ui.components.resolveDetailsBackdropHeightDp
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -3728,36 +3729,6 @@ private fun MobileMetadataSeparator() {
         color = Color.White.copy(alpha = 0.42f),
         maxLines = 1
     )
-}
-
-/**
- * Age certification chip — same rounded shape and padding as the "In Cinema" pill,
- * but on a neutral translucent surface instead of a solid colour.
- */
-@Composable
-private fun ContentRatingChip(
-    text: String,
-    fontWeight: FontWeight,
-    textColor: Color,
-    textShadow: Shadow
-) {
-    Box(
-        modifier = Modifier
-            .background(Color.White.copy(alpha = 0.14f), RoundedCornerShape(6.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = text,
-            style = ArflixTypography.caption.copy(
-                fontSize = 13.sp,
-                fontWeight = fontWeight,
-                shadow = textShadow
-            ),
-            color = textColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
 }
 
 /**

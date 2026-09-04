@@ -136,12 +136,13 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.isPortrait
 import com.arflix.tv.network.OkHttpProvider
+import com.arflix.tv.ui.components.AppTopBar
+import com.arflix.tv.ui.components.AppTopBarContentTopInset
+import com.arflix.tv.ui.components.CardLayoutMode
+import com.arflix.tv.ui.components.ContentRatingChip
 import com.arflix.tv.ui.components.FeaturedMediaCard
 import com.arflix.tv.ui.components.MediaCard as ArvioMediaCard
 import com.arflix.tv.ui.components.TrailerPlayer
-import com.arflix.tv.ui.components.CardLayoutMode
-import com.arflix.tv.ui.components.AppTopBar
-import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.ui.components.SkeletonMobileHeroBanner
 import com.arflix.tv.ui.components.SkeletonPosterCard
@@ -1653,6 +1654,15 @@ private fun HeroSection(
                                     ),
                                     color = Color.White,
                                     maxLines = 1
+                                )
+                            }
+
+                            currentItem.contentRating?.let { contentRating ->
+                                ContentRatingChip(
+                                    text = contentRating,
+                                    fontWeight = FontWeight.Bold,
+                                    textColor = Color.White,
+                                    textShadow = textShadow
                                 )
                             }
                         }

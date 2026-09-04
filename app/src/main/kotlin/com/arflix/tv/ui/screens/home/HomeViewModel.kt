@@ -212,6 +212,7 @@ class HomeViewModel @Inject constructor(
         val tmdbRating: String,
         val budget: Long?,
         val overview: String,
+        val contentRating: String? = null,
         val primaryNetworkLogo: String? = null,
         val fullyLoaded: Boolean = false
     )
@@ -677,6 +678,7 @@ class HomeViewModel @Inject constructor(
             tmdbRating = snapshot.tmdbRating.ifEmpty { tmdbRating },
             budget = snapshot.budget ?: budget,
             overview = snapshot.overview.ifBlank { overview },
+            contentRating = snapshot.contentRating ?: contentRating,
             primaryNetworkLogo = snapshot.primaryNetworkLogo ?: primaryNetworkLogo
         )
     }
@@ -690,6 +692,7 @@ class HomeViewModel @Inject constructor(
             tmdbRating = cached.tmdbRating,
             budget = cached.budget,
             overview = cached.overview,
+            contentRating = cached.contentRating,
             primaryNetworkLogo = cached.primaryNetworkLogo,
             fullyLoaded = false
         )
@@ -759,6 +762,7 @@ class HomeViewModel @Inject constructor(
                 tmdbRating = details?.tmdbRating.orEmpty(),
                 budget = details?.budget,
                 overview = resolvedOverview,
+                contentRating = details?.contentRating,
                 primaryNetworkLogo = primaryNetworkLogo,
                 fullyLoaded = true
             )
