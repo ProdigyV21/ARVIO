@@ -1578,19 +1578,11 @@ private fun DetailsContent(
                                     )
                                 }
                                 item.contentRating?.let { contentRating ->
-                                    if (ratingValue > 0f || displayDate.isNotEmpty() || hasDuration) {
-                                        MobileMetadataSeparator()
-                                    }
-                                    Text(
+                                    ContentRatingChip(
                                         text = contentRating,
-                                        style = ArflixTypography.caption.copy(
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            shadow = textShadow
-                                        ),
-                                        color = Color.White.copy(alpha = 0.78f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        fontWeight = FontWeight.SemiBold,
+                                        textColor = Color.White.copy(alpha = 0.78f),
+                                        textShadow = textShadow
                                     )
                                 }
                             }
@@ -2237,16 +2229,11 @@ private fun DetailsContent(
                         }
 
                         item.contentRating?.let { contentRating ->
-                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
-                            Text(
+                            ContentRatingChip(
                                 text = contentRating,
-                                style = ArflixTypography.caption.copy(
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    shadow = textShadow
-                                ),
-                                color = Color.White,
-                                maxLines = 1
+                                fontWeight = FontWeight.Bold,
+                                textColor = Color.White,
+                                textShadow = textShadow
                             )
                         }
                     }
@@ -3741,6 +3728,36 @@ private fun MobileMetadataSeparator() {
         color = Color.White.copy(alpha = 0.42f),
         maxLines = 1
     )
+}
+
+/**
+ * Age certification chip — same rounded shape and padding as the "In Cinema" pill,
+ * but on a neutral translucent surface instead of a solid colour.
+ */
+@Composable
+private fun ContentRatingChip(
+    text: String,
+    fontWeight: FontWeight,
+    textColor: Color,
+    textShadow: Shadow
+) {
+    Box(
+        modifier = Modifier
+            .background(Color.White.copy(alpha = 0.14f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            style = ArflixTypography.caption.copy(
+                fontSize = 13.sp,
+                fontWeight = fontWeight,
+                shadow = textShadow
+            ),
+            color = textColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
 }
 
 /**
