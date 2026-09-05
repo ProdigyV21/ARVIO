@@ -1795,6 +1795,7 @@ class DetailsViewModel @Inject constructor(
             totalAddons = 0,
             streams = emptyList(),
             streamsEpisodeIdentity = identity,
+            subtitles = emptyList(),
             streamSearchStartTime = System.currentTimeMillis()
         )
         val requestId = ++loadStreamsRequestId
@@ -1840,6 +1841,7 @@ class DetailsViewModel @Inject constructor(
                 totalAddons = 0,
                 streams = emptyList(),
                 streamsEpisodeIdentity = identity,
+                subtitles = emptyList(),
                 addonOrderedIds = orderedAddonIds,
                 streamSearchStartTime = System.currentTimeMillis()
             )
@@ -1888,7 +1890,6 @@ class DetailsViewModel @Inject constructor(
                         requestMediaId = requestMediaId
                     )
                 }
-
 
                 val result = if (currentMediaType == MediaType.MOVIE) {
                     val enabledAddons = streamRepository.installedAddons.first()

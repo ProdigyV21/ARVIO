@@ -1557,7 +1557,11 @@ class AuthRepository @Inject constructor(
             return Result.success(bestPayload.payload)
         }
 
-        if (netlifyResult.isSuccess || accountSyncResult.isSuccess || userSettingsResult.isSuccess || profileResult.isSuccess) {
+        // Disabled fallback providers return success(null); they must not hide a failed Netlify read.
+        if (Constants.USE_NETLIFY_CLOUD_SYNC) {
+            return netlifyResult.map { it?.payload }
+        }
+        if (accountSyncResult.isSuccess || userSettingsResult.isSuccess || profileResult.isSuccess) {
             return Result.success(null)
         }
 

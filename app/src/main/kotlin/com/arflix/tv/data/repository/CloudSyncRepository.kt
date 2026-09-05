@@ -821,8 +821,6 @@ class CloudSyncRepository @Inject constructor(
         root.put("iptvFavoriteGroups", JSONArray(gson.toJson(iptvRepository.observeFavoriteGroups().first())))
         root.put("iptvFavoriteChannels", JSONArray(gson.toJson(iptvRepository.observeFavoriteChannels().first())))
 
-
-
         // Informational
         val isTraktLinked = traktRepository.hasTrakt()
         root.put("traktLinked", isTraktLinked)
@@ -902,7 +900,14 @@ class CloudSyncRepository @Inject constructor(
             return Result.failure(it)
         }
 
-        val existingRemotePayload = authRepository.loadAccountSyncPayload()
+        val remotePayloadResult = authRepository.loadAccountSyncPayload()
+        val compatiblePayload = preserveLegacyPluginBackup(payload, remotePayloadResult).getOrElse { error ->
+            markPushFailedDirty()
+            pushFailureCount++
+            Log.w(TAG, "Push skipped: existing cloud backup could not be preserved")
+            return Result.failure(error)
+        }
+        val existingRemotePayload = remotePayloadResult
             .getOrNull()
             ?.takeIf { it.isNotBlank() }
         if (
@@ -940,9 +945,9 @@ class CloudSyncRepository @Inject constructor(
         }
 
         val groupOrderMerged = if (existingRemotePayload != null && !iptvRepository.isGroupOrderLocallyDirty()) {
-            mergeRemoteGroupOrder(payload, existingRemotePayload)
+            mergeRemoteGroupOrder(compatiblePayload, existingRemotePayload)
         } else {
-            payload
+            compatiblePayload
         }
         val traktMerged = if (existingRemotePayload != null) {
             mergeRemoteTraktTokens(groupOrderMerged, existingRemotePayload)
@@ -1896,8 +1901,6 @@ class CloudSyncRepository @Inject constructor(
 
         traktRepository.clearAllProfileCaches()
         watchHistoryRepository.clearProfileCaches()
-
-
 
         // Reset the per-field baseline/timestamps to the merged result so the next snapshot build
         // does not see remote-applied values as fresh local changes (ping-pong guard). If we
