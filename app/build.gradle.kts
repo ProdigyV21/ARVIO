@@ -41,7 +41,6 @@ android {
         versionName = "1.9.996"
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
-        buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
         // Emergency Supabase cost guard. Keep high-volume public metadata and
         // idle realtime polling off Supabase unless explicitly re-enabled.
         buildConfigField("Boolean", "ENABLE_TMDB_EDGE_PROXY", "false")
@@ -101,12 +100,10 @@ android {
         create("play") {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
-            buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
         }
         create("sideload") {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
-            buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "true")
         }
     }
 
@@ -435,19 +432,6 @@ ksp {
     // NanoHTTPD – lightweight HTTP server for QR-based AI key setup
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 
-    // Plugin system dependencies (Sideload flavor only)
-    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
-    add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
-    add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
-    add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
-    add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
-        exclude(group = "org.mozilla", module = "rhino")
-    }
-    add("sideloadImplementation", "org.mozilla:rhino:1.8.1")
-    add("sideloadImplementation", "com.google.re2j:re2j:1.8")
-    add("sideloadImplementation", "org.webjars.npm:crypto-js:4.2.0")
-
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
@@ -580,21 +564,6 @@ kotlin {
 dependencies {
     ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
     annotationProcessor("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
-
-    // Plugin system dependencies (Sideload flavor only)
-    add("sideloadImplementation", files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
-    add("sideloadImplementation", "com.fasterxml.jackson.core:jackson-databind:2.17.0")
-    add("sideloadImplementation", "com.fasterxml.jackson.module:jackson-module-kotlin:2.17.0")
-    add("sideloadImplementation", "com.github.Blatzar:NiceHttp:0.4.11")
-    add("sideloadImplementation", "org.conscrypt:conscrypt-android:2.5.3")
-    add("sideloadImplementation", "com.github.recloudstream.cloudstream:library-android:v4.7.0") {
-        exclude(group = "org.mozilla", module = "rhino")
-    }
-    add("sideloadImplementation", "org.webjars.npm:crypto-js:4.2.0")
-    
-    // Runtime helpers used by the sideload plugin extractor stack.
-    add("sideloadImplementation", "org.mozilla:rhino:1.8.1")
-    add("sideloadImplementation", "com.google.re2j:re2j:1.8")
 }
 
 

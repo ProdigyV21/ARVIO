@@ -103,7 +103,6 @@ class CloudSyncRepository @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
     private val profileAvatarImageManager: ProfileAvatarImageManager,
     private val invalidationBus: CloudSyncInvalidationBus,
-    private val pluginDataStore: com.arflix.tv.data.local.PluginDataStore,
     private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore
 ) {
     private val TAG = "CloudSync"
@@ -822,17 +821,7 @@ class CloudSyncRepository @Inject constructor(
         root.put("iptvFavoriteGroups", JSONArray(gson.toJson(iptvRepository.observeFavoriteGroups().first())))
         root.put("iptvFavoriteChannels", JSONArray(gson.toJson(iptvRepository.observeFavoriteChannels().first())))
 
-        // Plugin repositories and scrapers (sideload flavor)
-        try {
-            val pluginRepos = pluginDataStore.repositories.first()
-            val pluginScrapers = pluginDataStore.scrapers.first()
-            val pluginsEnabled = pluginDataStore.pluginsEnabled.first()
-            root.put("pluginRepositories", JSONArray(gson.toJson(pluginRepos)))
-            root.put("pluginScrapers", JSONArray(gson.toJson(pluginScrapers)))
-            root.put("pluginsEnabled", pluginsEnabled)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-        }
+
 
         // Informational
         val isTraktLinked = traktRepository.hasTrakt()
@@ -1908,23 +1897,7 @@ class CloudSyncRepository @Inject constructor(
         traktRepository.clearAllProfileCaches()
         watchHistoryRepository.clearProfileCaches()
 
-        // Restore plugin repositories and scrapers
-        try {
-            root.optJSONArray("pluginRepositories")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-                val type = com.google.gson.reflect.TypeToken.getParameterized(List::class.java, com.arflix.tv.domain.model.PluginRepository::class.java).type
-                val repos: List<com.arflix.tv.domain.model.PluginRepository> = gson.fromJson(json, type) ?: emptyList()
-                if (repos.isNotEmpty()) pluginDataStore.saveRepositories(repos)
-            }
-            root.optJSONArray("pluginScrapers")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-                val type = com.google.gson.reflect.TypeToken.getParameterized(List::class.java, com.arflix.tv.domain.model.ScraperInfo::class.java).type
-                val scrapers: List<com.arflix.tv.domain.model.ScraperInfo> = gson.fromJson(json, type) ?: emptyList()
-                if (scrapers.isNotEmpty()) pluginDataStore.saveScrapers(scrapers)
-            }
-            if (root.has("pluginsEnabled")) pluginDataStore.setPluginsEnabled(root.optBoolean("pluginsEnabled", false))
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            AppLogger.recordException(e, mapOf("error_area" to "CloudSync", "cloud_flow" to "apply_plugins"))
-        }
+
 
         // Reset the per-field baseline/timestamps to the merged result so the next snapshot build
         // does not see remote-applied values as fresh local changes (ping-pong guard). If we

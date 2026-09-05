@@ -402,9 +402,6 @@ fun SettingsScreen(
             add("stremio")
             add("catalogs")
             add("home_server")
-            if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
-                add("plugins")
-            }
             add("appearance")
             add("network")
         }
@@ -436,9 +433,6 @@ fun SettingsScreen(
         )
     }
     var contentFocusIndex by remember { mutableIntStateOf(0) }
-    var pluginsMaxIndex by remember { mutableIntStateOf(0) }
-    var pluginsEnterTrigger by remember { mutableIntStateOf(-1) }
-    var pluginsModalOpen by remember { mutableStateOf(false) }
     var activeZone by remember { mutableStateOf(Zone.CONTENT) }
     var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
 
@@ -536,7 +530,6 @@ fun SettingsScreen(
             "home_server" -> uiState.homeServerConnections.size + 3
             "catalogs" -> uiState.catalogs.size + 1 // Add + Import + catalogs
             "stremio" -> stremioAddons.size + 1 // rows + refresh + add button
-            "plugins" -> pluginsMaxIndex
             "accounts" -> 15 // Accounts, tracking routing, telegram, discord, sync/update, privacy and deletion
             else -> 0
         }
@@ -766,8 +759,7 @@ fun SettingsScreen(
         showDeletePackConfirm ||
         uiState.isPackLoading ||
         uiState.packError != null ||
-        uiState.pendingPackManifest != null ||
-        pluginsModalOpen
+        uiState.pendingPackManifest != null
 
     BackHandler(enabled = !isTouchDevice && !hasBlockingModal) {
         when (activeZone) {
@@ -1325,9 +1317,6 @@ fun SettingsScreen(
                                                 15 -> openExternalUrl(context, ACCOUNT_DELETION_URL)
                                             }
                                         }
-                                        "plugins" -> {
-                                            pluginsEnterTrigger = contentFocusIndex
-                                        }
                                         else -> Unit
                                     }
                                 }
@@ -1858,18 +1847,6 @@ fun SettingsScreen(
                             onAddCustomAddon = { showCustomAddonInput = true },
                             onRefreshAddons = { viewModel.refreshAddons() }
                         )
-                        "plugins" -> {
-                            com.arflix.tv.ui.screens.plugin.PluginScreen(
-                                focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
-                                onFocusedIndexChanged = { contentFocusIndex = it },
-                                onMaxIndexChanged = { pluginsMaxIndex = it },
-                                enterTrigger = if (activeZone == Zone.CONTENT) pluginsEnterTrigger else -1,
-                                onEnterTriggerHandled = { pluginsEnterTrigger = -1 },
-                                onModalStateChanged = { pluginsModalOpen = it },
-                                onBackPressed = { activeZone = Zone.SECTION },
-                                onNavigateToSection = { activeZone = Zone.SECTION }
-                            )
-                        }
                         "accounts" -> AccountsSettings(
                             isCloudAuthenticated = uiState.isLoggedIn,
                             cloudEmail = uiState.accountEmail,
@@ -4115,7 +4092,6 @@ private fun mobileCategoryTitle(page: String): String = when (page) {
     "Audio & Subtitles" -> stringResource(R.string.settings_cat_audio_subtitles)
     "Appearance" -> stringResource(R.string.interface_label)
     "Addons" -> stringResource(R.string.addons)
-    "Plugins & Extensions" -> stringResource(R.string.settings_cat_plugins_extensions)
     "Catalogs" -> stringResource(R.string.catalogs)
     "TV" -> stringResource(R.string.iptv)
     "Home Server" -> stringResource(R.string.settings_home_server)
@@ -4189,9 +4165,6 @@ private fun MobileSettingsMainPage(
                     add("Audio & Subtitles" to Icons.Default.Speaker)
                     add("Appearance" to Icons.Default.Palette)
                     add("Addons" to Icons.Default.Extension)
-                    if (BuildConfig.FEATURE_PLUGINS_ENABLED) {
-                        add("Plugins & Extensions" to Icons.Default.Extension)
-                    }
                     add("Catalogs" to Icons.Default.Widgets)
                     add("TV" to Icons.Default.LiveTv)
                     add("Home Server" to Icons.Default.Cloud)
@@ -4693,18 +4666,6 @@ private fun MobileSettingsSubPage(
                     onDeleteAddon = { viewModel.removeAddon(it) },
                     onAddCustomAddon = onAddCustomAddonClick,
                     onRefreshAddons = { viewModel.refreshAddons() }
-                )
-            }
-            "Plugins & Extensions" -> {
-                com.arflix.tv.ui.screens.plugin.PluginScreen(
-                    focusedIndex = -1,
-                    onFocusedIndexChanged = {},
-                    onMaxIndexChanged = {},
-                    enterTrigger = -1,
-                    onEnterTriggerHandled = {},
-                    onModalStateChanged = {},
-                    onBackPressed = { onNavigate("MAIN") },
-                    onNavigateToSection = {}
                 )
             }
             "Catalogs" -> {
