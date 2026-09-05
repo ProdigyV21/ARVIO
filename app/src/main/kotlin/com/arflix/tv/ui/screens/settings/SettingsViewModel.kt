@@ -53,6 +53,7 @@ import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.network.OkHttpProvider
+import com.arflix.tv.data.repository.CatalogException
 import com.arflix.tv.data.repository.SyncProgress
 import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.SyncResult
@@ -125,6 +126,17 @@ sealed interface SettingsMessage {
 /** Wraps a non-null error text from a repository/exception into a [SettingsMessage]. */
 private fun String?.orMessage(fallback: SettingsMessage): SettingsMessage =
     this?.takeIf { it.isNotBlank() }?.let { SettingsMessage.Raw(it) } ?: fallback
+
+/**
+ * Turns a catalog failure into a [SettingsMessage]. A [CatalogException] carries the
+ * string resource rather than a finished text, so it stays in the language selected
+ * in the app; anything else falls back to its platform message.
+ */
+private fun Throwable.orCatalogMessage(fallback: SettingsMessage): SettingsMessage =
+    when (this) {
+        is CatalogException -> SettingsMessage.Res(messageRes, formatArgs)
+        else -> message.orMessage(fallback)
+    }
 
 data class AiKeyServerState(
     val isActive: Boolean = false,
@@ -2254,7 +2266,7 @@ class SettingsViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isPackLoading = false,
-                    packError = error.message.orMessage(
+                    packError = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.settings_pack_load_failed)
                     ),
                     pendingPackUrl = null
@@ -2295,7 +2307,7 @@ class SettingsViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isPackLoading = false,
-                    packError = error.message.orMessage(
+                    packError = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.settings_pack_install_failed)
                     )
                 )
@@ -2314,7 +2326,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message.orMessage(
+                    toastMessage = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.settings_pack_remove_failed)
                     ),
                     toastType = ToastType.ERROR
@@ -2337,7 +2349,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message.orMessage(
+                    toastMessage = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.catalog_failed_add)
                     ),
                     toastType = ToastType.ERROR
@@ -2422,7 +2434,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message.orMessage(
+                    toastMessage = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.catalog_failed_add)
                     ),
                     toastType = ToastType.ERROR
@@ -2445,7 +2457,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message.orMessage(
+                    toastMessage = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.catalog_failed_update)
                     ),
                     toastType = ToastType.ERROR
@@ -2468,7 +2480,7 @@ class SettingsViewModel @Inject constructor(
                 syncLocalStateToCloud(silent = true)
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = error.message.orMessage(
+                    toastMessage = error.orCatalogMessage(
                         SettingsMessage.Res(R.string.catalog_failed_remove)
                     ),
                     toastType = ToastType.ERROR

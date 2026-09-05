@@ -102,6 +102,9 @@ enum class CollectionTab { MOVIES, SERIES }
  */
 private const val COLLECTION_LOAD_FAILED_ERROR = "__collection_load_failed__"
 
+/** Same sentinel mechanism as [COLLECTION_LOAD_FAILED_ERROR], for an unknown collection id. */
+private const val COLLECTION_NOT_FOUND_ERROR = "__collection_not_found__"
+
 data class CollectionDetailsUiState(
     val catalog: CatalogConfig? = null,
     val movieItems: List<MediaItem> = emptyList(),
@@ -157,7 +160,7 @@ class CollectionDetailsViewModel @Inject constructor(
                 _uiState.value = CollectionDetailsUiState(
                     isLoadingMovies = false,
                     isLoadingSeries = false,
-                    error = "Collection not found"
+                    error = COLLECTION_NOT_FOUND_ERROR
                 )
                 return@launch
             }
@@ -683,6 +686,7 @@ fun CollectionDetailsScreen(
             emptyMessage = when (uiState.error) {
                 null -> stringResource(R.string.collection_empty)
                 COLLECTION_LOAD_FAILED_ERROR -> stringResource(R.string.collection_failed_load)
+                COLLECTION_NOT_FOUND_ERROR -> stringResource(R.string.collection_not_found)
                 else -> uiState.error!!
             },
             topContentPadding = if (isMobile) 18.dp else if (usePosterCards) 22.dp else 10.dp
@@ -769,7 +773,7 @@ private fun CollectionTabBar(
     ) {
         if (isSportsCollection) {
             CollectionTabChip(
-                label = "Live & Upcoming",
+                label = stringResource(R.string.collection_tab_live_upcoming),
                 isSelected = true,
                 focusRequester = seriesTabFocusRequester,
                 onClick = { onTabSelected(CollectionTab.SERIES) }

@@ -205,7 +205,7 @@ fun NextEpisodeOverlay(
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = "in ${countdown}s",
+                            text = stringResource(R.string.component_next_in_seconds, countdown),
                             style = ArflixTypography.body,
                             color = TextSecondary
                         )
@@ -287,7 +287,7 @@ fun NextEpisodeOverlay(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "S$seasonNumber E$episodeNumber",
+                                text = stringResource(R.string.player_season_episode_short, seasonNumber, episodeNumber),
                                 style = ArflixTypography.badge,
                                 color = TextSecondary
                             )

@@ -218,7 +218,13 @@ fun CrashReportScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "ID: $crashId\nTime: $timeString\nVersion: $crashVersion\nError: $crashMsg",
+                        text = stringResource(
+                            R.string.crash_details_body,
+                            crashId,
+                            timeString,
+                            crashVersion,
+                            crashMsg
+                        ),
                         color = Color(0xFFD0D5DD),
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace

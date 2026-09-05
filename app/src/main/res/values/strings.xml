@@ -839,6 +839,7 @@
     <string name="crash_desc_mobile">We apologize for the interruption. You can report this crash directly to our Discord channel to help us fix it.</string>
     <string name="crash_qr_hint">Scan to open arvio.tv — 1 tap to copy report &amp; jump into Discord.</string>
     <string name="crash_details_title">Crash Reference Details</string>
+    <string name="crash_details_body">ID: %1$s\nTime: %2$s\nVersion: %3$s\nError: %4$s</string>
     <string name="crash_copied_toast">Crash details copied! Opening Discord...</string>
     <string name="crash_report_discord">Report on Discord</string>
     <string name="crash_restart_app">Restart ARVIO</string>
@@ -873,6 +874,7 @@
     <string name="login_privacy_notice">Creating an account stores your email and the cloud data you choose to sync.</string>
     <string name="login_read_privacy_policy">Read Privacy Policy</string>
     <string name="collection_empty">Nothing to show here yet.</string>
+    <string name="collection_tab_live_upcoming">Live &amp; Upcoming</string>
 
     <!-- Extracted from code: Details, Home, Search and Player -->
     <string name="details_toast_debrid_downloading">This debrid torrent is still being downloaded. Try another source or wait a bit.</string>
@@ -1087,6 +1089,14 @@
     <string name="component_ep_left_one">1 ep left</string>
     <string name="component_eps_left">%1$d eps left</string>
     <string name="component_season_episode_marker">S%1$d • E%2$d</string>
+    <string name="component_next_in_seconds">in %1$d s</string>
+    <string name="component_ctx_mark_watched">Mark as Watched</string>
+    <string name="component_ctx_mark_unwatched">Mark as Unwatched</string>
+    <string name="component_ctx_view_details">View Details</string>
+    <string name="component_ctx_mark_season_watched">Mark Season Watched</string>
+    <string name="component_ctx_mark_season_unwatched">Mark Season Unwatched</string>
+    <string name="component_ctx_season_title">Season %1$d</string>
+    <string name="component_ctx_quick_actions">Quick Actions</string>
     <string name="person_section_biography">Biography</string>
     <string name="person_section_known_for">Known For</string>
     <string name="person_as_character">as %1$s</string>
@@ -1326,6 +1336,24 @@
 
     <!-- Extracted from code: Catalog / IPTV repositories -->
     <string name="catalog_mdblist_title">MDBList Catalog</string>
+    <string name="catalog_pack_invalid_url_scheme">Invalid URL: must start with http:// or https://</string>
+    <string name="catalog_pack_fetch_failed">Failed to fetch catalog pack from URL</string>
+    <string name="catalog_pack_parse_failed">Failed to parse catalog pack manifest</string>
+    <string name="catalog_pack_missing_id_or_name">Invalid catalog pack manifest: missing ID or Name</string>
+    <string name="catalog_pack_no_catalogs">Invalid catalog pack manifest: catalogs list is empty or missing</string>
+    <string name="catalog_pack_item_incomplete">Invalid catalog pack manifest: catalog items must have a name and url</string>
+    <string name="catalog_pack_duplicate_url">Invalid catalog pack manifest: duplicate catalog URL \'%1$s\'</string>
+    <string name="catalog_pack_manifest_missing_id">Manifest missing ID</string>
+    <string name="catalog_pack_manifest_missing_name">Manifest missing Name</string>
+    <string name="catalog_pack_manifest_missing_catalogs">Manifest missing catalogs</string>
+    <string name="catalog_pack_nothing_to_import">No new or valid catalogs found in this pack to import</string>
+    <string name="catalog_pack_none_for_pack">No catalogs found for pack: %1$s</string>
+    <string name="catalog_url_required">URL is required</string>
+    <string name="catalog_url_invalid">Invalid URL</string>
+    <string name="catalog_url_invalid_format">Invalid URL format</string>
+    <string name="catalog_url_invalid_host">Invalid host</string>
+    <string name="catalog_url_trakt_hint">Use a Trakt list URL: trakt.tv/users/{user}/lists/{list}</string>
+    <string name="catalog_url_unsupported">Only Trakt and MDBList URLs are supported</string>
     <string name="iptv_progress_loading_channels">Loading channels from portal...</string>
     <string name="iptv_progress_loading_full_epg">Loading full EPG (%1$d/%2$d)...</string>
     <string name="iptv_progress_loading_live">Loading live streams...</string>
@@ -1372,6 +1400,7 @@
     <string name="watchlist_failed_remove_trakt">Failed to remove from Trakt watchlist</string>
     <string name="watchlist_failed_remove">Failed to remove from watchlist</string>
     <string name="collection_failed_load">Failed to load collection</string>
+    <string name="collection_not_found">Collection not found</string>
 
 
     <!-- Extracted from code: Auth / HomeServer / Telegram error messages -->
