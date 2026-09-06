@@ -70,4 +70,65 @@ class HomeMobileCategoryOrderingTest {
             "sports"
         ).inOrder()
     }
+
+    @Test
+    fun `applyIptvFavoritesPlacement preserves user catalog order when enabled`() {
+        val savedCatalogs = listOf(
+            CatalogConfig(id = "trending_movies", title = "Trending in Movies", sourceType = CatalogSourceType.MDBLIST, isPreinstalled = true),
+            CatalogConfig(id = "trending_tv", title = "Trending in Shows", sourceType = CatalogSourceType.MDBLIST, isPreinstalled = true),
+            CatalogConfig(id = "favorite_tv", title = "Favorite TV", sourceType = CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+            CatalogConfig(id = "sports", title = "Sports", sourceType = CatalogSourceType.PREINSTALLED, isPreinstalled = true)
+        )
+
+        val result = applyIptvFavoritesPlacement(savedCatalogs, enabled = true)
+
+        assertThat(result.map { it.id }).containsExactly(
+            "trending_movies",
+            "trending_tv",
+            "favorite_tv",
+            "sports"
+        ).inOrder()
+    }
+
+    @Test
+    fun `applyIptvFavoritesPlacement removes favorite tv when disabled`() {
+        val savedCatalogs = listOf(
+            CatalogConfig(id = "trending_movies", title = "Trending in Movies", sourceType = CatalogSourceType.MDBLIST, isPreinstalled = true),
+            CatalogConfig(id = "favorite_tv", title = "Favorite TV", sourceType = CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+            CatalogConfig(id = "sports", title = "Sports", sourceType = CatalogSourceType.PREINSTALLED, isPreinstalled = true)
+        )
+
+        val result = applyIptvFavoritesPlacement(savedCatalogs, enabled = false)
+
+        assertThat(result.map { it.id }).containsExactly(
+            "trending_movies",
+            "sports"
+        ).inOrder()
+    }
+
+    @Test
+    fun `orderCategoriesBySavedCatalogs respects custom placement of favorite tv`() {
+        val savedCatalogs = listOf(
+            CatalogConfig(id = "trending_movies", title = "Trending in Movies", sourceType = CatalogSourceType.MDBLIST, isPreinstalled = true),
+            CatalogConfig(id = "trending_tv", title = "Trending in Shows", sourceType = CatalogSourceType.MDBLIST, isPreinstalled = true),
+            CatalogConfig(id = "favorite_tv", title = "Favorite TV", sourceType = CatalogSourceType.PREINSTALLED, isPreinstalled = true),
+            CatalogConfig(id = "sports", title = "Sports", sourceType = CatalogSourceType.PREINSTALLED, isPreinstalled = true)
+        )
+
+        val categories = listOf(
+            Category(id = "sports", title = "Sports", items = listOf(MediaItem(1, "Live Match", mediaType = MediaType.MOVIE))),
+            Category(id = "favorite_tv", title = "Favorite TV", items = listOf(MediaItem(2, "Channel 1", mediaType = MediaType.TV))),
+            Category(id = "trending_movies", title = "Trending in Movies", items = listOf(MediaItem(3, "Top Movie", mediaType = MediaType.MOVIE))),
+            Category(id = "trending_tv", title = "Trending in Shows", items = listOf(MediaItem(4, "Top Show", mediaType = MediaType.TV)))
+        )
+
+        val ordered = orderCategoriesBySavedCatalogs(categories, savedCatalogs)
+
+        assertThat(ordered.map { it.id }).containsExactly(
+            "trending_movies",
+            "trending_tv",
+            "favorite_tv",
+            "sports"
+        ).inOrder()
+    }
 }

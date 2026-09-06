@@ -171,6 +171,21 @@ internal fun orderCategoriesBySavedCatalogs(
     }
 }
 
+/**
+ * Filters the Favorite TV row according to the "Show IPTV favorites on home" preference.
+ *
+ * Preserves the user's custom catalog ordering configured in Settings > Catalogs.
+ */
+internal fun applyIptvFavoritesPlacement(
+    savedCatalogs: List<CatalogConfig>,
+    enabled: Boolean
+): List<CatalogConfig> {
+    val favIdx = savedCatalogs.indexOfFirst { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
+    if (favIdx < 0) return savedCatalogs
+    if (!enabled) return savedCatalogs.filterNot { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
+    return savedCatalogs
+}
+
 enum class ToastType {
     SUCCESS, ERROR, INFO
 }
@@ -985,31 +1000,6 @@ class HomeViewModel @Inject constructor(
         val prefs = context.settingsDataStore.data.first()
         prefs[profileManager.profileBooleanKey(IPTV_FAVORITES_ON_HOME)] ?: true
     }.getOrDefault(true)
-
-    /**
-     * Places the Favorite TV row according to that preference.
-     *
-     * Every home ordering site resolves rows by walking `savedCatalogs`, so doing this
-     * once here covers all of them instead of special-casing each. On this profile the
-     * catalog sat at index 67 of 71 — below ~60 collection tiles — which put the row
-     * near the bottom of the screen and made it look like it was never built.
-     */
-    private fun applyIptvFavoritesPlacement(
-        savedCatalogs: List<CatalogConfig>,
-        enabled: Boolean
-    ): List<CatalogConfig> {
-        val favIdx = savedCatalogs.indexOfFirst { it.id == FAVORITE_TV_CATEGORY_ID }
-        if (favIdx < 0) return savedCatalogs
-        // Dropping the config keeps the ordering resolvers from emitting the row at all;
-        // buildFavoriteTvOutcome() independently returns Empty so the additive passes,
-        // which never look at savedCatalogs, stay in agreement.
-        if (!enabled) return savedCatalogs.filterNot { it.id == FAVORITE_TV_CATEGORY_ID }
-        if (favIdx == 0) return savedCatalogs
-        return buildList(savedCatalogs.size) {
-            add(savedCatalogs[favIdx])
-            savedCatalogs.forEachIndexed { idx, cfg -> if (idx != favIdx) add(cfg) }
-        }
-    }
 
     private fun isCustomCatalogConfig(cfg: CatalogConfig): Boolean {
         if (cfg.kind == CatalogKind.COLLECTION || cfg.kind == CatalogKind.COLLECTION_RAIL) {
