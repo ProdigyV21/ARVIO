@@ -304,8 +304,14 @@ class IptvRepositoryStalkerVodTest {
         val second = StalkerVodLink.buildMarker("stalker2", "/media/file_1.mpg")
 
         assertNotEquals(first, second)
-        assertEquals("stalker1" to "/media/file_1.mpg", StalkerVodLink.parseMarker(first!!))
-        assertEquals("stalker2" to "/media/file_1.mpg", StalkerVodLink.parseMarker(second!!))
+        assertEquals(
+            StalkerVodLink.Target("stalker1", "/media/file_1.mpg"),
+            StalkerVodLink.parseMarker(first!!)
+        )
+        assertEquals(
+            StalkerVodLink.Target("stalker2", "/media/file_1.mpg"),
+            StalkerVodLink.parseMarker(second!!)
+        )
     }
 
     @Test
@@ -314,7 +320,7 @@ class IptvRepositoryStalkerVodTest {
         val marker = StalkerVodLink.buildMarker("stalker1", cmd)
 
         assertTrue(StalkerVodLink.isMarker(marker!!))
-        assertEquals("stalker1" to cmd, StalkerVodLink.parseMarker(marker))
+        assertEquals(StalkerVodLink.Target("stalker1", cmd), StalkerVodLink.parseMarker(marker))
     }
 
     @Test

@@ -918,4 +918,141 @@ class StalkerApiTest {
         // caller drops it because it is not an http(s) URL.
         assertEquals("ffmpeg", StalkerApi.sanitizePlaybackCommand("ffmpeg   "))
     }
+
+    // ── Series ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `searchSeries asks the portal for shows, not for the whole catalog`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_ordered_list") -> """
+                    {"js":{"total_items":1,"max_page_items":14,"data":[
+                      {"id":"7","name":"Breaking Bad","cmd":"/media/bb","year":"2008","tmdb_id":"1396"}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        val items = api.searchSeries("Breaking Bad")
+
+        assertEquals(1, items.size)
+        assertEquals("Breaking Bad", items.first().name)
+        assertEquals("1396", items.first().tmdbId)
+        assertEquals(1, requests.size)
+        assertTrue(requests.single().contains("type=series&action=get_ordered_list"))
+        assertTrue(requests.single().contains("search=Breaking"))
+        assertTrue(requests.single().contains("category=*"))
+        // Binding a show must never cost a link either.
+        assertTrue(requests.none { it.contains("action=create_link") })
+    }
+
+    @Test
+    fun `searchSeries treats an HTML 200 answer as unsupported`() = runTest {
+        val api = stubApi(requests = mutableListOf()) { "<html>not a portal api</html>" }
+
+        assertTrue(api.searchSeries("Breaking Bad").isEmpty())
+    }
+
+    @Test
+    fun `searchSeries ignores a blank query without touching the portal`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { error("must not be called") }
+
+        assertTrue(api.searchSeries("   ").isEmpty())
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `getSeasons asks by movie_id and reads the episode numbers`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("movie_id=7") -> """
+                    {"js":{"total_items":2,"max_page_items":14,"data":[
+                      {"id":"71","name":"Season 1","cmd":"/media/bb/s1","series":[1,2,3]},
+                      {"id":"72","name":"Season 2","cmd":"/media/bb/s2","series":[1,2]}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        val seasons = api.getSeasons("7")
+
+        assertEquals(listOf("Season 1", "Season 2"), seasons.map { it.name })
+        assertEquals(listOf(1, 2, 3), StalkerApi.episodeNumbers(seasons.first().series))
+        assertEquals(1, requests.size)
+        assertTrue(requests.single().contains("type=series&action=get_ordered_list"))
+        assertTrue(requests.single().contains("movie_id=7"))
+    }
+
+    @Test
+    fun `getSeasons stops when a portal ignores paging and repeats itself`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) {
+            // No total reported and the same entry on every page - the guard
+            // against portals that ignore `p`.
+            """{"js":{"data":[{"id":"71","name":"Season 1","cmd":"/media/s1","series":[1]}]}}"""
+        }
+
+        val seasons = api.getSeasons("7")
+
+        assertEquals(1, seasons.size)
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `getSeasons ignores a blank series id without touching the portal`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { error("must not be called") }
+
+        assertTrue(api.getSeasons("  ").isEmpty())
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `episodeNumbers accepts numbers and numeric strings and drops the rest`() {
+        val gson = com.google.gson.Gson()
+        fun parse(json: String) = StalkerApi.episodeNumbers(
+            gson.fromJson(json, com.google.gson.JsonElement::class.java)
+        )
+
+        assertEquals(listOf(1, 2, 3), parse("[3,1,2]"))
+        assertEquals(listOf(1, 2), parse("""["1","2"]"""))
+        // Portals pad the array with labels or nulls; those must not take the
+        // whole season down with them.
+        assertEquals(listOf(4), parse("""[null,"extras",4]"""))
+        // A show entry has no season list at all, and some builds send "".
+        assertTrue(parse("\"\"").isEmpty())
+        assertTrue(parse("[]").isEmpty())
+        assertTrue(StalkerApi.episodeNumbers(null).isEmpty())
+    }
+
+    @Test
+    fun `resolveVodStreamUrl passes the episode number as the series parameter`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) {
+            """{"js":{"cmd":"ffmpeg http://cdn.example.com/bb-s2e5.mp4"}}"""
+        }
+
+        val url = api.resolveVodStreamUrl("/media/bb/s2", series = 5)
+
+        assertEquals("http://cdn.example.com/bb-s2e5.mp4", url)
+        assertTrue(requests.single().contains("action=create_link"))
+        assertTrue(requests.single().contains("series=5"))
+    }
+
+    @Test
+    fun `resolveVodStreamUrl omits the series parameter for a movie`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) {
+            """{"js":{"cmd":"http://cdn.example.com/movie.mp4"}}"""
+        }
+
+        api.resolveVodStreamUrl("/media/movie.mpg")
+
+        assertFalse(requests.single().contains("series="))
+    }
 }

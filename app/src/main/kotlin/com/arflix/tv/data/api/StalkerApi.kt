@@ -4,6 +4,9 @@ import com.arflix.tv.data.model.IptvChannel
 import com.arflix.tv.network.withIptvProviderRequestGuard
 import com.arflix.tv.data.repository.StalkerPortalSupport
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonPrimitive
 import com.google.gson.annotations.SerializedName
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
@@ -518,16 +521,121 @@ open class StalkerApi(
     }
 
     /**
+     * Ask the portal for shows matching [query], the series counterpart of
+     * [searchVod].
+     *
+     * Same reasoning as there: `get_ordered_list` only ever answers in small
+     * pages, so the portal's own `search` does the narrowing instead of a local
+     * catalog copy. This is level one of Stalker's two-level series model - the
+     * show, not its episodes.
+     */
+    suspend fun searchSeries(
+        query: String,
+        maxPages: Int = DEFAULT_VOD_SEARCH_PAGES
+    ): List<StalkerSeriesItem> {
+        require(maxPages > 0) { "maxPages must be positive" }
+        val term = query.trim()
+        if (term.isBlank()) return emptyList()
+        val encodedTerm = java.net.URLEncoder.encode(term, "UTF-8")
+        return fetchSeriesPages(
+            baseUrl = "$apiBase/server/load.php?type=series&action=get_ordered_list" +
+                "&category=*&sortby=added&search=$encodedTerm",
+            maxPages = maxPages,
+            failureLabel = "series search"
+        )
+    }
+
+    /**
+     * Level two: the seasons of one show, addressed by the show's portal id.
+     *
+     * Each entry carries its own `cmd` plus a `series` array of the episode
+     * numbers available in that season - the episode itself has no id, it is a
+     * parameter of [resolveVodStreamUrl]. Note that some portal builds answer
+     * this call with episode entries rather than seasons; [StalkerSeriesItem]
+     * covers both because the response shape is identical.
+     */
+    suspend fun getSeasons(
+        seriesId: String,
+        maxPages: Int = DEFAULT_SEASON_PAGES
+    ): List<StalkerSeriesItem> {
+        require(maxPages > 0) { "maxPages must be positive" }
+        val id = seriesId.trim()
+        if (id.isBlank()) return emptyList()
+        val encodedId = java.net.URLEncoder.encode(id, "UTF-8")
+        return fetchSeriesPages(
+            baseUrl = "$apiBase/server/load.php?type=series&action=get_ordered_list" +
+                "&movie_id=$encodedId&sortby=added",
+            maxPages = maxPages,
+            failureLabel = "get_seasons movie_id=$id"
+        )
+    }
+
+    /**
+     * Shared paging for both series levels. [baseUrl] carries everything except
+     * `p` and the JsHttpRequest marker.
+     *
+     * A portal that ignores `p` answers every page with the same entries, so
+     * paging stops as soon as a page adds nothing new; a portal that reports no
+     * total at all stops there or at [maxPages]. Failure is measured on the
+     * parsed payload - portals without series support answer an HTML page or a
+     * bare `{"js":""}` under a plain HTTP 200.
+     */
+    private suspend fun fetchSeriesPages(
+        baseUrl: String,
+        maxPages: Int,
+        failureLabel: String
+    ): List<StalkerSeriesItem> {
+        val results = mutableListOf<StalkerSeriesItem>()
+        val seenKeys = HashSet<String>()
+        try {
+            var page = 1
+            while (page <= maxPages) {
+                val url = "$baseUrl&p=$page&JsHttpRequest=1-xml"
+                val response = doGet(url)
+                val parsed = gson.fromJson(response, StalkerSeriesResponse::class.java)
+                val data = parsed?.js?.data ?: break
+                if (data.isEmpty()) break
+
+                var newEntries = 0
+                for (item in data) {
+                    val key = item.id?.trim()?.ifBlank { null }
+                        ?: item.cmd?.trim()?.ifBlank { null }
+                        ?: continue
+                    if (!seenKeys.add(key)) continue
+                    newEntries++
+                    results += item
+                }
+
+                val totalItems = parsed.js?.totalItems ?: 0
+                val maxPageItems = (parsed.js?.maxPageItems ?: data.size).coerceAtLeast(1)
+                if (newEntries == 0) break
+                if (totalItems > 0 && data.size >= totalItems) break
+                if (totalItems > 0 && page * maxPageItems >= totalItems) break
+                page++
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
+            System.err.println("[Stalker] $failureLabel failed: ${e.message}")
+        }
+        return results
+    }
+
+    /**
      * Exchange a VOD `cmd` for a playable URL (`type=vod&action=create_link`).
      *
-     * Only ever called when playback actually starts - see [StalkerVodItem].
+     * [series] is the episode number for a season `cmd`; omitting it resolves a
+     * movie. Only ever called when playback actually starts - see
+     * [StalkerVodItem].
      */
-    suspend fun resolveVodStreamUrl(cmd: String): String? {
+    suspend fun resolveVodStreamUrl(cmd: String, series: Int? = null): String? {
         val command = cmd.trim()
         if (command.isBlank()) return null
         return try {
             val encodedCmd = java.net.URLEncoder.encode(command, "UTF-8")
+            val seriesParam = series?.takeIf { it > 0 }?.let { "&series=$it" }.orEmpty()
             val url = "$apiBase/server/load.php?type=vod&action=create_link&cmd=$encodedCmd" +
+                seriesParam +
                 "&forced_storage=undefined&disable_ad=0&JsHttpRequest=1-xml"
             val response = doGet(url)
             val parsed = gson.fromJson(response, StalkerLinkResponse::class.java)
@@ -647,12 +755,72 @@ open class StalkerApi(
         @SerializedName("max_page_items") val maxPageItems: Int?
     )
 
+    /**
+     * One entry of the portal's series catalog - a show on level one, a season
+     * of that show on level two. The response shape is identical for both,
+     * which is why one class serves them.
+     *
+     * [series] is what tells them apart: a show has none, a season lists the
+     * episode numbers it holds. It stays a raw [JsonElement] because portals
+     * send it as an array of numbers, an array of strings, or an empty string
+     * when there is nothing to list - a typed field would throw away the whole
+     * response on the odd one out. Use [episodeNumbers] to read it.
+     */
+    data class StalkerSeriesItem(
+        val id: String? = null,
+        val name: String? = null,
+        val cmd: String? = null,
+        val year: String? = null,
+        val time: String? = null,
+        val hd: String? = null,
+        val series: JsonElement? = null,
+        @SerializedName("screenshot_uri") val screenshotUri: String? = null,
+        @SerializedName("rating_imdb") val ratingImdb: String? = null,
+        @SerializedName(value = "tmdb_id", alternate = ["tmdb", "tmdbid"]) val tmdbId: String? = null,
+        @SerializedName("category_id") val categoryId: String? = null
+    )
+
+    data class StalkerSeriesResponse(val js: StalkerSeriesData?)
+    data class StalkerSeriesData(
+        val data: List<StalkerSeriesItem>?,
+        @SerializedName("total_items") val totalItems: Int?,
+        @SerializedName("max_page_items") val maxPageItems: Int?
+    )
+
     companion object {
         /**
          * Search results are already narrow; a handful of pages is plenty and
          * keeps a single lookup from turning into a crawl.
          */
         const val DEFAULT_VOD_SEARCH_PAGES = 3
+
+        /**
+         * Seasons of a single show fit one page on any portal seen so far; the
+         * second page exists for builds that answer this call with episodes
+         * instead of seasons.
+         */
+        const val DEFAULT_SEASON_PAGES = 2
+
+        /**
+         * Episode numbers a season entry offers, read from its raw `series`
+         * field.
+         *
+         * Accepts numbers and numeric strings and drops everything else, so a
+         * portal that pads the array with nulls or labels still yields the
+         * numbers it does report. Duplicates are collapsed and the result is
+         * sorted, because "is episode N here" is the only question asked of it.
+         */
+        fun episodeNumbers(raw: JsonElement?): List<Int> {
+            val array = raw as? JsonArray ?: return emptyList()
+            val numbers = LinkedHashSet<Int>()
+            for (element in array) {
+                val primitive = element as? JsonPrimitive ?: continue
+                val value = runCatching { primitive.asString }.getOrNull()?.trim()
+                val number = value?.toIntOrNull() ?: continue
+                if (number > 0) numbers += number
+            }
+            return numbers.sorted()
+        }
 
         /**
          * Portals return the playable URL prefixed with the player they expect

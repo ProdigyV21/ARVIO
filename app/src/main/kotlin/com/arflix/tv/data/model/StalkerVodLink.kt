@@ -12,28 +12,58 @@ import java.net.URLEncoder
  * this marker instead and `StreamRepository.resolveStreamInternal` exchanges it
  * exactly once, when the user actually starts playback.
  *
- * Shape: `stalker_vod://<portalId>/<urlencoded cmd>`. The portal id travels
- * inside the marker so a multi-portal setup always resolves against the portal
- * the entry came from.
+ * Shape: `stalker_vod://<portalId>/<urlencoded cmd>`, with `?series=<number>`
+ * appended for an episode. The portal id travels inside the marker so a
+ * multi-portal setup always resolves against the portal the entry came from.
+ *
+ * Movies and episodes deliberately share one scheme: an episode differs from a
+ * movie by a single `create_link` parameter, not by how it is played, so every
+ * place that recognises a Stalker placeholder - the playback exchange, autoplay,
+ * the source ordering - keeps working on both with the one check it already has.
  */
 internal object StalkerVodLink {
 
     const val SCHEME = "stalker_vod://"
 
+    private const val SERIES_PARAM = "?series="
+
+    /** A parsed marker: the portal it belongs to, its `cmd`, and the episode
+     *  number for a season `cmd` (null for a movie). */
+    data class Target(
+        val portalId: String,
+        val cmd: String,
+        val series: Int? = null
+    )
+
     fun isMarker(url: String): Boolean = url.trim().startsWith(SCHEME, ignoreCase = true)
 
-    fun buildMarker(portalId: String, cmd: String): String? {
+    fun buildMarker(portalId: String, cmd: String, series: Int? = null): String? {
         val id = portalId.trim()
         val command = cmd.trim()
         if (id.isBlank() || command.isBlank()) return null
-        return SCHEME + URLEncoder.encode(id, "UTF-8") + "/" + URLEncoder.encode(command, "UTF-8")
+        if (series != null && series <= 0) return null
+        val episodePart = series?.let { SERIES_PARAM + it }.orEmpty()
+        return SCHEME + URLEncoder.encode(id, "UTF-8") + "/" +
+            URLEncoder.encode(command, "UTF-8") + episodePart
     }
 
-    /** Returns `portalId to cmd`, or null when [url] is not a well-formed marker. */
-    fun parseMarker(url: String): Pair<String, String>? {
+    /** Returns null when [url] is not a well-formed marker. */
+    fun parseMarker(url: String): Target? {
         val trimmed = url.trim()
         if (!isMarker(trimmed)) return null
-        val body = trimmed.substring(SCHEME.length)
+        var body = trimmed.substring(SCHEME.length)
+
+        // The episode number is appended after the encoded cmd, so it can be
+        // split off before decoding without colliding with the cmd's own
+        // characters ('?' url-encodes to %3F).
+        var series: Int? = null
+        val seriesAt = body.indexOf(SERIES_PARAM)
+        if (seriesAt >= 0) {
+            series = body.substring(seriesAt + SERIES_PARAM.length).trim().toIntOrNull()
+            if (series == null || series <= 0) return null
+            body = body.substring(0, seriesAt)
+        }
+
         // The cmd is url-encoded, so its own slashes cannot be confused with
         // the single separator between portal id and command.
         val separator = body.indexOf('/')
@@ -43,7 +73,7 @@ internal object StalkerVodLink {
         val command = runCatching { URLDecoder.decode(body.substring(separator + 1), "UTF-8") }
             .getOrNull()?.trim().orEmpty()
         if (portalId.isBlank() || command.isBlank()) return null
-        return portalId to command
+        return Target(portalId, command, series)
     }
 }
 
