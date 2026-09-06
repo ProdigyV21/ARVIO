@@ -103,30 +103,11 @@
 -dontwarn org.jellyfin.media3.**
 
 # ============================================
-# Sideload plugin runtime / extractor stack
+# Jsoup (Catalog Discovery)
 # ============================================
-# CloudStream/NewPipe/Jackson pull a few optional JVM helper integrations that
-# are not available or not needed on Android release builds. Keep R8 strict for
-# app code, but suppress those optional adapter references so sideload release
-# minification can complete.
--dontwarn com.google.re2j.**
--dontwarn com.sun.jna.**
--dontwarn edu.umd.cs.findbugs.annotations.**
--dontwarn javax.script.**
--dontwarn org.mozilla.javascript.**
-
-# CloudStream API & Dependencies (External plugins are compiled against these)
--keep class com.lagradost.** { *; }
--keep interface com.lagradost.** { *; }
--dontwarn com.lagradost.**
-
 -keep class org.jsoup.** { *; }
 -keep interface org.jsoup.** { *; }
 -dontwarn org.jsoup.**
-
--keep class com.fasterxml.jackson.** { *; }
--keep interface com.fasterxml.jackson.** { *; }
--dontwarn com.fasterxml.jackson.**
 
 # ============================================
 # Hilt / Dagger - KEEP EVERYTHING

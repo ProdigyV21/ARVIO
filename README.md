@@ -59,6 +59,12 @@ ARVIO is an Android media hub for TV, phone, and tablet form factors. This repos
 
 The app provides a media browser, player shell, profile support, optional cloud sync, IPTV playlist support, catalog configuration, home-server integrations, and integrations with user-configured sources. ARVIO does not host, store, sell, or distribute movies, series, live TV channels, playlists, streams, or other third-party media.
 
+## Plugins and Extensions
+
+Main-branch builds no longer load user-installed plugins or extensions. Development of that runtime continues on the [`plugin-extentions` branch](https://github.com/ProdigyV21/ARVIO/tree/plugin-extentions). This applies to both Play and sideload builds; sideload builds still support self-updates.
+
+Ordinary add-ons, supported HTTP sources, IPTV playlists, and home-server integrations remain available. Upgrading does not delete existing on-device plugin files or preferences. Cloud sync preserves existing plugin backup fields for extension-capable clients, but main builds do not install, execute, or edit them.
+
 ## Repository Purpose
 
 
