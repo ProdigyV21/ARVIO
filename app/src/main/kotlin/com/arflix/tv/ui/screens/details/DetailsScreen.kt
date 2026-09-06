@@ -20,6 +20,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -40,6 +41,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -2703,7 +2705,7 @@ private fun DetailsSeasonRail(
         isCurrentRow = focusSectionForUi == FocusSection.SEASONS,
         focusedItemIndex = seasonIndex,
         totalItems = totalSeasons,
-        itemWidth = 128.dp,
+        itemWidth = 96.dp,
         itemSpacing = 8.dp
     )
 
@@ -2721,7 +2723,7 @@ private fun DetailsSeasonRail(
         contentPadding = PaddingValues(
             start = contentStartPadding,
             end = lockedDetailsRailEndPadding(
-                itemWidth = 128.dp,
+                itemWidth = 96.dp,
                 startPadding = contentStartPadding,
                 outerStartPadding = contentOuterStartPadding,
                 minimum = 150.dp
@@ -3427,20 +3429,23 @@ private fun lockedDetailsRailEndPadding(
         .coerceAtLeast(minimum)
 }
 
+private val DetailsScrollEasing = FastOutSlowInEasing
+
 private suspend fun TvLazyListState.animateDetailsScrollDelta(
     deltaPx: Float,
-    durationMillis: Int
+    durationMillis: Int,
+    easing: Easing = DetailsScrollEasing
 ) {
-    if (abs(deltaPx) <= 1f) return
+    if (abs(deltaPx) <= 0.5f) return
     scroll(scrollPriority = MutatePriority.PreventUserInput) {
         var previousValue = 0f
         animate(
             initialValue = 0f,
             targetValue = deltaPx,
-            animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = durationMillis, easing = easing)
         ) { value, _ ->
             val step = value - previousValue
-            if (abs(step) > 0.01f) {
+            if (abs(step) > 0.001f) {
                 scrollBy(step)
             }
             previousValue = value
@@ -3495,12 +3500,18 @@ private fun HomeStyleRowAutoScroll(
             focusedItemIndex.coerceAtMost(maxFirstIndex)
         }
     }
-    val itemSpanPx = remember(density, itemWidth, itemSpacing) {
-        with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
+    val itemSizes = remember { mutableMapOf<Int, Int>() }
+    val visibleItems = rowState.layoutInfo.visibleItemsInfo
+    LaunchedEffect(visibleItems) {
+        visibleItems.forEach { item ->
+            itemSizes[item.index] = item.size
+        }
     }
 
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
     var lastScrollOffset by remember { mutableIntStateOf(-1) }
+    var lastScrollTimeMs by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(isCurrentRow) {
         if (!isCurrentRow) {
             lastScrollIndex = -1
@@ -3512,37 +3523,86 @@ private fun HomeStyleRowAutoScroll(
 
         val extraOffset = 0
 
-        if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
-            rowState.scrollToItem(index = 0, scrollOffset = 0)
-            lastScrollIndex = 0
-            lastScrollOffset = 0
+        val currentFirst = rowState.firstVisibleItemIndex
+        val currentOffset = rowState.firstVisibleItemScrollOffset
+        val isAlreadyAtTarget = currentFirst == scrollTargetIndex &&
+            abs(currentOffset - extraOffset) <= 2
+        if (isAlreadyAtTarget) {
+            lastScrollIndex = scrollTargetIndex
+            lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
 
-        if (lastScrollIndex == scrollTargetIndex && lastScrollOffset == extraOffset) return@LaunchedEffect
         if (lastScrollIndex == -1) {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             lastScrollIndex = scrollTargetIndex
             lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
-        val currentFirst = rowState.firstVisibleItemIndex
-        val currentOffset = rowState.firstVisibleItemScrollOffset
+
         val currentLast = rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: currentFirst
-        val targetOutsideViewport = focusedItemIndex < currentFirst || focusedItemIndex > currentLast
+        val targetOutsideViewport = scrollTargetIndex < currentFirst || scrollTargetIndex > currentLast
         val delta = scrollTargetIndex - currentFirst
+        val offsetDelta = abs(extraOffset - currentOffset)
+
         if (abs(delta) > 6) {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else if (delta != 0 || targetOutsideViewport || lastScrollOffset != extraOffset) {
-            val deltaPx = (delta * itemSpanPx) + (extraOffset - currentOffset)
+        } else if (delta != 0 || targetOutsideViewport || offsetDelta > 2) {
+            val nowMs = SystemClock.elapsedRealtime()
+            val isFast = (nowMs - lastScrollTimeMs) < 180L
+            lastScrollTimeMs = nowMs
+
+            val layoutInfo = rowState.layoutInfo
+            layoutInfo.visibleItemsInfo.forEach { item ->
+                itemSizes[item.index] = item.size
+            }
+
+            val defaultItemSizePx = with(density) { itemWidth.roundToPx() }
+            val spacingPx = layoutInfo.mainAxisItemSpacing.takeIf { it > 0 }
+                ?: with(density) { itemSpacing.roundToPx() }
+            val beforePaddingPx = layoutInfo.beforeContentPadding
+
+            fun calculateScrollPosition(index: Int, scrollOffset: Int): Int {
+                if (index <= 0) return scrollOffset
+                var pos = beforePaddingPx + scrollOffset
+                for (i in 0 until index) {
+                    pos += (itemSizes[i] ?: defaultItemSizePx) + spacingPx
+                }
+                return pos
+            }
+
+            val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == scrollTargetIndex }
+            val deltaPx = if (scrollTargetIndex == 0) {
+                if (currentFirst == 0) {
+                    -currentOffset.toFloat()
+                } else {
+                    val currentPos = calculateScrollPosition(currentFirst, currentOffset)
+                    -currentPos.toFloat()
+                }
+            } else if (targetItem != null) {
+                (targetItem.offset - extraOffset).toFloat()
+            } else {
+                val currentPos = calculateScrollPosition(currentFirst, currentOffset)
+                val targetPos = calculateScrollPosition(scrollTargetIndex, extraOffset)
+                (targetPos - currentPos).toFloat()
+            }
+
+            val duration = when {
+                isFast -> 120
+                abs(delta) >= 3 -> 200
+                else -> 180
+            }
+
             rowState.animateDetailsScrollDelta(
                 deltaPx = deltaPx,
-                durationMillis = if (abs(delta) >= 3) 180 else 150
+                durationMillis = duration,
+                easing = DetailsScrollEasing
             )
-            if (
-                rowState.firstVisibleItemIndex != scrollTargetIndex ||
-                abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 8
-            ) {
+
+            // Ensure exact alignment if item index is off, or if significantly drifted
+            if (rowState.firstVisibleItemIndex != scrollTargetIndex) {
+                rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+            } else if (abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 16) {
                 rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             }
         }
@@ -4269,12 +4329,18 @@ private fun SeasonButton(
     }
     val backgroundColor by animateColorAsState(
         targetValue = targetBackgroundColor,
-        animationSpec = androidx.compose.animation.core.tween(150),
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 180,
+            easing = FastOutSlowInEasing
+        ),
         label = "season_btn_bg"
     )
     val textColor by animateColorAsState(
         targetValue = targetTextColor,
-        animationSpec = androidx.compose.animation.core.tween(150),
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 180,
+            easing = FastOutSlowInEasing
+        ),
         label = "season_btn_txt"
     )
 
@@ -4298,6 +4364,7 @@ private fun SeasonButton(
     Row(
         modifier = clickModifier
             .background(backgroundColor, shape)
+            .defaultMinSize(minWidth = 96.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -4306,7 +4373,7 @@ private fun SeasonButton(
             text = "${stringResource(R.string.season_label)} $season",
             style = ArvioSkin.typography.button.copy(
                 fontSize = 13.sp,
-                fontWeight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Medium
+                fontWeight = FontWeight.SemiBold
             ),
             color = textColor
         )
