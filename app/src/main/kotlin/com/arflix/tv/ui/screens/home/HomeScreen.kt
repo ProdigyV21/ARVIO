@@ -137,6 +137,7 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.isPortrait
 import com.arflix.tv.network.OkHttpProvider
+import com.arflix.tv.core.player.TrailerPlayerPool
 import com.arflix.tv.ui.components.FeaturedMediaCard
 import com.arflix.tv.ui.components.movieGenreNameRes
 import com.arflix.tv.ui.components.tvGenreNameRes
@@ -488,7 +489,16 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.animateHomeSc
     }
 }
 
-
+private fun calculateTvHeroMediaDimensions(
+    screenWidth: androidx.compose.ui.unit.Dp,
+    screenHeight: androidx.compose.ui.unit.Dp
+): Pair<androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp> {
+    val rowsViewportHeight = if ((screenHeight - 24.dp) < 600.dp) 238.dp else ((screenHeight - 24.dp) * 0.35f).coerceIn(260.dp, 340.dp)
+    val catalogPostersTop = screenHeight - rowsViewportHeight + 28.dp
+    val mediaHeight = catalogPostersTop.coerceAtLeast(320.dp)
+    val mediaWidth = (mediaHeight * (16f / 9f)).coerceIn(screenWidth * 0.58f, screenWidth * 0.65f)
+    return mediaWidth to mediaHeight
+}
 
 @Composable
 private fun HomeBackdropCrossfade(
@@ -569,6 +579,7 @@ private fun HomeBackdropCrossfade(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = Alignment.TopEnd,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -581,6 +592,7 @@ private fun HomeBackdropCrossfade(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = Alignment.TopEnd,
                 onSuccess = { pendingBackdropReady = true },
                 modifier = Modifier
                     .fillMaxSize()
@@ -639,9 +651,31 @@ fun HomeScreen(
     val profileCount = if (currentProfile != null) 1 else 0
     val usePosterCards = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val lifecycleOwner = LocalLifecycleOwner.current
+    val trailerPlayerPool = com.arflix.tv.core.player.LocalTrailerPlayerPool.current
+    DisposableEffect(lifecycleOwner, trailerPlayerPool) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                trailerPlayerPool?.stop()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            trailerPlayerPool?.stop()
+        }
+    }
+    LaunchedEffect(uiState.trailerAutoPlay) {
+        if (!uiState.trailerAutoPlay) {
+            trailerPlayerPool?.stop()
+        }
+    }
+    LaunchedEffect(uiState.trailerInCards) {
+        trailerPlayerPool?.stop()
+    }
     var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
 
     val navigateToDetailsWithCache: (MediaType, Int, Int?, Int?) -> Unit = { mediaType, mediaId, initialSeason, initialEpisode ->
+        trailerPlayerPool?.stop()
         val matchingItem = uiState.categories.asSequence()
             .flatMap { it.items.asSequence() }
             .firstOrNull { it.id == mediaId && it.mediaType == mediaType }
@@ -723,9 +757,17 @@ fun HomeScreen(
     }
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
-    val backdropSize = remember(configuration, density) {
-        val widthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
-        val heightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
+    val backdropSize = remember(configuration, density, isMobile) {
+        val (mediaWidthDp, mediaHeightDp) = if (isMobile) {
+            configuration.screenWidthDp.dp to configuration.screenHeightDp.dp
+        } else {
+            calculateTvHeroMediaDimensions(
+                screenWidth = configuration.screenWidthDp.dp,
+                screenHeight = configuration.screenHeightDp.dp
+            )
+        }
+        val widthPx = with(density) { mediaWidthDp.roundToPx() }
+        val heightPx = with(density) { mediaHeightDp.roundToPx() }
         widthPx.coerceAtLeast(1) to heightPx.coerceAtLeast(1)
     }
     val backdropGradient = remember {
@@ -867,6 +909,7 @@ fun HomeScreen(
                 val now = SystemClock.elapsedRealtime()
                 val isFastScrolling = now - focusState.lastNavEventTime < fastScrollThresholdMs
                 if (isFastScrolling) {
+                    trailerPlayerPool?.stop()
                     delay(360L)
                     if (
                         focusState.currentRowIndex != focusSnapshot.rowIndex ||
@@ -884,6 +927,7 @@ fun HomeScreen(
                 if (homeRowItemKey(latestFocusedItem) != focusSnapshot.focusedItemKey) {
                     return@collectLatest
                 }
+                trailerPlayerPool?.stop()
                 viewModel.onFocusChanged(focusSnapshot.rowIndex, focusSnapshot.itemIndex, shouldPrefetch = true)
                 viewModel.updateHeroItem(latestFocusedItem)
             }
@@ -945,17 +989,12 @@ fun HomeScreen(
 
     var isTrailerPlaying by remember { mutableStateOf(false) }
     var trailerSuppressed by remember { mutableStateOf(false) }
-    LaunchedEffect(displayHeroItem?.id) { trailerSuppressed = false }
+    LaunchedEffect(displayHeroItem?.id) {
+        trailerSuppressed = false
+        isTrailerPlaying = false
+    }
     val heroRowIsContinueWatching = latestDisplayCategories
         .getOrNull(focusState.currentRowIndex)?.id == "continue_watching"
-    val trailerOverlayAlpha = remember { Animatable(1f) }
-    LaunchedEffect(isTrailerPlaying) {
-        if (isTrailerPlaying) {
-            trailerOverlayAlpha.animateTo(0f, tween(1500, easing = FastOutSlowInEasing))
-        } else {
-            trailerOverlayAlpha.animateTo(1f, tween(500, easing = FastOutSlowInEasing))
-        }
-    }
 
     var heroPlaybackHandles by remember { mutableStateOf<HomeHeroPlaybackHandles?>(null) }
     var preparedHeroVideoUrl by remember { mutableStateOf<String?>(null) }
@@ -1064,25 +1103,63 @@ fun HomeScreen(
             }
         }
         // On mobile, the hero backdrop is rendered inline inside MobileHomeRowsLayer — skip the fixed backdrop.
-        // On TV, fill the entire screen with the backdrop.
+        // On TV, render the hero media (backdrop image and trailer) strictly delimited in the top-right corner (16:9 ratio, ~60-65% screen) matching Nuvio design.
         if (!isMobile) {
-            val backdropModifier = Modifier.fillMaxSize()
-            Box(modifier = backdropModifier) {
-                if (!showCinematicHomeLayer || settledBackdrop == null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = backdropGradient
-                            )
-                    )
-                }
+            val (mediaWidth, mediaHeight) = remember(configuration) {
+                calculateTvHeroMediaDimensions(
+                    screenWidth = configuration.screenWidthDp.dp,
+                    screenHeight = configuration.screenHeightDp.dp
+                )
+            }
 
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .width(mediaWidth)
+                    .height(mediaHeight)
+            ) {
                 if (showCinematicHomeLayer && settledBackdrop != null) {
                     HomeBackdropCrossfade(
                         backdropUrl = settledBackdrop,
                         backdropSize = backdropSize,
                         modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // YouTube trailer auto-play as Hero Backdrop (trailerInCards == false)
+                val showHeroBackdropTrailer = !isMobile &&
+                    !uiState.trailerInCards &&
+                    uiState.trailerAutoPlay &&
+                    !trailerSuppressed &&
+                    !heroRowIsContinueWatching &&
+                    heroVideoUrl == null &&
+                    uiState.heroTrailerKey != null
+
+                if (showHeroBackdropTrailer) {
+                    var trailerFirstFrameRendered by remember(uiState.heroTrailerKey) { mutableStateOf(false) }
+                    val trailerFadeAlpha by animateFloatAsState(
+                        targetValue = if (trailerFirstFrameRendered) 1f else 0f,
+                        animationSpec = tween(durationMillis = 400),
+                        label = "heroTrailerBackdropAlpha"
+                    )
+
+                    TrailerPlayer(
+                        youtubeKey = uiState.heroTrailerKey,
+                        delayMs = uiState.trailerDelaySeconds * 1000L,
+                        volume = if (uiState.trailerSoundEnabled) 1f else 0f,
+                        cropToFill = true,
+                        overscanZoom = 1.0f,
+                        ownerToken = displayHeroItem?.let { "hero_backdrop_${it.mediaType}_${it.id}" } ?: "hero_backdrop",
+                        trailerPlayerPool = trailerPlayerPool,
+                        onPlayingChanged = { isPlaying ->
+                            isTrailerPlaying = isPlaying
+                        },
+                        onFirstFrameRendered = {
+                            trailerFirstFrameRendered = true
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = trailerFadeAlpha }
                     )
                 }
 
@@ -1114,72 +1191,53 @@ fun HomeScreen(
                     )
                 }
 
-                // YouTube trailer auto-play — on TV, trailer plays inside the focused card instead
-                if ((isMobile || !uiState.trailerInCards) && heroVideoUrl == null && uiState.trailerAutoPlay && uiState.heroTrailerKey != null && !trailerSuppressed && !heroRowIsContinueWatching) {
-                    TrailerPlayer(
-                        youtubeKey = uiState.heroTrailerKey!!,
-                        delayMs = uiState.trailerDelaySeconds * 1000L,
-                        volume = if (uiState.trailerSoundEnabled) 1f else 0f,
-                        onPlayingChanged = { playing -> isTrailerPlaying = playing },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                // === SCRIM SYSTEM ===
+                // === HERO MEDIA GRADIENTS (Smooth edge blend into dark background on left and bottom) ===
+                val heroBgColor = appBackgroundDark()
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .drawWithCache {
                             val width = size.width
                             val height = size.height
-                            val leftScrim = Brush.horizontalGradient(
+                            val bgColor = heroBgColor
+
+                            val horizontalFadeEndX = width * 0.32f
+                            val horizontalGradient = Brush.horizontalGradient(
                                 colorStops = arrayOf(
-                                    0.0f to Color.Black.copy(alpha = 0.95f),
-                                    0.12f to Color.Black.copy(alpha = 0.88f),
-                                    0.22f to Color.Black.copy(alpha = 0.72f),
-                                    0.32f to Color.Black.copy(alpha = 0.50f),
-                                    0.42f to Color.Black.copy(alpha = 0.30f),
-                                    0.55f to Color.Black.copy(alpha = 0.10f),
-                                    0.65f to Color.Transparent,
+                                    0.0f to bgColor,
+                                    0.25f to bgColor.copy(alpha = 0.85f),
+                                    0.55f to bgColor.copy(alpha = 0.50f),
+                                    0.80f to bgColor.copy(alpha = 0.15f),
                                     1.0f to Color.Transparent
                                 ),
                                 startX = 0f,
-                                endX = width
+                                endX = horizontalFadeEndX
                             )
-                            val topScrim = Brush.verticalGradient(
-                                colorStops = arrayOf(
-                                    0.0f to Color.Black.copy(alpha = 0.7f),
-                                    0.06f to Color.Black.copy(alpha = 0.45f),
-                                    0.15f to Color.Black.copy(alpha = 0.15f),
-                                    0.25f to Color.Transparent,
-                                    1.0f to Color.Transparent
-                                ),
-                                startY = 0f,
-                                endY = height
-                            )
-                            val bottomScrim = Brush.verticalGradient(
+
+                            val bottomStripStartY = height * 0.82f
+                            val verticalGradient = Brush.verticalGradient(
                                 colorStops = arrayOf(
                                     0.0f to Color.Transparent,
-                                    0.85f to Color.Transparent,
-                                    0.92f to Color.Black.copy(alpha = 0.5f),
-                                    1.0f to Color.Black.copy(alpha = 0.85f)
+                                    0.40f to bgColor.copy(alpha = 0.35f),
+                                    0.75f to bgColor.copy(alpha = 0.80f),
+                                    1.0f to bgColor
                                 ),
-                                startY = 0f,
+                                startY = bottomStripStartY,
                                 endY = height
                             )
+
                             onDrawBehind {
+                                // 1. Left horizontal edge fade to solid background
                                 drawRect(
-                                    brush = leftScrim,
-                                    size = Size(width * 0.66f, height)
+                                    brush = horizontalGradient,
+                                    topLeft = Offset(0f, 0f),
+                                    size = Size(horizontalFadeEndX, height)
                                 )
+                                // 2. Bottom vertical edge fade to solid background
                                 drawRect(
-                                    brush = topScrim,
-                                    size = Size(width, height * 0.26f)
-                                )
-                                drawRect(
-                                    brush = bottomScrim,
-                                    topLeft = Offset(0f, height * 0.84f),
-                                    size = Size(width, height * 0.16f)
+                                    brush = verticalGradient,
+                                    topLeft = Offset(0f, bottomStripStartY),
+                                    size = Size(width, height - bottomStripStartY)
                                 )
                             }
                         }
@@ -1187,7 +1245,6 @@ fun HomeScreen(
             }
         } // end if (!isMobile) backdrop
 
-        Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = trailerOverlayAlpha.value }) {
         HomeInputLayer(
             categories = displayCategories,
             cardLogoUrls = cardLogoUrls,
@@ -1258,16 +1315,15 @@ fun HomeScreen(
             featuredTrailerKey = if (!isMobile && uiState.trailerInCards && uiState.trailerAutoPlay && !trailerSuppressed && !heroRowIsContinueWatching) uiState.heroTrailerKey else null,
             featuredTrailerDelayMs = uiState.trailerDelaySeconds * 1000L,
             featuredTrailerVolume = if (uiState.trailerSoundEnabled) 1f else 0f,
+            trailerPlayerPool = trailerPlayerPool,
             onOpenContextMenu = { item, isContinue ->
                 contextMenuItem = item
                 contextMenuIsContinueWatching = isContinue
                 showContextMenu = true
             }
         )
-        } // end trailer-dim wrapper
 
         if (showCinematicHomeLayer) {
-            Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = trailerOverlayAlpha.value }) {
             HomeHeroLayer(
                 heroItem = displayHeroItem,
                 heroLogoUrl = displayHeroLogo,
@@ -1280,7 +1336,6 @@ fun HomeScreen(
                 isIptvItem = { item -> viewModel.isIptvItem(item) },
                 getIptvChannelId = { item -> viewModel.getIptvChannelId(item) }
             )
-            } // end trailer-dim wrapper
         }
 
         // Error state - show message when loading failed and no content
@@ -2363,6 +2418,7 @@ private fun HomeInputLayer(
     featuredTrailerKey: String? = null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
+    trailerPlayerPool: TrailerPlayerPool? = null,
     onOpenContextMenu: (MediaItem, Boolean) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -2491,11 +2547,15 @@ private fun HomeInputLayer(
             if (isContextMenuOpen) {
                 return@onPreviewKeyEvent false
             }
-            if (trailerIsPlaying && event.type == KeyEventType.KeyDown &&
-                (isArvioDpadNavigationKey(event.key) || event.key == Key.Enter || event.key == Key.DirectionCenter || event.key == Key.Back)
-            ) {
-                onTrailerStop()
-                return@onPreviewKeyEvent true
+            if (trailerIsPlaying && event.type == KeyEventType.KeyDown) {
+                if (event.key == Key.Back || event.key == Key.Escape) {
+                    onTrailerStop()
+                    return@onPreviewKeyEvent true
+                }
+                if (isArvioDpadNavigationKey(event.key) || event.key == Key.Enter || event.key == Key.DirectionCenter) {
+                    onTrailerStop()
+                    // Do not consume the event: allows focus navigation to move immediately on first click
+                }
             }
             if (event.type == KeyEventType.KeyUp && isArvioDpadNavigationKey(event.key)) {
                 dpadRepeatGate.reset()
@@ -2793,6 +2853,7 @@ private fun HomeInputLayer(
             featuredTrailerKey = featuredTrailerKey,
             featuredTrailerDelayMs = featuredTrailerDelayMs,
             featuredTrailerVolume = featuredTrailerVolume,
+            trailerPlayerPool = trailerPlayerPool,
             onItemClick = { item ->
                 if (!isActionableHomeItem(item)) {
                     return@HomeRowsLayer
@@ -2858,6 +2919,7 @@ private fun HomeRowsLayer(
     featuredTrailerKey: String? = null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
+    trailerPlayerPool: TrailerPlayerPool? = null,
     onItemClick: (MediaItem) -> Unit,
     onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null
 ) {
@@ -2905,6 +2967,7 @@ private fun HomeRowsLayer(
             featuredTrailerKey = featuredTrailerKey,
             featuredTrailerDelayMs = featuredTrailerDelayMs,
             featuredTrailerVolume = featuredTrailerVolume,
+            trailerPlayerPool = trailerPlayerPool,
             onItemClick = onItemClick
         )
     }
@@ -3167,6 +3230,7 @@ private fun TvHomeRowsLayer(
     featuredTrailerKey: String? = null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
+    trailerPlayerPool: TrailerPlayerPool? = null,
     onItemClick: (MediaItem) -> Unit
 ) {
     // ── Focus-row stabilizer ──
@@ -3358,6 +3422,7 @@ private fun TvHomeRowsLayer(
                             featuredTrailerKey = if (rowIsFocused) featuredTrailerKey else null,
                             featuredTrailerDelayMs = featuredTrailerDelayMs,
                             featuredTrailerVolume = featuredTrailerVolume,
+                            trailerPlayerPool = trailerPlayerPool,
                             onItemClick = onItemClick,
                             onItemFocused = onRowItemFocused
                         )
@@ -3573,6 +3638,7 @@ private fun ContentRow(
     featuredTrailerKey: String? = null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
+    trailerPlayerPool: TrailerPlayerPool? = null,
     onItemClick: (MediaItem) -> Unit,
     onItemFocused: (MediaItem, Int) -> Unit
 ) {
@@ -3592,6 +3658,8 @@ private fun ContentRow(
     }
     val cardAspectRatio = if (effectivePosterMode) 2f / 3f else 16f / 9f
     val itemWidth = if (effectivePosterMode) 105.dp else 210.dp
+    val rowCardHeight = if (effectivePosterMode) (itemWidth / cardAspectRatio) else 146.dp
+    val expandedCardWidth = if (effectivePosterMode) 280.dp else 380.dp
     val itemSpacing = 14.dp
     val itemsToRender = remember(category.items) {
         if (category.items.isEmpty()) {
@@ -3620,17 +3688,21 @@ private fun ContentRow(
     val itemSpanPx = remember(density, itemWidth, itemSpacing) {
         with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
     }
-    val hasFeaturedCard = !effectivePosterMode && featuredTrailerKey != null
+    val hasFeaturedCard = isCurrentRow && featuredTrailerKey != null
     // Tracks which item index has held focus long enough to expand.
-    // Using an index (not a boolean) means the derived `featuredExpanded`
-    // evaluates to false immediately in the same composition frame when
-    // focusedItemIndex changes — no async LaunchedEffect reset needed.
-    // Without this, the new card briefly saw featuredExpanded=true
-    // (stale from the previous card) and rendered at 380dp, causing a
-    // layout overshoot in the LazyRow before snapping back.
-    var featuredExpandedForIndex by remember { mutableIntStateOf(-1) }
+    // Tied strictly to focusedItemIndex so that D-pad navigation immediately resets it
+    // on the very same frame without stale expansion or delayed stopping.
+    var focusSettledForIndex by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(focusedItemIndex, isCurrentRow, hasFeaturedCard) {
+        focusSettledForIndex = -1
+        if (hasFeaturedCard && isCurrentRow && focusedItemIndex >= 0) {
+            val delayMs = if (featuredTrailerDelayMs <= 0L) 370L else featuredTrailerDelayMs.coerceAtLeast(370L)
+            delay(delayMs)
+            focusSettledForIndex = focusedItemIndex
+        }
+    }
     val featuredExpanded = hasFeaturedCard && isCurrentRow &&
-        featuredExpandedForIndex == focusedItemIndex && focusedItemIndex >= 0
+        focusSettledForIndex == focusedItemIndex && focusedItemIndex >= 0
     val context = LocalContext.current
     val trailerExtractor = remember {
         EntryPointAccessors.fromApplication(
@@ -3648,23 +3720,12 @@ private fun ContentRow(
             catch (_: Exception) {}
         }
     }
-    LaunchedEffect(focusedItemIndex, hasFeaturedCard) {
-        featuredExpandedForIndex = -1
-        if (hasFeaturedCard && isCurrentRow && focusedItemIndex >= 0) {
-            delay(featuredTrailerDelayMs.coerceAtLeast(500L))
-            featuredExpandedForIndex = focusedItemIndex
-        }
-    }
     val railFocusOverlayActive = isCurrentRow && isScrollable && focusedItemIndex >= 0 && totalItems > 0 &&
-        !hasFeaturedCard &&
+        !featuredExpanded &&
         focusedItemIndex <= maxFirstIndex &&
         focusedItemIndex == rowState.firstVisibleItemIndex &&
         rowState.firstVisibleItemScrollOffset == 0
-    val focusedCardIndex = if (railFocusOverlayActive) {
-        -1
-    } else {
-        focusedItemIndex
-    }
+    val focusedCardIndex = focusedItemIndex
     val railFocusShape = rememberArvioCardShape(ArvioSkin.radius.md)
     val railEndPadding = lockedHomeRailEndPadding(
         itemWidth = itemWidth,
@@ -3819,23 +3880,22 @@ private fun ContentRow(
                 if (isRanked && index < 10) {
                     val cardLogoUrl = if (isCollectionRow) null else cardLogoUrls["${item.mediaType}_${item.id}"]
                     val rankedExpanded = hasFeaturedCard && itemIsFocused && featuredExpanded
+                    val animatedRankedWidth by animateDpAsState(
+                        targetValue = if (rankedExpanded) expandedCardWidth else itemWidth,
+                        animationSpec = if (rankedExpanded) spring() else snap(),
+                        label = "featuredRankedCardWidth"
+                    )
                     if (rankedExpanded) {
-                        // Expanded: fresh Animatable starting at itemWidth so the expansion
-                        // animates in from the card's resting size. This branch is only entered
-                        // after the 500ms focus-settle delay, so the Animatable is always new.
-                        val expandAnim = remember { Animatable(itemWidth.value) }
-                        LaunchedEffect(Unit) {
-                            expandAnim.animateTo(380f, spring())
-                        }
-                        val expandedWidth = expandAnim.value.dp
-                        Box(modifier = Modifier.width(expandedWidth)) {
+                        Box(modifier = Modifier.width(animatedRankedWidth)) {
                             FeaturedMediaCard(
                                 item = item,
-                                width = expandedWidth,
-                                height = 146.dp,
+                                width = animatedRankedWidth,
+                                height = rowCardHeight,
                                 trailerKey = featuredTrailerKey,
                                 trailerDelayMs = 0L,
                                 trailerVolume = featuredTrailerVolume,
+                                ownerToken = "${item.mediaType}_${item.id}",
+                                trailerPlayerPool = trailerPlayerPool,
                                 onClick = onCardClick,
                             )
                             TopRankRibbon(
@@ -3885,7 +3945,7 @@ private fun ContentRow(
                     val cardLogoUrl = if (isCollectionRow) null else cardLogoUrls["${item.mediaType}_${item.id}"]
                     val cardExpanded = hasFeaturedCard && itemIsFocused && featuredExpanded
                     val animatedCardWidth by animateDpAsState(
-                        targetValue = if (cardExpanded) 380.dp else itemWidth,
+                        targetValue = if (cardExpanded) expandedCardWidth else itemWidth,
                         animationSpec = if (cardExpanded) spring() else snap(),
                         label = "featuredCardWidth"
                     )
@@ -3893,10 +3953,12 @@ private fun ContentRow(
                         FeaturedMediaCard(
                             item = item,
                             width = animatedCardWidth,
-                            height = 146.dp,
+                            height = rowCardHeight,
                             trailerKey = featuredTrailerKey,
                             trailerDelayMs = 0L,
                             trailerVolume = featuredTrailerVolume,
+                            ownerToken = "${item.mediaType}_${item.id}",
+                            trailerPlayerPool = trailerPlayerPool,
                             onClick = onCardClick,
                         )
                     } else {

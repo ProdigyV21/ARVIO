@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import com.arflix.tv.core.player.TrailerPlayerPool
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -732,12 +736,22 @@ fun FeaturedMediaCard(
     width: Dp,
     height: Dp,
     trailerKey: String?,
-    trailerDelayMs: Long,
-    trailerVolume: Float,
+    trailerDelayMs: Long = 0L,
+    trailerVolume: Float = 0f,
+    ownerToken: String? = null,
+    trailerPlayerPool: TrailerPlayerPool? = null,
     onClick: () -> Unit,
 ) {
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
     val imageUrl = (item.backdrop ?: item.image).takeIf { it.isNotBlank() }
+    val effectiveToken = ownerToken ?: "${item.mediaType}_${item.id}"
+    var trailerFirstFrameRendered by remember(trailerKey) { mutableStateOf(false) }
+
+    val trailerCoverAlpha by animateFloatAsState(
+        targetValue = if (!trailerFirstFrameRendered) 1f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "trailerCoverAlpha"
+    )
 
     ArvioFocusableSurface(
         modifier = Modifier.size(width, height),
@@ -752,22 +766,44 @@ fun FeaturedMediaCard(
         isFocusedOverride = true,
         onClick = onClick,
     ) { _ ->
-        if (imageUrl != null) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+        // Black backdrop base
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        )
+
+        // In-card trailer playback strictly bounded inside the card
         if (trailerKey != null) {
             TrailerPlayer(
                 youtubeKey = trailerKey,
                 delayMs = trailerDelayMs,
                 volume = trailerVolume,
+                cropToFill = true,
+                overscanZoom = 1.35f,
+                ownerToken = effectiveToken,
+                trailerPlayerPool = trailerPlayerPool,
+                onFirstFrameRendered = {
+                    trailerFirstFrameRendered = true
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
+
+        // Static artwork cover that smoothly fades out after the first video frame is rendered (Nuvio pattern)
+        if (imageUrl != null && (trailerKey == null || trailerCoverAlpha > 0.01f)) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = if (trailerKey != null) trailerCoverAlpha else 1f
+                    }
+            )
+        }
+
         // Bottom gradient so title text is readable over the backdrop/trailer
         Box(
             modifier = Modifier
