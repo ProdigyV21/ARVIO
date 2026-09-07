@@ -220,10 +220,8 @@ export class TraktClient {
     return ids;
   }
 
-  // `activityKey` (the show's last_watched_at) makes the persistent cache
-  // activity-keyed: a show whose activity hasn't moved has IDENTICAL progress,
-  // so entries stay valid for days instead of the blanket 15-minute TTL — a
-  // repeat app boot then costs ~zero progress calls instead of ~120.
+  // Activity changes invalidate immediately; the TTL also catches new episodes
+  // airing or corrected episode metadata without any new watch activity.
   async showProgress(traktShowId: number, includeSpecials = false, activityKey?: string | number) {
     const token = await this.refreshIfNeeded();
     if (!token) return null;
@@ -548,12 +546,6 @@ interface TraktMediaRef {
 
 type ProgressCacheEntry = { at: number; value: unknown };
 
-// Activity-keyed entries (key includes the show's last_watched_at) stay valid
-// for a week — progress can only change when activity changes, and a changed
-// activity produces a NEW key so stale entries are never read, just evicted by
-// the size cap. Legacy keys without an activity component keep the short TTL.
-const TRAKT_PROGRESS_ACTIVITY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
 function progressCacheKey(token: string, traktShowId: number, includeSpecials: boolean, activityKey?: string | number) {
   const activity = activityKey !== undefined && activityKey !== null && activityKey !== "" ? `:${activityKey}` : "";
   return `${token.slice(0, 12)}:${traktShowId}:${includeSpecials ? "specials" : "regular"}${activity}`;
@@ -562,8 +554,7 @@ function progressCacheKey(token: string, traktShowId: number, includeSpecials: b
 function readProgressCache(token: string, traktShowId: number, includeSpecials: boolean, activityKey?: string | number) {
   const cache = loadStored<Record<string, ProgressCacheEntry>>(TRAKT_PROGRESS_CACHE_KEY, {});
   const entry = cache[progressCacheKey(token, traktShowId, includeSpecials, activityKey)];
-  const ttl = activityKey !== undefined ? TRAKT_PROGRESS_ACTIVITY_TTL_MS : TRAKT_PROGRESS_TTL_MS;
-  if (!entry || Date.now() - entry.at > ttl) return undefined;
+  if (!entry || Date.now() - entry.at >= TRAKT_PROGRESS_TTL_MS) return undefined;
   return entry.value;
 }
 

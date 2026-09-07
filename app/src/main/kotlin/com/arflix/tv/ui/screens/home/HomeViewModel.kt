@@ -27,6 +27,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.ContinueWatchingItem
+import com.arflix.tv.data.repository.ContinueWatchingMerge
 import com.arflix.tv.data.repository.ContinueWatchingUpdate
 import com.arflix.tv.data.repository.ContinueWatchingUpdates
 import com.arflix.tv.data.repository.CatalogRepository
@@ -170,6 +171,21 @@ internal fun orderCategoriesBySavedCatalogs(
             }
         }
     }
+}
+
+/**
+ * Filters the Favorite TV row according to the "Show IPTV favorites on home" preference.
+ *
+ * Preserves the user's custom catalog ordering configured in Settings > Catalogs.
+ */
+internal fun applyIptvFavoritesPlacement(
+    savedCatalogs: List<CatalogConfig>,
+    enabled: Boolean
+): List<CatalogConfig> {
+    val favIdx = savedCatalogs.indexOfFirst { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
+    if (favIdx < 0) return savedCatalogs
+    if (!enabled) return savedCatalogs.filterNot { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
+    return savedCatalogs
 }
 
 enum class ToastType {
@@ -528,29 +544,7 @@ class HomeViewModel @Inject constructor(
     private fun mergeContinueWatchingVisuals(
         preferred: ContinueWatchingItem,
         fallback: ContinueWatchingItem
-    ): ContinueWatchingItem {
-        val sameEpisode = preferred.season == fallback.season && preferred.episode == fallback.episode
-        return preferred.copy(
-            title = preferred.title.ifBlank { fallback.title },
-            episodeTitle = preferred.episodeTitle ?: fallback.episodeTitle,
-            backdropPath = preferred.backdropPath ?: fallback.backdropPath,
-            episodeStillPath = preferred.episodeStillPath ?: fallback.episodeStillPath.takeIf { sameEpisode },
-            posterPath = preferred.posterPath ?: fallback.posterPath,
-            streamKey = preferred.streamKey ?: fallback.streamKey,
-            streamAddonId = preferred.streamAddonId ?: fallback.streamAddonId,
-            streamTitle = preferred.streamTitle ?: fallback.streamTitle,
-            year = preferred.year.ifBlank { fallback.year },
-            releaseDate = preferred.releaseDate.ifBlank { fallback.releaseDate },
-            overview = preferred.overview.ifBlank { fallback.overview },
-            imdbRating = preferred.imdbRating.ifBlank { fallback.imdbRating },
-            duration = preferred.duration.ifBlank { fallback.duration },
-            durationSeconds = maxOf(preferred.durationSeconds, fallback.durationSeconds),
-            budget = preferred.budget ?: fallback.budget,
-            totalEpisodes = if (preferred.totalEpisodes > 0) preferred.totalEpisodes else fallback.totalEpisodes,
-            watchedEpisodes = if (preferred.watchedEpisodes > 0) preferred.watchedEpisodes else fallback.watchedEpisodes,
-            updatedAtMs = maxOf(preferred.updatedAtMs, fallback.updatedAtMs)
-        )
-    }
+    ): ContinueWatchingItem = ContinueWatchingMerge.mergeVisuals(preferred, fallback)
 
     private fun needsContinueWatchingArtworkRepair(item: ContinueWatchingItem): Boolean {
         return item.posterPath.isNullOrBlank() ||
@@ -585,36 +579,7 @@ class HomeViewModel @Inject constructor(
         traktItems: List<ContinueWatchingItem>,
         localItems: List<ContinueWatchingItem>,
         historyItems: List<ContinueWatchingItem>
-    ): List<ContinueWatchingItem> {
-        val freshestLocalByExactEpisode = (localItems + historyItems)
-            .groupBy { item ->
-                "${item.mediaType}:${item.id}:${item.season ?: -1}:${item.episode ?: -1}"
-            }
-            .mapValues { (_, candidates) ->
-                candidates.maxWithOrNull(
-                    compareBy<ContinueWatchingItem> { it.updatedAtMs }
-                        .thenBy { it.resumePositionSeconds }
-                        .thenBy { it.progress }
-                )
-            }
-
-        return traktItems.map { traktItem ->
-            val exactKey = "${traktItem.mediaType}:${traktItem.id}:${traktItem.season ?: -1}:${traktItem.episode ?: -1}"
-            val local = freshestLocalByExactEpisode[exactKey]
-            if (local == null) {
-                traktItem
-            } else {
-                mergeContinueWatchingVisuals(
-                    preferred = traktItem.copy(
-                        resumePositionSeconds = maxOf(traktItem.resumePositionSeconds, local.resumePositionSeconds),
-                        durationSeconds = maxOf(traktItem.durationSeconds, local.durationSeconds),
-                        progress = maxOf(traktItem.progress, local.progress)
-                    ),
-                    fallback = local
-                )
-            }
-        }
-    }
+    ): List<ContinueWatchingItem> = ContinueWatchingMerge.merge(traktItems, localItems, historyItems)
 
     private fun overviewLooksTruncated(overview: String): Boolean {
         val value = overview.trim()
@@ -986,31 +951,6 @@ class HomeViewModel @Inject constructor(
         val prefs = context.settingsDataStore.data.first()
         prefs[profileManager.profileBooleanKey(IPTV_FAVORITES_ON_HOME)] ?: true
     }.getOrDefault(true)
-
-    /**
-     * Places the Favorite TV row according to that preference.
-     *
-     * Every home ordering site resolves rows by walking `savedCatalogs`, so doing this
-     * once here covers all of them instead of special-casing each. On this profile the
-     * catalog sat at index 67 of 71 — below ~60 collection tiles — which put the row
-     * near the bottom of the screen and made it look like it was never built.
-     */
-    private fun applyIptvFavoritesPlacement(
-        savedCatalogs: List<CatalogConfig>,
-        enabled: Boolean
-    ): List<CatalogConfig> {
-        val favIdx = savedCatalogs.indexOfFirst { it.id == FAVORITE_TV_CATEGORY_ID }
-        if (favIdx < 0) return savedCatalogs
-        // Dropping the config keeps the ordering resolvers from emitting the row at all;
-        // buildFavoriteTvOutcome() independently returns Empty so the additive passes,
-        // which never look at savedCatalogs, stay in agreement.
-        if (!enabled) return savedCatalogs.filterNot { it.id == FAVORITE_TV_CATEGORY_ID }
-        if (favIdx == 0) return savedCatalogs
-        return buildList(savedCatalogs.size) {
-            add(savedCatalogs[favIdx])
-            savedCatalogs.forEachIndexed { idx, cfg -> if (idx != favIdx) add(cfg) }
-        }
-    }
 
     private fun isCustomCatalogConfig(cfg: CatalogConfig): Boolean {
         if (cfg.kind == CatalogKind.COLLECTION || cfg.kind == CatalogKind.COLLECTION_RAIL) {
@@ -4251,39 +4191,7 @@ class HomeViewModel @Inject constructor(
             if (entries.isEmpty()) return emptyList()
             val mapped = entries.distinctBy { entry ->
                 "${entry.media_type}:${entry.show_tmdb_id}"
-            }.mapNotNull { entry ->
-                val mediaType = if (entry.media_type == "tv") MediaType.TV else MediaType.MOVIE
-                val storedPct = (entry.progress * 100f).toInt()
-                val hasResumePosition = entry.position_seconds > 0L
-                val derivedPct = when {
-                    storedPct > 0 -> storedPct
-                    entry.duration_seconds > 0 && hasResumePosition ->
-                        ((entry.position_seconds.toFloat() / entry.duration_seconds.toFloat()) * 100f).toInt()
-                    hasResumePosition -> 1
-                    else -> 0
-                }
-                val resolvedTitle = entry.title
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: entry.episode_title
-                        ?.trim()
-                        ?.takeIf { it.isNotBlank() }
-                    ?: "Untitled"
-                ContinueWatchingItem(
-                    id = entry.show_tmdb_id,
-                    title = resolvedTitle,
-                    mediaType = mediaType,
-                    progress = derivedPct.coerceIn(0, 100),
-                    resumePositionSeconds = entry.position_seconds.coerceAtLeast(0L),
-                    durationSeconds = entry.duration_seconds.coerceAtLeast(0L),
-                    season = entry.season,
-                    episode = entry.episode,
-                    episodeTitle = entry.episode_title,
-                    backdropPath = entry.backdrop_path,
-                    posterPath = entry.poster_path,
-                    updatedAtMs = parseContinueWatchingUpdatedAt(entry.updated_at, entry.paused_at)
-                )
-            }
+            }.map(ContinueWatchingMerge::fromHistory)
             traktRepository.enrichContinueWatchingItems(mapped)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -4333,36 +4241,17 @@ class HomeViewModel @Inject constructor(
                     emptyList()
                 }
             }
-            val localItems = try {
-                traktRepository.getLocalContinueWatching()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                emptyList()
-            }
             val historyItems = loadContinueWatchingFromHistoryStable()
-            if (remoteItems.isEmpty() && historyItems.isNotEmpty()) {
-                historyItems
-            } else {
-                mergeTraktAndRecentLocalContinueWatching(
-                    traktItems = remoteItems,
-                    localItems = localItems,
-                    historyItems = historyItems
-                )
-            }
+            val localItems = loadSavedContinueWatchingSnapshot()
+            mergeTraktAndRecentLocalContinueWatching(
+                traktItems = remoteItems.ifEmpty { historyItems },
+                localItems = localItems,
+                historyItems = historyItems
+            )
         } else {
             val historyItems = loadContinueWatchingFromHistoryStable()
-            if (historyItems.isNotEmpty()) {
-                historyItems
-            } else {
-                try {
-                    traktRepository.getLocalContinueWatching()
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
+            val localItems = loadSavedContinueWatchingSnapshot()
+            ContinueWatchingMerge.merge(historyItems.ifEmpty { localItems }, localItems, historyItems)
         }
 
         val repairedItems = repairContinueWatchingMetadataIfNeeded(items)
@@ -4377,6 +4266,7 @@ class HomeViewModel @Inject constructor(
         // Startup must never wait for Trakt, Simkl, MDBList, or cloud traffic.
         // This profile-scoped snapshot is updated after every successful remote
         // resolution and gives every tracking provider the same instant path.
+        val localItems = loadSavedContinueWatchingSnapshot()
         val diskItems = loadContinueWatchingCache()
         val items = if (diskItems.isNotEmpty()) {
             diskItems
@@ -4395,23 +4285,27 @@ class HomeViewModel @Inject constructor(
                 if (historyItems.isNotEmpty()) {
                     historyItems
                 } else {
-                    try {
-                        traktRepository.getLocalContinueWatching()
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        emptyList()
-                    }
+                    localItems
                 }
             }
         }
 
-        val repairedItems = repairContinueWatchingMetadataIfNeeded(items)
+        val repairedItems = repairContinueWatchingMetadataIfNeeded(ContinueWatchingMerge.merge(items, localItems))
         return applyContinueWatchingDismissals(sanitizeContinueWatchingItems(repairedItems))
             .filter { item ->
                 item.progress in 0..99 || item.resumePositionSeconds > 0L
             }
             .take(Constants.MAX_CONTINUE_WATCHING)
+    }
+
+    private suspend fun loadSavedContinueWatchingSnapshot(): List<ContinueWatchingItem> {
+        return try {
+            traktRepository.getLocalContinueWatchingSnapshot()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private suspend fun mergeContinueWatchingResumeData(

@@ -4,6 +4,7 @@ import { Bookmark, Film, LoaderCircle, RefreshCw, Search, Server, Tv } from "luc
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MediaCard } from "@/components/media/MediaCard";
 import { TrackerLibrary } from "./TrackerLibrary";
+import { LIBRARY_SORT_OPTIONS, compareLibraryItems } from "@/lib/librarySort";
 import type { HomeServerLibraryOption, HomeServerLibraryPage, HomeServerLibrarySort } from "@/lib/homeserver";
 import { useApp } from "@/lib/store";
 import type { HomeServerConfig, MediaItem } from "@/lib/types";
@@ -207,11 +208,7 @@ export function WatchlistScreen() {
   const items = useMemo(() => {
     if (tab !== "watchlist") return libraryPage.items;
     const filtered = filter === "all" ? watchlistList : watchlistList.filter((item) => item.mediaType === filter);
-    return [...filtered].sort((a, b) => {
-      if (sort === "rating") return (Number(b.rating) || 0) - (Number(a.rating) || 0);
-      if (sort === "title") return a.title.localeCompare(b.title);
-      return (b.activityAt ?? 0) - (a.activityAt ?? 0);
-    });
+    return [...filtered].sort((a, b) => compareLibraryItems(a, b, sort));
   }, [filter, libraryPage.items, sort, tab, watchlistList]);
 
   const activeServerName = activeLibrary?.serverName ?? visibleLibraries[0]?.serverName ?? "Home server";
@@ -251,9 +248,7 @@ export function WatchlistScreen() {
           {simklConnected && <button type="button" className={trackerTab === "simkl" ? "is-active" : ""} onClick={() => setTrackerTab("simkl")}><span className="library-provider-mark is-simkl" /> Simkl</button>}
           {!trackerTab && tab !== "watchlist" && (
             <select className="library-provider-sort" value={sort} onChange={(event) => setSort(event.target.value as HomeServerLibrarySort)} aria-label="Sort titles">
-              <option value="added">Recently added</option>
-              <option value="rating">Highest rated</option>
-              <option value="title">Title A-Z</option>
+              {LIBRARY_SORT_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
           )}
         </nav>
@@ -309,9 +304,7 @@ export function WatchlistScreen() {
         )}
         {tab === "watchlist" && (
           <select className="watchlist-sort" value={sort} onChange={(event) => setSort(event.target.value as HomeServerLibrarySort)} aria-label="Sort titles">
-            <option value="added">Recently added</option>
-            <option value="rating">Highest rated</option>
-            <option value="title">Title A-Z</option>
+            {LIBRARY_SORT_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
           </select>
         )}
         {tab !== "watchlist" && (
@@ -319,6 +312,11 @@ export function WatchlistScreen() {
             <Search size={17} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${PROVIDER_LABELS[tab]}`} />
           </label>
+        )}
+        {tab !== "watchlist" && (
+          <select className="watchlist-sort library-mobile-sort" value={sort} onChange={(event) => setSort(event.target.value as HomeServerLibrarySort)} aria-label="Sort titles">
+            {LIBRARY_SORT_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+          </select>
         )}
         {tab !== "watchlist" && (
           <button type="button" className="library-refresh" title="Refresh library" aria-label="Refresh library" onClick={() => void loadLibrary(true)} disabled={loading}>

@@ -2,8 +2,8 @@
 // the Android app ships (see app/.../telegram/TelegramConfig.kt) — they identify
 // the ARVIO application to Telegram, not the user, and are already shipped in the
 // public APK, so surfacing them in the browser bundle exposes nothing new.
-export const TELEGRAM_API_ID = 23905496;
-export const TELEGRAM_API_HASH = "1e48b355edfe55f9a4fbf8d3c2324628";
+export const TELEGRAM_API_ID = Number(process.env.NEXT_PUBLIC_TELEGRAM_API_ID || 23905496);
+export const TELEGRAM_API_HASH = process.env.NEXT_PUBLIC_TELEGRAM_API_HASH || "1e48b355edfe55f9a4fbf8d3c2324628";
 
 // localStorage key holding the GramJS StringSession (the authorization key). This
 // is the browser equivalent of Android's on-device TDLib database — losing it

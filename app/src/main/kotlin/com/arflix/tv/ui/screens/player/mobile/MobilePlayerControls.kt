@@ -45,10 +45,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.wrapContentHeight
-import com.arflix.tv.ui.screens.player.preview.SeekPreviewCard
+import com.arflix.tv.ui.screens.player.preview.ReadySeekPreview
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewFrame
-import com.arflix.tv.ui.screens.player.preview.SeekPreviewPlaceholder
-import com.arflix.tv.ui.screens.player.preview.quantizeSeekPreviewPosition
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -476,8 +474,6 @@ fun MobilePlayerBottomSection(
     isEpisodeListAvailable: Boolean,
     isPromptShowing: Boolean,
     seekPreviewFrame: SeekPreviewFrame? = null,
-    isSeekPreviewSupported: Boolean = true,
-    isSeekPreviewLoading: Boolean = false,
     onOpenSources: () -> Unit,
     onOpenEpisodes: () -> Unit,
     onOpenAudio: () -> Unit,
@@ -592,6 +588,7 @@ fun MobilePlayerBottomSection(
 
             // Interactive Scrubber Bar - takes all remaining space, shrinks dynamically to fit timestamps
             var trackWidthPx by remember { mutableIntStateOf(0) }
+            val scrubberHeight = 36.dp
             val progressFraction = if (durationMs > 0) (displayPos.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
             val bufferedFraction = if (durationMs > 0) (bufferedPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
             val trackHeight by animateDpAsState(
@@ -613,7 +610,7 @@ fun MobilePlayerBottomSection(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(36.dp)
+                    .height(scrubberHeight)
                     .testTag("mobile_player_scrubber")
                     .onSizeChanged { trackWidthPx = it.width }
                     .pointerInput(durationMs) {
@@ -704,43 +701,27 @@ fun MobilePlayerBottomSection(
                 val previewCardHeight = previewCardWidth * 9f / 16f
                 val previewDensity = LocalDensity.current
                 val previewCardWidthPx = with(previewDensity) { previewCardWidth.toPx() }
-                val previewCardHeightPx = with(previewDensity) { (previewCardHeight + 16.dp).roundToPx() }
+                val previewOffsetY = with(previewDensity) {
+                    (scrubberHeight / 2f - needleHeight / 2f - 4.dp - previewCardHeight).roundToPx()
+                }
                 val previewX = if (trackWidthPx > 0) {
                     (progressFraction * trackWidthPx - previewCardWidthPx / 2f)
                         .coerceIn(0f, (trackWidthPx - previewCardWidthPx).coerceAtLeast(0f))
                         .roundToInt()
                 } else 0
 
-                val showPreview = isScrubbing && durationMs > 0L && (
-                    isSeekPreviewSupported || seekPreviewFrame != null
-                )
-
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = showPreview,
-                    enter = fadeIn(animationSpec = tween(90)),
-                    exit = fadeOut(animationSpec = tween(70)),
+                ReadySeekPreview(
+                    frame = seekPreviewFrame,
+                    positionMs = displayPos,
+                    visible = isScrubbing && durationMs > 0L,
+                    cornerRadius = 8.dp,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .offset { IntOffset(previewX, -previewCardHeightPx) }
+                        .offset { IntOffset(previewX, previewOffsetY) }
                         .zIndex(12f)
                         .width(previewCardWidth)
                         .wrapContentHeight(align = Alignment.Top, unbounded = true),
-                ) {
-                    if (seekPreviewFrame != null) {
-                        SeekPreviewCard(
-                            frame = seekPreviewFrame,
-                            cornerRadius = 8.dp,
-                            timestamp = formatTime(displayPos),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else if (isSeekPreviewSupported && isSeekPreviewLoading) {
-                        SeekPreviewPlaceholder(
-                            cornerRadius = 8.dp,
-                            timestamp = formatTime(displayPos),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                )
             }
 
             // Remaining / Total toggle timestamp (right) - natural single-line measurement, never wraps

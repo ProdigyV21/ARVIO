@@ -267,7 +267,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "language" -> listOf(0, 3, 1, 2)
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38, 39, 9)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 13, 14, 37, 34, 16, 15, 40, 27)
+        "playback" -> listOf(10, 11, 12, 16, 15, 40, 27)
         "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 41, 36)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -385,6 +385,10 @@ fun SettingsScreen(
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showCredits by remember { mutableStateOf(false) }
+    if (showCredits) {
+        com.arflix.tv.ui.components.AboutCreditsDialog { showCredits = false }
+    }
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -537,7 +541,7 @@ fun SettingsScreen(
             "catalogs" -> uiState.catalogs.size + 1 // Add + Import + catalogs
             "stremio" -> stremioAddons.size + 1 // rows + refresh + add button
             "plugins" -> pluginsMaxIndex
-            "accounts" -> 15 // Accounts, tracking routing, telegram, discord, sync/update, privacy and deletion
+            "accounts" -> 16 // Includes About & Credits.
             else -> 0
         }
     }
@@ -1323,6 +1327,7 @@ fun SettingsScreen(
                                                 13 -> viewModel.setDiagnosticsSharingEnabled(!uiState.diagnosticsSharingEnabled)
                                                 14 -> openExternalUrl(context, PRIVACY_POLICY_URL)
                                                 15 -> openExternalUrl(context, ACCOUNT_DELETION_URL)
+                                                16 -> showCredits = true
                                             }
                                         }
                                         "plugins" -> {
@@ -1916,6 +1921,7 @@ fun SettingsScreen(
                             onInstallUpdate = { viewModel.installAppUpdateOrRequestPermission() },
                             onDiagnosticsSharingToggle = viewModel::setDiagnosticsSharingEnabled,
                             onOpenPrivacy = { openExternalUrl(context, PRIVACY_POLICY_URL) },
+                            onOpenCredits = { showCredits = true },
                             onOpenDataDeletion = { openExternalUrl(context, ACCOUNT_DELETION_URL) },
                             onNavigateToTelegram = onNavigateToTelegramSettings
                         )
@@ -4139,6 +4145,10 @@ private fun MobileSettingsMainPage(
     onNavigateToTelegram: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    var showCredits by remember { mutableStateOf(false) }
+    if (showCredits) {
+        com.arflix.tv.ui.components.AboutCreditsDialog { showCredits = false }
+    }
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
@@ -4292,6 +4302,15 @@ private fun MobileSettingsMainPage(
                     showDivider = false,
                     onClick = { onNavigate("Privacy & Data") }
                 )
+                MobileSettingsRow(
+                    icon = Icons.Default.Link,
+                    title = stringResource(R.string.about_credits),
+                    subtitle = stringResource(R.string.about_credits_description),
+                    value = "",
+                    isFocused = false,
+                    showDivider = false,
+                    onClick = { showCredits = true }
+                )
             }
         }
     }
@@ -4367,37 +4386,6 @@ private fun MobileSettingsSubPage(
                         value = uiState.autoPlayMinQuality,
                         isFocused = false,
                         onClick = { viewModel.cycleAutoPlayMinQuality() }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.Movie,
-                        title = stringResource(R.string.trailer_auto_play),
-                        value = stringResource(if (uiState.trailerAutoPlay) R.string.on else R.string.off),
-                        toggleChecked = uiState.trailerAutoPlay,
-                        isFocused = false,
-                        onClick = { viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay) }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.VolumeUp,
-                        title = stringResource(R.string.trailer_sound),
-                        value = stringResource(if (uiState.trailerSoundEnabled) R.string.on else R.string.off),
-                        toggleChecked = uiState.trailerSoundEnabled,
-                        isFocused = false,
-                        onClick = { viewModel.setTrailerSoundEnabled(!uiState.trailerSoundEnabled) }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.Schedule,
-                        title = stringResource(R.string.trailer_delay),
-                        value = "${uiState.trailerDelaySeconds}s",
-                        isFocused = false,
-                        onClick = { viewModel.cycleTrailerDelay() }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.Movie,
-                        title = stringResource(R.string.trailer_in_cards),
-                        value = stringResource(if (uiState.trailerInCards) R.string.on else R.string.off),
-                        toggleChecked = uiState.trailerInCards,
-                        isFocused = false,
-                        onClick = { viewModel.setTrailerInCards(!uiState.trailerInCards) }
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.Settings,
@@ -5547,7 +5535,7 @@ private fun tvSettingsSectionPills(
         )
         "playback" -> listOf(
             stringResource(R.string.settings_pill_autoplay, if (uiState.autoPlaySingleSource) stringResource(R.string.settings_inline_on) else stringResource(R.string.settings_inline_off)),
-            stringResource(R.string.settings_pill_trailers, if (uiState.trailerAutoPlay) stringResource(R.string.settings_inline_on) else stringResource(R.string.settings_inline_off)),
+            stringResource(R.string.trailers_on_youtube),
             stringResource(R.string.settings_pill_min, localizeSettingValue(uiState.autoPlayMinQuality)),
         )
         "appearance" -> listOf(
@@ -5597,7 +5585,7 @@ private fun tvSettingsPanelFacts(
         )
         "playback" -> listOf(
             stringResource(R.string.settings_fact_autoplay) to if (uiState.autoPlaySingleSource) stringResource(R.string.on) else stringResource(R.string.off),
-            stringResource(R.string.settings_fact_trailers) to if (uiState.trailerAutoPlay) stringResource(R.string.on) else stringResource(R.string.off),
+            stringResource(R.string.settings_fact_trailers) to "YouTube",
             stringResource(R.string.settings_fact_frame_rate) to uiState.frameRateMatchingMode
         )
         "appearance" -> listOf(
@@ -5661,8 +5649,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
         "playback" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
-            in 3..4 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
-            7 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
+            6 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
@@ -6133,24 +6120,6 @@ private fun GeneralSettings(
             isFocused = focusedIndex == 12,
             onClick = onAutoPlayMinQualityClick,
             modifier = Modifier.settingsFocusSlot(12)
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        SettingsToggleRow(
-            title = stringResource(R.string.trailer_auto_play),
-            subtitle = stringResource(R.string.trailer_desc),
-            isEnabled = trailerAutoPlay,
-            isFocused = focusedIndex == 13,
-            onToggle = onTrailerAutoPlayToggle,
-            modifier = Modifier.settingsFocusSlot(13)
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        SettingsToggleRow(
-            title = stringResource(R.string.trailer_sound),
-            subtitle = stringResource(R.string.trailer_sound_desc),
-            isEnabled = trailerSoundEnabled,
-            isFocused = focusedIndex == 14,
-            onToggle = onTrailerSoundEnabledToggle,
-            modifier = Modifier.settingsFocusSlot(14)
         )
         Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
@@ -8969,6 +8938,7 @@ private fun AccountsSettings(
     onDiagnosticsSharingToggle: (Boolean) -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenDataDeletion: () -> Unit,
+    onOpenCredits: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
     Column {
@@ -9235,6 +9205,15 @@ private fun AccountsSettings(
             isFocused = focusedIndex == 15,
             onClick = onOpenDataDeletion,
             modifier = Modifier.settingsFocusSlot(15)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        SettingsActionRow(
+            title = stringResource(R.string.about_credits),
+            description = stringResource(R.string.about_credits_description),
+            actionLabel = stringResource(R.string.settings_badge_open),
+            isFocused = focusedIndex == 16,
+            onClick = onOpenCredits,
+            modifier = Modifier.settingsFocusSlot(16)
         )
     }
 }

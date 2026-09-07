@@ -803,7 +803,6 @@ fun FeaturedMediaCard(
                     }
             )
         }
-
         // Bottom gradient so title text is readable over the backdrop/trailer
         Box(
             modifier = Modifier

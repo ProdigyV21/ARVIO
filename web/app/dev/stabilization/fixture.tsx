@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Home, Library, Tv, Settings, LayoutGrid } from "lucide-react";
 import { AppContext, defaultSettings, type AppStore } from "@/lib/store";
 import { LiveTvScreen } from "@/components/livetv/LiveTvScreen";
@@ -10,6 +10,7 @@ import { SettingsScreen } from "@/components/settings/SettingsScreen";
 import { PlayerOverlay } from "@/components/player/PlayerOverlay";
 import { PaywallScreen } from "@/components/shell/Paywall";
 import { iptvPlaylistSignature } from "@/lib/iptv";
+import { NoAddonsPrompt } from "@/components/shell/NoAddonsPrompt";
 import type { AppSettings, IptvChannel, IptvNowNext, MediaItem, StreamSource } from "@/lib/types";
 
 const noop = () => {};
@@ -26,7 +27,10 @@ const titles = ["Dune: Part Two", "The Dark Knight", "Interstellar", "The Shawsh
 const media: MediaItem[] = Array.from({ length: 24 }, (_, i) => ({ id: -i - 1, mediaType: "movie", title: titles[i % 4], year: "2024", image: `https://image.tmdb.org/t/p/w500${posters[i % 4]}`, backdrop: `https://image.tmdb.org/t/p/w780${posters[i % 4]}`, rating: "8.4", overview: "Controlled test data", activityAt: 100 - i }));
 
 export function StabilizationFixture() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
   const [page, setPage] = useState("tv");
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [toast, setToast] = useState("");
   const [failLibrary, setFailLibrary] = useState(false);
   const [activeStream, setActiveStream] = useState<StreamSource | null>(null);
@@ -50,6 +54,7 @@ export function StabilizationFixture() {
   const loadTraktLists = useCallback(async () => [{ id: "curated", name: "Weekend watch" }], []);
   const iptvSnapshot = useMemo(() => ({ channels, allChannels: channels, grouped: {}, nowNext, groupOrder: [], favoriteGroups: [], hiddenGroups: [], favoriteChannels: settings.favoriteChannelIds, signature: iptvPlaylistSignature(settings.iptvPlaylists), loadedAt: Date.now() }), [nowNext, settings]);
   const app = {
+    view: "app", section: page === "onboarding" ? "home" : page, addonsReady: true, closeDetails: noop,
     settings, setSettings, updateSettings: (patch: object) => setSettings((old) => ({ ...old, ...patch })),
     iptvSnapshot, loadIptvGuide, refreshIptv: async () => {}, busy: "", auth: null, activeProfile: { id: "fixture", name: "Test profile" },
     profiles: [], addons: [], watchlist: media, continueWatching: media.slice(0, 4), traktConnected: true, simklConnected: true, mdblistConnected: false,
@@ -57,12 +62,12 @@ export function StabilizationFixture() {
     loadTrackerLibrary, loadTraktLists, loadTraktListItems: async () => media,
     playChannel: (channel: IptvChannel) => setToast(`Selected: ${channel.name}`), playCatchup: noop, setToast,
     trackingPreferences: { watchlistReadMode: "trakt", continueWatchingReadMode: "both", watchedReadMode: "both", writeToTrakt: true, writeToSimkl: true },
-    settingsSyncState: "local", saveTrackingPreferences: noop, setSection: noop, signOut: noop, refreshData: empty,
+    settingsSyncState: "local", saveTrackingPreferences: noop, setSection: setPage, signOut: noop, refreshData: empty,
     homeServerRows: [], categories: [], catalogConfigs: [], selected: null, streams: [], activeStream, activeChannel: null, selectedEpisode: null,
     playStream: setActiveStream, closePlayer: () => setActiveStream(null), advanceEpisode: async () => false,
   } as unknown as AppStore;
   return <AppContext.Provider value={app}>
-    <div style={{ maxWidth: 1600, margin: "auto", padding: "18px 20px" }}>
+    <div data-fixture-ready={ready} style={{ maxWidth: 1600, margin: "auto", padding: "18px 20px" }}>
       <nav className="fixture-nav" aria-label="Test navigation"><img src="/arvio-wordmark.svg" alt="ARVIO" width={130} />
         {[{ id: "home", label: "Home", icon: Home }, { id: "library", label: "Library", icon: Library }, { id: "tv", label: "Live TV", icon: Tv }, { id: "settings", label: "Settings", icon: Settings }].map(({ id, label, icon: Icon }) => <button className={page === id ? "primary" : "secondary"} key={id} onClick={() => setPage(id)}><Icon size={18} />{label}</button>)}
         <button className="secondary" onClick={() => setPage("premium")}>Premium</button><span>Test data</span>
@@ -71,6 +76,12 @@ export function StabilizationFixture() {
       {page === "premium" ? <PaywallScreen state={null} accountId={null} isSignedIn={false} onEntitled={noop} onConnect={() => setToast("Cloud connection requested (test only)")} onSignOut={noop} /> : page === "tv" ? <LiveTvScreen /> : page === "library" ? <WatchlistScreen /> : page === "settings" ? <SettingsScreen /> : <section className="screen"><h2>Continue Watching</h2><div className="grid-results">{media.slice(0, 8).map((item) => <MediaCard key={item.id} item={item} onOpen={app.openDetails} />)}</div></section>}
       {toast && <div role="status" className="fixture-toast" onClick={() => setToast("")}>{toast}</div>}
       <PlayerOverlay />
+      <div className="fixture-tools">
+        <button onClick={() => { setSettings((old) => ({ ...old, homeServers: (["plex", "jellyfin", "emby"] as const).map((type) => ({ id: type, type, name: `Fixture ${type}`, url: `https://${type}.invalid`, token: "fixture-only", userId: "fixture", enabled: true })) })); setPage("library"); }}>Test home server libraries</button>
+        <button onClick={() => setActiveStream({ source: "YouTube player example", addonName: "Test fixture", quality: "", size: "", url: "https://www.youtube.com/watch?v=M7lc1UVf-VE" })}>Test YouTube embed</button>
+        <button onClick={() => { sessionStorage.removeItem("arvio.web.noAddonsPrompt.v1:fixture"); setSettings((old) => ({ ...old, homeServers: [], iptvPlaylists: [] })); setPage("onboarding"); setShowOnboarding(true); }}>Test source setup</button>
+      </div>
+      {showOnboarding && <NoAddonsPrompt />}
     </div>
   </AppContext.Provider>;
 }

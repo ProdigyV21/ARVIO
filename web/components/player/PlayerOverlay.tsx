@@ -199,15 +199,16 @@ export function PlayerOverlay() {
 
   if (ytId) {
     return (
-      <section className="player-overlay">
+      <section className="player-overlay youtube-player-layout">
         <iframe
           className="player-youtube"
-          src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`}
+          src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&playsinline=1`}
           title={title}
+          referrerPolicy="strict-origin-when-cross-origin"
           allow="autoplay; encrypted-media; fullscreen"
           allowFullScreen
         />
-        <div className="player-top show">
+        <div className="youtube-player-toolbar">
           <div className="player-top-left">
             <button type="button" className="player-icon-btn" onClick={closePlayer} aria-label="Back"><ArrowLeft size={24} /></button>
             <div>
@@ -215,6 +216,7 @@ export function PlayerOverlay() {
               <h2>{title}</h2>
             </div>
           </div>
+          <a className="player-icon-btn" href={`https://www.youtube.com/watch?v=${ytId}`} target="_blank" rel="noopener noreferrer" aria-label="Open in YouTube" title="Open in YouTube"><ExternalLink size={24} /></a>
           <button type="button" className="player-icon-btn" onClick={closePlayer} aria-label="Close"><X size={24} /></button>
         </div>
       </section>

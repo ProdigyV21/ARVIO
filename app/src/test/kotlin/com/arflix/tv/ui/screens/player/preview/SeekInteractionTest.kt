@@ -6,6 +6,25 @@ import org.junit.Test
 class SeekInteractionTest {
     private val duration = 3_600_000L
 
+    @Test fun `remote browsing commits two seconds after the most recent key`() {
+        val first = SeekInteraction().step(SeekSurface.Controls, 10_000, 300_000, duration, true, 100)
+        assertEquals(2_000L, first.autoCommitDelayMs(100))
+        assertEquals(1L, first.autoCommitDelayMs(2_099))
+        assertEquals(0L, first.autoCommitDelayMs(2_100))
+        val next = first.step(SeekSurface.Controls, 10_000, 300_000, duration, false, 2_000)
+        assertEquals(1_900L, next.autoCommitDelayMs(2_100))
+        assertTrue(next.resumeAfterBrowse)
+        assertNull(next.finish().autoCommitDelayMs(2_100))
+    }
+
+    @Test fun `automatic seek never resumes deliberately paused playback or commits a touch drag`() {
+        val paused = SeekInteraction().step(SeekSurface.Quick, 30_000, 300_000, duration, false, 100)
+        assertEquals(0L, paused.autoCommitDelayMs(2_100))
+        assertFalse(paused.resumeAfterBrowse)
+        assertNull(paused.dragTo(400_000, 300_000, duration, false).autoCommitDelayMs(5_000))
+        assertNull(SeekInteraction().autoCommitDelayMs(5_000))
+    }
+
     @Test fun `finishing without an active seek does not render a zero target`() {
         val idle = SeekInteraction()
         assertSame(idle, idle.finish())

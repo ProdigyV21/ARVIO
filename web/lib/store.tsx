@@ -6,6 +6,7 @@ import { AuthClient, SESSION_KEY, decodeJwtPayload } from "./auth";
 import { getAuthPortalUrl } from "./config";
 import { defaultCatalogs, mergeCatalogs } from "./catalogs";
 import { getContinueWatching, isLiveStreamOrSportsItem, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudProfiles, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, removeContinueWatchingProgress, saveCloudAddons, saveCloudProfiles, saveCloudSettings, saveCloudTrackingSelection, saveCloudWatchlist, saveWatchedState } from "./cloud";
+import { includeIptvContinueWatching, isUnwatchedContinueWatching, mergeTrackerContinueWatching } from "./continueWatching";
 import { cachedDebridDirectUrl, parseDebridStream, resolveDebridDirectUrl, resolveTranscodeStream } from "./debrid";
 import { createPendingExternalPlayback } from "./externalPlayback";
 import { trackPremiumEvent } from "./premiumAnalytics";
@@ -280,10 +281,7 @@ function traktWatchedKeys(movies: unknown[], shows: unknown[]) {
 function filterWatchedContinueWatching(items: MediaItem[], watchedKeys: Set<string>, addons: InstalledAddon[]) {
   const nonLive = items.filter((item) => !isLiveStreamOrSportsItem(item, addons));
   if (!watchedKeys.size) return nonLive;
-  return nonLive.filter((item) => {
-    const key = mediaWatchKey(item);
-    return !key || !watchedKeys.has(key);
-  });
+  return nonLive.filter((item) => isUnwatchedContinueWatching(item, watchedKeys));
 }
 
 
@@ -306,12 +304,6 @@ function traktActivityTime(raw: unknown) {
   const item = raw as { last_watched_at?: string; last_updated_at?: string; show?: { title?: string } };
   return Date.parse(item.last_watched_at ?? item.last_updated_at ?? "") || 0;
 }
-
-// Per-show progress responses cached by show + last activity: a show whose
-// last_watched_at hasn't moved has unchanged progress, so refreshes after the
-// first cost zero Trakt calls for it. Keeps us far away from Trakt's rate
-// limits (their July 2026 API update made bursts much more failure-prone).
-const showProgressCache = new Map<string, unknown>();
 
 // How many watched shows we ask Trakt for per-show progress. The activity-keyed
 // progress cache means only shows whose last_watched_at MOVED cost a call on a
@@ -354,25 +346,10 @@ async function loadTraktUpNext(watchedShowsRows: unknown[], includeSpecials: boo
       const traktId = row.show?.ids?.trakt;
       if (!traktId) continue;
       const activityAt = traktActivityTime(watched);
-      const cacheKey = `${traktId}:${activityAt}:${includeSpecials}`;
-      let progress: unknown = showProgressCache.get(cacheKey) ?? null;
-      if (progress === undefined || progress === null) {
-        // activityAt keys the persistent cache: unchanged activity = identical
-        // progress, so repeat boots read from localStorage instead of firing
-        // ~120 Trakt calls — the difference between CW enriching in seconds vs
-        // half a minute (and the reason the CW cache never got written on
-        // devices where sessions were shorter than the old pipeline).
-        progress = await traktClient.showProgress(traktId, includeSpecials, activityAt).catch(() => null);
-        if (progress) {
-          showProgressCache.set(cacheKey, progress);
-          if (showProgressCache.size > 200) {
-            const oldest = showProgressCache.keys().next().value;
-            if (oldest) showProgressCache.delete(oldest);
-          }
-        } else {
-          fetchFailures += 1;
-        }
-      }
+      // The client owns the account-scoped, expiring cache. A second, timeless
+      // cache here hid newly aired episodes and could leak progress by profile.
+      const progress = await traktClient.showProgress(traktId, includeSpecials, activityAt).catch(() => null);
+      if (!progress) fetchFailures += 1;
       results[index] = traktUpNextToMedia(watched, progress);
     }
   });
@@ -399,6 +376,9 @@ function mergeTraktWithLocalResume(traktItems: MediaItem[], localItems: MediaIte
       episodeStill: item.episodeStill || local.episodeStill,
       episodeTitle: item.episodeTitle ?? local.episodeTitle ?? null,
       progress: Math.max(item.progress ?? 0, local.progress ?? 0),
+      resumePositionSeconds: Math.max(item.resumePositionSeconds ?? 0, local.resumePositionSeconds ?? 0),
+      durationSeconds: Math.max(item.durationSeconds ?? 0, local.durationSeconds ?? 0),
+      streamAddonId: item.streamAddonId ?? local.streamAddonId,
       timeRemainingLabel: local.timeRemainingLabel ?? item.timeRemainingLabel ?? null
     };
   });
@@ -428,7 +408,7 @@ async function hydrateContinueWatchingItems(items: MediaItem[]) {
         getDetails(item).catch(() => item),
         episodeStillPromise
       ]);
-      const clamped = clampUpNextEpisode({
+      const enriched = {
         ...details,
         ...item,
         image: item.image || details.image,
@@ -437,60 +417,31 @@ async function hydrateContinueWatchingItems(items: MediaItem[]) {
         overview: details.overview || item.overview,
         rating: details.rating || item.rating,
         duration: details.duration || item.duration
-      });
-      if (!clamped) {
-        hydrated[index] = null;
-        continue;
-      }
-      const episodeChanged = clamped.seasonNumber !== item.seasonNumber || clamped.episodeNumber !== item.episodeNumber;
-      const correctedStill = episodeChanged && clamped.seasonNumber != null && clamped.episodeNumber != null
-        ? await getSeasonEpisodes(clamped.id, clamped.seasonNumber)
-            .then((episodes) => episodes.find((episode) => episode.episodeNumber === clamped.episodeNumber)?.still ?? null)
-            .catch(() => null)
-        : null;
+      };
       hydrated[index] = {
-        ...clamped,
-        episodeStill: episodeChanged
-          ? correctedStill
-          : episodeStill || item.episodeStill || null
+        ...enriched,
+        episodeStill: episodeStill || item.episodeStill || null
       };
     }
   });
   await Promise.all(workers);
-  // The unhydrated tail still gets the episode clamp — that guard reads only
-  // TMDB season data the item may already carry, and returns the item as-is
-  // when it doesn't.
-  const tailClamped = tail.map(clampUpNextEpisode);
-  return [...hydrated, ...tailClamped].filter((item): item is MediaItem => Boolean(item));
+  // Metadata providers can disagree about season numbering. Artwork must never
+  // change Trakt's selected episode or remove it based on TMDB episode counts.
+  return [...hydrated, ...tail].filter((item): item is MediaItem => Boolean(item));
 }
 
-// Trakt's episode database can list MORE episodes than TMDB does for the same
-// season (specials folded in, split-release counting) — its next_episode then
-// points past the last episode the app can actually show ("Up next S1 E11" on
-// a 10-episode season, which plays nothing). Clamp against the hydrated TMDB
-// season data: advance to the next real season when one exists, otherwise the
-// show is finished and the row is dropped from Continue Watching.
-function clampUpNextEpisode(item: MediaItem): MediaItem | null {
-  if (item.timeRemainingLabel !== "Up next") return item;
-  const seasonNumber = item.seasonNumber;
-  const episodeNumber = item.episodeNumber;
-  if (item.mediaType !== "tv" || !seasonNumber || !episodeNumber) return item;
+
+// Only locally advancing playback uses TMDB's season boundaries, not imported
+// tracker progress (which may use a different episode ordering).
+function nextLocalEpisode(item: MediaItem): MediaItem | null {
+  const { seasonNumber, episodeNumber } = item;
+  if (!seasonNumber || !episodeNumber) return item;
   const seasons = (item.seasons ?? []).filter((season) => season.seasonNumber > 0);
-  if (!seasons.length) return item;
   const current = seasons.find((season) => season.seasonNumber === seasonNumber);
   if (!current?.episodeCount || episodeNumber <= current.episodeCount) return item;
-  const nextSeason = seasons
-    .filter((season) => season.seasonNumber > seasonNumber && (season.episodeCount ?? 0) > 0)
+  const next = seasons.filter((season) => season.seasonNumber > seasonNumber && (season.episodeCount ?? 0) > 0)
     .sort((a, b) => a.seasonNumber - b.seasonNumber)[0];
-  if (!nextSeason) return null; // watched past the final episode — show done
-  return {
-    ...item,
-    seasonNumber: nextSeason.seasonNumber,
-    episodeNumber: 1,
-    episodeTitle: null,
-    episodeStill: null,
-    subtitle: `S${nextSeason.seasonNumber} E1`
-  };
+  return next ? { ...item, seasonNumber: next.seasonNumber, episodeNumber: 1, episodeTitle: null, episodeStill: null, subtitle: `S${next.seasonNumber} E1` } : null;
 }
 
 function sameSettings(a: AppSettings, b: AppSettings) {
@@ -924,13 +875,21 @@ export function AppProvider({
       const traktReady = client.isConnected;
       const readFailures = new Set<string>();
       const failedRead = (feature: string) => { readFailures.add(feature); return []; };
+      const watchedMoviesRead = traktReady ? client.watched("movies").catch(() => failedRead("watched")) : Promise.resolve([]);
+      const watchedShowsRead = traktReady ? client.watched("shows").catch(() => failedRead("watched")) : Promise.resolve([]);
+      const cwUsesTrakt = readsFrom("continueWatching", "trakt");
+      const watchedOnlyTrakt = readsFrom("watched", "trakt") && !readsFrom("watched", "simkl") && !readsFrom("watched", "mdblist");
+      // Progress must use history from the same provider, not the separately selected badge source.
+      const cwTraktShowsRead = !cwUsesTrakt ? Promise.resolve([])
+        : watchedOnlyTrakt ? watchedShowsRead
+        : traktClient.watched("shows").catch(() => failedRead("cw-watched"));
       const watchlistReady = ["trakt", "simkl", "mdblist"].some((provider) => readsFrom("watchlist", provider as "trakt" | "simkl" | "mdblist"));
       const [historyRows, traktRows, playbackRows, watchedMoviesRows, watchedShowsRows, cloudWatchlistRows, cloudWatchedKeys, cloudDismissals, hiddenShowIds] = await Promise.all([
         authClient.session ? getContinueWatching(authClient, profileId, addonState).catch(() => []) : Promise.resolve([]),
         traktReady ? client.watchlist().catch(() => failedRead("watchlist")) : Promise.resolve([]),
         traktReady ? client.playback().catch(() => failedRead("playback")) : Promise.resolve([]),
-        traktReady ? client.watched("movies").catch(() => failedRead("watched")) : Promise.resolve([]),
-        traktReady ? client.watched("shows").catch(() => failedRead("watched")) : Promise.resolve([]),
+        watchedMoviesRead,
+        watchedShowsRead,
         authClient.session ? pullCloudWatchlist(authClient, profileId).catch(() => []) : Promise.resolve([]),
         authClient.session ? pullCloudWatchedKeys(authClient, profileId).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
         authClient.session ? pullCloudContinueWatchingDismissals(authClient, profileId).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
@@ -1013,27 +972,32 @@ export function AppProvider({
       }
       // ───────────────────────────────────────────────────────────────────────
 
-      const upNext = readsFrom("continueWatching", "trakt")
-        ? await loadTraktUpNext(watchedShowsRows, effectiveSettings.includeSpecials, hiddenShowIds).catch(() => ({ items: [] as MediaItem[], fetchFailures: 1 }))
+      const cwTraktShows = await cwTraktShowsRead;
+      const upNext = cwUsesTrakt
+        ? await loadTraktUpNext(cwTraktShows, effectiveSettings.includeSpecials, hiddenShowIds).catch(() => ({ items: [] as MediaItem[], fetchFailures: 1 }))
         : { items: [] as MediaItem[], fetchFailures: 0 };
       const upNextRows = upNext.items;
-      const playbackShowKeys = new Set(traktPlaybackCw.filter((item) => item.mediaType === "tv").map((item) => `${item.mediaType}:${item.id}`));
-      const traktCw = mergeTraktWithLocalResume([
-        ...traktPlaybackCw,
-        ...upNextRows.filter((item) => !playbackShowKeys.has(`${item.mediaType}:${item.id}`))
-      ], cloudCw);
       const watchedKeys = new Set([...traktWatchedKeys(watchedMoviesRows, watchedShowsRows), ...cloudWatchedKeys]);
+      // Cloud watched flags may be older than a provider's reset/progress response.
+      // Keep those flags for badges, but do not let them veto tracker Continue Watching.
+      const cwWatchedKeys = traktWatchedKeys(watchedMoviesRows, cwUsesTrakt ? cwTraktShows : watchedShowsRows);
+      const traktCw = mergeTraktWithLocalResume(
+        mergeTrackerContinueWatching(traktPlaybackCw, upNextRows, cwWatchedKeys), cloudCw
+      );
       if (!readFailures.has("watched") && refreshKeyRef.current === key) setWatchedKeys(watchedKeys);
-      const cwBase = traktReady ? traktCw : cloudCw.filter(isPausedPlaybackItem);
+      const cwBase = includeIptvContinueWatching(
+        traktReady ? traktCw : cloudCw.filter(isPausedPlaybackItem),
+        cloudCw.filter((item) => !isHiddenShow(item) && !isDismissed(item))
+      );
       // Order newest-activity-first across playback + up-next (matches the app's
       // updatedAt-descending sort) so the row leads with what you last watched.
       const cwSorted = dedupeMedia(cwBase).filter((item) => !isDismissed(item)).sort((a, b) => (b.activityAt ?? 0) - (a.activityAt ?? 0));
-      const cw = await hydrateContinueWatchingItems(filterWatchedContinueWatching(cwSorted, watchedKeys, addonState));
+      const cw = await hydrateContinueWatchingItems(filterWatchedContinueWatching(cwSorted, traktReady ? cwWatchedKeys : watchedKeys, addonState));
       // Trakt outage guard: when Trakt is connected but every read came back
       // empty, the calls were blocked (Cloudflare challenges the CORS
       // preflight intermittently, especially on VPN/datacenter IPs) — keep
       // showing the cached rail instead of wiping it with an empty list.
-      const traktOutage = readFailures.has("playback") || readFailures.has("watched");
+      const traktOutage = readFailures.has("playback") || readFailures.has("cw-watched") || (watchedOnlyTrakt && readFailures.has("watched"));
       // Enriched CW (adds Trakt up-next episodes) replaces the fast paint. When
       // the fresh list is non-empty we swap it in. An empty result with Trakt
       // connected and reads healthy means the rail is GENUINELY empty — clear it
@@ -1707,7 +1671,7 @@ export function AppProvider({
     const playback = ++playbackGeneration.current;
     const isCurrent = () => sourceGeneration.current === generation && playbackGeneration.current === playback;
     try {
-      const next = clampUpNextEpisode({ ...selected, timeRemainingLabel: "Up next", seasonNumber: selectedEpisode.season, episodeNumber: selectedEpisode.episode + 1 });
+      const next = nextLocalEpisode({ ...selected, timeRemainingLabel: "Up next", seasonNumber: selectedEpisode.season, episodeNumber: selectedEpisode.episode + 1 });
       if (!next?.seasonNumber || !next.episodeNumber) { setToast("You have reached the last available episode."); return false; }
       const episodes = await getSeasonEpisodes(selected.tmdbId ?? selected.id, next.seasonNumber);
       if (!isCurrent()) return false;

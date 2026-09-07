@@ -7,8 +7,8 @@ import com.arflix.tv.ui.screens.details.isAutoPlayableStream
 import com.arflix.tv.ui.screens.details.qualityScoreForAutoPlay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -35,14 +35,14 @@ internal fun mergePlayerSourceDiscovery(
     pluginBatches: Flow<List<StreamSource>>,
     onPluginFailure: (Throwable) -> Unit = {}
 ): Flow<ProgressiveStreamResult> {
-    val plugins = flow {
+    val plugins = channelFlow {
         var sources = emptyList<StreamSource>()
-        emit(PluginSources(sources, false))
+        send(PluginSources(sources, false))
         try {
             withTimeoutOrNull(30_000L) {
                 pluginBatches.collect { batch ->
                     sources = (sources + batch).distinctBy(::providerScopedStreamIdentity)
-                    emit(PluginSources(sources, false))
+                    send(PluginSources(sources, false))
                 }
             }
         } catch (e: CancellationException) {
@@ -50,7 +50,7 @@ internal fun mergePlayerSourceDiscovery(
         } catch (e: Exception) {
             onPluginFailure(e)
         }
-        emit(PluginSources(sources, true))
+        send(PluginSources(sources, true))
     }
     return combine(
         addons.onStart { emit(ProgressiveStreamResult(emptyList(), completedAddons = 0, totalAddons = 0, isFinal = false)) },

@@ -3064,6 +3064,11 @@ a.login-submit {
 .player-overlay { cursor: default; }
 .player-overlay.controls-off { cursor: none; }
 .player-youtube { width: 100%; height: 100%; border: 0; }
+.youtube-player-layout { display: grid; grid-template-rows: auto minmax(200px, 1fr); overflow: auto; }
+.youtube-player-layout .player-youtube { grid-row: 2; min-width: 200px; min-height: 200px; }
+.youtube-player-toolbar { grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; background: #111; }
+.youtube-player-toolbar .player-top-left { min-width: 0; }
+.youtube-player-toolbar h2 { font-size: 18px; overflow-wrap: anywhere; }
 
 /* Top bar fades with the controls */
 .player-top {
@@ -10256,6 +10261,7 @@ button,
 .library-mobile-select {
   display: none;
 }
+.library-mobile-sort { display: none; }
 
 .library-toolbar {
   min-height: 42px;
@@ -10363,6 +10369,8 @@ button,
   .library-heading { grid-template-columns: 1fr; align-items: start; gap: 16px; }
   .library-provider-tabs { width: 100%; }
   .library-provider-tabs button { flex: 1 0 auto; }
+  .library-provider-tabs .library-provider-sort { display: none; }
+  .library-toolbar .library-mobile-sort { display: block; min-width: 0; max-width: 100%; flex: 1; }
   .library-workspace.has-library-sidebar {
     display: block;
     padding: 0 0 64px;

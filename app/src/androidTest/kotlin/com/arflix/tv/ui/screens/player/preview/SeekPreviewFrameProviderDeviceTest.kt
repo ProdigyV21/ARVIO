@@ -14,6 +14,9 @@ import java.net.ServerSocket
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
@@ -24,6 +27,34 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SeekPreviewFrameProviderDeviceTest {
+    @Test
+    fun changingTargetDuringColdDecodeRetainsLateFrameAndLoadsNewTarget() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val file = File(context.cacheDir, "seek_preview_cancel_test.mp4")
+        InstrumentationRegistry.getInstrumentation().context.assets.open("seek_preview_device_test.mp4").use { input ->
+            file.outputStream().use(input::copyTo)
+        }
+        val provider = SeekPreviewFrameProvider(context, OkHttpClient(), 256)
+        try {
+            provider.configure(SeekPreviewSource(
+                Uri.fromFile(file).toString(), emptyMap(), UUID.randomUUID().toString(),
+                30_000L, false, false,
+            ))
+            val opening = async { provider.frameAt(2_000L) }
+            delay(350)
+            opening.cancelAndJoin()
+            val ending = provider.frameAt(22_000L)
+            assertNotNull("Changing target must not destroy the decoder or poison its next request", ending)
+            assertTimestampAndScene(ending!!, 22_000L, 22_000L, red = false)
+            val earlier = provider.frameAt(2_000L)
+            assertNotNull(earlier)
+            assertTimestampAndScene(earlier!!, 2_000L, 2_000L, red = true, origin = SeekPreviewOrigin.MEMORY)
+        } finally {
+            provider.close()
+            file.delete()
+        }
+    }
+
     @Test
     fun localVideoReturnsDifferentFramesAcrossTimeline() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -59,9 +90,9 @@ class SeekPreviewFrameProviderDeviceTest {
                 "Timeline previews must change as the scrub position changes",
                 openingFrame!!.bitmap.sameAs(endingFrame!!.bitmap),
             )
-            assertTimestampAndScene(openingFrame, 2_000L, 0L, red = true)
-            assertTimestampAndScene(endingFrame, 22_000L, 20_000L, red = false)
-            assertWarmMemoryLatency(provider, 22_000L, 20_000L)
+            assertTimestampAndScene(openingFrame, 2_000L, 2_000L, red = true)
+            assertTimestampAndScene(endingFrame, 22_000L, 22_000L, red = false)
+            assertWarmMemoryLatency(provider, 22_000L, 22_000L)
             assertTrue(
                 "A decoded frame must be immediately available from memory",
                 provider.memoryFrameAt(2_000L)?.bitmap === openingFrame.bitmap,
@@ -108,9 +139,9 @@ class SeekPreviewFrameProviderDeviceTest {
                 "Ranged HTTP previews must change with the scrub position",
                 openingFrame!!.bitmap.sameAs(endingFrame!!.bitmap),
             )
-            assertTimestampAndScene(openingFrame, 2_000L, 0L, red = true)
-            assertTimestampAndScene(endingFrame, 22_000L, 20_000L, red = false)
-            assertWarmMemoryLatency(provider, 22_000L, 20_000L)
+            assertTimestampAndScene(openingFrame, 2_000L, 2_000L, red = true)
+            assertTimestampAndScene(endingFrame, 22_000L, 22_000L, red = false)
+            assertWarmMemoryLatency(provider, 22_000L, 22_000L)
             assertTrue("Playback authentication headers must reach the media server", server.sawAuthHeader.get())
             assertTrue("Progressive previews must use byte-range requests", server.sawRangeRequest.get())
         } finally {
@@ -119,13 +150,13 @@ class SeekPreviewFrameProviderDeviceTest {
         }
     }
 
-    private fun assertTimestampAndScene(frame: SeekPreviewFrame, requestedMs: Long, actualMs: Long, red: Boolean) {
+    private fun assertTimestampAndScene(frame: SeekPreviewFrame, requestedMs: Long, actualMs: Long, red: Boolean, origin: SeekPreviewOrigin = SeekPreviewOrigin.DECODER) {
         // Fixture is red at 0..10s, green at 10..20s, blue at 20..30s, with 1s sync frames.
         assertEquals(requestedMs, frame.requestedPositionMs)
         assertEquals(actualMs, frame.actualPositionMs)
         assertEquals(actualMs, frame.positionMs)
         assertEquals(SeekPreviewValidity.TIMESTAMP, frame.validity)
-        assertEquals(SeekPreviewOrigin.DECODER, frame.origin)
+        assertEquals(origin, frame.origin)
         assertTrue(frame.bitmap.width <= 480 && frame.bitmap.height <= 270)
         assertEquals(16f / 9f, frame.bitmap.width.toFloat() / frame.bitmap.height, 0.02f)
         val points = listOf(

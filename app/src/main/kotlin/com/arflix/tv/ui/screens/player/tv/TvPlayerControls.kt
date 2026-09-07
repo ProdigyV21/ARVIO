@@ -77,9 +77,8 @@ import com.arflix.tv.ui.theme.TextPrimary
 
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import com.arflix.tv.ui.screens.player.preview.SeekPreviewCard
+import com.arflix.tv.ui.screens.player.preview.ReadySeekPreview
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewFrame
-import com.arflix.tv.ui.screens.player.preview.quantizeSeekPreviewPosition
 import kotlin.math.roundToInt
 
 @Composable
@@ -423,7 +422,9 @@ fun TvPlayerControls(
                         val previewCardHeight = previewCardWidth * 9f / 16f
                         val previewDensity = LocalDensity.current
                         val previewCardWidthPx = with(previewDensity) { previewCardWidth.toPx() }
-                        val previewCardHeightPx = with(previewDensity) { (previewCardHeight + 16.dp).roundToPx() }
+                        val previewOffsetY = with(previewDensity) {
+                            (10.dp - barHeight / 2f - 4.dp - previewCardHeight).roundToPx()
+                        }
                         val previewX = if (trackbarWidthPx > 0) {
                             (frac * trackbarWidthPx - previewCardWidthPx / 2f)
                                 .coerceIn(0f, (trackbarWidthPx - previewCardWidthPx).coerceAtLeast(0f))
@@ -431,28 +432,17 @@ fun TvPlayerControls(
                         } else 0
 
                         val currentPos = if (isScrubbing) scrubPreviewPositionMs else currentPositionMs
-                        val targetBucket = quantizeSeekPreviewPosition(currentPos, durationMs)
-                        val isCurrentFrame = seekPreviewFrame != null && seekPreviewFrame.positionMs == targetBucket
-
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = (isScrubbing || trackbarFocused) && durationMs > 0L && isCurrentFrame,
-                            enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(90)),
-                            exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(70)),
+                        ReadySeekPreview(
+                            frame = seekPreviewFrame,
+                            positionMs = currentPos,
+                            visible = (isScrubbing || trackbarFocused) && durationMs > 0L,
+                            cornerRadius = 6.dp,
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .offset { IntOffset(previewX, -previewCardHeightPx) }
+                                .offset { IntOffset(previewX, previewOffsetY) }
                                 .zIndex(12f)
                                 .width(previewCardWidth)
-                        ) {
-                            if (isCurrentFrame && seekPreviewFrame != null) {
-                                SeekPreviewCard(
-                                    frame = seekPreviewFrame,
-                                    cornerRadius = 6.dp,
-                                    timestamp = formatTime(currentPos),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))

@@ -1,6 +1,12 @@
 # Seek Preview Validation
 
+Latest UI behavior and focused test results: [ready-only previews](player-seek-preview-ready-only-2026-09-07.md).
+
 Implementation baseline: `9a1e5c84`, 2026-09-05. Android 1.9.996 (311).
+
+For the subsequent 1.9.996 (312) retained-decoder and two-second automatic remote seek
+implementation and measured limitations, see [the September 7 retest](player-seek-preview-matlock-2026-09-07.md#retained-decoder-and-automatic-seek-retest).
+The results below are historical baseline measurements, not current release certification.
 
 ## Behavior
 

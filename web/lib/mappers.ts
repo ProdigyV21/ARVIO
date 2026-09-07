@@ -21,6 +21,9 @@ export function historyToItem(entry: WatchHistoryEntry): MediaItem {
     episodeNumber: entry.episode ?? null,
     episodeTitle: entry.episode_title ?? null,
     progress,
+    resumePositionSeconds: entry.position_seconds ?? 0,
+    durationSeconds: entry.duration_seconds ?? 0,
+    streamAddonId: entry.stream_addon_id ?? null,
     activityAt: Date.parse(entry.updated_at ?? entry.paused_at ?? "") || 0,
     timeRemainingLabel: remaining > 0 ? `${Math.ceil(remaining / 60)}m left` : null
   };

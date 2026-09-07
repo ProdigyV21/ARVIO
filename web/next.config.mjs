@@ -27,7 +27,11 @@ const nextConfig = {
     // production deploy cannot silently lose ARVIO Cloud login/sync when the
     // Netlify site only defines the canonical server-side variable.
     NEXT_PUBLIC_ARVIO_APP_ANON_KEY:
-      process.env.NEXT_PUBLIC_ARVIO_APP_ANON_KEY ?? process.env.APP_ANON_KEY ?? ""
+      process.env.NEXT_PUBLIC_ARVIO_APP_ANON_KEY || process.env.APP_ANON_KEY || "",
+    // The client ID is public, unlike the OAuth secret. Direct browser reads
+    // avoid the Netlify egress block and must work with the canonical site env.
+    NEXT_PUBLIC_TRAKT_CLIENT_ID:
+      process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID || process.env.TRAKT_CLIENT_ID || ""
   },
   images: {
     remotePatterns: [

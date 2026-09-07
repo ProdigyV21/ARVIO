@@ -210,6 +210,7 @@ fun WatchlistScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var sortFocusIndex by remember { mutableIntStateOf(0) }
     var selectedProviderId by remember { mutableStateOf(WATCHLIST_PROVIDER_ID) }
+    var listSort by remember { mutableStateOf(HomeServerLibrarySort.RECENTLY_ADDED) }
     var trackerSearchQuery by remember { mutableStateOf("") }
     val longPressThresholdMs = 500L
     val watchlistColumnState = rememberLazyListState()
@@ -272,12 +273,13 @@ fun WatchlistScreen(
             else -> emptyList()
         }
     }
-    val trackerItems = remember(uiState.allItems, trackerSearchQuery, activeProvider.id) {
+    val trackerItems = remember(uiState.allItems, trackerSearchQuery, activeProvider.id, listSort) {
         val query = trackerSearchQuery.trim()
-        if (!isTrackerMode || query.isBlank()) uiState.allItems else uiState.allItems.filter { item ->
+        val filtered = if (!isTrackerMode || query.isBlank()) uiState.allItems else uiState.allItems.filter { item ->
             item.title.contains(query, ignoreCase = true) ||
                 item.overview.contains(query, ignoreCase = true)
         }
+        sortLibraryItems(filtered, listSort)
     }
     val activeLibraryState = when {
         isHomeServerMode -> libraryState
@@ -287,14 +289,15 @@ fun WatchlistScreen(
             isLoading = uiState.isLoading,
             isLoadingMore = uiState.isLoadingMore,
             hasMore = uiState.hasMore,
+            sort = listSort,
             searchQuery = trackerSearchQuery,
             error = uiState.error
         )
-        else -> HomeLibraryUiState()
+        else -> HomeLibraryUiState(sort = listSort)
     }
     val selectedLibraryIndex = providerLibraries.indexOfFirst { it.sourceRef == activeLibraryState.selectedSourceRef }
         .coerceAtLeast(0)
-    val filters = if (isHomeServerMode) {
+    val filters = if (isHomeServerMode || isTrackerMode) {
         listOf(
             LibraryFilter(tr("Sort"), isSort = true),
             LibraryFilter(tr("Search"), isSearch = true, iconOnly = true),
@@ -302,22 +305,31 @@ fun WatchlistScreen(
         )
     } else {
         listOf(
-            LibraryFilter(tr("Search"), isSearch = true, iconOnly = true),
-            LibraryFilter(tr("Refresh"), isRefresh = true, iconOnly = true)
+            LibraryFilter(tr("Sort"), isSort = true)
         )
     }
     val sortOptions = listOf(
         tr("Recently added") to HomeServerLibrarySort.RECENTLY_ADDED,
+        stringResource(R.string.library_sort_release_newest) to HomeServerLibrarySort.RELEASE_DATE_NEWEST,
+        stringResource(R.string.library_sort_release_oldest) to HomeServerLibrarySort.RELEASE_DATE_OLDEST,
         tr("Highest rated") to HomeServerLibrarySort.RATING,
         tr("Title A-Z") to HomeServerLibrarySort.TITLE
     )
-    val watchlistSections = listOf(
-        "movies" to uiState.movies,
-        "series" to uiState.series
-    ).filter { it.second.isNotEmpty() }
+    val watchlistSections = remember(uiState.movies, uiState.series, listSort) {
+        listOf(
+            "movies" to sortLibraryItems(uiState.movies, listSort),
+            "series" to sortLibraryItems(uiState.series, listSort)
+        ).filter { it.second.isNotEmpty() }
+    }
     val watchlistTotal = uiState.movies.size + uiState.series.size
     val isLibraryMode = isHomeServerMode || isTrackerMode
     val visibleLibraryItems = activeLibraryState.items
+
+    fun selectSort(sort: HomeServerLibrarySort) {
+        if (isHomeServerMode) viewModel.setLibrarySort(sort) else listSort = sort
+        focusedSectionIndex = 0
+        focusedItemIndex = 0
+    }
 
     fun moveToContent() {
         focusZone = WatchlistFocusZone.CONTENT
@@ -354,7 +366,7 @@ fun WatchlistScreen(
             filter.isSearch -> showSearchModal = true
             filter.isRefresh -> if (isHomeServerMode) viewModel.refreshLibrary() else viewModel.refresh()
             filter.isSort -> {
-                sortFocusIndex = sortOptions.indexOfFirst { it.second == libraryState.sort }.coerceAtLeast(0)
+                sortFocusIndex = sortOptions.indexOfFirst { it.second == activeLibraryState.sort }.coerceAtLeast(0)
                 showSortMenu = true
             }
         }
@@ -398,6 +410,7 @@ fun WatchlistScreen(
     ) {
         focusedItemIndex = 0
         if (isLibraryMode) libraryGridState.scrollToItem(0)
+        else watchlistColumnState.scrollToItem(0)
     }
     LaunchedEffect(watchlistSections.size, uiState.movies.size, uiState.series.size) {
         if (watchlistSections.isNotEmpty() && focusedSectionIndex >= watchlistSections.size) {
@@ -460,7 +473,7 @@ fun WatchlistScreen(
                             true
                         }
                         Key.Enter, Key.DirectionCenter -> {
-                            sortOptions.getOrNull(sortFocusIndex)?.second?.let(viewModel::setLibrarySort)
+                            sortOptions.getOrNull(sortFocusIndex)?.second?.let(::selectSort)
                             showSortMenu = false
                             focusZone = WatchlistFocusZone.FILTERS
                             true
@@ -500,7 +513,7 @@ fun WatchlistScreen(
                             when (focusZone) {
                                 WatchlistFocusZone.TOP_BAR -> sidebarFocusIndex = (sidebarFocusIndex + 1).coerceAtMost(maxSidebarIndex)
                                 WatchlistFocusZone.PROVIDERS -> {
-                                    if (isLibraryMode && providerFocusIndex >= providers.lastIndex) {
+                                    if (providerFocusIndex >= providers.lastIndex) {
                                         filterFocusIndex = 0
                                         focusZone = WatchlistFocusZone.FILTERS
                                     } else {
@@ -546,7 +559,7 @@ fun WatchlistScreen(
                                 WatchlistFocusZone.LIBRARIES -> {
                                     if (libraryFocusIndex < providerLibraries.lastIndex) libraryFocusIndex++
                                 }
-                                WatchlistFocusZone.FILTERS -> if (visibleLibraryItems.isNotEmpty()) moveToContent()
+                                WatchlistFocusZone.FILTERS -> if (if (isLibraryMode) visibleLibraryItems.isNotEmpty() else watchlistSections.isNotEmpty()) moveToContent()
                                 WatchlistFocusZone.CONTENT -> {
                                     if (isLibraryMode) {
                                         val next = focusedItemIndex + libraryColumns
@@ -641,7 +654,7 @@ fun WatchlistScreen(
                 libraryState = activeLibraryState,
                 filters = filters,
                 focusedFilterIndex = if (focusZone == WatchlistFocusZone.FILTERS) filterFocusIndex else -1,
-                showLibraryControls = isLibraryMode,
+                showLibraryControls = true,
                 isMobile = isMobile,
                 onSelect = ::activateProvider,
                 onFilterSelect = { index ->
@@ -738,7 +751,7 @@ fun WatchlistScreen(
                 isMobile = isMobile,
                 onFocus = { sortFocusIndex = it },
                 onSelect = { sort ->
-                    viewModel.setLibrarySort(sort)
+                    selectSort(sort)
                     showSortMenu = false
                     focusZone = WatchlistFocusZone.FILTERS
                 },
@@ -1054,6 +1067,8 @@ private fun LibraryFilterControl(
             HomeServerLibrarySort.RECENTLY_ADDED -> tr("Recently added")
             HomeServerLibrarySort.RATING -> tr("Highest rated")
             HomeServerLibrarySort.TITLE -> tr("Title A-Z")
+            HomeServerLibrarySort.RELEASE_DATE_NEWEST -> stringResource(R.string.library_sort_release_newest)
+            HomeServerLibrarySort.RELEASE_DATE_OLDEST -> stringResource(R.string.library_sort_release_oldest)
         }
         filter.isSearch && state.searchQuery.isNotBlank() -> state.searchQuery
         else -> filter.label

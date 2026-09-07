@@ -3,11 +3,14 @@ package com.arflix.tv.ui.screens.player.preview
 import android.content.Context
 import android.graphics.Bitmap
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,6 +39,53 @@ class SeekPreviewFrameProviderIntegrationTest {
     ) = SeekPreviewFrameProvider(context, OkHttpClient(), 256, { images }, decode, 1024 * 1024)
 
     @Test
+    fun `cold frame may finish after the old UI deadline without being discarded`() = runBlocking {
+        provider(decode = { _, target ->
+            delay(4_700)
+            SeekPreviewImage(bitmap(), actualPositionMs = target)
+        }).use { provider ->
+            provider.configure(source())
+            assertNotNull(loadSeekPreviewFrame(provider, 30_000))
+            assertEquals(SeekPreviewState.READY, provider.status.value.state)
+        }
+    }
+
+    @Test
+    fun `decoder cancellation completes UI request instead of leaving loading forever`() = runBlocking {
+        provider(decode = { _, _ -> throw CancellationException("Decoder request cancelled") }).use { provider ->
+            provider.configure(source())
+            assertNull(loadSeekPreviewFrame(provider, 30_000))
+            assertEquals(SeekPreviewState.IDLE, provider.status.value.state)
+        }
+    }
+
+    @Test
+    fun `UI request still propagates cancellation when the user changes target`() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        provider(decode = { _, _ -> started.complete(Unit); awaitCancellation() }).use { provider ->
+            provider.configure(source())
+            val pending = async { loadSeekPreviewFrame(provider, 30_000) }
+            started.await()
+            pending.cancel()
+            pending.join()
+            assertTrue(pending.isCancelled)
+        }
+    }
+
+    @Test
+    fun `decoder seeks the target not a rounded bucket that rejects valid keyframes`() = runBlocking {
+        provider(decode = { _, target ->
+            SeekPreviewImage(bitmap(), actualPositionMs = target - 1_000)
+        }).use { provider ->
+            provider.configure(source())
+            val frame = provider.frameAt(14_999)
+            assertNotNull("Rounding down before seeking used to reject this valid frame", frame)
+            assertEquals(13_999L, frame!!.actualPositionMs)
+            assertTrue(provider.matchesTarget(frame, 14_999))
+        }
+    }
+
+    @Test
     fun `disk and memory preserve actual decoded presentation time`() = runBlocking {
         val source = source()
         provider(decode = { _, _ -> SeekPreviewImage(bitmap(), actualPositionMs = 28_160) }).use { provider ->
@@ -47,13 +97,22 @@ class SeekPreviewFrameProviderIntegrationTest {
             assertEquals(28_160L, provider.memoryFrameAt(30_000)!!.positionMs)
             assertTrue(provider.matchesTarget(frame, 30_000))
             assertFalse(provider.matchesTarget(frame, 40_000))
-        }
-        provider().use { provider ->
-            provider.configure(source)
-            val diskFrame = provider.cachedFrameAt(30_000)!!
-            assertEquals(SeekPreviewOrigin.DISK, diskFrame.origin)
-            assertEquals(28_160L, diskFrame.positionMs)
-            assertEquals(30_000L, diskFrame.requestedPositionMs)
+            // Display returns before optional persistence. Keep the writer alive and verify
+            // a separate provider can read the completed entry without decoding it again.
+            provider().use { reader ->
+                reader.configure(source)
+                val diskFrame = withTimeout(3_000) {
+                    var cached = reader.cachedFrameAt(30_000)
+                    while (cached == null) {
+                        delay(10)
+                        cached = reader.cachedFrameAt(30_000)
+                    }
+                    cached
+                }
+                assertEquals(SeekPreviewOrigin.DISK, diskFrame.origin)
+                assertEquals(28_160L, diskFrame.positionMs)
+                assertEquals(30_000L, diskFrame.requestedPositionMs)
+            }
         }
     }
 

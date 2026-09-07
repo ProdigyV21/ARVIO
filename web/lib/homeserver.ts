@@ -318,6 +318,7 @@ interface JellyfinItem {
   PrimaryImageTag?: string;
   ProviderIds?: { Tmdb?: string; Imdb?: string; Tvdb?: string };
   DateCreated?: string;
+  PremiereDate?: string;
 }
 
 interface PlexSection {
@@ -338,6 +339,7 @@ interface PlexItem {
   Media?: Array<{ Part?: Array<{ key?: string }> }>;
   Guid?: Array<{ id?: string }>;
   addedAt?: number;
+  originallyAvailableAt?: string;
 }
 
 const NON_VIDEO_COLLECTION_TYPES = new Set(["music", "photos", "homevideos", "books", "podcasts", "audiobooks"]);
@@ -367,6 +369,7 @@ function mapItem(base: string, token: string, item: JellyfinItem, server?: HomeS
     title: item.Name,
     overview: item.Overview ?? "",
     year: item.ProductionYear ? String(item.ProductionYear) : "",
+    releaseDate: item.PremiereDate ?? null,
     rating: item.CommunityRating ? item.CommunityRating.toFixed(1) : "",
     mediaType,
     image,
@@ -405,6 +408,7 @@ function mapPlexItem(base: string, token: string, item: PlexItem, server?: HomeS
     title: item.title,
     overview: item.summary ?? "",
     year: item.year ? String(item.year) : "",
+    releaseDate: item.originallyAvailableAt ?? null,
     rating: item.rating ? item.rating.toFixed(1) : "",
     mediaType,
     image: plexImage(base, token, item.thumb),
@@ -1070,7 +1074,7 @@ function isBrowsableLibraryType(type?: string | null): boolean {
   return !type || BROWSABLE_LIBRARY_TYPES.has(type.toLowerCase().trim());
 }
 
-export type HomeServerLibrarySort = "added" | "title" | "rating";
+export type HomeServerLibrarySort = import("./librarySort").LibrarySort;
 export interface HomeServerLibraryPage {
   items: MediaItem[];
   hasMore: boolean;
@@ -1189,7 +1193,7 @@ export async function loadHomeServerLibraryPage(
       const token = server.token ?? "";
       const params = new URLSearchParams({
         "X-Plex-Token": token,
-        sort: sort === "title" ? "titleSort:asc" : sort === "rating" ? "rating:desc" : "addedAt:desc",
+        sort: sort === "release-newest" ? "originallyAvailableAt:desc" : sort === "release-oldest" ? "originallyAvailableAt:asc" : sort === "title" ? "titleSort:asc" : sort === "rating" ? "rating:desc" : "addedAt:desc",
         "X-Plex-Container-Start": String(offset),
         "X-Plex-Container-Size": String(limit),
         includeGuids: "1"
@@ -1213,8 +1217,8 @@ export async function loadHomeServerLibraryPage(
       ParentId: libraryKey,
       Recursive: "true",
       IncludeItemTypes: effectiveFilter === "movie" ? "Movie" : effectiveFilter === "tv" ? "Series" : "Movie,Series",
-      SortBy: sort === "title" ? "SortName" : sort === "rating" ? "CommunityRating" : "DateCreated",
-      SortOrder: sort === "title" ? "Ascending" : "Descending",
+      SortBy: sort === "release-newest" || sort === "release-oldest" ? "PremiereDate" : sort === "title" ? "SortName" : sort === "rating" ? "CommunityRating" : "DateCreated",
+      SortOrder: sort === "title" || sort === "release-oldest" ? "Ascending" : "Descending",
       StartIndex: String(offset),
       Limit: String(limit),
       Fields: "Overview,PrimaryImageAspectRatio,BasicSyncInfo,ImageTags,BackdropImageTags,ProductionYear,CommunityRating,ProviderIds,DateCreated",

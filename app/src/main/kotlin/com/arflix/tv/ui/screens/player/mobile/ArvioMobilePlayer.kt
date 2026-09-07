@@ -131,8 +131,6 @@ fun ArvioMobilePlayer(
     showCastButton: Boolean,
     showPipButton: Boolean,
     seekPreviewFrame: SeekPreviewFrame? = null,
-    isSeekPreviewSupported: Boolean = true,
-    isSeekPreviewLoading: Boolean = false,
     onScrubPreviewPosition: ((Long?) -> Unit)? = null,
     onTogglePlayPause: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -889,8 +887,6 @@ fun ArvioMobilePlayer(
                     isEpisodeListAvailable = uiState.seasonEpisodes.isNotEmpty(),
                     isPromptShowing = isPromptShowing,
                     seekPreviewFrame = seekPreviewFrame,
-                    isSeekPreviewSupported = isSeekPreviewSupported,
-                    isSeekPreviewLoading = isSeekPreviewLoading,
                     onOpenSources = {
                         closeAllPanels()
                         showSourcesDrawer = true

@@ -122,10 +122,16 @@ data class HomeServerCatalogItem(
     val providerName: String = ""
 )
 
-enum class HomeServerLibrarySort {
-    RECENTLY_ADDED,
-    TITLE,
-    RATING
+enum class HomeServerLibrarySort(
+    val plexSort: String,
+    val jellyfinSort: String,
+    val ascending: Boolean = false
+) {
+    RECENTLY_ADDED("addedAt:desc", "DateCreated"),
+    TITLE("titleSort:asc", "SortName", ascending = true),
+    RATING("rating:desc", "CommunityRating"),
+    RELEASE_DATE_NEWEST("originallyAvailableAt:desc", "PremiereDate"),
+    RELEASE_DATE_OLDEST("originallyAvailableAt:asc", "PremiereDate", ascending = true)
 }
 
 internal fun homeServerCatalogMediaType(
@@ -1664,11 +1670,7 @@ class HomeServerRepository @Inject constructor(
                 mapOf(
                     "type" to plexType,
                     "includeGuids" to "1",
-                    "sort" to when (sort) {
-                        HomeServerLibrarySort.RECENTLY_ADDED -> "addedAt:desc"
-                        HomeServerLibrarySort.RATING -> "rating:desc"
-                        HomeServerLibrarySort.TITLE -> "titleSort:asc"
-                    },
+                    "sort" to sort.plexSort,
                     "title" to searchQuery.trim().takeIf { it.isNotBlank() },
                     "X-Plex-Container-Start" to offset.toString(),
                     "X-Plex-Container-Size" to limit.toString()
@@ -1712,12 +1714,8 @@ class HomeServerRepository @Inject constructor(
                         null -> "Movie,Series"
                     },
                     "Fields" to catalogItemFields(),
-                    "SortBy" to when (sort) {
-                        HomeServerLibrarySort.RECENTLY_ADDED -> "DateCreated"
-                        HomeServerLibrarySort.RATING -> "CommunityRating"
-                        HomeServerLibrarySort.TITLE -> "SortName"
-                    },
-                    "SortOrder" to if (sort == HomeServerLibrarySort.TITLE) "Ascending" else "Descending",
+                    "SortBy" to sort.jellyfinSort,
+                    "SortOrder" to if (sort.ascending) "Ascending" else "Descending",
                     "SearchTerm" to searchQuery.trim().takeIf { it.isNotBlank() },
                     "StartIndex" to offset.toString(),
                     "Limit" to limit.toString()

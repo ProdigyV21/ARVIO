@@ -174,6 +174,36 @@ class SeekPreviewRangeProviderTest {
     }
 
     @Test
+    fun `nearby decode keeps existing byte connection valid and explicit release ends it`() = runBlocking {
+        val bytes = ByteArray(32) { it.toByte() }
+        val upstreamClient = client { request ->
+            if (request.method == "HEAD") response(request, 200, ByteArray(0), "Content-Length" to "32")
+            else response(request, 206, bytes, "Content-Range" to "bytes 0-31/32", "Content-Length" to "32")
+        }
+        SeekPreviewRangeProxy(HttpRangeReader(upstreamClient, upstream, emptyMap())).use { proxy ->
+            proxy.prepare()
+            proxy.beginRequest()
+            val session = java.lang.reflect.Proxy.newProxyInstance(
+                NanoHTTPD.IHTTPSession::class.java.classLoader, arrayOf(NanoHTTPD.IHTTPSession::class.java),
+            ) { _, method, _ ->
+                when (method.name) {
+                    "getUri" -> java.net.URI(proxy.url).path
+                    "getMethod" -> NanoHTTPD.Method.GET
+                    "getHeaders" -> mapOf("range" to "bytes=0-31")
+                    else -> null
+                }
+            } as NanoHTTPD.IHTTPSession
+            proxy.serve(session).data.use { body ->
+                assertEquals(0, body.read())
+                proxy.beginRequest()
+                assertEquals(1, body.read())
+                proxy.endRequest()
+                expectFailure { body.read() }
+            }
+        }
+    }
+
+    @Test
     fun `loopback proxy reads large offsets without staging entire remux`() = runBlocking {
         val mediaSize = 50L * 1024 * 1024 * 1024
         val transferred = AtomicLong()

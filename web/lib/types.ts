@@ -16,6 +16,9 @@ export interface MediaItem {
   backdrop?: string | null;
   episodeStill?: string | null;
   progress?: number;
+  resumePositionSeconds?: number;
+  durationSeconds?: number;
+  streamAddonId?: string | null;
   isWatched?: boolean;
   traktId?: number | null;
   imdbId?: string | null;

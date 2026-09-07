@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MediaCard } from "@/components/media/MediaCard";
 import { useApp } from "@/lib/store";
 import type { MediaItem } from "@/lib/types";
+import { LIBRARY_SORT_OPTIONS, compareLibraryItems, type LibrarySort } from "@/lib/librarySort";
 
 const builtins = {
   trakt: [{ id: "watchlist", name: "Watchlist" }, { id: "collection", name: "Collection" }, { id: "watched", name: "Watched" }],
@@ -22,7 +23,7 @@ export function TrackerLibrary({ provider }: { provider: "trakt" | "simkl" }) {
   const [listError, setListError] = useState("");
   const [retry, setRetry] = useState(0);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState("added");
+  const [sort, setSort] = useState<LibrarySort>("added");
   const [count, setCount] = useState(60);
   const generation = useRef(0);
   const scope = `${auth?.userId ?? "local"}:${activeProfile?.id}:${provider}`;
@@ -47,7 +48,7 @@ export function TrackerLibrary({ provider }: { provider: "trakt" | "simkl" }) {
     }).finally(() => { if (generation.current === id) setLoading(false); });
     return () => { generation.current++; };
   }, [scope, source, provider, retry, loadTrackerLibrary]);
-  const visible = useMemo(() => [...items].filter((item) => item.title.toLowerCase().includes(query.toLowerCase())).sort((a, b) => sort === "title" ? a.title.localeCompare(b.title) : sort === "rating" ? Number(b.rating ?? 0) - Number(a.rating ?? 0) : (b.activityAt ?? 0) - (a.activityAt ?? 0)), [items, query, sort]);
+  const visible = useMemo(() => [...items].filter((item) => item.title.toLowerCase().includes(query.toLowerCase())).sort((a, b) => compareLibraryItems(a, b, sort)), [items, query, sort]);
   const selected = lists.find((list) => list.id === source)?.name ?? "Library";
   return (
     <div className="library-workspace has-library-sidebar tracker-workspace">
@@ -59,7 +60,7 @@ export function TrackerLibrary({ provider }: { provider: "trakt" | "simkl" }) {
         <label className="library-mobile-select"><ListVideo size={17} /><select aria-label="Tracker library" value={source} onChange={(event) => setSource(event.target.value)}>{lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
         <div className="library-toolbar"><div className="tracker-library-title"><strong>{selected}</strong><span>{visible.length.toLocaleString()} titles</span></div>
           <label className="library-search"><Search size={17} /><input aria-label="Search library" placeholder="Search library" value={query} onChange={(event) => { setQuery(event.target.value); setCount(60); }} /></label>
-          <select className="watchlist-sort" aria-label="Sort titles" value={sort} onChange={(event) => setSort(event.target.value)}><option value="added">Recently added</option><option value="title">Title A-Z</option><option value="rating">Highest rated</option></select>
+          <select className="watchlist-sort" aria-label="Sort titles" value={sort} onChange={(event) => { setSort(event.target.value as LibrarySort); setCount(60); }}>{LIBRARY_SORT_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select>
           <button className="library-refresh" aria-label="Refresh library" title="Refresh library" disabled={loading} onClick={() => setRetry((value) => value + 1)}><RefreshCw size={17} /></button>
         </div>
         {error && <div className="library-error" role="alert"><span>{error}</span><button className="secondary" onClick={() => setRetry((value) => value + 1)}>Retry</button></div>}

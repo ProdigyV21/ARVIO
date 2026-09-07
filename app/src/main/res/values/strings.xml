@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="library_sort_release_newest">Release date: newest first</string>
+    <string name="library_sort_release_oldest">Release date: oldest first</string>
     <string name="app_name">ARVIO</string>
+    <string name="about_credits">About &amp; Credits</string>
+    <string name="about_credits_description">Metadata attribution and copyright information</string>
+    <string name="tmdb_attribution" translatable="false">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+    <string name="authorized_sources_notice">ARVIO is a media hub for sources you configure. A catalog entry does not grant viewing rights. Connect only services and media you are authorized to use.</string>
+    <string name="credits_and_copyright">Credits &amp; copyright reports</string>
+    <string name="trailers_on_youtube">Trailers on YouTube</string>
+    <string name="trailer_open_failed">Could not open the trailer. Install YouTube or a web browser and try again.</string>
     <string name="now_playing">NOW PLAYING</string>
 
     <!-- Navigation -->

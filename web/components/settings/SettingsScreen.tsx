@@ -111,6 +111,7 @@ const SECTIONS = [
   { id: "catalogs", label: "Catalogs", icon: ListVideo },
   { id: "addons", label: "Addons", icon: Sparkles },
   { id: "metadata", label: "Metadata & Keys", icon: Sparkles },
+  { id: "credits", label: "About & Credits", icon: Eye },
 ] as const;
 
 
@@ -570,6 +571,21 @@ function SectionBody({ section }: { section: SectionId }) {
   };
 
   switch (section) {
+    case "credits":
+      return (
+        <Panel title="About ARVIO">
+          <h3>Credits</h3>
+          <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">
+            <img src="/tmdb-logo.svg" alt="TMDB" width={100} height={16} />
+          </a>
+          <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+          <p>ARVIO is a media hub for sources you configure. Catalog entries do not grant viewing rights.
+            Connect only services and media you are authorized to use.</p>
+          <a className="secondary text-button" href="https://arvio.tv/credits/" target="_blank" rel="noopener noreferrer">
+            <ExternalLink size={16} /> Credits &amp; copyright reports
+          </a>
+        </Panel>
+      );
     case "accounts":
       return <AccountsSection />;
     case "profiles":
@@ -678,35 +694,6 @@ function SectionBody({ section }: { section: SectionId }) {
                 ["fhd", "FHD"],
                 ["4k", "4K"],
               ]}
-            />
-          </Row>
-          <Row label="Trailer auto play">
-            <Toggle
-              value={settings.trailerAutoPlay}
-              onChange={(v) => set({ trailerAutoPlay: v })}
-            />
-          </Row>
-          <Row label="Trailer sound">
-            <Toggle
-              value={settings.trailerSound}
-              onChange={(v) => set({ trailerSound: v })}
-            />
-          </Row>
-          <Row label="Trailer delay (seconds)">
-            <input
-              type="number"
-              min={0}
-              max={10}
-              value={settings.trailerDelaySeconds}
-              onChange={(e) =>
-                set({ trailerDelaySeconds: Number(e.target.value) })
-              }
-            />
-          </Row>
-          <Row label="Show trailers inside cards">
-            <Toggle
-              value={settings.trailerInCards}
-              onChange={(v) => set({ trailerInCards: v })}
             />
           </Row>
           <Row
