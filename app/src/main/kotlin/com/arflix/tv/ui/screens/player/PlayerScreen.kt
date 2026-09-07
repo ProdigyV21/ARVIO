@@ -1723,6 +1723,14 @@ fun PlayerScreen(
         onDispose { playerEngine.release() }
     }
 
+    val trailerPlayerPool = com.arflix.tv.core.player.LocalTrailerPlayerPool.current
+    DisposableEffect(trailerPlayerPool) {
+        trailerPlayerPool?.yield()
+        onDispose {
+            trailerPlayerPool?.reclaim()
+        }
+    }
+
     val exitTransition = rememberPlayerExitTransition(
         animateExit = deviceType.isTouchDevice(),
         pause = { if (!playerReleased) exoPlayer.pause() },
