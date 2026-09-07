@@ -662,7 +662,8 @@ class MediaRepository @Inject constructor(
     fun getDefaultCatalogConfigs(): List<CatalogConfig> = buildPreinstalledDefaults()
 
     companion object {
-        const val STREAMING_COLLECTION_ADDON_URL = "https://pastebin.com/raw/P4gfd98n"
+        const val STREAMING_COLLECTION_ADDON_URL = "https://raw.githubusercontent.com/ProdigyV21/ARVIO/main/config/streaming_addon.txt"
+        const val PASTEBIN_STREAMING_ADDON_URL = "https://pastebin.com/raw/P4gfd98n"
         private val UPLOADED_COVER_BASE = "https://" + "nu" + "vioapp.space/uploads/covers/"
 
         /**
