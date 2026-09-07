@@ -524,6 +524,10 @@ open class StalkerApi(
      * Ask the portal for shows matching [query], the series counterpart of
      * [searchVod].
      *
+     * Returns null when the request itself failed and an empty list when the
+     * portal answered but knows no such show - callers cache the two very
+     * differently.
+     *
      * Same reasoning as there: `get_ordered_list` only ever answers in small
      * pages, so the portal's own `search` does the narrowing instead of a local
      * catalog copy. This is level one of Stalker's two-level series model - the
@@ -532,7 +536,7 @@ open class StalkerApi(
     suspend fun searchSeries(
         query: String,
         maxPages: Int = DEFAULT_VOD_SEARCH_PAGES
-    ): List<StalkerSeriesItem> {
+    ): List<StalkerSeriesItem>? {
         require(maxPages > 0) { "maxPages must be positive" }
         val term = query.trim()
         if (term.isBlank()) return emptyList()
@@ -557,7 +561,7 @@ open class StalkerApi(
     suspend fun getSeasons(
         seriesId: String,
         maxPages: Int = DEFAULT_SEASON_PAGES
-    ): List<StalkerSeriesItem> {
+    ): List<StalkerSeriesItem>? {
         require(maxPages > 0) { "maxPages must be positive" }
         val id = seriesId.trim()
         if (id.isBlank()) return emptyList()
@@ -584,7 +588,7 @@ open class StalkerApi(
         baseUrl: String,
         maxPages: Int,
         failureLabel: String
-    ): List<StalkerSeriesItem> {
+    ): List<StalkerSeriesItem>? {
         val results = mutableListOf<StalkerSeriesItem>()
         val seenKeys = HashSet<String>()
         try {
@@ -617,6 +621,8 @@ open class StalkerApi(
             if (e is kotlinx.coroutines.CancellationException) throw e
 
             System.err.println("[Stalker] $failureLabel failed: ${e.message}")
+            // See searchVod: a failure is null, never an empty result set.
+            return null
         }
         return results
     }

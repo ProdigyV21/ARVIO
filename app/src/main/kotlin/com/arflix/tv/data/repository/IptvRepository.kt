@@ -6165,10 +6165,11 @@ class IptvRepository @Inject constructor(
         val key = StalkerVodSearchCacheKey(portal.id, fingerprint, term.lowercase(Locale.US))
         val now = System.currentTimeMillis()
         stalkerSeriesSearchCache[key]?.let { cached ->
-            if (now - cached.fetchedAtMs < stalkerVodSearchCacheTtlMs) return cached.items
+            if (now - cached.fetchedAtMs < cacheTtlFor(cached.items)) return cached.items
             stalkerSeriesSearchCache.remove(key)
         }
-        val items = api.searchSeries(term)
+        // See stalkerVodSearch: a failed request is not an answer.
+        val items = api.searchSeries(term) ?: return emptyList()
         if (stalkerSeriesSearchCache.size >= maxStalkerVodSearchCacheEntries) {
             stalkerSeriesSearchCache.clear()
         }
@@ -6190,10 +6191,12 @@ class IptvRepository @Inject constructor(
         val key = StalkerSeasonsCacheKey(portal.id, fingerprint, seriesId)
         val now = System.currentTimeMillis()
         stalkerSeasonsCache[key]?.let { cached ->
-            if (now - cached.fetchedAtMs < stalkerVodSearchCacheTtlMs) return cached.items
+            if (now - cached.fetchedAtMs < cacheTtlFor(cached.items)) return cached.items
             stalkerSeasonsCache.remove(key)
         }
-        val items = api.getSeasons(seriesId)
+        // A failed season fetch must not be remembered as "this show has no
+        // seasons" - that is what left a bound show unplayable for hours.
+        val items = api.getSeasons(seriesId) ?: return emptyList()
         if (stalkerSeasonsCache.size >= maxStalkerSeasonsCacheEntries) {
             stalkerSeasonsCache.clear()
         }
