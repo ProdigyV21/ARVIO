@@ -67,6 +67,16 @@ android {
             "APP_ANON_KEY",
             "\"${escapeBuildConfigString(localSecretValue("APP_ANON_KEY").ifBlank { localSecretValue("SUPABASE_ANON_KEY") })}\""
         )
+        buildConfigField(
+            "int",
+            "TELEGRAM_API_ID",
+            localSecretValue("TELEGRAM_API_ID").ifBlank { "23905496" }
+        )
+        buildConfigField(
+            "String",
+            "TELEGRAM_API_HASH",
+            "\"${escapeBuildConfigString(localSecretValue("TELEGRAM_API_HASH").ifBlank { "1e48b355edfe55f9a4fbf8d3c2324628" })}\""
+        )
 
 
         // Keep release downloads ARM-universal by default. Developers can add x86

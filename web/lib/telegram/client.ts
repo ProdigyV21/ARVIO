@@ -104,6 +104,11 @@ async function loadGram(sessionString: string): Promise<Gram> {
   const session = new StringSession(sessionString);
   const client = new TelegramClient(session, TELEGRAM_API_ID, TELEGRAM_API_HASH, {
     connectionRetries: 5,
+    deviceModel: "ARVIO Web",
+    appVersion: "1.0.0",
+    systemVersion: typeof navigator !== "undefined" ? navigator.platform || "Web" : "Web",
+    langCode: typeof navigator !== "undefined" ? navigator.language || "en" : "en",
+    systemLangCode: typeof navigator !== "undefined" ? navigator.language || "en" : "en",
     // GramJS auto-selects the browser WebSocket transport; keep logs quiet.
     baseLogger: undefined,
   });

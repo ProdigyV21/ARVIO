@@ -1,8 +1,14 @@
 package com.arflix.tv.data.telegram
 
 import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import android.util.Log
+import com.arflix.tv.BuildConfig
 import com.arflix.tv.R
+import com.arflix.tv.util.DeviceType
+import com.arflix.tv.util.detectDeviceType
+import java.util.Locale
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -105,6 +111,16 @@ class TelegramClient @Inject constructor(
     private fun sendTdlibParameters() {
         val dbDir = File(context.filesDir, "tdlib").absolutePath
         val filesDir = File(context.filesDir, "tdlib_files").absolutePath
+        val deviceType = detectDeviceType(context)
+        val customName = getCustomDeviceNameOrNull(context)
+        val deviceModel = resolveTelegramDeviceModel(deviceType, Build.MODEL.orEmpty(), customName)
+        val systemVersion = if (Build.VERSION.RELEASE.isNullOrBlank()) {
+            "Android API ${Build.VERSION.SDK_INT}"
+        } else {
+            "Android ${Build.VERSION.RELEASE}"
+        }
+        val langCode = Locale.getDefault().toLanguageTag().ifBlank { "en" }
+
         client?.send(TdApi.SetTdlibParameters().also { p ->
             p.apiId = TelegramConfig.API_ID
             p.apiHash = TelegramConfig.API_HASH
@@ -112,9 +128,10 @@ class TelegramClient @Inject constructor(
             p.filesDirectory = filesDir
             p.useMessageDatabase = false
             p.useSecretChats = false
-            p.systemLanguageCode = "en"
-            p.deviceModel = "Android TV"
-            p.applicationVersion = "1.0"
+            p.systemLanguageCode = langCode
+            p.deviceModel = deviceModel
+            p.systemVersion = systemVersion
+            p.applicationVersion = BuildConfig.VERSION_NAME
         }, null)
     }
 
@@ -235,3 +252,54 @@ class TelegramClient @Inject constructor(
         _authState.value = TelegramAuthState.Idle
     }
 }
+
+internal fun resolveTelegramDeviceModel(
+    deviceType: DeviceType,
+    rawModel: String = Build.MODEL.orEmpty(),
+    customDeviceName: String? = null
+): String {
+    val candidate = customDeviceName?.trim()
+        ?.takeIf { it.isNotEmpty() && !isGenericDeviceName(it) }
+        ?: rawModel.trim()
+
+    val cleanName = candidate.takeIf { !isGenericDeviceName(it) }.orEmpty()
+
+    val formatted = when {
+        cleanName.isEmpty() -> {
+            when (deviceType) {
+                DeviceType.TV -> "ARVIO TV"
+                DeviceType.TABLET -> "ARVIO Tablet"
+                DeviceType.PHONE -> "ARVIO"
+            }
+        }
+        cleanName.contains("arvio", ignoreCase = true) -> cleanName
+        deviceType == DeviceType.TV -> {
+            if (cleanName.contains("tv", ignoreCase = true)) "ARVIO ($cleanName)"
+            else "ARVIO TV ($cleanName)"
+        }
+        deviceType == DeviceType.TABLET -> "ARVIO Tablet ($cleanName)"
+        else -> "ARVIO ($cleanName)"
+    }
+    return formatted.take(64)
+}
+
+internal fun isGenericDeviceName(name: String): Boolean {
+    val lower = name.lowercase().trim()
+    return lower.isEmpty() ||
+        lower == "unknown" ||
+        lower == "generic" ||
+        lower == "android" ||
+        lower == "android tv" ||
+        lower == "google tv" ||
+        lower.startsWith("sdk_") ||
+        lower.startsWith("generic_") ||
+        lower.startsWith("android sdk") ||
+        lower.contains("emulator")
+}
+
+internal fun getCustomDeviceNameOrNull(context: Context): String? = try {
+    Settings.Global.getString(context.contentResolver, "device_name")
+} catch (_: Throwable) {
+    null
+}
+
