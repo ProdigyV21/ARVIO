@@ -67,6 +67,24 @@ class PlayerSourceDiscoveryTest {
         assertTrue(emissions.last().isFinal)
     }
 
+    @Test fun slowDownstreamDoesNotCauseFlowExceptionTransparencyViolation() = runTest {
+        val plugin = stream("plugin")
+        val job = launch {
+            mergePlayerSourceDiscovery(
+                flowOf(result(listOf(stream("addon")), final = true)),
+                flow {
+                    emit(listOf(plugin))
+                    emit(listOf(plugin))
+                    awaitCancellation()
+                }
+            ).collect {
+                delay(35_000L)
+            }
+        }
+        advanceTimeBy(35_000L)
+        job.cancel()
+    }
+
     @Test fun leavingPlayerCancelsDiscoveryWithoutReportingFailure() = runTest {
         var cancelled = false
         var failed = false
