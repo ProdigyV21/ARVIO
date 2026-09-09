@@ -137,6 +137,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import io.github.peerless2012.ass.media.kt.buildWithAssSupport
+import io.github.peerless2012.ass.media.type.AssRenderType
 import coil.compose.AsyncImage
 import com.arflix.tv.ArflixApplication
 import com.arflix.tv.network.OkHttpProvider
@@ -1152,7 +1154,10 @@ fun PlayerScreen(
                     .build(),
                 /* handleAudioFocus = */ true
             )
-            .build().apply {
+            .buildWithAssSupport( // Enable ASS subtitle rendering for stylized subtitles
+                context,
+                AssRenderType.OVERLAY_OPEN_GL
+            ).apply {
                 // Ensure volume is at maximum
                 volume = 1.0f
 
