@@ -768,6 +768,53 @@ class StalkerApiTest {
     }
 
     @Test
+    fun `searchSeries asks every category and lets the portal sort by name`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_ordered_list") -> """
+                    {"js":{"total_items":1,"max_page_items":14,"data":[
+                      {"id":"7","name":"Breaking Bad","cmd":"/media/bb"}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        api.searchSeries("Breaking Bad")
+
+        val url = requests.single()
+        assertTrue(url.contains("&category=0&"))
+        assertTrue(url.contains("&sortby=name&"))
+        assertFalse(url.contains("category=*"))
+        assertFalse(url.contains("sortby=added"))
+    }
+
+    @Test
+    fun `getSeasons asks for the seasons of one show without imposing an order`() = runTest {
+        // A show addressed by movie_id needs no sorting at all - a full client
+        // sends none, and a build that reads sortby as a filter would answer
+        // this call with nothing.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("movie_id=7") -> """
+                    {"js":{"total_items":1,"max_page_items":14,"data":[
+                      {"id":"71","name":"Season 1","cmd":"/media/bb/s1","series":[1,2]}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        api.getSeasons("7")
+
+        val url = requests.single()
+        assertTrue(url.contains("&movie_id=7"))
+        assertFalse(url.contains("sortby"))
+    }
+
+    @Test
     fun `searchVod never asks for more pages than its cap allows`() = runTest {
         // A portal that reports a total far beyond what we page for must not
         // pull the whole catalogue down: the cap is what keeps a search a
@@ -943,7 +990,7 @@ class StalkerApiTest {
         assertEquals(1, requests.size)
         assertTrue(requests.single().contains("type=series&action=get_ordered_list"))
         assertTrue(requests.single().contains("search=Breaking"))
-        assertTrue(requests.single().contains("category=*"))
+        assertTrue(requests.single().contains("category=0"))
         // Binding a show must never cost a link either.
         assertTrue(requests.none { it.contains("action=create_link") })
     }

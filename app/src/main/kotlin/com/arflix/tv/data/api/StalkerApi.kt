@@ -542,8 +542,9 @@ open class StalkerApi(
         if (term.isBlank()) return emptyList()
         val encodedTerm = java.net.URLEncoder.encode(term, "UTF-8")
         return fetchSeriesPages(
+            // Same two parameters as [searchVod], for the same reasons.
             baseUrl = "$apiBase/server/load.php?type=series&action=get_ordered_list" +
-                "&category=*&sortby=added&search=$encodedTerm",
+                "&category=0&sortby=name&search=$encodedTerm",
             maxPages = maxPages,
             failureLabel = "series search"
         )
@@ -567,8 +568,11 @@ open class StalkerApi(
         if (id.isBlank()) return emptyList()
         val encodedId = java.net.URLEncoder.encode(id, "UTF-8")
         return fetchSeriesPages(
+            // No `sortby`: the seasons of one show arrive in the portal's own
+            // order, and asking for another one only risks a build that reads
+            // the parameter as a filter.
             baseUrl = "$apiBase/server/load.php?type=series&action=get_ordered_list" +
-                "&movie_id=$encodedId&sortby=added",
+                "&movie_id=$encodedId",
             maxPages = maxPages,
             failureLabel = "get_seasons movie_id=$id"
         )
