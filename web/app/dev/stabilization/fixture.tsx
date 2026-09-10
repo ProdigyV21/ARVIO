@@ -29,7 +29,7 @@ const posters = ["/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg", "/qJ2tW6WMUDux911r6m7haRef0
 const titles = ["Dune: Part Two", "The Dark Knight", "Interstellar", "The Shawshank Redemption"];
 const media: MediaItem[] = Array.from({ length: 24 }, (_, i) => ({ id: -i - 1, mediaType: "movie", title: titles[i % 4], year: "2024", image: `https://image.tmdb.org/t/p/w500${posters[i % 4]}`, backdrop: `https://image.tmdb.org/t/p/w780${posters[i % 4]}`, rating: "8.4", overview: "Controlled test data", activityAt: 100 - i }));
 
-export function StabilizationFixture() {
+export function StabilizationFixture({ testLiveUrl }: { testLiveUrl?: string } = {}) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   const [page, setPage] = useState("tv");
@@ -83,6 +83,8 @@ export function StabilizationFixture() {
       <PlayerOverlay />
       <div className="fixture-tools">
         <button onClick={() => { setPage("tv"); setActiveChannel(channels[0]); setActiveStream({ source: "CC0 live-player sample", addonName: "Test fixture", quality: "HD", size: "", url: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" }); }}>Test guide mini-player</button>
+        <button onClick={() => { setPage("tv"); setActiveChannel(channels[0]); setActiveStream({ source: "Unavailable live-player sample", addonName: "Test fixture", quality: "HD", size: "", url: "https://example.invalid/unavailable.m3u8" }); }}>Test mini-player startup failure</button>
+        {testLiveUrl && <button onClick={() => { setPage("tv"); setActiveChannel(channels[0]); setActiveStream({ source: "Provider playback verification", addonName: "Live TV", quality: "Live", size: "", url: testLiveUrl }); }}>Test supplied IPTV source</button>}
         <button onClick={() => { setSettings((old) => ({ ...old, homeServers: (["plex", "jellyfin", "emby"] as const).map((type) => ({ id: type, type, name: `Fixture ${type}`, url: `https://${type}.invalid`, token: "fixture-only", userId: "fixture", enabled: true })) })); setPage("library"); }}>Test home server libraries</button>
         <button onClick={() => setActiveStream({ source: "YouTube player example", addonName: "Test fixture", quality: "", size: "", url: "https://www.youtube.com/watch?v=M7lc1UVf-VE" })}>Test YouTube embed</button>
         <button onClick={() => setActiveStream({ source: "Browser conversion test", addonName: "Local fixture", quality: "540p", size: "", url: "http://127.0.0.1:3099/media/multi.mkv", remux: true })}>Test MKV browser player</button>

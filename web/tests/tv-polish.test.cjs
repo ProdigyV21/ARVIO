@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { load } = require('./load.cjs');
+const { load, storage } = require('./load.cjs');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
@@ -40,4 +40,21 @@ test('late cloud hydration keeps the profile selected on this device', () => {
   assert.equal(hydratedProfileId('deleted', profiles, 'shai'), 'shai');
   assert.equal(hydratedProfileId(null, profiles, 'missing'), 'arvind');
   assert.equal(hydratedProfileId('deleted', [], 'missing'), null);
+});
+
+test('unhydrated settings never overwrite cloud playlists, including legacy queued defaults', async () => {
+  const persisted = storage();
+  const writes = [];
+  const auth = { session: { userId: 'test' } };
+  const outbox = load('lib/settingsOutbox.ts', { './storage': persisted, './cloud': { saveCloudSettings: async (...args) => writes.push(args) } });
+  outbox.queueSettings(auth, 'new-profile', { iptvPlaylists: [] }, null);
+  assert.equal(outbox.hasPendingSettings(auth), false);
+  persisted.saveStored('arvio.web.settingsOutbox.v1:test', [{ id: 'legacy', profileId: 'new-profile', settings: { iptvPlaylists: [] }, baseline: null, changedAt: 1 }]);
+  await outbox.flushSettingsOutbox(auth);
+  assert.equal(writes.length, 0);
+  assert.equal(outbox.hasPendingSettings(auth), false);
+  // An explicit deletion after hydration must still sync.
+  outbox.queueSettings(auth, 'new-profile', { iptvPlaylists: [] }, { iptvPlaylists: [{ id: 'one' }] });
+  await outbox.flushSettingsOutbox(auth);
+  assert.equal(writes.length, 1);
 });

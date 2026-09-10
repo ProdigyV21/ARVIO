@@ -1595,7 +1595,7 @@ function VideoPlayer({
         ))}
       </video>
       {dock.docked && <div className="player-dock-controls">
-        <span>ON AIR</span>
+        <span role="status">{error ? "Unavailable" : buffering ? "Connecting" : playing ? "LIVE" : "Paused"}</span>
         <button type="button" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause" : "Play"}>{playing ? <Pause size={20} /> : <Play size={20} />}</button>
         <button type="button" onClick={dock.expand} aria-label="Expand player" title="Expand player"><Maximize size={20} /></button>
         <button type="button" onClick={onClose} aria-label="Stop channel" title="Stop channel"><X size={20} /></button>

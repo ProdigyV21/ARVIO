@@ -1329,6 +1329,9 @@ export function AppProvider({
     } catch {
       baseline = null;
     }
+    // Profile hydration is asynchronous. Until this profile has an acknowledged
+    // baseline, settings still belong to the previous profile or browser defaults.
+    if (!baseline) return;
     const accountId = authClient.session?.userId;
     const submitted = { settings, activeProfileId };
     setSettingsSyncState("pending");

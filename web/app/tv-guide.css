@@ -9,10 +9,10 @@
 .player-overlay.player-docked .player-error p { font-size: 13px; }
 .player-overlay.player-docked .player-error-actions { flex-wrap: wrap; gap: 4px; }
 .player-overlay.player-docked .player-error-actions button { font-size: 12px; padding: 6px; min-height: 32px; }
-.player-dock-controls { position: absolute; z-index: 5; bottom: 8px; inset-inline: 8px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
+.player-dock-controls { position: absolute; z-index: 50; bottom: 8px; inset-inline: 8px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
 .player-dock-controls span { color: white; background: #000b; border-radius: 3px; padding: 4px 6px; font-size: 11px; margin-inline-end: auto; }
 .player-dock-controls button, .player-dock-return { pointer-events: auto; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 4px; background: #000b; color: white; }
-.player-dock-return { position: absolute; inset-inline-end: 24px; top: 90px; z-index: 20; }
+.player-dock-return { position: absolute; inset-inline-end: 24px; top: 90px; z-index: 50; }
 .player-dock-controls button:focus-visible, .player-dock-return:focus-visible { outline: 2px solid white; }
 .livetv-preview-play { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; border: 0; border-radius: inherit; background: #0003; color: white; cursor: pointer; }
 .livetv-preview-play svg { box-sizing: content-box; padding: 12px; background: #000b; border: 1px solid #ffffff80; border-radius: 50%; }

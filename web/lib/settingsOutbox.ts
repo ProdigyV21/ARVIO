@@ -13,7 +13,7 @@ export function hasPendingSettings(auth: AuthClient, profileId?: string | null) 
 }
 
 export function queueSettings(auth: AuthClient, profileId: string, settings: AppSettings, baseline: AppSettings | null) {
-  if (!auth.session) return;
+  if (!auth.session || !baseline) return;
   const key = keyFor(auth.session.userId);
   const entries = loadStored<Pending[]>(key, []);
   const previous = entries.find((entry) => entry.profileId === profileId);
@@ -32,6 +32,12 @@ export async function flushSettingsOutbox(auth: AuthClient): Promise<void> {
     while (auth.session?.userId === userId) {
       const entry = loadStored<Pending[]>(key, [])[0];
       if (!entry) return;
+      // Older clients queued full default snapshots before profile hydration.
+      // They have no acknowledged baseline, so cannot safely describe user edits.
+      if (!entry.baseline) {
+        saveStored(key, loadStored<Pending[]>(key, []).filter(pending => pending.id !== entry.id));
+        continue;
+      }
       await saveCloudSettings(auth, entry.settings, [], entry.profileId, [], entry.baseline, entry.changedAt);
       // Do not acknowledge a newer edit queued while the request was in flight.
       saveStored(key, loadStored<Pending[]>(key, []).filter((pending) => pending.id !== entry.id));
