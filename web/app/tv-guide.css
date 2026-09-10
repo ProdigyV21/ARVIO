@@ -1,4 +1,5 @@
 /* TV workspace: shared charcoal surfaces, independent selected/focused states. */
+.app-shell:has(.player-overlay:not(.player-docked)) > :is(.sidebar, .mobile-header, .mobile-bottom-nav) { visibility: hidden; pointer-events: none; }
 .player-overlay.player-docked { z-index: 40; border-radius: 4px; overflow: hidden; background: #080808; }
 .player-overlay.player-docked > .player-top, .player-overlay.player-docked > .player-controls,
 .player-overlay.player-docked > .player-panel { display: none; }

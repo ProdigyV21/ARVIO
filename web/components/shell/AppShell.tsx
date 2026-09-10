@@ -30,7 +30,7 @@ const ACCENTS: Record<string, string> = {
 };
 
 export function AppShell() {
-  const { view, section, settings, selected, activeStream } = useApp();
+  const { view, section, settings, selected, activeStream, activeChannel } = useApp();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ export function AppShell() {
       className={`app-shell ${settings.oledBlack ? "oled" : ""} ${settings.spoilerBlur ? "spoiler-blur" : ""}`}
       style={{ ["--accent" as string]: accent }}
     >
-      {!activeStream && <TopNav />}
+      {(!activeStream || (section === "tv" && activeChannel)) && <TopNav />}
 
       <section className="content">
         {selected ? (
