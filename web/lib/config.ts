@@ -1,5 +1,5 @@
 function envValue(value: string | undefined, fallback = "") {
-  return value && !value.startsWith("$") ? value : fallback;
+  return value && !value.startsWith("$") && !value.includes("****") ? value : fallback;
 }
 
 const selfHosted = process.env.NEXT_PUBLIC_SELF_HOSTED === "true";

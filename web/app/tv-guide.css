@@ -14,6 +14,9 @@
 .player-dock-controls button, .player-dock-return { pointer-events: auto; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 4px; background: #000b; color: white; }
 .player-dock-return { position: absolute; inset-inline-end: 24px; top: 90px; z-index: 20; }
 .player-dock-controls button:focus-visible, .player-dock-return:focus-visible { outline: 2px solid white; }
+.livetv-preview-play { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; border: 0; border-radius: inherit; background: #0003; color: white; cursor: pointer; }
+.livetv-preview-play svg { box-sizing: content-box; padding: 12px; background: #000b; border: 1px solid #ffffff80; border-radius: 50%; }
+.livetv-preview-play:focus-visible { outline: 2px solid white; outline-offset: -2px; }
 .screen.livetv-shell { padding-inline: 16px; animation: none; transform: none; }
 .tv-drawer-scrim { display: none; }
 .tv-guide-workspace { --guide-channel-width: 260px; gap: 0; border-radius: 0; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: clamp(210px, 28dvh, 286px) minmax(0, 1fr); height: calc(100dvh - clamp(84px, 9vh, 108px) - 24px); min-height: 480px; flex: none; transition: grid-template-columns 240ms cubic-bezier(.2,.7,.2,1); }
@@ -48,7 +51,7 @@
 .tv-guide-workspace button:focus-visible, .tv-event-picker button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; box-shadow: none; }
 .tv-guide-workspace .livetv-list { grid-column: 2; grid-row: 2; background: #080808; border: 0; border-radius: 0; min-width: 0; min-height: 0; overflow: hidden; }
 .tv-guide-workspace .livetv-detail { grid-column: 2; grid-row: 1; position: static; display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 38%); align-content: start; gap: 8px 20px; background: #080808; border: 0; border-bottom: 1px solid #202020; border-radius: 0; padding: 8px 20px 16px; max-height: none; overflow: auto; }
-.tv-guide-workspace .livetv-detail-art { grid-column: 2; grid-row: 1 / 5; width: 100%; height: auto; aspect-ratio: 16 / 9; max-height: none; border-radius: 4px; background: #141414; }
+.tv-guide-workspace .livetv-detail-art { position: relative; grid-column: 2; grid-row: 1 / 5; width: 100%; height: auto; aspect-ratio: 16 / 9; max-height: none; border-radius: 4px; background: #141414; }
 .tv-guide-workspace .livetv-detail-art img { width: 100%; height: 100%; object-fit: contain; padding: 22px; }
 .tv-guide-workspace .livetv-detail { height: 100%; min-height: 0; }
 .tv-guide-workspace .livetv-detail { row-gap: 4px; }
@@ -128,9 +131,9 @@
 .tv-event-stamp.is-on-air::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #ff3b30; }
 .tv-event-card > strong { font-size: 18px; font-weight: 500; line-height: 1.4; height: 2.8em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; max-width: 100%; overflow: hidden; overflow-wrap: anywhere; }
 .tv-event-card small { font-size: 15px; color: #b9c0cb; }
-.tv-event-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tv-event-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; }
 .tv-event-meta span { display: flex; gap: 8px; align-items: center; font-size: 14px; }
-.tv-event-meta .tv-event-competition { display: block; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-event-meta .tv-event-competition { display: block; min-width: 0; flex: 1 1 100%; white-space: normal; overflow-wrap: anywhere; }
 .tv-event-meta > span:last-child { flex-shrink: 0; }
 .tv-sports-empty { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #bbb; padding: 24px; text-align: center; }
 .tv-sports-empty button { width: auto; min-height: 44px; padding: 10px 16px; }
@@ -145,15 +148,15 @@
 @keyframes tv-picker-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .tv-event-picker h2 { font-size: 28px; margin: 8px 0 0; }
 .tv-event-picker header p { color: #b9c0cb; margin: 0; }
-.tv-event-picker h3 { font-size: 22px; color: #eee; margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+.tv-event-picker h3 { font-size: 22px; color: #eee; margin: 16px 0 8px; display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; align-items: center; }
 .tv-event-picker h3 span { font-size: 16px; color: #b9c0cb; }
 .tv-event-picker header button { flex-shrink: 0; width: 44px; height: 44px; border: 0; color: #eee; background: #242424; border-radius: 6px; }
 .tv-event-picker .virtual-list { height: min(50dvh, 520px, calc(var(--source-count, 8) * 72px)); min-height: 72px; }
 .tv-event-picker [data-virtual-index] { padding: 0; }
 .tv-event-source { display: flex; align-items: center; gap: 20px; width: 100%; height: 72px; padding: 8px 20px; background: transparent; color: #eee; border: 0; border-bottom: 1px solid #333; border-radius: 0; text-align: start; }
 .tv-event-source:focus-visible { background: #282828; border-radius: 4px; }
-.tv-event-source img, .tv-source-logo-fallback { width: 155px; height: 52px; object-fit: contain; flex-shrink: 0; }
-.tv-event-source span { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 6px; }
+.tv-source-logo-fallback { width: 120px; height: 52px; overflow: hidden; flex-shrink: 0; }
+.tv-event-source > span:not(.tv-source-logo-fallback) { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 6px; }
 .tv-event-source .tv-source-logo-fallback { flex: none; display: grid; place-items: center; }
 .tv-source-play { display: none; flex-shrink: 0; }
 .tv-event-source:focus-visible .tv-source-arrow { display: none; }
@@ -204,7 +207,7 @@
   .tv-event-picker h3 { font-size: 16px; }
   .tv-event-picker h3 span { font-size: 12px; }
   .tv-event-source { padding: 8px; gap: 10px; }
-  .tv-event-source img, .tv-source-logo-fallback { width: 48px; height: 38px; }
+  .tv-source-logo-fallback { width: 48px; height: 38px; }
   .tv-event-card strong { font-size: 16px; }
   .tv-event-card small { font-size: 12px; }
   .tv-event-meta span { font-size: 11px; }

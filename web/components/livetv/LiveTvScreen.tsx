@@ -489,6 +489,7 @@ export function LiveTvScreen() {
               <>
                 <div id="live-tv-player-dock" className={`livetv-detail-art ${activeChannel ? "has-live-playback" : ""}`} aria-label="Live player">
                   <ChannelLogo channel={selectedChannel} size={48} />
+                  {!activeChannel && <button type="button" className="livetv-preview-play" aria-label={`Play ${selectedChannel.name}`} title={`Play ${selectedChannel.name}`} onClick={() => watchChannel(selectedChannel)}><Play size={28} fill="currentColor" /></button>}
                 </div>
                 <p className="livetv-detail-group">{selectedChannel.group || "Live TV"}</p>
                 <div className="livetv-channel-identity"><div className="tv-identity-logo"><ChannelLogo channel={selectedChannel} size={28} /></div><span>{selectedChannel.name}{selectedChannel.qualityLabel ? ` · ${selectedChannel.qualityLabel}` : ""}</span></div>

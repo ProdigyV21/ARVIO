@@ -55,7 +55,7 @@ jobs:
         run: |
           trakt_id="$PUBLIC_TRAKT_ID"
           app_key="$PUBLIC_APP_KEY"
-          if [[ -z "$trakt_id" || -z "$app_key" ]]; then
+          if [[ ${#trakt_id} -lt 10 || ${#app_key} -lt 40 || "$trakt_id" == *'*'* || "$app_key" == *'*'* ]]; then
             echo "Missing required public Trakt/cloud configuration; refusing to publish a stale-only client." >&2
             exit 1
           fi
@@ -63,6 +63,8 @@ jobs:
           echo "::add-mask::$app_key"
           printf 'NEXT_PUBLIC_TRAKT_CLIENT_ID=%s\n' "$trakt_id" >> "$GITHUB_ENV"
           printf 'NEXT_PUBLIC_ARVIO_APP_ANON_KEY=%s\n' "$app_key" >> "$GITHUB_ENV"
+          printf 'ARVIO_BUILD_APP_ANON_KEY=%s\n' "$app_key" >> "$GITHUB_ENV"
+          echo 'ARVIO_VERIFY_BUILD_CONFIG=true' >> "$GITHUB_ENV"
 
       - name: Build Netlify bundle
         env:

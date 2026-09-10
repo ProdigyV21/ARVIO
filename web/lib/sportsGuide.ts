@@ -38,6 +38,12 @@ export const isConfirmedLive = (event: SportsGuideEvent, now: number) => event.f
 export const isOnAir = (event: SportsGuideEvent, now: number) => !["finished", "postponed"].includes(event.fixture?.status ?? "") && (isConfirmedLive(event, now) || Object.values(event.schedules ?? { fallback: event.programme }).some(p => programmeOnAir(p, now)));
 export const availableEventChannels = (event: SportsGuideEvent, now: number) => event.channels.filter(ch => programmeOnAir(event.schedules?.[ch.id] ?? event.programme, now));
 export const hasSportsChannels = (event: SportsGuideEvent, now: number) => (isOnAir(event, now) ? availableEventChannels(event, now) : event.channels).length > 0 || (event.possibleChannels?.length ?? 0) > 0;
+export function sportsChannelSummary(event: SportsGuideEvent, now: number): string {
+  const matched = new Set((isOnAir(event, now) ? availableEventChannels(event, now) : event.channels).map(ch => ch.id));
+  const possible = new Set((event.possibleChannels ?? []).filter(ch => !matched.has(ch.id)).map(ch => ch.id));
+  return [matched.size ? `${matched.size} guide ${matched.size === 1 ? "match" : "matches"}` : "",
+    possible.size ? `${possible.size} possible` : ""].filter(Boolean).join(" · ") || "No channels";
+}
 export const sportsArtworkKey = (title: string) => title.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase()
   .replace(/^(live\s*[:|-]\s*|live\s+)/, "").replace(/^(football|soccer|basketball|baseball|tennis|ice hockey|american football|boxing|mma|cricket)\s*:\s*/, "")
   .replace(/\b(vs\.?|versus|v\.)\s+/g, "vs ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();

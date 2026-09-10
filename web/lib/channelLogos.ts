@@ -15,9 +15,11 @@ export function channelLogoIndex(entries: LogoEntry[]) {
   return (epgId: string | undefined, name: string): string[] => {
     const exact = epgId && ids.get(epgId.trim().toLowerCase());
     if (exact) return exact[3];
-    const prefix = /^([A-Za-z]{2,3})\s*[|:]\s*/.exec(name.trim());
+    // A provider qualifier is not part of the station name (e.g. UK-NOWTV).
+    const cleaned = name.trim().replace(/^(?:4K|8K|UHD|FHD|HD)\s*[|:]\s*/i, "");
+    const prefix = /^([A-Za-z]{2,3})(?:-[A-Za-z0-9]+)?\s*[|:]\s*/.exec(cleaned);
     const country = prefix && countries[prefix[1].toUpperCase()];
-    const title = country ? name.trim().slice(prefix![0].length) : name;
+    const title = country ? cleaned.slice(prefix![0].length) : cleaned;
     const matches = (names.get(nameKey(title)) ?? []).filter(entry => !country || (countries[entry[1].toUpperCase()] ?? entry[1].toUpperCase()) === country);
     return matches.length === 1 ? matches[0][3] : [];
   };

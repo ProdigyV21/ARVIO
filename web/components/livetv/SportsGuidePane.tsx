@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { X, Tv, PanelLeft, ChevronRight, Play, RefreshCw } from "lucide-react";
-import { guideSports, isOnAir, isConfirmedLive, hasSportsChannels, availableEventChannels, sportsGuideRows, type SportsGuideEvent } from "@/lib/sportsGuide";
+import { guideSports, isOnAir, isConfirmedLive, hasSportsChannels, availableEventChannels, sportsGuideRows, sportsChannelSummary, type SportsGuideEvent } from "@/lib/sportsGuide";
 import { sportsChannelKey, sportsBroadcasterKeys } from "@/lib/sportsCatalogue";
 import type { InstalledAddon, IptvChannel, IptvNowNext } from "@/lib/types";
 import { cachedSportsMetadata, loadSportsGuideArtwork, loadSportsMetadata, type SportsEventArtwork } from "@/lib/sportsArtwork";
@@ -85,7 +85,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   }, [rows.length]);
   const selected = illustratedEvents.find((event) => event.id === selectedId);
   const confirmedChannels = selected ? (isOnAir(selected, now) ? availableEventChannels(selected, now) : selected.channels) : [];
-  const possibleChannels = selected?.possibleChannels ?? [];
+  const possibleChannels = (selected?.possibleChannels ?? []).filter((ch, i, rows) => !confirmedChannels.some(match => match.id === ch.id) && rows.findIndex(other => other.id === ch.id) === i);
   const sourceChannels = [...confirmedChannels, ...possibleChannels];
   const close = () => { dialog.current?.close(); setSelectedId(null); origin.current?.focus({ preventScroll: true }); };
   useEffect(() => {
@@ -146,7 +146,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
           }}
           onClick={(click) => { origin.current = click.currentTarget; setShowScore(false); setSelectedId(event.id); }}>
           <div className="tv-event-art"><EventArtwork event={event} onUnavailable={() => setFailedArtwork(current => new Set([...current, event.id]))} /><span className={`tv-event-stamp${isOnAir(event, now) ? " is-on-air" : ""}`}>{stamp(event)}</span></div>
-          <strong>{event.title}</strong><small className="tv-event-meta"><span className="tv-event-competition">{[sport.title, event.competition].filter(Boolean).join(" · ")}</span>{isOnAir(event, now) && <span><Tv size={16} />{channelCount(availableEventChannels(event, now).length + (event.possibleChannels?.length ?? 0))}</span>}</small>
+          <strong>{event.title}</strong><small className="tv-event-meta"><span className="tv-event-competition">{[sport.title, event.competition].filter(Boolean).join(" · ")}</span>{isOnAir(event, now) && <span><Tv size={16} />{sportsChannelSummary(event, now)}</span>}</small>
         </button>;
       })}</div>
     </section>)}
@@ -155,7 +155,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
       <header>{selected && <div className="tv-event-picker-art"><EventArtwork event={selected} /></div>}<div><p>{selected ? `${stamp(selected)} · ${guideSports.find(s => s.id === selected.sportId)!.title}` : "This event is no longer in the available guide."}</p><h2>{selected?.title ?? "Schedule changed"}</h2></div><button type="button" onClick={close} aria-label="Close"><X /></button></header>
       {selected?.fixture && <div className="tv-event-details"><span>{[selected.competition, selected.fixture.venue, selected.fixture.round ? `Round ${selected.fixture.round}` : undefined].filter(Boolean).join(" · ")}</span>
         {selected.fixture.homeScore !== undefined && selected.fixture.awayScore !== undefined && now - selected.fixture.observedAt < 300_000 && <button type="button" className="secondary" onClick={() => setShowScore(value => !value)}>{showScore ? `${selected.fixture.homeScore} : ${selected.fixture.awayScore}` : "Show score"}</button>}</div>}
-      <h3>{selected && isOnAir(selected, now) ? "Channels" : "Scheduled channels"}<span>{channelCount(sourceChannels.length)}</span></h3>
+      <h3>{selected && isOnAir(selected, now) ? "Channels" : "Scheduled channels"}<span>{selected ? sportsChannelSummary(selected, now) : "No channels"}</span></h3>
       {!sourceChannels.length && <p className="tv-event-no-channels">No matching channels in your playlists.</p>}
       <VirtualList items={sourceChannels} estimate={72} itemKey={(ch) => ch.id} label="Available channels" renderItem={(ch) =>
         <button type="button" className="tv-event-source" disabled={!selected || !isOnAir(selected, now)} onClick={() => {
@@ -165,7 +165,6 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   </section>;
 }
 
-const channelCount = (count: number) => `${count} ${count === 1 ? "channel" : "channels"}`;
 
 function EventArtwork({ event, onUnavailable }: { event: SportsGuideEvent; onUnavailable?: () => void }) {
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);

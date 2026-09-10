@@ -24,7 +24,14 @@ test('time shifts, numbers and regions are not discarded', () => {
     assert.equal(match(undefined, name).length, 0, name);
   }
 });
-test('provider URLs remain primary candidates and unsafe schemes are rejected', () => {
+
+test('provider and quality prefixes do not prevent an exact regional match', () => {
+  assert.equal(match(undefined, 'UK-NOWTV| BBC One FHD').join(), 'bbc');
+  assert.equal(match(undefined, '4K| NL: ESPN UHD').join(), 'nl');
+  assert.equal(match(undefined, '4K| ESPN UHD').length, 0, 'ambiguous ESPN regions must not be guessed');
+  assert.equal(match(undefined, 'UK-NOWTV| BBC One +1').length, 0);
+});
+test('provider fallback URLs are normalized and unsafe schemes are rejected', () => {
   assert.equal(providerLogoUrl('//example.com/logo.png'), 'https://example.com/logo.png');
   assert.equal(providerLogoUrl(btoa('https://example.com/logo.png')), 'https://example.com/logo.png');
   assert.equal(providerLogoUrl('javascript:alert(1)'), undefined);
