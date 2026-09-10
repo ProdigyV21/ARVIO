@@ -5060,7 +5060,8 @@ class PlayerViewModel @Inject constructor(
                 title = lookupTitle,
                 tmdbId = currentMediaId,
                 tvdbId = currentTvdbId,
-                timeoutMs = timeoutMs
+                timeoutMs = timeoutMs,
+                originalTitle = lookupOriginalTitle
             )
         }
 

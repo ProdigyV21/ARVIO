@@ -296,6 +296,44 @@ class IptvRepositoryStalkerVodTest {
         )
     }
 
+    @Test
+    fun `a show listed only under its original name is matched too`() {
+        val repository = newRepository()
+        val shows = listOf(
+            StalkerApi.StalkerSeriesItem(
+                id = "1",
+                name = "EN - Money Heist",
+                cmd = "/media/1.mpg",
+                year = "2017"
+            )
+        )
+
+        val matches = repository.matchStalkerSeriesItems(
+            items = shows,
+            normalizedTitle = "haus des geldes",
+            normalizedTmdb = null,
+            inputYear = 2017,
+            normalizedOriginalTitle = "money heist"
+        )
+
+        assertEquals(listOf("1"), matches.map { it.id })
+    }
+
+    @Test
+    fun `a plain show title is unaffected by the extra term`() {
+        val repository = newRepository()
+
+        // Series and movies share stalkerVodSearchQueries, so the series path
+        // must stay a single request when both names agree.
+        assertEquals(
+            listOf("Breaking Bad"),
+            repository.stalkerVodSearchQueries(
+                title = "Breaking Bad",
+                originalTitle = "Breaking Bad"
+            )
+        )
+    }
+
     // ── Portal isolation (C1) ─────────────────────────────────────────────
 
     @Test

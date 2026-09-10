@@ -490,6 +490,13 @@ class IptvRepository @Inject constructor(
     private val stalkerVodSearchEmptyCacheTtlMs = 10 * 60_000L
     private val maxStalkerVodSearchCacheEntries = 64
 
+    /**
+     * Shortest head-of-title that is still worth asking a portal for. Below
+     * this a subtitle split stops naming a film - "It: Chapter Two" would ask
+     * for "It" and get a slice of the catalog back.
+     */
+    private val minStalkerVodQueryHeadLength = 3
+
     private data class StalkerSeriesSearchCacheEntry(
         val fetchedAtMs: Long,
         val items: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>
@@ -542,13 +549,6 @@ class IptvRepository @Inject constructor(
 
     /** A season entry whose whole name is the number, e.g. "2" or "02". */
     private val STALKER_SEASON_BARE_NUMBER_REGEX = Regex("""^\s*(\d{1,3})\s*$""")
-
-    /**
-     * Shortest head-of-title that is still worth asking a portal for. Below
-     * this a subtitle split stops naming a film - "It: Chapter Two" would ask
-     * for "It" and get a slice of the catalog back.
-     */
-    private val minStalkerVodQueryHeadLength = 3
 
     /**
      * Public accessor kept for compatibility with code that previously read the
@@ -6064,7 +6064,8 @@ class IptvRepository @Inject constructor(
         episode: Int,
         tmdbId: Int?,
         imdbId: String?,
-        allowNetwork: Boolean
+        allowNetwork: Boolean,
+        originalTitle: String? = null
     ): List<StreamSource> {
         if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return emptyList()
         if (season <= 0 || episode <= 0) return emptyList()
@@ -6090,17 +6091,25 @@ class IptvRepository @Inject constructor(
         val api = getOrCreateStalkerApi(portal) ?: return emptyList()
 
         val normalizedTmdb = normalizeTmdbId(tmdbId)
+        val normalizedOriginalTitle = normalizeLookupText(originalTitle.orEmpty())
+            .takeIf { it.isNotBlank() && it != normalizedTitle }
         val inputYear = parseYear(title)
 
         var shows: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem> = emptyList()
         // See the movie path: the offered count separates "the portal sent
         // nothing" from "the portal sent a catalogue page that matched nothing".
         var offered = 0
-        for (query in stalkerVodSearchQueries(title)) {
+        for (query in stalkerVodSearchQueries(title, originalTitle)) {
             val items = stalkerSeriesSearch(portal, fingerprint, api, query)
             offered += items.size
             if (items.isEmpty()) continue
-            shows = matchStalkerSeriesItems(items, normalizedTitle, normalizedTmdb, inputYear)
+            shows = matchStalkerSeriesItems(
+                items = items,
+                normalizedTitle = normalizedTitle,
+                normalizedTmdb = normalizedTmdb,
+                inputYear = inputYear,
+                normalizedOriginalTitle = normalizedOriginalTitle
+            )
             if (shows.isNotEmpty()) break
         }
         if (shows.isEmpty()) {
@@ -6153,12 +6162,14 @@ class IptvRepository @Inject constructor(
         items: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>,
         normalizedTitle: String,
         normalizedTmdb: String?,
-        inputYear: Int?
+        inputYear: Int?,
+        normalizedOriginalTitle: String? = null
     ): List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem> = matchStalkerCatalogEntries(
         items = items,
         normalizedTitle = normalizedTitle,
         normalizedTmdb = normalizedTmdb,
-        inputYear = inputYear
+        inputYear = inputYear,
+        normalizedOriginalTitle = normalizedOriginalTitle
     ) { StalkerCatalogFields(it.name, it.cmd, it.year, it.tmdbId) }
 
     private suspend fun stalkerSeriesSearch(
@@ -6313,7 +6324,8 @@ class IptvRepository @Inject constructor(
         episode: Int,
         imdbId: String? = null,
         tmdbId: Int? = null,
-        allowNetwork: Boolean = true
+        allowNetwork: Boolean = true,
+        originalTitle: String? = null
     ): List<StreamSource> {
         return withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext emptyList()
@@ -6345,7 +6357,8 @@ class IptvRepository @Inject constructor(
                             episode = episode,
                             tmdbId = tmdbId,
                             imdbId = imdbId,
-                            allowNetwork = allowNetwork
+                            allowNetwork = allowNetwork,
+                            originalTitle = originalTitle
                         )
                     }.getOrDefault(emptyList())
                 }
@@ -6621,7 +6634,8 @@ class IptvRepository @Inject constructor(
         season: Int,
         episode: Int,
         imdbId: String? = null,
-        tmdbId: Int? = null
+        tmdbId: Int? = null,
+        originalTitle: String? = null
     ) {
         withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext
@@ -6655,7 +6669,8 @@ class IptvRepository @Inject constructor(
                         episode = episode,
                         tmdbId = tmdbId,
                         imdbId = imdbId,
-                        allowNetwork = true
+                        allowNetwork = true,
+                        originalTitle = originalTitle
                     )
                 }
             }
@@ -6665,7 +6680,8 @@ class IptvRepository @Inject constructor(
     suspend fun prefetchSeriesInfoForShow(
         title: String,
         imdbId: String? = null,
-        tmdbId: Int? = null
+        tmdbId: Int? = null,
+        originalTitle: String? = null
     ) {
         withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext
@@ -6685,7 +6701,7 @@ class IptvRepository @Inject constructor(
                 }
             }
             activeStalkerPortals(config).forEach { portal ->
-                runCatching { warmStalkerSeriesBinding(portal, title, tmdbId) }
+                runCatching { warmStalkerSeriesBinding(portal, title, tmdbId, originalTitle) }
             }
         }
     }
@@ -6701,7 +6717,8 @@ class IptvRepository @Inject constructor(
     private suspend fun warmStalkerSeriesBinding(
         portal: StalkerPortalEntry,
         title: String,
-        tmdbId: Int?
+        tmdbId: Int?,
+        originalTitle: String? = null
     ) {
         if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return
         val normalizedTitle = normalizeLookupText(title)
@@ -6709,12 +6726,22 @@ class IptvRepository @Inject constructor(
         val fingerprint = stalkerPortalFingerprint(portal)
         val api = getOrCreateStalkerApi(portal) ?: return
         val normalizedTmdb = normalizeTmdbId(tmdbId)
+        val normalizedOriginalTitle = normalizeLookupText(originalTitle.orEmpty())
+            .takeIf { it.isNotBlank() && it != normalizedTitle }
         val inputYear = parseYear(title)
 
-        for (query in stalkerVodSearchQueries(title)) {
+        // Warming must ask exactly what the real lookup will ask: a different
+        // term list would bind a show here and search again on open.
+        for (query in stalkerVodSearchQueries(title, originalTitle)) {
             val items = stalkerSeriesSearch(portal, fingerprint, api, query)
             if (items.isEmpty()) continue
-            val shows = matchStalkerSeriesItems(items, normalizedTitle, normalizedTmdb, inputYear)
+            val shows = matchStalkerSeriesItems(
+                items = items,
+                normalizedTitle = normalizedTitle,
+                normalizedTmdb = normalizedTmdb,
+                inputYear = inputYear,
+                normalizedOriginalTitle = normalizedOriginalTitle
+            )
             if (shows.isEmpty()) continue
             shows.take(maxStalkerSeriesBindings).forEach { show ->
                 val showId = show.id?.trim().orEmpty()
