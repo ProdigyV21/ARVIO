@@ -65,7 +65,7 @@ export function StabilizationFixture() {
     profiles: [], addons: sportsAddons, watchlist: media, continueWatching: media.slice(0, 4), traktConnected: true, simklConnected: true, mdblistConnected: false,
     openDetails: (item: MediaItem) => setToast(`Selected: ${item.title}`), openContextMenu: noop, isWatched: () => false,
     loadTrackerLibrary, loadTraktLists, loadTraktListItems: async () => media,
-    playChannel: (channel: IptvChannel) => setToast(`Selected: ${channel.name}`), playCatchup: noop, setToast,
+    playChannel: (channel: IptvChannel) => setToast(`Selected: ${channel.name}`), recordChannelPlayback: noop, playCatchup: noop, setToast,
     trackingPreferences: { watchlistReadMode: "trakt", continueWatchingReadMode: "both", watchedReadMode: "both", writeToTrakt: true, writeToSimkl: true },
     settingsSyncState: "local", saveTrackingPreferences: noop, setSection: setPage, signOut: noop, refreshData: empty,
     homeServerRows: [], categories: [], catalogConfigs: [], selected: null, streams: [], activeStream, activeChannel, selectedEpisode: null,

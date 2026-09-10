@@ -121,6 +121,26 @@ test('Settings mutations fetch fresh cloud data even after a cached pull', async
   assert.deepEqual(f.remote.iptvByProfile.arvind.favoriteChannels, ['tv-new']);
 });
 
+test('profile playlists override legacy mirrors, including deleted playlists and other profiles', async () => {
+  const current = playlist();
+  const f = fixture({ settings: { iptvPlaylists: [current, playlist('stale')] }, iptvM3uUrl: current.m3uUrl,
+    iptvByProfile: { arvind: { playlists: [current] }, child: { playlists: [] } } });
+  assert.deepEqual(Array.from((await f.cloud.pullCloudPayload(auth, 'arvind')).settings.iptvPlaylists, p => p.id), ['list_1']);
+  assert.deepEqual(Array.from((await f.cloud.pullCloudPayload(auth, 'child')).settings.iptvPlaylists), []);
+});
+
+test('Android recent history pulls and web playback round-trips without overwriting newer TV plays', async () => {
+  const remote = { lastChannelId: 'tv', lastOpenedAt: 300, recentChannelIds: ['old', 'tv'] };
+  const f = fixture({ iptvByProfile: { arvind: { playlists: [playlist()], tvSession: remote } } });
+  const pulled = (await f.cloud.pullCloudPayload(auth, 'arvind')).settings;
+  assert.equal(pulled.iptvTvSession.lastChannelId, 'tv');
+  assert.deepEqual(Array.from(pulled.iptvTvSession.recentChannelIds), ['old', 'tv']);
+  await f.cloud.saveCloudSettings(auth, settings({ iptvTvSession: { lastChannelId: 'web', lastOpenedAt: 200, recentChannelIds: ['old', 'web'] } }), [], 'arvind', [], settings());
+  assert.equal(f.remote.iptvByProfile.arvind.tvSession.lastChannelId, 'tv');
+  assert.ok(f.remote.iptvByProfile.arvind.tvSession.recentChannelIds.includes('web'));
+  assert.ok(f.remote.fieldUpdatedAt['i:arvind:tvSession'] > 0);
+});
+
 test('A HTTP 200 rejected cloud save stays in the durable outbox and succeeds on retry', async () => {
   const f = fixture();
   const outbox = load('lib/settingsOutbox.ts', { './storage': storage(), './cloud': f.cloud });

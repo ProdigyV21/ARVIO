@@ -885,6 +885,62 @@ function safeGuideImage(value: string): string | undefined {
   try { return value.length <= 2048 && ["https:", "http:"].includes(new URL(value).protocol) ? value : undefined; } catch { return undefined; }
 }
 
+const identityLoads = new Map<string, { expires: number; task: Promise<IptvChannel[]> }>();
+
+/** A single cached metadata request, never a stream probe or a request per channel. */
+export async function loadIptvChannelIdentities(playlists: IptvPlaylistEntry[], channels: IptvChannel[], options: IptvLoadOptions = {}) {
+  const replacements = new Map<string, IptvChannel>();
+  for (const playlist of normalizeIptvPlaylists(playlists).filter(p => p.enabled)) {
+    const scoped = channels.filter(c => c.id.startsWith(`${playlist.id}:xtream:`));
+    if (!scoped.length) continue;
+    const url = new URL(playlist.m3uUrl);
+    url.searchParams.set("output", "ts");
+    const key = `${playlist.id}:${url}`;
+    let cached = identityLoads.get(key);
+    if (!cached || cached.expires < Date.now()) {
+      const task = fetchPlaylistText(url.toString(), options)
+        .then(text => attachM3uChannelIdentities(scoped, text, playlist.id));
+      cached = { expires: Date.now() + PLAYLIST_TTL_MS, task };
+      identityLoads.set(key, cached);
+      // A provider failure must not become a render/retry loop.
+      void task.catch(() => { if (identityLoads.get(key) === cached) cached!.expires = Date.now() + 300_000; });
+      if (identityLoads.size > 12) identityLoads.delete(identityLoads.keys().next().value!);
+    }
+    try { for (const channel of await cached.task) replacements.set(channel.id, channel); }
+    catch { /* Keep API channels available when the optional identity bridge fails. */ }
+  }
+  return channels.map(channel => {
+    const identity = replacements.get(channel.id);
+    return identity?.cloudId ? { ...channel, cloudId: identity.cloudId, syncAliases: identity.syncAliases } : channel;
+  });
+}
+
+export async function attachM3uChannelIdentities(channels: IptvChannel[], text: string, playlistId: string) {
+  const byId = new Map(channels.map(c => [c.id, c]));
+  const replacements = new Map<string, IptvChannel>();
+  let epgId: string | undefined;
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0 && i % 500 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    const line = lines[i].trim();
+    if (line.startsWith("#EXTINF:")) { epgId = attr(line, "tvg-id"); continue; }
+    if (!line || line.startsWith("#")) continue;
+    const path = parseUrl(line)?.pathname;
+    const streamId = path?.match(/\/(\d+)(?:\.[a-z0-9]+)?$/i)?.[1];
+    const id = `${playlistId}:xtream:${streamId}`;
+    const channel = byId.get(id);
+    if (channel) {
+      const cloudId = `${playlistId}:${buildChannelId(line, epgId)}`;
+      const hlsAlias = `${playlistId}:${buildChannelId(line.replace(/\.ts(?=\?|$)/i, ".m3u8"), epgId)}`;
+      const previous = replacements.get(id);
+      replacements.set(id, { ...channel, cloudId: previous?.cloudId ?? cloudId,
+        syncAliases: [...new Set([...(previous?.syncAliases ?? []), cloudId, hlsAlias])] });
+    }
+    epgId = undefined;
+  }
+  return channels.map(channel => replacements.get(channel.id) ?? channel);
+}
+
 function parseXmltvTime(value: string) {
   const match = value.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\s*([+-]\d{4})?/);
   if (!match) return 0;

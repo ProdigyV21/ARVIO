@@ -8,7 +8,7 @@ exports.load = (relative, mocks = {}, globals = {}) => {
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(code, {
-    module, exports: module.exports, require: (name) => { if (name in mocks) return mocks[name]; if (name.startsWith('node:') || ['ipaddr.js', 'undici'].includes(name)) return require(name); throw new Error(`Unmocked dependency ${name}`); },
+    module, exports: module.exports, require: (name) => { if (name in mocks) return mocks[name]; if (name === './iptvSession') return exports.load('lib/iptvSession.ts'); if (name.startsWith('node:') || ['ipaddr.js', 'undici'].includes(name)) return require(name); throw new Error(`Unmocked dependency ${name}`); },
     URL, URLSearchParams, Headers, Request, Response, ReadableStream, TextEncoder, TextDecoder, Uint8Array, Buffer, Date, Map, Set, AbortController, AbortSignal, structuredClone, setTimeout, clearTimeout, atob, btoa, crypto: crypto.webcrypto, console, process: { env: {} }, ...globals
   }, { filename });
   return module.exports;

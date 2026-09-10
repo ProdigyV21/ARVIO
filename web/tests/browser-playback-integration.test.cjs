@@ -222,7 +222,7 @@ function storeHarness(prepare, report = async () => {}, overrides = {}) {
     prepareBrowserStream: prepare, reportHomeServerPlayback: report,
     setActiveChannel: () => {}, setActiveStream: (value) => { state.active = value; state.accepted.push(value); },
     setToast: (value) => state.toasts.push(value),
-    openLiveExternally: () => false, buildXtreamCatchupUrl: () => 'https://iptv.example/archive.m3u8',
+    openLiveExternally: () => false, recordChannelPlayback: () => {}, buildXtreamCatchupUrl: () => 'https://iptv.example/archive.m3u8',
     window: { setTimeout: (fn) => { const id = state.timers.size + 1; state.timers.set(id, fn); return id; }, clearTimeout: (id) => state.timers.delete(id) },
     ...overrides
   };
