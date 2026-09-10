@@ -31,3 +31,13 @@ test('production build refuses masked values before starting Next', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /refusing production build/);
 });
+
+test('late cloud hydration keeps the profile selected on this device', () => {
+  const { hydratedProfileId } = load('lib/profiles.ts');
+  const profiles = [{ id: 'arvind' }, { id: 'shai' }];
+  assert.equal(hydratedProfileId('arvind', profiles, 'shai'), 'arvind');
+  assert.equal(hydratedProfileId('shai', profiles, 'arvind'), 'shai');
+  assert.equal(hydratedProfileId('deleted', profiles, 'shai'), 'shai');
+  assert.equal(hydratedProfileId(null, profiles, 'missing'), 'arvind');
+  assert.equal(hydratedProfileId('deleted', [], 'missing'), null);
+});

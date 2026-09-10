@@ -21,6 +21,7 @@ import { dedupeMedia, historyToItem, hydrateTraktItems, traktItemToMedia, traktP
 import { loadStored, purgeLegacyStorage, removeStored, saveStored } from "./storage";
 import { getDetails, getSeasonEpisodes, loadCatalog, searchMedia, resolveTmdbId } from "./tmdb";
 import { verifyProfilePin } from "./profilePin";
+import { hydratedProfileId } from "./profiles";
 import { flushSettingsOutbox, hasPendingSettings, queueSettings } from "./settingsOutbox";
 import type { MetadataProviderId, ProviderPriorityConfig } from "./metadata/types";
 import { TraktClient, type TraktDeviceCode } from "./trakt";
@@ -1377,13 +1378,12 @@ export function AppProvider({
         if (cloud.profiles.length) {
           setProfiles(cloud.profiles);
           setAvatarImages(cloud.avatarImages);
-          if (cloud.activeProfileId) {
-            setActiveProfileId(cloud.activeProfileId);
-            void refreshData(cloud.activeProfileId);
-          } else if (cloud.profiles[0]) {
-            setActiveProfileId(cloud.profiles[0].id);
-            void refreshData(cloud.profiles[0].id);
-          }
+          // Read the current selection when the request completes: a user may
+          // have chosen a profile while this older cloud snapshot was loading.
+          const selectedId = hydratedProfileId(activeProfileIdRef.current, cloud.profiles, cloud.activeProfileId);
+          activeProfileIdRef.current = selectedId;
+          setActiveProfileId(selectedId);
+          void refreshData(selectedId);
         } else {
           // New account with no cloud profiles yet. If the local profiles were
           // stamped for a DIFFERENT account, they leaked from a previous
@@ -1395,7 +1395,7 @@ export function AppProvider({
             saveStored(PROFILES_OWNER_KEY, currentAccountEmail());
             void refreshData(fresh[0].id);
           } else {
-            void refreshData(activeProfileId);
+            void refreshData(activeProfileIdRef.current);
           }
         }
         setCloudProfilesHydrated(true);
@@ -1406,7 +1406,7 @@ export function AppProvider({
     return () => {
       cancelled = true;
     };
-  }, [activeProfileId, auth, refreshData]);
+  }, [auth, refreshData]);
 
   useEffect(() => {
     let current = true;
