@@ -4206,16 +4206,17 @@ class PlayerViewModel @Inject constructor(
                         }
                     }
                     when {
-                        // The model could not pair a single line between the reference and this
-                        // subtitle: it is not this dialogue. Timing cannot see that, so this is the
-                        // only check that catches a coincidental high score. Zero the candidate so
-                        // the escalation below looks at the rest of the pack, and if none of them
-                        // are right either, the ladder ends on AI translation.
-                        aiSync != null && aiSync.pairs == 0 -> {
+                        // The model could pair none, or almost none, of the lines between the
+                        // reference and this subtitle: it is not this dialogue. Timing cannot see
+                        // that, so this is the only check that catches a coincidental high score.
+                        // Zero the candidate so the escalation below looks at the rest of the pack,
+                        // and if none of them are right either, the ladder ends on AI translation.
+                        aiSync != null && aiSync.notThisDialogue -> {
                             Log.w(
                                 "SubMatch",
                                 "[ai-sync] \"${aiTarget.sub.label}\" scored ${"%.2f".format(aiTarget.score)} " +
-                                    "but NO lines pair — wrong subtitle, rejecting"
+                                    "but ${if (aiSync.pairs == 0) "NO lines pair" else "only ${aiSync.pairs}/${aiSync.sent} lines pair"}" +
+                                    " — wrong subtitle, rejecting"
                             )
                             matchStep("3· \"${aiTarget.sub.label}\" is the wrong subtitle — rejecting")
                             aiRejected.add("${aiTarget.sub.provider}|${aiTarget.sub.id}")
@@ -4457,7 +4458,7 @@ class PlayerViewModel @Inject constructor(
      * metric and applies it only if it genuinely improves, so a hallucinated pairing can never
      * select or shift a subtitle on its own. Costs one small request.
      *
-     * Returns null when AI isn't configured, the model declines, or too few pairs agree.
+     * Returns null when AI isn't configured, the inputs are too thin, or the request fails.
      */
     /**
      * [pairs] is how many reference lines the model could confidently match in the candidate.
@@ -4474,8 +4475,21 @@ class PlayerViewModel @Inject constructor(
          * different length, and no constant offset makes it usable. It must not be confused with
          * "the model had no answer", which leaves the timing verdict standing.
          */
-        val unfixableShiftMs: Long? = null
-    )
+        val unfixableShiftMs: Long? = null,
+        /** How many reference lines were sent; set when the answer paired too few to measure. */
+        val sent: Int = 0,
+    ) {
+        /**
+         * The model answered and could pair none, or almost none, of the reference lines: these are
+         * not the same dialogue. Exactly zero used to be the only veto, so a reply pairing 1 of 8
+         * lines was treated like no reply at all and the coincidental timing score it should have
+         * overruled stood — The Office S01E03 (Sept 2026): 0.75 on timing, 1/8 lines paired, the wrong
+         * subtitle selected while the right one sat third. Correct subtitles have paired 8/8, 8/8, 4/5
+         * and 3/7, so the bar sits well below them.
+         */
+        val notThisDialogue: Boolean
+            get() = pairs == 0 || pairs < sent * MATCH_AI_MIN_PAIR_FRACTION
+    }
 
     private suspend fun measureOffsetWithAi(
         referenceCues: List<SubtitleSyncMatcher.TimedCue>,
@@ -4502,14 +4516,21 @@ class PlayerViewModel @Inject constructor(
             refs.map { it.text.replace("\n", " ") },
             window.map { it.text.replace("\n", " ") }
         )
-        if (matches.isNullOrEmpty()) {
+        // null is a FAILED request (HTTP error, rate limit, unreadable reply), not an answer. It used
+        // to share the zero-pairs branch below, so an API hiccup rejected subtitles as "not this
+        // dialogue". No answer is no evidence: the timing verdict stands.
+        if (matches == null) {
+            Log.i("SubMatch", "[ai-sync] \"$label\" no answer (request failed or unreadable) — timing verdict stands")
+            return null
+        }
+        if (matches.isEmpty()) {
             Log.i("SubMatch", "[ai-sync] \"$label\" no pairings returned — not this dialogue")
-            return AiLineSync(pairs = 0, offsetMs = null)
+            return AiLineSync(pairs = 0, offsetMs = null, sent = refs.size)
         }
         val deltas = matches.map { refs[it.referenceIndex].startMs - window[it.candidateIndex].startMs }.sorted()
         if (deltas.size < MATCH_AI_MIN_PAIRS) {
-            Log.i("SubMatch", "[ai-sync] \"$label\" only ${deltas.size} pairs — too few to trust")
-            return AiLineSync(pairs = deltas.size, offsetMs = null)
+            Log.i("SubMatch", "[ai-sync] \"$label\" only ${deltas.size}/${refs.size} lines pair — too few to measure")
+            return AiLineSync(pairs = deltas.size, offsetMs = null, sent = refs.size)
         }
         // Robust mean: drop pairs far from the median (a single mis-pairing is worth seconds), then
         // average what is left. Agreement among the survivors is the evidence the offset is real.
@@ -6425,7 +6446,12 @@ class PlayerViewModel @Inject constructor(
         // ── AI semantic sync (users with an API key only) ───────────────────────
         private const val MATCH_AI_REFERENCE_LINES = 8   // reference lines sent per request
         private const val MATCH_AI_CANDIDATE_LINES = 40  // candidate window sent per request
-        private const val MATCH_AI_MIN_PAIRS = 3         // fewer confident pairs than this decides nothing
+        private const val MATCH_AI_MIN_PAIRS = 3         // fewer pairs than this can't measure an offset
+        /**
+         * An answer pairing fewer than this share of the reference lines sent is a veto, like zero:
+         * 1 of 8 is different dialogue, not a thin measurement. 2 of 8 stays inconclusive.
+         */
+        private const val MATCH_AI_MIN_PAIR_FRACTION = 0.25
         private const val MATCH_AI_OUTLIER_MS = 450L     // pairs this far from the median are mis-pairings
         /**
          * How much a MODEL-measured shift must improve the timing score. Deliberately far smaller

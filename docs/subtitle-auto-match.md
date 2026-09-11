@@ -215,11 +215,15 @@ the **median** of `referenceTime − candidateTime` over confident pairs, with >
 
 | Result | Meaning | Action |
 |---|---|---|
-| 0 pairs | not this dialogue | **reject**, remember it, escalate to the next candidate |
+| 0 pairs, or under a quarter of the lines sent | not this dialogue | **reject**, remember it, escalate to the next candidate |
 | pairs, shift ≤ `MATCH_OFFSET_MAX_MS` | right subtitle, fixable | apply (or confirm the sweep's offset) |
 | pairs, shift > `MATCH_OFFSET_MAX_MS` | right episode, **different cut** | **reject** — no constant offset makes it usable |
-| no answer / too few pairs / pairs disagree | no evidence | leave the timing verdict alone |
+| request failed / too few pairs to measure / pairs disagree | no evidence | leave the timing verdict alone |
 
+- **A near-zero answer is a veto; a failed request is not an answer.** Only exactly 0 pairs used
+  to reject, so a reply pairing 1 of 8 lines let a coincidental 0.75 timing score stand (The Office
+  S01E03: wrong subtitle picked, the right one third in the list). And a failed request (`null`)
+  shared the zero-pairs branch, so an API error rejected subtitles as "not this dialogue".
 - Consulted whenever a candidate **fails** the timing test, *and* whenever the sweep is **about to
   shift** one. Gating it on "thin evidence" was wrong: more reference windows do not make a
   coincidence less likely, they make it look more convincing.
@@ -552,8 +556,9 @@ Decision trail (`Log.i`):
 - `align src=player … selfHits=N/M` — buffer-path reference vs the first candidate; `selfHits` near
   `M` is the stale-buffer trap (§2a).
 - `escalating to all N candidates` — the top candidate failed; the rest are being loaded (§2c).
-- `[ai-sync] "…" …` — text verification (§2d): `no pairings returned — not this dialogue` (reject),
-  `only N pairs` / `pairs disagree: […]` / `no answer from the model` (no evidence, timing stands).
+- `[ai-sync] "…" …` — text verification (§2d): `no pairings returned — not this dialogue` and
+  `… only N/M lines pair — wrong subtitle, rejecting` (reject); `only N/M lines pair — too few to
+  measure`, `pairs disagree: […]` and `no answer (request failed or unreadable)` (no evidence).
 - `swap provisional "…" -> "…"` — the scan overrode the optimistic pick.
 - `step: …` — the stages behind the single "Adjusting subtitles…" indicator.
 - `not remembered: moved off "…" after Ns` — the 2-minute cache dwell was abandoned (§4).
