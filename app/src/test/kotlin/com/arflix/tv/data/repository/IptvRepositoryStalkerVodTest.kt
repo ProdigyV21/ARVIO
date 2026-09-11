@@ -54,6 +54,24 @@ class IptvRepositoryStalkerVodTest {
     }
 
     @Test
+    fun `the movie path is unaffected by the series binding limit`() {
+        val repository = newRepository()
+        // The series path learned to ask how a show was matched, and both paths
+        // share the scorer. The movie path follows every match - a film needs no
+        // second request to be playable - so nothing here may be capped.
+        val items = (1..10).map { item("$it", "Dune", year = "2021", tmdbId = "438631") }
+
+        val matches = repository.matchStalkerVodItems(
+            items = items,
+            normalizedTitle = "dune",
+            normalizedTmdb = "438631",
+            inputYear = 2021
+        )
+
+        assertEquals(10, matches.size)
+    }
+
+    @Test
     fun `an unmatched tmdb id falls through to title scoring`() {
         val repository = newRepository()
         val items = listOf(item("1", "Dune", year = "2021"))

@@ -10,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 /**
@@ -131,6 +132,153 @@ class IptvRepositoryStalkerSeriesTest {
         )
 
         assertTrue(matches.isEmpty())
+    }
+
+    // ── How many shows a lookup binds (B) ─────────────────────────────────
+
+    @Test
+    fun `a tmdb id match raises the binding limit above a name match`() {
+        val repository = newRepository()
+
+        // The whole point of telling the caller how the match was made: with a
+        // portal-supplied id the entries are proven versions of the same show,
+        // so more of them are worth a season request.
+        assertEquals(2, repository.stalkerSeriesBindingLimit(matchedById = false))
+        assertEquals(6, repository.stalkerSeriesBindingLimit(matchedById = true))
+    }
+
+    @Test
+    fun `the matcher reports that the portal id decided the match`() {
+        val repository = newRepository()
+        val shows = listOf(
+            show("al", "AL - Breaking Bad", year = "2008", tmdbId = "1396"),
+            show("ar", "AR - Breaking Bad", year = "2008", tmdbId = "1396"),
+            show("de", "DE - Breaking Bad", year = "2008", tmdbId = "1396")
+        )
+
+        val matched = repository.matchStalkerSeriesMatches(
+            items = shows,
+            normalizedTitle = "breaking bad",
+            normalizedTmdb = "1396",
+            inputYear = 2008
+        )
+
+        assertTrue(matched.matchedById)
+        assertEquals(listOf("al", "ar", "de"), matched.matches.map { it.id })
+    }
+
+    @Test
+    fun `the matcher reports a title score as such`() {
+        val repository = newRepository()
+        val shows = listOf(show("1", "Breaking Bad", year = "2008"))
+
+        val matched = repository.matchStalkerSeriesMatches(
+            items = shows,
+            normalizedTitle = "breaking bad",
+            normalizedTmdb = null,
+            inputYear = 2008
+        )
+
+        assertFalse(matched.matchedById)
+        assertEquals(listOf("1"), matched.matches.map { it.id })
+    }
+
+    @Test
+    fun `a portal listing ten id matches still reaches the German version`() = runTest {
+        val repository = newRepository()
+        // The measured list: German on place four, English on place five, all
+        // ten carrying tmdb_id 1396. A limit of two bound AL and AR only.
+        val order = listOf("AL", "AR", "BG", "DE", "EN", "ES", "FR", "GR", "NL", "PL")
+        val shows = order.mapIndexed { index, tag ->
+            show(id = "$index", name = "$tag - Breaking Bad", year = "2008", tmdbId = "1396")
+        }
+        val matched = repository.matchStalkerSeriesMatches(
+            items = shows,
+            normalizedTitle = "breaking bad",
+            normalizedTmdb = "1396",
+            inputYear = 2008
+        )
+
+        val bound = repository.bindStalkerSeriesShows(
+            shows = matched.matches,
+            limit = repository.stalkerSeriesBindingLimit(matched.matchedById)
+        ) { listOf(season("s1", "Season 1", episodes = listOf(1))) }
+
+        val boundTags = bound.map { it.show.name?.substringBefore(" -") }
+        assertTrue(boundTags.contains("DE"))
+        assertTrue(boundTags.contains("EN"))
+    }
+
+    // ── Dead show entries do not consume a place (C) ───────────────────────
+
+    @Test
+    fun `a show without seasons does not use up one of the places`() = runTest {
+        val repository = newRepository()
+        val shows = listOf(
+            show("dead", "A+ - Ted Lasso (US)"),
+            show("ar", "AR - Ted Lasso"),
+            show("de", "DE - Ted Lasso")
+        )
+        val asked = mutableListOf<String>()
+
+        val bound = repository.bindStalkerSeriesShows(shows = shows, limit = 2) { showId ->
+            asked += showId
+            // The measured case: the entry announces files like every other hit
+            // and answers the season request with nothing.
+            if (showId == "dead") emptyList() else listOf(season("s1", "Season 1", listOf(1)))
+        }
+
+        assertEquals(listOf("ar", "de"), bound.map { it.show.id })
+        assertEquals(listOf("dead", "ar", "de"), asked)
+    }
+
+    @Test
+    fun `a long tail of dead entries is not followed to the end`() = runTest {
+        val repository = newRepository()
+        val shows = (1..50).map { show("$it", "Ted Lasso $it") }
+        val asked = mutableListOf<String>()
+
+        val bound = repository.bindStalkerSeriesShows(shows = shows, limit = 2) { showId ->
+            asked += showId
+            emptyList()
+        }
+
+        assertTrue(bound.isEmpty())
+        // Two places plus the slack, never one request per entry.
+        assertEquals(4, asked.size)
+    }
+
+    @Test
+    fun `a show id the portal left blank costs no request`() = runTest {
+        val repository = newRepository()
+        val shows = listOf(
+            StalkerApi.StalkerSeriesItem(id = "  ", name = "Ted Lasso", cmd = "/media/x"),
+            show("de", "DE - Ted Lasso")
+        )
+        val asked = mutableListOf<String>()
+
+        val bound = repository.bindStalkerSeriesShows(shows = shows, limit = 1) { showId ->
+            asked += showId
+            listOf(season("s1", "Season 1", listOf(1)))
+        }
+
+        assertEquals(listOf("de"), bound.map { it.show.id })
+        assertEquals(listOf("de"), asked)
+    }
+
+    @Test
+    fun `binding stops as soon as the limit is filled`() = runTest {
+        val repository = newRepository()
+        val shows = (1..10).map { show("$it", "Ted Lasso $it") }
+        val asked = mutableListOf<String>()
+
+        val bound = repository.bindStalkerSeriesShows(shows = shows, limit = 2) { showId ->
+            asked += showId
+            listOf(season("s1", "Season 1", listOf(1)))
+        }
+
+        assertEquals(2, bound.size)
+        assertEquals(listOf("1", "2"), asked)
     }
 
     // ── Season selection ──────────────────────────────────────────────────
