@@ -135,6 +135,148 @@ class SubtitleTranslationService(
     private fun encodeIndexed(lines: List<String>, NL: String): JSONArray =
         JSONArray(lines.mapIndexed { i, line -> "$i: ${line.replace("\n", NL)}" })
 
+    // ── Semantic line matching (subtitle sync) ──────────────────────────────────
+
+    /** One confident pairing: reference line [referenceIndex] says the same thing as [candidateIndex]. */
+    data class LineMatch(val referenceIndex: Int, val candidateIndex: Int)
+
+    private fun buildMatchPrompt() =
+        "You align two subtitle files for the SAME video, written in different languages.\n" +
+        "You are given REFERENCE lines and CANDIDATE lines, each prefixed with its index.\n" +
+        "Rules:\n" +
+        "1. Return ONLY a valid JSON array of objects, each exactly {\"r\": <reference index>, \"c\": <candidate index>}.\n" +
+        "2. Pair a reference line with the candidate line that expresses the SAME dialogue, across languages.\n" +
+        "3. OMIT any reference line you are not confident about. A short, correct list beats a complete, guessed one.\n" +
+        "4. Never translate, never invent text, never output anything except the JSON array.\n" +
+        "5. Each index may appear at most once."
+
+    /**
+     * Asks the model which lines of two differently-languaged subtitle files say the same thing.
+     *
+     * This is a *measuring instrument*, not a decision: the caller turns the returned pairings into
+     * a timing offset and then re-scores it with the ordinary timing metric, so a hallucinated
+     * pairing can only fail to improve the score — never select a subtitle on its own.
+     *
+     * Why it exists: our overlap-maximising offset search is a proxy for alignment that degrades
+     * when the two files are segmented differently (an English CC track splits lines that a
+     * translation merges). Matching by meaning is segmentation-independent.
+     */
+    suspend fun matchSubtitleLines(
+        referenceLines: List<String>,
+        candidateLines: List<String>
+    ): List<LineMatch>? {
+        if (referenceLines.isEmpty() || candidateLines.isEmpty()) return null
+        val apiKey = apiKeyProvider()
+        if (apiKey.isBlank()) return null
+        val prompt = buildMatchPrompt()
+        val payload = "REFERENCE:\n${encodeIndexed(referenceLines, " ")}\n\nCANDIDATE:\n${encodeIndexed(candidateLines, " ")}"
+        val raw = when (modelProvider()) {
+            SubtitleAiModel.GROQ_LLAMA_70B -> matchGroq(prompt, payload, apiKey)
+            SubtitleAiModel.GEMINI_FLASH_25 -> matchGemini(prompt, payload, apiKey)
+        } ?: return null
+        val array = extractJsonArray(raw) ?: return null
+        val matches = ArrayList<LineMatch>(array.length())
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            val r = obj.optInt("r", -1)
+            val c = obj.optInt("c", -1)
+            if (r !in referenceLines.indices || c !in candidateLines.indices) continue
+            matches.add(LineMatch(r, c))
+        }
+        // Each index at most once — a model that maps several references onto one candidate line is
+        // guessing, and those pairs would all vote the same bogus offset.
+        val seenRef = HashSet<Int>()
+        val seenCand = HashSet<Int>()
+        return matches.filter { seenRef.add(it.referenceIndex) && seenCand.add(it.candidateIndex) }
+    }
+
+    private suspend fun matchGroq(systemPrompt: String, payload: String, apiKey: String): String? {
+        val body = JSONObject().apply {
+            put("model", GROQ_MODEL_ID)
+            put("temperature", 0)
+            put("reasoning_effort", GROQ_REASONING_EFFORT)
+            put("reasoning_format", GROQ_REASONING_FORMAT)
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply { put("role", "system"); put("content", systemPrompt) })
+                put(JSONObject().apply { put("role", "user"); put("content", payload) })
+            })
+        }
+        val request = Request.Builder()
+            .url(GROQ_URL)
+            .header("Authorization", "Bearer $apiKey")
+            .header("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful || responseBody == null) {
+                        Log.w(TAG, "matchSubtitleLines groq HTTP ${response.code}")
+                        return@use null
+                    }
+                    JSONObject(responseBody).getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").getString("content").trim()
+                }
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                Log.w(TAG, "matchSubtitleLines groq failed: ${it.message}")
+            }.getOrNull()
+        }
+    }
+
+    private suspend fun matchGemini(systemPrompt: String, payload: String, apiKey: String): String? {
+        val body = JSONObject().apply {
+            put("system_instruction", JSONObject().apply {
+                put("parts", JSONArray().apply { put(JSONObject().apply { put("text", systemPrompt) }) })
+            })
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply { put(JSONObject().apply { put("text", payload) }) })
+                })
+            })
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0)
+                put("responseMimeType", "application/json")
+                put("thinkingConfig", JSONObject().apply { put("thinkingLevel", "minimal") })
+            })
+            // Same reason as translation: this is the film's own dialogue, and default safety
+            // filters block such prompts outright (HTTP 200 with no candidates).
+            put("safetySettings", JSONArray().apply {
+                listOf(
+                    "HARM_CATEGORY_HARASSMENT",
+                    "HARM_CATEGORY_HATE_SPEECH",
+                    "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "HARM_CATEGORY_DANGEROUS_CONTENT"
+                ).forEach { category ->
+                    put(JSONObject().apply { put("category", category); put("threshold", "BLOCK_NONE") })
+                }
+            })
+        }
+        val request = Request.Builder()
+            .url("$GEMINI_BASE_URL?key=$apiKey")
+            .header("Content-Type", "application/json")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                client.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string()
+                    if (!response.isSuccessful || responseBody == null) {
+                        Log.w(TAG, "matchSubtitleLines gemini HTTP ${response.code}")
+                        return@use null
+                    }
+                    JSONObject(responseBody).getJSONArray("candidates").getJSONObject(0)
+                        .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
+                        .getString("text").trim()
+                }
+            }.onFailure {
+                if (it is kotlinx.coroutines.CancellationException) throw it
+                Log.w(TAG, "matchSubtitleLines gemini failed: ${it.message}")
+            }.getOrNull()
+        }
+    }
+
     suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult =
         translateBatchInternal(lines, targetLanguage, depth = 0)
 

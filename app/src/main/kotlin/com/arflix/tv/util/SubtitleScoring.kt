@@ -78,8 +78,16 @@ private fun tokenWeight(token: String): Int = when {
  *   Noise           → 1  (ntsc, proper, hdr…)
  *   Pure numbers    → 0  (skipped)
  */
-fun weightedSubtitleScore(streamSource: String, subtitleId: String): Int {
-    if (streamSource.isBlank() || subtitleId.isBlank()) return 0
+fun weightedSubtitleScore(streamSourceRaw: String, subtitleId: String): Int {
+    if (streamSourceRaw.isBlank() || subtitleId.isBlank()) return 0
+
+    // A stream name can reach us URL-encoded, with '+' where the spaces belong — debrid links carry
+    // the filename as a query component, and it is decoded somewhere later in the pipeline. Scoring
+    // the encoded form tokenises to nothing and every subtitle ties at 0, which silently turns the
+    // ranking into arrival order. Observed From S02E04 (Sept 2026): the same eight subtitles scored
+    // 0/0/0 against "FROM+2022+S02E04+..." and 81/81/71 against "FROM 2022 S02E04 ..." eight
+    // seconds later, so the optimistic pick started from the worst candidate instead of the best.
+    val streamSource = streamSourceRaw.replace('+', ' ')
 
     val cleanId = subtitleId.replace(SUBTITLE_BRACKET_RE, "").trim()
 
