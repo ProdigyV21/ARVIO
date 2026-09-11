@@ -1,0 +1,8 @@
+ARVIO v1.9.996
+- Redesigned mobile player and timeline seek previews.
+- Multiple Stalker portals, expanded TV guides, and easier IPTV setup.
+- Improved Home loading, Search focus, landscape layouts, and Continue Watching.
+- More subtitle options and playback fixes.
+- Brazilian Portuguese and expanded German translations.
+- Navigation, sync, Discord, and stability improvements.
+Full changelog and contributor credits: https://github.com/ProdigyV21/ARVIO/releases/tag/v1.9.996

@@ -2,7 +2,7 @@
 name: Bug Report
 about: Create a report to help us improve ARVIO
 title: "[BUG]:"
-labels: bug
+labels: 'type:bug'
 assignees: ''
 
 ---

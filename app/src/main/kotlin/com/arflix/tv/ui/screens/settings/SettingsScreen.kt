@@ -125,10 +125,13 @@ import androidx.compose.material3.Icon
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.MobileSettingsCategory
 import com.arflix.tv.ui.components.MobileSettingsRow
+import com.arflix.tv.ui.components.IptvPlaylistModal
+import com.arflix.tv.ui.components.IptvSourceType
 import com.arflix.tv.ui.components.QrCodeImage
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -264,7 +267,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "language" -> listOf(0, 3, 1, 2)
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38, 39, 9)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 13, 14, 37, 34, 16, 15, 40, 27)
+        "playback" -> listOf(10, 11, 12, 16, 15, 40, 27)
         "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 41, 36)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -311,6 +314,22 @@ private fun openExternalUrl(context: Context, url: String) {
             Intent(Intent.ACTION_VIEW, Uri.parse(url))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+    }
+}
+
+/**
+ * Resolves a [SettingsMessage] against the app language. Nested messages (e.g. the EPG summary
+ * inside an IPTV status line) are resolved first so they are localized too.
+ */
+@Composable
+private fun SettingsMessage.localizedText(): String = when (this) {
+    is SettingsMessage.Raw -> text
+    is SettingsMessage.Res -> {
+        val args = mutableListOf<Any>()
+        formatArgs.forEach { arg ->
+            args += if (arg is SettingsMessage) arg.localizedText() else arg
+        }
+        stringResource(resourceId, *args.toTypedArray())
     }
 }
 
@@ -366,6 +385,10 @@ fun SettingsScreen(
     onBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showCredits by remember { mutableStateOf(false) }
+    if (showCredits) {
+        com.arflix.tv.ui.components.AboutCreditsDialog { showCredits = false }
+    }
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -454,15 +477,6 @@ fun SettingsScreen(
     var customAddonUrl by remember { mutableStateOf("") }
     var showIptvInput by remember { mutableStateOf(false) }
     var editingIptvIndex by remember { mutableIntStateOf(-1) }
-    var iptvEditName by remember { mutableStateOf("") }
-    var iptvEditUrl by remember { mutableStateOf("") }
-    var iptvEditEpg by remember { mutableStateOf("") }
-    var iptvEditEnabled by remember { mutableStateOf(true) }
-    var iptvEditImportLiveTv by remember { mutableStateOf(true) }
-    var iptvEditImportVod by remember { mutableStateOf(true) }
-    var iptvEditImportSeries by remember { mutableStateOf(true) }
-    var iptvEditXtreamUser by remember { mutableStateOf("") }
-    var iptvEditXtreamPass by remember { mutableStateOf("") }
     var showStalkerInput by remember { mutableStateOf(false) }
     var stalkerEditPortal by remember { mutableStateOf("") }
     var stalkerEditMac by remember { mutableStateOf("") }
@@ -519,15 +533,15 @@ fun SettingsScreen(
                 // Reset row + (bulk-toggle row) + category rows.
                 groups.size + (firstIptvGroupIndex(uiState.iptvSelectedPlaylistId.orEmpty(), groups, stalkerIds) - 1)
             } else {
-                // Add-M3U + M3U rows + Add-Stalker + Stalker rows + order + VOD search
+                // Add-Playlist + M3U rows + Stalker rows + order + VOD search
                 // + EPG actions + favorites-on-home + refresh + clear
-                7 + uiState.iptvPlaylists.size + uiState.iptvStalkerPortals.size
+                6 + uiState.iptvPlaylists.size + uiState.iptvStalkerPortals.size
             }
             "home_server" -> uiState.homeServerConnections.size + 3
             "catalogs" -> uiState.catalogs.size + 1 // Add + Import + catalogs
             "stremio" -> stremioAddons.size + 1 // rows + refresh + add button
             "plugins" -> pluginsMaxIndex
-            "accounts" -> 15 // Accounts, tracking routing, telegram, discord, sync/update, privacy and deletion
+            "accounts" -> 16 // Includes About & Credits.
             else -> 0
         }
     }
@@ -696,44 +710,9 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(uiState.iptvPlaylists, showIptvInput, editingIptvIndex) {
+    LaunchedEffect(showIptvInput) {
         if (!showIptvInput) {
             editingIptvIndex = -1
-            iptvEditName = ""
-            iptvEditUrl = ""
-            iptvEditEpg = ""
-            iptvEditEnabled = true
-            iptvEditXtreamUser = ""
-            iptvEditXtreamPass = ""
-            iptvEditImportLiveTv = true
-            iptvEditImportVod = true
-            iptvEditImportSeries = true
-        } else {
-            val playlist = uiState.iptvPlaylists.getOrNull(editingIptvIndex)
-            iptvEditName = playlist?.name ?: "List ${editingIptvIndex + 2}".takeIf { editingIptvIndex >= 0 } ?: "List ${uiState.iptvPlaylists.size + 1}"
-            // When editing, try to extract Xtream credentials from the saved URL
-            // (normalizeIptvInput converts "host user pass" to a full get.php URL)
-            val savedUrl = playlist?.m3uUrl ?: ""
-            val xtreamUri = try { android.net.Uri.parse(savedUrl) } catch (_: Exception) { null }
-            val xtreamUser = xtreamUri?.getQueryParameter("username") ?: ""
-            val xtreamPass = xtreamUri?.getQueryParameter("password") ?: ""
-            val isXtreamUrl = savedUrl.contains("get.php") && xtreamUser.isNotBlank() && xtreamPass.isNotBlank()
-            if (isXtreamUrl) {
-                // Show just the host:port for Xtream URLs
-                val baseUrl = "${xtreamUri!!.scheme}://${xtreamUri.host}${if (xtreamUri.port > 0) ":${xtreamUri.port}" else ""}"
-                iptvEditUrl = baseUrl
-                iptvEditXtreamUser = xtreamUser
-                iptvEditXtreamPass = xtreamPass
-            } else {
-                iptvEditUrl = savedUrl
-                iptvEditXtreamUser = ""
-                iptvEditXtreamPass = ""
-            }
-            iptvEditEpg = playlist?.settingsEpgInput().orEmpty()
-            iptvEditEnabled = playlist?.enabled ?: true
-            iptvEditImportLiveTv = playlist?.importLiveTv ?: true
-            iptvEditImportVod = playlist?.importVod ?: true
-            iptvEditImportSeries = playlist?.importSeries ?: true
         }
     }
 
@@ -866,15 +845,15 @@ fun SettingsScreen(
                                 Zone.CONTENT -> {
                                     val m3uCount = uiState.iptvPlaylists.size
                                     val stalkerCount = uiState.iptvStalkerPortals.size
-                                    val stalkerStart = m3uCount + 2
-                                    val stalkerEnd = m3uCount + 1 + stalkerCount
+                                    val stalkerStart = m3uCount + 1
+                                    val stalkerEnd = m3uCount + stalkerCount
                                     if (currentSection == "stremio" && contentFocusIndex < stremioAddons.size && addonActionIndex > 0) {
                                         addonActionIndex--
                                     } else if (currentSection == "iptv" &&
                                         iptvActionIndex > 0 &&
                                         (
                                             showIptvCategoriesSettings && contentFocusIndex > 0 ||
-                                                !showIptvCategoriesSettings && (contentFocusIndex in 1..m3uCount || contentFocusIndex in stalkerStart..stalkerEnd)
+                                                !showIptvCategoriesSettings && (contentFocusIndex in 1..m3uCount || (stalkerCount > 0 && contentFocusIndex in stalkerStart..stalkerEnd))
                                             )
                                     ) {
                                         iptvActionIndex--
@@ -915,8 +894,8 @@ fun SettingsScreen(
                                     val stalkerIds = uiState.iptvStalkerPortals.map { it.id }.toSet()
                                     val m3uCount = uiState.iptvPlaylists.size
                                     val stalkerCount = uiState.iptvStalkerPortals.size
-                                    val stalkerStart = m3uCount + 2
-                                    val stalkerEnd = m3uCount + 1 + stalkerCount
+                                    val stalkerStart = m3uCount + 1
+                                    val stalkerEnd = m3uCount + stalkerCount
                                     if (currentSection == "stremio" &&
                                         contentFocusIndex in 0 until stremioAddons.size &&
                                         addonActionIndex < focusedStremioAddonMaxAction
@@ -926,7 +905,7 @@ fun SettingsScreen(
                                         iptvActionIndex++
                                     } else if (currentSection == "iptv" && !showIptvCategoriesSettings && contentFocusIndex in 1..m3uCount && iptvActionIndex < iptvRowMaxAction()) {
                                         iptvActionIndex++
-                                    } else if (currentSection == "iptv" && !showIptvCategoriesSettings && contentFocusIndex in stalkerStart..stalkerEnd && iptvActionIndex < iptvRowMaxAction()) {
+                                    } else if (currentSection == "iptv" && !showIptvCategoriesSettings && stalkerCount > 0 && contentFocusIndex in stalkerStart..stalkerEnd && iptvActionIndex < iptvRowMaxAction()) {
                                         iptvActionIndex++
                                     } else if (currentSection == "catalogs" && contentFocusIndex > 1 && catalogActionIndex < 5) {
                                         catalogActionIndex++
@@ -1093,8 +1072,8 @@ fun SettingsScreen(
                                             } else {
                                                 val m3uCount = uiState.iptvPlaylists.size
                                                 val stalkerCount = uiState.iptvStalkerPortals.size
-                                                val stalkerStart = m3uCount + 2
-                                                val stalkerEnd = m3uCount + 1 + stalkerCount
+                                                val stalkerStart = m3uCount + 1
+                                                val stalkerEnd = m3uCount + stalkerCount
                                                 when {
                                                     contentFocusIndex == 0 -> {
                                                         editingIptvIndex = -1
@@ -1133,15 +1112,7 @@ fun SettingsScreen(
                                                             }
                                                         }
                                                     }
-                                                    contentFocusIndex == m3uCount + 1 -> {
-                                                        // Add Stalker portal
-                                                        stalkerEditId = null
-                                                        stalkerEditPortal = ""
-                                                        stalkerEditMac = ""
-                                                        stalkerEditName = ""
-                                                        showStalkerInput = true
-                                                    }
-                                                    contentFocusIndex in stalkerStart..stalkerEnd -> {
+                                                    stalkerCount > 0 && contentFocusIndex in stalkerStart..stalkerEnd -> {
                                                         val sIdx = contentFocusIndex - stalkerStart
                                                         val portal = uiState.iptvStalkerPortals.getOrNull(sIdx)
                                                         if (portal != null) {
@@ -1161,7 +1132,7 @@ fun SettingsScreen(
                                                             }
                                                         }
                                                     }
-                                                    contentFocusIndex == m3uCount + stalkerCount + 2 -> {
+                                                    contentFocusIndex == m3uCount + stalkerCount + 1 -> {
                                                         val next = when (uiState.iptvSortOrder) {
                                                             "provider" -> "number"
                                                             "number" -> "name"
@@ -1169,19 +1140,19 @@ fun SettingsScreen(
                                                         }
                                                         viewModel.setIptvSortOrder(next)
                                                     }
-                                                    contentFocusIndex == m3uCount + stalkerCount + 3 -> {
+                                                    contentFocusIndex == m3uCount + stalkerCount + 2 -> {
                                                         viewModel.setVodSearchEnabled(!uiState.vodSearchEnabled)
                                                     }
-                                                    contentFocusIndex == m3uCount + stalkerCount + 4 -> {
+                                                    contentFocusIndex == m3uCount + stalkerCount + 3 -> {
                                                         viewModel.setEpgVodActionsEnabled(!uiState.epgVodActionsEnabled)
                                                     }
-                                                    contentFocusIndex == m3uCount + stalkerCount + 5 -> {
+                                                    contentFocusIndex == m3uCount + stalkerCount + 4 -> {
                                                         viewModel.setIptvFavoritesOnHome(!uiState.iptvFavoritesOnHome)
                                                     }
-                                                    contentFocusIndex == m3uCount + stalkerCount + 6 -> {
+                                                    contentFocusIndex == m3uCount + stalkerCount + 5 -> {
                                                         viewModel.refreshIptv(force = true)
                                                     }
-                                                    contentFocusIndex == m3uCount + stalkerCount + 7 -> {
+                                                    contentFocusIndex == m3uCount + stalkerCount + 6 -> {
                                                         viewModel.clearIptvConfig()
                                                     }
                                                 }
@@ -1356,6 +1327,7 @@ fun SettingsScreen(
                                                 13 -> viewModel.setDiagnosticsSharingEnabled(!uiState.diagnosticsSharingEnabled)
                                                 14 -> openExternalUrl(context, PRIVACY_POLICY_URL)
                                                 15 -> openExternalUrl(context, ACCOUNT_DELETION_URL)
+                                                16 -> showCredits = true
                                             }
                                         }
                                         "plugins" -> {
@@ -1393,6 +1365,20 @@ fun SettingsScreen(
                 onSubtitleAiQrClick = { viewModel.startAiKeyServer() },
                 onAddIptvClick = { editingIptvIndex = -1; showIptvInput = true },
                 onEditIptvClick = { idx -> editingIptvIndex = idx; showIptvInput = true },
+                onAddStalkerPortal = {
+                    stalkerEditId = null
+                    stalkerEditPortal = ""
+                    stalkerEditMac = ""
+                    stalkerEditName = ""
+                    showStalkerInput = true
+                },
+                onEditStalkerPortal = { portal ->
+                    stalkerEditId = portal.id
+                    stalkerEditPortal = portal.portalUrl
+                    stalkerEditMac = portal.macAddress
+                    stalkerEditName = portal.name
+                    showStalkerInput = true
+                },
                 onAddCatalogClick = { showCatalogInput = true },
                 onImportCatalogPackClick = { showCatalogPackInput = true },
                 onRenameCatalogClick = { catalog ->
@@ -1695,8 +1681,8 @@ fun SettingsScreen(
                             playlists = uiState.iptvPlaylists,
                             channelCount = uiState.iptvChannelCount,
                             isLoading = uiState.isIptvLoading,
-                            error = uiState.iptvError,
-                            statusMessage = uiState.iptvStatusMessage,
+                            error = uiState.iptvError?.localizedText(),
+                            statusMessage = uiState.iptvStatusMessage?.localizedText(),
                             statusType = uiState.iptvStatusType,
                             progressText = uiState.iptvProgressText,
                             progressPercent = uiState.iptvProgressPercent,
@@ -1756,8 +1742,8 @@ fun SettingsScreen(
                             playlists = uiState.iptvPlaylists,
                             channelCount = uiState.iptvChannelCount,
                             isLoading = uiState.isIptvLoading,
-                            error = uiState.iptvError,
-                            statusMessage = uiState.iptvStatusMessage,
+                            error = uiState.iptvError?.localizedText(),
+                            statusMessage = uiState.iptvStatusMessage?.localizedText(),
                             statusType = uiState.iptvStatusType,
                             progressText = uiState.iptvProgressText,
                             progressPercent = uiState.iptvProgressPercent,
@@ -1817,7 +1803,7 @@ fun SettingsScreen(
                             connections = uiState.homeServerConnections,
                             isWorking = uiState.isHomeServerConnecting,
                             isPlexWorking = uiState.isPlexHomeServerPolling || uiState.plexHomeServerAuth != null,
-                            error = uiState.homeServerError,
+                            error = uiState.homeServerError?.localizedText(),
                             focusedIndex = if (activeZone == Zone.CONTENT) contentFocusIndex else -1,
                             onConnect = {
                                 homeServerUrl = ""
@@ -1899,7 +1885,7 @@ fun SettingsScreen(
                             isTraktAuthStarting = uiState.isTraktAuthStarting,
                             isTraktPolling = uiState.isTraktPolling,
                             isForceCloudSyncing = uiState.isForceCloudSyncing,
-                            lastCloudSyncStatus = uiState.lastCloudSyncStatus,
+                            lastCloudSyncStatus = uiState.lastCloudSyncStatus?.localizedText(),
                             diagnosticsSharingEnabled = uiState.diagnosticsSharingEnabled,
                             isSelfUpdateSupported = uiState.isSelfUpdateSupported,
                             updateStatus = uiState.updateStatus,
@@ -1935,6 +1921,7 @@ fun SettingsScreen(
                             onInstallUpdate = { viewModel.installAppUpdateOrRequestPermission() },
                             onDiagnosticsSharingToggle = viewModel::setDiagnosticsSharingEnabled,
                             onOpenPrivacy = { openExternalUrl(context, PRIVACY_POLICY_URL) },
+                            onOpenCredits = { showCredits = true },
                             onOpenDataDeletion = { openExternalUrl(context, ACCOUNT_DELETION_URL) },
                             onNavigateToTelegram = onNavigateToTelegramSettings
                         )
@@ -2049,132 +2036,127 @@ fun SettingsScreen(
                 }
             )
         }
-        if (showIptvInput) {
-            InputModal(
-                title = if (editingIptvIndex >= 0) stringResource(R.string.settings_edit_tv_playlist) else stringResource(R.string.settings_add_tv_playlist),
-                supportingText = stringResource(R.string.settings_iptv_epg_note),
-                fields = listOf(
-                    InputField(
-                        label = stringResource(R.string.settings_label_playlist_name),
-                        value = iptvEditName,
-                        onValueChange = { iptvEditName = it }
-                    ),
-                    InputField(
-                        label = stringResource(R.string.settings_label_m3u_or_xtream),
-                        value = iptvEditUrl,
-                        placeholder = stringResource(R.string.settings_ph_provider_host),
-                        onValueChange = { iptvEditUrl = it }
-                    ),
-                    InputField(
-                        label = stringResource(R.string.settings_label_xtream_user),
-                        value = iptvEditXtreamUser,
-                        placeholder = stringResource(R.string.settings_ph_plain_m3u),
-                        onValueChange = { iptvEditXtreamUser = it }
-                    ),
-                    InputField(
-                        label = stringResource(R.string.settings_label_xtream_pass),
-                        value = iptvEditXtreamPass,
-                        placeholder = stringResource(R.string.settings_ph_plain_m3u),
-                        isSecret = true,
-                        onValueChange = { iptvEditXtreamPass = it }
-                    ),
-                    InputField(
-                        label = stringResource(R.string.settings_label_epg_sources),
-                        value = iptvEditEpg,
-                        placeholder = "https://provider.com/xmltv.xml\nhttps://backup.com/epg.xml.gz",
-                        helper = stringResource(R.string.settings_helper_epg_one_per_line),
-                        singleLine = false,
-                        onValueChange = { iptvEditEpg = it }
-                    )
-                ),
-                toggleFields = listOf(
-                    ToggleField(
-                        label = stringResource(R.string.live),
-                        value = iptvEditImportLiveTv,
-                        onValueChange = { iptvEditImportLiveTv = it }
-                    ),
-                    ToggleField(
-                        label = stringResource(R.string.movies),
-                        value = iptvEditImportVod,
-                        onValueChange = { iptvEditImportVod = it }
-                    ),
-                    ToggleField(
-                        label = stringResource(R.string.series),
-                        value = iptvEditImportSeries,
-                        onValueChange = { iptvEditImportSeries = it }
-                    )
-                ),
-                onConfirm = {
-                    // Build the m3uUrl: if Xtream credentials are provided, combine as "host user pass"
-                    val hasXtream = iptvEditXtreamUser.isNotBlank() && iptvEditXtreamPass.isNotBlank()
-                    val finalM3uUrl = if (hasXtream) {
-                        "${iptvEditUrl.trim()} ${iptvEditXtreamUser.trim()} ${iptvEditXtreamPass.trim()}"
+        if (showIptvInput || showStalkerInput) {
+            val editingPlaylist = if (showIptvInput && editingIptvIndex in uiState.iptvPlaylists.indices) {
+                uiState.iptvPlaylists[editingIptvIndex]
+            } else null
+            val isEditingStalker = showStalkerInput && stalkerEditId != null
+            val isEditingIptv = showIptvInput && editingPlaylist != null
+            val isEditing = isEditingStalker || isEditingIptv
+
+            val resolvedInitialName = when {
+                showStalkerInput -> stalkerEditName
+                editingPlaylist != null -> editingPlaylist.name
+                else -> ""
+            }
+
+            val sourceInfo = if (showStalkerInput) {
+                ResolvedIptvSource(IptvSourceType.STALKER, stalkerEditPortal, "", "")
+            } else if (editingPlaylist != null) {
+                val rawUrl = editingPlaylist.m3uUrl.trim()
+                val parts = rawUrl.split("\\s+".toRegex()).filter { it.isNotBlank() }
+                if (parts.size == 3 && !rawUrl.contains("get.php")) {
+                    ResolvedIptvSource(IptvSourceType.XTREAM, parts[0], parts[1], parts[2])
+                } else {
+                    val uri = try { android.net.Uri.parse(rawUrl) } catch (_: Exception) { null }
+                    val u = uri?.getQueryParameter("username").orEmpty()
+                    val p = uri?.getQueryParameter("password").orEmpty()
+                    if ((rawUrl.contains("get.php") || rawUrl.contains("player_api.php")) && u.isNotBlank() && p.isNotBlank()) {
+                        val base = "${uri!!.scheme}://${uri.host}${if (uri.port > 0) ":${uri.port}" else ""}"
+                        ResolvedIptvSource(IptvSourceType.XTREAM, base, u, p)
                     } else {
-                        iptvEditUrl
+                        ResolvedIptvSource(IptvSourceType.M3U, rawUrl, "", "")
                     }
-                    // Auto-derive EPG for Xtream if not provided
-                    val finalEpgUrl = if (hasXtream && iptvEditEpg.isBlank()) {
-                        "${iptvEditUrl.trim()} ${iptvEditXtreamUser.trim()} ${iptvEditXtreamPass.trim()}"
-                    } else {
-                        iptvEditEpg
-                    }
-                    val finalEpgUrls = splitSettingsEpgInput(finalEpgUrl)
-                    val updated = uiState.iptvPlaylists.toMutableList()
-                    val entry = com.arflix.tv.data.repository.IptvPlaylistEntry(
-                        id = updated.getOrNull(editingIptvIndex)?.id ?: "list_${editingIptvIndex + 2}".takeIf { editingIptvIndex >= 0 } ?: "list_${updated.size + 1}",
-                        name = iptvEditName,
-                        m3uUrl = finalM3uUrl,
-                        epgUrl = finalEpgUrls.firstOrNull().orEmpty(),
-                        enabled = iptvEditEnabled,
-                        epgUrls = finalEpgUrls,
-                        importLiveTv = iptvEditImportLiveTv,
-                        importVod = iptvEditImportVod,
-                        importSeries = iptvEditImportSeries
-                    )
-                    if (editingIptvIndex in updated.indices) updated[editingIptvIndex] = entry else updated.add(entry)
-                    viewModel.saveIptvPlaylists(updated)
-                    showIptvInput = false
-                },
-                onDismiss = {
-                    showIptvInput = false
                 }
-            )
-        }
-        if (showStalkerInput) {
-            val isEditing = stalkerEditId != null
-            InputModal(
-                title = stringResource(if (isEditing) R.string.settings_cd_edit_stalker_config else R.string.settings_add_stalker_portal_button),
-                fields = listOf(
-                    InputField(
-                        label = stringResource(R.string.settings_stalker_portal_name_label),
-                        value = stalkerEditName,
-                        placeholder = stringResource(R.string.settings_stalker_portal_name_placeholder),
-                        onValueChange = { stalkerEditName = it }
-                    ),
-                    InputField(
-                        label = stringResource(R.string.settings_stalker_label_portal_url),
-                        value = stalkerEditPortal,
-                        placeholder = stringResource(R.string.settings_stalker_ph_portal_url),
-                        onValueChange = { stalkerEditPortal = it }
-                    ),
-                    InputField(
-                        label = stringResource(R.string.settings_stalker_label_mac),
-                        value = stalkerEditMac,
-                        placeholder = stringResource(R.string.settings_stalker_ph_mac),
-                        onValueChange = { stalkerEditMac = it }
-                    )
-                ),
-                onConfirm = {
-                    val id = stalkerEditId
-                    if (id != null) {
-                        viewModel.onEditStalkerPortal(id, stalkerEditPortal, stalkerEditMac, stalkerEditName)
-                    } else {
-                        viewModel.onAddStalkerPortal(stalkerEditPortal, stalkerEditMac, stalkerEditName)
+            } else {
+                ResolvedIptvSource(IptvSourceType.M3U, "", "", "")
+            }
+
+            val resolvedEpg = editingPlaylist?.settingsEpgInput().orEmpty()
+
+            val resolvedMac = when {
+                showStalkerInput -> stalkerEditMac
+                else -> ""
+            }
+
+            val resolvedImportLiveTv = editingPlaylist?.importLiveTv ?: true
+            val resolvedImportVod = editingPlaylist?.importVod ?: true
+            val resolvedImportSeries = editingPlaylist?.importSeries ?: true
+            val playlistEnabled = editingPlaylist?.enabled ?: true
+
+            key(
+                if (showStalkerInput) "stalker_${stalkerEditId ?: "new"}"
+                else if (isEditingIptv) "iptv_${editingPlaylist.id}"
+                else "iptv_new"
+            ) {
+                IptvPlaylistModal(
+                    isEditing = isEditing,
+                    initialSourceType = sourceInfo.sourceType,
+                    initialName = resolvedInitialName,
+                    initialUrl = sourceInfo.url,
+                    initialXtreamUser = sourceInfo.xtreamUser,
+                    initialXtreamPass = sourceInfo.xtreamPass,
+                    initialEpg = resolvedEpg,
+                    initialMacAddress = resolvedMac,
+                    initialImportLiveTv = resolvedImportLiveTv,
+                    initialImportVod = resolvedImportVod,
+                    initialImportSeries = resolvedImportSeries,
+                    onSaveIptv = { name, url, xtreamUser, xtreamPass, epg, importLiveTv, importVod, importSeries ->
+                        val hasXtream = xtreamUser.isNotBlank() && xtreamPass.isNotBlank()
+                        val finalM3uUrl = if (hasXtream) {
+                            "${url.trim()} ${xtreamUser.trim()} ${xtreamPass.trim()}"
+                        } else {
+                            url.trim()
+                        }
+                        val finalEpgUrl = if (hasXtream && epg.isBlank()) {
+                            "${url.trim()} ${xtreamUser.trim()} ${xtreamPass.trim()}"
+                        } else {
+                            epg.trim()
+                        }
+                        val finalEpgUrls = splitSettingsEpgInput(finalEpgUrl)
+                        val updated = uiState.iptvPlaylists.toMutableList()
+                        val entry = com.arflix.tv.data.repository.IptvPlaylistEntry(
+                            id = editingPlaylist?.id ?: "list_${updated.size + 1}",
+                            name = name.trim(),
+                            m3uUrl = finalM3uUrl,
+                            epgUrl = finalEpgUrls.firstOrNull().orEmpty(),
+                            enabled = playlistEnabled,
+                            epgUrls = finalEpgUrls,
+                            importLiveTv = importLiveTv,
+                            importVod = importVod,
+                            importSeries = importSeries
+                        )
+                        if (editingPlaylist != null && editingIptvIndex in updated.indices) {
+                            updated[editingIptvIndex] = entry
+                        } else {
+                            updated.add(entry)
+                        }
+                        viewModel.saveIptvPlaylists(updated)
+                        showIptvInput = false
+                        showStalkerInput = false
+                        editingIptvIndex = -1
+                        stalkerEditId = null
+                    },
+                    onSaveStalker = { name, portalUrl, macAddress ->
+                        val id = stalkerEditId
+                        if (id != null) {
+                            viewModel.onEditStalkerPortal(id, portalUrl.trim(), macAddress.trim(), name.trim())
+                        } else {
+                            viewModel.onAddStalkerPortal(portalUrl.trim(), macAddress.trim(), name.trim())
+                        }
+                        showIptvInput = false
+                        showStalkerInput = false
+                        editingIptvIndex = -1
+                        stalkerEditId = null
+                    },
+                    onDismiss = {
+                        showIptvInput = false
+                        showStalkerInput = false
+                        editingIptvIndex = -1
+                        stalkerEditId = null
                     }
-                    showStalkerInput = false
-                },
-                onDismiss = { showStalkerInput = false }
-            )
+                )
+            }
         }
         if (showStalkerRename) {
             InputModal(
@@ -2202,7 +2184,7 @@ fun SettingsScreen(
                 query = uiState.catalogSearchQuery,
                 results = uiState.catalogSearchResults,
                 isSearching = uiState.isCatalogSearching,
-                error = uiState.catalogSearchError,
+                error = uiState.catalogSearchError?.localizedText(),
                 manualUrl = catalogInputUrl,
                 addedCatalogUrls = uiState.catalogs.mapNotNull { it.sourceUrl }.toSet(),
                 onQueryChange = viewModel::setCatalogSearchQuery,
@@ -2244,9 +2226,9 @@ fun SettingsScreen(
 
         if (showCatalogPackInput) {
             InputModal(
-                title = "Import Catalog Pack",
+                title = stringResource(R.string.settings_catalog_pack_import_title),
                 fields = listOf(
-                    InputField(label = "Pack URL", value = catalogPackInputUrl, onValueChange = { catalogPackInputUrl = it })
+                    InputField(label = stringResource(R.string.settings_catalog_pack_url_label), value = catalogPackInputUrl, onValueChange = { catalogPackInputUrl = it })
                 ),
                 onConfirm = {
                     if (catalogPackInputUrl.isNotBlank()) {
@@ -2266,7 +2248,7 @@ fun SettingsScreen(
             CatalogPackImportDialog(
                 pendingPack = uiState.pendingPackManifest,
                 isLoading = uiState.isPackLoading,
-                error = uiState.packError,
+                error = uiState.packError?.localizedText(),
                 onConfirm = { manifest ->
                     viewModel.confirmInstallPack(uiState.pendingPackUrl ?: "")
                 },
@@ -2532,8 +2514,8 @@ fun SettingsScreen(
         uiState.simklUserCode?.let { simklCode ->
             val verificationUrl = uiState.simklVerificationUrl ?: "https://simkl.com/pin"
             TraktActivationModal(
-                title = "Connect Simkl",
-                instruction = "Visit $verificationUrl on your phone or computer and enter this code:",
+                title = stringResource(R.string.settings_simkl_connect_title),
+                instruction = stringResource(R.string.settings_activation_visit_instruction, verificationUrl),
                 verificationUrl = verificationUrl,
                 userCode = simklCode,
                 onDismiss = { viewModel.disconnectSimkl() }
@@ -2606,7 +2588,7 @@ fun SettingsScreen(
         // Toast notification
         uiState.toastMessage?.let { message ->
             Toast(
-                message = message,
+                message = message.localizedText(),
                 type = when (uiState.toastType) {
                     ToastType.SUCCESS -> ComponentToastType.SUCCESS
                     ToastType.ERROR -> ComponentToastType.ERROR
@@ -3986,6 +3968,8 @@ private fun MobileSettingsLayout(
     onAddIptvClick: () -> Unit,
     onConfigureStalkerClick: () -> Unit = {},
     onEditIptvClick: (Int) -> Unit,
+    onAddStalkerPortal: () -> Unit = {},
+    onEditStalkerPortal: (StalkerPortalEntry) -> Unit = {},
     onAddCatalogClick: () -> Unit,
     onImportCatalogPackClick: () -> Unit,
     onRenameCatalogClick: (CatalogConfig) -> Unit,
@@ -4107,6 +4091,8 @@ private fun MobileSettingsLayout(
                     onAddIptvClick = onAddIptvClick,
                     onConfigureStalkerClick = onConfigureStalkerClick,
                     onEditIptvClick = onEditIptvClick,
+                    onAddStalkerPortal = onAddStalkerPortal,
+                    onEditStalkerPortal = onEditStalkerPortal,
                     onAddCatalogClick = onAddCatalogClick,
                     onImportCatalogPackClick = onImportCatalogPackClick,
                     onRenameCatalogClick = onRenameCatalogClick,
@@ -4159,6 +4145,10 @@ private fun MobileSettingsMainPage(
     onNavigateToTelegram: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    var showCredits by remember { mutableStateOf(false) }
+    if (showCredits) {
+        com.arflix.tv.ui.components.AboutCreditsDialog { showCredits = false }
+    }
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
@@ -4276,14 +4266,14 @@ private fun MobileSettingsMainPage(
                     iconRes = R.drawable.ic_discord,
                     title = "Discord RPC",
                     subtitle = when {
-                        !isDiscordSupported -> "Not included in this build"
-                        isDiscordLoggedIn && !discordUsername.isNullOrBlank() -> "Connected as $discordUsername"
+                        !isDiscordSupported -> stringResource(R.string.discord_not_included_in_build)
+                        isDiscordLoggedIn && !discordUsername.isNullOrBlank() -> stringResource(R.string.settings_connected_as, discordUsername.orEmpty())
                         else -> ""
                     },
                     value = when {
-                        !isDiscordSupported -> "Unavailable"
-                        isDiscordLoggedIn -> "Disconnect"
-                        else -> "Connect"
+                        !isDiscordSupported -> stringResource(R.string.unavailable)
+                        isDiscordLoggedIn -> stringResource(R.string.settings_disconnect)
+                        else -> stringResource(R.string.connect)
                     },
                     enabled = isDiscordSupported,
                     isFocused = false,
@@ -4312,6 +4302,15 @@ private fun MobileSettingsMainPage(
                     showDivider = false,
                     onClick = { onNavigate("Privacy & Data") }
                 )
+                MobileSettingsRow(
+                    icon = Icons.Default.Link,
+                    title = stringResource(R.string.about_credits),
+                    subtitle = stringResource(R.string.about_credits_description),
+                    value = "",
+                    isFocused = false,
+                    showDivider = false,
+                    onClick = { showCredits = true }
+                )
             }
         }
     }
@@ -4333,6 +4332,8 @@ private fun MobileSettingsSubPage(
     onAddIptvClick: () -> Unit,
     onConfigureStalkerClick: () -> Unit = {},
     onEditIptvClick: (Int) -> Unit,
+    onAddStalkerPortal: () -> Unit = {},
+    onEditStalkerPortal: (StalkerPortalEntry) -> Unit = {},
     onAddCatalogClick: () -> Unit,
     onImportCatalogPackClick: () -> Unit,
     onRenameCatalogClick: (CatalogConfig) -> Unit,
@@ -4350,11 +4351,6 @@ private fun MobileSettingsSubPage(
 ) {
 
     val scrollState = rememberScrollState()
-    var showStalkerInput by remember { mutableStateOf(false) }
-    var stalkerEditId by remember { mutableStateOf<String?>(null) }
-    var stalkerEditPortal by remember { mutableStateOf("") }
-    var stalkerEditMac by remember { mutableStateOf("") }
-    var stalkerEditName by remember { mutableStateOf("") }
     var showStalkerRename by remember { mutableStateOf(false) }
     var stalkerRenameId by remember { mutableStateOf("") }
     var stalkerRenameName by remember { mutableStateOf("") }
@@ -4371,14 +4367,16 @@ private fun MobileSettingsSubPage(
                     MobileSettingsRow(
                         icon = Icons.Default.PlayArrow,
                         title = stringResource(R.string.auto_play_next_title),
-                        value = if (uiState.autoPlayNext) "On" else "Off",
+                        value = stringResource(if (uiState.autoPlayNext) R.string.on else R.string.off),
+                        toggleChecked = uiState.autoPlayNext,
                         isFocused = false,
                         onClick = { viewModel.setAutoPlayNext(!uiState.autoPlayNext) }
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.PlayArrow,
                         title = stringResource(R.string.autoplay),
-                        value = if (uiState.autoPlaySingleSource) "On" else "Off",
+                        value = stringResource(if (uiState.autoPlaySingleSource) R.string.on else R.string.off),
+                        toggleChecked = uiState.autoPlaySingleSource,
                         isFocused = false,
                         onClick = { viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource) }
                     )
@@ -4388,34 +4386,6 @@ private fun MobileSettingsSubPage(
                         value = uiState.autoPlayMinQuality,
                         isFocused = false,
                         onClick = { viewModel.cycleAutoPlayMinQuality() }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.Movie,
-                        title = stringResource(R.string.trailer_auto_play),
-                        value = if (uiState.trailerAutoPlay) "On" else "Off",
-                        isFocused = false,
-                        onClick = { viewModel.setTrailerAutoPlay(!uiState.trailerAutoPlay) }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.VolumeUp,
-                        title = stringResource(R.string.trailer_sound),
-                        value = if (uiState.trailerSoundEnabled) "On" else "Off",
-                        isFocused = false,
-                        onClick = { viewModel.setTrailerSoundEnabled(!uiState.trailerSoundEnabled) }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.Schedule,
-                        title = stringResource(R.string.trailer_delay),
-                        value = "${uiState.trailerDelaySeconds}s",
-                        isFocused = false,
-                        onClick = { viewModel.cycleTrailerDelay() }
-                    )
-                    MobileSettingsRow(
-                        icon = Icons.Default.Movie,
-                        title = stringResource(R.string.trailer_in_cards),
-                        value = if (uiState.trailerInCards) "On" else "Off",
-                        isFocused = false,
-                        onClick = { viewModel.setTrailerInCards(!uiState.trailerInCards) }
                     )
                     MobileSettingsRow(
                         icon = Icons.Default.Settings,
@@ -4428,7 +4398,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Movie,
                         title = stringResource(R.string.dv_compat_title),
                         subtitle = stringResource(R.string.dv_compat_desc),
-                        value = if (uiState.dolbyVisionCompatEnabled) "On" else "Off",
+                        value = stringResource(if (uiState.dolbyVisionCompatEnabled) R.string.on else R.string.off),
+                        toggleChecked = uiState.dolbyVisionCompatEnabled,
                         isFocused = false,
                         onClick = { viewModel.setDolbyVisionCompatEnabled(!uiState.dolbyVisionCompatEnabled) }
                     )
@@ -4445,7 +4416,8 @@ private fun MobileSettingsSubPage(
                     MobileSettingsRow(
                         icon = Icons.Default.Person,
                         title = stringResource(R.string.skip_profile),
-                        value = if (uiState.skipProfileSelection) "On" else "Off",
+                        value = stringResource(if (uiState.skipProfileSelection) R.string.on else R.string.off),
+                        toggleChecked = uiState.skipProfileSelection,
                         isFocused = false,
                         onClick = { viewModel.setSkipProfileSelection(!uiState.skipProfileSelection) }
                     )
@@ -4508,7 +4480,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Subtitles,
                         title = stringResource(R.string.subtitle_stylized),
                         subtitle = stringResource(R.string.subtitle_stylized_desc),
-                        value = if (uiState.subtitleStylized) "On" else "Off",
+                        value = stringResource(if (uiState.subtitleStylized) R.string.on else R.string.off),
+                        toggleChecked = uiState.subtitleStylized,
                         isToggle = true,
                         isFocused = false,
                         onClick = { viewModel.toggleSubtitleStylized() }
@@ -4518,7 +4491,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Subtitles,
                         title = stringResource(R.string.ai_find_best_match_title),
                         subtitle = stringResource(R.string.ai_find_best_match_desc),
-                        value = if (uiState.subtitleAiFindBestMatch) "On" else "Off",
+                        value = stringResource(if (uiState.subtitleAiFindBestMatch) R.string.on else R.string.off),
+                        toggleChecked = uiState.subtitleAiFindBestMatch,
                         isToggle = true,
                         isFocused = false,
                         onClick = { viewModel.setSubtitleAiFindBestMatch(!uiState.subtitleAiFindBestMatch) }
@@ -4527,7 +4501,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Subtitles,
                         title = stringResource(R.string.subtitle_preload_title),
                         subtitle = stringResource(R.string.subtitle_preload_desc),
-                        value = if (uiState.subtitlePreloadEnabled) "On" else "Off",
+                        value = stringResource(if (uiState.subtitlePreloadEnabled) R.string.on else R.string.off),
+                        toggleChecked = uiState.subtitlePreloadEnabled,
                         isToggle = true,
                         isFocused = false,
                         onClick = { viewModel.setSubtitlePreloadEnabled(!uiState.subtitlePreloadEnabled) }
@@ -4536,7 +4511,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Subtitles,
                         title = stringResource(R.string.filter_subtitles),
                         subtitle = stringResource(R.string.filter_subtitles_desc),
-                        value = if (uiState.filterSubtitlesByLanguage) "On" else "Off",
+                        value = stringResource(if (uiState.filterSubtitlesByLanguage) R.string.on else R.string.off),
+                        toggleChecked = uiState.filterSubtitlesByLanguage,
                         isToggle = true,
                         isFocused = false,
                         showDivider = false,
@@ -4548,7 +4524,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.AutoAwesome,
                         title = stringResource(R.string.ai_subtitle_translation_title),
                         subtitle = stringResource(R.string.ai_subtitle_translation_desc),
-                        value = if (uiState.subtitleAiEnabled) "On" else "Off",
+                        value = stringResource(if (uiState.subtitleAiEnabled) R.string.on else R.string.off),
+                        toggleChecked = uiState.subtitleAiEnabled,
                         isFocused = false,
                         onClick = { viewModel.setSubtitleAiEnabled(!uiState.subtitleAiEnabled) }
                     )
@@ -4557,8 +4534,8 @@ private fun MobileSettingsSubPage(
                         title = stringResource(R.string.ai_model_title),
                         subtitle = stringResource(R.string.ai_model_desc),
                         value = when (uiState.subtitleAiModel) {
-                            com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
-                            com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
+                            com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
                         },
                         isFocused = false,
                         onClick = onSubtitleAiModelClick
@@ -4567,7 +4544,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.AutoAwesome,
                         title = stringResource(R.string.ai_auto_select_title),
                         subtitle = stringResource(R.string.ai_auto_select_desc),
-                        value = if (uiState.subtitleAiAutoSelect) "On" else "Off",
+                        value = stringResource(if (uiState.subtitleAiAutoSelect) R.string.on else R.string.off),
+                        toggleChecked = uiState.subtitleAiAutoSelect,
                         isFocused = false,
                         onClick = { viewModel.setSubtitleAiAutoSelect(!uiState.subtitleAiAutoSelect) }
                     )
@@ -4575,7 +4553,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Subtitles,
                         title = stringResource(R.string.ai_remove_hi_title),
                         subtitle = stringResource(R.string.ai_remove_hi_desc),
-                        value = if (uiState.subtitleRemoveHearingImpaired) "On" else "Off",
+                        value = stringResource(if (uiState.subtitleRemoveHearingImpaired) R.string.on else R.string.off),
+                        toggleChecked = uiState.subtitleRemoveHearingImpaired,
                         isFocused = false,
                         onClick = { viewModel.setSubtitleRemoveHearingImpaired(!uiState.subtitleRemoveHearingImpaired) }
                     )
@@ -4599,9 +4578,9 @@ private fun MobileSettingsSubPage(
                     if (uiState.subtitleAiEnabled) {
                         Text(
                             text = when (uiState.subtitleAiModel) {
-                                com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B ->
+                                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B ->
                                     stringResource(R.string.ai_groq_disclaimer)
-                                com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 ->
+                                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 ->
                                     stringResource(R.string.ai_gemini_disclaimer)
                             },
                             style = ArflixTypography.caption.copy(fontSize = 11.sp),
@@ -4609,17 +4588,6 @@ private fun MobileSettingsSubPage(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                         )
                     }
-                }
-                MobileSettingsCategory(title = stringResource(R.string.settings_section_audio)) {
-                    MobileSettingsRow(
-                        icon = Icons.Default.VolumeUp,
-                        title = stringResource(R.string.volume_boost),
-                        value = if (uiState.volumeBoostDb > 0) "+${uiState.volumeBoostDb} dB" else "0 dB",
-                        isToggle = false,
-                        isFocused = false,
-                        showDivider = false,
-                        onClick = { viewModel.cycleVolumeBoost() }
-                    )
                 }
             }
             "Appearance" -> {
@@ -4642,7 +4610,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Palette,
                         title = stringResource(R.string.oled_black_background),
                         subtitle = stringResource(R.string.oled_black_background_desc),
-                        value = if (uiState.oledBlackBackground) "On" else "Off",
+                        value = stringResource(if (uiState.oledBlackBackground) R.string.on else R.string.off),
+                        toggleChecked = uiState.oledBlackBackground,
                         isFocused = false,
                         onClick = { viewModel.setOledBlackBackground(!uiState.oledBlackBackground) }
                     )
@@ -4656,7 +4625,8 @@ private fun MobileSettingsSubPage(
                     MobileSettingsRow(
                         icon = Icons.Default.Movie,
                         title = stringResource(R.string.show_budget),
-                        value = if (uiState.showBudget) "On" else "Off",
+                        value = stringResource(if (uiState.showBudget) R.string.on else R.string.off),
+                        toggleChecked = uiState.showBudget,
                         isFocused = false,
                         showDivider = true,
                         onClick = { viewModel.setShowBudget(!uiState.showBudget) }
@@ -4664,7 +4634,8 @@ private fun MobileSettingsSubPage(
                     MobileSettingsRow(
                         icon = Icons.Default.Star,
                         title = stringResource(R.string.show_episode_ratings),
-                        value = if (uiState.showEpisodeRatings) "On" else "Off",
+                        value = stringResource(if (uiState.showEpisodeRatings) R.string.on else R.string.off),
+                        toggleChecked = uiState.showEpisodeRatings,
                         isFocused = false,
                         showDivider = true,
                         onClick = { viewModel.setShowEpisodeRatings(!uiState.showEpisodeRatings) }
@@ -4672,7 +4643,8 @@ private fun MobileSettingsSubPage(
                     MobileSettingsRow(
                         icon = Icons.Default.VisibilityOff,
                         title = stringResource(R.string.spoiler_blur),
-                        value = if (uiState.spoilerBlurEnabled) "On" else "Off",
+                        value = stringResource(if (uiState.spoilerBlurEnabled) R.string.on else R.string.off),
+                        toggleChecked = uiState.spoilerBlurEnabled,
                         isFocused = false,
                         showDivider = true,
                         onClick = { viewModel.setSpoilerBlurEnabled(!uiState.spoilerBlurEnabled) }
@@ -4689,7 +4661,8 @@ private fun MobileSettingsSubPage(
                         icon = Icons.Default.Palette,
                         title = stringResource(R.string.smooth_scrolling),
                         subtitle = stringResource(R.string.smooth_scrolling_desc),
-                        value = if (uiState.smoothScrolling) "On" else "Off",
+                        value = stringResource(if (uiState.smoothScrolling) R.string.on else R.string.off),
+                        toggleChecked = uiState.smoothScrolling,
                         isFocused = false,
                         showDivider = false,
                         onClick = { viewModel.setSmoothScrolling(!uiState.smoothScrolling) }
@@ -4741,8 +4714,8 @@ private fun MobileSettingsSubPage(
                     playlists = uiState.iptvPlaylists,
                     channelCount = uiState.iptvChannelCount,
                     isLoading = uiState.isIptvLoading,
-                    error = uiState.iptvError,
-                    statusMessage = uiState.iptvStatusMessage,
+                    error = uiState.iptvError?.localizedText(),
+                    statusMessage = uiState.iptvStatusMessage?.localizedText(),
                     statusType = uiState.iptvStatusType,
                     progressText = uiState.iptvProgressText,
                     progressPercent = uiState.iptvProgressPercent,
@@ -4750,8 +4723,8 @@ private fun MobileSettingsSubPage(
                     focusedActionIndex = 0,
                     onConfigure = onAddIptvClick,
                     stalkerPortals = uiState.iptvStalkerPortals,
-                    onAddStalkerPortal = { stalkerEditId = null; stalkerEditPortal = ""; stalkerEditMac = ""; stalkerEditName = ""; showStalkerInput = true },
-                    onEditStalkerPortal = { portal -> stalkerEditId = portal.id; stalkerEditPortal = portal.portalUrl; stalkerEditMac = portal.macAddress; stalkerEditName = portal.name; showStalkerInput = true },
+                    onAddStalkerPortal = onAddStalkerPortal,
+                    onEditStalkerPortal = onEditStalkerPortal,
                     onToggleStalkerPortal = { id -> viewModel.onToggleStalkerPortal(id) },
                     onMoveStalkerPortalUp = { id -> viewModel.onMoveStalkerPortalUp(id) },
                     onMoveStalkerPortalDown = { id -> viewModel.onMoveStalkerPortalDown(id) },
@@ -4823,7 +4796,7 @@ private fun MobileSettingsSubPage(
                     connections = uiState.homeServerConnections,
                     isWorking = uiState.isHomeServerConnecting,
                     isPlexWorking = uiState.isPlexHomeServerPolling || uiState.plexHomeServerAuth != null,
-                    error = uiState.homeServerError,
+                    error = uiState.homeServerError?.localizedText(),
                     focusedIndex = -1,
                     onConnect = onConnectHomeServerClick,
                     onConnectPlex = onConnectPlexHomeServerClick,
@@ -4873,42 +4846,6 @@ private fun MobileSettingsSubPage(
         }
     }
 
-    if (showStalkerInput) {
-        val isEditing = stalkerEditId != null
-        InputModal(
-            title = stringResource(if (isEditing) R.string.settings_cd_edit_stalker_config else R.string.settings_add_stalker_portal_button),
-            fields = listOf(
-                InputField(
-                    label = stringResource(R.string.settings_stalker_portal_name_label),
-                    value = stalkerEditName,
-                    placeholder = stringResource(R.string.settings_stalker_portal_name_placeholder),
-                    onValueChange = { stalkerEditName = it }
-                ),
-                InputField(
-                    label = stringResource(R.string.settings_stalker_label_portal_url),
-                    value = stalkerEditPortal,
-                    placeholder = stringResource(R.string.settings_stalker_ph_portal_url),
-                    onValueChange = { stalkerEditPortal = it }
-                ),
-                InputField(
-                    label = stringResource(R.string.settings_stalker_label_mac),
-                    value = stalkerEditMac,
-                    placeholder = stringResource(R.string.settings_stalker_ph_mac),
-                    onValueChange = { stalkerEditMac = it }
-                )
-            ),
-            onConfirm = {
-                val id = stalkerEditId
-                if (id != null) {
-                    viewModel.onEditStalkerPortal(id, stalkerEditPortal, stalkerEditMac, stalkerEditName)
-                } else {
-                    viewModel.onAddStalkerPortal(stalkerEditPortal, stalkerEditMac, stalkerEditName)
-                }
-                showStalkerInput = false
-            },
-            onDismiss = { showStalkerInput = false }
-        )
-    }
     if (showStalkerRename) {
         InputModal(
             title = stringResource(R.string.settings_stalker_rename_title),
@@ -4940,7 +4877,8 @@ private fun MobilePrivacySubPage(
             icon = Icons.Default.Settings,
             title = stringResource(R.string.settings_diagnostics_sharing),
             subtitle = stringResource(R.string.settings_diagnostics_sharing_desc),
-            value = if (uiState.diagnosticsSharingEnabled) "On" else "Off",
+            value = stringResource(if (uiState.diagnosticsSharingEnabled) R.string.on else R.string.off),
+            toggleChecked = uiState.diagnosticsSharingEnabled,
             isFocused = false,
             showDivider = false,
             onClick = { viewModel.setDiagnosticsSharingEnabled(!uiState.diagnosticsSharingEnabled) }
@@ -5103,7 +5041,8 @@ private fun MobileCloudAccountSubPage(
         MobileSettingsRow(
             icon = Icons.Default.Sync,
             title = stringResource(R.string.settings_force_sync),
-            subtitle = uiState.lastCloudSyncStatus ?: stringResource(R.string.settings_cloud_manual_sync_sub),
+            subtitle = uiState.lastCloudSyncStatus?.localizedText()
+                ?: stringResource(R.string.settings_cloud_manual_sync_sub),
             value = if (uiState.isForceCloudSyncing) stringResource(R.string.settings_badge_syncing) else stringResource(R.string.settings_badge_sync),
             isFocused = false,
             showDivider = true,
@@ -5596,7 +5535,7 @@ private fun tvSettingsSectionPills(
         )
         "playback" -> listOf(
             stringResource(R.string.settings_pill_autoplay, if (uiState.autoPlaySingleSource) stringResource(R.string.settings_inline_on) else stringResource(R.string.settings_inline_off)),
-            stringResource(R.string.settings_pill_trailers, if (uiState.trailerAutoPlay) stringResource(R.string.settings_inline_on) else stringResource(R.string.settings_inline_off)),
+            stringResource(R.string.trailers_on_youtube),
             stringResource(R.string.settings_pill_min, localizeSettingValue(uiState.autoPlayMinQuality)),
         )
         "appearance" -> listOf(
@@ -5646,7 +5585,7 @@ private fun tvSettingsPanelFacts(
         )
         "playback" -> listOf(
             stringResource(R.string.settings_fact_autoplay) to if (uiState.autoPlaySingleSource) stringResource(R.string.on) else stringResource(R.string.off),
-            stringResource(R.string.settings_fact_trailers) to if (uiState.trailerAutoPlay) stringResource(R.string.on) else stringResource(R.string.off),
+            stringResource(R.string.settings_fact_trailers) to "YouTube",
             stringResource(R.string.settings_fact_frame_rate) to uiState.frameRateMatchingMode
         )
         "appearance" -> listOf(
@@ -5710,8 +5649,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
         "playback" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
-            in 3..4 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
-            7 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
+            6 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
@@ -5735,7 +5673,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
         "accounts" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.cloud_account), stringResource(R.string.settings_help_cloud_account_desc))
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_trakt), stringResource(R.string.settings_help_trakt_desc))
-            10 -> TvSettingsHelp("Discord RPC", "Show your watch status on your Discord profile.")
+            10 -> TvSettingsHelp("Discord RPC", stringResource(R.string.discord_rpc_help_desc))
             11 -> TvSettingsHelp(stringResource(R.string.force_cloud_sync), stringResource(R.string.settings_help_force_sync_desc))
             12 -> TvSettingsHelp(stringResource(R.string.settings_help_app_updates), stringResource(R.string.settings_help_app_updates_desc))
             13 -> TvSettingsHelp(stringResource(R.string.settings_diagnostics_sharing), stringResource(R.string.settings_diagnostics_sharing_desc))
@@ -5777,7 +5715,7 @@ private fun TvGeneralSettingsRows(
     oledBlackBackground: Boolean = false,
     clockFormat: String = "24h",
     showBudget: Boolean = true,
-    showEpisodeRatings: Boolean = true,
+    showEpisodeRatings: Boolean = false,
     smoothScrolling: Boolean = true,
     spoilerBlurEnabled: Boolean = false,
     accentColor: String = "White",
@@ -5830,7 +5768,7 @@ private fun TvGeneralSettingsRows(
     subtitlePreloadEnabled: Boolean = false,
     dolbyVisionCompatEnabled: Boolean = true,
     subtitleAiApiKey: String = "",
-    subtitleAiModel: com.arflix.tv.ui.screens.player.SubtitleAiModel = com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B,
+    subtitleAiModel: com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel = com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B,
     subtitleRemoveHearingImpaired: Boolean = true,
     onSubtitleAiEnabledToggle: (Boolean) -> Unit = {},
     onSubtitleAiModelClick: () -> Unit = {},
@@ -5905,9 +5843,9 @@ private fun TvGeneralSettingsRows(
                     subtitle = stringResource(R.string.ui_mode_desc),
                     value = when (deviceModeOverride) {
                         "tv" -> "TV"
-                        "tablet" -> "Tablet"
-                        "phone" -> "Phone"
-                        else -> "Auto"
+                        "tablet" -> stringResource(R.string.settings_mode_tablet)
+                        "phone" -> stringResource(R.string.settings_mode_phone)
+                        else -> stringResource(R.string.auto)
                     },
                     isFocused = focusedIndex == localIndex,
                     onClick = onDeviceModeClick,
@@ -5938,8 +5876,8 @@ private fun TvGeneralSettingsRows(
                     title = stringResource(R.string.ai_model_title),
                     subtitle = stringResource(R.string.ai_model_desc),
                     value = when (subtitleAiModel) {
-                        com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
-                        com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
+                        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq - GPT-OSS 120B"
+                        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google - Gemini 3.5 Flash Lite"
                     },
                     isFocused = focusedIndex == localIndex,
                     onClick = onSubtitleAiModelClick,
@@ -5983,7 +5921,7 @@ private fun GeneralSettings(
     oledBlackBackground: Boolean = false,
     clockFormat: String = "24h",
     showBudget: Boolean = true,
-    showEpisodeRatings: Boolean = true,
+    showEpisodeRatings: Boolean = false,
     spoilerBlurEnabled: Boolean = false,
     accentColor: String = "White",
     volumeBoostDb: Int = 0,
@@ -6028,7 +5966,7 @@ private fun GeneralSettings(
     subtitleAiAutoSelect: Boolean = false,
     subtitleAiFindBestMatch: Boolean = false,
     subtitleAiApiKey: String = "",
-    subtitleAiModel: com.arflix.tv.ui.screens.player.SubtitleAiModel = com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B,
+    subtitleAiModel: com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel = com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B,
     subtitleRemoveHearingImpaired: Boolean = true,
     onSubtitleAiEnabledToggle: (Boolean) -> Unit = {},
     onSubtitleAiModelClick: () -> Unit = {},
@@ -6182,24 +6120,6 @@ private fun GeneralSettings(
             isFocused = focusedIndex == 12,
             onClick = onAutoPlayMinQualityClick,
             modifier = Modifier.settingsFocusSlot(12)
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        SettingsToggleRow(
-            title = stringResource(R.string.trailer_auto_play),
-            subtitle = stringResource(R.string.trailer_desc),
-            isEnabled = trailerAutoPlay,
-            isFocused = focusedIndex == 13,
-            onToggle = onTrailerAutoPlayToggle,
-            modifier = Modifier.settingsFocusSlot(13)
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        SettingsToggleRow(
-            title = stringResource(R.string.trailer_sound),
-            subtitle = stringResource(R.string.trailer_sound_desc),
-            isEnabled = trailerSoundEnabled,
-            isFocused = focusedIndex == 14,
-            onToggle = onTrailerSoundEnabledToggle,
-            modifier = Modifier.settingsFocusSlot(14)
         )
         Spacer(modifier = Modifier.height(10.dp))
         SettingsRow(
@@ -6375,7 +6295,7 @@ private fun GeneralSettings(
             title = stringResource(R.string.volume_boost),
             subtitle = stringResource(R.string.volume_boost_desc),
             value = when (volumeBoostDb) {
-                0 -> "Off"
+                0 -> stringResource(R.string.off)
                 else -> "+${volumeBoostDb} dB"
             },
             isFocused = focusedIndex == 27,
@@ -6405,8 +6325,8 @@ private fun GeneralSettings(
             title = stringResource(R.string.ai_model_title),
             subtitle = stringResource(R.string.ai_model_desc),
             value = when (subtitleAiModel) {
-                com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq – GPT-OSS 120B"
-                com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "Google – Gemini 3.5 Flash Lite"
+                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "Groq – GPT-OSS 120B"
+                com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "Google – Gemini 3.5 Flash Lite"
             },
             isFocused = focusedIndex == 29,
             onClick = onSubtitleAiModelClick,
@@ -6454,9 +6374,9 @@ private fun GeneralSettings(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = when (subtitleAiModel) {
-                    com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B ->
+                    com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B ->
                         stringResource(R.string.ai_groq_disclaimer)
-                    com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 ->
+                    com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 ->
                         stringResource(R.string.ai_gemini_disclaimer)
                 },
                 style = ArflixTypography.caption.copy(fontSize = 11.sp),
@@ -6481,14 +6401,14 @@ private fun maskAiApiKey(key: String, notSetLabel: String = "Not set"): String {
 
 @Composable
 private fun AiModelDialog(
-    currentModel: com.arflix.tv.ui.screens.player.SubtitleAiModel,
-    onModelSelected: (com.arflix.tv.ui.screens.player.SubtitleAiModel) -> Unit,
+    currentModel: com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel,
+    onModelSelected: (com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel) -> Unit,
     onDismiss: () -> Unit
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val options = listOf(
-        Triple(com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B, "Groq – GPT-OSS 120B", stringResource(R.string.ai_groq_model_note)),
-        Triple(com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 3.5 Flash Lite", stringResource(R.string.ai_gemini_model_note))
+        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B, "Groq – GPT-OSS 120B", stringResource(R.string.ai_groq_model_note)),
+        Triple(com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25, "Google – Gemini 3.5 Flash Lite", stringResource(R.string.ai_gemini_model_note))
     )
     BackHandler { onDismiss() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -6560,14 +6480,14 @@ private fun AiApiKeyDialog(
     currentKey: String,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
-    model: com.arflix.tv.ui.screens.player.SubtitleAiModel = com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B
+    model: com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel = com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
     var value by remember(currentKey) { mutableStateOf(currentKey) }
     val inputFocusRequester = remember { FocusRequester() }
     val placeholder = when (model) {
-        com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B -> "gsk_..."
-        com.arflix.tv.ui.screens.player.SubtitleAiModel.GEMINI_FLASH_25 -> "AIzaSy..."
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B -> "gsk_..."
+        com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GEMINI_FLASH_25 -> "AIzaSy..."
     }
     BackHandler { onDismiss() }
     LaunchedEffect(Unit) {
@@ -6588,7 +6508,7 @@ private fun AiApiKeyDialog(
                 Text(text = stringResource(R.string.ai_api_key_title), style = ArflixTypography.sectionTitle, color = TextPrimary)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(if (model == com.arflix.tv.ui.screens.player.SubtitleAiModel.GROQ_LLAMA_70B) R.string.ai_api_key_dialog_subtitle_groq else R.string.ai_api_key_dialog_subtitle_gemini),
+                    text = stringResource(if (model == com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel.GROQ_LLAMA_70B) R.string.ai_api_key_dialog_subtitle_groq else R.string.ai_api_key_dialog_subtitle_gemini),
                     style = ArflixTypography.caption,
                     color = TextSecondary
                 )
@@ -7149,18 +7069,9 @@ private fun IptvSettings(
                     }
                 }
             }
-            MobileSettingsCategory(title = stringResource(R.string.settings_section_stalker_portals)) {
-                val stalkerFull = stalkerPortals.size >= 3
-                MobileSettingsRow(
-                    icon = Icons.Default.Add,
-                    title = stringResource(R.string.settings_add_stalker_portal_button),
-                    subtitle = if (stalkerPortals.isEmpty()) stringResource(R.string.settings_stalker_add_hint) else stringResource(R.string.settings_stalker_create_another),
-                    value = if (stalkerFull) stringResource(R.string.settings_badge_full_short) else "",
-                    isFocused = false,
-                    showDivider = stalkerPortals.isNotEmpty(),
-                    onClick = { if (!stalkerFull) onAddStalkerPortal() }
-                )
-                stalkerPortals.forEachIndexed { index, portal ->
+            if (stalkerPortals.isNotEmpty()) {
+                MobileSettingsCategory(title = stringResource(R.string.settings_section_stalker_portals)) {
+                    stalkerPortals.forEachIndexed { index, portal ->
                     val isSelected = selectedIndices.contains(index)
                     Column {
                         Row(
@@ -7211,7 +7122,8 @@ private fun IptvSettings(
                     }
                 }
             }
-            MobileSettingsCategory(title = stringResource(R.string.settings_section_options)) {
+        }
+        MobileSettingsCategory(title = stringResource(R.string.settings_section_options)) {
                 val sortDisplayValue = when (sortOrder) {
                     "number" -> stringResource(R.string.settings_iptv_order_number)
                     "name" -> stringResource(R.string.settings_iptv_order_name)
@@ -7327,71 +7239,62 @@ private fun IptvSettings(
                 Spacer(modifier = Modifier.height(10.dp))
             }
             Spacer(modifier = Modifier.height(6.dp))
-            // ── Stalker portals section (separate from M3U, decision #4) ──
-            val stalkerAddIndex = playlists.size + 1
-            val stalkerFull = stalkerPortals.size >= 3
-            SettingsRow(
-                icon = Icons.Default.Add,
-                title = stringResource(R.string.settings_add_stalker_portal_button),
-                subtitle = if (stalkerPortals.isEmpty()) stringResource(R.string.settings_stalker_add_hint) else stringResource(R.string.settings_stalker_create_another),
-                value = if (stalkerFull) stringResource(R.string.settings_badge_full) else stringResource(R.string.settings_badge_add),
-                isFocused = focusedIndex == stalkerAddIndex,
-                onClick = { if (!stalkerFull) onAddStalkerPortal() },
-                modifier = Modifier.settingsFocusSlot(stalkerAddIndex)
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            stalkerPortals.forEachIndexed { index, portal ->
-                val rowIndex = playlists.size + 2 + index
-                val focusRingColor = resolveAccentColor(fallback = Pink)
-                Row(modifier = Modifier.settingsFocusSlot(rowIndex).fillMaxWidth().background(if (focusedIndex == rowIndex) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (focusedIndex == rowIndex) 2.dp else 0.dp, color = if (focusedIndex == rowIndex) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onEditStalkerPortal(portal) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.LiveTv, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(portal.name, style = ArflixTypography.cardTitle.copy(fontSize = 16.sp), color = if (focusedIndex == rowIndex) TextPrimary else TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(portal.portalUrl.take(56), style = ArflixTypography.caption.copy(fontSize = 13.sp), color = TextSecondary.copy(alpha = 0.72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // ── Stalker portals section ──
+            if (stalkerPortals.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                stalkerPortals.forEachIndexed { index, portal ->
+                    val rowIndex = playlists.size + 1 + index
+                    val focusRingColor = resolveAccentColor(fallback = Pink)
+                    Row(modifier = Modifier.settingsFocusSlot(rowIndex).fillMaxWidth().background(if (focusedIndex == rowIndex) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(width = if (focusedIndex == rowIndex) 2.dp else 0.dp, color = if (focusedIndex == rowIndex) focusRingColor else Color.Transparent, shape = RoundedCornerShape(12.dp)).clickable { onEditStalkerPortal(portal) }.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.LiveTv, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(portal.name, style = ArflixTypography.cardTitle.copy(fontSize = 16.sp), color = if (focusedIndex == rowIndex) TextPrimary else TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(portal.portalUrl.take(56), style = ArflixTypography.caption.copy(fontSize = 13.sp), color = TextSecondary.copy(alpha = 0.72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        CatalogActionChip(
+                            icon = Icons.Default.List,
+                            isFocused = focusedIndex == rowIndex && focusedActionIndex == 0,
+                            onClick = { onManageStalkerCategories(portal.id) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CatalogActionChip(
+                            icon = if (portal.enabled) Icons.Default.Check else Icons.Default.VisibilityOff,
+                            isFocused = focusedIndex == rowIndex && focusedActionIndex == 1,
+                            onClick = { onToggleStalkerPortal(portal.id) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CatalogActionChip(
+                            icon = Icons.Default.Edit,
+                            isFocused = focusedIndex == rowIndex && focusedActionIndex == 2,
+                            onClick = { onEditStalkerPortal(portal) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CatalogActionChip(
+                            icon = Icons.Default.ArrowUpward,
+                            isFocused = focusedIndex == rowIndex && focusedActionIndex == 3,
+                            onClick = { onMoveStalkerPortalUp(portal.id) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CatalogActionChip(
+                            icon = Icons.Default.ArrowDownward,
+                            isFocused = focusedIndex == rowIndex && focusedActionIndex == 4,
+                            onClick = { onMoveStalkerPortalDown(portal.id) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CatalogActionChip(
+                            icon = Icons.Default.Delete,
+                            isFocused = focusedIndex == rowIndex && focusedActionIndex == 5,
+                            isDestructive = true,
+                            onClick = { onRemoveStalkerPortal(portal.id) }
+                        )
                     }
-                    CatalogActionChip(
-                        icon = Icons.Default.List,
-                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 0,
-                        onClick = { onManageStalkerCategories(portal.id) }
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(
-                        icon = if (portal.enabled) Icons.Default.Check else Icons.Default.VisibilityOff,
-                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 1,
-                        onClick = { onToggleStalkerPortal(portal.id) }
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(
-                        icon = Icons.Default.Edit,
-                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 2,
-                        onClick = { onEditStalkerPortal(portal) }
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(
-                        icon = Icons.Default.ArrowUpward,
-                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 3,
-                        onClick = { onMoveStalkerPortalUp(portal.id) }
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(
-                        icon = Icons.Default.ArrowDownward,
-                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 4,
-                        onClick = { onMoveStalkerPortalDown(portal.id) }
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    CatalogActionChip(
-                        icon = Icons.Default.Delete,
-                        isFocused = focusedIndex == rowIndex && focusedActionIndex == 5,
-                        isDestructive = true,
-                        onClick = { onRemoveStalkerPortal(portal.id) }
-                    )
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
-                Spacer(modifier = Modifier.height(10.dp))
             }
             Spacer(modifier = Modifier.height(6.dp))
-            val trailingBase = playlists.size + stalkerPortals.size + 2
+            val trailingBase = playlists.size + stalkerPortals.size + 1
             SettingsRow(
                 icon = Icons.Default.List,
                 title = stringResource(R.string.settings_iptv_channel_order),
@@ -8353,7 +8256,7 @@ private fun CatalogsSettings(
             }
             MobileSettingsCategory(title = stringResource(R.string.settings_section_add_catalog)) {
                 MobileSettingsRow(icon = Icons.Default.Add, title = stringResource(R.string.add_catalog), subtitle = stringResource(R.string.add_catalog_desc), value = "", isFocused = false, showDivider = true, onClick = onAddCatalog)
-                MobileSettingsRow(icon = Icons.Default.Widgets, title = "Import Catalog Pack", subtitle = "Import a bundle of catalogs from a JSON manifest URL", value = "", isFocused = false, showDivider = false, onClick = onImportCatalogPack)
+                MobileSettingsRow(icon = Icons.Default.Widgets, title = stringResource(R.string.settings_catalog_pack_import_title), subtitle = stringResource(R.string.settings_catalog_pack_import_desc), value = "", isFocused = false, showDivider = false, onClick = onImportCatalogPack)
             }
             if (catalogs.isNotEmpty()) {
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_my_catalogs)) {
@@ -8448,7 +8351,7 @@ private fun CatalogsSettings(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Unarchive,
-                                                contentDescription = "Unpack catalog row",
+                                                contentDescription = stringResource(R.string.settings_cd_unpack_catalog_row),
                                                 tint = Color.White.copy(alpha = 0.7f),
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -8485,7 +8388,7 @@ private fun CatalogsSettings(
             Text(text = stringResource(R.string.catalogs), style = ArflixTypography.caption, color = TextSecondary.copy(alpha = 0.65f), modifier = Modifier.padding(bottom = 20.dp))
             SettingsRow(icon = Icons.Default.Add, title = stringResource(R.string.add_catalog), subtitle = stringResource(R.string.add_catalog_desc), value = stringResource(R.string.settings_badge_add), isFocused = focusedIndex == 0, onClick = onAddCatalog, modifier = Modifier.settingsFocusSlot(0))
             Spacer(modifier = Modifier.height(16.dp))
-            SettingsRow(icon = Icons.Default.Widgets, title = "Import Catalog Pack", subtitle = "Import a bundle of catalogs from a JSON manifest URL", value = "IMPORT", isFocused = focusedIndex == 1, onClick = onImportCatalogPack, modifier = Modifier.settingsFocusSlot(1))
+            SettingsRow(icon = Icons.Default.Widgets, title = stringResource(R.string.settings_catalog_pack_import_title), subtitle = stringResource(R.string.settings_catalog_pack_import_desc), value = stringResource(R.string.settings_catalog_pack_import_badge), isFocused = focusedIndex == 1, onClick = onImportCatalogPack, modifier = Modifier.settingsFocusSlot(1))
             Spacer(modifier = Modifier.height(16.dp))
             catalogs.forEachIndexed { index, catalog ->
                 val rowFocusIndex = index + 2; val isRowFocused = focusedIndex == rowFocusIndex
@@ -9035,6 +8938,7 @@ private fun AccountsSettings(
     onDiagnosticsSharingToggle: (Boolean) -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenDataDeletion: () -> Unit,
+    onOpenCredits: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
     Column {
@@ -9117,8 +9021,8 @@ private fun AccountsSettings(
         Spacer(modifier = Modifier.height(16.dp))
 
         SettingsActionRow(
-            title = "Watchlist source",
-            description = "Choose which connected service supplies your watchlist.",
+            title = stringResource(R.string.settings_routing_watchlist_source),
+            description = stringResource(R.string.settings_routing_watchlist_source_desc),
             actionLabel = trackingModeLabel(trackingUiState.trackingWatchlistReadMode),
             isFocused = focusedIndex == 4,
             onClick = {
@@ -9133,8 +9037,8 @@ private fun AccountsSettings(
         Spacer(modifier = Modifier.height(16.dp))
 
         SettingsActionRow(
-            title = "Continue Watching source",
-            description = "Choose where playback progress and Up Next are loaded from.",
+            title = stringResource(R.string.settings_routing_continue_source),
+            description = stringResource(R.string.settings_routing_continue_source_desc),
             actionLabel = trackingModeLabel(trackingUiState.trackingContinueReadMode),
             isFocused = focusedIndex == 5,
             onClick = {
@@ -9149,8 +9053,8 @@ private fun AccountsSettings(
         Spacer(modifier = Modifier.height(16.dp))
 
         SettingsActionRow(
-            title = "Watched history source",
-            description = "Choose which connected service supplies watched badges.",
+            title = stringResource(R.string.settings_routing_watched_source),
+            description = stringResource(R.string.settings_routing_watched_source_desc),
             actionLabel = trackingModeLabel(trackingUiState.trackingWatchedReadMode),
             isFocused = focusedIndex == 6,
             onClick = {
@@ -9165,8 +9069,8 @@ private fun AccountsSettings(
         Spacer(modifier = Modifier.height(16.dp))
 
         SettingsToggleRow(
-            title = "Update Trakt while watching",
-            subtitle = if (isTraktAuthenticated) "Send progress and watched changes to Trakt." else "Connect Trakt to enable this.",
+            title = stringResource(R.string.settings_routing_update_trakt),
+            subtitle = stringResource(if (isTraktAuthenticated) R.string.settings_routing_update_trakt_on else R.string.settings_routing_update_trakt_off),
             isEnabled = isTraktAuthenticated && trackingUiState.trackingWriteToTrakt,
             isFocused = focusedIndex == 7,
             onToggle = { enabled -> if (isTraktAuthenticated) onTrackingWriteTarget(com.arflix.tv.data.repository.sync.SyncProvider.TRAKT, enabled) },
@@ -9176,8 +9080,8 @@ private fun AccountsSettings(
         Spacer(modifier = Modifier.height(16.dp))
 
         SettingsToggleRow(
-            title = "Update Simkl while watching",
-            subtitle = if (isSimklConnected) "Send progress and watched changes to Simkl." else "Connect Simkl to enable this.",
+            title = stringResource(R.string.settings_routing_update_simkl),
+            subtitle = stringResource(if (isSimklConnected) R.string.settings_routing_update_simkl_on else R.string.settings_routing_update_simkl_off),
             isEnabled = isSimklConnected && trackingUiState.trackingWriteToSimkl,
             isFocused = focusedIndex == 8,
             onToggle = { enabled -> if (isSimklConnected) onTrackingWriteTarget(com.arflix.tv.data.repository.sync.SyncProvider.SIMKL, enabled) },
@@ -9206,8 +9110,8 @@ private fun AccountsSettings(
         AccountRow(
             name = "Discord Rich Presence",
             description = when {
-                !isDiscordSupported -> "Not included in this build"
-                isDiscordLoggedIn && !discordUsername.isNullOrBlank() -> "Connected as $discordUsername"
+                !isDiscordSupported -> stringResource(R.string.discord_not_included_in_build)
+                isDiscordLoggedIn && !discordUsername.isNullOrBlank() -> stringResource(R.string.settings_connected_as, discordUsername.orEmpty())
                 else -> ""
             },
             isConnected = isDiscordLoggedIn,
@@ -9301,6 +9205,15 @@ private fun AccountsSettings(
             isFocused = focusedIndex == 15,
             onClick = onOpenDataDeletion,
             modifier = Modifier.settingsFocusSlot(15)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        SettingsActionRow(
+            title = stringResource(R.string.about_credits),
+            description = stringResource(R.string.about_credits_description),
+            actionLabel = stringResource(R.string.settings_badge_open),
+            isFocused = focusedIndex == 16,
+            onClick = onOpenCredits,
+            modifier = Modifier.settingsFocusSlot(16)
         )
     }
 }
@@ -9752,7 +9665,7 @@ private fun TrackingIntegrationsPage(
                 tagline = stringResource(R.string.settings_simkl_tagline),
                 isConnected = uiState.isSimklConnected,
                 isWorking = uiState.isSimklAuthStarting || uiState.isSimklPolling,
-                connectedAs = if (uiState.isSimklConnected) (uiState.simklUsername ?: "Connected") else null,
+                connectedAs = if (uiState.isSimklConnected) (uiState.simklUsername ?: stringResource(R.string.connected)) else null,
                 comingSoon = false,
                 showDivider = false,
                 onConnect = {
@@ -9767,9 +9680,9 @@ private fun TrackingIntegrationsPage(
         }
 
         if (uiState.isTraktAuthenticated || uiState.isSimklConnected || uiState.isMdbListConnected) {
-            MobileSettingsCategory(title = "DATA ROUTING") {
+            MobileSettingsCategory(title = stringResource(R.string.settings_data_routing)) {
                 TrackingRoutingRow(
-                    title = "Watchlist source",
+                    title = stringResource(R.string.settings_routing_watchlist_source),
                     value = trackingModeLabel(uiState.trackingWatchlistReadMode),
                     showDivider = true,
                     onClick = {
@@ -9780,7 +9693,7 @@ private fun TrackingIntegrationsPage(
                     }
                 )
                 TrackingRoutingRow(
-                    title = "Continue Watching source",
+                    title = stringResource(R.string.settings_routing_continue_source),
                     value = trackingModeLabel(uiState.trackingContinueReadMode),
                     showDivider = true,
                     onClick = {
@@ -9791,7 +9704,7 @@ private fun TrackingIntegrationsPage(
                     }
                 )
                 TrackingRoutingRow(
-                    title = "Watched history source",
+                    title = stringResource(R.string.settings_routing_watched_source),
                     value = trackingModeLabel(uiState.trackingWatchedReadMode),
                     showDivider = uiState.isTraktAuthenticated || uiState.isSimklConnected,
                     onClick = {
@@ -9803,8 +9716,8 @@ private fun TrackingIntegrationsPage(
                 )
                 if (uiState.isTraktAuthenticated) {
                     TrackingRoutingRow(
-                        title = "Update Trakt while watching",
-                        value = if (uiState.trackingWriteToTrakt) "On" else "Off",
+                        title = stringResource(R.string.settings_routing_update_trakt),
+                        value = stringResource(if (uiState.trackingWriteToTrakt) R.string.on else R.string.off),
                         showDivider = uiState.isSimklConnected,
                         onClick = {
                             onWriteTarget(
@@ -9816,8 +9729,8 @@ private fun TrackingIntegrationsPage(
                 }
                 if (uiState.isSimklConnected) {
                     TrackingRoutingRow(
-                        title = "Update Simkl while watching",
-                        value = if (uiState.trackingWriteToSimkl) "On" else "Off",
+                        title = stringResource(R.string.settings_routing_update_simkl),
+                        value = stringResource(if (uiState.trackingWriteToSimkl) R.string.on else R.string.off),
                         showDivider = false,
                         onClick = {
                             onWriteTarget(
@@ -9832,12 +9745,13 @@ private fun TrackingIntegrationsPage(
     }
 }
 
+@Composable
 private fun trackingModeLabel(mode: com.arflix.tv.data.repository.sync.TrackingReadMode): String = when (mode) {
     com.arflix.tv.data.repository.sync.TrackingReadMode.BOTH -> "Trakt + Simkl"
     com.arflix.tv.data.repository.sync.TrackingReadMode.TRAKT -> "Trakt"
     com.arflix.tv.data.repository.sync.TrackingReadMode.SIMKL -> "Simkl"
     com.arflix.tv.data.repository.sync.TrackingReadMode.MDBLIST -> "MDBList"
-    com.arflix.tv.data.repository.sync.TrackingReadMode.AUTO -> "Automatic"
+    com.arflix.tv.data.repository.sync.TrackingReadMode.AUTO -> stringResource(R.string.settings_tracking_mode_automatic)
 }
 
 private fun nextTrackingMode(
@@ -10134,7 +10048,7 @@ private fun AccountRow(
                 }
             } else {
                 Text(
-                    text = "UNAVAILABLE",
+                    text = stringResource(R.string.unavailable).uppercase(),
                     style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
                     color = TextSecondary,
                     maxLines = 1
@@ -10215,7 +10129,14 @@ data class ToggleField(
     val onValueChange: (Boolean) -> Unit
 )
 
-private fun IptvPlaylistEntry.settingsEpgInput(): String {
+private data class ResolvedIptvSource(
+    val sourceType: IptvSourceType,
+    val url: String,
+    val xtreamUser: String,
+    val xtreamPass: String
+)
+
+internal fun IptvPlaylistEntry.settingsEpgInput(): String {
     return (epgUrls.orEmpty().ifEmpty { listOf(epgUrl) })
         .map { it.trim() }
         .filter { it.isNotBlank() }
@@ -10781,6 +10702,7 @@ private fun InputModal(
                                 )
                             }
 
+                            val enterFieldHint = stringResource(R.string.settings_input_hint_enter, field.label)
                             val regexFieldFocusColor = resolveAccentColor(fallback = Pink)
                             Box(
                                 modifier = Modifier
@@ -10800,7 +10722,7 @@ private fun InputModal(
                                             setText(field.value)
                                             setTextColor(android.graphics.Color.WHITE)
                                             setHintTextColor(android.graphics.Color.GRAY)
-                                            hint = field.placeholder.ifBlank { "Enter ${field.label.lowercase()}..." }
+                                            hint = field.placeholder.ifBlank { enterFieldHint }
                                             textSize = 16f
                                             background = null
                                             setPadding(20, 14, 20, 14)
@@ -10893,6 +10815,7 @@ private fun InputModal(
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     update = { editText ->
+                                        editText.hint = field.placeholder.ifBlank { enterFieldHint }
                                         val current = editText.text?.toString().orEmpty()
                                         if (current != field.value) {
                                             editText.setText(field.value)
@@ -11389,7 +11312,7 @@ val TMDB_LANGUAGES = listOf(
     "fa-IR" to "Persian (Farsi)",
     "pl-PL" to "Polish (Polski)",
     "pt-PT" to "Portuguese (Portugues)",
-    "pt-BR" to "Portuguese - Brazil",
+    "pt-BR" to "Português (Brasil)",
     "pa-IN" to "Punjabi",
     "ro-RO" to "Romanian (Romana)",
     "ru-RU" to "Russian",
@@ -11684,7 +11607,7 @@ private fun CatalogPackImportDialog(
                         LoadingIndicator(size = 40.dp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Loading catalog pack details...",
+                            text = stringResource(R.string.settings_catalog_pack_loading),
                             style = ArflixTypography.body,
                             color = TextPrimary
                         )
@@ -11692,7 +11615,7 @@ private fun CatalogPackImportDialog(
                 } else if (error != null) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Import Failed",
+                            text = stringResource(R.string.settings_catalog_pack_import_failed),
                             style = ArflixTypography.sectionTitle,
                             color = Color(0xFFDC2626)
                         )
@@ -11713,7 +11636,7 @@ private fun CatalogPackImportDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Close",
+                                text = stringResource(R.string.close),
                                 style = ArflixTypography.button,
                                 color = Color.Black
                             )
@@ -11722,7 +11645,7 @@ private fun CatalogPackImportDialog(
                 } else if (pendingPack != null) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Import Catalog Pack",
+                            text = stringResource(R.string.settings_catalog_pack_import_title),
                             style = ArflixTypography.sectionTitle,
                             color = TextPrimary
                         )
@@ -11734,7 +11657,7 @@ private fun CatalogPackImportDialog(
                         )
                         if (!pendingPack.author.isNullOrBlank()) {
                             Text(
-                                text = "Author: ${pendingPack.author} • v${pendingPack.version ?: "1.0.0"}",
+                                text = stringResource(R.string.settings_catalog_pack_author, pendingPack.author.orEmpty(), pendingPack.version ?: "1.0.0"),
                                 style = ArflixTypography.caption,
                                 color = TextSecondary.copy(alpha = 0.8f)
                             )
@@ -11749,7 +11672,7 @@ private fun CatalogPackImportDialog(
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Catalogs included (${pendingPack.catalogs?.size ?: 0}):",
+                            text = stringResource(R.string.settings_catalog_pack_included, pendingPack.catalogs?.size ?: 0),
                             style = ArflixTypography.caption,
                             color = TextSecondary.copy(alpha = 0.6f)
                         )
@@ -11811,7 +11734,7 @@ private fun CatalogPackImportDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Install Pack",
+                                    text = stringResource(R.string.settings_catalog_pack_install),
                                     style = ArflixTypography.button,
                                     color = if (isConfirmFocused) Color.Black else Color.White
                                 )
@@ -11836,7 +11759,7 @@ private fun CatalogPackImportDialog(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Cancel",
+                                    text = stringResource(R.string.cancel),
                                     style = ArflixTypography.button,
                                     color = if (isCancelFocused) Color.Black else Color.White
                                 )
@@ -11911,13 +11834,13 @@ private fun CatalogPackDeleteConfirmDialog(
                     }
             ) {
                 Text(
-                    text = "Delete Catalog Pack",
+                    text = stringResource(R.string.settings_catalog_pack_delete_title),
                     style = ArflixTypography.sectionTitle,
                     color = Color(0xFFDC2626)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Do you want to delete the pack \"$packName\"? This will remove all catalogs that were imported with this pack.",
+                    text = stringResource(R.string.settings_catalog_pack_delete_message, packName),
                     style = ArflixTypography.body,
                     color = TextSecondary
                 )
@@ -11945,7 +11868,7 @@ private fun CatalogPackDeleteConfirmDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Delete Pack",
+                            text = stringResource(R.string.settings_catalog_pack_delete_confirm),
                             style = ArflixTypography.button,
                             color = if (isConfirmFocused) Color.Black else Color.White
                         )
@@ -11970,7 +11893,7 @@ private fun CatalogPackDeleteConfirmDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Cancel",
+                            text = stringResource(R.string.cancel),
                             style = ArflixTypography.button,
                             color = if (isCancelFocused) Color.Black else Color.White
                         )

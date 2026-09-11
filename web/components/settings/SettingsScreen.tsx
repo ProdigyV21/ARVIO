@@ -36,6 +36,7 @@ import { Component, CSSProperties, useEffect, useState, type ReactNode } from "r
 import { createPortal } from "react-dom";
 import { defaultCatalogs, mergeCatalogs } from "@/lib/catalogs";
 import {
+  config,
   hasNetlifyBackendConfig,
   hasSupabaseConfig,
   hasTraktConfig,
@@ -54,6 +55,7 @@ import {
 } from "@/lib/externalPlayers";
 import { buildHomeServerCatalogConfigs } from "@/lib/homeserver";
 import { defaultSettings, useApp } from "@/lib/store";
+import { PremiumAccount } from "@/components/shell/PremiumAccount";
 import type {
   AppSettings,
   CatalogConfig,
@@ -111,6 +113,7 @@ const SECTIONS = [
   { id: "catalogs", label: "Catalogs", icon: ListVideo },
   { id: "addons", label: "Addons", icon: Sparkles },
   { id: "metadata", label: "Metadata & Keys", icon: Sparkles },
+  { id: "credits", label: "About & Credits", icon: Eye },
 ] as const;
 
 
@@ -570,6 +573,22 @@ function SectionBody({ section }: { section: SectionId }) {
   };
 
   switch (section) {
+    case "credits":
+      return (
+        <Panel title="About ARVIO">
+          <h3>Credits</h3>
+          <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">
+            <img src="/tmdb-logo.svg" alt="TMDB" width={100} height={16} />
+          </a>
+          <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+          <p>Sports data and artwork provided by <a href="https://www.thesportsdb.com" target="_blank" rel="noopener noreferrer">TheSportsDB</a>.</p>
+          <p>ARVIO is a media hub for sources you configure. Catalog entries do not grant viewing rights.
+            Connect only services and media you are authorized to use.</p>
+          <a className="secondary text-button" href="https://arvio.tv/credits/" target="_blank" rel="noopener noreferrer">
+            <ExternalLink size={16} /> Credits &amp; copyright reports
+          </a>
+        </Panel>
+      );
     case "accounts":
       return <AccountsSection />;
     case "profiles":
@@ -678,35 +697,6 @@ function SectionBody({ section }: { section: SectionId }) {
                 ["fhd", "FHD"],
                 ["4k", "4K"],
               ]}
-            />
-          </Row>
-          <Row label="Trailer auto play">
-            <Toggle
-              value={settings.trailerAutoPlay}
-              onChange={(v) => set({ trailerAutoPlay: v })}
-            />
-          </Row>
-          <Row label="Trailer sound">
-            <Toggle
-              value={settings.trailerSound}
-              onChange={(v) => set({ trailerSound: v })}
-            />
-          </Row>
-          <Row label="Trailer delay (seconds)">
-            <input
-              type="number"
-              min={0}
-              max={10}
-              value={settings.trailerDelaySeconds}
-              onChange={(e) =>
-                set({ trailerDelaySeconds: Number(e.target.value) })
-              }
-            />
-          </Row>
-          <Row label="Show trailers inside cards">
-            <Toggle
-              value={settings.trailerInCards}
-              onChange={(v) => set({ trailerInCards: v })}
             />
           </Row>
           <Row
@@ -1240,6 +1230,7 @@ function AccountsSection() {
     pollSimkl,
     disconnectSimkl,
     refreshData,
+    settingsSyncState,
   } = useApp();
   const [traktError, setTraktError] = useState<string | null>(null);
   const [traktBusy, setTraktBusy] = useState<"start" | "poll" | null>(null);
@@ -1351,11 +1342,11 @@ function AccountsSection() {
 
   return (
     <>
-      <Panel title="ARVIO Account">
+      <PremiumAccount />
+      <Panel title={config.selfHosted ? "Local Account" : "ARVIO Account"}>
         {!cloudConfigured && (
           <p className="empty">
-            ARVIO Cloud backend env is missing. Add backend values in
-            web/.env.local.
+            {config.selfHosted ? "Profiles and settings are saved in this browser. ARVIO Cloud is not connected." : "ARVIO Cloud backend env is missing. Add backend values in web/.env.local."}
           </p>
         )}
         <div className="settings-status-grid">
@@ -1366,7 +1357,7 @@ function AccountsSection() {
                 ? "Connected"
                 : cloudConfigured
                   ? "Ready"
-                  : "Missing config"}
+                  : config.selfHosted ? "Disabled" : "Missing config"}
             </strong>
           </div>
           <div>
@@ -1395,7 +1386,7 @@ function AccountsSection() {
           </div>
           <div>
             <span>Sync</span>
-            <strong>{auth ? "Cloud saved" : "Local only"}</strong>
+            <strong>{!auth ? "Local only" : settingsSyncState === "saved" ? "Settings saved" : settingsSyncState === "error" ? "Save pending - retrying" : "Settings pending"}</strong>
           </div>
         </div>
         {auth ? (
@@ -1409,7 +1400,7 @@ function AccountsSection() {
               <LogOut size={18} /> Sign out
             </button>
           </div>
-        ) : (
+        ) : !config.selfHosted ? (
           <div className="login-form">
             <button
               type="button"
@@ -1420,7 +1411,7 @@ function AccountsSection() {
               Sign In with ARVIO Cloud
             </button>
           </div>
-        )}
+        ) : null}
       </Panel>
 
       <Panel title="Trakt">
@@ -1579,7 +1570,7 @@ function AccountsSection() {
       </Panel>
 
       <Panel title="Sync & Updates">
-        <button
+        {!config.selfHosted && <button
           type="button"
           className="secondary text-button"
           disabled={syncBusy}
@@ -1587,7 +1578,7 @@ function AccountsSection() {
         >
           <RefreshCw size={18} />{" "}
           {syncBusy ? "Syncing..." : "Force cloud sync now"}
-        </button>
+        </button>}
         <p className="empty">
           Telegram bot setup is available in the Android app. The web app
           updates itself when a new version is deployed.
@@ -1867,6 +1858,23 @@ function TelegramSection() {
     return (
       <Panel title="Telegram">
         <p className="empty">Loading…</p>
+      </Panel>
+    );
+  }
+
+  if (!mod.isTelegramConfigured) {
+    return (
+      <Panel title="Telegram">
+        <p className="empty">
+          Connect your Telegram account to stream video files from your chats and
+          channels as sources — the same feature as the Android app. Everything
+          runs in your browser; nothing is sent to ARVIO servers.
+        </p>
+        <div className="tg-center">
+          <p className="tg-lead" style={{ color: "var(--color-danger, #ff6b6b)" }}>
+            Telegram integration is not configured in this build. Please configure NEXT_PUBLIC_TELEGRAM_API_ID and NEXT_PUBLIC_TELEGRAM_API_HASH in your environment.
+          </p>
+        </div>
       </Panel>
     );
   }

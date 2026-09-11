@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.details
 
+import com.arflix.tv.data.model.isDirectStreamUrl
 import com.arflix.tv.data.model.StreamSource
 import java.util.Locale
 
@@ -98,7 +99,10 @@ internal fun minQualityThreshold(value: String): Int {
 
 internal fun isAutoPlayableStream(stream: StreamSource): Boolean {
     val url = stream.url?.trim().orEmpty()
-    if (!url.startsWith("http", ignoreCase = true)) return false
+    // A Stalker VOD source carries a placeholder that only turns into an http
+    // URL when playback starts. It is autoplayable all the same - resolving it
+    // any earlier would cost the portal a link per candidate.
+    if (!isDirectStreamUrl(url)) return false
     return !isPendingDebridStream(stream)
 }
 

@@ -1,5 +1,6 @@
 package com.arflix.tv.data.model
 
+import androidx.annotation.StringRes
 import java.io.Serializable
 
 enum class CatalogSourceType {
@@ -150,7 +151,8 @@ data class CatalogValidationResult(
     val isValid: Boolean,
     val normalizedUrl: String? = null,
     val sourceType: CatalogSourceType? = null,
-    val error: String? = null
+    /** Resource of the validation error; resolved where it is displayed. */
+    @param:StringRes val errorRes: Int? = null
 )
 
 data class CatalogPackManifest(

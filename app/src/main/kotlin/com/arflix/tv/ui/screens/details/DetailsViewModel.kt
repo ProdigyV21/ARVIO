@@ -15,6 +15,7 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.data.model.SportsAddonCapabilities
+import com.arflix.tv.data.model.IptvVodSourceIds
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.api.TmdbApi
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Locale
 import com.arflix.tv.core.plugin.PluginManager
+import com.arflix.tv.data.repository.toStreamSource
 import com.arflix.tv.domain.model.LocalScraperResult
 import javax.inject.Inject
 
@@ -76,6 +78,7 @@ data class DetailsUiState(
     val isLoadingPerson: Boolean = false,
     // Streams
     val streams: List<StreamSource> = emptyList(),
+    val streamsEpisodeIdentity: EpisodeIdentity? = null,
     val subtitles: List<Subtitle> = emptyList(),
     val isLoadingStreams: Boolean = false,
     val streamSearchStartTime: Long = 0L,
@@ -86,7 +89,7 @@ data class DetailsUiState(
     val hasStreamingAddons: Boolean = true,
     val addonOrderedIds: List<String> = emptyList(),
     val isInWatchlist: Boolean = false,
-    val showEpisodeRatings: Boolean = true,
+    val showEpisodeRatings: Boolean = false,
     // Toast
     val toastMessage: String? = null,
     val toastType: ToastType = ToastType.INFO,
@@ -187,7 +190,7 @@ enum class ToastType {
 }
 
 private fun isSupplementalStream(stream: StreamSource): Boolean =
-    stream.addonId == "iptv_xtream_vod" || stream.addonId == HomeServerRepository.ADDON_ID
+    IptvVodSourceIds.isIptvVodAddonId(stream.addonId) || stream.addonId == HomeServerRepository.ADDON_ID
 
 private fun Addon.isVodStreamingAddon(): Boolean =
     isEnabled &&
@@ -351,6 +354,7 @@ class DetailsViewModel @Inject constructor(
             primaryNetworkLogo = primary.primaryNetworkLogo ?: fallback.primaryNetworkLogo,
             genreIds = if (primary.genreIds.isEmpty()) fallback.genreIds else primary.genreIds,
             originalLanguage = primary.originalLanguage ?: fallback.originalLanguage,
+            originalTitle = primary.originalTitle ?: fallback.originalTitle,
             isOngoing = primary.isOngoing || fallback.isOngoing,
             totalEpisodes = primary.totalEpisodes ?: fallback.totalEpisodes,
             watchedEpisodes = primary.watchedEpisodes ?: fallback.watchedEpisodes,
@@ -380,7 +384,7 @@ class DetailsViewModel @Inject constructor(
                 val autoPlaySingleSource = prefs[autoPlaySingleSourceKey()] ?: true
                 val autoPlayMinQuality = normalizeAutoPlayMinQuality(prefs[autoPlayMinQualityKey()])
                 val showBudget = prefs[showBudgetKey()] ?: true
-                val showEpisodeRatings = prefs[showEpisodeRatingsKey()] ?: true
+                val showEpisodeRatings = prefs[showEpisodeRatingsKey()] ?: false
 
                 val previousState = _uiState.value
                 val previousMatches = previousState.item?.id == mediaId &&
@@ -1798,6 +1802,7 @@ class DetailsViewModel @Inject constructor(
             completedAddons = 0,
             totalAddons = 0,
             streams = emptyList(),
+            streamsEpisodeIdentity = identity,
             subtitles = emptyList(),
             streamSearchStartTime = System.currentTimeMillis(),
             pluginScrapersLoading = false
@@ -1844,6 +1849,7 @@ class DetailsViewModel @Inject constructor(
                 completedAddons = 0,
                 totalAddons = 0,
                 streams = emptyList(),
+                streamsEpisodeIdentity = identity,
                 subtitles = emptyList(),
                 addonOrderedIds = orderedAddonIds,
                 streamSearchStartTime = System.currentTimeMillis(),
@@ -3043,6 +3049,9 @@ class DetailsViewModel @Inject constructor(
             return
         }
         val itemTitle = _uiState.value.item?.title.orEmpty()
+        // Passed alongside the displayed title: a provider catalogue may list
+        // the title only under its original name.
+        val itemOriginalTitle = _uiState.value.item?.originalTitle
 
         val vodSources = if (requestMediaType == MediaType.MOVIE) {
             streamRepository.resolveMovieVodSources(
@@ -3050,7 +3059,8 @@ class DetailsViewModel @Inject constructor(
                 title = itemTitle,
                 year = _uiState.value.item?.year?.toIntOrNull(),
                 tmdbId = currentMediaId,
-                timeoutMs = timeoutMs
+                timeoutMs = timeoutMs,
+                originalTitle = itemOriginalTitle
             )
         } else {
             streamRepository.resolveEpisodeVodSources(
@@ -3101,24 +3111,3 @@ private object DetailsVMRegexes {
     )
 
 }
-
-private fun LocalScraperResult.toStreamSource(): StreamSource = StreamSource(
-    source = title,
-    addonName = provider ?: name ?: "Plugin",
-    addonId = "plugin_${provider?.lowercase()?.replace(" ", "_") ?: "unknown"}",
-    quality = quality ?: "Unknown",
-    size = size ?: "",
-    sizeBytes = null,
-    url = url,
-    infoHash = infoHash,
-    fileIdx = null,
-    behaviorHints = headers?.let { hdrs ->
-        com.arflix.tv.data.model.StreamBehaviorHints(
-            notWebReady = false,
-            proxyHeaders = com.arflix.tv.data.model.ProxyHeaders(request = hdrs)
-        )
-    },
-    subtitles = emptyList(),
-    sources = emptyList(),
-    description = null
-)

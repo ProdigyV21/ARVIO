@@ -29,6 +29,7 @@ import com.arflix.tv.util.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -44,6 +45,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+import java.util.Locale
 
 enum class ToastType {
     SUCCESS, ERROR, INFO
@@ -280,9 +282,10 @@ class WatchlistViewModel @Inject constructor(
         viewModelScope.launch {
             homeServerRepository.connections.collect { connections ->
                 val usable = connections.filter { it.isUsable }.map { it.serverKind }.distinct()
-                val candidates = runCatching { homeServerRepository.getCatalogCandidates() }
-                    .getOrDefault(emptyList())
-                    .filter { it.serverKind in usable && it.collectionType.lowercase() in BROWSABLE_LIBRARY_TYPES }
+                // Box-set discovery is for catalog settings, not the Library sidebar.
+                // It can take multiple server timeouts and its results are not used here.
+                val candidates = homeServerRepository.getSavedCatalogCandidates(connections)
+                    .filter { it.collectionType.trim().lowercase(Locale.ROOT) in BROWSABLE_LIBRARY_TYPES }
                 updateHomeLibraryState(usable, candidates)
                 updateAvailableSources(homeServerCandidates = candidates)
             }
@@ -369,19 +372,32 @@ class WatchlistViewModel @Inject constructor(
         val selectedProvider = current.selectedProvider?.takeIf { it in providers }
         val selectedSource = current.selectedSourceRef?.takeIf { source ->
             candidates.any { it.sourceRef == source && it.serverKind == selectedProvider }
+        } ?: candidates.firstOrNull { it.serverKind == selectedProvider }?.sourceRef
+        val selectionChanged = current.selectedSourceRef != selectedSource || current.selectedProvider != selectedProvider
+        libraryCache.keys.removeAll { key -> candidates.none { key.startsWith("${it.sourceRef}|") } }
+        if (selectionChanged) {
+            libraryRequestId++
+            libraryLoadJob?.cancel()
+            librarySearchJob?.cancel()
         }
         _libraryState.value = current.copy(
             providers = providers,
             libraries = candidates,
             selectedProvider = selectedProvider,
             selectedSourceRef = selectedSource,
-            items = if (selectedProvider == null) emptyList() else current.items
+            items = if (selectionChanged || selectedProvider == null) emptyList() else current.items,
+            isLoading = if (selectionChanged) selectedSource != null else current.isLoading,
+            isLoadingMore = if (selectionChanged) false else current.isLoadingMore,
+            hasMore = if (selectionChanged) false else current.hasMore,
+            error = if (selectionChanged) null else current.error
         )
+        if (selectionChanged && selectedSource != null) loadLibraryFirstPage()
     }
 
     fun selectLibraryProvider(provider: HomeServerKind?) {
         val current = _libraryState.value
         if (current.selectedProvider == provider) return
+        libraryRequestId++
         libraryLoadJob?.cancel()
         librarySearchJob?.cancel()
         if (provider == null) {
@@ -479,6 +495,7 @@ class WatchlistViewModel @Inject constructor(
             }.onSuccess { page ->
                 if (requestId != libraryRequestId) return@onSuccess
                 val items = page.items.enrichWithPlaybackProgress()
+                if (requestId != libraryRequestId) return@onSuccess
                 libraryCache[cacheKey] = items to page.hasMore
                 while (libraryCache.size > LIBRARY_CACHE_ENTRY_LIMIT) {
                     libraryCache.remove(libraryCache.keys.first())
@@ -492,6 +509,7 @@ class WatchlistViewModel @Inject constructor(
                 )
                 fetchLogos(items.take(LIBRARY_LOGO_INITIAL_PREFETCH))
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 if (requestId != libraryRequestId) return@onFailure
                 _libraryState.value = _libraryState.value.copy(
                     items = if (cached == null) emptyList() else _libraryState.value.items,
@@ -532,6 +550,7 @@ class WatchlistViewModel @Inject constructor(
                 val fresh = page.items.filter { item ->
                     "${item.homeServerSourceRef}:${item.homeServerItemId}:${item.mediaType}:${item.id}" !in existing
                 }.enrichWithPlaybackProgress()
+                if (requestId != libraryRequestId) return@onSuccess
                 val merged = current.items + fresh
                 _libraryState.value = current.copy(
                     items = merged,
@@ -542,6 +561,7 @@ class WatchlistViewModel @Inject constructor(
                 libraryCache[cacheKey] = merged to page.hasMore
                 fetchLogos(fresh.take(LIBRARY_LOGO_INITIAL_PREFETCH))
             }.onFailure {
+                if (it is CancellationException) throw it
                 if (requestId == libraryRequestId) {
                     _libraryState.value = _libraryState.value.copy(isLoadingMore = false)
                 }

@@ -63,6 +63,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.telegram.TelegramAuthState
+import com.arflix.tv.data.telegram.TelegramConfig
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
@@ -216,7 +217,25 @@ private fun IdleContent(onConnect: () -> Unit) {
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
-        ActionButton(label = stringResource(R.string.connect).uppercase(), onClick = onConnect)
+        if (!TelegramConfig.isConfigured) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.72f)
+                    .background(Color(0xFF331A1A), RoundedCornerShape(10.dp))
+                    .border(1.dp, Color(0xFFFF5252).copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.telegram_not_configured),
+                    style = ArflixTypography.caption.copy(fontSize = 12.sp),
+                    color = Color(0xFFFF8A80),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        } else {
+            ActionButton(label = stringResource(R.string.connect).uppercase(), onClick = onConnect)
+        }
     }
 }
 

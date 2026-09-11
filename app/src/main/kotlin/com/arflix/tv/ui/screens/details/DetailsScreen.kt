@@ -20,6 +20,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -40,6 +41,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +52,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -159,6 +164,7 @@ import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.CardLayoutMode
+import com.arflix.tv.ui.components.DetailsTvHeroLayout
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.PersonModal
 import com.arflix.tv.ui.components.PosterCard
@@ -168,7 +174,7 @@ import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.SkeletonDetailsPage
 import com.arflix.tv.ui.components.SkeletonEpisodeCard
 import com.arflix.tv.ui.components.StreamSelector
-import com.arflix.tv.ui.components.TrailerPlayer
+import com.arflix.tv.ui.components.OpenYouTubeTrailer
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -262,8 +268,6 @@ fun DetailsScreen(
     var showStreamSelector by remember { mutableStateOf(false) }
     var showTrailerPlayer by remember { mutableStateOf(false) }
     KeepScreenOn(active = showTrailerPlayer)
-    var pendingAutoPlayRequest by remember { mutableStateOf<PendingAutoPlayRequest?>(null) }
-    var autoPlayWaitTick by remember { mutableIntStateOf(0) }
 
     // Episode Context Menu state
     var showEpisodeContextMenu by remember { mutableStateOf(false) }
@@ -290,12 +294,18 @@ fun DetailsScreen(
             tmdbSeason = tmdbSeason,
             tmdbEpisode = tmdbEpisode
         )
-        viewModel.loadStreams(imdbId, identity)
-        autoPlayWaitTick = 0
-        pendingAutoPlayRequest = PendingAutoPlayRequest(
-            identity = identity,
-            startPositionMs = startPositionMs,
-            requestedAtMs = SystemClock.elapsedRealtime()
+        viewModel.recordPlayedEpisode(mediaId, identity)
+        // Let the player resolve this identity. The current Details snapshot may still
+        // contain another episode's sources, and starting both resolvers duplicates requests.
+        onNavigateToPlayer(
+            mediaType,
+            mediaId,
+            identity,
+            imdbId,
+            null,
+            null,
+            null,
+            startPositionMs
         )
     }
 
@@ -364,59 +374,6 @@ fun DetailsScreen(
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
         suppressSelectUntilMs = SystemClock.elapsedRealtime() + 150L
-    }
-
-    LaunchedEffect(
-        pendingAutoPlayRequest,
-        uiState.isLoadingStreams,
-        uiState.streams,
-        uiState.autoPlayMinQuality,
-        autoPlayWaitTick
-    ) {
-        val request = pendingAutoPlayRequest ?: return@LaunchedEffect
-
-        val validStreams = uiState.streams.filter(::isAutoPlayableStream)
-        val minThreshold = minQualityThreshold(uiState.autoPlayMinQuality)
-        val selectedStream = bestAutoPlayStream(validStreams, minThreshold)
-        val shouldWaitForSources = shouldWaitForAutoPlaySources(
-            isLoadingStreams = uiState.isLoadingStreams,
-            selectedStream = selectedStream,
-            elapsedMs = SystemClock.elapsedRealtime() - request.requestedAtMs
-        )
-
-        when {
-            selectedStream != null && !shouldWaitForSources -> {
-                val identity = request.identity
-                viewModel.recordPlayedEpisode(mediaId, identity)
-                onNavigateToPlayer(
-                    mediaType,
-                    mediaId,
-                    identity,
-                    uiState.imdbId,
-                    selectedStream.url?.takeIf { it.isNotBlank() },
-                    selectedStream.addonId.takeIf { it.isNotBlank() },
-                    selectedStream.source.takeIf { it.isNotBlank() },
-                    request.startPositionMs
-                )
-                pendingAutoPlayRequest = null
-            }
-            shouldWaitForSources -> {
-                delay(AUTOPLAY_SOURCE_RECHECK_MS)
-                autoPlayWaitTick += 1
-            }
-            uiState.isLoadingStreams -> Unit
-            validStreams.isNotEmpty() || uiState.streams.isNotEmpty() -> {
-                showStreamSelector = true
-                pendingAutoPlayRequest = null
-            }
-            else -> {
-                // When no streams found, show the StreamSelector with its
-                // friendly "no addons" / "no sources" empty state instead of
-                // navigating to the player which would show a scary error.
-                showStreamSelector = true
-                pendingAutoPlayRequest = null
-            }
-        }
     }
 
     // Place episode focus for whichever season is actually loaded. Keyed on currentSeason (which
@@ -1057,45 +1014,9 @@ fun DetailsScreen(
             }
         )
 
-        // In-app Trailer Player (fullscreen overlay)
         if (showTrailerPlayer && uiState.trailerKey != null) {
-            BackHandler { showTrailerPlayer = false }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-                    .zIndex(50f)
-                    .clickable { showTrailerPlayer = false }
-            ) {
-                TrailerPlayer(
-                    youtubeKey = uiState.trailerKey!!,
-                    modifier = Modifier.fillMaxSize(),
-                    delayMs = 0L,
-                    volume = 1f
-                )
-                // Close button for touch devices
-                if (isMobile) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 48.dp, end = 16.dp)
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .clickable { showTrailerPlayer = false },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.close),
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            }
+            OpenYouTubeTrailer(uiState.trailerKey!!) { showTrailerPlayer = false }
         }
-
         // Stream Selector Modal
         StreamSelector(
             isVisible = showStreamSelector,
@@ -1133,7 +1054,10 @@ fun DetailsScreen(
                     null
                 )
             },
-            onClose = { showStreamSelector = false }
+            onClose = {
+                showStreamSelector = false
+                runCatching { focusRequester.requestFocus() }
+            }
         )
 
         // Episode Context Menu
@@ -1203,12 +1127,6 @@ fun DetailsScreen(
 private enum class FocusSection {
     BUTTONS, EPISODES, SEASONS, RATINGS, CAST, REVIEWS, SIMILAR, COLLECTION
 }
-
-private data class PendingAutoPlayRequest(
-    val identity: EpisodeIdentity?,
-    val startPositionMs: Long?,
-    val requestedAtMs: Long
-)
 
 private fun handleLeft(
     section: FocusSection,
@@ -1294,7 +1212,7 @@ private fun DetailsContent(
     hasTrailer: Boolean = false,
     contentHasFocus: Boolean = true,
     usePosterCards: Boolean = false,
-    showEpisodeRatings: Boolean = true,
+    showEpisodeRatings: Boolean = false,
     isMobile: Boolean = false,
     isLoading: Boolean = false,
     isSeasonLoading: Boolean = false,
@@ -2072,50 +1990,72 @@ private fun DetailsContent(
 
         // Layer 4 removed for performance - radial gradients are expensive on TV
 
-        // Hero metadata positioned above the content rows
+        // Unified hero metadata and action buttons positioned safely below the top bar
         val heroStartPadding = 36.dp
         val heroEndPadding = 400.dp
         val configuration = LocalConfiguration.current
-        val hasPosterDetailRails = usePosterCards && (collectionItems.isNotEmpty() || similar.isNotEmpty())
-        // Poster details rails need extra vertical room for two title lines,
-        // subtitle text, and focus bleed; otherwise the title block clips.
-        val minContentRowHeight = if (hasPosterDetailRails) 322.dp else 260.dp
-        val maxContentRowHeight = if (hasPosterDetailRails) 350.dp else 330.dp
-        val contentRowHeight = (configuration.screenHeightDp * 0.34f).dp.coerceIn(
-            minimumValue = minContentRowHeight,
-            maximumValue = maxContentRowHeight
-        )
-        val contentRowBottomPadding = 0.dp
-        val contentRowTopPadding = contentRowHeight + contentRowBottomPadding
-        val buttonsBottomPadding = contentRowTopPadding - 4.dp
-        val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 46.dp else 58.dp
+        val isCompactHeight = configuration.screenHeightDp < 720
+        val heroTopPadding = AppTopBarContentTopInset + if (isCompactHeight) 10.dp else 16.dp
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(
-                    bottom = heroBottomPadding,
-                    start = heroStartPadding,
-                    end = heroEndPadding
-                )
+        val hasPosterDetailRails = usePosterCards && (collectionItems.isNotEmpty() || similar.isNotEmpty())
+        val isBrowsingRails = focusSectionForUi != null && focusSectionForUi != FocusSection.BUTTONS
+
+        val shiftAmount = if (isCompactHeight) 135.dp else 175.dp
+        val railExpansionProgress by animateFloatAsState(
+            targetValue = if (isBrowsingRails) 1f else 0f,
+            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+            label = "details_rail_expansion"
+        )
+        val heroAlpha = 1f - 0.65f * railExpansionProgress
+
+        val minRestingRowHeight = if (hasPosterDetailRails) 226.dp else 210.dp
+        val maxRestingRowHeight = if (hasPosterDetailRails) 246.dp else 226.dp
+        val restingRowHeight = if (isCompactHeight) {
+            minRestingRowHeight
+        } else {
+            (configuration.screenHeightDp * 0.38f).dp.coerceIn(
+                minimumValue = minRestingRowHeight,
+                maximumValue = maxRestingRowHeight
+            )
+        }
+        val expandedRowHeight = restingRowHeight + shiftAmount
+
+        val contentRowBottomPadding = 0.dp
+
+        DetailsTvHeroLayout(
+            restingRowsHeight = restingRowHeight,
+            expandedRowsHeight = expandedRowHeight,
+            expansionProgress = railExpansionProgress,
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Column(verticalArrangement = Arrangement.Bottom) {
+            Column(
+                modifier = Modifier
+                    .graphicsLayer {
+                        alpha = heroAlpha
+                    }
+                    .padding(
+                        top = heroTopPadding,
+                        start = heroStartPadding,
+                        end = heroEndPadding
+                    )
+            ) {
                 val showInCinema = remember(item.releaseDate, item.mediaType) {
                     isInCinema(item)
                 }
                 val inCinemaColor = Color(0xFF8AD5FF)
+                val logoHeight = if (isCompactHeight) 64.dp else 72.dp
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
-                        modifier = Modifier.height(72.dp),
+                        modifier = Modifier.height(logoHeight),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Crossfade(
                             targetState = logoUrl,
                             animationSpec = tween(300, easing = FastOutSlowInEasing),
-                            label = "mobile_logo_crossfade"
+                            label = "tv_logo_crossfade"
                         ) { currentLogoUrl ->
                             if (!currentLogoUrl.isNullOrBlank()) {
                                 AsyncImage(
@@ -2124,7 +2064,7 @@ private fun DetailsContent(
                                     contentScale = ContentScale.Fit,
                                     alignment = Alignment.CenterStart,
                                     modifier = Modifier
-                                        .height(72.dp)
+                                        .height(logoHeight)
                                         .width(320.dp)
                                 )
                             } else {
@@ -2160,14 +2100,13 @@ private fun DetailsContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 val tvSeriesLabel = stringResource(R.string.details_label_tv_series)
                 val movieLabel = stringResource(R.string.movie)
                 val genreText = genres.take(2).map(::formatGenreName).joinToString(" / ").ifEmpty {
                     if (item.mediaType == MediaType.TV) tvSeriesLabel else movieLabel
                 }
-                val isCompactHeight = configuration.screenHeightDp < 720
                 val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() } ?: item.year
                 val hasDuration = item.duration.isNotEmpty() && item.duration != "0m"
                 val rating = imdbRatingFor(item)
@@ -2179,7 +2118,7 @@ private fun DetailsContent(
                 val hasSecondaryMetadata = primaryNetworkLogo != null ||
                     hasRatingMetadata ||
                     hasBudgetMetadata
-                val overviewMaxHeight = if (isCompactHeight) 68.dp else 72.dp
+                val overviewMaxHeight = if (isCompactHeight) 58.dp else 68.dp
 
                 val separatorStyle = ArflixTypography.caption.copy(
                     fontSize = 13.sp,
@@ -2187,11 +2126,11 @@ private fun DetailsContent(
                 )
 
                 Column(
-                    modifier = Modifier.width(360.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                    modifier = Modifier.width(420.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -2209,7 +2148,7 @@ private fun DetailsContent(
                         )
 
                         if (displayDate.isNotEmpty()) {
-                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.6f))
                             Text(
                                 text = displayDate,
                                 style = ArflixTypography.caption.copy(
@@ -2223,7 +2162,7 @@ private fun DetailsContent(
                         }
 
                         if (hasDuration) {
-                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.6f))
                             Text(
                                 text = item.duration,
                                 style = ArflixTypography.caption.copy(
@@ -2237,7 +2176,7 @@ private fun DetailsContent(
                         }
 
                         item.contentRating?.let { contentRating ->
-                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.7f))
+                            Text(text = "|", style = separatorStyle, color = Color.White.copy(alpha = 0.6f))
                             Text(
                                 text = contentRating,
                                 style = ArflixTypography.caption.copy(
@@ -2270,6 +2209,7 @@ private fun DetailsContent(
                                     imageLoader = metadataLogoImageLoader,
                                     contentDescription = stringResource(R.string.details_cd_primary_provider),
                                     contentScale = ContentScale.Fit,
+                                    alignment = Alignment.CenterStart,
                                     modifier = Modifier
                                         .height(16.dp)
                                         .width(52.dp)
@@ -2285,7 +2225,7 @@ private fun DetailsContent(
                                     rating = rating,
                                     imageLoader = metadataLogoImageLoader,
                                     ratingFontSize = 13,
-                                    logoWidth = 34.dp,
+                                    logoWidth = 28.dp,
                                     logoHeight = 14.dp,
                                     textShadow = textShadow
                                 )
@@ -2322,14 +2262,14 @@ private fun DetailsContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 val displayOverview = item.overview
 
                 Box(
                     modifier = Modifier
-                        .width(360.dp)
-                        .height(overviewMaxHeight)
+                        .width(420.dp)
+                        .heightIn(max = overviewMaxHeight)
                 ) {
                     Text(
                         text = displayOverview,
@@ -2345,129 +2285,120 @@ private fun DetailsContent(
                     )
                 }
 
-            }
-        }
+                // Space before action buttons (flexible slot for future in-between items)
+                Spacer(modifier = Modifier.height(14.dp))
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(
-                    bottom = buttonsBottomPadding,
-                    start = heroStartPadding,
-                    end = heroEndPadding
-                )
-        ) {
-            val buttonWatched = if (item.mediaType == MediaType.TV) {
-                episodes.getOrNull(episodeIndex)?.isWatched ?: item.isWatched
-            } else {
-                item.isWatched
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val playButtonLabel = if (!playLabel.isNullOrBlank()) {
-                    playLabel
+                val buttonWatched = if (item.mediaType == MediaType.TV) {
+                    episodes.getOrNull(episodeIndex)?.isWatched ?: item.isWatched
                 } else {
-                    stringResource(R.string.play)
-                }
-                Box(modifier = Modifier.clickable { onButtonClick(0) }) {
-                    PremiumActionButton(
-                        icon = Icons.Default.PlayArrow,
-                        text = playButtonLabel,
-                        isPrimary = true,
-                        isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 0
-                    )
-                }
-                Box(modifier = Modifier.clickable { onButtonClick(1) }) {
-                    PremiumActionButton(
-                        icon = Icons.Default.List,
-                        text = stringResource(R.string.sources),
-                        isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 1,
-                        isIconOnly = true
-                    )
-                }
-                Box(modifier = Modifier
-                    .clickable(enabled = hasTrailer) { onButtonClick(2) }
-                    .graphicsLayer { alpha = if (hasTrailer) 1f else 0.4f }
-                ) {
-                    PremiumActionButton(
-                        icon = Icons.Default.Movie,
-                        text = stringResource(R.string.trailer),
-                        isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 2,
-                        isIconOnly = true
-                    )
-                }
-                Box(modifier = Modifier.clickable { onButtonClick(3) }) {
-                    PremiumActionButton(
-                        icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
-                        text = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.details_btn_mark_watched),
-                        isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 3,
-                        isActive = buttonWatched,
-                        isIconOnly = true
-                    )
-                }
-                Box(modifier = Modifier.clickable { onButtonClick(4) }) {
-                    PremiumActionButton(
-                        icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        text = stringResource(R.string.watchlist),
-                        isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 4,
-                        isIconOnly = true,
-                        isActive = isInWatchlist
-                    )
+                    item.isWatched
                 }
 
-                // "View Collection" button — only shown when this movie belongs to a TMDB collection
-                if (hasCollectionAction) {
-                    Box(modifier = Modifier.clickable { onButtonClick(5) }) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val playButtonLabel = if (!playLabel.isNullOrBlank()) {
+                        playLabel
+                    } else {
+                        stringResource(R.string.play)
+                    }
+                    Box(modifier = Modifier.clickable { onButtonClick(0) }) {
                         PremiumActionButton(
-                            icon = Icons.Default.Star,
-                            text = stringResource(R.string.view_collection),
-                            isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 5,
+                            icon = Icons.Default.PlayArrow,
+                            text = playButtonLabel,
+                            isPrimary = true,
+                            isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 0
+                        )
+                    }
+                    Box(modifier = Modifier.clickable { onButtonClick(1) }) {
+                        PremiumActionButton(
+                            icon = Icons.Default.List,
+                            text = stringResource(R.string.sources),
+                            isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 1,
                             isIconOnly = true
                         )
                     }
+                    Box(modifier = Modifier
+                        .clickable(enabled = hasTrailer) { onButtonClick(2) }
+                        .graphicsLayer { alpha = if (hasTrailer) 1f else 0.4f }
+                    ) {
+                        PremiumActionButton(
+                            icon = Icons.Default.Movie,
+                            text = stringResource(R.string.trailer),
+                            isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 2,
+                            isIconOnly = true
+                        )
+                    }
+                    Box(modifier = Modifier.clickable { onButtonClick(3) }) {
+                        PremiumActionButton(
+                            icon = if (buttonWatched) Icons.Default.Check else Icons.Default.Visibility,
+                            text = if (buttonWatched) stringResource(R.string.watched) else stringResource(R.string.details_btn_mark_watched),
+                            isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 3,
+                            isActive = buttonWatched,
+                            isIconOnly = true
+                        )
+                    }
+                    Box(modifier = Modifier.clickable { onButtonClick(4) }) {
+                        PremiumActionButton(
+                            icon = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            text = stringResource(R.string.watchlist),
+                            isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 4,
+                            isIconOnly = true,
+                            isActive = isInWatchlist
+                        )
+                    }
+
+                    // "View Collection" button — only shown when this movie belongs to a TMDB collection
+                    if (hasCollectionAction) {
+                        Box(modifier = Modifier.clickable { onButtonClick(5) }) {
+                            PremiumActionButton(
+                                icon = Icons.Default.Star,
+                                text = stringResource(R.string.view_collection),
+                                isFocused = focusSectionForUi == FocusSection.BUTTONS && buttonIndex == 5,
+                                isIconOnly = true
+                            )
+                        }
+                    }
                 }
             }
-        }
 
-        DetailsTvRows(
-            modifier = Modifier.align(Alignment.BottomStart),
-            item = item,
-            episodes = episodes,
-            totalSeasons = totalSeasons,
-            currentSeason = currentSeason,
-            cast = cast,
-            reviews = reviews,
-            similar = similar,
-            similarLogoUrls = similarLogoUrls,
-            collectionItems = collectionItems,
-            collectionName = collectionName,
-            collectionIndex = collectionIndex,
-            focusedSection = focusedSection,
-            focusSectionForUi = focusSectionForUi,
-            episodeIndex = episodeIndex,
-            ratingsIndex = ratingsIndex,
-            seasonIndex = seasonIndex,
-            castIndex = castIndex,
-            reviewIndex = reviewIndex,
-            similarIndex = similarIndex,
-            seasonProgress = seasonProgress,
-            usePosterCards = usePosterCards,
-            showEpisodeRatings = showEpisodeRatings,
-            spoilerBlurEnabled = spoilerBlurEnabled,
-            isSeasonLoading = isSeasonLoading,
-            contentRowHeight = contentRowHeight,
-            contentRowBottomPadding = contentRowBottomPadding,
-            configuration = configuration,
-            contentHasFocus = contentHasFocus,
-            onSeasonClick = onSeasonClick,
-            onEpisodeClick = onEpisodeClick,
-            onCastClick = onCastClick,
-            onSimilarClick = onSimilarClick,
-            onCollectionClick = onCollectionClick
-        )
+            DetailsTvRows(
+                modifier = Modifier,
+                item = item,
+                episodes = episodes,
+                totalSeasons = totalSeasons,
+                currentSeason = currentSeason,
+                cast = cast,
+                reviews = reviews,
+                similar = similar,
+                similarLogoUrls = similarLogoUrls,
+                collectionItems = collectionItems,
+                collectionName = collectionName,
+                collectionIndex = collectionIndex,
+                focusedSection = focusedSection,
+                focusSectionForUi = focusSectionForUi,
+                episodeIndex = episodeIndex,
+                ratingsIndex = ratingsIndex,
+                seasonIndex = seasonIndex,
+                castIndex = castIndex,
+                reviewIndex = reviewIndex,
+                similarIndex = similarIndex,
+                seasonProgress = seasonProgress,
+                usePosterCards = usePosterCards,
+                showEpisodeRatings = showEpisodeRatings,
+                spoilerBlurEnabled = spoilerBlurEnabled,
+                isSeasonLoading = isSeasonLoading,
+                contentRowBottomPadding = contentRowBottomPadding,
+                configuration = configuration,
+                contentHasFocus = contentHasFocus,
+                onSeasonClick = onSeasonClick,
+                onEpisodeClick = onEpisodeClick,
+                onCastClick = onCastClick,
+                onSimilarClick = onSimilarClick,
+                onCollectionClick = onCollectionClick
+            )
+        }
     }
 }
 
@@ -2498,7 +2429,6 @@ private fun DetailsTvRows(
     showEpisodeRatings: Boolean,
     spoilerBlurEnabled: Boolean,
     isSeasonLoading: Boolean = false,
-    contentRowHeight: Dp,
     contentRowBottomPadding: Dp,
     configuration: android.content.res.Configuration,
     contentHasFocus: Boolean,
@@ -2509,8 +2439,6 @@ private fun DetailsTvRows(
     onCollectionClick: (Int) -> Unit = {}
 ) {
     val contentScrollState = rememberTvLazyListState()
-    val detailsStackOffsetPx = remember { Animatable(0f) }
-    val density = LocalDensity.current
     val isTV = item.mediaType == MediaType.TV
     val hasEpisodes = isTV && episodes.isNotEmpty()
     val hasAnyValidRating = remember(episodes) {
@@ -2575,14 +2503,12 @@ private fun DetailsTvRows(
             focusSectionForUi == FocusSection.SEASONS
         ) {
             if (firstVisible > topClusterMaxIndex || contentScrollState.firstVisibleItemScrollOffset != 0) {
-                val travelPx = with(density) { 96.dp.toPx() }
-                detailsStackOffsetPx.stop()
-                detailsStackOffsetPx.snapTo(-travelPx)
-                contentScrollState.scrollToItem(0, 0)
-                detailsStackOffsetPx.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
-                )
+                val visibleTop = contentScrollState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == 0 }
+                if (visibleTop != null) {
+                    contentScrollState.animateDetailsScrollDelta(visibleTop.offset.toFloat(), 130)
+                } else {
+                    contentScrollState.animateScrollToItem(0, 0)
+                }
             }
             return@LaunchedEffect
         }
@@ -2590,20 +2516,15 @@ private fun DetailsTvRows(
         val targetAligned = firstVisible == targetScrollIndex &&
             contentScrollState.firstVisibleItemScrollOffset == 0
         if (targetAligned) {
-            detailsStackOffsetPx.stop()
-            detailsStackOffsetPx.snapTo(0f)
             return@LaunchedEffect
         }
 
-        val direction = if (targetScrollIndex > firstVisible) 1f else -1f
-        val travelPx = with(density) { 96.dp.toPx() }
-        detailsStackOffsetPx.stop()
-        detailsStackOffsetPx.snapTo(direction * travelPx)
-        contentScrollState.scrollToItem(targetScrollIndex, 0)
-        detailsStackOffsetPx.animateTo(
-            targetValue = 0f,
-            animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
-        )
+        val visibleTarget = contentScrollState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetScrollIndex }
+        if (visibleTarget != null) {
+            contentScrollState.animateDetailsScrollDelta(visibleTarget.offset.toFloat(), 130)
+        } else {
+            contentScrollState.animateScrollToItem(targetScrollIndex, 0)
+        }
     }
 
     val contentStartPadding = 12.dp
@@ -2613,9 +2534,7 @@ private fun DetailsTvRows(
         state = contentScrollState,
         modifier = modifier
             .fillMaxWidth()
-            .height(contentRowHeight)
             .padding(start = 24.dp, bottom = contentRowBottomPadding)
-            .graphicsLayer { translationY = detailsStackOffsetPx.value }
             .arvioManualBringIntoViewBoundary()
             .arvioDpadFocusGroup(enableFocusRestorer = false)
             .clipToBounds(),
@@ -2753,7 +2672,7 @@ private fun DetailsSeasonRail(
         isCurrentRow = focusSectionForUi == FocusSection.SEASONS,
         focusedItemIndex = seasonIndex,
         totalItems = totalSeasons,
-        itemWidth = 128.dp,
+        itemWidth = 96.dp,
         itemSpacing = 8.dp
     )
 
@@ -2771,7 +2690,7 @@ private fun DetailsSeasonRail(
         contentPadding = PaddingValues(
             start = contentStartPadding,
             end = lockedDetailsRailEndPadding(
-                itemWidth = 128.dp,
+                itemWidth = 96.dp,
                 startPadding = contentStartPadding,
                 outerStartPadding = contentOuterStartPadding,
                 minimum = 150.dp
@@ -3477,20 +3396,23 @@ private fun lockedDetailsRailEndPadding(
         .coerceAtLeast(minimum)
 }
 
+private val DetailsScrollEasing = FastOutSlowInEasing
+
 private suspend fun TvLazyListState.animateDetailsScrollDelta(
     deltaPx: Float,
-    durationMillis: Int
+    durationMillis: Int,
+    easing: Easing = DetailsScrollEasing
 ) {
-    if (abs(deltaPx) <= 1f) return
+    if (abs(deltaPx) <= 0.5f) return
     scroll(scrollPriority = MutatePriority.PreventUserInput) {
         var previousValue = 0f
         animate(
             initialValue = 0f,
             targetValue = deltaPx,
-            animationSpec = tween(durationMillis = durationMillis, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = durationMillis, easing = easing)
         ) { value, _ ->
             val step = value - previousValue
-            if (abs(step) > 0.01f) {
+            if (abs(step) > 0.001f) {
                 scrollBy(step)
             }
             previousValue = value
@@ -3545,12 +3467,18 @@ private fun HomeStyleRowAutoScroll(
             focusedItemIndex.coerceAtMost(maxFirstIndex)
         }
     }
-    val itemSpanPx = remember(density, itemWidth, itemSpacing) {
-        with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
+    val itemSizes = remember { mutableMapOf<Int, Int>() }
+    val visibleItems = rowState.layoutInfo.visibleItemsInfo
+    LaunchedEffect(visibleItems) {
+        visibleItems.forEach { item ->
+            itemSizes[item.index] = item.size
+        }
     }
 
     var lastScrollIndex by remember { mutableIntStateOf(-1) }
     var lastScrollOffset by remember { mutableIntStateOf(-1) }
+    var lastScrollTimeMs by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(isCurrentRow) {
         if (!isCurrentRow) {
             lastScrollIndex = -1
@@ -3562,37 +3490,86 @@ private fun HomeStyleRowAutoScroll(
 
         val extraOffset = 0
 
-        if (focusedItemIndex == 0 && scrollTargetIndex == 0) {
-            rowState.scrollToItem(index = 0, scrollOffset = 0)
-            lastScrollIndex = 0
-            lastScrollOffset = 0
+        val currentFirst = rowState.firstVisibleItemIndex
+        val currentOffset = rowState.firstVisibleItemScrollOffset
+        val isAlreadyAtTarget = currentFirst == scrollTargetIndex &&
+            abs(currentOffset - extraOffset) <= 2
+        if (isAlreadyAtTarget) {
+            lastScrollIndex = scrollTargetIndex
+            lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
 
-        if (lastScrollIndex == scrollTargetIndex && lastScrollOffset == extraOffset) return@LaunchedEffect
         if (lastScrollIndex == -1) {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             lastScrollIndex = scrollTargetIndex
             lastScrollOffset = extraOffset
             return@LaunchedEffect
         }
-        val currentFirst = rowState.firstVisibleItemIndex
-        val currentOffset = rowState.firstVisibleItemScrollOffset
+
         val currentLast = rowState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: currentFirst
-        val targetOutsideViewport = focusedItemIndex < currentFirst || focusedItemIndex > currentLast
+        val targetOutsideViewport = scrollTargetIndex < currentFirst || scrollTargetIndex > currentLast
         val delta = scrollTargetIndex - currentFirst
+        val offsetDelta = abs(extraOffset - currentOffset)
+
         if (abs(delta) > 6) {
             rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
-        } else if (delta != 0 || targetOutsideViewport || lastScrollOffset != extraOffset) {
-            val deltaPx = (delta * itemSpanPx) + (extraOffset - currentOffset)
+        } else if (delta != 0 || targetOutsideViewport || offsetDelta > 2) {
+            val nowMs = SystemClock.elapsedRealtime()
+            val isFast = (nowMs - lastScrollTimeMs) < 180L
+            lastScrollTimeMs = nowMs
+
+            val layoutInfo = rowState.layoutInfo
+            layoutInfo.visibleItemsInfo.forEach { item ->
+                itemSizes[item.index] = item.size
+            }
+
+            val defaultItemSizePx = with(density) { itemWidth.roundToPx() }
+            val spacingPx = layoutInfo.mainAxisItemSpacing.takeIf { it > 0 }
+                ?: with(density) { itemSpacing.roundToPx() }
+            val beforePaddingPx = layoutInfo.beforeContentPadding
+
+            fun calculateScrollPosition(index: Int, scrollOffset: Int): Int {
+                if (index <= 0) return scrollOffset
+                var pos = beforePaddingPx + scrollOffset
+                for (i in 0 until index) {
+                    pos += (itemSizes[i] ?: defaultItemSizePx) + spacingPx
+                }
+                return pos
+            }
+
+            val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == scrollTargetIndex }
+            val deltaPx = if (scrollTargetIndex == 0) {
+                if (currentFirst == 0) {
+                    -currentOffset.toFloat()
+                } else {
+                    val currentPos = calculateScrollPosition(currentFirst, currentOffset)
+                    -currentPos.toFloat()
+                }
+            } else if (targetItem != null) {
+                (targetItem.offset - extraOffset).toFloat()
+            } else {
+                val currentPos = calculateScrollPosition(currentFirst, currentOffset)
+                val targetPos = calculateScrollPosition(scrollTargetIndex, extraOffset)
+                (targetPos - currentPos).toFloat()
+            }
+
+            val duration = when {
+                isFast -> 120
+                abs(delta) >= 3 -> 200
+                else -> 180
+            }
+
             rowState.animateDetailsScrollDelta(
                 deltaPx = deltaPx,
-                durationMillis = if (abs(delta) >= 3) 180 else 150
+                durationMillis = duration,
+                easing = DetailsScrollEasing
             )
-            if (
-                rowState.firstVisibleItemIndex != scrollTargetIndex ||
-                abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 8
-            ) {
+
+            // Ensure exact alignment if item index is off, or if significantly drifted
+            if (rowState.firstVisibleItemIndex != scrollTargetIndex) {
+                rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
+            } else if (abs(rowState.firstVisibleItemScrollOffset - extraOffset) > 16) {
                 rowState.scrollToItem(index = scrollTargetIndex, scrollOffset = extraOffset)
             }
         }
@@ -3633,8 +3610,9 @@ private fun DetailsImdbSvgRatingBadge(
             imageLoader = imageLoader,
             contentDescription = "IMDb",
             contentScale = ContentScale.Fit,
+            alignment = Alignment.CenterStart,
             modifier = Modifier
-                .width(logoWidth)
+                .width(logoHeight * 2)
                 .height(logoHeight)
         )
         Text(
@@ -3650,22 +3628,20 @@ private fun DetailsImdbSvgRatingBadge(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun MdbExternalRatingsRow(
+internal fun MdbExternalRatingsRow(
     ratings: List<MdbExternalRating>,
     centered: Boolean,
     textShadow: Shadow
 ) {
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(
             6.dp,
             if (centered) Alignment.CenterHorizontally else Alignment.Start
         ),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
         ratings.forEach { rating ->
             Row(
@@ -3881,11 +3857,11 @@ private fun PremiumActionButton(
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.3.sp
     )
-    val iconSize = if (isIconOnly) 20.dp else 16.dp
+    val iconSize = 20.dp
     val expandedPadding = 12.dp
     val collapsedPadding = 0.dp
     val labelSpacing = 8.dp
-    val labelExtraWidth = 12.dp
+    val labelExtraWidth = 6.dp
     val showLabel = isFocused && text.isNotBlank()
 
     val labelWidthPx = remember(text, density) {
@@ -3894,15 +3870,15 @@ private fun PremiumActionButton(
         }
     }
     val labelWidthDp = with(density) { labelWidthPx.toDp() }
-    val targetPadding = if (showLabel || !isIconOnly) expandedPadding else collapsedPadding
+    val targetPadding = if (showLabel) expandedPadding else collapsedPadding
     val horizontalPadding by animateDpAsState(
         targetValue = targetPadding,
         animationSpec = tween(140),
         label = "button_padding"
     )
-    val baseWidth = iconSize + targetPadding * 2
+    val baseWidth = iconSize + (if (showLabel) targetPadding * 2 else 0.dp)
     val expandedWidth = baseWidth + labelSpacing + labelWidthDp + labelExtraWidth
-    val targetWidth = if (showLabel) expandedWidth else baseWidth
+    val targetWidth = if (showLabel) expandedWidth else iconSize
     val animatedWidth by animateDpAsState(
         targetValue = targetWidth,
         animationSpec = tween(
@@ -3986,7 +3962,6 @@ private fun PremiumActionButton(
         contentAlignment = contentAlignment
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(labelSpacing)
         ) {
@@ -3996,7 +3971,7 @@ private fun PremiumActionButton(
                 tint = contentColor,
                 modifier = Modifier.size(iconSize)
             )
-            if (text.isNotEmpty()) {
+            if (text.isNotEmpty() && (showLabel || labelAlpha > 0.01f)) {
                 Text(
                     text = text,
                     style = textStyle,
@@ -4321,12 +4296,18 @@ private fun SeasonButton(
     }
     val backgroundColor by animateColorAsState(
         targetValue = targetBackgroundColor,
-        animationSpec = androidx.compose.animation.core.tween(150),
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 180,
+            easing = FastOutSlowInEasing
+        ),
         label = "season_btn_bg"
     )
     val textColor by animateColorAsState(
         targetValue = targetTextColor,
-        animationSpec = androidx.compose.animation.core.tween(150),
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 180,
+            easing = FastOutSlowInEasing
+        ),
         label = "season_btn_txt"
     )
 
@@ -4350,6 +4331,7 @@ private fun SeasonButton(
     Row(
         modifier = clickModifier
             .background(backgroundColor, shape)
+            .defaultMinSize(minWidth = 96.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -4358,7 +4340,7 @@ private fun SeasonButton(
             text = "${stringResource(R.string.season_label)} $season",
             style = ArvioSkin.typography.button.copy(
                 fontSize = 13.sp,
-                fontWeight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Medium
+                fontWeight = FontWeight.SemiBold
             ),
             color = textColor
         )

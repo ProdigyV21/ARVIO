@@ -1,5 +1,5 @@
 import { config } from "./config";
-import { getDetails } from "./tmdb";
+import { getDetails, resolveTmdbId } from "./tmdb";
 import { tmdbImageUrl } from "./mediaImages";
 import type { MediaItem, WatchHistoryEntry } from "./types";
 
@@ -21,9 +21,21 @@ export function historyToItem(entry: WatchHistoryEntry): MediaItem {
     episodeNumber: entry.episode ?? null,
     episodeTitle: entry.episode_title ?? null,
     progress,
+    resumePositionSeconds: entry.position_seconds ?? 0,
+    durationSeconds: entry.duration_seconds ?? 0,
+    streamAddonId: entry.stream_addon_id ?? null,
     activityAt: Date.parse(entry.updated_at ?? entry.paused_at ?? "") || 0,
     timeRemainingLabel: remaining > 0 ? `${Math.ceil(remaining / 60)}m left` : null
   };
+}
+
+// Negative IDs are local identities, never IDs in the TMDB namespace.
+function trackerIdentity(media: { title?: string; ids?: { tmdb?: number; trakt?: number; imdb?: string } } | undefined): number {
+  if (media?.ids?.tmdb && media.ids.tmdb > 0) return media.ids.tmdb;
+  const key = String(media?.ids?.trakt ?? media?.ids?.imdb ?? media?.title ?? "unmatched");
+  let hash = 2166136261;
+  for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return -((hash >>> 0) || 1);
 }
 
 export function traktItemToMedia(raw: unknown): MediaItem {
@@ -34,9 +46,9 @@ export function traktItemToMedia(raw: unknown): MediaItem {
     show?: { title?: string; year?: number; ids?: { tmdb?: number; trakt?: number; imdb?: string } };
   };
   const media = item.movie ?? item.show;
-  const mediaType = item.type === "show" ? "tv" : "movie";
+  const mediaType = item.show || item.type === "show" ? "tv" : "movie";
   return {
-    id: media?.ids?.tmdb ?? media?.ids?.trakt ?? Math.floor(Math.random() * 1000000),
+    id: trackerIdentity(media),
     title: media?.title ?? "Untitled",
     year: media?.year ? String(media.year) : "",
     subtitle: mediaType === "tv" ? "TV Series" : "Movie",
@@ -61,8 +73,8 @@ export function traktPlaybackToMedia(raw: unknown): MediaItem {
   const media = item.movie ?? item.show;
   const isShow = Boolean(item.show);
   return {
-    activityAt: Date.parse(item.paused_at ?? "") || Date.now(),
-    id: media?.ids?.tmdb ?? media?.ids?.trakt ?? Math.floor(Math.random() * 1000000),
+    activityAt: Date.parse(item.paused_at ?? "") || 0,
+    id: trackerIdentity(media),
     title: isShow && item.episode?.title ? `${media?.title ?? "Series"}: ${item.episode.title}` : media?.title ?? "Untitled",
     year: media?.year ? String(media.year) : "",
     subtitle: isShow ? `S${item.episode?.season ?? 1} E${item.episode?.number ?? 1}` : "Movie",
@@ -87,6 +99,7 @@ export function traktUpNextToMedia(watchedRaw: unknown, progressRaw: unknown): M
   const progress = progressRaw as {
     aired?: number;
     completed?: number;
+    reset_at?: string | null;
     last_watched_at?: string;
     next_episode?: { season?: number; number?: number; title?: string };
   } | null;
@@ -110,6 +123,7 @@ export function traktUpNextToMedia(watchedRaw: unknown, progressRaw: unknown): M
     episodeTitle: nextEpisode.title ?? null,
     progress: aired > 0 ? Math.round((Math.min(completed, aired) / aired) * 100) : 0,
     badge: "Up Next",
+    progressResetAt: Date.parse(progress?.reset_at ?? "") || 0,
     timeRemainingLabel: "Up next",
     activityAt: Date.parse(progress?.last_watched_at ?? watched.last_watched_at ?? watched.last_updated_at ?? "") || 0,
     releaseDate: progress?.last_watched_at ?? watched.last_watched_at ?? watched.last_updated_at ?? null
@@ -126,7 +140,7 @@ export function traktHistoryToMedia(raw: unknown): MediaItem {
   const media = item.movie ?? item.show;
   const isShow = Boolean(item.show);
   return {
-    id: media?.ids?.tmdb ?? media?.ids?.trakt ?? Math.floor(Math.random() * 1000000),
+    id: trackerIdentity(media),
     title: isShow && item.episode?.title ? `${media?.title ?? "Series"}: ${item.episode.title}` : media?.title ?? "Untitled",
     year: media?.year ? String(media.year) : "",
     subtitle: isShow ? `Watched S${item.episode?.season ?? 1} E${item.episode?.number ?? 1}` : "Watched movie",
@@ -153,7 +167,16 @@ export function dedupeMedia(items: MediaItem[]) {
 export async function hydrateTraktItems(items: MediaItem[]) {
   // Hydrate the whole watchlist so nothing is silently dropped. getDetails is
   // cached, so re-renders don't re-fetch.
-  const hydrated = await Promise.all(items.map((item) => getDetails(item).catch(() => item)));
+  const hydrated = new Array<MediaItem>(items.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(6, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      const item = items[index];
+      const id = item.id > 0 ? item.id : await resolveTmdbId(item).catch(() => null);
+      hydrated[index] = id ? await getDetails({ ...item, id }).catch(() => ({ ...item, id })) : item;
+    }
+  }));
   // getDetails merges TMDB data over the item but keeps activityAt (added date)
   // from the Trakt mapping via the spread; make sure it survives explicitly.
   return hydrated.map((item, index) => ({ ...item, activityAt: items[index]?.activityAt ?? item.activityAt, badge: index < 10 ? `#${index + 1}` : item.badge }));

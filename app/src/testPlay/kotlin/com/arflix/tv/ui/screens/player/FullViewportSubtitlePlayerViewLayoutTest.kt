@@ -3,6 +3,7 @@ package com.arflix.tv.ui.screens.player
 import android.app.Application
 import android.view.View
 import android.widget.FrameLayout
+import com.arflix.tv.ui.screens.player.engine.exoplayer.FullViewportSubtitlePlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.R as Media3UiR
 import com.google.common.truth.Truth.assertThat

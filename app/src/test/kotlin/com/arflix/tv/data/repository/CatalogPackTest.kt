@@ -1,6 +1,7 @@
 package com.arflix.tv.data.repository
 
 import android.content.Context
+import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogPackManifest
 import com.arflix.tv.data.model.CatalogPackItem
@@ -50,8 +51,9 @@ class CatalogPackTest {
         assertTrue(result.isFailure)
         val exception = result.exceptionOrNull()
         assertNotNull(exception)
-        assertTrue(exception is IllegalArgumentException)
-        assertTrue(exception!!.message!!.contains("duplicate catalog URL"))
+        assertTrue(exception is CatalogException)
+        assertEquals(R.string.catalog_pack_duplicate_url, (exception as CatalogException).messageRes)
+        assertEquals(listOf("https://mdblist.com/lists/snoak/trending-movies"), exception.formatArgs)
     }
 
     @Test

@@ -233,26 +233,30 @@ function hashId(value: string): number {
   return Math.abs(hash) || 1;
 }
 
-async function proxiedGet<T>(url: string, headers?: Record<string, string>): Promise<T> {
-  return jsonRequest<T>(proxiedUrl(url, headers));
+async function proxiedGet<T>(url: string, headers?: Record<string, string>, signal?: AbortSignal): Promise<T> {
+  return jsonRequest<T>(proxiedUrl(url, headers), { signal });
 }
 
-async function proxiedPost<T>(url: string, body: unknown, headers?: Record<string, string>): Promise<T> {
+async function proxiedPost<T>(url: string, body: unknown, headers?: Record<string, string>, signal?: AbortSignal): Promise<T> {
   const target = new URL("/api/proxy", window.location.origin);
   target.searchParams.set("url", url);
   if (headers && Object.keys(headers).length) target.searchParams.set("headers", btoa(JSON.stringify(headers)));
-  return jsonRequest<T>(target.toString(), { method: "POST", body: JSON.stringify(body) });
+  return jsonRequest<T>(target.toString(), { method: "POST", body: JSON.stringify(body), signal });
 }
 
-async function ensureSession(server: HomeServerConfig): Promise<{ token: string; userId: string } | null> {
-  const cached = sessionCache.get(server.id);
+export { ensureSession as ensureHomeServerSession };
+
+async function ensureSession(server: HomeServerConfig, signal?: AbortSignal): Promise<{ token: string; userId: string } | null> {
+  signal?.throwIfAborted();
+  const cacheKey = JSON.stringify([server.id, server.url, server.token, server.userId, server.username, server.password]);
+  const cached = sessionCache.get(cacheKey);
   if (cached) return cached;
   const base = trimUrl(server.url);
 
   // Direct session if both token and userId are already present on the config
   if (server.token && server.userId) {
     const session = { token: server.token, userId: server.userId };
-    sessionCache.set(server.id, session);
+    sessionCache.set(cacheKey, session);
     return session;
   }
 
@@ -262,26 +266,30 @@ async function ensureSession(server: HomeServerConfig): Promise<{ token: string;
       const me = await proxiedGet<{ Id: string }>(`${base}/Users/Me?api_key=${encodeURIComponent(server.token)}`, {
         "X-Emby-Token": server.token,
         "X-MediaBrowser-Token": server.token
-      });
+      }, signal);
+      signal?.throwIfAborted();
       if (me?.Id) {
         const session = { token: server.token, userId: me.Id };
-        sessionCache.set(server.id, session);
+        sessionCache.set(cacheKey, session);
         return session;
       }
     } catch {
+      signal?.throwIfAborted();
       /* fall through to username auth */
     }
 
     try {
       const users = await proxiedGet<Array<{ Id: string }>>(`${base}/Users?api_key=${encodeURIComponent(server.token)}`, {
         "X-Emby-Token": server.token
-      });
+      }, signal);
+      signal?.throwIfAborted();
       if (Array.isArray(users) && users.length > 0 && users[0]?.Id) {
         const session = { token: server.token, userId: users[0].Id };
-        sessionCache.set(server.id, session);
+        sessionCache.set(cacheKey, session);
         return session;
       }
     } catch {
+      signal?.throwIfAborted();
       /* fall through to username auth */
     }
   }
@@ -292,14 +300,17 @@ async function ensureSession(server: HomeServerConfig): Promise<{ token: string;
       const auth = await proxiedPost<{ AccessToken: string; User: { Id: string } }>(
         `${base}/Users/AuthenticateByName`,
         { Username: server.username, Pw: server.password ?? "" },
-        { "X-Emby-Authorization": AUTH_HEADER }
+        { "X-Emby-Authorization": AUTH_HEADER },
+        signal
       );
+      signal?.throwIfAborted();
       if (auth?.AccessToken && auth.User?.Id) {
         const session = { token: auth.AccessToken, userId: auth.User.Id };
-        sessionCache.set(server.id, session);
+        sessionCache.set(cacheKey, session);
         return session;
       }
     } catch {
+      signal?.throwIfAborted();
       return null;
     }
   }
@@ -318,6 +329,7 @@ interface JellyfinItem {
   PrimaryImageTag?: string;
   ProviderIds?: { Tmdb?: string; Imdb?: string; Tvdb?: string };
   DateCreated?: string;
+  PremiereDate?: string;
 }
 
 interface PlexSection {
@@ -338,6 +350,7 @@ interface PlexItem {
   Media?: Array<{ Part?: Array<{ key?: string }> }>;
   Guid?: Array<{ id?: string }>;
   addedAt?: number;
+  originallyAvailableAt?: string;
 }
 
 const NON_VIDEO_COLLECTION_TYPES = new Set(["music", "photos", "homevideos", "books", "podcasts", "audiobooks"]);
@@ -367,6 +380,7 @@ function mapItem(base: string, token: string, item: JellyfinItem, server?: HomeS
     title: item.Name,
     overview: item.Overview ?? "",
     year: item.ProductionYear ? String(item.ProductionYear) : "",
+    releaseDate: item.PremiereDate ?? null,
     rating: item.CommunityRating ? item.CommunityRating.toFixed(1) : "",
     mediaType,
     image,
@@ -405,6 +419,7 @@ function mapPlexItem(base: string, token: string, item: PlexItem, server?: HomeS
     title: item.title,
     overview: item.summary ?? "",
     year: item.year ? String(item.year) : "",
+    releaseDate: item.originallyAvailableAt ?? null,
     rating: item.rating ? item.rating.toFixed(1) : "",
     mediaType,
     image: plexImage(base, token, item.thumb),
@@ -751,19 +766,51 @@ function qualityLabel(width?: number, height?: number): string {
 
 // ---- Jellyfin / Emby ----
 
+export interface JellyfinMediaSource {
+  Id?: string;
+  Path?: string;
+  Container?: string;
+  Size?: number;
+  ETag?: string;
+  DefaultAudioStreamIndex?: number;
+  SupportsDirectPlay?: boolean;
+  SupportsDirectStream?: boolean;
+  SupportsTranscoding?: boolean;
+  DirectStreamUrl?: string;
+  TranscodingUrl?: string;
+  TranscodingSubProtocol?: string;
+  TranscodingContainer?: string;
+  RequiresOpening?: boolean;
+  MediaStreams?: Array<{
+    Type?: string; Index?: number; IsDefault?: boolean; Codec?: string; Profile?: string;
+    Width?: number; Height?: number; BitDepth?: number; Level?: number; IsInterlaced?: boolean;
+    VideoRange?: string; VideoRangeType?: string; ColorTransfer?: string;
+    DvProfile?: number; DolbyVisionProfile?: number;
+  }>;
+}
+
+export function jellyfinSourceMedia(source: JellyfinMediaSource): NonNullable<StreamSource["media"]> {
+  const streams = source.MediaStreams ?? [];
+  const video = streams.find((s) => s.Type === "Video");
+  const audio = streams.find((s) => s.Type === "Audio" && source.DefaultAudioStreamIndex != null && s.Index === source.DefaultAudioStreamIndex)
+    ?? streams.find((s) => s.Type === "Audio" && s.IsDefault) ?? streams.find((s) => s.Type === "Audio");
+  const range = video?.VideoRangeType || video?.VideoRange;
+  return {
+    container: source.Container?.toLowerCase(),
+    videoCodec: video?.Codec?.toLowerCase(),
+    audioCodec: audio?.Codec?.toLowerCase(),
+    hdr: video?.DvProfile || video?.DolbyVisionProfile ? "Dolby Vision"
+      : range && range !== "Unknown" ? range
+      : video?.ColorTransfer === "smpte2084" ? "HDR10" : video?.ColorTransfer === "arib-std-b67" ? "HLG" : undefined
+  };
+}
+
 interface JellyfinFullItem {
   Id: string;
   Name: string;
   ProductionYear?: number;
   ProviderIds?: Record<string, string>;
-  MediaSources?: Array<{
-    Id?: string;
-    Path?: string;
-    Container?: string;
-    Size?: number;
-    ETag?: string;
-    MediaStreams?: Array<{ Type?: string; Width?: number; Height?: number }>;
-  }>;
+  MediaSources?: JellyfinMediaSource[];
 }
 
 async function jellyfinFindItems(
@@ -778,7 +825,7 @@ async function jellyfinFindItems(
     Recursive: "true",
     IncludeItemTypes: itemTypes,
     SearchTerm: target.title,
-    Fields: "ProviderIds,MediaSources,ProductionYear,Path",
+    Fields: "ProviderIds,MediaSources,MediaStreams,ProductionYear,Path",
     Limit: "12",
     api_key: token
   });
@@ -820,7 +867,7 @@ async function jellyfinItemSources(
   const { token, userId } = session;
   // PlaybackInfo yields the authoritative MediaSources with container/size.
   const playbackInfo = await proxiedPost<{ MediaSources?: JellyfinFullItem["MediaSources"] }>(
-    `${base}/Items/${item.Id}/PlaybackInfo?UserId=${userId}&IsPlayback=true&AutoOpenLiveStream=true&MaxStreamingBitrate=2147483647&api_key=${token}`,
+    `${base}/Items/${item.Id}/PlaybackInfo?UserId=${userId}&IsPlayback=false&AutoOpenLiveStream=false&MaxStreamingBitrate=2147483647&api_key=${token}`,
     {},
     { "X-Emby-Token": token }
   ).catch(() => null);
@@ -828,13 +875,15 @@ async function jellyfinItemSources(
   const label = server.name || "Home Server";
   const seen = new Set<string>();
   const out: StreamSource[] = [];
-  for (const ms of mediaSources) {
+  for (const [mediaIndex, ms] of mediaSources.entries()) {
     const videoStream = (ms.MediaStreams ?? []).find((s) => s.Type === "Video");
     const quality = qualityLabel(videoStream?.Width, videoStream?.Height) || "Direct";
     const container = (ms.Container ?? "").toLowerCase();
     const ext = container ? `.${container}` : "";
     // Direct static stream — playable in-browser (mp4) or via remux/external.
-    const url = `${base}/Videos/${item.Id}/stream${ext}?Static=true&MediaSourceId=${ms.Id ?? ""}&api_key=${token}${ms.ETag ? `&Tag=${ms.ETag}` : ""}`;
+    const params = new URLSearchParams({ Static: "true", MediaSourceId: ms.Id ?? "", api_key: token });
+    if (ms.ETag) params.set("Tag", ms.ETag);
+    const url = `${base}/Videos/${encodeURIComponent(item.Id)}/stream${ext}?${params}`;
     if (seen.has(url)) continue;
     seen.add(url);
     out.push({
@@ -845,6 +894,9 @@ async function jellyfinItemSources(
       size: formatBytes(ms.Size ?? 0),
       sizeBytes: ms.Size && ms.Size > 0 ? ms.Size : null,
       url,
+      transport: "file",
+      media: jellyfinSourceMedia(ms),
+      homeServer: { serverId: server.id, itemId: item.Id, mediaSourceId: ms.Id, mediaIndex },
       behaviorHints: {
         cached: true,
         filename: item.Name,
@@ -858,15 +910,43 @@ async function jellyfinItemSources(
 
 // ---- Plex ----
 
-interface PlexMetadata {
+export interface PlexMedia {
+  id?: string | number;
+  container?: string;
+  videoCodec?: string;
+  audioCodec?: string;
+  videoResolution?: string;
+  Part?: Array<{
+    id?: string | number; key?: string; size?: number; container?: string; file?: string;
+    decision?: string;
+    Stream?: Array<{
+      streamType?: number; codec?: string; selected?: boolean | number; default?: boolean | number;
+      DOVIPresent?: boolean | number; DOVIProfile?: number; colorTrc?: string;
+      videoRange?: string; bitDepth?: number; profile?: string; decision?: string;
+    }>;
+  }>;
+}
+
+export function plexSourceMedia(media: PlexMedia, part: NonNullable<PlexMedia["Part"]>[number]): NonNullable<StreamSource["media"]> {
+  const streams = part.Stream ?? [];
+  const video = streams.find((s) => s.streamType === 1);
+  const audio = streams.find((s) => s.streamType === 2 && s.selected)
+    ?? streams.find((s) => s.streamType === 2 && s.default) ?? streams.find((s) => s.streamType === 2);
+  return {
+    container: (part.container ?? media.container)?.toLowerCase(),
+    videoCodec: (video?.codec ?? media.videoCodec)?.toLowerCase(),
+    audioCodec: (audio?.codec ?? media.audioCodec)?.toLowerCase(),
+    hdr: video?.DOVIPresent || video?.DOVIProfile ? "Dolby Vision"
+      : video?.videoRange || (video?.colorTrc === "smpte2084" ? "HDR10" : video?.colorTrc === "arib-std-b67" ? "HLG" : undefined)
+  };
+}
+
+export interface PlexMetadata {
   ratingKey: string;
   title: string;
   year?: number;
   Guid?: Array<{ id: string }>;
-  Media?: Array<{
-    videoResolution?: string;
-    Part?: Array<{ key?: string; size?: number; container?: string; file?: string }>;
-  }>;
+  Media?: PlexMedia[];
 }
 
 function plexProviderIds(meta: PlexMetadata): Record<string, string> {
@@ -926,13 +1006,13 @@ async function plexMetadataSources(server: HomeServerConfig, meta: PlexMetadata)
   const label = server.name || "Home Server";
   const out: StreamSource[] = [];
   const seen = new Set<string>();
-  for (const media of hydrated.Media ?? []) {
-    for (const part of media.Part ?? []) {
+  for (const [mediaIndex, media] of (hydrated.Media ?? []).entries()) {
+    for (const [partIndex, part] of (media.Part ?? []).entries()) {
       if (!part.key) continue;
       const url = `${base}${part.key}?X-Plex-Token=${encodeURIComponent(token)}`;
       if (seen.has(url)) continue;
       seen.add(url);
-      const container = (part.container ?? "").toLowerCase();
+      const container = (part.container ?? media.container ?? "").toLowerCase();
       const quality = media.videoResolution
         ? (media.videoResolution === "4k" ? "4K" : `${media.videoResolution}p`.replace("pp", "p"))
         : "Direct";
@@ -944,6 +1024,12 @@ async function plexMetadataSources(server: HomeServerConfig, meta: PlexMetadata)
         size: formatBytes(part.size ?? 0),
         sizeBytes: part.size && part.size > 0 ? part.size : null,
         url,
+        transport: "file",
+        media: plexSourceMedia(media, part),
+        homeServer: {
+          serverId: server.id, itemId: hydrated.ratingKey,
+          mediaSourceId: media.id == null ? undefined : String(media.id), mediaIndex, partIndex
+        },
         behaviorHints: { cached: true, filename: hydrated.title, videoSize: part.size && part.size > 0 ? part.size : null },
         description: `${hydrated.title} · ${label}`
       });
@@ -1070,7 +1156,7 @@ function isBrowsableLibraryType(type?: string | null): boolean {
   return !type || BROWSABLE_LIBRARY_TYPES.has(type.toLowerCase().trim());
 }
 
-export type HomeServerLibrarySort = "added" | "title" | "rating";
+export type HomeServerLibrarySort = import("./librarySort").LibrarySort;
 export interface HomeServerLibraryPage {
   items: MediaItem[];
   hasMore: boolean;
@@ -1189,7 +1275,7 @@ export async function loadHomeServerLibraryPage(
       const token = server.token ?? "";
       const params = new URLSearchParams({
         "X-Plex-Token": token,
-        sort: sort === "title" ? "titleSort:asc" : sort === "rating" ? "rating:desc" : "addedAt:desc",
+        sort: sort === "release-newest" ? "originallyAvailableAt:desc" : sort === "release-oldest" ? "originallyAvailableAt:asc" : sort === "title" ? "titleSort:asc" : sort === "rating" ? "rating:desc" : "addedAt:desc",
         "X-Plex-Container-Start": String(offset),
         "X-Plex-Container-Size": String(limit),
         includeGuids: "1"
@@ -1213,8 +1299,8 @@ export async function loadHomeServerLibraryPage(
       ParentId: libraryKey,
       Recursive: "true",
       IncludeItemTypes: effectiveFilter === "movie" ? "Movie" : effectiveFilter === "tv" ? "Series" : "Movie,Series",
-      SortBy: sort === "title" ? "SortName" : sort === "rating" ? "CommunityRating" : "DateCreated",
-      SortOrder: sort === "title" ? "Ascending" : "Descending",
+      SortBy: sort === "release-newest" || sort === "release-oldest" ? "PremiereDate" : sort === "title" ? "SortName" : sort === "rating" ? "CommunityRating" : "DateCreated",
+      SortOrder: sort === "title" || sort === "release-oldest" ? "Ascending" : "Descending",
       StartIndex: String(offset),
       Limit: String(limit),
       Fields: "Overview,PrimaryImageAspectRatio,BasicSyncInfo,ImageTags,BackdropImageTags,ProductionYear,CommunityRating,ProviderIds,DateCreated",

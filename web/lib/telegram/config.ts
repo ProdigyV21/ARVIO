@@ -1,9 +1,29 @@
-// Telegram MTProto app credentials. These are the SAME public api_id / api_hash
-// the Android app ships (see app/.../telegram/TelegramConfig.kt) — they identify
-// the ARVIO application to Telegram, not the user, and are already shipped in the
-// public APK, so surfacing them in the browser bundle exposes nothing new.
-export const TELEGRAM_API_ID = 23905496;
-export const TELEGRAM_API_HASH = "1e48b355edfe55f9a4fbf8d3c2324628";
+export function sanitizeTelegramApiId(val?: string | number | null): number {
+  if (val === undefined || val === null) return 0;
+  const str = String(val).trim();
+  if (!str || str.toLowerCase().startsWith("your-") || str.toLowerCase() === "disabled") {
+    return 0;
+  }
+  const num = Number(str);
+  return Number.isSafeInteger(num) && num > 0 ? num : 0;
+}
+
+export function sanitizeTelegramApiHash(val?: string | null): string {
+  if (!val) return "";
+  const str = String(val).trim();
+  if (!str || str.toLowerCase().startsWith("your-") || str.toLowerCase() === "disabled") {
+    return "";
+  }
+  return str;
+}
+
+export function isTelegramCredentialsConfigured(apiId: number, apiHash: string): boolean {
+  return apiId > 0 && Boolean(apiHash);
+}
+
+export const TELEGRAM_API_ID = sanitizeTelegramApiId(process.env.NEXT_PUBLIC_TELEGRAM_API_ID);
+export const TELEGRAM_API_HASH = sanitizeTelegramApiHash(process.env.NEXT_PUBLIC_TELEGRAM_API_HASH);
+export const isTelegramConfigured = isTelegramCredentialsConfigured(TELEGRAM_API_ID, TELEGRAM_API_HASH);
 
 // localStorage key holding the GramJS StringSession (the authorization key). This
 // is the browser equivalent of Android's on-device TDLib database — losing it

@@ -1,7 +1,8 @@
 const crypto = require("crypto");
 const { connectLambda, getStore } = require("@netlify/blobs");
-const { privacyHash, sendTransactionalEmail } = require("./_backend");
+const { privacyHash, sendTransactionalEmail, sha256, normalizeEmail } = require("./_backend");
 const { recordPremiumEvent } = require("./_premium-funnel");
+const { entitlementsStore, readEntitlement, evaluateEntitlement } = require("./_entitlements");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const JOB_RETENTION_MS = 14 * DAY_MS;
@@ -65,7 +66,7 @@ function trialJobKey(accountKey, type) {
 }
 
 function trialEmailContent(type, expiresAt) {
-  const webUrl = "https://web.arvio.tv";
+  const webUrl = `https://web.arvio.tv/?utm_source=trial_email&utm_medium=email&utm_campaign=premium&utm_content=${type}`;
   const membershipUrl = process.env.KOFI_URL || process.env.NEXT_PUBLIC_KOFI_URL || "https://ko-fi.com/arvio/tiers";
   const end = new Intl.DateTimeFormat("en", {
     year: "numeric",
@@ -133,7 +134,7 @@ async function queueTrialEmails(event, email, expiresAt) {
 async function deliverTrialEmailJob(event, store, key, job) {
   const now = new Date();
   const nowMs = now.getTime();
-  if (!job || job.sentAt || !JOB_TYPES.includes(job.type)) return false;
+  if (!job || job.sentAt || job.status === "suppressed" || !JOB_TYPES.includes(job.type)) return false;
   if (job.status === "failed" && Number(job.attempts || 0) >= 6) return false;
   if (Date.parse(job.dueAt || "") > nowMs) return false;
   if (job.nextAttemptAt && Date.parse(job.nextAttemptAt) > nowMs) return false;
@@ -148,6 +149,16 @@ async function deliverTrialEmailJob(event, store, key, job) {
   });
   try {
     const email = openEmail(job.sealedEmail);
+    const accessStore = entitlementsStore(event);
+    const record = await readEntitlement(accessStore, sha256(normalizeEmail(email)));
+    const linkedEmail = normalizeEmail(record?.linkedFrom);
+    const linked = linkedEmail && linkedEmail !== normalizeEmail(email)
+      ? await readEntitlement(accessStore, sha256(linkedEmail)) : null;
+    const suppression = trialEmailSuppression(job, record, linked, nowMs);
+    if (suppression) {
+      await store.setJSON(key, { ...job, sealedEmail: null, status: "suppressed", reason: suppression, updatedAt: now.toISOString() });
+      return false;
+    }
     const content = trialEmailContent(job.type, job.expiresAt);
     const result = await sendTransactionalEmail(email, content.subject, content.text, content.html);
     const sentAt = new Date().toISOString();
@@ -192,7 +203,7 @@ async function runDueTrialEmails(event, limit = 50) {
     if (sent + failed >= limit) break;
     const job = await getJSON(store, key);
     const completedAt = Date.parse(job?.sentAt || job?.updatedAt || "");
-    if (["sent", "failed"].includes(job?.status) && Number.isFinite(completedAt) && Date.now() - completedAt > JOB_RETENTION_MS) {
+    if (["sent", "failed", "suppressed"].includes(job?.status) && Number.isFinite(completedAt) && Date.now() - completedAt > JOB_RETENTION_MS) {
       await store.delete(key).catch(() => {});
       deleted += 1;
       continue;
@@ -207,9 +218,21 @@ async function runDueTrialEmails(event, limit = 50) {
   return { sent, failed, deleted, scanned: keys.length };
 }
 
+function trialEmailSuppression(job, record, linkedRecord, now = Date.now()) {
+  const paid = candidate => {
+    const state = evaluateEntitlement(candidate);
+    return state.entitled && state.reason === "subscription";
+  };
+  if (paid(record) || paid(linkedRecord)) return "already_paid";
+  if (!record) return "no_entitlement";
+  if (job.type === "expired" && record.source === "trial" && Date.parse(record.expiresAt) > now) return "trial_still_active";
+  if (job.type !== "expired" && Date.parse(job.expiresAt) <= now) return "stale_trial_message";
+  return null;
+}
+
 module.exports = {
   JOB_TYPES,
   queueTrialEmails,
   runDueTrialEmails,
-  _test: { sealEmail, openEmail, trialEmailContent, trialJobKey }
+  _test: { sealEmail, openEmail, trialEmailContent, trialJobKey, trialEmailSuppression, deliverTrialEmailJob }
 };

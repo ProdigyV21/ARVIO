@@ -19,8 +19,9 @@ const REQUEST_RULES = [
   { path: /^\/users\/settings$/, methods: ['POST'] },
   { path: /^\/scrobble\/(?:start|pause|stop)$/, methods: ['POST'] },
   { path: /^\/sync\/activities$/, methods: ['GET'] },
-  { path: /^\/sync\/all-items\/(?:movies|shows|anime|all)\/(?:watching|plantowatch|hold|completed|dropped|all)$/, methods: ['GET'] },
-  { path: /^\/sync\/playback(?:\/(?:movies|shows|anime|all))?$/, methods: ['GET'] },
+  { path: /^\/sync\/all-items(?:\/(?:movies|shows|anime|all)(?:\/(?:watching|plantowatch|hold|completed|dropped|all))?)?$/, methods: ['GET'] },
+  { path: /^\/sync\/playback(?:\/(?:movies|episodes|shows|anime|all))?$/, methods: ['GET'] },
+  { path: /^\/sync\/playback\/\d+$/, methods: ['DELETE'] },
   { path: /^\/sync\/(?:history|history\/remove|add-to-list)$/, methods: ['POST'] },
 ]
 
@@ -123,11 +124,23 @@ serve(async (req) => {
         simklUrl.searchParams.set(key, value)
       }
     })
-    if (path.startsWith('/oauth/pin')) simklUrl.searchParams.set('client_id', SIMKL_CLIENT_ID)
+    simklUrl.searchParams.set('client_id', SIMKL_CLIENT_ID)
+    if (!simklUrl.searchParams.has('app-name') || simklUrl.searchParams.get('app-name') === 'ARVIO') {
+      simklUrl.searchParams.set('app-name', 'arvio')
+    }
+    if (!simklUrl.searchParams.has('app-version')) {
+      const incomingVersion = req.headers.get('x-app-version') || '1.9.996'
+      simklUrl.searchParams.set('app-version', incomingVersion)
+    }
+
+    const appVersion = simklUrl.searchParams.get('app-version') || '1.9.996'
+    const incomingUa = req.headers.get('user-agent')?.trim()
+    const userAgent = incomingUa || `ARVIO/${appVersion} (Supabase Proxy)`
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'simkl-api-key': SIMKL_CLIENT_ID,
+      'User-Agent': userAgent,
     }
 
     const userToken = req.headers.get('x-user-token')
@@ -165,8 +178,14 @@ serve(async (req) => {
       data = responseText ? { raw: responseText } : { status: response.status }
     }
 
+    const returnHeaders: Record<string, string> = { ...corsHeaders(req), 'Content-Type': 'application/json' }
+    const upstreamRetryAfter = response.headers.get('retry-after')
+    if (upstreamRetryAfter) {
+      returnHeaders['Retry-After'] = upstreamRetryAfter
+    }
+
     return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+      headers: returnHeaders,
       status: response.status,
     })
   } catch (error) {

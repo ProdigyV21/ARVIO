@@ -448,14 +448,18 @@ class TraktRepository @Inject constructor(
         return out
     }
 
-    suspend fun importLocalContinueWatchingForProfiles(values: Map<String, List<ContinueWatchingItem>>) {
+    suspend fun importLocalContinueWatchingForProfiles(values: Map<String, List<ContinueWatchingItem>?>) {
         context.traktDataStore.edit { prefs ->
             values.forEach { (profileId, items) ->
+                if (items == null) return@forEach
+                val validItems = sanitizeContinueWatchingItems(items)
+                // A corrupt non-empty snapshot must not erase this device's valid history.
+                if (items.isNotEmpty() && validItems.isEmpty()) return@forEach
                 val key = profileManager.profileStringKeyFor(profileId, "local_continue_watching_v1")
-                if (items.isEmpty()) {
+                if (validItems.isEmpty()) {
                     prefs.remove(key)
                 } else {
-                    prefs[key] = gson.toJson(items.take(Constants.MAX_CONTINUE_WATCHING))
+                    prefs[key] = gson.toJson(validItems.take(Constants.MAX_CONTINUE_WATCHING))
                 }
             }
         }
@@ -1419,6 +1423,7 @@ class TraktRepository @Inject constructor(
                 }
                 throw lastErr ?: IllegalStateException("$label failed")
             }
+            val snapshotIncomplete = java.util.concurrent.atomic.AtomicBoolean(false)
             val hiddenShowsDeferred = async {
                 try {
                     traktCallWithAuthRetry("hidden progress shows") { currentAuth ->
@@ -1428,6 +1433,7 @@ class TraktRepository @Inject constructor(
                     if (e is kotlinx.coroutines.CancellationException) throw e
 
                     System.err.println("TraktRepo:getCW: getHiddenShows failed: ${e.message}")
+                    snapshotIncomplete.set(true)
                     AppLogger.breadcrumb(
                         tag = "Trakt",
                         message = "cw_hidden_shows_failed error=${e::class.java.simpleName}",
@@ -1445,6 +1451,7 @@ class TraktRepository @Inject constructor(
                     if (e is kotlinx.coroutines.CancellationException) throw e
 
                     System.err.println("TraktRepo:getCW: getHiddenResetShows failed: ${e.message}")
+                    snapshotIncomplete.set(true)
                     AppLogger.breadcrumb(
                         tag = "Trakt",
                         message = "cw_hidden_reset_failed error=${e::class.java.simpleName}",
@@ -1454,25 +1461,33 @@ class TraktRepository @Inject constructor(
                 }
             }
             val playbackDeferred = async {
-                traktCallWithAuthRetry("playback progress") { currentAuth ->
-                    getAllPlaybackProgress(currentAuth)
+                traktSnapshotRead {
+                    traktCallWithAuthRetry("playback progress") { currentAuth ->
+                        getAllPlaybackProgress(currentAuth)
+                    }
                 }
             }
             val watchedShowsDeferred = async {
-                traktCallWithAuthRetry("watched shows") { currentAuth ->
-                    getAllWatchedShows(currentAuth)
+                traktSnapshotRead {
+                    traktCallWithAuthRetry("watched shows") { currentAuth ->
+                        getAllWatchedShows(currentAuth)
+                    }
                 }
             }
 
             val hiddenTraktIds = (hiddenShowsDeferred.await() + hiddenResetShowsDeferred.await())
                 .mapNotNull { it.show?.ids?.trakt }
                 .toSet()
+            // Use the same fresh history for playback filtering and Up Next selection.
+            val watchedSnapshot = watchedShowsDeferred.await()
+            val watchedEpisodeKeys = watchedSnapshot.getOrNull()?.let(::traktWatchedEpisodeKeys)
+                ?: watchedEpisodesCache.toSet()
             // Fetch actively paused playback items (sync/playback).
             val processedKeys = mutableSetOf<String>()
             var playbackFetched = false
             var watchedProgressFetched = false
             try {
-                val playbackItems = playbackDeferred.await()
+                val playbackItems = playbackDeferred.await().getOrThrow()
                 playbackFetched = true
                 for (item in playbackItems) {
                     if (item.progress < Constants.MIN_PROGRESS_THRESHOLD || item.progress >= Constants.WATCHED_THRESHOLD) continue
@@ -1515,7 +1530,7 @@ class TraktRepository @Inject constructor(
                     if (key in processedKeys) continue
                     // Check if this episode is already watched
                     val epWatchedKey = "show_tmdb:$tmdbId:$season:$number"
-                    if (watchedEpisodesCache.contains(epWatchedKey)) continue
+                    if (watchedEpisodeKeys.contains(epWatchedKey)) continue
                     candidates.add(
                         ContinueWatchingCandidate(
                             item = ContinueWatchingItem(
@@ -1551,7 +1566,7 @@ class TraktRepository @Inject constructor(
 
             try {
                 val includeSpecials = context.settingsDataStore.data.first()[includeSpecialsKey()] ?: false
-                val allWatchedShows = watchedShowsDeferred.await()
+                val allWatchedShows = watchedSnapshot.getOrThrow()
                     .asSequence()
                     .filter { watched ->
                         val show = watched.show
@@ -1591,6 +1606,7 @@ class TraktRepository @Inject constructor(
                                 if (e is kotlinx.coroutines.CancellationException) throw e
 
                                 System.err.println("TraktRepo:getCW: show progress failed for ${show.title}: ${e.message}")
+                                snapshotIncomplete.set(true)
                                 AppLogger.breadcrumb(
                                     tag = "Trakt",
                                     message = "cw_show_progress_failed error=${e::class.java.simpleName}",
@@ -1641,7 +1657,7 @@ class TraktRepository @Inject constructor(
                         processedKeys.add(showKey)
                     }
                 }
-                watchedProgressFetched = true
+                watchedProgressFetched = !snapshotIncomplete.get()
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -1653,6 +1669,25 @@ class TraktRepository @Inject constructor(
                         "trakt_phase" to "cw_watched_progress"
                     )
                 )
+            }
+
+            // An incomplete response is not an authoritative replacement for the saved row.
+            // Leave its fetch time untouched so a subsequent refresh can retry.
+            if (!playbackFetched || !watchedProgressFetched || snapshotIncomplete.get()) {
+                if (currentProfileId() != requestProfileId) return@coroutineScope emptyList()
+                val saved = if (cachedContinueWatchingProfileId == requestProfileId && cachedContinueWatching.isNotEmpty()) {
+                    cachedContinueWatching
+                } else {
+                    loadContinueWatchingCache()
+                }
+                if (saved.isNotEmpty()) return@coroutineScope filterDismissedContinueWatchingItems(saved)
+                // On a first login there is no snapshot to preserve. Show successful reads
+                // without persisting the incomplete result or marking the refresh as fresh.
+                val partial = hydrateTopCandidates(
+                    candidates.sortedByDescending { it.lastActivityAt }.take(Constants.MAX_CONTINUE_WATCHING)
+                )
+                if (currentProfileId() != requestProfileId) return@coroutineScope emptyList()
+                return@coroutineScope filterDismissedContinueWatchingItems(partial)
             }
 
             // Filter out dismissed items
@@ -1980,18 +2015,8 @@ class TraktRepository @Inject constructor(
                         )
                     } else {
                         val details = tmdbApi.getTvDetails(item.id, Constants.TMDB_API_KEY)
-                        // Allow items where Trakt says there's a next episode even if
-                        // TMDB hasn't updated its season count yet. Trakt's progress
-                        // API is authoritative for "what to watch next" — TMDB often
-                        // lags by hours or days when a new season premieres. Only drop
-                        // items where the season is wildly beyond TMDB's count (likely
-                        // a Trakt data error, e.g., a specials season numbered 99).
-                        val validatedItem = if (item.season != null && item.season > details.numberOfSeasons + 1) {
-                            null
-                        } else {
-                            item
-                        }
-                        validatedItem?.copy(
+                        // TMDB supplies artwork only; its season numbering must not veto Trakt progress.
+                        item.copy(
                             backdropPath = details.backdropPath?.let { "${Constants.BACKDROP_BASE_LARGE}$it" },
                             posterPath = details.posterPath?.let { "${Constants.IMAGE_BASE}$it" },
                             overview = details.overview ?: "",
@@ -2125,8 +2150,7 @@ class TraktRepository @Inject constructor(
             val cacheKey = stringPreferencesKey("profile_${profileId}_trakt_continue_watching_cache_v1")
             val json = prefs[cacheKey] ?: return
 
-            val type = TypeToken.getParameterized(MutableList::class.java, ContinueWatchingItem::class.java).type
-            val parsed: List<ContinueWatchingItem> = gson.fromJson(json, type)
+            val parsed = decodeContinueWatchingCache(json, gson)
             val filtered = filterDismissedContinueWatchingItems(parsed, profileId)
             preloadedProfileCache[profileId] = filtered
 
@@ -2412,14 +2436,7 @@ class TraktRepository @Inject constructor(
     }
 
     private fun decodeContinueWatchingList(json: String): List<ContinueWatchingItem> {
-        if (json.isBlank()) return emptyList()
-        return try {
-            val type = TypeToken.getParameterized(MutableList::class.java, ContinueWatchingItem::class.java).type
-            val items: List<ContinueWatchingItem> = gson.fromJson(json, type)
-            items.distinctBy { "${it.mediaType}:${it.id}" }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return decodeContinueWatchingCache(json, gson)
     }
 
     private fun decodeIntList(json: String): List<Int> {
@@ -2666,6 +2683,11 @@ class TraktRepository @Inject constructor(
         return loadLocalContinueWatching()
     }
 
+    /** Profile-scoped saved playback, without waiting for metadata or tracker requests. */
+    internal suspend fun getLocalContinueWatchingSnapshot(): List<ContinueWatchingItem> {
+        return loadLocalContinueWatchingRaw()
+    }
+
     /**
      * Check if current profile has Trakt authentication
      */
@@ -2884,9 +2906,7 @@ class TraktRepository @Inject constructor(
         val prefs = context.traktDataStore.data.first()
         val json = prefs[continueWatchingCacheKey()] ?: return emptyList()
         return try {
-            val type = TypeToken.getParameterized(MutableList::class.java, ContinueWatchingItem::class.java).type
-            val parsed: List<ContinueWatchingItem> = gson.fromJson(json, type)
-            parsed
+            decodeContinueWatchingCache(json, gson)
         } catch (_: Exception) {
             emptyList()
         }

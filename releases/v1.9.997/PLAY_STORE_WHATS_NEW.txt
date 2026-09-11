@@ -1,0 +1,1 @@
+Improved IPTV and Stalker playback, programme guides, and TV remote navigation. Better seek previews, release-date sorting, and Library scroll restoration. More reliable Trakt and SIMKL progress, including IPTV VOD in Continue Watching. Improved Telegram device sessions, translations, and startup stability.

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.arflix.tv.util.profilesDataStore
@@ -143,6 +144,21 @@ class ProfileManager @Inject constructor(
      */
     fun profileBooleanKeyFor(profileId: String, name: String): Preferences.Key<Boolean> {
         return booleanPreferencesKey("profile_${profileId}_$name")
+    }
+
+    /**
+     * Create a profile-scoped int preference key
+     */
+    fun profileIntKey(name: String): Preferences.Key<Int> {
+        return intPreferencesKey("profile_${getProfileIdSync()}_$name")
+    }
+
+    /**
+     * Create a profile-scoped int preference key for a specific profile ID
+     * (does not mutate current profile state).
+     */
+    fun profileIntKeyFor(profileId: String, name: String): Preferences.Key<Int> {
+        return intPreferencesKey("profile_${profileId}_$name")
     }
 
     /**

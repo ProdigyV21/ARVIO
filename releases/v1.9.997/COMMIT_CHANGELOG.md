@@ -1,0 +1,99 @@
+# Complete commit changelog for v1.9.997
+
+All 90 source-history commits after v1.9.996 through bbb469245fbdb341f34057fd1fbd08e73b61fe02, including merges and recorded co-authors. Release packaging is recorded separately by the release commit.
+
+- [bbb469245](https://github.com/ProdigyV21/ARVIO/commit/bbb469245fbdb341f34057fd1fbd08e73b61fe02) Merge latest main IPTV playback fixes with provider guard and indexed guides — Arvin
+- [1ca75df49](https://github.com/ProdigyV21/ARVIO/commit/1ca75df49a22e72172c0166b09b6d2b9ad22fda4) fix(iptv): bound provider requests and preserve indexed catch-up guides — Arvin
+- [d34ae4035](https://github.com/ProdigyV21/ARVIO/commit/d34ae4035f81cac0c5535fbb4f4cec92e6905c58) Merge pull request #675 from ReichiMD/claude/sharp-fermat-42iebj — Prodigy
+- [15e5bd04c](https://github.com/ProdigyV21/ARVIO/commit/15e5bd04c3c89c709d3da807ca1f194742dd6c71) Fix stale watched episodes in web Trakt continue watching — Arvin
+- [32ef59d99](https://github.com/ProdigyV21/ARVIO/commit/32ef59d996010a8e8dd1124f21656e0b51eaf398) test(iptv): correct legacy Android cache fixtures — Arvin
+- [eb400a33d](https://github.com/ProdigyV21/ARVIO/commit/eb400a33d405b888a02c20c8fc59a9404a966548) fix(web): keep home cards stationary while hero previews change — Arvin
+- [71f641b5d](https://github.com/ProdigyV21/ARVIO/commit/71f641b5d5b6d7be9fd9200efc7d6a260f61eb23) fix(iptv): preserve portal link requirements and recover expired redirects — Arvin
+- [a6c60c5fe](https://github.com/ProdigyV21/ARVIO/commit/a6c60c5feeec568b08ed5828c7c95cbeaa3fb49c) fix(stalker): stop sending a second handshake that discards the first token — Claude
+  - Co-Authored-By: Claude Opus 5
+- [3740a32b8](https://github.com/ProdigyV21/ARVIO/commit/3740a32b806d326857ee83f8b8c256d709be8188) fix(live): play Stalker channels the portal already addressed — Claude
+  - Co-Authored-By: Claude Opus 5
+- [abd848b88](https://github.com/ProdigyV21/ARVIO/commit/abd848b888f8f655b1560ba8e15bcafca029a8a8) fix(live): stop replaying an expired Stalker link from cache — Claude
+  - Co-Authored-By: Claude Opus 5
+- [2f2365e5b](https://github.com/ProdigyV21/ARVIO/commit/2f2365e5b1b3f163f03709f877e265d731260be4) fix(live): stop retrying dead channels and read the server's stream type — Claude
+  - Co-Authored-By: Claude Opus 5
+- [ac52e9f50](https://github.com/ProdigyV21/ARVIO/commit/ac52e9f50b6e0644f850932d5a3c68e8a319986d) docs(iptv): record signed TV update and merged regression results [skip ci] — Arvin
+- [2fd626559](https://github.com/ProdigyV21/ARVIO/commit/2fd6265591634f8d3bacdf2a105c09dba8271ba4) Merge remote-tracking branch 'origin/main' into codex/library-scroll-navigation — Arvin
+- [984023944](https://github.com/ProdigyV21/ARVIO/commit/984023944ce981074cd8c07b6562778dfd3433db) fix(iptv): preserve playlists, complete guide imports and bound startup work — Arvin
+- [bd7ffd880](https://github.com/ProdigyV21/ARVIO/commit/bd7ffd8809c8bdf44f4c8b67c4f0fdad20ea3924) fix(web): bound recovery from interrupted browser range requests — Arvin
+- [b26aab8f0](https://github.com/ProdigyV21/ARVIO/commit/b26aab8f01b408cd62cbdcab101d095daae6acfe) fix(web): account for queued GOPs during browser remux playback — Arvin
+- [240c9acf4](https://github.com/ProdigyV21/ARVIO/commit/240c9acf4cf10e9b0dc8902e8b250ba3809e3ec6) fix(web): recover browser playback with bounded provider conversion — Arvin
+- [85bacc188](https://github.com/ProdigyV21/ARVIO/commit/85bacc1881680977630a19b165a7e2f3a386b07b) fix(web): avoid false Main10 and Matroska playback rejections — Arvin
+- [02caae502](https://github.com/ProdigyV21/ARVIO/commit/02caae502dd8029f6c5b752688408d360ec9c024) fix(web): prefer newer completion when trackers disagree on Up Next — Arvin
+- [5d8a83640](https://github.com/ProdigyV21/ARVIO/commit/5d8a836404adffe3e1df461ec98bac43296b13a3) fix(web): reconcile Continue Watching with cross-device Trakt completion — Arvin
+- [52b525e54](https://github.com/ProdigyV21/ARVIO/commit/52b525e54fcd49d5d22d6bfacec44bbf7a933ba4) feat(web): simplify independent self-hosting with Docker and personal API keys — Arvin
+- [600ed8979](https://github.com/ProdigyV21/ARVIO/commit/600ed8979af8c5381d16e0cccec94eeef4e850e0) fix(web): deliver browser playback tracking to Trakt and Simkl correctly — Arvin
+- [f006d6665](https://github.com/ProdigyV21/ARVIO/commit/f006d6665a60a18c782a39abe3a758a5125fd33c) docs(web): record playback verification and measured cost limits [skip ci] — Arvin
+- [26f187e55](https://github.com/ProdigyV21/ARVIO/commit/26f187e557c69ab0855694a3730497a76cab3f21) fix(library): keep sidebar focus visible and preserve scroll position — Arvin
+- [901834b32](https://github.com/ProdigyV21/ARVIO/commit/901834b32d2fdce9ee59c2cbf8f3b6c0199ac798) fix(web): expand safe browser playback and bound hosting traffic — Arvin
+- [56034bc8b](https://github.com/ProdigyV21/ARVIO/commit/56034bc8b5d7591795fc519511407cd0684441f3) fix(library): show saved server tabs without network discovery — Arvin
+- [522d7e54f](https://github.com/ProdigyV21/ARVIO/commit/522d7e54fda7a474d24bdcd61607053344ded010) fix(search): prioritize title matches and stabilize TV navigation — Arvin
+- [ef4eb2e2c](https://github.com/ProdigyV21/ARVIO/commit/ef4eb2e2c45b216c22e3ef00f5ed1c3794ef4f32) fix(web): sync IPTV favorites using Android channel identities — Arvin
+- [0eed16c88](https://github.com/ProdigyV21/ARVIO/commit/0eed16c8830dc91c412d4f4397bfa0dcdb2e2c4b) fix(stability): address Sentry startup, guide and cache failures — Arvin
+- [48a27fb25](https://github.com/ProdigyV21/ARVIO/commit/48a27fb258d1876ac61dd34b9356326f1e5aa0eb) Merge pull request #656 from ReichiMD/claude/i18n-cleanup-worker-dtk3e0 — Prodigy
+- [0385d1476](https://github.com/ProdigyV21/ARVIO/commit/0385d1476c7962e4c1e896f15f9f71a82c2d4ed0) Merge pull request #671 from Himanth-reddy/feat/decouple-public-credentials — Prodigy
+- [f4bd0c2df](https://github.com/ProdigyV21/ARVIO/commit/f4bd0c2df617854bce74e0d717adb4f10cec1bc0) fix(web): bound 4K remux queues and recover missing video frames — Arvin
+- [51c761f39](https://github.com/ProdigyV21/ARVIO/commit/51c761f3974f4aab94fa8d9f0b20017d9965b566) Merge pull request #672 from Himanth-reddy/fix/live-tv-navigation-and-focus — Prodigy
+- [52e406787](https://github.com/ProdigyV21/ARVIO/commit/52e4067871ea6eb50e026188377c8008ddb6c67c) perf(tv): bound guide ruler and use indexed channel focus — Arvin
+- [2045a46fb](https://github.com/ProdigyV21/ARVIO/commit/2045a46fb0db4df8fa0d6c93fd9a6ad02746d5ac) fix(web): center the player seek thumb across track states — Arvin
+- [afdc96f22](https://github.com/ProdigyV21/ARVIO/commit/afdc96f2224d8dec0ad79bef5588eeb6238d55c8) feat(web): improve browser playback, conversion and home-server sessions — Arvin
+- [1c1729613](https://github.com/ProdigyV21/ARVIO/commit/1c1729613f73fb8ccff2c71c6ce63356151ad048) perf(tv): draw passive guide programmes without nested layouts — Arvin
+- [c73d218eb](https://github.com/ProdigyV21/ARVIO/commit/c73d218eb0dbf3554a20712abe14c1455cfe54be) Merge remote-tracking branch 'origin/main' into codex/premium-activation-20260908 — Arvin
+- [703cf2be4](https://github.com/ProdigyV21/ARVIO/commit/703cf2be4e691e323d9f57594d740267fddde1cf) fix(premium): improve trial payment recovery and activation diagnostics — Arvin
+- [233be066f](https://github.com/ProdigyV21/ARVIO/commit/233be066f15641c259bd4d142718654632be80ad) Merge pull request #670 from Himanth-reddy/feat/simkl-api-convention-headers — Prodigy
+- [bef40fadc](https://github.com/ProdigyV21/ARVIO/commit/bef40fadc1a880ec873f2d0bf7ff18bac748367b) fix(simkl): reconcile deletions and preserve reliable tracking state — Arvin
+- [fc6d603ee](https://github.com/ProdigyV21/ARVIO/commit/fc6d603eed429aa76fd0576b0f09476d42807a26) fix(tv): align channel focus outline with rounded surface — Arvin
+- [6b0ec579b](https://github.com/ProdigyV21/ARVIO/commit/6b0ec579b49ff2b1b58bffac10429ee54f932a45) perf(tv): reduce guide semantics and graphics layer overhead — Arvin
+- [0c0394e87](https://github.com/ProdigyV21/ARVIO/commit/0c0394e87ed3c294712df76dff2d6adcc7f843ab) Merge remote-tracking branch 'origin/main' into codex/pr670-fix — Arvin
+- [933c5352b](https://github.com/ProdigyV21/ARVIO/commit/933c5352b09e6bd276fb883e8f03dfee43890cf6) fix(tv): reduce guide allocations and improve programme and playback feedback — Arvin
+- [49f241f08](https://github.com/ProdigyV21/ARVIO/commit/49f241f08302e99c6ac66b49e0851d0fbf7dc092) fix(tv): refine guide layout and isolate channel navigation focus — Arvin
+- [fdd52dd37](https://github.com/ProdigyV21/ARVIO/commit/fdd52dd379a4e3943329f1b95e2de210a70fef08) feat(simkl): address official integration review findings across Android, web, and proxies — Himanth Reddy
+- [8abb0612c](https://github.com/ProdigyV21/ARVIO/commit/8abb0612c18675b3a697aa2f68d369aaba7d4f33) feat(live-tv): cinematic 3D depth push transition & smooth mini-player fade — Himanth Reddy
+- [b70258ec3](https://github.com/ProdigyV21/ARVIO/commit/b70258ec3021959710b7dff760fd9a3daca13b74) fix(live-tv): fix home-return playlist jump, EPG blue row background, channel 0/1 focus bounce, and program time clipping — Himanth Reddy
+- [f629d461a](https://github.com/ProdigyV21/ARVIO/commit/f629d461a0689ec520e8aab3be8e2d012d9e955e) fix(live-tv): fix drawer collapse jumps, focus flash, epg text clipping, and category persistence — Himanth Reddy
+- [3f3410d3c](https://github.com/ProdigyV21/ARVIO/commit/3f3410d3c58fb43da1a7bf7550a49543ee17f8bb) fix(tv): snapshot categoryFocusRequesters values to prevent ConcurrentModificationException — Himanth Reddy
+- [65333abf5](https://github.com/ProdigyV21/ARVIO/commit/65333abf55201a85c196e5e2000bb87989dff8e2) fix(tv): resolve Live TV focus highlighters and drawer re-entry navigation — Himanth Reddy
+- [6bd4eed69](https://github.com/ProdigyV21/ARVIO/commit/6bd4eed691414f6bff6ae1a9d5a1efb63713c1cf) fix(player): overlay seek previews without shifting controls — Arvin
+- [f1bc20e0a](https://github.com/ProdigyV21/ARVIO/commit/f1bc20e0ae37e99e6d1c89e7ec13a8f52a93947a) fix(ci): explicitly provision public web integration settings — Arvin
+- [19bfc9e24](https://github.com/ProdigyV21/ARVIO/commit/19bfc9e242b57822d65ef826be463fa519978f98) fix(ci): require Netlify public configuration before web builds — Arvin
+- [98d1fde4f](https://github.com/ProdigyV21/ARVIO/commit/98d1fde4f70e003be0fc4555ae2234d9588c0168) fix(web): include public Trakt client ID in production builds — Arvin
+- [ac80e2104](https://github.com/ProdigyV21/ARVIO/commit/ac80e210450156af73dc573e35e8d20c50f2981d) fix(web): prevent watched snapshots from vetoing Trakt up next — Arvin
+- [b9031a5a2](https://github.com/ProdigyV21/ARVIO/commit/b9031a5a2ec5d25a78bc35c8aca912d8ecb515cc) fix(android): preserve authoritative Trakt continue watching progress — Arvin
+- [9ba0a52e3](https://github.com/ProdigyV21/ARVIO/commit/9ba0a52e345e62cbca24861437d80246e6f9e6d0) fix(web): refresh Trakt progress and preserve tracker next episodes — Arvin
+- [a51f9e942](https://github.com/ProdigyV21/ARVIO/commit/a51f9e942407ea65e8b00f6d29b9075b30d042e2) fix(player): show only ready seek previews without blocking on disk cache — Arvin
+- [a331d1d2d](https://github.com/ProdigyV21/ARVIO/commit/a331d1d2d22bea2e5993f3b118e4c55da2d916e4) feat(config): decouple public credentials and remove hardcoded fallbacks — Himanth Reddy
+- [91b28faf3](https://github.com/ProdigyV21/ARVIO/commit/91b28faf3c39638a0b6fc3553b484392dad5f006) feat(simkl): comply with Simkl API conventions across Android, web, and proxies — Himanth Reddy
+- [40672c1ad](https://github.com/ProdigyV21/ARVIO/commit/40672c1adc51edcdc9a38cf1d7886f851d9dafc3) Merge remote-tracking branch 'origin/main' into codex/seek-preview-grey — Arvin
+- [c7835f45a](https://github.com/ProdigyV21/ARVIO/commit/c7835f45a3883821ef06469acebb4780beb80223) docs(player): record auto-seek verification and remaining cold-preview limits — Arvin
+- [05f4db949](https://github.com/ProdigyV21/ARVIO/commit/05f4db949a58d2096cc388cc3daaf3b733fbc6b4) feat(library): add release date sorting across Android and web — Arvin
+- [9a08beaca](https://github.com/ProdigyV21/ARVIO/commit/9a08beaca683088e63fe531e38acb2ed5c7f878f) Merge pull request #669 from Himanth-reddy/feat/telegram-device-representation-and-credentials — Prodigy
+- [bc1f82497](https://github.com/ProdigyV21/ARVIO/commit/bc1f824973218327504c7e2437d848268fab55b2) fix(player): prevent stale exit animation resetting a new seek — Arvin
+- [2c7b5703d](https://github.com/ProdigyV21/ARVIO/commit/2c7b5703dea448f17f9777e1f34889cb4dc9a7be) fix(player): retain seek decoder work and auto-commit remote seeks — Arvin
+- [99f4d9609](https://github.com/ProdigyV21/ARVIO/commit/99f4d960961b8e11f360effe3e9d1a1a75f0070f) fix(telegram): wire web deployment credentials and verify configuration — Arvin
+- [861215332](https://github.com/ProdigyV21/ARVIO/commit/8612153321e25f5870655bbf24d922c593da3da8) Merge current main into Telegram session identity update — Arvin
+- [bcf96f916](https://github.com/ProdigyV21/ARVIO/commit/bcf96f91604ec99604fbec360fcb9cad7a36dc53) fix(telegram): handle String TELEGRAM_API_ID from secrets plugin cleanly — Himanth Reddy
+- [02b2761c6](https://github.com/ProdigyV21/ARVIO/commit/02b2761c69d511426c7aa2b55416fa5c954e19b9) fix(compliance): use official trailers and add copyright safeguards — Arvin
+- [5f44b53fb](https://github.com/ProdigyV21/ARVIO/commit/5f44b53fb56c9ae8e6a1a287ba7d014235f1e644) Merge pull request #667 from Himanth-reddy/fix/player-flow-exception-transparency — Prodigy
+- [ba0fa0d9e](https://github.com/ProdigyV21/ARVIO/commit/ba0fa0d9ea6a88089714af4129db48b36d086f14) fix(continue-watching): retain IPTV VOD across tracker refreshes — Arvin
+- [dfb22fbd0](https://github.com/ProdigyV21/ARVIO/commit/dfb22fbd0f70e8ab769b84bfc25791b9be4630df) Merge remote-tracking branch 'origin/main' into codex/seek-preview-grey — Arvin
+- [601065279](https://github.com/ProdigyV21/ARVIO/commit/6010652795bac3c559c9e7c6e8fb21bcf8f76818) Merge pull request #660 from Himanth-reddy/fix/preserve-catalog-order-favorite-tv — Prodigy
+- [00152a107](https://github.com/ProdigyV21/ARVIO/commit/00152a1078ab2dd70af91fa73045fe9f37540bbc) Merge pull request #659 from Himanth-reddy/fix/tv-season-rail-scrolling — Prodigy
+- [808468854](https://github.com/ProdigyV21/ARVIO/commit/8084688543280a710f5b7e2f78fefb6d0d1c49fc) fix(player): recover cancelled previews and align frame seek deadlines — Arvin
+- [c6c277ef2](https://github.com/ProdigyV21/ARVIO/commit/c6c277ef255e665ffef1c83d2625e4da6e143871) feat(telegram): reflect ARVIO device session identity and support custom API credentials — Himanth Reddy
+- [69cffefe0](https://github.com/ProdigyV21/ARVIO/commit/69cffefe0a46f6322e60938cd70c48b8d0109c15) fix(player): prevent flow exception transparency violation during source discovery — Himanth Reddy
+- [7328fb5dd](https://github.com/ProdigyV21/ARVIO/commit/7328fb5ddeee706495aaa4e2e764d5edf46b4098) fix(catalog): preserve user catalog order for Favorite TV row — Himanth Reddy
+- [1ce6495df](https://github.com/ProdigyV21/ARVIO/commit/1ce6495df11cab254f023b56f65e094ed5e1e725) chore(github): update issue templates to use standardized type labels — Himanth Reddy
+- [60f915f64](https://github.com/ProdigyV21/ARVIO/commit/60f915f64dd1b80ceb7adf009eb957f88f6135a3) fix(tv): resolve backward season clipping and smooth season rail scrolling — Himanth Reddy
+- [71c3a262a](https://github.com/ProdigyV21/ARVIO/commit/71c3a262a7d93e780da3c9ded0439a02dc1ddf0f) fix(deploy): preserve migration checksums and identify Trakt outages [skip netlify] — Arvin
+- [68a423036](https://github.com/ProdigyV21/ARVIO/commit/68a423036fe2d493f9322e1a2f28b753b2103d6b) fix(web): align hosted proxy configuration and prevent cached failures [skip netlify] — Arvin
+- [1979d2a43](https://github.com/ProdigyV21/ARVIO/commit/1979d2a43ab9ce3a9ea00cf504fb1972eb82f311) fix(web): finish premium recovery and conversion measurement [skip netlify] — Arvin
+- [ba8bf3677](https://github.com/ProdigyV21/ARVIO/commit/ba8bf3677a8fcf37bd1336ea1b175406a6b28721) Merge remote-tracking branch 'origin/main' into codex/webapp-stabilization — Arvin
+- [ac44a9fc2](https://github.com/ProdigyV21/ARVIO/commit/ac44a9fc2645ca6880ad10fd90bf086c88a12d1b) fix(web): repair Premium recovery and conversion measurement — Arvin
+- [1505dc3a8](https://github.com/ProdigyV21/ARVIO/commit/1505dc3a8c951731ffc8f0afdc0edd41b289ab6c) fix(web): stabilize libraries, playback, sync and premium access — Arvin
+- [8331d1497](https://github.com/ProdigyV21/ARVIO/commit/8331d14970379a8ad9ad03afcbb32f4aed15ec3e) i18n(app): move remaining hardcoded UI strings into string resources — Claude
+  - Co-Authored-By: Claude Opus 5

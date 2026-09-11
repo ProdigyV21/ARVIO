@@ -77,6 +77,25 @@ interface SimklApi {
         @Query("next_watch_info") nextWatchInfo: String = "yes"
     ): JsonElement
 
+    @GET("sync/all-items/{type}")
+    suspend fun getAllItemIds(
+        @Header("Authorization") auth: String,
+        @Header("simkl-api-key") clientId: String,
+        @Path("type") type: String,
+        @Query("extended") extended: String = "ids_only"
+    ): JsonElement
+
+    @GET("sync/all-items")
+    suspend fun getAllItemsDelta(
+        @Header("Authorization") auth: String,
+        @Header("simkl-api-key") clientId: String,
+        @Query("date_from") dateFrom: String,
+        @Query("extended") extended: String = "full_anime_seasons",
+        @Query("episode_watched_at") episodeWatchedAt: String = "yes",
+        @Query("include_all_episodes") includeAllEpisodes: String = "yes",
+        @Query("next_watch_info") nextWatchInfo: String = "yes"
+    ): JsonElement
+
     @GET("sync/playback")
     suspend fun getPlayback(
         @Header("Authorization") auth: String,
@@ -127,11 +146,13 @@ data class SimklPinPollResponse(
     @SerializedName("result") val result: String, // "KO", "pending", "OK"
     @SerializedName("access_token") val accessToken: String? = null,
     @SerializedName("token_type") val tokenType: String? = null,
-    @SerializedName("expires_in") val expiresIn: Long? = null
+    @SerializedName("expires_in") val expiresIn: Long? = null,
+    @SerializedName("device_code") val deviceCode: String? = null
 )
 
 data class SimklIds(
-    @SerializedName("simkl") val simkl: Long? = null,
+    @SerializedName(value = "simkl", alternate = ["simkl_id"]) val simkl: Long? = null,
+    @SerializedName("slug") val slug: String? = null,
     @SerializedName("tmdb") val tmdb: Int? = null,
     @SerializedName("imdb") val imdb: String? = null,
     @SerializedName("tvdb") val tvdb: String? = null
@@ -157,7 +178,8 @@ data class SimklShowRef(
     @SerializedName("ids") val ids: SimklIds,
     @SerializedName("seasons") val seasons: List<SimklSeasonRef>? = null,
     @SerializedName("runtime") val runtime: Int? = null,
-    @SerializedName("poster") val poster: String? = null
+    @SerializedName("poster") val poster: String? = null,
+    @SerializedName("use_tvdb_anime_seasons") val useTvdbAnimeSeasons: Boolean? = null
 )
 
 data class SimklSeasonRef(
@@ -192,7 +214,8 @@ data class SimklActivityGroup(
     @SerializedName("plantowatch") val planToWatch: String? = null,
     @SerializedName("watching") val watching: String? = null,
     @SerializedName("completed") val completed: String? = null,
-    @SerializedName("playback") val playback: String? = null
+    @SerializedName("playback") val playback: String? = null,
+    @SerializedName("removed_from_list") val removedFromList: String? = null
 )
 
 data class SimklAllItemsResponse(
@@ -216,7 +239,8 @@ data class SimklHistoryShowItem(
     @SerializedName("next_to_watch") val nextToWatch: String? = null,
     @SerializedName("next_to_watch_info") val nextToWatchInfo: SimklNextToWatchInfo? = null,
     @SerializedName("watched_episodes_count") val watchedEpisodesCount: Int? = null,
-    @SerializedName("total_episodes_count") val totalEpisodesCount: Int? = null
+    @SerializedName("total_episodes_count") val totalEpisodesCount: Int? = null,
+    @SerializedName("not_aired_episodes_count") val notAiredEpisodesCount: Int? = null
 )
 
 data class SimklNextToWatchInfo(
@@ -268,7 +292,8 @@ data class SimklAddToListMovie(
 
 data class SimklAddToListShow(
     @SerializedName("to") val to: String = "plantowatch",
-    @SerializedName("ids") val ids: SimklIds
+    @SerializedName("ids") val ids: SimklIds,
+    @SerializedName("use_tvdb_anime_seasons") val useTvdbAnimeSeasons: Boolean? = null
 )
 
 data class SimklAddToListBody(

@@ -19,6 +19,7 @@ import { NoAddonsPrompt } from "./NoAddonsPrompt";
 import { EntitlementGate } from "./Paywall";
 import { Toast } from "./Toast";
 import { TopNav } from "./TopNav";
+import { PremiumUsage } from "./PremiumUsage";
 
 const ACCENTS: Record<string, string> = {
   arctic: "#ededed",
@@ -29,7 +30,7 @@ const ACCENTS: Record<string, string> = {
 };
 
 export function AppShell() {
-  const { view, section, settings, selected, activeStream } = useApp();
+  const { view, section, settings, selected, activeStream, activeChannel } = useApp();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export function AppShell() {
       className={`app-shell ${settings.oledBlack ? "oled" : ""} ${settings.spoilerBlur ? "spoiler-blur" : ""}`}
       style={{ ["--accent" as string]: accent }}
     >
-      {!activeStream && <TopNav />}
+      {(!activeStream || (section === "tv" && activeChannel)) && <TopNav />}
 
       <section className="content">
         {selected ? (
@@ -108,6 +109,7 @@ export function AppShell() {
       <ExternalPlaybackPrompt />
       <MediaContextMenu />
       <NoAddonsPrompt />
+      <PremiumUsage />
       <BackHandler />
       <Toast />
     </main>

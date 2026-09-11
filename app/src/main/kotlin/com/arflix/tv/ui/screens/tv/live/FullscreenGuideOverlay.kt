@@ -73,6 +73,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
+import com.arflix.tv.data.model.IptvGuideHistory
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.ui.focus.mirrorHorizontalForRtl
 import kotlinx.coroutines.delay
@@ -115,8 +116,9 @@ internal fun FullscreenGuideOverlay(
     val nowMillis = clockTickMillis
 
     val catchupSupported = remember(channel) { channel.supportsFullscreenCatchup() }
-    val pastWindowStart = nowMillis - 48L * 60L * 60_000L
-    val past = remember(guide, nowMillis, catchupSupported) {
+    val historyDays = IptvGuideHistory.days(channel.source).takeIf { it > 0 } ?: 3
+    val pastWindowStart = nowMillis - historyDays * IptvGuideHistory.DAY_MS
+    val past = remember(guide, nowMillis, channel.source, historyDays) {
         guide?.recent.orEmpty()
             .asSequence()
             .filter { it.endUtcMillis <= nowMillis && it.endUtcMillis >= pastWindowStart }
@@ -125,7 +127,9 @@ internal fun FullscreenGuideOverlay(
             .map {
                 GuideProgramItem(
                     it,
-                    if (catchupSupported) GuideProgramState.PastPlayable else GuideProgramState.PastUnavailable
+                    if (IptvGuideHistory.canReplay(channel.source, it, nowMillis)) {
+                        GuideProgramState.PastPlayable
+                    } else GuideProgramState.PastUnavailable
                 )
             }
             .toList()
@@ -328,7 +332,9 @@ private fun FullscreenGuideContent(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(if (isTouchDevice) 5.dp else 6.dp)) {
                     GuideChip(stringResource(R.string.live_label_ch, channel.number), LiveColors.FgDim, Color.White.copy(alpha = 0.08f))
-                    GuideChip(channel.quality.label, LiveColors.FgDim, Color.White.copy(alpha = 0.08f))
+                    if (channel.quality != Quality.UNKNOWN) {
+                        GuideChip(channel.quality.label, LiveColors.FgDim, Color.White.copy(alpha = 0.08f))
+                    }
                     if (catchupSupported) {
                         GuideChip(stringResource(R.string.live_label_catchup), LiveColors.Bg, LiveColors.Accent)
                     }

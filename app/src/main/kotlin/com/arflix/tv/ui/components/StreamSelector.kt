@@ -2,6 +2,7 @@ package com.arflix.tv.ui.components
 
 import com.arflix.tv.ui.motion.*
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.mutableFloatStateOf
@@ -88,6 +89,8 @@ import androidx.tv.foundation.lazy.list.TvLazyListState
 import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.data.model.IptvVodSourceIds
+import com.arflix.tv.data.model.isDirectStreamUrl
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.theme.ArflixTypography
@@ -228,8 +231,14 @@ fun StreamSelector(
     onSelect: (StreamSource) -> Unit = {},
     onClose: () -> Unit = {}
 ) {
+    val isMobile = LocalDeviceType.current.isTouchDevice()
     val isRtlLayoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
-    val backMotion = rememberArvioPredictiveBack(enabled = isVisible, onCommit = onClose)
+    val backMotion = rememberArvioPredictiveBack(enabled = isVisible && isMobile, onCommit = onClose)
+    if (!isMobile) {
+        BackHandler(enabled = isVisible) {
+            onClose()
+        }
+    }
 
     var focusedIndex by remember { mutableIntStateOf(0) }
     var focusedTabIndex by remember { mutableIntStateOf(0) }
@@ -240,7 +249,6 @@ fun StreamSelector(
     val listState = rememberTvLazyListState()
     val addonListState = rememberTvLazyListState()
     val focusRequester = remember { FocusRequester() }
-    val isMobile = LocalDeviceType.current.isTouchDevice()
     val pluginPrefix = stringResource(R.string.plugin_prefix)
 
     var elapsedSeconds by remember { mutableIntStateOf(0) }
@@ -257,13 +265,18 @@ fun StreamSelector(
     // Request focus when visible
     LaunchedEffect(isVisible) {
         if (isVisible) {
-            runCatching { focusRequester.requestFocus() }
             focusedIndex = 0
             focusedTabIndex = 0
             selectedTabIndex = 0
             focusedFilterIndex = 0
             selectedFilterIndex = 0
             focusZone = "streams"
+            if (!isMobile) {
+                kotlinx.coroutines.delay(50)
+                runCatching { focusRequester.requestFocus() }
+            } else {
+                runCatching { focusRequester.requestFocus() }
+            }
         }
     }
 
@@ -424,7 +437,7 @@ fun StreamSelector(
                         } else actualKey
 
                         when (logicalKey) {
-                            Key.Escape -> {
+                            Key.Back, Key.Escape -> {
                                 onClose()
                                 true
                             }
@@ -1323,8 +1336,8 @@ private fun presentSource(stream: StreamSource, unknownSourceLabel: String): Sou
         addonLower.contains("alldebrid") ||
         searchBlob.contains("magnet:", ignoreCase = true)
 
-    val hasDirectHttpUrl = !stream.url.isNullOrBlank() && stream.url.startsWith("http", true)
-    val isIptvVod = stream.addonId == "iptv_xtream_vod" || addonLower.contains("iptv vod")
+    val hasDirectHttpUrl = isDirectStreamUrl(stream.url)
+    val isIptvVod = IptvVodSourceIds.isIptvVodAddonId(stream.addonId) || addonLower.contains("iptv vod")
     val isDebridReady = isDebridLikeSource(stream, searchBlob)
     val isReady = stream.behaviorHints?.cached == true || isDebridReady
 
@@ -1388,7 +1401,7 @@ private fun presentSource(stream: StreamSource, unknownSourceLabel: String): Sou
         qualityColor = qualityColor,
         sizeBytes = getSizeBytes(stream),
         sortCached = isReady,
-        sortDirect = !stream.url.isNullOrBlank() && stream.url.startsWith("http", true),
+        sortDirect = isDirectStreamUrl(stream.url),
         description = cleanStreamDescription(stream.description, rawTitle),
         bitrateLabel = StreamRegexes.BITRATE.find(stream.description.orEmpty())
             ?.let { "${it.groupValues[1]} Mbps" },

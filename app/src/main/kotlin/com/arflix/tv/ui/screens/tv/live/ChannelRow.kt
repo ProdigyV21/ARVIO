@@ -1,10 +1,13 @@
 package com.arflix.tv.ui.screens.tv.live
+import androidx.compose.foundation.basicMarquee
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.geometry.CornerRadius
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
@@ -33,6 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -85,6 +93,7 @@ fun ChannelRow(
     variantCount: Int = 1,
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
     forceFocused: Boolean = false,
+    displayQuality: Quality = channel.quality,
     modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -94,39 +103,53 @@ fun ChannelRow(
     // can be swallowed before combinedClickable turns them into a click.
     var longPressConsumed by remember { mutableStateOf(false) }
     val bg = when {
-        visuallyFocused -> LiveColors.PanelRaised
+        visuallyFocused && isActive -> LiveColors.FocusBg
         isActive -> LiveColors.FocusBg
-        stripe -> LiveColors.RowStripe
-        else -> Color.Transparent
+        visuallyFocused -> LiveColors.PanelRaised
+        else -> LiveColors.Panel
     }
     val now = nowNext?.now
-    val animatedBorderWidth by animateDpAsState(
-        targetValue = if (visuallyFocused) 3.dp else 0.dp,
+    val animatedBorderWidth = animateDpAsState(
+        targetValue = if (visuallyFocused) LiveDims.FocusBorder else 0.dp,
         animationSpec = tween(durationMillis = 70),
         label = "channel-row-border",
     )
-    val animatedScale by animateFloatAsState(
-        targetValue = if (visuallyFocused) 1.004f else 1f,
-        animationSpec = tween(durationMillis = 80),
-        label = "channel-row-scale",
-    )
+    val surface = animateColorAsState(bg, tween(120), label = "channel-surface")
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(rowHeight)
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-            }
             .onFocusChanged {
                 focused = it.hasFocus
                 if (it.hasFocus) onFocused()
             }
-            .border(
-                width = animatedBorderWidth,
-                color = if (visuallyFocused) LiveColors.FocusRing else Color.Transparent,
-            )
-            .background(if (visuallyFocused) LiveColors.PanelRaised else bg)
+            .drawWithContent {
+                val inset = 2.dp.toPx()
+                val radius = 6.dp.toPx()
+                val surfaceSize = Size(
+                    (size.width - inset * 2).coerceAtLeast(0f),
+                    (size.height - inset * 2).coerceAtLeast(0f),
+                )
+                drawRoundRect(
+                    color = surface.value,
+                    topLeft = Offset(inset, inset),
+                    size = surfaceSize,
+                    cornerRadius = CornerRadius(radius),
+                )
+                drawContent()
+                // Read animation state in drawing, not composition: channel
+                // text and logo layout should not rebuild for each border frame.
+                val stroke = animatedBorderWidth.value.toPx()
+                if (stroke > 0f) {
+                    drawRoundRect(
+                        color = LiveColors.FocusRing,
+                        topLeft = Offset(inset + stroke / 2f, inset + stroke / 2f),
+                        size = Size((surfaceSize.width - stroke).coerceAtLeast(0f), (surfaceSize.height - stroke).coerceAtLeast(0f)),
+                        cornerRadius = CornerRadius((radius - stroke / 2f).coerceAtLeast(0f)),
+                        style = Stroke(stroke),
+                    )
+                }
+            }
             .focusable()
             // Long-press / MENU opens the channel menu. This has to live in the PREVIEW
             // phase, ahead of combinedClickable: combinedClickable arms a click on the
@@ -164,7 +187,7 @@ fun ChannelRow(
                     return@onPreviewKeyEvent true
                 }
                 if (ev.key == Key.Menu) {
-                    if (ev.type == KeyEventType.KeyDown) onLongPress(true)
+                    if (ev.type == KeyEventType.KeyDown) onLongPress(false)
                     return@onPreviewKeyEvent true
                 }
                 if (ev.type == KeyEventType.KeyDown) {
@@ -188,55 +211,60 @@ fun ChannelRow(
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .width(LiveDims.ActiveIndicator)
-                .background(if (isActive) LiveColors.Accent else Color.Transparent),
+                .width(LiveDims.ActiveIndicator),
         )
 
         // ─ channel number ────────────────────────────────────
         Box(
             modifier = Modifier
-                .width(48.dp)
-                .padding(start = 10.dp, end = 6.dp),
+                .width(32.dp)
+                .padding(start = 8.dp, end = 4.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             Text(
                 text = channel.number.toString(),
                 style = LiveType.NumberMono.copy(
-                    color = if (isActive) LiveColors.Accent else LiveColors.FgMute,
+                    color = LiveColors.FgDim,
                 ),
             )
         }
 
         // ─ logo ──────────────────────────────────────────────
-        ChannelLogo(channel = channel, size = 36.dp)
+        ChannelLogo(channel = channel, size = 24.dp)
 
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(6.dp))
 
         // ─ name / program / progress / time ──────────────────
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .clipToBounds(),
             verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = channel.name,
                     style = LiveType.CellTitle.copy(
-                        color = if (isActive) LiveColors.Accent else LiveColors.Fg,
+                        color = LiveColors.Fg,
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).then(if (visuallyFocused) Modifier.basicMarquee(
+                        iterations = Int.MAX_VALUE, initialDelayMillis = 1000,
+                    ) else Modifier),
                 )
                 if (isFavorite) {
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
-                        tint = Color(0xFFFFC04A), // Golden star
+                        tint = LiveColors.Fg,
                         modifier = Modifier.size(11.dp),
                     )
                 }
-                if (channel.catchupDays > 0) {
+                if (channel.catchupDays > 0 && rowHeight >= 48.dp) {
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Filled.History,
@@ -250,7 +278,7 @@ fun ChannelRow(
             // itself is shown exclusively in the time-aligned grid cells to
             // the right, not smeared across the channel name column.
             val progress = remember(now, clockTickMillis) { progressOf(now) }
-            if (progress != null) {
+            if (progress != null && rowHeight >= 48.dp) {
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier.width(80.dp).height(2.dp),
@@ -261,13 +289,23 @@ fun ChannelRow(
         }
 
         // ─ stacked badges (quality + lang) ───────────────────
-        Column(
+        if (rowHeight >= 48.dp) Column(
             modifier = Modifier.padding(end = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            SmallPillBadge(if (variantCount > 1) stringResource(R.string.live_label_quality_variants, channel.quality.label, variantCount) else channel.quality.label)
+            if (displayQuality != Quality.UNKNOWN) {
+                SmallPillBadge(if (variantCount > 1) stringResource(R.string.live_label_quality_variants, displayQuality.label, variantCount) else displayQuality.label)
+            } else if (variantCount > 1) {
+                SmallPillBadge(stringResource(R.string.live_label_sources, variantCount))
+            }
             SmallPillBadge(channel.lang)
+        }
+        if (rowHeight < 48.dp) {
+            if (isActive) Row(Modifier.width(18.dp).height(16.dp).padding(end = 5.dp),
+                verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                listOf(7, 12, 9).forEach { h -> Box(Modifier.width(2.dp).height(h.dp).background(LiveColors.Accent)) }
+            } else Spacer(Modifier.width(6.dp))
         }
     }
 }

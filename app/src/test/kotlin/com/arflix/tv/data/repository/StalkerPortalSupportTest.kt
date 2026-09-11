@@ -230,4 +230,87 @@ class StalkerPortalSupportTest {
         assertThat(normalized).isNotNull()
         assertThat(normalized!!.enabled).isFalse()
     }
+
+    @Test
+    fun isRoutableStreamAddressRejectsPortalPlaceholders() {
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("http://localhost/ch/1234_")).isFalse()
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("http://127.0.0.1:8080/ch/1")).isFalse()
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("http://0.0.0.0/ch/1")).isFalse()
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("")).isFalse()
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("   ")).isFalse()
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("not a url")).isFalse()
+    }
+
+    @Test
+    fun isRoutableStreamAddressAcceptsRealHosts() {
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("http://provider.test/live/1")).isTrue()
+        assertThat(StalkerPortalSupport.isRoutableStreamAddress("https://provider.test:8080/token")).isTrue()
+    }
+
+    @Test
+    fun sanitizePlaybackCommandStripsAnyLeadingCommandWord() {
+        // Measured portals: "ffmpeg " at two of them, "auto " at a third.
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand("ffmpeg http://host/live/1"))
+            .isEqualTo("http://host/live/1")
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand("auto http://host/live.ts?channelId=1"))
+            .isEqualTo("http://host/live.ts?channelId=1")
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand("  extension  http://host/live/1  "))
+            .isEqualTo("http://host/live/1")
+    }
+
+    @Test
+    fun sanitizePlaybackCommandLeavesBareAddressesAlone() {
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand("http://host/live/1"))
+            .isEqualTo("http://host/live/1")
+        // A first word that carries the scheme is the address itself, not a command.
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand("http://host/live/1 extra"))
+            .isEqualTo("http://host/live/1 extra")
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand(null)).isEqualTo("")
+        assertThat(StalkerPortalSupport.sanitizePlaybackCommand("   ")).isEqualTo("")
+    }
+
+    @Test
+    fun isDirectStreamAddressAcceptsOnlyReadyToPlayAddresses() {
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("http://host/play/live.php?stream=1")).isTrue()
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("https://host:8080/token")).isTrue()
+        // Still carries the portal's command word.
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("ffmpeg http://host/live/1")).isFalse()
+        // The create_link placeholder, in both of its measured shapes.
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("http://localhost/ch/1234_")).isFalse()
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("http://host/ch/1234_")).isFalse()
+        // A play_token may end in an underscore; only the path decides.
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("http://host/play/live.php?play_token=ab_"))
+            .isTrue()
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("rtmp://host/live/1")).isFalse()
+        assertThat(StalkerPortalSupport.isDirectStreamAddress("")).isFalse()
+    }
+
+    @Test
+    fun directLiveStreamUrlPublishesTheAddressWhenThePortalNeedsNoTemporaryLink() {
+        val cmd = "ffmpeg http://host/play/live.php?stream=1284583&extension=ts&play_token=T"
+        assertThat(
+            StalkerPortalSupport.directLiveStreamUrl(cmd, "0", "0", "0")
+        ).isEqualTo("http://host/play/live.php?stream=1284583&extension=ts&play_token=T")
+        // The other measured shape, from a portal that prefixes with "auto".
+        assertThat(
+            StalkerPortalSupport.directLiveStreamUrl("auto http://host/live.ts?channelId=9", "0", null, null)
+        ).isEqualTo("http://host/live.ts?channelId=9")
+    }
+
+    @Test
+    fun directLiveStreamUrlKeepsTheRoundTripWheneverTheAnswerIsNotClear() {
+        val cmd = "ffmpeg http://host/play/live.php?stream=1&extension=ts"
+        // The portal asks for a temporary link.
+        assertThat(StalkerPortalSupport.directLiveStreamUrl(cmd, "1", "0", "0")).isNull()
+        assertThat(StalkerPortalSupport.directLiveStreamUrl(cmd, "0", "1", "0")).isNull()
+        assertThat(StalkerPortalSupport.directLiveStreamUrl(cmd, "0", "0", "1")).isNull()
+        // The portal says nothing at all.
+        assertThat(StalkerPortalSupport.directLiveStreamUrl(cmd, null, null, null)).isNull()
+        assertThat(StalkerPortalSupport.directLiveStreamUrl(cmd, "", null, null)).isNull()
+        // It says no temporary link but publishes a placeholder anyway.
+        assertThat(
+            StalkerPortalSupport.directLiveStreamUrl("ffmpeg http://localhost/ch/1_", "0", "0", "0")
+        ).isNull()
+        assertThat(StalkerPortalSupport.directLiveStreamUrl(null, "0", "0", "0")).isNull()
+    }
 }

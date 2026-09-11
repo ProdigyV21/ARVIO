@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { authClient, useApp } from "@/lib/store";
 import { ProfileAvatarVisual } from "@/components/profile/ProfileAvatar";
 import type { NavSection } from "@/lib/types";
-import { cachedEntitlement, kofiSubscribeUrl } from "@/lib/entitlement";
+import { kofiSubscribeUrl } from "@/lib/entitlement";
+import { useEntitlement } from "@/lib/entitlementContext";
+import { trialRemainingLabel } from "@/lib/entitlementPolicy";
 import { trackPremiumEvent } from "@/lib/premiumAnalytics";
 
 const nav = [
@@ -18,8 +20,18 @@ const nav = [
 export function TopNav() {
   const { view, section, setSection, switchProfile, activeProfile, avatarImages, settings, closeDetails, selected } = useApp();
   const [scrolled, setScrolled] = useState(false);
-  const entitlement = cachedEntitlement(authClient);
-  const trialActive = entitlement?.entitled === true && entitlement.reason === "trial";
+  const entitlement = useEntitlement();
+  const [now, setNow] = useState(Date.now);
+  const trialLabel = trialRemainingLabel(entitlement, now);
+  const trialActive = trialLabel !== null;
+  const trialTitle = trialActive ? `${trialLabel}. Keep Premium after ${new Date(entitlement!.expiresAt!).toLocaleString()}` : "Keep Premium";
+
+  useEffect(() => {
+    setNow(Date.now());
+    if (!entitlement?.entitled || entitlement.reason !== "trial") return;
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [entitlement?.entitled, entitlement?.reason, entitlement?.expiresAt]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -65,11 +77,11 @@ export function TopNav() {
               href={kofiSubscribeUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              title="Keep ARVIO Premium after your trial"
+              title={trialTitle}
               onClick={() => { void trackPremiumEvent(authClient, "checkout_opened", { source: "trial_nav" }); }}
             >
               <BadgeCheck size={18} />
-              <span>Keep Premium</span>
+              <span>{trialLabel}</span>
             </a>
           )}
           <button
@@ -99,8 +111,8 @@ export function TopNav() {
               href={kofiSubscribeUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Keep ARVIO Premium after your trial"
-              title="Keep ARVIO Premium after your trial"
+              aria-label={trialTitle}
+              title={trialTitle}
               onClick={() => { void trackPremiumEvent(authClient, "checkout_opened", { source: "trial_mobile_nav" }); }}
             >
               <BadgeCheck size={20} />

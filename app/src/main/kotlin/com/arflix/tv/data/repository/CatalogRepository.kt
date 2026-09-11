@@ -1,6 +1,7 @@
 package com.arflix.tv.data.repository
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -46,6 +47,19 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Failure of a catalog operation, carrying the string resource instead of a
+ * finished message.
+ *
+ * The repository only has the application context, whose resources follow the
+ * system language rather than the language selected in the app, so the text is
+ * resolved at the @Composable display point (see SettingsScreen).
+ */
+class CatalogException(
+    @param:StringRes val messageRes: Int,
+    val formatArgs: List<Any> = emptyList()
+) : Exception()
 
 @Singleton
 class CatalogRepository @Inject constructor(
@@ -711,33 +725,33 @@ class CatalogRepository @Inject constructor(
     suspend fun fetchCatalogPackManifest(packUrl: String): Result<CatalogPackManifest> {
         val trimmed = packUrl.trim()
         if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
-            return Result.failure(IllegalArgumentException("Invalid URL: must start with http:// or https://"))
+            return Result.failure(CatalogException(R.string.catalog_pack_invalid_url_scheme))
         }
 
         val json = fetchUrl(trimmed)
-            ?: return Result.failure(IllegalArgumentException("Failed to fetch catalog pack from URL"))
+            ?: return Result.failure(CatalogException(R.string.catalog_pack_fetch_failed))
         val manifest = try {
             val type = object : com.google.gson.reflect.TypeToken<CatalogPackManifest>() {}.type
             gson.fromJson<CatalogPackManifest>(json, type)
         } catch (e: Exception) {
             null
-        } ?: return Result.failure(IllegalArgumentException("Failed to parse catalog pack manifest"))
+        } ?: return Result.failure(CatalogException(R.string.catalog_pack_parse_failed))
 
         if (manifest.id.isNullOrBlank() || manifest.name.isNullOrBlank()) {
-            return Result.failure(IllegalArgumentException("Invalid catalog pack manifest: missing ID or Name"))
+            return Result.failure(CatalogException(R.string.catalog_pack_missing_id_or_name))
         }
         val cats = manifest.catalogs
         if (cats.isNullOrEmpty()) {
-            return Result.failure(IllegalArgumentException("Invalid catalog pack manifest: catalogs list is empty or missing"))
+            return Result.failure(CatalogException(R.string.catalog_pack_no_catalogs))
         }
         val normalizedUrls = mutableSetOf<String>()
         for (item in cats) {
             if (item.name.isNullOrBlank() || item.url.isNullOrBlank()) {
-                return Result.failure(IllegalArgumentException("Invalid catalog pack manifest: catalog items must have a name and url"))
+                return Result.failure(CatalogException(R.string.catalog_pack_item_incomplete))
             }
             val normalized = CatalogUrlParser.normalize(item.url).lowercase()
             if (!normalizedUrls.add(normalized)) {
-                return Result.failure(IllegalArgumentException("Invalid catalog pack manifest: duplicate catalog URL '$normalized'"))
+                return Result.failure(CatalogException(R.string.catalog_pack_duplicate_url, listOf(normalized)))
             }
         }
         return Result.success(manifest)
@@ -755,9 +769,9 @@ class CatalogRepository @Inject constructor(
         val current = getCatalogs().toMutableList()
         val addedConfigs = mutableListOf<CatalogConfig>()
 
-        val manifestId = finalManifest.id ?: return Result.failure(IllegalArgumentException("Manifest missing ID"))
-        val manifestName = finalManifest.name ?: return Result.failure(IllegalArgumentException("Manifest missing Name"))
-        val manifestCatalogs = finalManifest.catalogs ?: return Result.failure(IllegalArgumentException("Manifest missing catalogs"))
+        val manifestId = finalManifest.id ?: return Result.failure(CatalogException(R.string.catalog_pack_manifest_missing_id))
+        val manifestName = finalManifest.name ?: return Result.failure(CatalogException(R.string.catalog_pack_manifest_missing_name))
+        val manifestCatalogs = finalManifest.catalogs ?: return Result.failure(CatalogException(R.string.catalog_pack_manifest_missing_catalogs))
 
         val normalizedPackUrl = CatalogUrlParser.normalize(packUrl).lowercase()
         val derivedPackId = "pack_${sha256Short(normalizedPackUrl + "|" + manifestId)}"
@@ -795,7 +809,7 @@ class CatalogRepository @Inject constructor(
         }
 
         if (addedConfigs.isEmpty()) {
-            return Result.failure(IllegalArgumentException("No new or valid catalogs found in this pack to import"))
+            return Result.failure(CatalogException(R.string.catalog_pack_nothing_to_import))
         }
 
         current.addAll(0, addedConfigs)
@@ -808,7 +822,7 @@ class CatalogRepository @Inject constructor(
         val beforeSize = current.size
         current.removeAll { it.packId == packId }
         if (current.size == beforeSize) {
-            return Result.failure(IllegalArgumentException("No catalogs found for pack: $packId"))
+            return Result.failure(CatalogException(R.string.catalog_pack_none_for_pack, listOf(packId)))
         }
         saveCatalogs(current)
         return Result.success(Unit)
@@ -817,18 +831,18 @@ class CatalogRepository @Inject constructor(
     suspend fun addCustomCatalog(rawUrl: String): Result<CatalogConfig> {
         val validation = validateCatalogUrl(rawUrl)
         if (!validation.isValid || validation.normalizedUrl == null || validation.sourceType == null) {
-            return Result.failure(IllegalArgumentException(validation.error ?: "Invalid URL"))
+            return Result.failure(CatalogException(validation.errorRes ?: R.string.catalog_url_invalid))
         }
 
         val normalizedUrl = validation.normalizedUrl
         val sourceType = validation.sourceType
         val resolved = resolveMetadata(normalizedUrl, sourceType)
             ?: fallbackMetadata(normalizedUrl, sourceType)
-            ?: return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_failed_read_metadata)))
+            ?: return Result.failure(CatalogException(R.string.catalog_failed_read_metadata))
 
         val current = getCatalogs().toMutableList()
         if (current.any { it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
-            return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_already_added)))
+            return Result.failure(CatalogException(R.string.catalog_already_added))
         }
 
         val newCatalog = CatalogConfig(
@@ -847,25 +861,25 @@ class CatalogRepository @Inject constructor(
     suspend fun updateCustomCatalog(catalogId: String, rawUrl: String): Result<CatalogConfig> {
         val current = getCatalogs().toMutableList()
         val index = current.indexOfFirst { it.id == catalogId }
-        if (index < 0) return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_not_found)))
+        if (index < 0) return Result.failure(CatalogException(R.string.catalog_not_found))
         val existing = current[index]
         if (existing.isPreinstalled) {
-            return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_preinstalled_no_edit)))
+            return Result.failure(CatalogException(R.string.catalog_preinstalled_no_edit))
         }
 
         val validation = validateCatalogUrl(rawUrl)
         if (!validation.isValid || validation.normalizedUrl == null || validation.sourceType == null) {
-            return Result.failure(IllegalArgumentException(validation.error ?: "Invalid URL"))
+            return Result.failure(CatalogException(validation.errorRes ?: R.string.catalog_url_invalid))
         }
 
         val normalizedUrl = validation.normalizedUrl
         if (current.any { it.id != catalogId && it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
-            return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_already_added)))
+            return Result.failure(CatalogException(R.string.catalog_already_added))
         }
 
         val resolved = resolveMetadata(normalizedUrl, validation.sourceType)
             ?: fallbackMetadata(normalizedUrl, validation.sourceType)
-            ?: return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_failed_read_metadata)))
+            ?: return Result.failure(CatalogException(R.string.catalog_failed_read_metadata))
         val updated = existing.copy(
             title = resolved.title,
             sourceType = validation.sourceType,
@@ -880,7 +894,7 @@ class CatalogRepository @Inject constructor(
     suspend fun removeCustomCatalog(catalogId: String): Result<Unit> {
         val current = getCatalogs().toMutableList()
         val target = current.firstOrNull { it.id == catalogId }
-            ?: return Result.failure(IllegalArgumentException(context.getString(R.string.catalog_not_found)))
+            ?: return Result.failure(CatalogException(R.string.catalog_not_found))
         val profileId = activeProfileId()
         if (isPreinstalledCatalog(target)) {
             hidePreinstalledCatalog(profileId, catalogId)
@@ -957,12 +971,12 @@ class CatalogRepository @Inject constructor(
     fun validateCatalogUrl(rawUrl: String): CatalogValidationResult {
         val normalized = CatalogUrlParser.normalize(rawUrl)
         if (normalized.isBlank()) {
-            return CatalogValidationResult(isValid = false, error = "URL is required")
+            return CatalogValidationResult(isValid = false, errorRes = R.string.catalog_url_required)
         }
         val uri = try { URI(normalized) } catch (e: Exception) { null }
-            ?: return CatalogValidationResult(isValid = false, error = "Invalid URL format")
+            ?: return CatalogValidationResult(isValid = false, errorRes = R.string.catalog_url_invalid_format)
         val host = uri.host?.lowercase()
-            ?: return CatalogValidationResult(isValid = false, error = "Invalid host")
+            ?: return CatalogValidationResult(isValid = false, errorRes = R.string.catalog_url_invalid_host)
 
         return when {
             host == "trakt.tv" || host.endsWith(".trakt.tv") -> {
@@ -971,7 +985,7 @@ class CatalogRepository @Inject constructor(
                 if (parsed == null) {
                     CatalogValidationResult(
                         isValid = false,
-                        error = "Use a Trakt list URL: trakt.tv/users/{user}/lists/{list}"
+                        errorRes = R.string.catalog_url_trakt_hint
                     )
                 } else {
                     CatalogValidationResult(
@@ -990,7 +1004,7 @@ class CatalogRepository @Inject constructor(
             }
             else -> CatalogValidationResult(
                 isValid = false,
-                error = "Only Trakt and MDBList URLs are supported"
+                errorRes = R.string.catalog_url_unsupported
             )
         }
     }

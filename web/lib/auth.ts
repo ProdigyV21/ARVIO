@@ -1,4 +1,4 @@
-import { config, hasNetlifyBackendConfig, hasSupabaseConfig } from "./config";
+import { config, hasNetlifyBackendConfig, hasNetlifyBackendUrl, hasSupabaseConfig } from "./config";
 import { jsonRequest } from "./http";
 import { loadStored, removeStored, saveStored } from "./storage";
 import type { AuthSession, UserProfile } from "./types";
@@ -39,7 +39,7 @@ function sessionFromResponse(response: SupabaseAuthResponse, fallbackEmail: stri
 }
 
 export class AuthClient {
-  session = loadStored<AuthSession | null>(SESSION_KEY, null);
+  session = config.selfHosted ? null : loadStored<AuthSession | null>(SESSION_KEY, null);
   private refreshInFlight: Promise<void> | null = null;
 
   get isAuthenticated() {
@@ -53,7 +53,9 @@ export class AuthClient {
   }
 
   private async netlifyAuth<T>(path: string, body: Record<string, unknown>) {
-    if (!hasNetlifyBackendConfig()) throw new Error("ARVIO backend is not configured");
+    if (!hasNetlifyBackendConfig()) {
+      return jsonRequest<T>(`/api/cloud-auth/${path}`, { method: "POST", body: JSON.stringify(body) });
+    }
     return jsonRequest<T>(`${config.netlifyBackendUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`, {
       method: "POST",
       headers: {
@@ -65,14 +67,14 @@ export class AuthClient {
   }
 
   async signIn(email: string, password: string) {
-    if (hasNetlifyBackendConfig()) {
+    if (hasNetlifyBackendUrl()) {
       try {
         const response = await this.netlifyAuth<SupabaseAuthResponse>("auth-login", { email, password });
         this.session = sessionFromResponse(response, email, "netlify");
         saveStored(SESSION_KEY, this.session);
         return this.session;
       } catch (error) {
-        if (!hasSupabaseConfig()) throw error;
+        throw error;
       }
     }
     if (!hasSupabaseConfig()) throw new Error("Supabase is not configured");
@@ -87,14 +89,14 @@ export class AuthClient {
   }
 
   async signUp(email: string, password: string) {
-    if (hasNetlifyBackendConfig()) {
+    if (hasNetlifyBackendUrl()) {
       try {
         const response = await this.netlifyAuth<SupabaseAuthResponse>("cloud-auth-email", { email, password });
         this.session = sessionFromResponse(response, email, "netlify");
         saveStored(SESSION_KEY, this.session);
         return this.session;
       } catch (error) {
-        if (!hasSupabaseConfig()) throw error;
+        throw error;
       }
     }
     if (!hasSupabaseConfig()) throw new Error("Supabase is not configured");

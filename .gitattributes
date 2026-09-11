@@ -6,3 +6,5 @@ gradlew.bat text eol=crlf
 # so pin CRLF into the blob itself by treating it as binary — text-normalization
 # would strip CR from the stored object and hand Windows an LF-only script.
 web/public/vlc-setup.bat -text
+# Migration checksums must be identical for Windows CLI and Linux CI deploys.
+netlify-auth-site/netlify/database/migrations/**/migration.sql text eol=lf

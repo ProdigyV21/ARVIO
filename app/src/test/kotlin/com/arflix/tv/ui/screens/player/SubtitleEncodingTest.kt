@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.player
 
+import com.arflix.tv.ui.screens.player.subtitles.SubtitleSyncMatcher
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking

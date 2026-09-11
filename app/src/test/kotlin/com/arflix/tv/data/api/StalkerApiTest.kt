@@ -3,6 +3,7 @@ package com.arflix.tv.data.api
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.Reader
@@ -42,13 +43,30 @@ class StalkerApiTest {
         val ok = api.handshake()
 
         assertTrue(ok)
+        // The base-path probe is itself a handshake; repeating it would only throw
+        // away the token it just returned.
         assertEquals(
             listOf(
-                "$PORTAL/server/load.php?type=stb&action=handshake",
-                "$PORTAL/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
+                "$PORTAL/server/load.php?type=stb&action=handshake"
             ),
             requests
         )
+    }
+
+    @Test
+    fun `failed catalog page never returns a partial successful channel list`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_genres") -> """{"js":[]}"""
+                url.contains("action=get_all_channels&p=1&") ->
+                    """{"js":{"total_items":2,"max_page_items":1,"data":[{"id":1,"name":"One","cmd":"http://provider.test/1"}]}}"""
+                else -> throw com.arflix.tv.network.IptvProviderRequestDeferredException()
+            }
+        }
+        var rejected = false
+        try { api.getChannels() } catch (_: com.arflix.tv.network.IptvProviderRequestDeferredException) { rejected = true }
+        assertTrue("An incomplete catalog must be reported as a failure", rejected)
     }
 
     @Test
@@ -69,8 +87,7 @@ class StalkerApiTest {
         assertEquals(
             listOf(
                 "$PORTAL/server/load.php?type=stb&action=handshake",
-                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake",
-                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
+                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake"
             ),
             requests
         )
@@ -100,7 +117,6 @@ class StalkerApiTest {
                     "<!DOCTYPE html><html><body>404 Not Found</body></html>"
                 url == "$PORTAL/server/load.php?type=stb&action=handshake" ->
                     """{ "js": { "token": "ROOT" } }"""
-                url.contains("action=handshake&token=") -> """{ "js": { "token": "ROOT" } }"""
                 else -> null
             }
         }
@@ -111,8 +127,7 @@ class StalkerApiTest {
         assertEquals(
             listOf(
                 "$PORTAL/c/server/load.php?type=stb&action=handshake",
-                "$PORTAL/server/load.php?type=stb&action=handshake",
-                "$PORTAL/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
+                "$PORTAL/server/load.php?type=stb&action=handshake"
             ),
             requests
         )
@@ -127,7 +142,6 @@ class StalkerApiTest {
                 url == "$PORTAL/server/load.php?type=stb&action=handshake" -> "<html>404</html>"
                 url == "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake" ->
                     """{ "js": { "token": "SP" } }"""
-                url.contains("action=handshake&token=") -> """{ "js": { "token": "SP" } }"""
                 else -> null
             }
         }
@@ -139,8 +153,7 @@ class StalkerApiTest {
             listOf(
                 "$PORTAL/c/server/load.php?type=stb&action=handshake",
                 "$PORTAL/server/load.php?type=stb&action=handshake",
-                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake",
-                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
+                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake"
             ),
             requests
         )
@@ -156,7 +169,6 @@ class StalkerApiTest {
                     "<!DOCTYPE html><html><body>404 Not Found</body></html>"
                 url == "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake" ->
                     """{ "js": { "token": "SPC" } }"""
-                url.contains("action=handshake&token=") -> """{ "js": { "token": "SPC" } }"""
                 else -> null
             }
         }
@@ -167,8 +179,7 @@ class StalkerApiTest {
         assertEquals(
             listOf(
                 "$PORTAL/stalker_portal/c/server/load.php?type=stb&action=handshake",
-                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake",
-                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
+                "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake"
             ),
             requests
         )
@@ -183,7 +194,6 @@ class StalkerApiTest {
                     "<!DOCTYPE html><html><body>404 Not Found</body></html>"
                 url == "$PORTAL/stalker_portal/server/load.php?type=stb&action=handshake" ->
                     """{ "js": { "token": "LATE" } }"""
-                url.contains("action=handshake&token=") -> """{ "js": { "token": "LATE" } }"""
                 else -> null
             }
         }
@@ -519,5 +529,393 @@ class StalkerApiTest {
         val programs = api.getShortEpg("1")
 
         assertTrue(programs.isEmpty())
+    }
+
+    @Test
+    fun `channels of a portal that needs no temporary link keep their finished address`() = runTest {
+        // Measured portal: all 21295 channels report use_http_tmp_link 0 and publish a
+        // complete address, so playback must not ask create_link for one.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_genres") -> """{ "js": [{ "id": "1", "title": "News" }] }"""
+                url.contains("action=get_all_channels") -> """{
+                    "js": {
+                        "data": [
+                            {
+                                "id": 1,
+                                "name": "Direct",
+                                "cmd": "ffmpeg http://portal.example.com/play/live.php?stream=1&extension=ts",
+                                "tv_genre_id": "1",
+                                "use_http_tmp_link": "0",
+                                "wowza_tmp_link": "0",
+                                "flussonic_tmp_link": "0"
+                            }
+                        ],
+                        "total_items": 1,
+                        "max_page_items": 1
+                    }
+                }"""
+                else -> null
+            }
+        }
+
+        val channels = api.getChannels()
+
+        assertEquals(
+            "http://portal.example.com/play/live.php?stream=1&extension=ts",
+            channels.single().streamUrl
+        )
+        assertTrue(channels.single().stalkerDirectStream)
+    }
+
+    @Test
+    fun `channels of a portal that asks for a temporary link keep the raw command`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_genres") -> """{ "js": [] }"""
+                url.contains("action=get_all_channels") -> """{
+                    "js": {
+                        "data": [
+                            {
+                                "id": 7,
+                                "name": "Placeholder",
+                                "cmd": "ffmpeg http://localhost/ch/7_",
+                                "use_http_tmp_link": 1
+                            }
+                        ],
+                        "total_items": 1,
+                        "max_page_items": 1
+                    }
+                }"""
+                else -> null
+            }
+        }
+
+        val channels = api.getChannels()
+
+        assertEquals("ffmpeg http://localhost/ch/7_", channels.single().streamUrl)
+        assertFalse(channels.single().stalkerDirectStream)
+    }
+
+    @Test
+    fun `channels of a portal that states nothing keep the raw command`() = runTest {
+        // No flag at all is not a statement, so the create_link round trip stays.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_genres") -> """{ "js": [] }"""
+                url.contains("action=get_all_channels") -> """{
+                    "js": {
+                        "data": [
+                            { "id": 3, "name": "Unknown", "cmd": "ffmpeg http://host/live/3" }
+                        ],
+                        "total_items": 1,
+                        "max_page_items": 1
+                    }
+                }"""
+                else -> null
+            }
+        }
+
+        val channels = api.getChannels()
+
+        assertEquals("ffmpeg http://host/live/3", channels.single().streamUrl)
+        assertFalse(channels.single().stalkerDirectStream)
+    }
+
+    @Test
+    fun `bare URL does not erase temporary link requirements`() = runTest {
+        val cases = listOf(
+            "" to false,
+            "\"use_http_tmp_link\": 1," to false,
+            "\"use_http_tmp_link\": \"1\"," to false,
+            "\"use_http_tmp_link\": \"\"," to false,
+            "\"use_http_tmp_link\": 0, \"wowza_tmp_link\": 1," to false,
+            "\"use_http_tmp_link\": 0, \"flussonic_tmp_link\": \"1\"," to false,
+            "\"use_http_tmp_link\": 0," to true,
+            "\"use_http_tmp_link\": \"0\"," to true,
+        )
+        for ((flags, direct) in cases) {
+            val api = stubApi(requests = mutableListOf()) { url ->
+                when {
+                    url.contains("action=get_genres") -> """{"js": []}"""
+                    url.contains("action=get_all_channels") -> """{"js": {
+                        "data": [{$flags "id": 1, "name": "News", "cmd": "https://portal.test/live/one"}],
+                        "total_items": 1, "max_page_items": 1
+                    }}"""
+                    else -> null
+                }
+            }
+            val channel = api.getChannels().single().copy(id = "stalker:stalker1:1")
+            assertEquals(flags, "https://portal.test/live/one", channel.streamUrl)
+            assertEquals(flags, direct, channel.stalkerDirectStream)
+            assertEquals(flags, direct, com.arflix.tv.data.repository.StalkerPortalSupport
+                .canPlayDirectLiveStream(channel, channel.streamUrl, isCatchup = false))
+            assertFalse(com.arflix.tv.data.repository.StalkerPortalSupport
+                .canPlayDirectLiveStream(channel, channel.streamUrl, isCatchup = true))
+        }
+    }
+
+    @Test
+    fun `an empty tmp link flag does not take the whole channel page down`() = runTest {
+        // Portals have been seen sending "" where a number belongs; a numeric field
+        // would abort parsing and lose every channel of the page.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_genres") -> """{ "js": [] }"""
+                url.contains("action=get_all_channels") -> """{
+                    "js": {
+                        "data": [
+                            { "id": 5, "name": "Odd", "cmd": "ffmpeg http://host/live/5", "use_http_tmp_link": "" }
+                        ],
+                        "total_items": 1,
+                        "max_page_items": 1
+                    }
+                }"""
+                else -> null
+            }
+        }
+
+        val channels = api.getChannels()
+
+        assertEquals(listOf("5"), channels.map { it.id })
+        assertEquals("ffmpeg http://host/live/5", channels.single().streamUrl)
+    }
+
+    @Test
+    fun `resolveStreamUrl strips whichever command word the portal used`() = runTest {
+        // A third portal writes "auto http://..."; only "ffmpeg " used to be removed,
+        // which left an address no player can open.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            if (url.contains("action=create_link")) {
+                """{ "js": { "cmd": "auto http://host/live.ts?channelId=9" } }"""
+            } else null
+        }
+
+        val resolved = api.resolveStreamUrl("ffmpeg http://host/ch/9_")
+
+        assertEquals("http://host/live.ts?channelId=9", resolved)
+    }
+
+    @Test
+    fun `resolveStreamUrl returns null when the portal answers without a command`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            if (url.contains("action=create_link")) """{ "js": { "id": null } }""" else null
+        }
+
+        assertNull(api.resolveStreamUrl("ffmpeg http://host/ch/9_"))
+    }
+
+    // ── VOD ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `searchVod asks the portal instead of walking the catalog`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_ordered_list") -> """
+                    {"js":{"total_items":1,"max_page_items":14,"data":[
+                      {"id":"42","name":"Dune (2021)","cmd":"/media/dune.mpg","year":"2021","tmdb_id":"438631"}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        val items = api.searchVod("Dune")!!
+
+        assertEquals(1, items.size)
+        assertEquals("Dune (2021)", items.first().name)
+        assertEquals("438631", items.first().tmdbId)
+        assertEquals(1, requests.size)
+        assertTrue(requests.single().contains("type=vod&action=get_ordered_list"))
+        assertTrue(requests.single().contains("search=Dune"))
+        assertTrue(requests.single().contains("category=0"))
+        // Matching must never cost a link: create_link happens at playback only.
+        assertTrue(requests.none { it.contains("action=create_link") })
+    }
+
+    @Test
+    fun `searchVod asks every category and lets the portal sort by name`() = runTest {
+        // Measured against a working portal: a full client asks
+        // category=0&sortby=name and gets its matches. category=* is the
+        // category list's word for "all" and get_ordered_list does not take it;
+        // sortby=added buries a match behind everything added since.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("action=get_ordered_list") -> """
+                    {"js":{"total_items":1,"max_page_items":14,"data":[
+                      {"id":"42","name":"Dune (2021)","cmd":"/media/dune.mpg"}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        api.searchVod("Dune")
+
+        val url = requests.single()
+        assertTrue(url.contains("&category=0&"))
+        assertTrue(url.contains("&sortby=name&"))
+        assertFalse(url.contains("category=*"))
+        assertFalse(url.contains("sortby=added"))
+    }
+
+    @Test
+    fun `searchVod never asks for more pages than its cap allows`() = runTest {
+        // A portal that reports a total far beyond what we page for must not
+        // pull the whole catalogue down: the cap is what keeps a search a
+        // search. Sorted by name, the matches for one term stay inside it.
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            val page = Regex("&p=(\\d+)").find(url)?.groupValues?.get(1) ?: "1"
+            when {
+                url.contains("action=get_ordered_list") -> """
+                    {"js":{"total_items":104021,"max_page_items":14,"data":[
+                      {"id":"$page","name":"Hulk $page","cmd":"/media/hulk$page.mpg"}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        api.searchVod("Hulk")
+
+        assertEquals(StalkerApi.DEFAULT_VOD_SEARCH_PAGES, requests.size)
+        assertTrue(requests.any { it.contains("&p=1&") })
+        assertTrue(requests.none { it.contains("&p=${StalkerApi.DEFAULT_VOD_SEARCH_PAGES + 1}&") })
+    }
+
+    @Test
+    fun `searchVod pages until the reported total is covered`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("&p=1") -> """
+                    {"js":{"total_items":3,"max_page_items":2,"data":[
+                      {"id":"1","name":"Alien","cmd":"/a.mpg"},
+                      {"id":"2","name":"Aliens","cmd":"/b.mpg"}
+                    ]}}
+                """.trimIndent()
+                url.contains("&p=2") -> """
+                    {"js":{"total_items":3,"max_page_items":2,"data":[
+                      {"id":"3","name":"Alien 3","cmd":"/c.mpg"}
+                    ]}}
+                """.trimIndent()
+                else -> null
+            }
+        }
+
+        val items = api.searchVod("Alien")!!
+
+        assertEquals(listOf("Alien", "Aliens", "Alien 3"), items.map { it.name })
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `searchVod stops when a portal ignores paging and repeats itself`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            if (url.contains("action=get_ordered_list")) {
+                """
+                {"js":{"total_items":999,"max_page_items":1,"data":[
+                  {"id":"7","name":"Heat","cmd":"/heat.mpg"}
+                ]}}
+                """.trimIndent()
+            } else {
+                null
+            }
+        }
+
+        val items = api.searchVod("Heat")!!
+
+        assertEquals(1, items.size)
+        // Page 2 repeats page 1 - no new ids means stop, not 999 requests.
+        assertEquals(2, requests.size)
+    }
+
+    @Test
+    fun `searchVod reports an HTML 200 answer as a failure, not as no results`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { "<html><body>Not found</body></html>" }
+
+        // null, not emptyList: the caller caches answers, and a broken reply
+        // cached as "no such film" hides the title until the entry expires.
+        assertNull(api.searchVod("Dune"))
+    }
+
+    @Test
+    fun `searchVod skips entries without a playable cmd`() = runTest {
+        val api = stubApi(requests = mutableListOf()) {
+            """
+            {"js":{"total_items":2,"max_page_items":14,"data":[
+              {"id":"1","name":"No Command"},
+              {"id":"2","name":"Playable","cmd":"/ok.mpg"}
+            ]}}
+            """.trimIndent()
+        }
+
+        assertEquals(listOf("Playable"), api.searchVod("x")!!.map { it.name })
+    }
+
+    @Test
+    fun `searchVod ignores a blank query without touching the portal`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { null }
+
+        assertTrue(api.searchVod("   ")!!.isEmpty())
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `resolveVodStreamUrl exchanges the cmd for a playable url`() = runTest {
+        val requests = mutableListOf<String>()
+        val api = stubApi(requests = requests) { url ->
+            when {
+                url.contains("type=vod&action=create_link") ->
+                    """{"js":{"cmd":"ffmpeg http://cdn.example.com/movie.mp4"}}"""
+                else -> null
+            }
+        }
+
+        val url = api.resolveVodStreamUrl("/media/file_1.mpg")
+
+        assertEquals("http://cdn.example.com/movie.mp4", url)
+        assertTrue(requests.single().contains("cmd=%2Fmedia%2Ffile_1.mpg"))
+    }
+
+    @Test
+    fun `resolveVodStreamUrl returns null when the portal answers without a link`() = runTest {
+        val api = stubApi(requests = mutableListOf()) { """{"js":{"cmd":""}}""" }
+
+        assertNull(api.resolveVodStreamUrl("/media/file.mpg"))
+    }
+
+    @Test
+    fun `sanitizePlaybackCommand strips the player hint but keeps bare urls`() {
+        assertEquals(
+            "http://cdn.example.com/a.mp4",
+            StalkerApi.sanitizePlaybackCommand("ffmpeg http://cdn.example.com/a.mp4")
+        )
+        assertEquals(
+            "http://cdn.example.com/a.mp4",
+            StalkerApi.sanitizePlaybackCommand("auto http://cdn.example.com/a.mp4")
+        )
+        assertEquals(
+            "http://cdn.example.com/a.mp4",
+            StalkerApi.sanitizePlaybackCommand("  http://cdn.example.com/a.mp4  ")
+        )
+        assertNull(StalkerApi.sanitizePlaybackCommand(""))
+        assertNull(StalkerApi.sanitizePlaybackCommand(null))
+        assertNull(StalkerApi.sanitizePlaybackCommand("   "))
+        // A lone token carries no hint to strip and is returned unchanged; the
+        // caller drops it because it is not an http(s) URL.
+        assertEquals("ffmpeg", StalkerApi.sanitizePlaybackCommand("ffmpeg   "))
     }
 }

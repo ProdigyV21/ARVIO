@@ -2,7 +2,7 @@
 name: Feature Request
 about: Suggest an idea or feature to improve ARVIO
 title: "[FEATURE]:"
-labels: enhancement
+labels: 'type:feature'
 assignees: ''
 
 ---

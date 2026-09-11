@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.arflix.tv.util.IPTV_FAVORITES_ON_HOME
+import com.arflix.tv.util.resolveAppLanguage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -25,8 +26,7 @@ internal fun readHomeProfilePreferences(
     profileId: String
 ): HomeProfilePreferences {
     val prefix = "profile_${profileId}_"
-    val fallbackLanguage = preferences[stringPreferencesKey("last_app_language")] ?: "en-US"
-    val contentLang = preferences[stringPreferencesKey("${prefix}content_language")] ?: fallbackLanguage
+    val contentLang = resolveAppLanguage(preferences, profileId)
     return HomeProfilePreferences(
         trailerAutoPlay = preferences[booleanPreferencesKey("${prefix}trailer_auto_play")] ?: false,
         trailerSoundEnabled = preferences[booleanPreferencesKey("${prefix}trailer_sound_enabled")] ?: false,

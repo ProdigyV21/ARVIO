@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "22"
   NEXT_TELEMETRY_DISABLED = "1"
+  # Playback bytes stay on the provider/client, never on Netlify Functions.
+  ALLOW_NETLIFY_MEDIA_PROXY = "false"
+  NEXT_PUBLIC_ALLOW_NETLIFY_MEDIA_PROXY = "false"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

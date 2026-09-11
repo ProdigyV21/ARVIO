@@ -66,14 +66,24 @@ class ApiProxyInterceptor : Interceptor {
         val originalUrl = originalRequest.url
         val path = originalUrl.encodedPath
 
+        val cleanVersion = com.arflix.tv.BuildConfig.VERSION_NAME.substringBefore("-")
+
         val proxyUrlBuilder = (Constants.SIMKL_PROXY_URL.toHttpUrlOrNull() ?: return null).newBuilder()
             .addQueryParameter("path", path)
             .addQueryParameter("method", originalRequest.method)
+            .setQueryParameter("app-name", "arvio")
+            .setQueryParameter("app-version", cleanVersion)
+
+        if (Constants.SIMKL_CLIENT_ID.isNotBlank()) {
+            proxyUrlBuilder.setQueryParameter("client_id", Constants.SIMKL_CLIENT_ID)
+        }
 
         for (i in 0 until originalUrl.querySize) {
             val name = originalUrl.queryParameterName(i)
-            originalUrl.queryParameterValue(i)?.let { value ->
-                proxyUrlBuilder.addQueryParameter(name, value)
+            if (name !in listOf("path", "method", "client_id", "app-name", "app-version")) {
+                originalUrl.queryParameterValue(i)?.let { value ->
+                    proxyUrlBuilder.addQueryParameter(name, value)
+                }
             }
         }
 
@@ -82,6 +92,7 @@ class ApiProxyInterceptor : Interceptor {
             .url(proxyUrlBuilder.build())
             .header("apikey", Constants.APP_ANON_KEY)
             .header("Authorization", "Bearer ${Constants.APP_ANON_KEY}")
+            .header("User-Agent", "ARVIO/$cleanVersion (Android TV)")
 
         if (!userToken.isNullOrBlank()) {
             builder.header("x-user-token", userToken)

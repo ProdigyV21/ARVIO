@@ -38,6 +38,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
+import coil.size.Scale
 import com.arflix.tv.R
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.MediaItem
@@ -123,6 +124,7 @@ fun MediaCard(
     // hovered tile animates its GIF. Regular media items keep the existing
     // behavior (landscape uses backdrop art, poster uses image).
     val isCollectionTile = item.status?.startsWith("collection:") == true
+    val isChannelLogo = item.status?.startsWith("iptv:") == true
     val continueWatchingArtwork = item.episodeStill
         ?.takeIf { showProgress && isLandscape && it.isNotBlank() }
     val baseImageUrl = if (isCollectionTile) {
@@ -151,23 +153,25 @@ fun MediaCard(
     val context = LocalContext.current
     val density = LocalDensity.current
     val overlayBrush: Brush? = null  // Gradient removed per user feedback
-    val imageRequest = remember(rawImageUrl, width, aspectRatio, isMobile) {
+    val imageRequest = remember(rawImageUrl, width, aspectRatio, isMobile, isChannelLogo) {
         if (rawImageUrl == null) return@remember null
         val widthPx = with(density) { width.roundToPx() }
         val heightPx = (widthPx / aspectRatio).toInt().coerceAtLeast(1)
-        val cacheKey = "$rawImageUrl|${widthPx}x$heightPx"
+        val cacheKey = "$rawImageUrl|${widthPx}x$heightPx" + if (isChannelLogo) "|channel-logo" else ""
         ImageRequest.Builder(context)
             .data(rawImageUrl)
             .size(widthPx, heightPx)
+            .scale(if (isChannelLogo) Scale.FIT else Scale.FILL)
             .precision(Precision.INEXACT)
             .allowHardware(true)
             .memoryCacheKey(cacheKey)
             .placeholderMemoryCacheKey(cacheKey)
-            .crossfade(if (isMobile) 250 else 0)
+            .crossfade(if (isMobile && !isChannelLogo) 250 else 0)
             .build()
     }
+    var channelLogoFailed by remember(imageRequest) { mutableStateOf(false) }
     // Performance: Removed context/density from keys
-    val effectiveLogoImageUrl = logoImageUrl.takeIf { showLogoImage }
+    val effectiveLogoImageUrl = logoImageUrl.takeIf { showLogoImage && !isChannelLogo }
     val logoRequest = remember(effectiveLogoImageUrl, isMobile) {
         val logoWidthPx = with(density) { 220.dp.roundToPx() }.coerceAtLeast(1)
         val logoHeightPx = with(density) { 64.dp.roundToPx() }.coerceAtLeast(1)
@@ -215,30 +219,38 @@ fun MediaCard(
             },
         ) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
-                // Branded gradient fallback with title that sits behind AsyncImage.
-                // When AsyncImage loads, it fades in smoothly over this background;
-                // if image fails or is slow, the title remains visible instead of a black box.
+                // Channel logos can be transparent: never leave placeholder text behind them.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(missingArtworkBrush),
+                        .then(if (isChannelLogo) Modifier.background(ArvioSkin.colors.surface)
+                              else Modifier.background(missingArtworkBrush)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = item.title,
-                        style = ArvioSkin.typography.cardTitle,
-                        color = Color.White.copy(alpha = 0.72f),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 10.dp)
-                    )
+                    if (!isChannelLogo || imageRequest == null || channelLogoFailed) {
+                        Text(
+                            text = item.title,
+                            style = ArvioSkin.typography.cardTitle,
+                            color = Color.White.copy(alpha = 0.72f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        )
+                    }
                 }
                 if (imageRequest != null) {
                     AsyncImage(
                         model = imageRequest,
                         contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        contentScale = if (isChannelLogo) ContentScale.Fit else ContentScale.Crop,
+                        onError = { if (isChannelLogo) channelLogoFailed = true },
+                        onSuccess = { if (isChannelLogo) channelLogoFailed = false },
+                        modifier = Modifier.fillMaxSize().then(
+                            if (isChannelLogo) Modifier.padding(
+                                horizontal = width * 0.1f,
+                                vertical = (width / aspectRatio) * 0.12f
+                            ) else Modifier
+                        ),
                     )
                 }
                 if (overlayBrush != null) {
@@ -745,14 +757,6 @@ fun FeaturedMediaCard(
                 model = imageUrl,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        if (trailerKey != null) {
-            TrailerPlayer(
-                youtubeKey = trailerKey,
-                delayMs = trailerDelayMs,
-                volume = trailerVolume,
                 modifier = Modifier.fillMaxSize()
             )
         }

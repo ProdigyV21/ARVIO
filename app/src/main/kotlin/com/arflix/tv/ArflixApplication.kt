@@ -90,6 +90,7 @@ class ArflixApplication : Application(), Configuration.Provider, ImageLoaderFact
     }
 
     override fun onCreate() {
+        com.arflix.tv.network.initializeNetworkPlatform(this)
         super.onCreate()
         instance = this
 

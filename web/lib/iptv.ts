@@ -8,8 +8,50 @@ const IPTV_TEXT_CACHE_META = "arvio.web.iptv.textMeta.v1";
 const PLAYLIST_TTL_MS = 6 * 60 * 60 * 1000;
 const EPG_TTL_MS = 3 * 60 * 60 * 1000;
 const LARGE_IPTV_LIST_CHANNEL_COUNT = 10_000;
-const MAX_IPTV_PLAYLISTS = 3;
 const DEFAULT_IPTV_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20";
+
+type ProviderBudget = { starts: number[]; active: number; nextStart: number; blockedUntil: number };
+const providerBudgets = new Map<string, ProviderBudget>();
+const apiInFlight = new Map<string, Promise<unknown>>();
+const guideApiCache = new Map<string, { data: unknown; expires: number }>();
+
+// Shared by every visible row and fallback. Media segments do not use this path.
+async function providerTextRequest(providerUrl: string, requestUrl: string): Promise<string> {
+  const url = new URL(providerUrl);
+  const key = url.hostname + (url.port && !["80", "443"].includes(url.port) ? `:${url.port}` : "");
+  let budget = providerBudgets.get(key);
+  if (!budget) {
+    budget = { starts: [], active: 0, nextStart: 0, blockedUntil: 0 };
+    providerBudgets.set(key, budget);
+  }
+  const queuedAt = Date.now();
+  while (true) {
+    const now = Date.now();
+    budget.starts = budget.starts.filter((at) => now - at < 60_000);
+    if (now < budget.blockedUntil || budget.starts.length >= 30 || now - queuedAt >= 5_000) {
+      throw new Error("IPTV provider requests are temporarily paused. Please wait before refreshing.");
+    }
+    if (budget.active < 2 && now >= budget.nextStart) break;
+    await new Promise((resolve) => setTimeout(resolve, budget!.active >= 2 ? 50
+      : Math.max(1, Math.min(100, budget!.nextStart - now))));
+  }
+  budget.starts.push(Date.now());
+  budget.nextStart = Date.now() + 500;
+  budget.active++;
+  try { return await textRequest(requestUrl, { cache: "no-store" }); }
+  catch (error) {
+    const status = Number((error as { status?: number })?.status);
+    const cooldown = [401, 403, 451].includes(status) ? 900_000
+      : [429, 503, 513].includes(status) ? 300_000 : status >= 500 && status <= 599 ? 60_000 : 0;
+    if (cooldown) {
+      const header = (error as { retryAfter?: string | null })?.retryAfter;
+      const requested = header ? (/^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now()) : 0;
+      budget.blockedUntil = Math.max(budget.blockedUntil, Date.now() + Math.max(cooldown,
+        Number.isFinite(requested) ? Math.min(86_400_000, requested) : 0));
+    }
+    throw error;
+  } finally { budget.active--; }
+}
 
 type IptvLoadOptions = {
   userAgent?: string;
@@ -75,7 +117,8 @@ export async function loadIptvSnapshot(
         // Xtream playlists load API-first: the JSON API is faster than a huge
         // M3U text, provides category names + EPG channel ids, and yields HLS
         // (.m3u8) stream URLs the browser can actually play.
-        if (xtreamInfoFromPlaylist(playlist.m3uUrl)) {
+        const isXtream = Boolean(xtreamInfoFromPlaylist(playlist.m3uUrl));
+        if (isXtream) {
           const xtreamChannels = await fetchXtreamChannels(playlist, options).catch(() => []);
           if (xtreamChannels.length) return xtreamChannels;
         }
@@ -84,12 +127,12 @@ export async function loadIptvSnapshot(
           const channels = parseM3u(text, playlist.id);
           if (channels.length) return channels;
         } catch (m3uError) {
-          const xtreamChannels = await fetchXtreamChannels(playlist, options).catch(() => []);
+          const xtreamChannels = isXtream ? [] : await fetchXtreamChannels(playlist, options).catch(() => []);
           if (xtreamChannels.length) return xtreamChannels;
           throw m3uError;
         }
 
-        const xtreamChannels = await fetchXtreamChannels(playlist, options).catch(() => []);
+        const xtreamChannels = isXtream ? [] : await fetchXtreamChannels(playlist, options).catch(() => []);
         if (xtreamChannels.length) return xtreamChannels;
         throw new Error("Playlist response did not contain any channels.");
       } catch (error) {
@@ -98,15 +141,16 @@ export async function loadIptvSnapshot(
       }
     })
   );
-  const channels = channelSets.flat();
+  const allChannels = channelSets.flat();
+  const channels = accessibleChannels(allChannels, hiddenGroups);
   // Xtream channels get now/next on demand from the panel's JSON EPG (fast,
   // per-channel); only non-Xtream channels need the upfront XMLTV pass.
   const xtreamPlaylistIds = new Set(enabled.filter((playlist) => xtreamInfoFromPlaylist(playlist.m3uUrl)).map((playlist) => playlist.id));
   const xmltvChannels = channels.filter((channel) => !xtreamPlaylistIds.has(channel.id.split(":")[0] ?? ""));
   const skipInitialEpg = xmltvChannels.length > LARGE_IPTV_LIST_CHANNEL_COUNT;
-  const nowNext = skipInitialEpg || !xmltvChannels.length
-    ? {}
-    : await loadNowNext(enabled, xmltvChannels).catch(() => ({} as Record<string, IptvNowNext>));
+  // Channels must not wait for a potentially huge XMLTV response. The visible
+  // window requests its guide independently after the snapshot is painted.
+  const nowNext = {};
   const epgWarning = skipInitialEpg
     ? `Guide loads on demand for this ${channels.length.toLocaleString()} channel playlist, so Live TV opens fast without parsing the full EPG upfront.`
     : undefined;
@@ -114,12 +158,13 @@ export async function loadIptvSnapshot(
   const grouped = channels.reduce<Record<string, IptvChannel[]>>((acc, channel) => {
     const group = channel.group || "Uncategorized";
     if (hidden.has(group) || hidden.has(groupKey(channel))) return acc;
-    acc[group] = [...(acc[group] ?? []), channel];
+    (acc[group] ??= []).push(channel);
     return acc;
   }, {});
   const orderedGroups = orderGroups(grouped, groupOrder, channels);
   return {
     channels,
+    allChannels,
     grouped: Object.fromEntries(orderedGroups.map((group) => [group, grouped[group]])),
     nowNext,
     favoriteChannels,
@@ -306,9 +351,9 @@ async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
     async () => {
       const headers = playlistProxyHeaders(options.userAgent);
       const candidates: Array<{ label: string; load: () => Promise<string> }> = [
-        { label: "direct", load: () => textRequest(url, { cache: "no-store" }) },
-        { label: "proxy", load: () => textRequest(playlistTextUrl(url), { cache: "no-store" }) },
-        { label: "proxy with media headers", load: () => textRequest(playlistTextUrl(url, headers), { cache: "no-store" }) }
+        { label: "direct", load: () => providerTextRequest(url, url) },
+        { label: "proxy", load: () => providerTextRequest(url, playlistTextUrl(url)) },
+        { label: "proxy with media headers", load: () => providerTextRequest(url, playlistTextUrl(url, headers)) }
       ];
       const errors: string[] = [];
 
@@ -331,8 +376,12 @@ async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
 export function normalizeIptvPlaylists(playlists: IptvPlaylistEntry[]) {
   return playlists
     .map((playlist, index) => normalizeIptvPlaylist(playlist, index))
-    .filter((playlist): playlist is IptvPlaylistEntry => Boolean(playlist))
-    .slice(0, MAX_IPTV_PLAYLISTS);
+    .filter((playlist): playlist is IptvPlaylistEntry => Boolean(playlist));
+}
+
+export function accessibleChannels(channels: IptvChannel[], hiddenGroups: string[]) {
+  const hidden = new Set(hiddenGroups);
+  return channels.filter((channel) => !hidden.has(channel.group || "Uncategorized") && !hidden.has(groupKey(channel)));
 }
 
 export function normalizeIptvPlaylist(playlist: IptvPlaylistEntry, index = 0): IptvPlaylistEntry | null {
@@ -517,7 +566,9 @@ async function fetchXtreamChannels(playlist: IptvPlaylistEntry, options: IptvLoa
     const streamId = String(stream.stream_id ?? "").trim();
     if (!streamId) return [];
     const streamUrl = buildXtreamStreamUrl(info, streamId);
-    const id = `${playlist.id}:${buildChannelId(streamUrl, stream.epg_channel_id)}`;
+    // Match Android's provider identity; the browser uses HLS while Android
+    // may use TS, so hashing the playback URL creates different favorites.
+    const id = `${playlist.id}:xtream:${streamId}`;
     if (seen.has(id)) return [];
     seen.add(id);
     const group = groupById.get(String(stream.category_id ?? "")) || "Uncategorized";
@@ -546,11 +597,36 @@ function buildXtreamStreamUrl(info: XtreamInfo, streamId: string) {
 }
 
 async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) {
-  try {
-    return await jsonFromText<T>(await textRequest(url, { cache: "no-store" }));
-  } catch {
-    return jsonFromText<T>(await textRequest(playlistTextUrl(url, headers), { cache: "no-store" }));
-  }
+  const key = `${url}|${JSON.stringify(headers)}`;
+  const cached = guideApiCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.data as T;
+  const existing = apiInFlight.get(key);
+  if (existing) return existing as Promise<T>;
+  const task = (async () => {
+    const load = async () => {
+      try {
+        const text = await providerTextRequest(url, url);
+        jsonFromText(text);
+        return text;
+      } catch {
+        const text = await providerTextRequest(url, playlistTextUrl(url, headers));
+        jsonFromText(text);
+        return text;
+      }
+    };
+    const action = new URL(url).searchParams.get("action");
+    const guide = action === "get_short_epg" || action === "get_simple_data_table";
+    const text = guide ? await load() : await cachedRemoteText(`api:${key}`, PLAYLIST_TTL_MS, load);
+    const data = jsonFromText<T>(text);
+    if (guide) {
+      const empty = !(data as { epg_listings?: unknown[] })?.epg_listings?.length;
+      guideApiCache.set(key, { data, expires: Date.now() + (empty ? 600_000 : 120_000) });
+      while (guideApiCache.size > 128) guideApiCache.delete(guideApiCache.keys().next().value!);
+    }
+    return data;
+  })();
+  apiInFlight.set(key, task);
+  try { return await task; } finally { if (apiInFlight.get(key) === task) apiInFlight.delete(key); }
 }
 
 function jsonFromText<T>(text: string) {
@@ -587,7 +663,7 @@ function orderGroups(grouped: Record<string, IptvChannel[]>, groupOrder: string[
     const bKey = firstChannelByGroup[b] ? groupKey(firstChannelByGroup[b]) : b;
     const ai = orderMap.get(aKey) ?? orderMap.get(a) ?? Number.MAX_SAFE_INTEGER;
     const bi = orderMap.get(bKey) ?? orderMap.get(b) ?? Number.MAX_SAFE_INTEGER;
-    return ai === bi ? a.localeCompare(b) : ai - bi;
+    return ai === bi ? 0 : ai - bi;
   });
 }
 
@@ -596,29 +672,52 @@ export function parseM3u(text: string, playlistId = "default") {
   const channels: IptvChannel[] = [];
   const seen = new Set<string>();
   let pending: Record<string, string> | null = null;
+  let requestHeaders: Record<string, string> = Object.create(null);
 
-  for (const line of lines) {
-    if (line.startsWith("#EXTINF")) {
-      const title = line.split(",").slice(1).join(",").trim();
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (/^#EXTINF:/i.test(line)) {
+      // Header values can contain commas; only an unquoted comma starts the title.
+      const [, metadata = line, title = ""] = line.match(/^#EXTINF:((?:[^"',]|"[^"]*"|'[^']*')*),(.*)$/i) ?? [];
       pending = {
-        name: attr(line, "tvg-name") || title || "Unknown Channel",
-        group: attr(line, "group-title") || "Uncategorized",
-        logo: attr(line, "tvg-logo"),
-        tvgId: attr(line, "tvg-id"),
-        number: firstAttr(line, ["tvg-chno", "tvg-ch-number", "channel-number", "ch-number", "number"]),
-        catchupDays: attr(line, "catchup-days") || attr(line, "timeshift"),
-        catchupType: attr(line, "catchup"),
-        catchupSource: attr(line, "catchup-source"),
-        language: firstAttr(line, ["tvg-language", "tvg-lang", "language", "lang"]),
-        country: firstAttr(line, ["tvg-country", "country"]),
-        qualityLabel: firstAttr(line, ["quality", "tvg-quality", "resolution"])
+        name: attr(metadata, "tvg-name") || title.trim() || "Unknown Channel",
+        group: attr(metadata, "group-title") || "Uncategorized",
+        logo: attr(metadata, "tvg-logo"),
+        tvgId: attr(metadata, "tvg-id"),
+        number: firstAttr(metadata, ["tvg-chno", "tvg-ch-number", "channel-number", "ch-number", "number"]),
+        catchupDays: attr(metadata, "catchup-days") || attr(metadata, "timeshift"),
+        catchupType: attr(metadata, "catchup"),
+        catchupSource: attr(metadata, "catchup-source"),
+        language: firstAttr(metadata, ["tvg-language", "tvg-lang", "language", "lang"]),
+        country: firstAttr(metadata, ["tvg-country", "country"]),
+        qualityLabel: firstAttr(metadata, ["quality", "tvg-quality", "resolution"])
       };
-    } else if (pending && line.trim() && !line.startsWith("#")) {
+      requestHeaders = Object.create(null);
+      for (const match of metadata.matchAll(/(?:^|\s)([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))/g)) {
+        const name = m3uHeaderName(match[1]);
+        if (name) setM3uHeader(requestHeaders, name, match[2] ?? match[3] ?? match[4] ?? "");
+      }
+    } else if (pending && /^#EXTVLCOPT:/i.test(line)) {
+      const option = line.match(/^#EXTVLCOPT:\s*([^=]+)=(.*)$/i);
+      const name = option && m3uHeaderName(option[1]);
+      if (name && option) setM3uHeader(requestHeaders, name, option[2].trim().replace(/^(["'])(.*)\1$/, "$2"));
+    } else if (pending && line && !line.startsWith("#")) {
       if (isDividerChannelName(pending.name)) {
         pending = null;
         continue;
       }
-      const streamUrl = line.trim();
+      const pipe = line.indexOf("|");
+      const streamUrl = (pipe < 0 ? line : line.slice(0, pipe)).trim();
+      // URL headers override entry options, without decoding/re-serializing a signed stream URL.
+      if (pipe >= 0) {
+        for (const [name, value] of new URLSearchParams(line.slice(pipe + 1).replace(/\|/g, "&"))) {
+          setM3uHeader(requestHeaders, name, value);
+        }
+      }
+      if (!streamUrl) {
+        pending = null;
+        continue;
+      }
       const id = `${playlistId}:${buildChannelId(streamUrl, pending.tvgId)}`;
       if (seen.has(id)) {
         pending = null;
@@ -638,13 +737,54 @@ export function parseM3u(text: string, playlistId = "default") {
         language: pending.language,
         country: pending.country,
         qualityLabel: pending.qualityLabel || inferQualityLabel(pending.name, pending.group),
-        streamUrl
+        streamUrl,
+        ...(Object.keys(requestHeaders).length ? { requestHeaders: { ...requestHeaders } } : {})
       });
       pending = null;
     }
   }
 
   return channels;
+}
+
+export function migrateXtreamFavoriteIds(favorites: string[], channels: IptvChannel[]): string[] {
+  const legacyPrefixes = new Set(favorites.filter((id) => id.includes(":m3u:"))
+    .map((id) => id.slice(0, id.lastIndexOf(":") + 1)));
+  if (!legacyPrefixes.size) return favorites;
+  const favoriteSet = new Set(favorites);
+  const replacements = new Map<string, string>();
+  for (const channel of channels) {
+    const match = channel.id.match(/^(.+):xtream:\d+$/);
+    if (!match) continue;
+    const epg = normalizeChannelKey(channel.tvgId ?? "");
+    const prefix = `${match[1]}:m3u:${epg ? `${epg}:` : ""}`;
+    if (!legacyPrefixes.has(prefix)) continue;
+    // Recognize the previous web HLS hash and Android's M3U/TS hash without
+    // guessing by name (HD/SD variants and other playlists must stay distinct).
+    for (const url of [channel.streamUrl, channel.streamUrl.replace(/\.m3u8(?=[?#]|$)/i, ".ts")]) {
+      const legacy = `${match[1]}:${buildChannelId(url, channel.tvgId)}`;
+      if (favoriteSet.has(legacy)) replacements.set(legacy, channel.id);
+    }
+  }
+  if (!replacements.size) return favorites;
+  return [...new Set(favorites.map((id) => replacements.get(id) ?? id))];
+}
+
+function m3uHeaderName(name: string): string | undefined {
+  switch (name.trim().toLowerCase()) {
+    case "http-user-agent": case "user-agent": case "useragent": return "User-Agent";
+    case "http-referrer": case "http-referer": case "referrer": case "referer": return "Referer";
+    case "http-origin": case "origin": return "Origin";
+    default: return undefined;
+  }
+}
+
+function setM3uHeader(headers: Record<string, string>, rawName: string, rawValue: string) {
+  const name = m3uHeaderName(rawName) ?? rawName.trim();
+  const value = rawValue.trim();
+  if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/i.test(name) || !value || /[^\t\x20-\x7e]/.test(rawValue)) return;
+  const existing = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase());
+  headers[existing ?? name] = value;
 }
 
 export function isDividerChannelName(name?: string) {
@@ -657,37 +797,62 @@ export function isDividerChannelName(name?: string) {
 }
 
 async function loadNowNext(playlists: IptvPlaylistEntry[], channels: IptvChannel[]) {
-  const urls = playlists.flatMap((playlist) => [playlist.epgUrl, ...(playlist.epgUrls ?? [])]).filter((url): url is string => Boolean(url?.trim()));
-  if (!urls.length || !channels.length) return {};
+  if (!channels.length) return {};
   const programsById: Record<string, IptvProgram[]> = {};
-  const channelLookup = new Map(channels.flatMap((channel) => [
-    [channel.tvgId?.toLowerCase(), channel.id],
-    [channel.name.toLowerCase(), channel.id]
-  ].filter((pair): pair is [string, string] => Boolean(pair[0]))));
-
-  const xmlTexts = await Promise.all(urls.slice(0, 3).map((url) => fetchEpgText(url).catch(() => "")));
-  for (const xml of xmlTexts) {
-    for (const program of parseXmltv(xml)) {
-      const channelId = channelLookup.get(program.channel.toLowerCase());
-      if (!channelId) continue;
-      programsById[channelId] = [...(programsById[channelId] ?? []), program.program];
+  for (const playlist of playlists) {
+    const lookup = new Map<string, Set<string>>();
+    for (const channel of channels) {
+      if (!channel.id.startsWith(`${playlist.id}:`)) continue;
+      for (const key of [channel.tvgId, channel.name]) {
+        if (!key?.trim()) continue;
+        const normalized = key.trim().toLowerCase();
+        if (!lookup.has(normalized)) lookup.set(normalized, new Set());
+        lookup.get(normalized)!.add(channel.id);
+      }
+    }
+    if (!lookup.size) continue;
+    const urls = [...new Set([playlist.epgUrl, ...(playlist.epgUrls ?? [])].filter((url): url is string => Boolean(url?.trim())))];
+    for (const url of urls) {
+      const programs = await cachedXmltvPrograms(url).catch(() => []);
+      const matchedThisSource = new Set<string>();
+      for (const { channel, program } of programs) {
+        for (const id of lookup.get(channel.trim().toLowerCase()) ?? []) {
+          // Earlier configured sources own the channel when they contain data.
+          if (programsById[id] && !matchedThisSource.has(id)) continue;
+          matchedThisSource.add(id);
+          (programsById[id] ??= []).push(program);
+        }
+      }
     }
   }
 
   const now = Date.now();
   return Object.fromEntries(Object.entries(programsById).map(([channelId, programs]) => {
-    const sorted = programs.sort((a, b) => a.startUtcMillis - b.startUtcMillis);
+    const sorted = [...new Map(programs.map((p) => [p.startUtcMillis, p])).values()].sort((a, b) => a.startUtcMillis - b.startUtcMillis);
     const live = sorted.find((program) => now >= program.startUtcMillis && now < program.endUtcMillis);
     const future = sorted.filter((program) => program.startUtcMillis > now);
-    const recent = sorted.filter((program) => program.endUtcMillis <= now).slice(-12);
+    const recent = sorted.filter((program) => program.endUtcMillis <= now && program.endUtcMillis >= now - 48 * 3600_000);
     return [channelId, {
       now: live,
       next: future[0],
       later: future[1],
-      upcoming: future.slice(0, 8),
+      upcoming: future.filter((program) => program.startUtcMillis < now + 48 * 3600_000),
       recent
     } satisfies IptvNowNext];
   }));
+}
+
+const parsedGuides = new Map<string, { at: number; promise: Promise<ReturnType<typeof parseXmltv>> }>();
+function cachedXmltvPrograms(url: string) {
+  const cached = parsedGuides.get(url);
+  if (cached && Date.now() - cached.at < EPG_TTL_MS) return cached.promise;
+  const promise = fetchEpgText(url).then(parseXmltv).catch((error) => {
+    parsedGuides.delete(url);
+    throw error;
+  });
+  if (parsedGuides.size >= 4) parsedGuides.delete(parsedGuides.keys().next().value!);
+  parsedGuides.set(url, { at: Date.now(), promise });
+  return promise;
 }
 
 function parseXmltv(xml: string) {
@@ -706,12 +871,74 @@ function parseXmltv(xml: string) {
       program: {
         title: decodeXml(textTag(body, "title") || "Untitled"),
         description: decodeXml(textTag(body, "desc") || ""),
+        artworkUrl: safeGuideImage(decodeXml(attr(body.match(/<icon\b([^>]*)\/?\s*>/i)?.[1] ?? "", "src"))),
+        category: decodeXml(textTag(body, "category") || "").slice(0, 200) || undefined,
         startUtcMillis: start,
         endUtcMillis: stop
       }
     });
   }
   return results;
+}
+
+function safeGuideImage(value: string): string | undefined {
+  try { return value.length <= 2048 && ["https:", "http:"].includes(new URL(value).protocol) ? value : undefined; } catch { return undefined; }
+}
+
+const identityLoads = new Map<string, { expires: number; task: Promise<IptvChannel[]> }>();
+
+/** A single cached metadata request, never a stream probe or a request per channel. */
+export async function loadIptvChannelIdentities(playlists: IptvPlaylistEntry[], channels: IptvChannel[], options: IptvLoadOptions = {}) {
+  const replacements = new Map<string, IptvChannel>();
+  for (const playlist of normalizeIptvPlaylists(playlists).filter(p => p.enabled)) {
+    const scoped = channels.filter(c => c.id.startsWith(`${playlist.id}:xtream:`));
+    if (!scoped.length) continue;
+    const url = new URL(playlist.m3uUrl);
+    url.searchParams.set("output", "ts");
+    const key = `${playlist.id}:${url}`;
+    let cached = identityLoads.get(key);
+    if (!cached || cached.expires < Date.now()) {
+      const task = fetchPlaylistText(url.toString(), options)
+        .then(text => attachM3uChannelIdentities(scoped, text, playlist.id));
+      cached = { expires: Date.now() + PLAYLIST_TTL_MS, task };
+      identityLoads.set(key, cached);
+      // A provider failure must not become a render/retry loop.
+      void task.catch(() => { if (identityLoads.get(key) === cached) cached!.expires = Date.now() + 300_000; });
+      if (identityLoads.size > 12) identityLoads.delete(identityLoads.keys().next().value!);
+    }
+    try { for (const channel of await cached.task) replacements.set(channel.id, channel); }
+    catch { /* Keep API channels available when the optional identity bridge fails. */ }
+  }
+  return channels.map(channel => {
+    const identity = replacements.get(channel.id);
+    return identity?.cloudId ? { ...channel, cloudId: identity.cloudId, syncAliases: identity.syncAliases } : channel;
+  });
+}
+
+export async function attachM3uChannelIdentities(channels: IptvChannel[], text: string, playlistId: string) {
+  const byId = new Map(channels.map(c => [c.id, c]));
+  const replacements = new Map<string, IptvChannel>();
+  let epgId: string | undefined;
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0 && i % 500 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    const line = lines[i].trim();
+    if (line.startsWith("#EXTINF:")) { epgId = attr(line, "tvg-id"); continue; }
+    if (!line || line.startsWith("#")) continue;
+    const path = parseUrl(line)?.pathname;
+    const streamId = path?.match(/\/(\d+)(?:\.[a-z0-9]+)?$/i)?.[1];
+    const id = `${playlistId}:xtream:${streamId}`;
+    const channel = byId.get(id);
+    if (channel) {
+      const cloudId = `${playlistId}:${buildChannelId(line, epgId)}`;
+      const hlsAlias = `${playlistId}:${buildChannelId(line.replace(/\.ts(?=\?|$)/i, ".m3u8"), epgId)}`;
+      const previous = replacements.get(id);
+      replacements.set(id, { ...channel, cloudId: previous?.cloudId ?? cloudId,
+        syncAliases: [...new Set([...(previous?.syncAliases ?? []), cloudId, hlsAlias])] });
+    }
+    epgId = undefined;
+  }
+  return channels.map(channel => replacements.get(channel.id) ?? channel);
 }
 
 function parseXmltvTime(value: string) {
@@ -750,9 +977,9 @@ async function fetchEpgText(url: string) {
     EPG_TTL_MS,
     async () => {
       try {
-        return await textRequest(url, { cache: "no-store" });
+        return await providerTextRequest(url, url);
       } catch {
-        return textRequest(proxiedUrl(url), { cache: "no-store" });
+        return providerTextRequest(url, proxiedUrl(url));
       }
     },
     isXmltvText

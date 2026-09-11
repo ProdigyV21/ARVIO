@@ -68,7 +68,7 @@ function isTextTarget(target: EventTarget | null): boolean {
 }
 
 export function playerIsOpen(): boolean {
-  return document.querySelector(".player-overlay") !== null;
+  return document.querySelector(".player-overlay:not(.player-docked)") !== null;
 }
 
 function isVisible(el: HTMLElement): boolean {
@@ -185,6 +185,7 @@ function appVideo(): HTMLVideoElement | null {
 }
 
 function onKeyDown(event: KeyboardEvent) {
+  if (event.defaultPrevented) return;
   // --- Escape frees a focused text field. ---
   // Without this, remotes and controllers have no way OUT of an input: the
   // guard below swallows their arrows and nothing else listens. TV Back runs

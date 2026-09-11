@@ -6,6 +6,9 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.arflix.tv.BuildConfig
 import com.arflix.tv.util.Constants
 import java.net.HttpURLConnection
@@ -60,7 +63,8 @@ object DiscordRpcManager {
     private var authPollingJob: Job? = null
 
     private var initialized = false
-    @Volatile private var bridgeReady = false
+    private var initializationJob: Job? = null
+    private var bridgeReady by mutableStateOf(false)
     @Volatile private var connectionState = ConnectionState.DISCONNECTED
     @Volatile private var currentAccessToken: String? = null
     @Volatile private var currentRefreshToken: String? = null
@@ -143,26 +147,42 @@ object DiscordRpcManager {
             return
         }
 
-        if (context is Activity) {
-            runCatching {
-                val initClass = Class.forName("com.discord.socialsdk.DiscordSocialSdkInit")
-                initClass.getMethod("setEngineActivity", Activity::class.java).invoke(null, context)
-            }.onFailure { error ->
-                Log.e(TAG, "Failed to attach the Android activity to Discord Social SDK", error)
+        val activity = java.lang.ref.WeakReference(context as? Activity)
+        initializationJob = coroutineScope.launch {
+            // SDK static initializers load native libraries. On some TVs this takes
+            // seconds; never block MainActivity.onCreate or input dispatch on dlopen.
+            val initClass = withContext(Dispatchers.IO) {
+                try {
+                    Class.forName("com.discord.socialsdk.DiscordSocialSdkInit").also {
+                        DiscordBridge.isAvailable
+                    }
+                } catch (error: Exception) {
+                    Log.e(TAG, "Failed to load Discord Social SDK", error)
+                    null
+                } catch (error: LinkageError) {
+                    Log.e(TAG, "Discord Social SDK native library is unavailable", error)
+                    null
+                }
+            } ?: return@launch
+
+            activity.get()?.takeUnless { it.isFinishing || it.isDestroyed }?.let { currentActivity ->
+                runCatching {
+                    initClass.getMethod("setEngineActivity", Activity::class.java).invoke(null, currentActivity)
+                }.onFailure { error ->
+                    Log.e(TAG, "Failed to attach the Android activity to Discord Social SDK", error)
+                }
             }
-        }
 
-        bridgeReady = DiscordBridge.init(discordClientId, jniCallback)
-        if (!bridgeReady) return
+            bridgeReady = DiscordBridge.init(discordClientId, jniCallback)
+            if (!bridgeReady) return@launch
 
-        val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        currentAccessToken = prefs.getString(KEY_ACCESS_TOKEN, null)
-        currentRefreshToken = prefs.getString(KEY_REFRESH_TOKEN, null)
-        accessTokenExpiresAt = prefs.getLong(KEY_ACCESS_TOKEN_EXPIRES_AT, 0L)
-        _username.value = prefs.getString(KEY_USERNAME, null)
+            val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            currentAccessToken = prefs.getString(KEY_ACCESS_TOKEN, null)
+            currentRefreshToken = prefs.getString(KEY_REFRESH_TOKEN, null)
+            accessTokenExpiresAt = prefs.getLong(KEY_ACCESS_TOKEN_EXPIRES_AT, 0L)
+            _username.value = prefs.getString(KEY_USERNAME, null)
 
-        if (currentAccessToken != null || currentRefreshToken != null) {
-            coroutineScope.launch {
+            if (currentAccessToken != null || currentRefreshToken != null) {
                 val token = ensureValidAccessToken()
                 if (token == null) {
                     logout()
@@ -177,6 +197,13 @@ object DiscordRpcManager {
 
     fun login(context: Context) {
         if (!initialized) init(context)
+        if (initializationJob?.isActive == true) {
+            coroutineScope.launch {
+                initializationJob?.join()
+                login(context)
+            }
+            return
+        }
         if (!isSupported) {
             Log.w(TAG, "Discord Rich Presence is unavailable in this build.")
             return
@@ -216,6 +243,13 @@ object DiscordRpcManager {
 
     fun startBrowserAuth(context: Context) {
         if (!initialized) init(context)
+        if (initializationJob?.isActive == true) {
+            coroutineScope.launch {
+                initializationJob?.join()
+                startBrowserAuth(context)
+            }
+            return
+        }
         if (!isSupported) return
         val url = getDirectOAuthUrl() ?: return
         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -290,8 +324,10 @@ object DiscordRpcManager {
     }
 
     fun completeAuthWithCode(code: String) {
-        if (!isSupported || code.isBlank() || code.length > 2048) return
+        if (code.isBlank() || code.length > 2048) return
         coroutineScope.launch {
+            initializationJob?.join()
+            if (!isSupported) return@launch
             val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val verifier = prefs.getString(KEY_CODE_VERIFIER, null)
             if (verifier.isNullOrBlank()) {

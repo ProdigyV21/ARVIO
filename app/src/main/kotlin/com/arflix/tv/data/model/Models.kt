@@ -34,6 +34,11 @@ data class MediaItem(
     val badge: String? = null,
     val genreIds: List<Int> = emptyList(),
     val originalLanguage: String? = null,
+    // The native TMDB name, kept next to the localized [title] because some
+    // providers list a title only under its original name. Null when TMDB has
+    // none, and null on items restored from an older JSON cache - every reader
+    // must treat it as "unknown", never as "same as the title".
+    val originalTitle: String? = null,
     val primaryNetworkLogo: String? = null,
     val isOngoing: Boolean = false,
     val totalEpisodes: Int? = null,
@@ -71,7 +76,10 @@ data class MediaItem(
 ) : Serializable
 
 enum class MediaType {
-    MOVIE, TV
+    @com.google.gson.annotations.SerializedName(value = "MOVIE", alternate = ["movie"])
+    MOVIE,
+    @com.google.gson.annotations.SerializedName(value = "TV", alternate = ["tv"])
+    TV
 }
 
 /**
@@ -223,7 +231,34 @@ data class StreamSource(
     val rawLabel: String? = null,
     // Original Stremio title. Some addons use it for source/indexer details
     // that are intentionally separate from behaviorHints.filename.
-    val addonTitle: String? = null
+    val addonTitle: String? = null,
+    // Explicit source metadata only; discovery is deferred until a preview is requested.
+    val preview: StreamPreviewMetadata? = null
+) : Serializable
+
+enum class StreamPreviewKind { JELLYFIN, PLEX, EMBY, WEBVTT, IMAGE_HLS, BIF }
+
+/**
+ * Identifies existing source-owned images, never a request to generate them. Server/item/version
+ * and account scope must survive playback URL rotation. Generic tracks must be explicitly supplied;
+ * no addon storyboard convention is inferred. Headers are secrets, not cache-key material.
+ */
+@Immutable
+data class StreamPreviewMetadata(
+    val kind: StreamPreviewKind,
+    val serverId: String = "",
+    val accountId: String = "",
+    val itemId: String = "",
+    val mediaSourceId: String = "",
+    val mediaVersion: String = "",
+    val mediaETag: String = "",
+    val serverUrl: String? = null,
+    val manifestUrl: String? = null,
+    val userId: String = "",
+    val headers: Map<String, String> = emptyMap(),
+    val durationMs: Long = 0L,
+    // Original media time = player time + offset. Resume alone does not change this offset.
+    val timelineOffsetMs: Long = 0L
 ) : Serializable
 
 /**

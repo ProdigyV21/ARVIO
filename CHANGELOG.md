@@ -7,6 +7,23 @@ All notable changes to this project are documented in this file.
 ### Added
 - (Nothing yet)
 
+## [1.9.997] - 2026-09-09
+
+- Improved IPTV and Stalker playback, guide imports, provider request limits, and Live TV focus and rendering. Contributors: @ReichiMD, @Himanth-reddy.
+- Improved seek previews, Library sorting and scroll restoration, Search navigation, Home catalog order, season rails, and startup stability. Contributor: @Himanth-reddy.
+- Improved Trakt and SIMKL tracking, Telegram configuration and device sessions, localization, and official trailer handling. Contributors: @Himanth-reddy, @ReichiMD.
+- Fixed web Home hover layout shifts and stale watched episodes; improved browser playback, self-hosting, synchronization, and premium recovery. Contributor: @Himanth-reddy.
+- Signed APK and Play AAB version 1.9.997, version code 313. Full details and individual credits: [release notes](releases/v1.9.997/RELEASE_NOTES.md), [merged contributions](releases/v1.9.997/MERGED_CONTRIBUTIONS.md), and [commit changelog](releases/v1.9.997/COMMIT_CHANGELOG.md).
+
+## [1.9.996] - 2026-09-06
+
+- Redesigned mobile playback, seek previews, Home loading, and navigation. Contributors: @Himanth-reddy, @silentbil, @Saelon600, @ProdigyV21.
+- Expanded IPTV, Stalker portals, guides, and selective imports. Contributors: @ReichiMD, @Saelon600, @Aaronnn17, @Himanth-reddy, @silentbil, @ProdigyV21.
+- Added Brazilian Portuguese and expanded localization and Continue Watching language handling. Contributors: @procopio1000, @ReichiMD, @Aaronnn17, @ProdigyV21.
+- Updated integrations, subtitles, website branding, and release packaging. Contributors: @silentbil, @Saelon600, @Himanth-reddy, @keviiixaviiii, @ProdigyV21.
+- Retained the existing installed-plugin behavior by reverting the proposed separation (#655) before release. Revert: @ProdigyV21. Original proposal, deferred for further review: @Himanth-reddy.
+- Full per-update credits, 55 historically merged PRs (54 effective, #655 reverted), and all 344 source-history commits since v1.9.995 are in [release notes](releases/v1.9.996/RELEASE_NOTES.md), [merged contributions](releases/v1.9.996/MERGED_CONTRIBUTIONS.md), and [commit history](releases/v1.9.996/COMMIT_CHANGELOG.md). This preserves individual Git authors, including @tormox, co-authors, and PR contributors. Release packaging: @ProdigyV21.
+
 ## [1.9.995] - 2026-08-20
 
 - Added 16 KB memory-page support to the Play release native libraries.

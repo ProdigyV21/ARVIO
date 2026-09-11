@@ -1,5 +1,8 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.draw.drawBehind
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
@@ -20,8 +23,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -49,10 +54,12 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -88,6 +95,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.model.PlaylistGroupKey
+import androidx.compose.foundation.basicMarquee
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.focus.mirrorHorizontalForRtl
 import kotlinx.coroutines.Job
@@ -106,6 +114,7 @@ fun CategorySidebar(
     selectedId: String,
     playlistSections: List<PlaylistCategorySection> = emptyList(),
     expanded: Boolean,
+    fixedViewport: Boolean = false,
     listState: LazyListState,
     focusRequester: FocusRequester? = null,
     onSelect: (String) -> Unit,
@@ -124,30 +133,45 @@ fun CategorySidebar(
     focusSearchSignal: Int = 0,
     focusCategorySignal: Int = 0,
     isTouchDevice: Boolean = false,
+    providers: List<TvProviderFilter> = emptyList(),
+    selectedProviderId: String = "all",
+    onProviderSelect: (String) -> Unit = {},
+    sidebarWidth: androidx.compose.ui.unit.Dp = LiveDims.SidebarExpanded,
     modifier: Modifier = Modifier,
 ) {
-    val targetWidth = if (expanded) LiveDims.SidebarExpanded else 0.dp
+    val playlistFocus = remember { FocusRequester() }
+    val targetWidth = if (expanded || fixedViewport) sidebarWidth else 0.dp
     val animatedWidth by animateDpAsState(
         targetValue = targetWidth,
         animationSpec = tween(durationMillis = 240),
         label = "sidebar-width",
     )
     val contentAlpha by animateFloatAsState(
-        targetValue = if (expanded) 1f else 0f,
+        targetValue = if (expanded || fixedViewport) 1f else 0f,
         animationSpec = tween(durationMillis = 180),
         label = "sidebar-content-alpha",
     )
     // Keep the content mounted until the width animation finishes. Removing it
     // immediately made the drawer pop out and left a visible focus jump.
-    val contentVisible = expanded || animatedWidth > 0.dp
+    // The workspace owns the slide. Do not fade/rebuild the category rows during it.
+    val contentVisible = if (fixedViewport) LocalLiveDrawerVisible.current else expanded || contentAlpha > 0f
     var expandedCountry by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedAll by rememberSaveable { mutableStateOf(false) }
-    var expandedPlaylistIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var expandedPlaylistIds by rememberSaveable {
+        mutableStateOf(
+            playlistSections.firstOrNull { section ->
+                section.id == selectedId || section.categories.any { it.containsId(selectedId) }
+            }?.id?.let { listOf(it) } ?: emptyList()
+        )
+    }
     var activeMenu by remember { mutableStateOf<CategoryMenuState?>(null) }
+    var hiddenCategoryPendingFocus by remember { mutableStateOf<String?>(null) }
     var menuSelectArmed by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val selectedCategoryFocusRequester = remember { FocusRequester() }
     val firstCategoryFocusRequester = remember { FocusRequester() }
+    val categoryFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    var lastFocusedCategoryKey by remember { mutableStateOf<String?>(null) }
     val focusManager = LocalFocusManager.current
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
@@ -183,6 +207,7 @@ fun CategorySidebar(
             canLock = menu.canLock,
             canUnlock = menu.canUnlock,
             onHide = {
+                hiddenCategoryPendingFocus = menu.id
                 activeMenu = null
                 onHideCategory(menu.playlistId, menu.groupName)
             },
@@ -231,17 +256,19 @@ fun CategorySidebar(
         }
     }
 
-    val categoriesLoaded = LiveTvStartup.searchIsReachable(tree.top.size)
-    val categoryStructureKey = remember(tree, playlistSections) {
+    val visibleTopCategories = remember(tree.top) {
+        tree.top.distinctBy { it.id }.filter { it.id != "fav" || it.count > 0 }
+    }
+    val categoriesLoaded = LiveTvStartup.searchIsReachable(visibleTopCategories.size)
+    val categoryStructureKey = remember(tree, playlistSections, visibleTopCategories) {
         buildString {
             fun appendSection(name: String, categories: List<LiveCategory>) {
                 append(name).append(':')
                 categories.forEach { category -> append(category.id).append(',') }
                 append('|')
             }
-            appendSection("top", tree.top)
+            appendSection("top", visibleTopCategories)
             appendSection("global", tree.global.categories)
-            appendSection("hidden", tree.hidden.categories)
             appendSection("countries", tree.countries.categories)
             appendSection("adult", tree.adult.categories)
             playlistSections.forEach { section ->
@@ -265,6 +292,30 @@ fun CategorySidebar(
     // both must be corrected.
     var userChoseSearch by remember { mutableStateOf(false) }
     var categoryHasHadFocus by remember { mutableStateOf(false) }
+
+    LaunchedEffect(categoryStructureKey, hiddenCategoryPendingFocus, selectedId) {
+        val hiddenId = hiddenCategoryPendingFocus ?: return@LaunchedEffect
+        if (isTouchDevice || !expanded) {
+            hiddenCategoryPendingFocus = null
+            return@LaunchedEffect
+        }
+        if (tree.byId(hiddenId) != null && tree.hidden.categories.none { it.id == hiddenId }) {
+            return@LaunchedEffect
+        }
+        // Removing the focused lazy row must not hand focus to the guide behind the drawer.
+        repeat(LiveTvStartup.INITIAL_FOCUS_ATTEMPTS) {
+            runCatching { selectedCategoryFocusRequester.requestFocus() }
+            delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+            if (sidebarHasFocus && !searchHasFocus) {
+                hiddenCategoryPendingFocus = null
+                return@LaunchedEffect
+            }
+            listState.scrollToItem(0)
+            runCatching { firstCategoryFocusRequester.requestFocus() }
+            delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+        }
+        hiddenCategoryPendingFocus = null
+    }
 
     LaunchedEffect(expanded) {
         if (!expanded) {
@@ -291,17 +342,51 @@ fun CategorySidebar(
     ) {
         if (isTouchDevice || !expanded || !categoriesLoaded || userChoseSearch) return@LaunchedEffect
         if (LiveTvStartup.shouldFocusSearch(focusSearchSignal)) return@LaunchedEffect
+        if (activeMenu != null || (categoryHasHadFocus && sidebarHasFocus && !searchHasFocus)) return@LaunchedEffect
         claimingCategoryFocus = true
         try {
-            // requestFocus() in the Compose version used by ARVIO does not
-            // report whether a lazy item was attached. Check the actual focus
-            // state before accepting the selected row; otherwise retry with
-            // the always-composed first row as a reliable fallback.
             repeat(LiveTvStartup.INITIAL_FOCUS_ATTEMPTS) {
-                runCatching { selectedCategoryFocusRequester.requestFocus() }
-                delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
-                if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
+                if (activeMenu != null || (categoryHasHadFocus && sidebarHasFocus && !searchHasFocus)) return@LaunchedEffect
+                // 1. If we remember the last focused item in the sidebar, try restoring focus to it
+                val lastKey = lastFocusedCategoryKey
+                if (lastKey != null) {
+                    val req = categoryFocusRequesters[lastKey]
+                    if (req != null && runCatching { req.requestFocus() }.isSuccess) {
+                        delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+                        if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
+                    }
+                }
 
+                // 2. Try selected category requester
+                if (runCatching { selectedCategoryFocusRequester.requestFocus() }.isSuccess) {
+                    delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+                    if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
+                }
+                val selectedReq = categoryFocusRequesters[selectedId]
+                if (selectedReq != null && runCatching { selectedReq.requestFocus() }.isSuccess) {
+                    delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+                    if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
+                }
+
+                // 3. Try visible items in LazyColumn
+                val visibleKeys = listState.layoutInfo.visibleItemsInfo.map { it.key.toString() }
+                for (vKey in visibleKeys) {
+                    val req = categoryFocusRequesters[vKey]
+                    if (req != null && runCatching { req.requestFocus() }.isSuccess) {
+                        delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+                        if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
+                    }
+                }
+
+                // 4. Try any registered category requester that is currently composed
+                for (req in categoryFocusRequesters.values.toList()) {
+                    if (runCatching { req.requestFocus() }.isSuccess) {
+                        delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
+                        if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
+                    }
+                }
+
+                // 5. Fallback to first row
                 runCatching { firstCategoryFocusRequester.requestFocus() }
                 delay(LiveTvStartup.INITIAL_FOCUS_RETRY_MS)
                 if (sidebarHasFocus && !searchHasFocus) return@LaunchedEffect
@@ -331,10 +416,30 @@ fun CategorySidebar(
             expandedAll = true
         }
         playlistSections.firstOrNull { section ->
-            section.categories.any { it.containsId(selectedId) }
+            section.id == selectedId || section.categories.any { it.containsId(selectedId) }
         }?.id?.let { sectionId ->
             if (sectionId !in expandedPlaylistIds) {
                 expandedPlaylistIds = expandedPlaylistIds + sectionId
+            }
+        }
+    }
+
+    LaunchedEffect(selectedId, expanded, categoriesLoaded, expandedPlaylistIds) {
+        if (categoryHasHadFocus && sidebarHasFocus) return@LaunchedEffect
+        if (expanded && categoriesLoaded && selectedId.isNotBlank()) {
+            val targetIdx = findCategoryLazyIndex(
+                targetId = selectedId,
+                topCategories = visibleTopCategories,
+                playlistSections = playlistSections,
+                globalSection = tree.global,
+                countrySection = tree.countries,
+                adultSection = tree.adult,
+                expandedAll = expandedAll,
+                expandedPlaylistIds = expandedPlaylistIds,
+                expandedCountry = expandedCountry,
+            )
+            if (targetIdx >= 0) {
+                listState.scrollToItem((targetIdx - 2).coerceAtLeast(0))
             }
         }
     }
@@ -349,6 +454,7 @@ fun CategorySidebar(
                 alpha = contentAlpha
                 clip = true
             }
+            .clipToBounds()
             .onPreviewKeyEvent { ev ->
                 // RTL mirrors the sidebar to the right edge, so the physical
                 // Left/Right keys drive the opposite logical action here.
@@ -385,7 +491,15 @@ fun CategorySidebar(
                             }
                             true
                         }
-                        ev.key == Key.Menu && ev.type == KeyEventType.KeyUp -> {
+                        // Ignore release of the Menu press that opened this popup.
+                        ev.key == Key.Menu && ev.type == KeyEventType.KeyDown && ev.nativeKeyEvent.repeatCount == 0 -> {
+                            activeMenu = null
+                            menuSelectArmed = false
+                            true
+                        }
+                        ev.key == Key.Back && ev.type == KeyEventType.KeyUp -> {
+                            activeMenu = null
+                            menuSelectArmed = false
                             true
                         }
                         // logicalKey, not ev.key: in RTL the sidebar sits on the right edge,
@@ -415,267 +529,372 @@ fun CategorySidebar(
             // hands it the selector on entry and again every time the lazy list
             // recomposes underneath the focused row — which is what pinned the
             // selector in the search box while the playlist loaded.
-            .arvioDpadFocusGroup()
             .onFocusChanged { focusState ->
                 sidebarHasFocus = focusState.hasFocus
                 if (focusState.hasFocus) {
                     onFocusEnter()
                 }
             }
+            .arvioDpadFocusGroup()
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (!contentVisible) return@Column
-        SearchEntry(
-            onClick = onOpenSearch,
-            expanded = expanded,
-            onMoveUp = onMoveUpFromSearch,
-            onMoveDown = {
-                // Down from search is navigation, not activation. Selecting here
-                // closed the drawer while the same physical key was still being
-                // handled, so rapid D-pad input left the guide without a focusable
-                // row. Move focus to the first category and require OK to open it.
-                userChoseSearch = false
-                runCatching { firstCategoryFocusRequester.requestFocus() }
-            },
-            onFocusChanged = { atTop ->
-                // Search taking focus *after* a category already had it means
-                // the user walked up into it — leave the selector alone from
-                // then on. Search taking it before that is Compose's default
-                // placement (or the player bouncing focus back), which the
-                // effect above corrects.
-                if (atTop && categoryHasHadFocus && !claimingCategoryFocus) userChoseSearch = true
-                searchHasFocus = atTop
-                onTopBoundaryFocusChanged(atTop)
-            },
-            focusRequester = searchFocusRequester,
-            focusable = categoriesLoaded,
-        )
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(
-            state = listState,
+        Column(
+            modifier = Modifier
+                .requiredWidth(sidebarWidth - 20.dp)
+                .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            itemsIndexed(tree.top, key = { index, cat -> "top:${cat.id}:$index" }) { index, cat ->
-                val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
-                val isOpen = isAllGroup && expandedAll
-                SidebarRow(
-                    label = liveCategoryLabel(cat.label),
-                    count = cat.count,
-                    icon = iconFor(cat),
-                    active = selectedId == cat.id,
-                    expanded = expanded,
-                    hasChildren = isAllGroup,
-                    isOpenGroup = isOpen,
-                    // The selected category can be nested (or scrolled out of
-                    // the lazy list), in which case its requester is unattached
-                    // and cannot take focus. The first row always can, so it
-                    // acts as the guaranteed landing spot on entry.
-                    focusRequester = when {
-                        selectedId == cat.id -> selectedCategoryFocusRequester
-                        index == 0 -> firstCategoryFocusRequester
-                        else -> null
-                    },
-                    onFocused = { onCategoryFocused() },
-                    onClick = {
-                        if (isAllGroup) {
-                            expandedAll = !expandedAll
-                        }
-                        onSelect(cat.id)
-                    },
-                )
-                if (isOpen && expanded) {
-                    cat.children.forEach { child ->
-                        SidebarRow(
-                            label = liveCategoryLabel(child.label),
-                            count = child.count,
-                            icon = iconFor(child),
-                            flagEmoji = child.flagEmoji,
-                            active = selectedId == child.id,
-                            expanded = true,
-                            indent = 28.dp,
-                            labelSize = 10.5.sp,
-                            hasChildren = child.children.isNotEmpty(),
-                            isOpenGroup = child.containsId(selectedId),
-                            focusRequester = if (selectedId == child.id) selectedCategoryFocusRequester else null,
-                            onFocused = { onCategoryFocused() },
-                            onClick = { onSelect(child.id) },
-                        )
-                        if (child.containsId(selectedId)) {
-                            child.children.forEach { grandchild ->
-                                SidebarRow(
-                                    label = liveCategoryLabel(grandchild.label),
-                                    count = grandchild.count,
-                                    icon = iconFor(grandchild),
-                                    active = selectedId == grandchild.id,
-                                    expanded = true,
-                                    indent = 48.dp,
-                                    labelSize = 9.5.sp,
-                                    focusRequester = if (selectedId == grandchild.id) selectedCategoryFocusRequester else null,
-                                    onFocused = { onCategoryFocused() },
-                                    onClick = { onSelect(grandchild.id) },
-                                )
-                            }
-                        }
-                    }
-                }
+            if (providers.isNotEmpty()) {
+                PlaylistDropdown(providers, selectedProviderId, onProviderSelect, playlistFocus,
+                    onUp = onMoveUpFromSearch, onDown = { searchFocusRequester.requestFocus() })
+                Spacer(Modifier.height(4.dp))
             }
-            if (playlistSections.isNotEmpty()) {
-                playlistSections.forEach { section ->
-                    item(key = "playlist-section:${section.id}") {
-                        val isOpen = section.id in expandedPlaylistIds
-                        SidebarRow(
-                            label = section.label,
-                            count = section.count,
-                            icon = Icons.Filled.LibraryBooks,
-                            active = section.categories.any { it.containsId(selectedId) },
-                            expanded = expanded,
-                            hasChildren = true,
-                            isOpenGroup = isOpen,
-                            onFocused = { onCategoryFocused() },
-                            onClick = {
-                                expandedPlaylistIds = if (isOpen) {
-                                    expandedPlaylistIds - section.id
-                                } else {
-                                    expandedPlaylistIds + section.id
-                                }
-                            },
-                        )
-                    }
-                    if (expanded && section.id in expandedPlaylistIds) {
-                        itemsIndexed(
-                            section.categories,
-                            key = { index, cat -> "playlist:${section.id}:${cat.id}:$index" },
-                        ) { _, cat ->
-                            SidebarRow(
-                                label = liveCategoryLabel(cat.label),
-                                count = cat.count,
-                                icon = iconFor(cat),
-                                active = selectedId == cat.id,
-                                expanded = true,
-                                indent = 28.dp,
-                                focusRequester = if (selectedId == cat.id) selectedCategoryFocusRequester else null,
-                                onFocused = { onCategoryFocused() },
-                                locked = isCategoryLocked(cat),
-                                onLongClick = { openCategoryMenu(cat, hidden = false) },
-                                onClick = { onSelect(cat.id) },
-                            )
-                        }
-                    }
-                }
-            } else if (tree.global.categories.isNotEmpty()) {
-                item { SectionHeader(liveSectionLabel(tree.global.label), expanded) }
-                itemsIndexed(tree.global.categories, key = { index, cat -> "global:${cat.id}:$index" }) { _, cat ->
+            SearchEntry(
+                onClick = onOpenSearch,
+                expanded = contentVisible,
+                onMoveUp = { if (providers.isNotEmpty()) playlistFocus.requestFocus() else onMoveUpFromSearch() },
+                onMoveDown = {
+                    // Down from search is navigation, not activation. Selecting here
+                    // closed the drawer while the same physical key was still being
+                    // handled, so rapid D-pad input left the guide without a focusable
+                    // row. Move focus to the first category and require OK to open it.
+                    userChoseSearch = false
+                    runCatching { firstCategoryFocusRequester.requestFocus() }
+                },
+                onFocusChanged = { atTop ->
+                    // Search taking focus *after* a category already had it means
+                    // the user walked up into it — leave the selector alone from
+                    // then on. Search taking it before that is Compose's default
+                    // placement (or the player bouncing focus back), which the
+                    // effect above corrects.
+                    if (atTop && categoryHasHadFocus && !claimingCategoryFocus) userChoseSearch = true
+                    searchHasFocus = atTop
+                    onTopBoundaryFocusChanged(atTop)
+                },
+                focusRequester = searchFocusRequester,
+                focusable = categoriesLoaded,
+            )
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                itemsIndexed(visibleTopCategories, key = { _, cat -> "top:${cat.id}" }) { index, cat ->
+                    val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
+                    val isOpen = isAllGroup && expandedAll
+                    val itemKey = "top:${cat.id}"
+                    val requester = rememberCategoryRequester(
+                        key = itemKey,
+                        id = cat.id,
+                        selectedId = selectedId,
+                        isTopFirst = index == 0,
+                        selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                        firstCategoryFocusRequester = firstCategoryFocusRequester,
+                        categoryFocusRequesters = categoryFocusRequesters,
+                    )
                     SidebarRow(
                         label = liveCategoryLabel(cat.label),
                         count = cat.count,
                         icon = iconFor(cat),
                         active = selectedId == cat.id,
-                        expanded = expanded,
-                        focusRequester = if (selectedId == cat.id) selectedCategoryFocusRequester else null,
-                        onFocused = { onCategoryFocused() },
-                        locked = isCategoryLocked(cat),
-                        onLongClick = {
-                            openCategoryMenu(cat, hidden = false)
-                        },
-                        onClick = { onSelect(cat.id) },
-                    )
-                }
-            }
-            if (tree.hidden.categories.isNotEmpty()) {
-                item { SectionHeader(liveSectionLabel(tree.hidden.label), expanded) }
-                itemsIndexed(tree.hidden.categories, key = { index, cat -> "hidden:${cat.id}:$index" }) { _, cat ->
-                    SidebarRow(
-                        label = liveCategoryLabel(cat.label),
-                        count = cat.count,
-                        icon = Icons.Filled.VisibilityOff,
-                        active = false,
-                        expanded = expanded,
-                        focusRequester = if (selectedId == cat.id) selectedCategoryFocusRequester else null,
-                        onFocused = { onCategoryFocused() },
-                        locked = isCategoryLocked(cat),
-                        onLongClick = {
-                            openCategoryMenu(cat, hidden = true)
+                        expanded = contentVisible,
+                        hasChildren = isAllGroup,
+                        isOpenGroup = isOpen,
+                        focusRequester = requester,
+                        onFocused = {
+                            lastFocusedCategoryKey = itemKey
+                            onCategoryFocused()
                         },
                         onClick = {
-                            val groupName = cat.playlistGroupName ?: return@SidebarRow
-                            onUnhideCategory(cat.playlistId, groupName)
-                        },
-                    )
-                }
-            }
-            if (tree.countries.categories.isNotEmpty()) {
-                item { SectionHeader(liveSectionLabel(tree.countries.label), expanded) }
-                itemsIndexed(tree.countries.categories, key = { index, country -> "country:${country.id}:$index" }) { _, country ->
-                    val isExpanded = expandedCountry == country.id
-                    SidebarRow(
-                        label = liveCategoryLabel(country.label),
-                        count = country.count,
-                        icon = null,
-                        leadingCode = country.id,
-                        active = selectedId == country.id,
-                        expanded = expanded,
-                        hasChildren = country.children.isNotEmpty(),
-                        isOpenGroup = isExpanded,
-                        focusRequester = if (selectedId == country.id) selectedCategoryFocusRequester else null,
-                        onFocused = { onCategoryFocused() },
-                        onClick = {
-                            // Tap always toggles expansion. Opening also selects so
-                            // the grid reflects the just-opened group; collapsing
-                            // leaves selection alone so the user can close a group
-                            // without losing their filter.
-                            if (isExpanded) {
-                                expandedCountry = null
-                            } else {
-                                expandedCountry = country.id
-                                onSelect(country.id)
+                            if (isAllGroup) {
+                                expandedAll = !expandedAll
                             }
+                            onSelect(cat.id)
                         },
                     )
-                    if (isExpanded && expanded) {
-                        country.children.forEach { child ->
+                    if (isOpen && contentVisible) {
+                        cat.children.forEach { child ->
+                            val childKey = "top:child:${child.id}"
+                            val childRequester = rememberCategoryRequester(
+                                key = childKey,
+                                id = child.id,
+                                selectedId = selectedId,
+                                isTopFirst = false,
+                                selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                                firstCategoryFocusRequester = firstCategoryFocusRequester,
+                                categoryFocusRequesters = categoryFocusRequesters,
+                            )
                             SidebarRow(
                                 label = liveCategoryLabel(child.label),
                                 count = child.count,
-                                icon = null,
+                                icon = iconFor(child),
+                                flagEmoji = child.flagEmoji,
                                 active = selectedId == child.id,
-                                expanded = true,
-                                indent = 40.dp,
-                                labelSize = 10.5.sp,
-                                focusRequester = if (selectedId == child.id) selectedCategoryFocusRequester else null,
-                                onFocused = { onCategoryFocused() },
+                                expanded = contentVisible,
+                                indent = 28.dp,
+                                labelSize = 11.sp,
+                                hasChildren = child.children.isNotEmpty(),
+                                isOpenGroup = child.containsId(selectedId),
+                                focusRequester = childRequester,
+                                onFocused = {
+                                    lastFocusedCategoryKey = childKey
+                                    onCategoryFocused()
+                                },
                                 onClick = { onSelect(child.id) },
                             )
+                            if (child.containsId(selectedId)) {
+                                child.children.forEach { grandchild ->
+                                    val gcKey = "top:grandchild:${grandchild.id}"
+                                    val gcRequester = rememberCategoryRequester(
+                                        key = gcKey,
+                                        id = grandchild.id,
+                                        selectedId = selectedId,
+                                        isTopFirst = false,
+                                        selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                                        firstCategoryFocusRequester = firstCategoryFocusRequester,
+                                        categoryFocusRequesters = categoryFocusRequesters,
+                                    )
+                                    SidebarRow(
+                                        label = liveCategoryLabel(grandchild.label),
+                                        count = grandchild.count,
+                                        icon = iconFor(grandchild),
+                                        active = selectedId == grandchild.id,
+                                        expanded = contentVisible,
+                                        indent = 48.dp,
+                                        labelSize = 10.5.sp,
+                                        focusRequester = gcRequester,
+                                        onFocused = {
+                                            lastFocusedCategoryKey = gcKey
+                                            onCategoryFocused()
+                                        },
+                                        onClick = { onSelect(grandchild.id) },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
-            if (tree.adult.categories.isNotEmpty()) {
-                item { SectionHeader(liveSectionLabel(tree.adult.label), expanded) }
-                itemsIndexed(tree.adult.categories, key = { index, cat -> "adult:${cat.id}:$index" }) { _, cat ->
-                    SidebarRow(
-                        label = liveCategoryLabel(cat.label),
-                        count = cat.count,
-                        icon = Icons.Filled.Lock,
-                        active = selectedId == cat.id,
-                        expanded = expanded,
-                        focusRequester = if (selectedId == cat.id) selectedCategoryFocusRequester else null,
-                        onFocused = { onCategoryFocused() },
-                        onClick = { onSelect(cat.id) },
-                    )
+                if (playlistSections.isNotEmpty()) {
+                    playlistSections.forEach { section ->
+                        item(key = "playlist-section:${section.id}") {
+                            val isOpen = section.id in expandedPlaylistIds
+                            val sectionKey = "playlist-section:${section.id}"
+                            val isSectionSelected = section.id == selectedId ||
+                                (!isOpen && section.categories.any { it.containsId(selectedId) })
+                            val sectionRequester = rememberCategoryRequester(
+                                key = sectionKey,
+                                id = section.id,
+                                selectedId = if (isSectionSelected) section.id else null,
+                                isTopFirst = false,
+                                selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                                firstCategoryFocusRequester = firstCategoryFocusRequester,
+                                categoryFocusRequesters = categoryFocusRequesters,
+                            )
+                            SidebarRow(
+                                label = section.label,
+                                count = section.count,
+                                icon = Icons.Filled.LibraryBooks,
+                                active = section.categories.any { it.containsId(selectedId) },
+                                expanded = contentVisible,
+                                hasChildren = true,
+                                isOpenGroup = isOpen,
+                                focusRequester = sectionRequester,
+                                onFocused = {
+                                    lastFocusedCategoryKey = sectionKey
+                                    onCategoryFocused()
+                                },
+                                onClick = {
+                                    expandedPlaylistIds = if (isOpen) {
+                                        expandedPlaylistIds - section.id
+                                    } else {
+                                        expandedPlaylistIds + section.id
+                                    }
+                                },
+                            )
+                        }
+                        if (contentVisible && section.id in expandedPlaylistIds) {
+                            itemsIndexed(
+                                section.categories.distinctBy { it.id },
+                                key = { _, cat -> "playlist:${section.id}:${cat.id}" },
+                            ) { _, cat ->
+                                val catKey = "playlist:${section.id}:${cat.id}"
+                                val catRequester = rememberCategoryRequester(
+                                    key = catKey,
+                                    id = cat.id,
+                                    selectedId = selectedId,
+                                    isTopFirst = false,
+                                    selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                                    firstCategoryFocusRequester = firstCategoryFocusRequester,
+                                    categoryFocusRequesters = categoryFocusRequesters,
+                                )
+                                SidebarRow(
+                                    label = liveCategoryLabel(cat.playlistGroupName ?: cat.label),
+                                    count = cat.count,
+                                    icon = iconFor(cat),
+                                    active = selectedId == cat.id,
+                                    expanded = contentVisible,
+                                    indent = 28.dp,
+                                    focusRequester = catRequester,
+                                    onFocused = {
+                                        lastFocusedCategoryKey = catKey
+                                        onCategoryFocused()
+                                    },
+                                    locked = isCategoryLocked(cat),
+                                    onLongClick = { openCategoryMenu(cat, hidden = false) },
+                                    onClick = { onSelect(cat.id) },
+                                )
+                            }
+                        }
+                    }
+                } else if (tree.global.categories.isNotEmpty()) {
+                    item { SectionHeader(liveSectionLabel(tree.global.label), contentVisible) }
+                    itemsIndexed(tree.global.categories.distinctBy { it.id }, key = { _, cat -> "global:${cat.id}" }) { _, cat ->
+                        val catKey = "global:${cat.id}"
+                        val catRequester = rememberCategoryRequester(
+                            key = catKey,
+                            id = cat.id,
+                            selectedId = selectedId,
+                            isTopFirst = false,
+                            selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                            firstCategoryFocusRequester = firstCategoryFocusRequester,
+                            categoryFocusRequesters = categoryFocusRequesters,
+                        )
+                        SidebarRow(
+                            label = liveCategoryLabel(cat.label),
+                            count = cat.count,
+                            icon = iconFor(cat),
+                            active = selectedId == cat.id,
+                            expanded = contentVisible,
+                            focusRequester = catRequester,
+                            onFocused = {
+                                lastFocusedCategoryKey = catKey
+                                onCategoryFocused()
+                            },
+                            locked = isCategoryLocked(cat),
+                            onLongClick = {
+                                openCategoryMenu(cat, hidden = false)
+                            },
+                            onClick = { onSelect(cat.id) },
+                        )
+                    }
+                }
+                if (tree.countries.categories.isNotEmpty()) {
+                    item { SectionHeader(liveSectionLabel(tree.countries.label), contentVisible) }
+                    itemsIndexed(tree.countries.categories.distinctBy { it.id }, key = { _, country -> "country:${country.id}" }) { _, country ->
+                        val isExpanded = expandedCountry == country.id
+                        val countryKey = "country:${country.id}"
+                        val countryRequester = rememberCategoryRequester(
+                            key = countryKey,
+                            id = country.id,
+                            selectedId = selectedId,
+                            isTopFirst = false,
+                            selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                            firstCategoryFocusRequester = firstCategoryFocusRequester,
+                            categoryFocusRequesters = categoryFocusRequesters,
+                        )
+                        SidebarRow(
+                            label = liveCategoryLabel(country.label),
+                            count = country.count,
+                            icon = null,
+                            leadingCode = country.id,
+                            active = selectedId == country.id,
+                            expanded = contentVisible,
+                            hasChildren = country.children.isNotEmpty(),
+                            isOpenGroup = isExpanded,
+                            focusRequester = countryRequester,
+                            onFocused = {
+                                lastFocusedCategoryKey = countryKey
+                                onCategoryFocused()
+                            },
+                            onClick = {
+                                // Tap always toggles expansion. Opening also selects so
+                                // the grid reflects the just-opened group; collapsing
+                                // leaves selection alone so the user can close a group
+                                // without losing their filter.
+                                if (isExpanded) {
+                                    expandedCountry = null
+                                } else {
+                                    expandedCountry = country.id
+                                    onSelect(country.id)
+                                }
+                            },
+                        )
+                        if (isExpanded && contentVisible) {
+                            country.children.forEach { child ->
+                                val childKey = "country:child:${child.id}"
+                                val childRequester = rememberCategoryRequester(
+                                    key = childKey,
+                                    id = child.id,
+                                    selectedId = selectedId,
+                                    isTopFirst = false,
+                                    selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                                    firstCategoryFocusRequester = firstCategoryFocusRequester,
+                                    categoryFocusRequesters = categoryFocusRequesters,
+                                )
+                                SidebarRow(
+                                    label = liveCategoryLabel(child.label),
+                                    count = child.count,
+                                    icon = null,
+                                    active = selectedId == child.id,
+                                    expanded = contentVisible,
+                                    indent = 40.dp,
+                                    labelSize = 11.sp,
+                                    focusRequester = childRequester,
+                                    onFocused = {
+                                        lastFocusedCategoryKey = childKey
+                                        onCategoryFocused()
+                                    },
+                                    onClick = { onSelect(child.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (tree.adult.categories.isNotEmpty()) {
+                    item { SectionHeader(liveSectionLabel(tree.adult.label), contentVisible) }
+                    itemsIndexed(tree.adult.categories, key = { index, cat -> "adult:${cat.id}:$index" }) { index, cat ->
+                        val adultKey = "adult:${cat.id}:$index"
+                        val adultRequester = rememberCategoryRequester(
+                            key = adultKey,
+                            id = cat.id,
+                            selectedId = selectedId,
+                            isTopFirst = false,
+                            selectedCategoryFocusRequester = selectedCategoryFocusRequester,
+                            firstCategoryFocusRequester = firstCategoryFocusRequester,
+                            categoryFocusRequesters = categoryFocusRequesters,
+                        )
+                        SidebarRow(
+                            label = liveCategoryLabel(cat.label),
+                            count = cat.count,
+                            icon = Icons.Filled.Lock,
+                            active = selectedId == cat.id,
+                            expanded = contentVisible,
+                            focusRequester = adultRequester,
+                            onFocused = {
+                                lastFocusedCategoryKey = adultKey
+                                onCategoryFocused()
+                            },
+                            onClick = { onSelect(cat.id) },
+                        )
+                    }
                 }
             }
-        }
-        if (currentMenu != null && activeMenuActions.isNotEmpty()) {
-            CategoryContextMenu(
-                onDismiss = {
-                    activeMenu = null
-                    menuSelectArmed = false
-                },
-                actions = activeMenuActions,
-                focusedIndex = currentMenu.focusedIndex.coerceIn(0, activeMenuActions.lastIndex),
-                onAction = { runActiveMenuAction(it) },
-            )
+            if (currentMenu != null && activeMenuActions.isNotEmpty()) {
+                CategoryContextMenu(
+                    onDismiss = {
+                        activeMenu = null
+                        menuSelectArmed = false
+                    },
+                    actions = activeMenuActions,
+                    focusedIndex = currentMenu.focusedIndex.coerceIn(0, activeMenuActions.lastIndex),
+                    onAction = { runActiveMenuAction(it) },
+                )
+            }
         }
     }
 }
@@ -708,12 +927,10 @@ private fun SearchEntry(
                 } else when (ev.key) {
                     Key.DirectionUp -> {
                         onMoveUp()
-                        focusManager.moveFocus(FocusDirection.Up)
                         true
                     }
                     Key.DirectionDown -> {
                         onMoveDown()
-                        focusManager.moveFocus(FocusDirection.Down)
                         true
                     }
                     Key.DirectionCenter, Key.Enter -> {
@@ -724,11 +941,11 @@ private fun SearchEntry(
                 }
             }
             .border(
-                width = if (focused) 3.dp else 0.dp,
-                color = if (focused) LiveColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(10.dp),
+                width = if (focused) 2.dp else 1.dp,
+                color = if (focused) LiveColors.FocusRing else LiveColors.Divider,
+                shape = RoundedCornerShape(5.dp),
             )
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(5.dp))
             .background(if (focused) LiveColors.FocusBg else LiveColors.Panel)
             // Search is the first focusable row in the sidebar, so while the
             // categories are still loading Compose parks the D-pad selector
@@ -768,13 +985,8 @@ private fun SearchEntry(
         )
         if (expanded) {
             Text(
-                text = stringResource(R.string.search),
+                text = stringResource(R.string.live_label_search_channels),
                 style = LiveType.CatLabel.copy(color = LiveColors.FgDim),
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "/",
-                style = LiveType.NumberMono.copy(color = LiveColors.FgMute),
             )
         }
     }
@@ -799,7 +1011,40 @@ private fun SectionHeader(label: String, expanded: Boolean) {
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun rememberCategoryRequester(
+    key: String,
+    id: String?,
+    selectedId: String?,
+    isTopFirst: Boolean,
+    selectedCategoryFocusRequester: FocusRequester,
+    firstCategoryFocusRequester: FocusRequester,
+    categoryFocusRequesters: MutableMap<String, FocusRequester>,
+): FocusRequester {
+    val isSelected = id != null && id == selectedId
+    val requester = when {
+        isSelected -> selectedCategoryFocusRequester
+        isTopFirst -> firstCategoryFocusRequester
+        else -> remember(key) { FocusRequester() }
+    }
+    DisposableEffect(key, requester, id) {
+        categoryFocusRequesters[key] = requester
+        if (id != null) {
+            categoryFocusRequesters[id] = requester
+        }
+        onDispose {
+            if (categoryFocusRequesters[key] === requester) {
+                categoryFocusRequesters.remove(key)
+            }
+            if (id != null && categoryFocusRequesters[id] === requester) {
+                categoryFocusRequesters.remove(id)
+            }
+        }
+    }
+    return requester
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SidebarRow(
     label: String,
@@ -816,11 +1061,13 @@ private fun SidebarRow(
     hasChildren: Boolean = false,
     isOpenGroup: Boolean = false,
     indent: androidx.compose.ui.unit.Dp = 0.dp,
-    labelSize: androidx.compose.ui.unit.TextUnit = 11.sp,
+    labelSize: androidx.compose.ui.unit.TextUnit = 12.sp,
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     var selectPressed by remember { mutableStateOf(false) }
+    val currentClick by rememberUpdatedState(onClick)
+    val currentLongClick by rememberUpdatedState(onLongClick)
     var longPressTriggered by remember { mutableStateOf(false) }
     var longPressJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -830,37 +1077,29 @@ private fun SidebarRow(
         focused -> LiveColors.Panel
         else -> Color.Transparent
     }
+    val surface = animateColorAsState(
+        if (focused) LiveColors.PanelRaised else bg,
+        animationSpec = tween(120), label = "category-surface",
+    )
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(LiveDims.SidebarRowHeight)
             .padding(start = indent),
     ) {
-        if (active) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(LiveDims.ActiveIndicator)
-                    .background(LiveColors.Accent),
-            )
-        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                .padding(start = if (active) 12.dp else 10.dp, end = 12.dp)
+                .padding(start = 12.dp, end = 12.dp)
                 .onFocusChanged {
                     focused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()
                 }
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .border(
-                    width = if (focused) 3.dp else 0.dp,
-                    color = if (focused) LiveColors.FocusRing else Color.Transparent,
-                    shape = RoundedCornerShape(8.dp),
-                )
+                .liveFocusOutline(focused, 8.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (focused) LiveColors.PanelRaised else bg)
+                .drawBehind { drawRect(surface.value) }
                 .onPreviewKeyEvent { ev ->
                     val isSelect = ev.key == Key.DirectionCenter || ev.key == Key.Enter
                     when {
@@ -914,10 +1153,10 @@ private fun SidebarRow(
                     }
                 }
                 .focusable()
-                .pointerInput(onClick, onLongClick) {
+                .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = { onClick() },
-                        onLongPress = { onLongClick?.invoke() },
+                        onTap = { currentClick() },
+                        onLongPress = { currentLongClick?.invoke() },
                     )
                 }
                 .padding(horizontal = 6.dp),
@@ -928,7 +1167,7 @@ private fun SidebarRow(
                 leadingCode != null -> Text(
                     text = leadingCode,
                     style = LiveType.NumberMono.copy(
-                        color = if (active) LiveColors.Accent else LiveColors.FgMute,
+                        color = LiveColors.FgDim,
                     ),
                     modifier = Modifier.width(20.dp),
                 )
@@ -939,8 +1178,8 @@ private fun SidebarRow(
                 icon != null -> Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (active) LiveColors.Accent else LiveColors.FgDim,
-                    modifier = Modifier.size(14.dp),
+                    tint = if (active) LiveColors.Fg else LiveColors.FgDim,
+                    modifier = Modifier.size(17.dp),
                 )
                 else -> Spacer(Modifier.size(14.dp))
             }
@@ -953,12 +1192,14 @@ private fun SidebarRow(
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).then(if (focused) Modifier.basicMarquee(
+                        iterations = Int.MAX_VALUE, initialDelayMillis = 1000,
+                    ) else Modifier),
                 )
                 if (count > 0) {
                     Text(
-                        text = formatCount(count),
-                        style = LiveType.NumberMono.copy(color = LiveColors.FgMute, fontSize = 7.sp),
+                        text = java.text.NumberFormat.getIntegerInstance().format(count),
+                        style = LiveType.NumberMono.copy(color = LiveColors.FgDim, fontSize = 9.sp),
                     )
                 }
                 if (hasChildren) {
@@ -1142,4 +1383,76 @@ fun formatCount(n: Int): String {
     if (n < 1000) return n.toString()
     val k = n / 1000.0
     return if (k < 10) String.format("%.1fk", k) else "${k.toInt()}k"
+}
+
+private fun findCategoryLazyIndex(
+    targetId: String,
+    topCategories: List<LiveCategory>,
+    playlistSections: List<PlaylistCategorySection>,
+    globalSection: LiveSection,
+    countrySection: LiveSection,
+    adultSection: LiveSection,
+    expandedAll: Boolean,
+    expandedPlaylistIds: List<String>,
+    expandedCountry: String?,
+): Int {
+    var index = 0
+    for (cat in topCategories) {
+        if (cat.id == targetId) return index
+        index++
+        val isAllGroup = cat.id == "all" && cat.children.isNotEmpty()
+        if (isAllGroup && expandedAll) {
+            for (child in cat.children) {
+                if (child.id == targetId) return index
+                index++
+                if (child.containsId(targetId)) {
+                    for (grandchild in child.children) {
+                        if (grandchild.id == targetId) return index
+                        index++
+                    }
+                }
+            }
+        }
+    }
+    if (playlistSections.isNotEmpty()) {
+        for (section in playlistSections) {
+            if (section.categories.any { it.containsId(targetId) } && section.id !in expandedPlaylistIds) {
+                return index
+            }
+            index++
+            if (section.id in expandedPlaylistIds) {
+                for (cat in section.categories.distinctBy { it.id }) {
+                    if (cat.id == targetId) return index
+                    index++
+                }
+            }
+        }
+    } else if (globalSection.categories.isNotEmpty()) {
+        index++
+        for (cat in globalSection.categories.distinctBy { it.id }) {
+            if (cat.id == targetId) return index
+            index++
+        }
+    }
+    if (countrySection.categories.isNotEmpty()) {
+        index++
+        for (country in countrySection.categories.distinctBy { it.id }) {
+            if (country.id == targetId) return index
+            index++
+            if (expandedCountry == country.id) {
+                for (child in country.children) {
+                    if (child.id == targetId) return index
+                    index++
+                }
+            }
+        }
+    }
+    if (adultSection.categories.isNotEmpty()) {
+        index++
+        for (cat in adultSection.categories) {
+            if (cat.id == targetId) return index
+            index++
+        }
+    }
+    return -1
 }

@@ -45,7 +45,8 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode }: {
   const { settings, isWatched, openContextMenu } = useApp();
   const effectivePosterMode = posterMode ?? settings.cardLayoutMode === "poster";
   const [logo, setLogo] = useState<string | null>(null);
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [loadedArtwork, setLoadedArtwork] = useState("");
+  const [failedArtwork, setFailedArtwork] = useState("");
   const progress = item.progress ?? 0;
   const watched = isWatched(item);
   // "Up next" rows carry SERIES completion (how far through the show you are),
@@ -65,6 +66,8 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode }: {
   const backdrop = item.backdrop || fallbackArt?.backdrop || "";
   const episodeArtwork = isContinueWatchingCard ? item.episodeStill || "" : "";
   const artwork = effectivePosterMode ? (image || backdrop) : (episodeArtwork || backdrop || image);
+  const imgLoaded = Boolean(artwork && loadedArtwork === artwork);
+  const imgFailed = Boolean(artwork && failedArtwork === artwork);
   const year = item.releaseDate?.slice(0, 4) || item.year || (item.mediaType === "tv" ? "Series" : "Movie");
   const directMetadataId = item.tmdbId && item.tmdbId > 0 ? item.tmdbId : item.id > 0 ? item.id : null;
   const [metadataId, setMetadataId] = useState<number | null>(directMetadataId);
@@ -79,9 +82,10 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode }: {
     return () => { active = false; };
   }, [directMetadataId, item.homeServerId, item.homeServerItemId, item.imdbId, item.isHomeServer, item.mediaType]);
 
-  useEffect(() => {
-    setImgLoaded(false);
-  }, [artwork]);
+  useEffect(() => () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  }, []);
 
   const triggerContextMenu = (posX?: number, posY?: number) => {
     openContextMenu({
@@ -210,14 +214,16 @@ function MediaCardBase({ item, onOpen, onFocus, posterMode }: {
       onMouseLeave={handleMouseLeave}
       onFocus={() => { prefetchDetails(item); onFocus?.(item); }}
     >
-      <div className={`poster ${!imgLoaded ? "is-loading" : ""}`}>
-        {artwork ? (
+      <div className={`poster ${artwork && !imgLoaded && !imgFailed ? "is-loading" : ""}`}>
+        {artwork && !imgFailed ? (
           <img
+            key={artwork}
             src={artwork}
             alt=""
             loading="lazy"
             decoding="async"
-            onLoad={() => setImgLoaded(true)}
+            onLoad={() => setLoadedArtwork(artwork)}
+            onError={() => setFailedArtwork(artwork)}
             className={`poster-art ${imgLoaded ? "is-loaded" : ""}`}
           />
         ) : (

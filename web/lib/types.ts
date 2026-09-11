@@ -16,6 +16,9 @@ export interface MediaItem {
   backdrop?: string | null;
   episodeStill?: string | null;
   progress?: number;
+  resumePositionSeconds?: number;
+  durationSeconds?: number;
+  streamAddonId?: string | null;
   isWatched?: boolean;
   traktId?: number | null;
   imdbId?: string | null;
@@ -39,6 +42,8 @@ export interface MediaItem {
   // Epoch ms of the last activity (Trakt paused_at / last_watched_at, or cloud
   // history updated_at). Continue Watching is ordered by this, newest first.
   activityAt?: number;
+  // Explicit tracker progress reset; show-level activity is not a rewatch.
+  progressResetAt?: number;
   trailerUrl?: string | null;
   cast?: PersonCredit[];
   seasons?: SeasonSummary[];
@@ -204,6 +209,12 @@ export interface SubtitleTrack {
 }
 
 export interface StreamSource {
+  transport?: "file" | "hls" | "dash" | "mpegts";
+  media?: { container?: string; videoCodec?: string; audioCodec?: string; hdr?: string };
+  homeServer?: { serverId: string; itemId: string; mediaSourceId?: string; mediaIndex?: number; partIndex?: number };
+  playbackSession?: { serverId: string; itemId: string; sessionId: string; mediaSourceId?: string; transcoding: boolean; startOffset?: number };
+  autoSelect?: boolean;
+  resumePositionSeconds?: number;
   source: string;
   addonName: string;
   addonId?: string;
@@ -323,7 +334,20 @@ export interface IptvPlaylistEntry {
   enabled: boolean;
 }
 
+export interface IptvTvSession {
+  lastChannelId: string;
+  lastGroupName: string;
+  lastFocusedZone: string;
+  lastOpenedAt: number;
+  /** Android stores oldest first, most recently played last. */
+  recentChannelIds: string[];
+}
+
 export interface IptvChannel {
+  /** Exact provider-playlist identity used by Android cloud sync. */
+  cloudId?: string;
+  syncAliases?: string[];
+  requestHeaders?: Record<string, string>;
   id: string;
   name: string;
   group: string;
@@ -345,6 +369,8 @@ export interface IptvProgram {
   startUtcMillis: number;
   endUtcMillis: number;
   catchupAvailable?: boolean;
+  artworkUrl?: string;
+  category?: string;
 }
 
 export interface IptvNowNext {
@@ -356,6 +382,9 @@ export interface IptvNowNext {
 }
 
 export interface IptvSnapshot {
+  scopeKey?: string;
+  identitiesLoaded?: boolean;
+  allChannels?: IptvChannel[];
   channels: IptvChannel[];
   grouped: Record<string, IptvChannel[]>;
   nowNext: Record<string, IptvNowNext>;
@@ -475,8 +504,11 @@ export interface AppSettings {
   iptvStalkerUrl: string;
   iptvStalkerMac: string;
   favoriteChannelIds: string[];
+  iptvTvSession?: IptvTvSession;
   favoriteGroupIds: string[];
   hiddenGroupIds: string[];
+  /** Read from cloud; locked IPTV groups are not exposed without a PIN flow. */
+  lockedIptvGroupIds?: string[];
   groupOrder: string[];
   // Metadata & API Keys
   customTmdbApiKey: string;

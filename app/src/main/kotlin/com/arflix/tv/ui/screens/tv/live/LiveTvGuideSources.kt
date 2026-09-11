@@ -1,6 +1,7 @@
 package com.arflix.tv.ui.screens.tv.live
 
 import com.arflix.tv.data.repository.IptvConfig
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * Which guide sources a playlist can actually use.
@@ -15,20 +16,22 @@ object LiveTvGuideSources {
     const val LARGE_LIST_CHANNEL_COUNT: Int = 10_000
 
     /**
-     * Whether an explicit XMLTV guide URL is configured.
-     *
-     * Deliberately narrower than "has any EPG source": Xtream credentials also
-     * yield a guide, but only through one HTTP call per channel, which is what
-     * makes the backfill unaffordable on a huge playlist. An XMLTV source is a
-     * single file, parsed with SAX and keeping only now/next/recent per channel,
-     * so its cost tracks the channel count rather than the programme count.
+     * Explicit guides and standard Xtream logins both provide an XMLTV endpoint.
+     * Large-list backfill uses this single feed, not a per-channel API sweep.
      */
     fun hasXmltvSource(config: IptvConfig): Boolean {
         if (config.epgUrl.isNotBlank()) return true
+        if (config.playlists.isEmpty() && hasXtreamLogin(config.m3uUrl)) return true
         return config.playlists.any { playlist ->
             playlist.enabled &&
-                (playlist.epgUrl.isNotBlank() || playlist.epgUrls.any { it.isNotBlank() })
+                (playlist.epgUrl.isNotBlank() || playlist.epgUrls.any { it.isNotBlank() } || hasXtreamLogin(playlist.m3uUrl))
         }
+    }
+
+    private fun hasXtreamLogin(value: String): Boolean {
+        val url = value.toHttpUrlOrNull() ?: return false
+        return url.pathSegments.lastOrNull() in setOf("get.php", "player_api.php", "xmltv.php") &&
+            !url.queryParameter("username").isNullOrBlank() && !url.queryParameter("password").isNullOrBlank()
     }
 
     /**

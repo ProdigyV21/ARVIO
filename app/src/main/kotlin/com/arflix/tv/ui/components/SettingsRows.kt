@@ -7,6 +7,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import com.arflix.tv.R
@@ -286,14 +290,31 @@ fun MobileSettingsRow(
     isExternalLink: Boolean = false,
     actionIcon: ImageVector? = null,
     showDivider: Boolean = true,
+    toggleChecked: Boolean? = null,
     onClick: () -> Unit
 ) {
+    // Older callers still use English display tokens; localized toggles pass their Boolean state.
+    val checked = toggleChecked ?: if (isToggle) {
+        when (value) {
+            "On" -> true
+            "Off" -> false
+            else -> null
+        }
+    } else null
+    val toggleDescription = if (checked != null) {
+        stringResource(if (checked) R.string.on else R.string.off)
+    } else ""
     val alpha = if (enabled) 1f else 0.4f
     Column(modifier = Modifier.alpha(alpha)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = enabled) { onClick() }
+                .then(
+                    if (checked != null) Modifier
+                        .toggleable(checked, enabled = enabled, role = Role.Switch) { onClick() }
+                        .semantics { stateDescription = toggleDescription }
+                    else Modifier.clickable(enabled = enabled) { onClick() }
+                )
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -340,20 +361,19 @@ fun MobileSettingsRow(
             }
             val safeValue = value.orEmpty()
             val isOpenLabel = safeValue.equals("Open", ignoreCase = true) || safeValue == stringResource(R.string.settings_open)
-            if (safeValue.isNotEmpty() || isExternalLink || actionIcon != null) {
+            if (checked != null || safeValue.isNotEmpty() || isExternalLink || actionIcon != null) {
                 Spacer(modifier = Modifier.width(16.dp))
-                if (isToggle && (safeValue == "On" || safeValue == "Off")) {
-                    val isChecked = safeValue == "On"
+                if (checked != null) {
                     Box(
                         modifier = Modifier
                             .width(44.dp)
                             .height(24.dp)
                             .background(
-                                color = if (isChecked) SuccessGreen else Color.White.copy(alpha = 0.2f),
+                                color = if (checked) SuccessGreen else Color.White.copy(alpha = 0.2f),
                                 shape = RoundedCornerShape(13.dp)
                             )
                             .padding(3.dp),
-                        contentAlignment = if (isChecked) Alignment.CenterEnd else Alignment.CenterStart
+                        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
                     ) {
                         Box(
                             modifier = Modifier

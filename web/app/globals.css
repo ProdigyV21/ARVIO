@@ -991,9 +991,11 @@ input:focus {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: clamp(12px, 0.85vw, 16px);
+  font-size: 12px;
   font-weight: 700;
-  white-space: nowrap;
+  max-width: 180px;
+  white-space: normal;
+  line-height: 1.25;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
@@ -1095,6 +1097,7 @@ input:focus {
 }
 .paywall-link-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }
@@ -1127,12 +1130,52 @@ input:focus {
   color: rgba(255, 255, 255, 0.48);
   font-size: 12px;
 }
+
+.trial-membership-link svg { flex-shrink: 0; }
+.paywall-link-row label { flex: 1 0 100%; text-align: left; font-size: 13px; color: var(--muted); }
+.paywall-link-row label input { display: block; width: 100%; margin-top: 6px; }
+.paywall-link-row button { min-height: 44px; }
+.paywall-disclaimer {
+  margin: 10px 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .paywall-signout {
   margin-top: 22px;
   color: var(--muted);
   font-size: 13px;
 }
 .paywall-signout:hover { color: #fff; }
+
+.premium-billing-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: left;
+  min-width: 0;
+}
+.premium-billing-form label { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+.premium-billing-form input {
+  width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 8px;
+  color: #fff; background: #121212; font-size: 16px;
+}
+.premium-billing-form input:focus-visible,
+.premium-account a:focus-visible, .premium-account button:focus-visible {
+  outline: 2px solid var(--accent, #fff); outline-offset: 3px;
+}
+.premium-account { padding: 0 0 24px; margin-bottom: 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); min-width: 0; }
+.premium-account h2 { display: flex; align-items: center; gap: 8px; font-size: 20px; letter-spacing: 0; }
+.premium-account p { font-size: 14px; line-height: 1.55; color: var(--muted); margin: 8px 0; overflow-wrap: anywhere; }
+.premium-account .premium-account-status { color: #fff; font-weight: 600; }
+.premium-account .premium-account-email { color: #fff; }
+.premium-account-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.premium-account-actions > * { flex: 1 1 220px; margin: 0; min-width: 0; min-height: 44px; text-align: center; }
+.premium-account .paywall-link-toggle { margin-top: 16px; text-align: left; }
+.premium-account .premium-billing-form { max-width: 480px; }
+.premium-account-actions svg { flex-shrink: 0; }
 
 .vlc-setup-hint {
   display: flex;
@@ -3049,6 +3092,11 @@ a.login-submit {
 .player-overlay { cursor: default; }
 .player-overlay.controls-off { cursor: none; }
 .player-youtube { width: 100%; height: 100%; border: 0; }
+.youtube-player-layout { display: grid; grid-template-rows: auto minmax(200px, 1fr); overflow: auto; }
+.youtube-player-layout .player-youtube { grid-row: 2; min-width: 200px; min-height: 200px; }
+.youtube-player-toolbar { grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; background: #111; }
+.youtube-player-toolbar .player-top-left { min-width: 0; }
+.youtube-player-toolbar h2 { font-size: 18px; overflow-wrap: anywhere; }
 
 /* Top bar fades with the controls */
 .player-top {
@@ -9922,6 +9970,59 @@ button,
   }
 }
 
+/* Reserve the same space for every home preview. Intrinsic logo sizes, title
+   wrapping and late metadata must not move the rails under a resting pointer. */
+.home-hero .hero-title {
+  height: clamp(110px, 18vh, 200px);
+  margin-bottom: clamp(12px, 2vh, 22px);
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.home-hero .hero-title .hero-logo {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0;
+  object-fit: contain;
+  object-position: left bottom;
+}
+
+.home-hero .hero-title h2 {
+  margin: 0;
+  max-width: 100%;
+  max-height: 100%;
+  font-size: clamp(32px, 4vw, 64px);
+  line-height: 1.05;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.home-hero .hero-meta {
+  height: 28px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.home-hero .hero-meta::-webkit-scrollbar { display: none; }
+.home-hero .hero-meta > span { flex-shrink: 0; white-space: nowrap; }
+
+.home-hero .hero-copy p:not(.eyebrow) {
+  line-height: 1.48;
+  height: 4.44em;
+  -webkit-line-clamp: 3;
+}
+
+@media (max-width: 680px) {
+  .home-hero .hero-title { height: 90px; }
+}
+
 /* Scrolled top-nav: solid blurred backdrop so page content never bleeds through the nav labels. */
 .sidebar {
   transition: background-color 0.25s ease, box-shadow 0.25s ease;
@@ -10241,6 +10342,7 @@ button,
 .library-mobile-select {
   display: none;
 }
+.library-mobile-sort { display: none; }
 
 .library-toolbar {
   min-height: 42px;
@@ -10348,6 +10450,8 @@ button,
   .library-heading { grid-template-columns: 1fr; align-items: start; gap: 16px; }
   .library-provider-tabs { width: 100%; }
   .library-provider-tabs button { flex: 1 0 auto; }
+  .library-provider-tabs .library-provider-sort { display: none; }
+  .library-toolbar .library-mobile-sort { display: block; min-width: 0; max-width: 100%; flex: 1; }
   .library-workspace.has-library-sidebar {
     display: block;
     padding: 0 0 64px;
@@ -11165,9 +11269,11 @@ button,
 .player-controls .scrubber {
   -webkit-appearance: none;
   appearance: none;
+  --scrubber-track-height: 6px;
+  --scrubber-thumb-size: 13px;
   /* 3px was too thin to see the played/buffered split at a glance and too
      fiddly to aim at; 6px reads clearly and still looks slim. */
-  height: 6px !important;
+  height: var(--scrubber-track-height) !important;
   border-radius: 999px;
   background: linear-gradient(90deg,
     var(--accent, #e50914) 0, var(--accent, #e50914) var(--pct, 0%),
@@ -11181,7 +11287,7 @@ button,
    reveals the thumb — the 3px bar itself is an awkward pointer target. */
 .player-controls .scrubber:hover,
 .scrubber-track:hover .scrubber,
-.scrubber-track:focus-within .scrubber { height: 9px !important; }
+.scrubber-track:focus-within .scrubber { --scrubber-track-height: 9px; }
 
 /* iOS renders the native track unless it is explicitly zeroed out. */
 .player-controls .scrubber::-webkit-slider-runnable-track {
@@ -11196,15 +11302,16 @@ button,
    and grow it on hover/drag instead. */
 .player-controls .scrubber::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
-  margin-top: 0;
+  width: var(--scrubber-thumb-size);
+  height: var(--scrubber-thumb-size);
+  /* WebKit aligns the thumb's top to the track; Firefox centers it natively. */
+  margin-top: calc((var(--scrubber-track-height) - var(--scrubber-thumb-size)) / 2);
   border: 0;
   border-radius: 999px;
   background: #fff;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
   opacity: 1;
-  transition: transform 0.12s ease;
+  transition: transform 0.12s ease, margin-top 0.12s ease;
 }
 
 .player-controls .scrubber:hover::-webkit-slider-thumb,
@@ -11213,7 +11320,7 @@ button,
 .scrubber-track:focus-within .scrubber::-webkit-slider-thumb { transform: scale(1.35); }
 .player-controls .scrubber::-moz-range-track { background: transparent; height: 100%; border: 0; }
 .player-controls .scrubber::-moz-range-thumb {
-  width: 13px; height: 13px; border: 0; border-radius: 999px; background: #fff;
+  width: var(--scrubber-thumb-size); height: var(--scrubber-thumb-size); border: 0; border-radius: 999px; background: #fff;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6); opacity: 1;
 }
 .player-controls .scrubber:hover::-moz-range-thumb,

@@ -36,7 +36,7 @@ object SportsAddonCapabilities {
 
     // Internal sources that contain "iptv" in their ID but serve on-demand media.
     // Keep this exact so third-party IPTV/live add-ons remain classified as live.
-    private val explicitVodStreamAddonIds = setOf("iptv_xtream_vod")
+    private val explicitVodStreamAddonIds = IptvVodSourceIds.ALL
 
     fun isSportsHomeStatus(status: String?): Boolean {
         val value = status ?: return false

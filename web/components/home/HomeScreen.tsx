@@ -32,6 +32,10 @@ export function HomeScreen() {
   const seededHero = useRef(false);
   const userInteractedHero = useRef(false);
 
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+  }, []);
+
   // Showcase titles for the rotating hero, collected from the first rails as
   // they load (trending rails arrive lazily, so we accumulate here).
   const [heroPoolRows, setHeroPoolRows] = useState<MediaItem[]>([]);
@@ -146,13 +150,15 @@ export function HomeScreen() {
     // engines predate :has() support (Tizen/webOS).
     <div className={displayHero ? "screen has-hero" : "screen"}>
       {displayHero && (
-        <section className="hero" style={{ backgroundImage: displayHero.backdrop ? `url(${displayHero.backdrop})` : undefined }}>
-          <div className="hero-copy" key={displayHero.id}>
-            {heroLogo ? (
-              <img className="hero-logo" src={heroLogo} alt={displayHero.title} />
-            ) : (
-              <h2>{displayHero.title}</h2>
-            )}
+        <section className="hero home-hero" style={{ backgroundImage: displayHero.backdrop ? `url(${displayHero.backdrop})` : undefined }}>
+          <div className="hero-copy">
+            <div className="hero-title">
+              {heroLogo ? (
+                <img className="hero-logo" src={heroLogo} alt={displayHero.title} />
+              ) : (
+                <h2>{displayHero.title}</h2>
+              )}
+            </div>
             <div className="hero-meta">
               {heroImdbRating && (
                 <span className="hero-imdb">

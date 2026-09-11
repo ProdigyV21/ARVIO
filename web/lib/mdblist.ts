@@ -29,6 +29,8 @@ export class MdbListClient {
   key: string | null = null;
   private profileId: string | null = null;
 
+  get currentProfileId(): string | null { return this.profileId; }
+
   get isConnected() {
     return Boolean(this.key);
   }

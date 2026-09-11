@@ -116,4 +116,42 @@ class IptvTitleNormalizerTest {
         val once = IptvTitleNormalizer.foldUmlautTranscription("fuer alle faelle")
         assertEquals(once, IptvTitleNormalizer.foldUmlautTranscription(once))
     }
+
+    // ── IPTV panel title noise (language prefixes, pipe tags) ─────────────
+
+    @Test
+    fun `leading language markers used by iptv panels are stripped`() {
+        assertEquals("der herr der ringe", IptvTitleNormalizer.normalize("DE: Der Herr der Ringe"))
+        assertEquals("der herr der ringe", IptvTitleNormalizer.normalize("GER - Der Herr der Ringe"))
+        assertEquals("the dark knight", IptvTitleNormalizer.normalize("EN| The Dark Knight"))
+        assertEquals("le fabuleux destin", IptvTitleNormalizer.normalize("fr:Le Fabuleux Destin"))
+    }
+
+    @Test
+    fun `pipe wrapped tags in front of the title are stripped`() {
+        assertEquals("breaking bad", IptvTitleNormalizer.normalize("|DE| Breaking Bad"))
+        assertEquals("breaking bad", IptvTitleNormalizer.normalize("|DE|HD| Breaking Bad"))
+        // Some panels use a box-drawing bar instead of a pipe.
+        assertEquals("breaking bad", IptvTitleNormalizer.normalize("\u2503DE\u2503 Breaking Bad"))
+        assertEquals("breaking bad", IptvTitleNormalizer.normalize("\u2503DE\u2503_Breaking_Bad_(2008)"))
+    }
+
+    @Test
+    fun `a real title that looks like a language marker is left alone`() {
+        // The reason the language list is explicit: a generic two-letter prefix
+        // would turn these into "chapter two" and "the mission".
+        assertEquals("it chapter two", IptvTitleNormalizer.normalize("IT: Chapter Two"))
+        assertEquals("us", IptvTitleNormalizer.normalize("US"))
+        assertEquals("no country for old men", IptvTitleNormalizer.normalize("No Country for Old Men"))
+    }
+
+    @Test
+    fun `stripping a marker still leaves both sides of a lookup equal`() {
+        // What the matching actually depends on: the panel spelling and the
+        // TMDB spelling have to normalize onto the same key.
+        assertEquals(
+            IptvTitleNormalizer.normalize("Dune"),
+            IptvTitleNormalizer.normalize("|DE|HD| Dune (2021)")
+        )
+    }
 }

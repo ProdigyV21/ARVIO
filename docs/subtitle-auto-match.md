@@ -9,13 +9,13 @@ context.
 | Concern | File |
 |---|---|
 | Scan orchestration, selection flows, caches, settings gating | `app/src/main/kotlin/com/arflix/tv/ui/screens/player/PlayerViewModel.kt` (`findBestSubtitleMatch`, `runFindBestMatch`, `measureOffsetWithAi`, `activateAiSubtitle`, `applyPreferredSubtitle`, `MATCH_*` constants) |
-| Cue download/parse + timing/word scoring | `.../player/SubtitleSyncMatcher.kt` |
-| Buffered-cue reflection (the sync reference, AI pre-translation lookahead) | `.../player/BufferedCueReader.kt` |
-| Timing correction model (constant offset) | `.../player/SubtitleAutoSync.kt` |
+| Cue download/parse + timing/word scoring | `.../player/subtitles/SubtitleSyncMatcher.kt` |
+| Buffered-cue reflection (the sync reference, AI pre-translation lookahead) | `.../player/engine/exoplayer/BufferedCueReader.kt` |
+| Timing correction model (constant offset) | `.../player/subtitles/SubtitleAutoSync.kt` |
 | Subtitle menu, selection application, media item rebuild, startup watchdog | `.../player/PlayerScreen.kt` |
-| AI batch translation (Groq/Gemini generateContent) | `.../player/SubtitleTranslationManager.kt`, `SubtitleTranslationService.kt` |
-| Live hearing (Gemini Live WS, audio → target-language text) | `.../player/GeminiLiveTranslationService.kt`, `AudioCaptureProcessor.kt` |
-| Renderer hooks (buffered-cue reflection, pre-translation, cue offset) | `.../player/AiSubtitleRenderersFactory.kt` |
+| AI batch translation (Groq/Gemini generateContent) | `.../player/subtitles/SubtitleTranslationManager.kt`, `SubtitleTranslationService.kt` |
+| Live hearing (Gemini Live WS, audio → target-language text) | `.../player/subtitles/GeminiLiveTranslationService.kt`, `AudioCaptureProcessor.kt` |
+| Renderer hooks (buffered-cue reflection, pre-translation, cue offset) | `.../player/engine/exoplayer/AiSubtitleRenderersFactory.kt` |
 | Settings UI (toggle lives in **Subtitles** section, not AI) | `.../settings/SettingsScreen.kt` (TV row id **38**), `SettingsViewModel.kt` |
 | Cloud backup/restore of settings | `.../data/repository/CloudSyncRepository.kt` |
 

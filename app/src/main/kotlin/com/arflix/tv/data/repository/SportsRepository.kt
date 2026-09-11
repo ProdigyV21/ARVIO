@@ -28,6 +28,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.arflix.tv.data.model.SportsEventArtwork
+import com.arflix.tv.data.model.toSportsEventArtwork
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Locale
@@ -37,7 +41,8 @@ import javax.inject.Singleton
 @Singleton
 class SportsRepository @Inject constructor(
     private val streamRepository: StreamRepository,
-    private val streamApi: StreamApi
+    private val streamApi: StreamApi,
+    private val sportsMetadataRepository: SportsMetadataRepository
 ) {
     companion object {
         private const val MAX_EVENT_ITEMS = 24
@@ -68,6 +73,46 @@ class SportsRepository @Inject constructor(
         val type: String,
         val eventId: String
     )
+
+    private val guideArtworkMutex = Mutex()
+    private var guideArtworkKey = ""
+    private var guideArtworkUntil = 0L
+    private var guideArtworkCache = emptyList<SportsEventArtwork>()
+
+    suspend fun loadGuideArtwork(): List<SportsEventArtwork> = coroutineScope {
+        val metadata = async { sportsMetadataRepository.load() }
+        val addons = async { loadAddonGuideArtwork() }
+        addons.await() + metadata.await()
+    }
+
+    suspend fun cachedMetadata() = sportsMetadataRepository.peek()
+    suspend fun loadMetadata() = sportsMetadataRepository.load()
+    suspend fun loadAddonGuideArtwork(): List<SportsEventArtwork> = withContext(Dispatchers.IO) {
+        val addons = streamRepository.installedAddons.first().filter {
+            it.isInstalled && it.isEnabled && !it.url.isNullOrBlank() && SportsAddonCapabilities.isSportsLiveTvAddon(it)
+        }.prioritizedSportsAddons().take(2)
+        val requests = addons.flatMap { addon ->
+            addon.manifest?.catalogs.orEmpty().filter(SportsAddonCapabilities::isSportsCatalog)
+                .sortedBy { catalog ->
+                    val text = "${catalog.id} ${catalog.name}".lowercase(Locale.ROOT)
+                    when { text.contains("today") -> 0; text.contains("live") -> 1; text.contains("all") -> 2; else -> 3 }
+                }.take(3).map { addon to it }
+        }
+        val key = requests.joinToString { (addon, catalog) -> "${addon.url}|${catalog.type}|${catalog.id}" }
+        guideArtworkMutex.withLock {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (key == guideArtworkKey && now < guideArtworkUntil) return@withLock guideArtworkCache
+            val result = coroutineScope {
+                requests.map { (addon, catalog) -> async {
+                    withTimeoutOrNull(5_000L) { loadCatalogMetas(addon, catalog).take(500).mapNotNull { it.toSportsEventArtwork() } }.orEmpty()
+                } }.awaitAll().flatten().distinctBy { it.key to it.background }.take(1_000)
+            }
+            guideArtworkKey = key
+            guideArtworkCache = result
+            guideArtworkUntil = now + if (result.isEmpty()) 60_000L else 10 * 60_000L
+            result
+        }
+    }
 
     private val sportsCategories = listOf(
         SportsCategoryDef("basketball", "Basketball", setOf("sports_basketball"), setOf("basketball", "nba", "wnba"), drawable("sports_card_basketball")),

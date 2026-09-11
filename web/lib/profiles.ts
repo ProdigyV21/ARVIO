@@ -1,5 +1,12 @@
 import type { Profile } from "./types";
 
+/** Cloud shares profiles, not which person is currently using this device. */
+export function hydratedProfileId(localId: string | null, profiles: Pick<Profile, "id">[], cloudId?: string | null): string | null {
+  if (localId && profiles.some(profile => profile.id === localId)) return localId;
+  if (cloudId && profiles.some(profile => profile.id === cloudId)) return cloudId;
+  return profiles[0]?.id ?? null;
+}
+
 /** Netflix-style profile colors — mirrors Android ProfileColors.colors (ARGB longs). */
 export const profileColors = [
   0xffe50914, // Netflix Red

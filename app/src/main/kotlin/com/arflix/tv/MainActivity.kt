@@ -29,6 +29,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import com.arflix.tv.ui.components.LocalBottomBarInset
+import com.arflix.tv.ui.components.currentBottomBarSpec
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
@@ -60,6 +70,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.arflix.tv.ui.components.AppBottomBar
+import com.arflix.tv.ui.components.shouldShowBottomBar
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -72,7 +83,7 @@ import com.arflix.tv.util.ACCENT_COLOR_KEY
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.LocalHasTouchScreen
 import com.arflix.tv.util.LocalAppLanguage
-import com.arflix.tv.util.LAST_APP_LANGUAGE_KEY
+import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.detectDeviceType
 import com.arflix.tv.util.deviceHasTouchScreen
 import com.arflix.tv.util.findActivity
@@ -294,17 +305,16 @@ class MainActivity : ComponentActivity() {
             val activeProfileId by remember {
                 profileRepository.get().activeProfileId
             }.collectAsStateWithLifecycle(initialValue = null)
+            val initialAppLanguage = remember {
+                getSharedPreferences("app_locale", Context.MODE_PRIVATE)
+                    .getString("locale_tag", null)?.takeIf { it.isNotBlank() }
+                    ?: com.arflix.tv.util.defaultAppLanguage()
+            }
             val appLanguage by remember(activeProfileId) {
                 this@MainActivity.settingsDataStore.data.map { prefs ->
-                    val fallbackLanguage = prefs[LAST_APP_LANGUAGE_KEY] ?: "en-US"
-                    val profileId = activeProfileId
-                    if (profileId.isNullOrBlank()) {
-                        fallbackLanguage
-                    } else {
-                        prefs[stringPreferencesKey("profile_${profileId}_content_language")] ?: fallbackLanguage
-                    }
+                    resolveAppLanguage(prefs, activeProfileId)
                 }
-            }.collectAsStateWithLifecycle(initialValue = "en-US")
+            }.collectAsStateWithLifecycle(initialValue = initialAppLanguage)
             LaunchedEffect(appLanguage) {
                 mediaRepository.get().contentLanguage = appLanguage
             }
@@ -634,12 +644,14 @@ fun ArflixApp(
     // Hide bottom bar on player, profile selection, and login screens.
     // TV route shows the bottom bar on mobile (touch devices) for easy navigation;
     // the fullscreen IPTV player uses BackHandler to return to the guide.
-    val showBottomBar = isMobile && activeProfile != null &&
-        currentRoute != null &&
-        !iptvFullscreen &&
-        !currentRoute.contains("player") &&
-        !currentRoute.contains("profile") &&
-        !currentRoute.contains("login")
+    val isPlayerScreen = currentRoute?.startsWith("player") == true
+    val isFullscreenRoute = isPlayerScreen || iptvFullscreen
+    val showBottomBar = shouldShowBottomBar(
+        isMobile = isMobile,
+        currentRoute = currentRoute,
+        isFullscreenRoute = isFullscreenRoute
+    )
+    val applySystemBarsPadding = isMobile && !isFullscreenRoute
 
     val isPlayerRoute = iptvFullscreen || currentRoute?.contains("player") == true
 
@@ -660,7 +672,16 @@ fun ArflixApp(
         }
     }
 
-    Column(
+    val density = LocalDensity.current
+    val barSpec = currentBottomBarSpec()
+    val navigationInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    var measuredBarHeight by remember(barSpec, density.fontScale) { mutableStateOf(0.dp) }
+    val barInset = if (showBottomBar) {
+        maxOf(measuredBarHeight, (28 + (barSpec.itemHeightDp ?: 56)).dp + navigationInset)
+    } else 0.dp
+    val contentBehindBar = showBottomBar && currentRoute?.substringBefore('?') in setOf("home", "search", "watchlist")
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             // Background fills edge-to-edge (including behind transparent bars).
@@ -677,41 +698,47 @@ fun ArflixApp(
                     )
                 }
             )
-            // On mobile, push content below the status bar (except player).
-            // Applied AFTER background so the gradient fills behind the bars.
-            // statusBarsPadding() reads live WindowInsets, so it automatically
-            // becomes 0 when the player hides the bars.
-            .then(if (isMobile && !isPlayerRoute) Modifier.statusBarsPadding() else Modifier)
+            // Mobile navigation overlays scrollable content; other screens reserve its height.
+            // Player screens remain completely stable edge-to-edge without jumping when
+            // transient system bars appear or disappear.
+            .then(when {
+                showBottomBar -> Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                applySystemBarsPadding -> Modifier.systemBarsPadding()
+                else -> Modifier
+            })
     ) {
-        Box(modifier = Modifier.weight(1f)) {
-            AppNavigation(
-                navController = navController,
-                startDestination = startDestination,
-                preloadedCategories = preloadedCategories,
-                preloadedHeroItem = preloadedHeroItem,
-                preloadedHeroLogoUrl = preloadedHeroLogoUrl,
-                preloadedLogoCache = preloadedLogoCache,
-                currentProfile = activeProfile,
-                isCloudConnected = authState is AuthState.Authenticated,
-                onSwitchProfile = {
-                    appCoroutineScope.launch {
-                        traktRepository.clearAllProfileCaches()
-                        watchHistoryRepository.clearProfileCaches()
-                        watchlistRepository.clearWatchlistCache()
-                        iptvRepository.invalidateCache()
-                        profileManager.setCurrentProfileId("default")
-                        profileManager.setCurrentProfileName("default")
-                        profileRepository.clearActiveProfile()
-                    }
-                },
-                onTvFullscreenChanged = { fullscreen ->
-                    iptvFullscreen = fullscreen
-                },
-                onExitApp = onExitApp
-            )
+        CompositionLocalProvider(LocalBottomBarInset provides if (contentBehindBar) barInset else 0.dp) {
+            Box(modifier = Modifier.fillMaxSize().padding(bottom = if (contentBehindBar) 0.dp else barInset)) {
+                AppNavigation(
+                    navController = navController,
+                    startDestination = startDestination,
+                    preloadedCategories = preloadedCategories,
+                    preloadedHeroItem = preloadedHeroItem,
+                    preloadedHeroLogoUrl = preloadedHeroLogoUrl,
+                    preloadedLogoCache = preloadedLogoCache,
+                    currentProfile = activeProfile,
+                    isCloudConnected = authState is AuthState.Authenticated,
+                    onSwitchProfile = {
+                        appCoroutineScope.launch {
+                            traktRepository.clearAllProfileCaches()
+                            watchHistoryRepository.clearProfileCaches()
+                            watchlistRepository.clearWatchlistCache()
+                            iptvRepository.invalidateCache()
+                            profileManager.setCurrentProfileId("default")
+                            profileManager.setCurrentProfileName("default")
+                            profileRepository.clearActiveProfile()
+                        }
+                    },
+                    onTvFullscreenChanged = { fullscreen ->
+                        iptvFullscreen = fullscreen
+                    },
+                    onExitApp = onExitApp
+                )
+            }
+
         }
 
-        if (isMobile && !isPlayerRoute) {
+        if (showBottomBar) {
             val bottomBarAlpha by androidx.compose.animation.core.animateFloatAsState(
                 targetValue = if (showBottomBar) 1f else 0f,
                 animationSpec = androidx.compose.animation.core.tween(250),
@@ -728,7 +755,9 @@ fun ArflixApp(
                     }
                 },
                 modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
+                    .onSizeChanged { measuredBarHeight = with(density) { it.height.toDp() } }
                     .graphicsLayer {
                         alpha = bottomBarAlpha
                     }

@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="library_sort_release_newest">Release date: newest first</string>
+    <string name="library_sort_release_oldest">Release date: oldest first</string>
     <string name="app_name">ARVIO</string>
+    <string name="about_credits">About &amp; Credits</string>
+    <string name="about_credits_description">Metadata attribution and copyright information</string>
+    <string name="tmdb_attribution" translatable="false">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
+    <string name="authorized_sources_notice">ARVIO is a media hub for sources you configure. A catalog entry does not grant viewing rights. Connect only services and media you are authorized to use.</string>
+    <string name="credits_and_copyright">Credits &amp; copyright reports</string>
+    <string name="trailers_on_youtube">Trailers on YouTube</string>
+    <string name="trailer_open_failed">Could not open the trailer. Install YouTube or a web browser and try again.</string>
     <string name="now_playing">NOW PLAYING</string>
 
     <!-- Navigation -->
@@ -106,6 +115,7 @@
     <string name="loading">Loading…</string>
     <string name="loading_label">Loading</string>
     <string name="empty">Empty</string>
+    <string name="unavailable">Unavailable</string>
     <string name="no_results">No results found</string>
     <string name="no_results_for">No results found for</string>
     <string name="error_loading">Error loading content</string>
@@ -318,6 +328,22 @@
     <string name="settings_ph_server_url_discover">Leave empty to discover automatically</string>
     <string name="settings_edit_tv_playlist">Edit TV Playlist</string>
     <string name="settings_add_tv_playlist">Add TV Playlist</string>
+    <string name="settings_catalog_pack_import_title">Import Catalog Pack</string>
+    <string name="settings_catalog_pack_import_desc">Import a bundle of catalogs from a JSON manifest URL</string>
+    <string name="settings_catalog_pack_import_badge">IMPORT</string>
+    <string name="settings_catalog_pack_url_label">Pack URL</string>
+    <string name="settings_catalog_pack_loading">Loading catalog pack details...</string>
+    <string name="settings_catalog_pack_import_failed">Import Failed</string>
+    <string name="settings_catalog_pack_author">Author: %1$s • v%2$s</string>
+    <string name="settings_catalog_pack_included">Catalogs included (%1$d):</string>
+    <string name="settings_catalog_pack_install">Install Pack</string>
+    <string name="settings_catalog_pack_delete_title">Delete Catalog Pack</string>
+    <string name="settings_catalog_pack_delete_message">Do you want to delete the pack \"%1$s\"? This will remove all catalogs that were imported with this pack.</string>
+    <string name="settings_catalog_pack_delete_confirm">Delete Pack</string>
+    <string name="settings_cd_unpack_catalog_row">Unpack catalog row</string>
+    <string name="settings_simkl_connect_title">Connect Simkl</string>
+    <string name="settings_activation_visit_instruction">Visit %1$s on your phone or computer and enter this code:</string>
+    <string name="settings_input_hint_enter">Enter %1$s...</string>
     <string name="settings_iptv_epg_note">EPG supports multiple sources for this playlist. Add one URL per line; ARVIO will match them in order.</string>
     <string name="settings_label_playlist_name">Playlist Name</string>
     <string name="settings_label_m3u_or_xtream">M3U URL or Xtream Host</string>
@@ -327,6 +353,15 @@
     <string name="settings_label_xtream_pass">Xtream Password (Optional)</string>
     <string name="settings_label_epg_sources">EPG Sources (Optional)</string>
     <string name="settings_helper_epg_one_per_line">One URL per line. Commas, semicolons, and pipes are also accepted.</string>
+    <string name="settings_save_playlist">Save Playlist</string>
+    <string name="settings_source_type">Source Type</string>
+    <string name="settings_source_m3u">M3U Playlist</string>
+    <string name="settings_source_xtream">Xtream Codes</string>
+    <string name="settings_source_stalker">Stalker Portal</string>
+    <string name="settings_save_portal">Save Portal</string>
+    <string name="settings_stalker_desc">Ministra / Stalker portal with MAC address authentication.</string>
+    <string name="settings_content_to_import">Content to Import</string>
+    <string name="settings_label_m3u_url">M3U Playlist URL</string>
     <string name="settings_label_title">Title</string>
     <string name="settings_add_quality_filter">Add Quality Filter</string>
     <string name="settings_edit_quality_filter">Edit Quality Filter</string>
@@ -457,6 +492,20 @@
     <string name="settings_tracking_section_stats">SYNC STATS</string>
     <string name="settings_tracking_section_services">SERVICES</string>
     <string name="settings_tracking_none">None</string>
+    <string name="settings_data_routing">DATA ROUTING</string>
+    <string name="settings_routing_watchlist_source">Watchlist source</string>
+    <string name="settings_routing_watchlist_source_desc">Choose which connected service supplies your watchlist.</string>
+    <string name="settings_routing_continue_source">Continue Watching source</string>
+    <string name="settings_routing_continue_source_desc">Choose where playback progress and Up Next are loaded from.</string>
+    <string name="settings_routing_watched_source">Watched history source</string>
+    <string name="settings_routing_watched_source_desc">Choose which connected service supplies watched badges.</string>
+    <string name="settings_routing_update_trakt">Update Trakt while watching</string>
+    <string name="settings_routing_update_trakt_on">Send progress and watched changes to Trakt.</string>
+    <string name="settings_routing_update_trakt_off">Connect Trakt to enable this.</string>
+    <string name="settings_routing_update_simkl">Update Simkl while watching</string>
+    <string name="settings_routing_update_simkl_on">Send progress and watched changes to Simkl.</string>
+    <string name="settings_routing_update_simkl_off">Connect Simkl to enable this.</string>
+    <string name="settings_tracking_mode_automatic">Automatic</string>
 
     <string name="settings_fact_app_language">App language</string>
     <string name="settings_fact_default">Default</string>
@@ -839,6 +888,7 @@
     <string name="crash_desc_mobile">We apologize for the interruption. You can report this crash directly to our Discord channel to help us fix it.</string>
     <string name="crash_qr_hint">Scan to open arvio.tv — 1 tap to copy report &amp; jump into Discord.</string>
     <string name="crash_details_title">Crash Reference Details</string>
+    <string name="crash_details_body">ID: %1$s\nTime: %2$s\nVersion: %3$s\nError: %4$s</string>
     <string name="crash_copied_toast">Crash details copied! Opening Discord...</string>
     <string name="crash_report_discord">Report on Discord</string>
     <string name="crash_restart_app">Restart ARVIO</string>
@@ -873,6 +923,7 @@
     <string name="login_privacy_notice">Creating an account stores your email and the cloud data you choose to sync.</string>
     <string name="login_read_privacy_policy">Read Privacy Policy</string>
     <string name="collection_empty">Nothing to show here yet.</string>
+    <string name="collection_tab_live_upcoming">Live &amp; Upcoming</string>
 
     <!-- Extracted from code: Details, Home, Search and Player -->
     <string name="details_toast_debrid_downloading">This debrid torrent is still being downloaded. Try another source or wait a bit.</string>
@@ -902,6 +953,13 @@
     <string name="home_cd_rank">Rank #%1$d</string>
     <string name="search_filter_all">All</string>
     <string name="search_filter_anime">Anime</string>
+    <string name="home_no_description">No description available.</string>
+    <string name="home_still_loading_catalogue">Still loading your catalogue…</string>
+    <string name="search_row_trending">Trending</string>
+    <string name="search_row_popular_this_year">Popular This Year</string>
+    <string name="search_row_top_rated">Top Rated</string>
+    <string name="search_row_new_releases">New Releases</string>
+    <string name="search_row_hidden_gems">Hidden Gems</string>
     <string name="player_cd_rewind">Rewind 10s</string>
     <string name="player_cd_forward">Forward 10s</string>
     <string name="player_cd_pip">Picture in Picture</string>
@@ -915,6 +973,8 @@
     <string name="player_cd_setup">Setup</string>
     <string name="player_cd_error">Error</string>
     <string name="player_addon_setup_required">Addon Setup Required</string>
+    <string name="player_addon_setup_hint">Configure and install video addons in Settings to stream content</string>
+    <string name="player_season_episode_short">S%1$d E%2$d</string>
     <string name="player_playback_error">Playback Error</string>
     <string name="player_error_generic">An unknown error occurred</string>
     <string name="player_phase_loading_stream">Loading video stream…</string>
@@ -1057,6 +1117,11 @@
     <string name="live_cd_close_guide">Close guide</string>
     <string name="live_cd_catchup_available">Catchup available</string>
     <string name="live_cd_pause">Pause</string>
+    <string name="live_cd_previous_channel">Previous Channel</string>
+    <string name="live_cd_rewind">Rewind</string>
+    <string name="live_cd_fast_forward">Fast Forward</string>
+    <string name="live_cd_next_channel">Next Channel</string>
+    <string name="live_cd_replay">Replay</string>
     <string name="live_diag_seeking_catchup">Seeking catch-up</string>
     <string name="live_diag_starting_stream">Starting live stream</string>
     <string name="live_diag_preparing_source">Preparing source</string>
@@ -1081,6 +1146,14 @@
     <string name="component_ep_left_one">1 ep left</string>
     <string name="component_eps_left">%1$d eps left</string>
     <string name="component_season_episode_marker">S%1$d • E%2$d</string>
+    <string name="component_next_in_seconds">in %1$d s</string>
+    <string name="component_ctx_mark_watched">Mark as Watched</string>
+    <string name="component_ctx_mark_unwatched">Mark as Unwatched</string>
+    <string name="component_ctx_view_details">View Details</string>
+    <string name="component_ctx_mark_season_watched">Mark Season Watched</string>
+    <string name="component_ctx_mark_season_unwatched">Mark Season Unwatched</string>
+    <string name="component_ctx_season_title">Season %1$d</string>
+    <string name="component_ctx_quick_actions">Quick Actions</string>
     <string name="person_section_biography">Biography</string>
     <string name="person_section_known_for">Known For</string>
     <string name="person_as_character">as %1$s</string>
@@ -1199,6 +1272,100 @@
     <string name="cloud_sync_failed">Cloud sync failed</string>
     <string name="cloud_sync_failed_upload">Cloud sync failed while uploading</string>
 
+    <!-- SettingsViewModel messages: tracking sync, addons, catalog packs -->
+    <string name="settings_sync_summary">Synced %1$d movies and %2$d episodes</string>
+    <string name="settings_sync_summary_with_failures">Synced %1$d movies and %2$d episodes; %3$s</string>
+    <string name="settings_sync_no_provider">No tracking provider connected</string>
+    <string name="settings_quality_filters_custom">Custom filters detected — use manual editing to modify</string>
+    <string name="settings_addon_added_with_catalogs">Added %1$s (%2$d catalogs imported)</string>
+    <string name="settings_addon_added_no_catalogs">Added %1$s (no catalogs exposed)</string>
+    <string name="settings_addons_cloud_restore_failed">Cloud restore failed; addons were not changed</string>
+    <string name="settings_addons_refresh_report">%1$d addons refreshed, %2$d failed</string>
+    <string name="settings_addons_refresh_failed">Failed to refresh addons</string>
+    <string name="settings_pack_load_failed">Failed to load pack manifest</string>
+    <string name="settings_pack_installed">Installed pack: %1$s</string>
+    <string name="settings_pack_install_failed">Failed to install pack</string>
+    <string name="settings_pack_removed">Pack removed</string>
+    <string name="settings_pack_remove_failed">Failed to remove pack</string>
+
+    <!-- SettingsViewModel messages: catalogs and catalog discovery -->
+    <string name="settings_catalog_added">Added %1$s</string>
+    <string name="settings_catalog_updated">Updated %1$s</string>
+    <string name="settings_catalog_removed">Catalog removed</string>
+    <string name="settings_catalog_unpacked">Catalog row extracted from pack</string>
+    <string name="settings_catalog_search_min_chars">Type at least 2 characters</string>
+    <string name="settings_catalog_search_no_lists">No public Trakt lists found</string>
+
+    <!-- SettingsViewModel messages: IPTV, Xtream and Stalker portals -->
+    <string name="settings_iptv_m3u_required">M3U URL is required</string>
+    <string name="settings_iptv_portal_mac_required">Portal URL and MAC address are required</string>
+    <string name="settings_iptv_stalker_max_reached">Maximum number of Stalker portals reached</string>
+    <string name="settings_iptv_stalker_removed">Stalker portal removed</string>
+    <string name="settings_iptv_xtream_credentials_required">Xtream requires both username and password</string>
+    <string name="settings_iptv_epg_matched">EPG: %1$d matched, %2$d missing.</string>
+    <string name="settings_iptv_epg_none">EPG: no guide data yet.</string>
+    <string name="settings_iptv_connected_channels">Connected. Loaded %1$d channels.</string>
+    <string name="settings_iptv_connected_channels_epg">Connected. Loaded %1$d channels. %2$s</string>
+    <string name="settings_iptv_refreshed_channels">Refreshed %1$d channels.</string>
+    <string name="settings_iptv_refreshed_channels_epg">Refreshed %1$d channels. %2$s</string>
+    <string name="settings_iptv_configured_toast">IPTV configured (%1$d channels)</string>
+    <string name="settings_iptv_refreshed_toast">IPTV refreshed (%1$d channels)</string>
+    <string name="settings_iptv_load_failed">Failed to load IPTV playlist</string>
+    <string name="settings_iptv_refresh_failed">Failed to refresh IPTV</string>
+    <string name="settings_iptv_config_removed">IPTV configuration removed</string>
+
+    <!-- SettingsViewModel messages: ARVIO Cloud sign-in and sync -->
+    <string name="settings_cloud_password_required">Password is required</string>
+    <string name="settings_cloud_session_unavailable">Cloud sign-in session was unavailable. Try again.</string>
+    <string name="settings_cloud_signed_in_restored">Signed in and restored from cloud</string>
+    <string name="settings_cloud_signed_in">Signed in successfully</string>
+    <string name="settings_cloud_signed_in_restore_failed">Signed in, but cloud restore failed</string>
+    <string name="settings_cloud_signin_incomplete">Sign-in did not complete. Try again.</string>
+    <string name="settings_cloud_sync_complete">Cloud sync complete</string>
+    <string name="settings_cloud_upload_starting_status">Starting cloud upload...</string>
+    <string name="settings_cloud_force_sync_toast">Forcing cloud sync...</string>
+    <string name="settings_cloud_session_expired_sync_status">Cloud session expired. Reconnect ARVIO Cloud, then sync again.</string>
+    <string name="settings_cloud_session_expired_sync_toast">Reconnect ARVIO Cloud to sync</string>
+    <string name="settings_cloud_upload_timeout_status">Upload timed out before cloud confirmed it</string>
+    <string name="settings_cloud_upload_timeout_toast">Cloud sync upload timed out - try again</string>
+    <string name="settings_cloud_upload_failed_status">Upload failed: %1$s</string>
+    <string name="settings_cloud_sync_verified_status">Cloud sync complete and verified</string>
+    <string name="settings_cloud_sync_no_restore_status">Cloud upload complete; no remote restore was needed</string>
+    <string name="settings_cloud_sync_restore_failed_status">Upload complete, but restore failed</string>
+    <string name="settings_cloud_sync_complete_no_backup_toast">Cloud sync complete (no backup to restore)</string>
+    <string name="settings_cloud_restore_complete">Cloud restore complete</string>
+    <string name="settings_cloud_restore_failed">Cloud restore failed</string>
+    <string name="settings_update_already_latest">You already have the latest version</string>
+
+    <!-- SettingsViewModel messages: Home Server -->
+    <string name="settings_homeserver_connecting">Connecting Home Server...</string>
+    <string name="settings_homeserver_connected">Home Server connected</string>
+    <string name="settings_homeserver_code_starting">Starting code sign in...</string>
+    <string name="settings_homeserver_enter_code">Enter the code to connect</string>
+    <string name="settings_homeserver_connecting_server">Connecting server...</string>
+    <string name="settings_homeserver_server_connected">Server connected</string>
+    <string name="settings_homeserver_code_expired">Activation code expired</string>
+    <string name="settings_homeserver_reachable">Home Server is reachable</string>
+    <string name="settings_homeserver_disconnected">Home Server disconnected</string>
+
+    <!-- SettingsViewModel messages: Trakt, Simkl and sign-out -->
+    <string name="settings_trakt_activation_failed_code">Trakt activation failed (%1$d)</string>
+    <string name="settings_trakt_activation_failed">Trakt activation failed</string>
+    <string name="settings_trakt_connected_toast">Trakt connected successfully</string>
+    <string name="settings_trakt_code_invalid">Trakt activation code is invalid</string>
+    <string name="settings_trakt_code_used">Trakt activation code was already used</string>
+    <string name="settings_trakt_code_expired">Trakt activation code expired</string>
+    <string name="settings_trakt_denied">Trakt authorization was denied</string>
+    <string name="settings_trakt_auth_failed">Trakt authorization failed</string>
+    <string name="settings_trakt_auth_failed_code">Trakt authorization failed (%1$d)</string>
+    <string name="settings_trakt_disconnected">Trakt disconnected</string>
+    <string name="settings_simkl_auth_error">Simkl auth error: %1$s</string>
+    <string name="settings_simkl_connected">Connected to Simkl!</string>
+    <string name="settings_simkl_timed_out">Simkl authentication timed out</string>
+    <string name="settings_simkl_disconnected">Disconnected from Simkl</string>
+    <string name="settings_signing_out">Signing out...</string>
+    <string name="settings_signed_out">Signed out</string>
+
     <!-- Extracted from code: DetailsViewModel -->
     <string name="details_no_episodes_season">No episodes found for Season %1$d</string>
     <string name="details_failed_load_season">Failed to load Season %1$d</string>
@@ -1226,6 +1393,24 @@
 
     <!-- Extracted from code: Catalog / IPTV repositories -->
     <string name="catalog_mdblist_title">MDBList Catalog</string>
+    <string name="catalog_pack_invalid_url_scheme">Invalid URL: must start with http:// or https://</string>
+    <string name="catalog_pack_fetch_failed">Failed to fetch catalog pack from URL</string>
+    <string name="catalog_pack_parse_failed">Failed to parse catalog pack manifest</string>
+    <string name="catalog_pack_missing_id_or_name">Invalid catalog pack manifest: missing ID or Name</string>
+    <string name="catalog_pack_no_catalogs">Invalid catalog pack manifest: catalogs list is empty or missing</string>
+    <string name="catalog_pack_item_incomplete">Invalid catalog pack manifest: catalog items must have a name and url</string>
+    <string name="catalog_pack_duplicate_url">Invalid catalog pack manifest: duplicate catalog URL \'%1$s\'</string>
+    <string name="catalog_pack_manifest_missing_id">Manifest missing ID</string>
+    <string name="catalog_pack_manifest_missing_name">Manifest missing Name</string>
+    <string name="catalog_pack_manifest_missing_catalogs">Manifest missing catalogs</string>
+    <string name="catalog_pack_nothing_to_import">No new or valid catalogs found in this pack to import</string>
+    <string name="catalog_pack_none_for_pack">No catalogs found for pack: %1$s</string>
+    <string name="catalog_url_required">URL is required</string>
+    <string name="catalog_url_invalid">Invalid URL</string>
+    <string name="catalog_url_invalid_format">Invalid URL format</string>
+    <string name="catalog_url_invalid_host">Invalid host</string>
+    <string name="catalog_url_trakt_hint">Use a Trakt list URL: trakt.tv/users/{user}/lists/{list}</string>
+    <string name="catalog_url_unsupported">Only Trakt and MDBList URLs are supported</string>
     <string name="iptv_progress_loading_channels">Loading channels from portal...</string>
     <string name="iptv_progress_loading_full_epg">Loading full EPG (%1$d/%2$d)...</string>
     <string name="iptv_progress_loading_live">Loading live streams...</string>
@@ -1259,6 +1444,7 @@
 
     <!-- Extracted from code: Profile / TV / device-auth -->
     <string name="profile_avatar_import_failed">Could not import avatar image</string>
+    <string name="profile_image_picker_unavailable">No accessible image picker on this device. Choose a built-in avatar instead.</string>
     <string name="profile_created_success">Profile created successfully</string>
     <string name="profile_updated">Profile updated</string>
     <string name="profile_deleted">Profile deleted</string>
@@ -1272,6 +1458,7 @@
     <string name="watchlist_failed_remove_trakt">Failed to remove from Trakt watchlist</string>
     <string name="watchlist_failed_remove">Failed to remove from watchlist</string>
     <string name="collection_failed_load">Failed to load collection</string>
+    <string name="collection_not_found">Collection not found</string>
 
 
     <!-- Extracted from code: Auth / HomeServer / Telegram error messages -->
@@ -1338,6 +1525,24 @@
     <string name="collections_decade_60s">60\'s Movies</string>
 
 
+    <!-- TMDB genre names (display-only; the numeric TMDB genre id stays the key) -->
+    <string name="tmdb_genre_crime">Crime</string>
+    <string name="tmdb_genre_history">History</string>
+    <string name="tmdb_genre_music">Music</string>
+    <string name="tmdb_genre_mystery">Mystery</string>
+    <string name="tmdb_genre_tv_movie">TV Movie</string>
+    <string name="tmdb_genre_war">War</string>
+    <string name="tmdb_genre_western">Western</string>
+    <string name="tmdb_genre_action_adventure">Action &amp; Adventure</string>
+    <string name="tmdb_genre_kids">Kids</string>
+    <string name="tmdb_genre_news">News</string>
+    <string name="tmdb_genre_reality">Reality</string>
+    <string name="tmdb_genre_sci_fi_fantasy">Sci-Fi &amp; Fantasy</string>
+    <string name="tmdb_genre_soap">Soap</string>
+    <string name="tmdb_genre_talk">Talk</string>
+    <string name="tmdb_genre_war_politics">War &amp; Politics</string>
+
+
     <!-- Settings option values (display-only localization) -->
     <string name="settings_value_any">Any</string>
     <string name="settings_value_always">Always</string>
@@ -1397,6 +1602,7 @@
     <string name="sync_in_progress">Sync already in progress</string>
     <string name="telegram_tdlib_failed">TDLib failed to start: %1$s</string>
     <string name="telegram_tdlib_unavailable">TDLib not available on this device</string>
+    <string name="telegram_not_configured">Telegram integration is not configured in this build</string>
 
 
     <!-- Live TV category context menu -->
@@ -1420,4 +1626,6 @@
     <string name="discord_connecting">Connecting...</string>
     <string name="discord_waiting_approval">Waiting for approval...</string>
     <string name="discord_qr_instructions">1. Scan QR code on your phone\n2. Tap \'Authorize\' on Discord\n3. Connects automatically</string>
+    <string name="discord_not_included_in_build">Not included in this build</string>
+    <string name="discord_rpc_help_desc">Show your watch status on your Discord profile.</string>
 </resources>

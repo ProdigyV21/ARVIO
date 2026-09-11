@@ -232,7 +232,13 @@ private fun ProfileDialogContent(
 
     fun launchAvatarPicker() {
         hideKeyboard()
-        imagePicker.launch("image/*")
+        try {
+            imagePicker.launch("image/*")
+        } catch (_: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(context, R.string.profile_image_picker_unavailable, android.widget.Toast.LENGTH_LONG).show()
+        } catch (_: SecurityException) {
+            android.widget.Toast.makeText(context, R.string.profile_image_picker_unavailable, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     LaunchedEffect(isTouchDevice, autoFocusNameInput) {

@@ -1,6 +1,8 @@
 package com.arflix.tv.ui.screens.tv.live
 
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.layout.layout
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -23,11 +25,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -42,6 +46,11 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -67,6 +76,7 @@ fun ProgramCell(
     isPast: Boolean,
     isFocusTarget: Boolean,
     focusable: Boolean = true,
+    renderContent: Boolean = true,
     isCatchupSupported: Boolean = false,
     onClick: () -> Unit,
     onFocused: () -> Unit = {},
@@ -75,53 +85,35 @@ fun ProgramCell(
     onMoveUp: () -> Boolean = { false },
     onMoveDown: () -> Boolean = { false },
     rowHeight: androidx.compose.ui.unit.Dp = LiveDims.EpgRowHeight,
+    contentStartOffsetPx: () -> Int = { 0 },
     focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     val deviceType = LocalDeviceType.current
     val isTouchDevice = deviceType.isTouchDevice()
+    // Retain the standard layout for touch, expanded rows and RTL text layout.
+    if (!focusable && !isTouchDevice && rowHeight < 60.dp &&
+        LocalLayoutDirection.current == LayoutDirection.Ltr) {
+        ChannelProgrammeCanvas(program, width, rowHeight, isNow, isPast,
+            isCatchupSupported, contentStartOffsetPx, onClick, modifier)
+        return
+    }
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val currentOnClick by rememberUpdatedState(onClick)
     var focused by remember { mutableStateOf(false) }
     val baseBg = when {
         isNow -> LiveColors.FocusBg
         else -> LiveColors.Panel
     }
-    val bg = if (focused) LiveColors.PanelRaised else baseBg
-    val borderColor = when {
-        focused -> LiveColors.FocusRing
-        isNow -> LiveColors.Accent.copy(alpha = 0.45f)
-        else -> Color.Transparent
-    }
-    val borderWidth = if (focusable) {
-        val animated by animateDpAsState(
-            targetValue = if (focused) 3.dp else 1.dp,
-            animationSpec = tween(durationMillis = 80),
-            label = "program-cell-border",
-        )
-        animated
-    } else {
-        if (focused) 3.dp else 1.dp
-    }
-    val scale = if (focusable) {
-        val animated by animateFloatAsState(
-            targetValue = if (focused) 1.008f else 1f,
-            animationSpec = tween(durationMillis = 90),
-            label = "program-cell-scale",
-        )
-        animated
-    } else {
-        1f
-    }
-    val contentAlpha = if (focusable) {
-        val animated by animateFloatAsState(
-            targetValue = if (isPast && !focused && !isCatchupSupported) 0.55f else 1f,
-            animationSpec = tween(durationMillis = 90),
-            label = "program-cell-alpha",
-        )
-        animated
-    } else {
-        if (isPast && !isCatchupSupported) 0.55f else 1f
-    }
+    val bg = animateColorAsState(
+        if (focused) LiveColors.PanelRaised else baseBg,
+        tween(120), label = "programme-surface",
+    )
+    val contentAlpha = animateFloatAsState(
+        targetValue = if (isPast && !focused && !isCatchupSupported) 0.55f else 1f,
+        animationSpec = tween(durationMillis = 90),
+        label = "program-cell-alpha",
+    )
     Box(
         modifier = modifier
             .height(rowHeight)
@@ -130,11 +122,10 @@ fun ProgramCell(
             // overhead. On a 60dp min-width block that left only ~34dp for
             // text + badges, which the LIVE pill alone consumed — leaving
             // blocks visually empty. Total horizontal overhead is now 8dp.
-            .padding(horizontal = 1.dp, vertical = 3.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
+            .padding(horizontal = 1.dp, vertical = 1.dp)
+            .then(if (isPast && !isCatchupSupported) Modifier.graphicsLayer {
+                alpha = contentAlpha.value
+            } else Modifier)
             .then(
                 if (focusable && focusRequester != null) {
                     Modifier.focusRequester(focusRequester)
@@ -152,14 +143,11 @@ fun ProgramCell(
                     Modifier
                 }
             )
-            .border(
-                width = borderWidth,
-                color = borderColor,
-                shape = RoundedCornerShape(LiveDims.CellRadius),
-            )
-            .clip(RoundedCornerShape(LiveDims.CellRadius))
-            .background(bg)
-            .alpha(contentAlpha)
+            .liveFocusOutline(focused, LiveDims.CellRadius)
+            .drawBehind {
+                val radius = LiveDims.CellRadius.toPx()
+                drawRoundRect(bg.value, cornerRadius = CornerRadius(radius))
+            }
             .then(if (focusable) Modifier.focusable() else Modifier)
             .then(
                 if (focusable) {
@@ -183,77 +171,88 @@ fun ProgramCell(
             )
             .then(
                 if (focusable || isTouchDevice) {
-                    Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onClick() }) }
+                    Modifier.pointerInput(Unit) { detectTapGestures(onTap = { currentOnClick() }) }
                 } else {
                     Modifier
                 }
             )
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            // Keep focus semantics above this node, but stop accessibility from
+            // walking the decorative/text layout beneath each programme.
+            .clearAndSetSemantics {
+                this[SemanticsProperties.Text] = listOfNotNull(
+                    AnnotatedString(program.title),
+                    AnnotatedString(formatClock(program.startUtcMillis)),
+                    program.description?.takeIf { it.isNotBlank() }?.let(::AnnotatedString),
+                )
+                if (isNow || (isPast && isCatchupSupported)) {
+                    onClick {
+                        currentOnClick()
+                        true
+                    }
+                }
+            }
+            .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
-        if (isNow) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                LiveColors.Accent.copy(alpha = 0.22f),
-                                Color.Transparent,
-                            )
-                        )
-                    )
-            )
-        }
-        Column(
-            modifier = Modifier.fillMaxSize(),
+        // Retain off-screen bounds/focus targets without laying out invisible text.
+        if (renderContent) Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // Read scroll position in measurement, not row composition.
+                .layout { measurable, constraints ->
+                    val shift = contentStartOffsetPx().coerceIn(0, constraints.maxWidth)
+                    val content = measurable.measure(constraints.copy(
+                        minWidth = (constraints.minWidth - shift).coerceAtLeast(0),
+                        maxWidth = (constraints.maxWidth - shift).coerceAtLeast(0),
+                    ))
+                    layout(content.width + shift, content.height) {
+                        content.placeRelative(shift, 0)
+                    }
+                },
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val nowMs = clockTickMillis
-                if (isNow) {
-                    Badge(stringResource(R.string.live_badge_live), Color.White, LiveColors.LiveRed)
-                    Spacer(Modifier.size(6.dp))
-                } else if (isPast && isCatchupSupported) {
-                    Badge(stringResource(R.string.live_badge_archive), LiveColors.Bg, LiveColors.Accent)
+                if (isPast && isCatchupSupported && width >= 150.dp) {
+                    Badge(stringResource(R.string.live_badge_archive), LiveColors.FgDim, LiveColors.PanelRaised)
                     Spacer(Modifier.size(6.dp))
                 } else if (!isPast) {
                     val isNewTag = (nowMs - program.startUtcMillis) in 0..24L * 60 * 60 * 1000L &&
                         !program.isLive(nowMs)
                     if (isNewTag) {
-                        Badge(stringResource(R.string.live_badge_new), LiveColors.Bg, LiveColors.Accent)
+                        Badge(stringResource(R.string.live_badge_new), LiveColors.FgDim, LiveColors.PanelRaised)
                         Spacer(Modifier.size(6.dp))
                     }
                 }
                 Text(
                     text = program.title,
-                    style = LiveType.CellTitle.copy(color = LiveColors.Fg, fontSize = 11.sp),
-                    maxLines = 1,
+                    style = LiveType.CellTitle.copy(color = LiveColors.Fg, fontSize = 10.sp, lineHeight = 12.sp),
+                    maxLines = if (width < 120.dp) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
             }
-            if (!program.description.isNullOrBlank()) {
+            if (rowHeight >= 60.dp && width >= 150.dp && !program.description.isNullOrBlank()) {
                 Text(
                     text = program.description!!,
-                    style = LiveType.BodySynopsis.copy(color = LiveColors.FgDim, fontSize = 9.sp),
+                    style = LiveType.BodySynopsis.copy(color = LiveColors.FgDim, fontSize = 8.sp, lineHeight = 10.sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Row(
+            if (width >= 120.dp) Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = formatClock(program.startUtcMillis),
-                    style = LiveType.TimeMono.copy(color = LiveColors.FgMute, fontSize = 9.sp),
+                    style = LiveType.TimeMono.copy(color = LiveColors.FgMute, fontSize = 8.sp, lineHeight = 10.sp),
                 )
                 val mins = ((program.endUtcMillis - program.startUtcMillis) / 60_000L)
                     .coerceAtLeast(0L)
                 if (mins > 0) {
                     Text(
                         text = stringResource(R.string.live_label_duration_min, mins),
-                        style = LiveType.TimeMono.copy(color = LiveColors.FgMute, fontSize = 9.sp),
+                        style = LiveType.TimeMono.copy(color = LiveColors.FgMute, fontSize = 8.sp, lineHeight = 10.sp),
                     )
                 }
             }
@@ -268,8 +267,8 @@ fun Badge(label: String, fg: Color, bg: Color) {
         modifier = Modifier
             .clip(RoundedCornerShape(3.dp))
             .background(bg)
-            .padding(horizontal = 5.dp, vertical = 1.dp),
+            .padding(horizontal = 4.dp, vertical = 0.5.dp),
     ) {
-        Text(label, style = LiveType.Badge.copy(color = fg, fontSize = 9.sp))
+        Text(label, style = LiveType.Badge.copy(color = fg, fontSize = 7.5.sp, lineHeight = 9.sp))
     }
 }

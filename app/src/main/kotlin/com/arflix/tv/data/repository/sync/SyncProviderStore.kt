@@ -295,6 +295,9 @@ class SyncProviderStore @Inject constructor(
         if (current.watchlistReadMode in affected) setReadMode(TrackingFeature.WATCHLIST, replacement)
         if (current.continueWatchingReadMode in affected) setReadMode(TrackingFeature.CONTINUE_WATCHING, replacement)
         if (current.watchedReadMode in affected) setReadMode(TrackingFeature.WATCHED, replacement)
+        if (provider == SyncProvider.SIMKL) {
+            setSimklWatermark(null)
+        }
         setProvider(
             when {
                 hasTrakt -> SyncProvider.TRAKT
@@ -308,6 +311,9 @@ class SyncProviderStore @Inject constructor(
     private fun simklAccessTokenKey() = profileManager.profileStringKey("simkl_access_token")
     private fun simklAccessTokenKeyFor(profileId: String) =
         profileManager.profileStringKeyFor(profileId, "simkl_access_token")
+    private fun simklWatermarkKey() = profileManager.profileStringKey("simkl_sync_watermark")
+    private fun simklWatermarkKeyFor(profileId: String) =
+        profileManager.profileStringKeyFor(profileId, "simkl_sync_watermark")
 
     suspend fun getSimklAccessToken(): String? {
         val prefs = context.traktDataStore.data.first()
@@ -329,12 +335,29 @@ class SyncProviderStore @Inject constructor(
             val trimmed = token?.trim().orEmpty()
             if (trimmed.isEmpty()) {
                 prefs.remove(simklAccessTokenKey())
+                prefs.remove(simklWatermarkKey())
             } else {
                 prefs[simklAccessTokenKey()] = SecureStorage.encrypt(trimmed, SIMKL_TOKEN_ALIAS)
             }
         }
         context.settingsDataStore.edit { prefs ->
             prefs[simklCredentialUpdatedAtKey()] = updatedAt
+        }
+    }
+
+    suspend fun getSimklWatermark(): String? {
+        val prefs = context.traktDataStore.data.first()
+        return prefs[simklWatermarkKey()]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun setSimklWatermark(watermark: String?) {
+        context.traktDataStore.edit { prefs ->
+            val trimmed = watermark?.trim().orEmpty()
+            if (trimmed.isEmpty()) {
+                prefs.remove(simklWatermarkKey())
+            } else {
+                prefs[simklWatermarkKey()] = trimmed
+            }
         }
     }
 

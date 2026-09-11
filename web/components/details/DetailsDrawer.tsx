@@ -1,11 +1,12 @@
 "use client";
 
-import { BadgeCheck, Bookmark, CalendarDays, Check, Clapperboard, Copy, Download, ExternalLink, EyeOff, Filter, MapPin, Play, Search, Star, Trash2, UserCircle, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BadgeCheck, Bookmark, CalendarDays, Check, Clapperboard, Copy, Download, ExternalLink, EyeOff, Filter, Info, MapPin, Play, Search, Star, Trash2, TriangleAlert, UserCircle, X } from "lucide-react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { MediaCard } from "@/components/media/MediaCard";
 import { RailScroller } from "@/components/media/RailScroller";
 import { config } from "@/lib/config";
+import { trackPremiumEvent } from "@/lib/premiumAnalytics";
 import { createPendingExternalPlayback } from "@/lib/externalPlayback";
 import { saveWatchedState } from "@/lib/cloud";
 import { copyStreamUrl, downloadStreamUrl, downloadToVlc, externalLaunchMode, isAppleMobile, isDesktop, isLinux, isWindows, openExternalPlayer, openInAnyPlayer, setVlcProtocolReady, triggerDownload, vlcProtocolReady, VLC_SETUP_SH_URL, VLC_SETUP_URL } from "@/lib/externalPlayers";
@@ -15,10 +16,13 @@ import { canonicalServiceName, IMDB_LOGO, serviceClearLogo } from "@/lib/service
 import { getImdbRating } from "@/lib/imdbRatings";
 import { mdblistClient, type MdbExternalRating } from "@/lib/mdblist";
 import { sourcePickerScore } from "@/lib/sourceRank";
+import { playbackCompatibilityRevision, playbackPlan, subscribePlaybackCompatibility } from "@/lib/streamCompatibility";
 import { authClient, getPriorityConfig, useApp } from "@/lib/store";
-import { syncClient } from "@/lib/sync";
+import { simklClient, getSimklItemUrl } from "@/lib/simkl";
+import { syncClient, syncSeasonWatched } from "@/lib/sync";
 import { getDetails, getLogoUrl, getPersonDetails, getReviews, getSeasonEpisodes } from "@/lib/tmdb";
 import type { EpisodeInfo, InstalledAddon, MediaItem, PersonCredit, PersonDetails, ReviewInfo, StreamSource, SubtitleTrack } from "@/lib/types";
+import { sourcePlaybackPresentation } from "./sourcePlaybackPresentation";
 
 export function DetailsDrawer() {
   const { selected: item } = useApp();
@@ -243,6 +247,17 @@ function DetailsView({ item }: { item: MediaItem }) {
               </span>
             ) : null}
             {detailWatched && <span className="detail-watched-chip"><BadgeCheck size={13} /> Watched</span>}
+            {simklClient.isConnected && (
+              <a
+                href={getSimklItemUrl((displayItem as unknown as { ids?: any })?.ids, displayItem.mediaType === "movie" ? "movie" : "tv") ?? `https://simkl.com/search?q=${encodeURIComponent(displayItem.title)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="simkl-lockup text-xs font-semibold px-1.5 py-0.5 rounded bg-surface-sunk hover:underline inline-flex items-center gap-1"
+                title="View on Simkl"
+              >
+                <span>Simkl</span>
+              </a>
+            )}
             {displayItem.genres?.slice(0, 3).map((genre) => <span key={genre}>{genre}</span>)}
           </div>
           {externalRatings.length ? (
@@ -391,7 +406,9 @@ function SourcePickerModal({
   onToast: (message: string) => void;
   loading: boolean;
 }) {
-  const { settings } = useApp();
+  const { settings, playStream } = useApp();
+  // Recompute visible plans after selected-source failures without probing the result list.
+  useSyncExternalStore(subscribePlaybackCompatibility, playbackCompatibilityRevision, () => 0);
   const [addonFilter, setAddonFilter] = useState("all");
   const [query, setQuery] = useState("");
   // Windows-only: offer the one-time vlc:// setup so "Open in VLC" launches VLC
@@ -469,9 +486,7 @@ function SourcePickerModal({
       if (addonFilter !== "all" && (stream.addonId || stream.addonName) !== addonFilter) return false;
       if (!needle) return true;
       return `${stream.source} ${stream.addonName} ${stream.description ?? ""} ${stream.quality ?? ""} ${stream.size ?? ""}`.toLowerCase().includes(needle);
-      // Every source opens in an external player, so quality-first ("external")
-      // is the right order for everyone — the browser-aware reordering only
-      // made sense while in-browser Play existed here.
+      // Keep quality-first ordering independent of the playback warning.
     }).sort((a, b) => sourcePickerScore(b, "external") - sourcePickerScore(a, "external"));
   }, [addonFilter, query, streams]);
 
@@ -523,6 +538,7 @@ function SourcePickerModal({
     // navigation to custom schemes (vlc-x-callback://) once the user gesture is
     // lost, so the app would appear to do nothing. Launch last.
     openExternalPlayer(player, target, title, settings.defaultSubtitle);
+    void trackPremiumEvent(authClient, "external_playback_requested", { player, entry: "sources" }, true);
   };
   // Android: open in whichever player the user picks (VLC, MX Player, …) via the
   // system chooser — the equivalent of the iOS-only Infuse button.
@@ -545,13 +561,16 @@ function SourcePickerModal({
       episode: selectedEpisode?.episode ?? item.episodeNumber ?? null
     });
     openInAnyPlayer(target, title, settings.defaultSubtitle);
+    void trackPremiumEvent(authClient, "external_playback_requested", { player: "chooser", entry: "sources" }, true);
   };
   const copyUrl = async (stream: StreamSource) => {
     const copied = await copyStreamUrl(stream).catch(() => false);
     onToast(copied ? "Stream URL copied." : "Could not copy this stream URL.");
   };
   const downloadSource = async (stream: StreamSource) => {
+    void trackPremiumEvent(authClient, "download_requested", { entry: "sources" }, true);
     if (!stream.url) {
+      void trackPremiumEvent(authClient, "download_failed", { stage: "missing_url" }, true);
       onToast("This source has no direct URL to download.");
       return;
     }
@@ -568,6 +587,7 @@ function SourcePickerModal({
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 20_000))
       ]);
       if (!direct) {
+        void trackPremiumEvent(authClient, "download_failed", { stage: "resolution" }, true);
         onToast("Could not prepare this download — the source may not be cached. Try a [TB+] source.");
         return;
       }
@@ -581,6 +601,7 @@ function SourcePickerModal({
     // for offline playback on the device. Desktop keeps the normal file download.
     if (isAppleMobile()) {
       const ok = downloadToVlc(target, title, settings.defaultSubtitle);
+      void trackPremiumEvent(authClient, ok ? "download_handoff" : "download_failed", { destination: "vlc" }, true);
       onToast(ok
         ? "Downloading to VLC for offline playback. If VLC doesn't open, install it from the App Store."
         : "Could not hand this download to VLC.");
@@ -588,6 +609,7 @@ function SourcePickerModal({
     }
     const href = downloadStreamUrl(target, title);
     if (!href) {
+      void trackPremiumEvent(authClient, "download_failed", { stage: "missing_download_url" }, true);
       onToast("Could not start this download.");
       return;
     }
@@ -597,6 +619,7 @@ function SourcePickerModal({
     // page with no feedback). The download proxy sets Content-Disposition:
     // attachment, so the browser's download manager owns the transfer.
     const started = triggerDownload(href, `${title}.${/\.mp4(?:[?#/]|$)/i.test(`${target.url} ${target.source ?? ""}`) ? "mp4" : "mkv"}`);
+    void trackPremiumEvent(authClient, started ? "download_handoff" : "download_failed", { destination: "browser" }, true);
     onToast(started ? "Download started — check your browser downloads." : "Could not start this download.");
   };
 
@@ -611,7 +634,7 @@ function SourcePickerModal({
             <h2>{title}</h2>
             <span>
               {streams.length} sources — highest quality and largest files first.
-              Playback uses an external player like VLC.
+              Choose browser playback or a compatible external player.
             </span>
           </div>
           <button type="button" className="person-close" onClick={onClose} aria-label="Close source picker"><X size={24} /></button>
@@ -629,9 +652,7 @@ function SourcePickerModal({
             <Search size={18} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search quality, release, provider" />
           </label>
-          {/* The "Browser playable" filter is gone with the in-browser Play
-              path: it counted a name-based guess that was wrong often enough
-              to be a broken promise. All sources, searchable, one order. */}
+          {/* Possible browser routes are not proof of playback; keep every source searchable. */}
           <div className="source-filter-group" aria-label="Source count">
             <button type="button" className="is-active" disabled>
               <Filter size={16} /> All sources{streams.length ? ` ${streams.length}` : ""}
@@ -660,28 +681,22 @@ function SourcePickerModal({
           )}
           {filtered.map((stream, index) => {
             const locked = !stream.url;
-            // No browser-playback claims at all. The "Plays here" verdict was
-            // inferred from release names and failed often enough that users
-            // stopped trusting the list — the product decision is to promise
-            // only what always works: an external player. In-browser Play is
-            // removed with it; a button that usually fails is worse than none.
             const uncached = isUncachedDebridStream(stream);
-            const statusLabel = uncached
-              ? "Not cached — downloads first, slow start"
-              : locked
-                ? "Needs a debrid resolver"
-                : "Plays in an external player — open in VLC";
-            const statusClass = "needs-vlc";
+            const plan = playbackPlan(stream);
+            const playback = sourcePlaybackPresentation(stream, plan, uncached);
+            const StatusIcon = playback.state === "blocked" ? TriangleAlert : Info;
             return (
-              <article key={`${stream.addonId}-${stream.source}-${index}`} className={`source-picker-row ${locked ? "is-locked" : ""}`}>
+              <article key={`${stream.addonId}-${stream.url ?? stream.source}`} className={`source-picker-row ${locked ? "is-locked" : ""}`}>
                 <span className="source-rank">{index + 1}</span>
                 <span className="source-main">
                   <strong>{stream.source || stream.addonName}</strong>
                   <em>{stream.addonName}{stream.description ? ` - ${stream.description}` : ""}</em>
-                  <span className="source-status-line">
-                    <span className={`source-playback-status ${statusClass}`}>
-                      {statusLabel}
+                  <span className="source-status-line" data-playback-state={playback.state}>
+                    <span className={`source-playback-status ${playback.className}`} style={{ maxWidth: "100%", whiteSpace: "normal", overflowWrap: "anywhere", gap: 6, paddingBlock: 4 }}>
+                      <StatusIcon size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
+                      <span>{playback.label}</span>
                     </span>
+                    {playback.detail && <span className="source-warning">{playback.detail}</span>}
                   </span>
                   <span className="stream-badges">
                     {streamBadges(stream).map((badge) => (
@@ -690,9 +705,10 @@ function SourcePickerModal({
                   </span>
                 </span>
                 <span className="source-side">
-                  <b>{stream.quality || "HD"}</b>
-                  <small>{locked ? "Needs resolver" : "External"}</small>
+                  <b>{stream.quality || "Unknown"}</b>
+                  <small>{locked ? "Needs resolver" : playback.state === "conversion" ? "Conversion required" : playback.state === "blocked" ? "Not browser-playable" : "Unverified"}</small>
                   <span className="source-row-actions">
+                    {playback.canTryBrowser && <button type="button" className="source-action primary-action" aria-label={playback.state === "conversion" ? "Try provider conversion in browser" : "Try browser playback"} title={playback.detail || "Try browser playback"} onClick={() => { playStream(stream, { forceBrowser: true }); onClose(); }}><Play size={13} /> Try</button>}
                     <button
                       type="button"
                       className={`source-action ${locked ? "" : "primary-action"}`}
@@ -817,10 +833,9 @@ function streamBadges(stream: StreamSource) {
   if (size) labels.push({ label: size });
   if (stream.behaviorHints?.cached) labels.push({ label: "CACHED", tone: "ok" });
   if (parseDebridStream(stream.url) || /real-?debrid|premiumize|alldebrid|torbox|\brd\b|\bpm\b|\bad\b|\bdebrid\b/i.test(text)) labels.push({ label: "DEBRID", tone: "ok" });
-  if (stream.url) labels.push({ label: "DIRECT", tone: "ok" });
-  // The WEB/REMUX/TRANSCODE badges were browser-playability claims inferred
-  // from the release name; they left with the in-browser Play path.
-  if (!stream.url) labels.push({ label: "ANDROID", tone: "warn" });
+  // A URL is not evidence of browser support, or of a resolved direct media link.
+  if (stream.url) labels.push({ label: "URL" });
+  if (!stream.url) labels.push({ label: "NO URL", tone: "warn" });
   const seen = new Set<string>();
   return labels.filter((badge) => {
     if (seen.has(badge.label)) return false;
@@ -914,9 +929,15 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
   const updateSeasonWatched = async (seasonNum: number, watched: boolean) => {
     try {
       const targetEpisodes = await getSeasonEpisodes(item.id, seasonNum, "en-US", priorityConfig, metadataContext);
+      const changedEpisodes = targetEpisodes.filter(ep => isWatched(item, seasonNum, ep.episodeNumber) !== watched);
+      await syncSeasonWatched({
+        mediaType: "tv",
+        tmdbId: item.id,
+        isAnime: item.originalLanguage === "ja" && Boolean(item.genreIds?.includes(16))
+      }, seasonNum, changedEpisodes.map(ep => ep.episodeNumber), watched);
       for (const ep of targetEpisodes) {
         if (isWatched(item, seasonNum, ep.episodeNumber) !== watched) {
-          await toggleWatched(item, seasonNum, ep.episodeNumber);
+          await toggleWatched(item, seasonNum, ep.episodeNumber, true);
         }
       }
       setToast(`Season ${seasonNum} marked as ${watched ? "watched" : "unwatched"}.`);

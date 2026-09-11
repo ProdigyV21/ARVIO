@@ -9,6 +9,7 @@ import {
   TELEGRAM_MAX_RESULTS,
   TELEGRAM_SCORE_THRESHOLD,
   TELEGRAM_SEARCH_TIMEOUT_MS,
+  isTelegramConfigured,
 } from "./config";
 import { isConnected, searchVideoMessages, type TgVideo } from "./client";
 import * as matcher from "./matcher";
@@ -29,7 +30,7 @@ export {
   type TgAuthState,
 } from "./client";
 export { initTelegramStreaming } from "./stream";
-export { TELEGRAM_ADDON_ID, TELEGRAM_ADDON_NAME } from "./config";
+export { TELEGRAM_ADDON_ID, TELEGRAM_ADDON_NAME, isTelegramConfigured } from "./config";
 
 export interface TelegramResolveOptions {
   excludedChatIds?: string[];
@@ -66,7 +67,7 @@ export async function resolveTelegramSources(
   episode: number | undefined,
   opts: TelegramResolveOptions = {}
 ): Promise<StreamSource[]> {
-  if (!isConnected()) return [];
+  if (!isTelegramConfigured || !isConnected()) return [];
 
   const key = cacheKey(item, season, episode);
   const cached = cache.get(key);

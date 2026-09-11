@@ -2,23 +2,40 @@
   "name": "arvio-web",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "overrides": {
+    "postcss": "8.5.28"
+  },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "setup:selfhost": "node scripts/selfhost.mjs setup",
+    "check:selfhost": "node scripts/selfhost.mjs check",
+    "test": "node --test tests/*.test.cjs",
+    "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
-    "@mediabunny/ac3": "^1.50.6",
+    "@mediabunny/aac-encoder": "^1.55.7",
+    "@mediabunny/ac3": "^1.55.7",
+    "@mediabunny/dts": "^1.55.7",
+    "@tanstack/react-virtual": "^3.14.10",
+    "dashjs": "^5.2.1",
     "hls.js": "^1.5.20",
+    "ipaddr.js": "^2.5.0",
     "lucide-react": "^0.468.0",
-    "mediabunny": "^1.50.6",
+    "mediabunny": "^1.55.7",
+    "mp4box": "2.4.1",
     "mpegts.js": "^1.8.0",
     "next": "^15.0.4",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "telegram": "^2.26.22"
+    "telegram": "^2.26.22",
+    "ts-ebml": "3.0.2",
+    "undici": "^8.10.2"
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^5.15.12",

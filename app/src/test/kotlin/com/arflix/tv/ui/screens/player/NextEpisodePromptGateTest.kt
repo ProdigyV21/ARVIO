@@ -1,9 +1,24 @@
 package com.arflix.tv.ui.screens.player
 
+import com.arflix.tv.ui.screens.player.common.NextEpisodePromptGate
+import com.arflix.tv.ui.screens.player.common.PlaybackEpisodeKey
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class NextEpisodePromptGateTest {
+
+    @Test
+    fun dismissingMobileSuggestionSuppressesEndPromptOnlyForThatEpisode() {
+        val gate = NextEpisodePromptGate()
+        val episode = PlaybackEpisodeKey(mediaId = 42, seasonNumber = 1, episodeNumber = 3)
+
+        gate.dismiss(episode)
+
+        assertThat(gate.tryOpen(episode, true, NextEpisodeAirDateResolution.Allowed)).isFalse()
+        assertThat(
+            gate.tryOpen(episode.copy(episodeNumber = 4), true, NextEpisodeAirDateResolution.Allowed)
+        ).isTrue()
+    }
 
     @Test
     fun dismissedPromptDoesNotReopenWhilePlayerRemainsEnded() {

@@ -7,12 +7,17 @@ import android.util.Base64
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import com.arflix.tv.data.model.IptvChannel
+import com.arflix.tv.data.model.IptvGuideHistory
+import com.arflix.tv.data.model.IptvVodSourceIds
 import com.arflix.tv.data.model.DrmInfo
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
+import com.arflix.tv.data.model.StalkerVodLink
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.R
+import com.arflix.tv.network.withIptvProviderRequestGuard
+import com.arflix.tv.network.iptvProviderCooldownMs
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
@@ -28,6 +33,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -183,9 +191,38 @@ internal object IptvTitleNormalizer {
     private val NON_ALPHA_NUM_REGEX = Regex("[^a-z0-9]+")
     private val DIACRITICS_REGEX = Regex("\\p{Mn}+")
 
+    /** Box-drawing bar some IPTV panels use in place of a pipe: "\u2503DE\u2503 Title". */
+    private const val BOX_DRAWING_BAR = '\u2503'
+
+    /**
+     * Leading language/quality tags in pipes: "|DE| Title", "|DE|HD| Title".
+     * The tags share their separators, hence one opening bar followed by
+     * repeated "TAG|" groups rather than repeated "|TAG|" groups.
+     */
+    private val LEADING_PIPE_TAG_REGEX = Regex("""^\s*\|(?:[A-Za-z0-9]{1,6}\|)+\s*""")
+
+    /**
+     * Leading language marker: "DE: Title", "GER - Title", "EN| Title".
+     *
+     * Deliberately an explicit code list instead of a generic two-or-three
+     * letter prefix: the generic form also eats real titles such as
+     * "IT: Chapter Two". Codes that double as English words ("it", "no", "se",
+     * "us") are left out for the same reason.
+     */
+    private val LANGUAGE_PREFIX_REGEX = Regex(
+        """^(?:de|deu|ger|en|eng|fr|fra|fre|es|esp|spa|pt|por|nl|ned|dut|pl|pol|tr|tur|ar|ara|""" +
+            """ru|rus|ro|ron|rom|ita|ell|gre|cz|cze|hu|hun|swe|nor|dan|fin|bg|bul|hr|hrv|srp|""" +
+            """sk|slo|slv|ua|ukr|mk|mkd|vip|multi|dual)\s*[:\-|]\s*""",
+        RegexOption.IGNORE_CASE
+    )
+
     fun normalize(value: String): String {
         if (value.isBlank()) return ""
         val stripped = value
+            .replace(BOX_DRAWING_BAR, '|')
+            .replace(LEADING_PIPE_TAG_REGEX, " ")
+            .trimStart()
+            .replace(LANGUAGE_PREFIX_REGEX, " ")
             .replace(BRACKET_CONTENT_REGEX, " ")
             .replace(PAREN_CONTENT_REGEX, " ")
             .replace(YEAR_PAREN_REGEX, " ")
@@ -354,6 +391,47 @@ class IptvRepository @Inject constructor(
     @Volatile
     private var cachedStalkerApis: Map<String, com.arflix.tv.data.api.StalkerApi> = emptyMap()
 
+    /**
+     * Scope for the shared Stalker channel-list download. Deliberately not tied
+     * to a caller: when the entry point that started the download gives up (its
+     * own timeout, a screen the user left), the download still finishes and the
+     * next entry point reuses it instead of starting another one.
+     */
+    private val stalkerChannelListScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+    )
+
+    /**
+     * What one portal answered: the session it opened and the channels it
+     * returned. A portal that did not answer carries a null [api] and no
+     * channels — that is what makes a failure visible per portal instead of
+     * disappearing into a merged list.
+     */
+    internal data class StalkerPortalChannels(
+        val portalId: String,
+        val api: com.arflix.tv.data.api.StalkerApi?,
+        val channels: List<IptvChannel>
+    )
+
+    /**
+     * One shared download **per portal**.
+     *
+     * Keyed per portal rather than per portal set: with several portals
+     * configured, a portal that is temporarily down must not hide behind one
+     * that answered. Its result is never remembered, so the next ordinary load
+     * asks it again, while the portals that did answer keep their lists.
+     *
+     * `internal` so a test can check what [invalidateCache] and
+     * [ensureCacheOwnership] do to it — the bug this loader exists to prevent
+     * came back through its caller, not through the loader itself (same
+     * convention as [activePlaylists]).
+     */
+    internal val stalkerChannelListLoader =
+        StalkerChannelListLoader<StalkerPortalChannels>(
+            scope = stalkerChannelListScope,
+            isReusable = { it.api != null && it.channels.isNotEmpty() }
+        )
+
     private data class StalkerEpgPortalCacheKey(
         val portalId: String,
         val apiIdentity: String
@@ -380,6 +458,44 @@ class IptvRepository @Inject constructor(
     private val stalkerEpgCacheTtlMs = 5 * 60 * 1000L
     private val stalkerShortEpgCacheTtlMs = 2 * 60 * 1000L
     private val stalkerBulkProgramsPerChannelLimit = 16
+
+    private data class StalkerVodSearchCacheKey(
+        val portalId: String,
+        val apiIdentity: String,
+        val query: String
+    )
+
+    private data class StalkerVodSearchCacheEntry(
+        val fetchedAtMs: Long,
+        val items: List<com.arflix.tv.data.api.StalkerApi.StalkerVodItem>
+    )
+
+    /**
+     * Raw portal answers per search term. The persisted movie-source cache
+     * already covers "same movie looked up again", this one covers different
+     * movies that normalize onto the same query and the repeated lookups a
+     * single detail screen can trigger, so neither hits the portal twice.
+     */
+    private val stalkerVodSearchCache =
+        ConcurrentHashMap<StalkerVodSearchCacheKey, StalkerVodSearchCacheEntry>()
+    private val stalkerVodSearchCacheTtlMs = 6 * 60 * 60_000L
+
+    /**
+     * A "the portal knows no such title" answer is kept only briefly. It is a
+     * real answer, so it earns an entry - it stops a browsed-past show from
+     * asking again on every screen - but six hours is far too long to be wrong
+     * about: catalogs change, and a title the portal gains today would stay
+     * invisible for the rest of the day.
+     */
+    private val stalkerVodSearchEmptyCacheTtlMs = 10 * 60_000L
+    private val maxStalkerVodSearchCacheEntries = 64
+
+    /**
+     * Shortest head-of-title that is still worth asking a portal for. Below
+     * this a subtitle split stops naming a film - "It: Chapter Two" would ask
+     * for "It" and get a slice of the catalog back.
+     */
+    private val minStalkerVodQueryHeadLength = 3
 
     /**
      * Public accessor kept for compatibility with code that previously read the
@@ -551,7 +667,8 @@ class IptvRepository @Inject constructor(
 
     private data class ScopedEpgCandidate(
         val url: String,
-        val playlistId: String? = null
+        val playlistId: String? = null,
+        val providerFallback: Boolean = false,
     )
     internal fun hasAnyConfiguredSource(config: IptvConfig): Boolean =
         activePlaylists(config).any { it.m3uUrl.isNotBlank() } ||
@@ -587,6 +704,93 @@ class IptvRepository @Inject constructor(
     private fun activeStalkerPortals(config: IptvConfig): List<StalkerPortalEntry> =
         config.stalkerPortals.filter { it.enabled && it.portalUrl.isNotBlank() }
 
+    /**
+     * Identifies one configured portal for [stalkerChannelListLoader]. Hashed so
+     * the portal URL and MAC address never travel further than this function.
+     */
+    private fun stalkerPortalKey(portal: StalkerPortalEntry): String {
+        val raw = listOf(portal.id.trim(), portal.portalUrl.trim(), portal.macAddress.trim())
+            .joinToString("|")
+        return MessageDigest.getInstance("SHA-256")
+            .digest(raw.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    /** The loader keys of the portals [config] currently has enabled. */
+    private fun activeStalkerPortalKeys(config: IptvConfig): Set<String> =
+        activeStalkerPortals(config).map { stalkerPortalKey(it) }.toSet()
+
+    /**
+     * Downloads every enabled portal's channel list, each portal at most once
+     * per freshness window, and merges the answers.
+     *
+     * This is the only place that opens portal sessions for the channel list —
+     * the startup prefetch, the live TV snapshot load and the guide backfill
+     * load all come through here, so a start costs one download instead of one
+     * per entry point (measured before: 3 x 29 MB in 17 seconds). Sharing and
+     * the freshness window live in [StalkerChannelListLoader].
+     *
+     * Each portal is loaded under its own key, so a portal that fails is
+     * retried by the next ordinary load while the portals that answered keep
+     * their lists. Merging is the only thing that happens here, and it happens
+     * after the decision what may be remembered — that decision is per portal.
+     *
+     * Channel ids are prefixed with `stalker:<portalId>:<origId>` so playback
+     * can route back to the portal that owns them.
+     *
+     * `internal` so a test can drive the real merge and the real loader keys
+     * with [fetchPortal] standing in for the network; production never passes
+     * it.
+     *
+     * @param freshSinceMs the moment the caller decided it needed fresh data;
+     *   `0` accepts any list inside the freshness window. See
+     *   [StalkerChannelListLoader.load].
+     */
+    internal suspend fun loadStalkerChannels(
+        portals: List<StalkerPortalEntry>,
+        freshSinceMs: Long = 0L,
+        fetchPortal: suspend (StalkerPortalEntry) -> StalkerPortalChannels = { fetchStalkerChannels(it) }
+    ): Pair<Map<String, com.arflix.tv.data.api.StalkerApi>, List<IptvChannel>> = coroutineScope {
+        if (portals.isEmpty()) {
+            return@coroutineScope emptyMap<String, com.arflix.tv.data.api.StalkerApi>() to emptyList()
+        }
+        val answers = portals
+            .map { portal ->
+                async {
+                    stalkerChannelListLoader.load(stalkerPortalKey(portal), freshSinceMs) {
+                        fetchPortal(portal)
+                    }
+                }
+            }
+            .awaitAll()
+        val apis = LinkedHashMap<String, com.arflix.tv.data.api.StalkerApi>()
+        val channels = ArrayList<IptvChannel>()
+        for (answer in answers) {
+            channels.addAll(answer.channels)
+            answer.api?.let { apis[answer.portalId] = it }
+        }
+        apis.toMap() to channels.toList()
+    }
+
+    /**
+     * Opens one portal's session and downloads its channels. A portal that does
+     * not answer returns no session and no channels, which is what keeps its
+     * failure out of [stalkerChannelListLoader]'s memory.
+     */
+    private suspend fun fetchStalkerChannels(portal: StalkerPortalEntry): StalkerPortalChannels =
+        runCatching {
+            val stalker = com.arflix.tv.data.api.StalkerApi(portal.portalUrl, portal.macAddress)
+            if (!stalker.handshake()) {
+                return@runCatching StalkerPortalChannels(portal.id, null, emptyList())
+            }
+            stalker.getProfile()
+            StalkerPortalChannels(
+                portalId = portal.id,
+                api = stalker,
+                channels = stalker.getChannels().map { it.copy(id = "stalker:${portal.id}:${it.id}") }
+            )
+        }.getOrElse { StalkerPortalChannels(portal.id, null, emptyList()) }
+
     @Volatile
     private var xtreamSeriesLoadedAtMs: Long = 0L
     @Volatile
@@ -605,17 +809,17 @@ class IptvRepository @Inject constructor(
     private val epgEmptyRetryMs = 30_000L
     private val epgUpcomingProgramLimit = 96
     private val epgRecentProgramLimit = 2
-    private val xmlTvPastWindowMs = 48L * 60L * 60_000L
+    private val xmlTvPastWindowMs = 3L * IptvGuideHistory.DAY_MS
     private val xmlTvFutureWindowMs = 72L * 60L * 60_000L
-    private val catchupGuideHistoryWindowMs = 48L * 60L * 60_000L
     private val indexedGuideFutureWarmMs = 6L * 60L * 60_000L
     private val completeEpgCoverageTarget = 0.98f
     private val xtreamShortEpgLimit = 24
     private val xtreamVisibleShortEpgLimit = 96
-    private val startupShortEpgChannelLimit = 1200
+    private val startupShortEpgChannelLimit = 24
     private val fullCatchupHistoryChannelLimit = 4
     private val xtreamShortEpgBatchSize = 1024
-    private val xtreamShortEpgConcurrency = 64
+    private val xtreamShortEpgConcurrency = 2
+    private val guideRequestBudget = IptvGuideRequestBudget()
 
     // Per-channel `get_short_epg` fallback (portals whose bulk EPG actions return
     // nothing, e.g. get_simple_data_table/get_epg_info both empty - confirmed
@@ -624,19 +828,20 @@ class IptvRepository @Inject constructor(
     // thousands of channels and would hammer the portal with that many
     // individual requests, so it's skipped above this cap and that batch
     // simply gets no EPG until it's requested via the on-demand path instead.
-    private val stalkerShortEpgFallbackMaxChannels = 100
-    private val stalkerShortEpgFallbackConcurrency = 8
+    private val stalkerShortEpgFallbackMaxChannels = 24
+    private val stalkerShortEpgFallbackConcurrency = 2
     private val cacheUpcomingProgramLimit = 48
     private val cacheRecentProgramLimit = 1
     private val cacheCatchupRecentProgramLimit = 96
-    private val catchupRecentProgramLimit = 1000
-    private val catchupProbeCandidateLimit = 40
+    private val catchupRecentProgramLimit = IptvGuideHistory.MAX_PROGRAMS
+    private val catchupProbeCandidateLimit = 3
     private val xtreamVodCacheMs = 6 * 60 * 60_000L
     private val iptvHttpClient: OkHttpClient by lazy {
         // Used for full playlist/EPG loading – generous timeouts for large
         // Xtream EPG feeds. TX-4K serves a ~100 MB XMLTV dump so the read
         // and call timeouts need to be minutes, not seconds.
         okHttpClient.newBuilder()
+            .withIptvProviderRequestGuard()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
@@ -646,6 +851,7 @@ class IptvRepository @Inject constructor(
     private val xtreamLookupHttpClient: OkHttpClient by lazy {
         // Fast-fail client for VOD/source lookups - must be quick for instant playback
         okHttpClient.newBuilder()
+            .withIptvProviderRequestGuard()
             .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(6, TimeUnit.SECONDS)
@@ -654,6 +860,7 @@ class IptvRepository @Inject constructor(
     }
     private val xtreamGuideHttpClient: OkHttpClient by lazy {
         okHttpClient.newBuilder()
+            .withIptvProviderRequestGuard()
             .connectTimeout(3, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .writeTimeout(3, TimeUnit.SECONDS)
@@ -665,6 +872,7 @@ class IptvRepository @Inject constructor(
         // short now/next EPG. Keep short EPG snappy, but give catchup history
         // enough time on slower TV boxes and large providers.
         okHttpClient.newBuilder()
+            .withIptvProviderRequestGuard()
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(8, TimeUnit.SECONDS)
@@ -675,6 +883,7 @@ class IptvRepository @Inject constructor(
         // Live catalog payloads can be very large (50k+ streams), so keep them
         // below XMLTV timeouts but long enough to finish on TV WiFi.
         okHttpClient.newBuilder()
+            .withIptvProviderRequestGuard()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)
             .writeTimeout(12, TimeUnit.SECONDS)
@@ -804,6 +1013,11 @@ class IptvRepository @Inject constructor(
             prefs[m3uUrlKey()] = encryptConfigValue(normalizedM3u)
             prefs[epgUrlKey()] = encryptConfigValue(normalizedEpg)
             prefs[playlistsKey()] = gson.toJson(primary)
+            if (previousConfig.playlists != primary || previousConfig.m3uUrl != normalizedM3u || previousConfig.epgUrl != normalizedEpg) {
+                IptvCloudFields.stamp(prefs, profileId, org.json.JSONObject()
+                    .put("playlists", org.json.JSONArray(gson.toJson(primary)))
+                    .put("m3uUrl", normalizedM3u).put("epgUrl", normalizedEpg))
+            }
             val retainedOrder = retainGroupOrderForUnchangedSources(
                 decodeGroupOrder(prefs),
                 changedSourceIds,
@@ -827,6 +1041,7 @@ class IptvRepository @Inject constructor(
             normalizePlaylistEntry(item, index)
         }.filterNotNull().take(3)
         val primary = normalized.firstOrNull()
+        if (normalized == previousConfig.playlists) return
         val nextConfig = previousConfig.copy(
             m3uUrl = primary?.m3uUrl.orEmpty(),
             epgUrl = primary?.epgUrl.orEmpty(),
@@ -841,6 +1056,9 @@ class IptvRepository @Inject constructor(
             prefs[playlistsKey()] = gson.toJson(normalized)
             prefs[m3uUrlKey()] = encryptConfigValue(primary?.m3uUrl.orEmpty())
             prefs[epgUrlKey()] = encryptConfigValue(primary?.epgUrl.orEmpty())
+            IptvCloudFields.stamp(prefs, profileId, org.json.JSONObject()
+                .put("playlists", org.json.JSONArray(gson.toJson(normalized)))
+                .put("m3uUrl", primary?.m3uUrl.orEmpty()).put("epgUrl", primary?.epgUrl.orEmpty()))
             val retainedOrder = retainGroupOrderForUnchangedSources(
                 decodeGroupOrder(prefs),
                 changedSourceIds,
@@ -1349,12 +1567,16 @@ class IptvRepository @Inject constructor(
         program: IptvProgram,
         startAttempt: Int = 0
     ): String {
+        if (program.catchupAvailable == false) {
+            throw IOException(context.getString(R.string.iptv_no_catchup))
+        }
         val candidates = getCatchupUrlCandidates(channel, program)
-        if (candidates.isEmpty()) return channel.streamUrl
+        if (candidates.isEmpty()) throw IOException(context.getString(R.string.iptv_no_catchup))
         val safeAttempt = startAttempt.coerceAtLeast(0)
-        val ordered = candidates.drop(safeAttempt) + candidates.take(safeAttempt)
+        // Each playback retry gets a fresh, bounded batch, never a rotated full scan.
+        val ordered = candidates.drop(safeAttempt.coerceAtMost(candidates.size) * catchupProbeCandidateLimit)
         return withContext(Dispatchers.IO) {
-            ordered.take(catchupProbeCandidateLimit).forEach { candidate ->
+            for (candidate in ordered.take(catchupProbeCandidateLimit)) {
                 val probe = probePlaybackUrl(candidate, channel.requestHeaders)
                 if (probe != null && probe.isPlayable) {
                     System.err.println(
@@ -1369,13 +1591,18 @@ class IptvRepository @Inject constructor(
                         "[IPTV-Catchup] rejected status=${probe.statusCode} reason=${probe.reason} " +
                             "url=${redactIptvUrl(candidate)}"
                     )
+                    if (iptvProviderCooldownMs(probe.statusCode, null, System.currentTimeMillis()) > 0L) {
+                        throw IOException("Catch-up stopped: provider returned HTTP ${probe.statusCode}. Please wait before retrying.")
+                    }
                 }
+                if (probe == null) break
             }
             throw IOException(context.getString(R.string.iptv_no_catchup))
         }
     }
 
     fun getCatchupUrlCandidates(channel: IptvChannel, program: IptvProgram): List<String> {
+        if (program.catchupAvailable == false) return emptyList()
         val startUnix = program.startUtcMillis / 1000L
         val endUnix = program.endUtcMillis / 1000L
         val nowUnix = System.currentTimeMillis() / 1000L
@@ -1429,7 +1656,6 @@ class IptvRepository @Inject constructor(
                         add(applyCatchupSourceTemplate(channel, it, program, serverStartMs, startUnix, endUnix, nowUnix, durationMin, streamId))
                     }
                     addAll(xtreamCandidates)
-                    if (isEmpty()) add(channel.streamUrl)
                 }
             }
             else -> {
@@ -1439,7 +1665,6 @@ class IptvRepository @Inject constructor(
                         add(applyCatchupSourceTemplate(channel, it, program, serverStartMs, startUnix, endUnix, nowUnix, durationMin, streamId))
                     }
                     addAll(xtreamCandidates)
-                    if (isEmpty()) add(channel.streamUrl)
                 }
             }
         }
@@ -1665,7 +1890,7 @@ class IptvRepository @Inject constructor(
     private fun probePlaybackUrl(url: String, headers: Map<String, String>): PlaybackProbeResult? {
         val ranged = executePlaybackProbe(url, headers, useRange = true)
         if (ranged == null || ranged.isPlayable) return ranged
-        if (ranged.statusCode in setOf(403, 405, 416, 500, 502, 503, 513)) {
+        if (ranged.statusCode in setOf(405, 416)) {
             val normal = executePlaybackProbe(url, headers, useRange = false)
             if (normal?.isPlayable == true) return normal.copy(reason = "ok-no-range")
             return normal ?: ranged
@@ -1746,6 +1971,12 @@ class IptvRepository @Inject constructor(
             prefs.remove(groupOrderKey())
             prefs.remove(groupOrderSchemaKey())
             prefs.remove(tvSessionKey())
+            IptvCloudFields.stamp(prefs, profileId, org.json.JSONObject()
+                .put("playlists", org.json.JSONArray()).put("m3uUrl", "").put("epgUrl", "")
+                .put("stalkerPortals", org.json.JSONArray()).put("stalkerPortalUrl", "").put("stalkerMacAddress", "")
+                .put("favoriteGroups", org.json.JSONArray()).put("favoriteChannels", org.json.JSONArray())
+                .put("hiddenGroups", org.json.JSONArray()).put("lockedGroups", org.json.JSONArray())
+                .put("groupOrder", org.json.JSONArray()).put("groupOrderSchema", IPTV_GROUP_ORDER_SCHEMA))
         }
         groupOrderLocallyDirty = true
         cachedStalkerApis = emptyMap()
@@ -1990,6 +2221,23 @@ class IptvRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "toggle favorite channel")
     }
 
+    suspend fun setFavoriteChannel(channelId: String, favorite: Boolean) {
+        val trimmed = channelId.trim()
+        if (trimmed.isEmpty()) return
+        var changed = false
+        context.settingsDataStore.edit { prefs ->
+            val existing = decodeFavoriteChannels(prefs)
+            val updated = favoriteChannelsWithMembership(existing, trimmed, favorite)
+            if (updated != existing) {
+                prefs[favoriteChannelsKey()] = gson.toJson(updated)
+                changed = true
+            }
+        }
+        if (changed) {
+            invalidationBus.markDirty(CloudSyncScope.IPTV, profileManager.getProfileIdSync(), "set favorite channel")
+        }
+    }
+
     /**
      * Reorders a channel within the favourites list.
      *
@@ -2030,6 +2278,12 @@ class IptvRepository @Inject constructor(
         onProgress: (IptvLoadProgress) -> Unit = {},
         onChannelsReady: suspend (List<IptvChannel>) -> Unit = {}
     ): IptvSnapshot {
+        // Taken before the lock on purpose: it is the moment this caller asked
+        // for data, not the moment it got its turn. A forced reload uses it to
+        // tell "the list is from before I asked" from "someone downloaded it
+        // while I was waiting" — the second entry point reacting to a single
+        // configuration change is the latter, and must not download again.
+        val requestedAtMs = System.currentTimeMillis()
         return withContext(Dispatchers.IO) {
             loadMutex.withLock {
             cleanupStaleEpgTempFiles()
@@ -2056,32 +2310,20 @@ class IptvRepository @Inject constructor(
             // Load every enabled Stalker portal in parallel with M3U/Xtream
             // playlists when both are configured (hybrid mode). Stalker-only
             // (no playlists) keeps the legacy early-return behavior.
+            // A forced reload asks for data that is newer than the request, so
+            // a list remembered from before it is skipped — but one downloaded
+            // while this caller waited for the lock counts, and a download that
+            // is already running is shared. Skipping every remembered list
+            // instead made two entry points reacting to the same configuration
+            // change pull the full channel list twice (measured: 2 x 27.67 MB
+            // on every playlist toggle).
             val stalkerChannelsDeferred = if (stalkerPortals.isNotEmpty()) {
                 async {
                     onProgress(IptvLoadProgress(context.getString(R.string.iptv_connecting_stalker), 10))
-                    stalkerPortals.map { portal ->
-                        async {
-                            runCatching {
-                                val stalker = com.arflix.tv.data.api.StalkerApi(portal.portalUrl, portal.macAddress)
-                                if (!stalker.handshake()) {
-                                    return@runCatching Triple<String, com.arflix.tv.data.api.StalkerApi?, List<IptvChannel>>(portal.id, null, emptyList())
-                                }
-                                stalker.getProfile()
-                                val channels = stalker.getChannels()
-                                // Prefix with stalker:<portalId>:<origId> so the
-                                // portal can be identified for playback routing.
-                                Triple<String, com.arflix.tv.data.api.StalkerApi?, List<IptvChannel>>(portal.id, stalker, channels.map { it.copy(id = "stalker:${portal.id}:${it.id}") })
-                            }.getOrElse { Triple<String, com.arflix.tv.data.api.StalkerApi?, List<IptvChannel>>(portal.id, null, emptyList()) }
-                        }
-                    }.awaitAll().let { results ->
-                        val apis = HashMap<String, com.arflix.tv.data.api.StalkerApi>()
-                        val channels = ArrayList<IptvChannel>()
-                        for ((portalId, api, chs) in results) {
-                            channels.addAll(chs)
-                            api?.let { apis[portalId] = it }
-                        }
-                        apis to channels
-                    }
+                    loadStalkerChannels(
+                        stalkerPortals,
+                        freshSinceMs = if (forcePlaylistReload) requestedAtMs else 0L
+                    )
                 }
             } else {
                 null
@@ -2282,6 +2524,7 @@ class IptvRepository @Inject constructor(
                 discoverEmbeddedEpgSourcesIfNeeded(activePlaylists)
             }
             val epgCandidates = resolveScopedEpgCandidates(config)
+            val largePersistedPlaylist = isLargePersistedChannelSnapshot(config, channels.size)
             var epgUpdated = false
             val cachedHasPrograms = hasAnyProgramData(cachedNowNext)
             val shouldUseCachedEpg = !forceEpgReload && (
@@ -2293,7 +2536,8 @@ class IptvRepository @Inject constructor(
             // Check if this is an Xtream provider (can use fast short EPG API)
             val xtreamProviderGroups = groupXtreamChannelsByCredentials(config, channels)
             val hasXtreamChannels = xtreamProviderGroups.isNotEmpty()
-            val shouldFetchBroadShortEpg = allowBroadShortEpg || epgCandidates.isEmpty() || channels.size <= LargeIptvListChannelCount
+            val shouldFetchBroadShortEpg = channels.size <= startupShortEpgChannelLimit &&
+                (allowBroadShortEpg || epgCandidates.isEmpty())
             System.err.println("[EPG] loadSnapshot: forceEpgReload=$forceEpgReload shouldUseCachedEpg=$shouldUseCachedEpg cachedHasPrograms=$cachedHasPrograms xtreamProviders=${xtreamProviderGroups.size} hasXtreamChannels=$hasXtreamChannels epgCandidates=${epgCandidates.size} broadShort=$shouldFetchBroadShortEpg")
             val cachedFallbackNowNext = if (channels.size > LargeIptvListChannelCount) {
                 emptyMap()
@@ -2377,9 +2621,15 @@ class IptvRepository @Inject constructor(
                     var bestCoverage = epgCoverageRatio(channels, resolvedNowNext)
                     val mergedXmlNowNext = ConcurrentHashMap(resolvedNowNext)
                     var xmltvChanged = false
+                    val indexedXmlPlaylists = HashSet<String?>()
+                    val completedXmlUrls = HashSet<String>()
+                    val xmlChannels = if (largePersistedPlaylist) {
+                        channelStore.loadAll(currentEpgIndexKey(config))
+                    } else channels
                     for ((index, candidate) in epgCandidatesToTry.withIndex()) {
+                        if (candidate.providerFallback && candidate.playlistId in indexedXmlPlaylists) continue
                         val epgUrl = candidate.url
-                        val candidateChannels = channelsForScopedEpgCandidate(candidate, channels)
+                        val candidateChannels = channelsForScopedEpgCandidate(candidate, xmlChannels)
                         if (candidateChannels.isEmpty()) continue
                         val pct = (90 + ((index * 8) / epgCandidatesToTry.size.coerceAtLeast(1))).coerceIn(90, 98)
                         onProgress(IptvLoadProgress(context.getString(R.string.iptv_progress_loading_full_epg, index + 1, epgCandidatesToTry.size), pct))
@@ -2387,13 +2637,21 @@ class IptvRepository @Inject constructor(
                             // 300 s: some providers (like TX-4K) serve a 100 MB
                             // XMLTV dump that needs 2-3 min on a TV's WiFi.
                             // 90 s was aborting before the file finished.
-                            withTimeoutOrNull(300_000L) { fetchAndParseEpg(epgUrl, candidateChannels) }
+                            withTimeoutOrNull(300_000L) {
+                                val jobContext = currentCoroutineContext()
+                                runInterruptible(Dispatchers.IO) {
+                                    fetchAndParseEpg(epgUrl, candidateChannels) { jobContext.ensureActive() }
+                                }
+                            }
                                 ?: throw java.util.concurrent.TimeoutException(context.getString(R.string.epg_timeout, epgUrl.take(80)))
                         }
                         if (attempt.isSuccess) {
                             val parsed = attempt.getOrDefault(emptyMap())
                             val parsedHasPrograms = hasAnyProgramData(parsed)
                             if (parsedHasPrograms) {
+                                completedXmlUrls.add(epgUrl)
+                                // Auto-discovered Xtream URLs are alternatives to the same feed.
+                                indexedXmlPlaylists.add(candidate.playlistId)
                                 xmltvChanged = true
                                 parsed.forEach { (channelId, nowNext) ->
                                     val current = mergedXmlNowNext[channelId]
@@ -2409,7 +2667,7 @@ class IptvRepository @Inject constructor(
                                 }
                                 resolved = true
                                 System.err.println("[EPG] XMLTV candidate ${index + 1} merged coverage=${(coverage * 100).toInt()}%")
-                                if (coverage >= completeEpgCoverageTarget) {
+                                if (!largePersistedPlaylist && coverage >= completeEpgCoverageTarget) {
                                     System.err.println("[EPG] XMLTV coverage target reached; skipping remaining EPG candidates")
                                     break
                                 }
@@ -2418,11 +2676,16 @@ class IptvRepository @Inject constructor(
                             val exception = attempt.exceptionOrNull()
                             if (exception is kotlinx.coroutines.CancellationException) throw exception
                             if (exception is EpgNotModifiedException) {
+                                completedXmlUrls.add(epgUrl)
+                                indexedXmlPlaylists.add(candidate.playlistId)
                                 System.err.println("[EPG] XMLTV candidate ${index + 1} is unchanged (HTTP 304). Loading existing index...")
                                 val existing = runCatching {
                                     epgIndex.loadNowNext(
                                         sourceKey = currentEpgIndexKey(config),
-                                        channelIds = candidateChannels.map { it.id }.toSet()
+                                        // The full guide is already indexed. Do not hydrate tens
+                                        // of thousands of schedules after a cheap HTTP 304.
+                                        channelIds = (if (largePersistedPlaylist) candidateChannels.take(16) else candidateChannels)
+                                            .map { it.id }.toSet()
                                     )
                                 }.getOrDefault(emptyMap())
                                 existing.forEach { (channelId, nowNext) ->
@@ -2437,6 +2700,8 @@ class IptvRepository @Inject constructor(
                             } else {
                                 epgFailureMessage = exception?.message
                                 System.err.println("[EPG] XMLTV attempt ${index + 1} failed: ${epgFailureMessage}")
+                                if (largePersistedPlaylist && (exception is java.util.concurrent.TimeoutException ||
+                                        exception is java.io.InterruptedIOException)) break
                             }
                         }
                     }
@@ -2444,6 +2709,11 @@ class IptvRepository @Inject constructor(
                         shortEpgResult?.let { mergedXmlNowNext.putAll(it) } // Short EPG wins for channels it covers
                         resolvedNowNext = mergedXmlNowNext
                         val refreshedAt = System.currentTimeMillis()
+                        if (largePersistedPlaylist && epgCandidatesToTry.all {
+                                it.url in completedXmlUrls || (it.providerFallback && it.playlistId in indexedXmlPlaylists)
+                            }) {
+                            epgIndex.markFullRefreshComplete(currentEpgIndexKey(config), refreshedAt)
+                        }
                         if (xmltvChanged) {
                             // Persist first. If Live TV became interactive while this
                             // large parse ran, cancellation keeps the previous compact
@@ -2464,7 +2734,7 @@ class IptvRepository @Inject constructor(
                     resolved &&
                     currentCoverage < completeEpgCoverageTarget &&
                     !shouldFetchBroadShortEpg &&
-                    hasXtreamChannels
+                    hasXtreamChannels && !largePersistedPlaylist
                 ) {
                     val missingXtreamChannels = channels.filter { channel ->
                         resolveXtreamStreamId(channel) != null && !hasProgramData(resolvedNowNext[channel.id])
@@ -2500,7 +2770,8 @@ class IptvRepository @Inject constructor(
                     }
                 }
 
-                if (!resolved && !shouldFetchBroadShortEpg && hasXtreamChannels) {
+                if (!resolved && !shouldFetchBroadShortEpg && hasXtreamChannels &&
+                    channels.size <= startupShortEpgChannelLimit) {
                     System.err.println("[EPG] XMLTV did not resolve; falling back to full Xtream guide API")
                     val fullEpgAttempt = runCatching {
                         fetchXtreamFullEpgForActiveProviders(config, channels, onProgress)
@@ -2803,7 +3074,25 @@ class IptvRepository @Inject constructor(
      * fall back to disk — it only reads volatile in-memory fields.
      * Use this when you need a fast, contention-free read (e.g., on navigation).
      */
+    suspend fun getPagedStartupSnapshotOrNull(): IptvSnapshot? = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val key = epgIndexKey(profileManager.getProfileIdSync(), config)
+        // Never read another profile's active store while ownership is changing.
+        if (key != currentEpgIndexKey) return@withContext null
+        val channels = channelStore.loadStartupChannels(key, LargeIptvListChannelCount, LargeListMemoryChannelLimit)
+        if (channels.isEmpty()) return@withContext null
+        IptvSnapshot(
+            channels = channels, grouped = buildGroupedChannels(channels),
+            favoriteChannels = observeFavoriteChannels().first(),
+            favoriteGroups = observeFavoriteGroups().first(),
+            hiddenGroups = observeHiddenGroups().first(),
+            groupOrder = observeGroupOrder().first(), sortOrder = config.sortOrder,
+            loadedAt = Instant.ofEpochMilli(channelStore.updatedAtMs(key)),
+        )
+    }
+
     suspend fun getMemoryCachedSnapshot(): IptvSnapshot? {
+        if (cacheOwnerProfileId != profileManager.getProfileIdSync()) return null
         val channels = cachedChannels
         if (channels.isEmpty()) return null
         val favoriteGroups = observeFavoriteGroups().first()
@@ -2837,7 +3126,18 @@ class IptvRepository @Inject constructor(
     fun reDeriveCachedNowNext(channelIds: Set<String>): Map<String, IptvNowNext>? {
         val cached = cachedNowNext
         val nowMs = System.currentTimeMillis()
-        val channelsById = cachedChannelLookup()
+        val cachedChannelMetadata = cachedChannelLookup()
+        val missingMetadataIds = channelIds.filter { it !in cachedChannelMetadata }
+        val indexedMetadata = if (missingMetadataIds.isNotEmpty() && currentEpgIndexKey.isNotBlank()) {
+            try {
+                channelStore.getByIds(currentEpgIndexKey, missingMetadataIds).associateBy { it.id }
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                System.err.println("[EPG-Index] Failed to read channel metadata: ${error.javaClass.simpleName}")
+                emptyMap()
+            }
+        } else emptyMap()
+        val channelsById = if (indexedMetadata.isEmpty()) cachedChannelMetadata else cachedChannelMetadata + indexedMetadata
         val missingIndexedIds = channelIds.filterTo(LinkedHashSet()) { channelId ->
             val guide = cached[channelId]
             !hasProgramData(guide) || shouldLoadIndexedGuide(guide, channelsById[channelId], nowMs)
@@ -2930,6 +3230,25 @@ class IptvRepository @Inject constructor(
 
     fun indexedGuideChannelCount(): Int = countIndexedGuideChannels()
 
+    /** Read complete archive only for the opened channel, not every row on a large playlist. */
+    fun indexedCatchupGuide(channelId: String): Map<String, IptvNowNext> {
+        val key = currentEpgIndexKey
+        if (key.isBlank() || channelId.isBlank()) return emptyMap()
+        val indexed = try {
+            epgIndex.loadNowNext(
+                key, setOf(channelId), pastWindowMs = IptvGuideHistory.MAX_WINDOW_MS,
+                recentProgramLimit = IptvGuideHistory.MAX_PROGRAMS,
+            )
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            System.err.println("[EPG-Index] Failed to read archive: ${error.javaClass.simpleName}")
+            emptyMap()
+        }
+        return indexed.also { guide ->
+            guide.forEach { (id, value) -> cachedNowNext[id] = mergeCachedGuideSlice(cachedNowNext[id], value) }
+        }
+    }
+
     fun indexedGuideProgramCount(): Int = countIndexedGuidePrograms()
 
     // ── Paged channel access (Stage 2) ─────────────────────────────────────────
@@ -2949,8 +3268,8 @@ class IptvRepository @Inject constructor(
     fun pagedChannelCount(playlistId: String?, groupTitle: String?): Int =
         runCatching { channelStore.countForPlaylistGroup(currentEpgIndexKey, playlistId, groupTitle) }.getOrDefault(0)
 
-    fun pagedChannelWindow(playlistId: String?, groupTitle: String?, offset: Int, limit: Int): List<IptvChannel> =
-        runCatching { channelStore.windowForPlaylistGroup(currentEpgIndexKey, playlistId, groupTitle, offset, limit) }.getOrDefault(emptyList())
+    fun pagedChannelWindow(playlistId: String?, groupTitle: String?, offset: Int, limit: Int, excludedGroups: Set<String> = emptySet()): List<IptvChannel> =
+        runCatching { channelStore.windowForPlaylistGroup(currentEpgIndexKey, playlistId, groupTitle, offset, limit, excludedGroups) }.getOrDefault(emptyList())
 
     /**
      * Number of channels in the paged store.
@@ -2990,6 +3309,16 @@ class IptvRepository @Inject constructor(
 
     fun pagedPlaylistGroupCounts(): List<Triple<String, String, Int>> =
         runCatching { channelStore.playlistGroupCounts(currentEpgIndexKey) }.getOrDefault(emptyList())
+
+    fun visitStoredChannelLabels(playlistId: String?, visitor: (String, String, String) -> Unit) =
+        channelStore.visitLabels(currentEpgIndexKey, playlistId, visitor)
+
+    fun cachedGuideChannelIds(startMs: Long, endMs: Long): Set<String> =
+        epgIndex.channelIdsInWindow(currentEpgIndexKey, startMs, endMs)
+
+    fun visitCachedGuideWindow(channelIds: Set<String>, startMs: Long, endMs: Long,
+        visitor: (String, IptvProgram) -> Unit) =
+        epgIndex.visitWindow(currentEpgIndexKey, channelIds, startMs, endMs, visitor)
 
     fun pagedChannelsByIds(ids: Collection<String>): List<IptvChannel> =
         runCatching { channelStore.getByIds(currentEpgIndexKey, ids) }.getOrDefault(emptyList())
@@ -3041,7 +3370,7 @@ class IptvRepository @Inject constructor(
                             next = future.getOrNull(0),
                             later = future.getOrNull(1),
                             upcoming = future.take(96),
-                            recent = recent.takeLast(96)
+                            recent = recent.takeLast(IptvGuideHistory.MAX_PROGRAMS)
                         )
                     )
                 }
@@ -3176,7 +3505,7 @@ class IptvRepository @Inject constructor(
                         } else {
                             xtreamShortEpgLimit
                         },
-                        allowUnboundedFallback = providerChannels.size > 256 || preferFullCatchupHistory
+                        allowUnboundedFallback = preferFullCatchupHistory
                     ) { _, hadError ->
                         if (hadError) errors++
                     }
@@ -3339,8 +3668,13 @@ class IptvRepository @Inject constructor(
             )
             var isCached = false
             val parsed = runCatching {
-                withTimeoutOrNull(12_000L) {
-                    fetchAndParseEpg(candidate.url, candidateChannels)
+                guideRequestBudget.request(candidate.url) {
+                    withTimeoutOrNull(12_000L) {
+                        val jobContext = currentCoroutineContext()
+                        runInterruptible(Dispatchers.IO) {
+                            fetchAndParseEpg(candidate.url, candidateChannels) { jobContext.ensureActive() }
+                        }
+                    }
                 } ?: emptyMap()
             }.recover { error ->
                 if (error is EpgNotModifiedException) {
@@ -3356,6 +3690,7 @@ class IptvRepository @Inject constructor(
                     throw error
                 }
             }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
                 System.err.println("[EPG-Refresh] XMLTV visible fallback failed: ${error.message}")
             }.getOrDefault(emptyMap())
 
@@ -3447,44 +3782,14 @@ class IptvRepository @Inject constructor(
 
         // Stalker-only mode: no playlists configured.
         if (activeLists.isEmpty() && stalkerPortals.isNotEmpty()) {
-            val apis = HashMap<String, com.arflix.tv.data.api.StalkerApi>()
-            val channels = ArrayList<IptvChannel>()
-            for (portal in stalkerPortals) {
-                runCatching {
-                    val stalker = com.arflix.tv.data.api.StalkerApi(portal.portalUrl, portal.macAddress)
-                    if (!stalker.handshake()) return@runCatching
-                    stalker.getProfile()
-                    stalker.getChannels().map { it.copy(id = "stalker:${portal.id}:${it.id}") }
-                        .also { channels.addAll(it) }
-                    apis[portal.id] = stalker
-                }
-            }
+            val (apis, channels) = loadStalkerChannels(stalkerPortals)
             return if (channels.isNotEmpty()) channels to apis else null
         }
 
         // Load playlists and Stalker in parallel when both are configured.
         val (playlistChannels, stalkerApis, stalkerChannels) = coroutineScope {
             val stalkerDeferred = if (stalkerPortals.isNotEmpty()) {
-                async {
-                    stalkerPortals.map { portal ->
-                        async {
-                            runCatching {
-                                val stalker = com.arflix.tv.data.api.StalkerApi(portal.portalUrl, portal.macAddress)
-                                if (!stalker.handshake()) return@runCatching Triple<String, com.arflix.tv.data.api.StalkerApi?, List<IptvChannel>>(portal.id, null, emptyList())
-                                stalker.getProfile()
-                                Triple<String, com.arflix.tv.data.api.StalkerApi?, List<IptvChannel>>(portal.id, stalker, stalker.getChannels().map { it.copy(id = "stalker:${portal.id}:${it.id}") })
-                            }.getOrElse { Triple<String, com.arflix.tv.data.api.StalkerApi?, List<IptvChannel>>(portal.id, null, emptyList()) }
-                        }
-                    }.awaitAll().let { results ->
-                        val apis = HashMap<String, com.arflix.tv.data.api.StalkerApi>()
-                        val channels = ArrayList<IptvChannel>()
-                        for ((portalId, api, chs) in results) {
-                            channels.addAll(chs)
-                            api?.let { apis[portalId] = it }
-                        }
-                        apis to channels
-                    }
-                }
+                async { loadStalkerChannels(stalkerPortals) }
             } else {
                 null
             }
@@ -3559,6 +3864,15 @@ class IptvRepository @Inject constructor(
     }
 
     fun invalidateCache() {
+        // The shared Stalker downloads are deliberately NOT dropped here. Each
+        // is keyed by one portal (id + URL + MAC), and portals that disappear
+        // are released in ensureCacheOwnership, which every entry point passes
+        // through. Everything else this function is called for — a playlist
+        // toggled, an EPG URL edited, a profile switched to one with the same
+        // portals — leaves the portals alone, so their channel lists stay
+        // valid. Dropping them anyway tore up a download that another entry
+        // point was already running and cost a second full 27.67 MB list on
+        // every playlist toggle (measured).
         cachedChannels = emptyList()
         cachedChannelsLookupSource = null
         cachedChannelsById = emptyMap()
@@ -3568,6 +3882,7 @@ class IptvRepository @Inject constructor(
         cachedEpgAt = 0L
         stalkerEpgCache.clear()
         stalkerShortEpgCache.clear()
+        stalkerVodSearchCache.clear()
         discoveredM3uEpgUrls.clear()
         xtreamVodCacheKey = null
         xtreamVodLoadedAtMs = 0L
@@ -3599,7 +3914,7 @@ class IptvRepository @Inject constructor(
      * way back to the provider.
      *
      * Unlike [invalidateCache], this also deletes the disk catalogs so that
-     * [warmXtreamVodCachesIfPossible] is guaranteed to re-fetch from network.
+     * [warmVodCachesIfPossible] is guaranteed to re-fetch from network.
      */
     suspend fun purgeAllIptvSourceCaches(preserveLiveSnapshot: Boolean = false) {
         val sourceKey = currentEpgIndexKey
@@ -3631,7 +3946,41 @@ class IptvRepository @Inject constructor(
         runCatching { channelCacheFile().delete() }
     }
 
-    private fun ensureCacheOwnership(profileId: String, config: IptvConfig) {
+    /**
+     * Releases what is held for Stalker portals that are no longer configured:
+     * their channel list and, with it, the portal session that came with it.
+     *
+     * [loadStalkerChannels] cannot do this. When the last portal is removed
+     * every caller returns before it is reached, so the removed portal's list
+     * and session stayed in memory until the app was closed.
+     *
+     * Only portals that actually disappeared are dropped. A playlist toggled,
+     * an EPG URL edited or a profile switched to one with the same portals
+     * leaves every key in place, so unrelated changes keep sharing the download
+     * they already have (measured: dropping it anyway cost a second full
+     * 27.67 MB list on every playlist toggle).
+     */
+    private fun releaseStalkerStateForRemovedPortals(config: IptvConfig) {
+        val liveKeys = activeStalkerPortalKeys(config)
+        stalkerChannelListLoader.retainOnly(liveKeys)
+        val livePortalIds = activeStalkerPortals(config).map { it.id }.toSet()
+        if (cachedStalkerApis.keys.any { it !in livePortalIds }) {
+            cachedStalkerApis = cachedStalkerApis.filterKeys { it in livePortalIds }
+        }
+    }
+
+    /**
+     * Runs before any entry point can decide it has nothing to do — the live TV
+     * snapshot load, the cache-only warmup and the cached-snapshot read all pass
+     * through here first, whether or not a source is configured. That makes it
+     * the one place where "the last portal is gone" is actually observed, so it
+     * is where the Stalker state of removed portals is released.
+     *
+     * `internal` so a test can drive it with a plain [IptvConfig], same
+     * convention as [activePlaylists].
+     */
+    internal fun ensureCacheOwnership(profileId: String, config: IptvConfig) {
+        releaseStalkerStateForRemovedPortals(config)
         val sig = buildSourceSignature(config)
         val ownerChanged = cacheOwnerProfileId != null && cacheOwnerProfileId != profileId
         val configChanged = cacheOwnerConfigSig != null && cacheOwnerConfigSig != sig
@@ -3948,8 +4297,14 @@ class IptvRepository @Inject constructor(
         )
     }
 
-    suspend fun importCloudConfigForProfile(profileId: String, state: IptvCloudProfileState) {
+    suspend fun importCloudConfigForProfile(
+        profileId: String,
+        state: IptvCloudProfileState,
+        incomingFieldTimestamps: org.json.JSONObject? = null,
+    ): Boolean {
         val safeProfileId = profileId.trim().ifBlank { "default" }
+        val previousState = exportCloudConfigForProfile(safeProfileId)
+        if (previousState == state) return false
         val normalizedM3u = normalizeStoredIptvUrl(state.m3uUrl)
         val normalizedEpgUrls = normalizeStoredEpgInputs(state.epgUrl)
         val normalizedEpg = normalizedEpgUrls.firstOrNull().orEmpty()
@@ -3980,6 +4335,8 @@ class IptvRepository @Inject constructor(
                 )
             )
         }
+        val sourcesChanged = previousState.m3uUrl != normalizedM3u || previousState.epgUrl != normalizedEpg ||
+            previousState.playlists != effectivePlaylists || previousState.stalkerPortals != normalizedStalkerPortals
         val validSourceIds = buildSet {
             effectivePlaylists.forEach { add(it.id) }
             normalizedStalkerPortals.forEach { add(it.id) }
@@ -4013,7 +4370,14 @@ class IptvRepository @Inject constructor(
                 .distinct()
                 .takeLast(40),
         )
+        var preservedConcurrentEdit = false
         context.settingsDataStore.edit { prefs ->
+            if (incomingFieldTimestamps != null &&
+                IptvCloudFields.hasNewerLocalChange(prefs, safeProfileId, incomingFieldTimestamps)
+            ) {
+                preservedConcurrentEdit = true
+                return@edit
+            }
             prefs[m3uUrlKeyFor(safeProfileId)] = encryptConfigValue(normalizedM3u)
             prefs[epgUrlKeyFor(safeProfileId)] = encryptConfigValue(normalizedEpg)
             if (normalizedStalkerPortals.isEmpty()) {
@@ -4042,11 +4406,20 @@ class IptvRepository @Inject constructor(
                 prefs.remove(tvSessionKeyFor(safeProfileId))
             }
         }
+        if (preservedConcurrentEdit) return true
         groupOrderLocallyDirty = false
-        if (profileManager.getProfileIdSync() == safeProfileId) {
+        if (sourcesChanged && profileManager.getProfileIdSync() == safeProfileId) {
             cachedStalkerApis = emptyMap()
             invalidateCache()
         }
+        return false
+    }
+
+    fun completedFullGuideAgeMs(): Long {
+        val key = currentEpgIndexKey
+        if (key.isBlank()) return Long.MAX_VALUE
+        val completedAt = runCatching { epgIndex.fullRefreshAtMs(key) }.getOrDefault(0L)
+        return if (completedAt > 0L) (System.currentTimeMillis() - completedAt).coerceAtLeast(0L) else Long.MAX_VALUE
     }
 
     private suspend fun fetchChannelsForPlaylistWithRetries(
@@ -4131,6 +4504,7 @@ class IptvRepository @Inject constructor(
         @SerializedName("stream_icon") val streamIcon: String? = null,
         @SerializedName("epg_channel_id") val epgChannelId: String? = null,
         @SerializedName("category_id") val categoryId: String? = null,
+        @SerializedName("container_extension") val containerExtension: String? = null,
         @SerializedName("tv_archive") val tvArchive: Int? = null,
         @SerializedName("tv_archive_duration") val tvArchiveDuration: Int? = null
     )
@@ -5123,12 +5497,13 @@ class IptvRepository @Inject constructor(
         year: Int?,
         imdbId: String? = null,
         tmdbId: Int? = null,
-        allowNetwork: Boolean = true
+        allowNetwork: Boolean = true,
+        originalTitle: String? = null
     ): List<StreamSource> {
         return withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext emptyList()
             val config = observeConfig().first()
-            xtreamCredentialsForVodImport(config)
+            val xtreamSources = xtreamCredentialsForVodImport(config)
                 .flatMap { creds ->
                     runCatching {
                         findMovieVodSourcesForCredentials(
@@ -5141,7 +5516,23 @@ class IptvRepository @Inject constructor(
                         )
                     }.getOrDefault(emptyList())
                 }
-                .let(::sortVodSources)
+            // Additive second provider: each Stalker portal is searched on its
+            // own, and a failing portal never removes Xtream results.
+            val stalkerSources = activeStalkerPortals(config)
+                .flatMap { portal ->
+                    runCatching {
+                        findStalkerMovieVodSources(
+                            portal = portal,
+                            title = title,
+                            year = year,
+                            tmdbId = tmdbId,
+                            imdbId = imdbId,
+                            allowNetwork = allowNetwork,
+                            originalTitle = originalTitle
+                        )
+                    }.getOrDefault(emptyList())
+                }
+            sortVodSources(xtreamSources + stalkerSources)
         }
     }
 
@@ -5236,6 +5627,360 @@ class IptvRepository @Inject constructor(
         return sources
     }
 
+    // ── Stalker VOD (movies) ────────────────────────────────────────────────
+
+    /**
+     * Stalker counterpart to [findMovieVodSourcesForCredentials].
+     *
+     * Unlike Xtream, a Stalker portal serves its catalog only in small pages
+     * (14 entries on a stock Ministra build), so downloading and indexing the
+     * whole catalog locally would mean hundreds of requests per refresh on a
+     * large portal - exactly the request pattern that gets users throttled or
+     * IP-banned by their provider. The portal's own `search` narrows the same
+     * endpoint server-side instead, and the handful of entries that come back
+     * is scored with the same TMDB-id / title+year matching the Xtream path
+     * uses.
+     */
+    private suspend fun findStalkerMovieVodSources(
+        portal: StalkerPortalEntry,
+        title: String,
+        year: Int?,
+        tmdbId: Int?,
+        imdbId: String?,
+        allowNetwork: Boolean,
+        originalTitle: String? = null
+    ): List<StreamSource> {
+        if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return emptyList()
+        val fingerprint = stalkerPortalFingerprint(portal)
+        // Portal id and fingerprint are both part of the key: two portals never
+        // read each other's matches, and re-pointing a portal at another server
+        // invalidates only that portal's entries.
+        val cacheKey = iptvMovieSourceCacheKey(
+            profileIdHash = profileIdHash(),
+            imdbId = imdbId,
+            tmdbId = tmdbId,
+            title = title,
+            year = year
+        )?.let { base -> "stalker|${portal.id}|$base" }
+        if (cacheKey != null) {
+            lookupCachedMovieSources(cacheKey, fingerprint)?.let { return it }
+        }
+        // Nothing to fall back on offline: there is no local Stalker catalog,
+        // the cached result above is the only network-free answer.
+        if (!allowNetwork) return emptyList()
+
+        val normalizedTitle = normalizeLookupText(title)
+        if (normalizedTitle.isBlank()) return emptyList()
+        val api = getOrCreateStalkerApi(portal) ?: return emptyList()
+
+        val normalizedTmdb = normalizeTmdbId(tmdbId)
+        val normalizedOriginalTitle = normalizeLookupText(originalTitle.orEmpty())
+            .takeIf { it.isNotBlank() && it != normalizedTitle }
+        val inputYear = year ?: parseYear(title)
+
+        var matches: List<com.arflix.tv.data.api.StalkerApi.StalkerVodItem> = emptyList()
+        // Counted separately from the matches: portals that ignore `search` answer
+        // every query with the head of their whole catalogue, so a high offered
+        // count next to zero matches names the portal as the cause, whereas both
+        // at zero points at the request or the portal's catalogue.
+        var offered = 0
+        for (query in stalkerVodSearchQueries(title, originalTitle)) {
+            val items = stalkerVodSearch(portal, fingerprint, api, query)
+            offered += items.size
+            if (items.isEmpty()) continue
+            matches = matchStalkerVodItems(
+                items = items,
+                normalizedTitle = normalizedTitle,
+                normalizedTmdb = normalizedTmdb,
+                inputYear = inputYear,
+                normalizedOriginalTitle = normalizedOriginalTitle
+            )
+            if (matches.isNotEmpty()) break
+        }
+        System.err.println(
+            "[Stalker-VOD] portal=${portal.id} title='$title' " +
+                "offered=$offered matches=${matches.size}"
+        )
+        if (matches.isEmpty()) return emptyList()
+
+        val sources = sortVodSources(
+            matches.mapNotNull { item ->
+                item.toStalkerMovieVodSource(portal, title.ifBlank { normalizedTmdb.orEmpty() })
+            }
+        )
+        if (cacheKey != null && sources.isNotEmpty()) {
+            storeCachedMovieSources(cacheKey, sources, fingerprint)
+        }
+        return sources
+    }
+
+    /** Empty answers expire quickly, real hits keep the long TTL. */
+    private fun cacheTtlFor(items: List<*>): Long =
+        if (items.isEmpty()) stalkerVodSearchEmptyCacheTtlMs else stalkerVodSearchCacheTtlMs
+
+    /**
+     * The terms one portal lookup may spend, most likely first. The caller
+     * stops at the first term that produced a match, so the later ones only
+     * cost a request when the earlier ones found nothing.
+     *
+     * A portal matches `search` literally against its own catalog name, and
+     * that name is not the name TMDB shows the user. Measured against a real
+     * portal: TMDB says "Der Astronaut - Project Hail Mary" with an en dash,
+     * the catalog lists "DE - Der Astronaut: Project Hail Mary (2026)" with a
+     * colon, and the literal search therefore answers with nothing at all -
+     * while the same film sits in that catalog eleven times under its original
+     * title. Hence three terms, none of which is enough on its own:
+     *
+     *  1. [originalTitle] - most catalog entries are listed under the original
+     *     name, so this is the term that hits first most of the time.
+     *  2. [title] as displayed - the only term that finds an entry a panel
+     *     carries purely localized: "Die Verurteilten" does not contain
+     *     "The Shawshank Redemption" anywhere.
+     *  3. The part in front of a subtitle separator - the rescue anchor for
+     *     the punctuation mismatch above, and for panels that list "Dune"
+     *     where TMDB says "Dune: Part Two".
+     *
+     * Costs nothing in the common case: when a user browses in the original
+     * language, terms 1 and 2 are the same string and only one request goes
+     * out, exactly as before.
+     */
+    internal fun stalkerVodSearchQueries(
+        title: String,
+        originalTitle: String? = null
+    ): List<String> {
+        val queries = mutableListOf<String>()
+        fun add(candidate: String) {
+            val term = candidate.trim()
+            if (term.isBlank()) return
+            // Case-insensitive: a portal search is case-insensitive too, so a
+            // second spelling of the same term would only buy a second
+            // identical answer.
+            if (queries.any { it.equals(term, ignoreCase = true) }) return
+            queries += term
+        }
+
+        add(originalTitle.orEmpty())
+        val primary = title.trim()
+        add(primary)
+
+        // Derived, not given: only used when it still names the film. Two
+        // characters ("It: Chapter Two" -> "It") would ask the portal for a
+        // slice of its whole catalog instead.
+        val head = primary.subtitleHead()
+        if (head.length >= minStalkerVodQueryHeadLength) add(head)
+
+        return queries
+    }
+
+    /**
+     * Everything in front of the first subtitle separator.
+     *
+     * The dashes are spaced on purpose: an unspaced hyphen belongs to names
+     * like "Spider-Man", and an unspaced en dash to year ranges. The en and em
+     * dash are in the list because TMDB writes German subtitles with them
+     * while portals write a colon - the exact mismatch this whole helper is
+     * about.
+     */
+    private fun String.subtitleHead(): String =
+        substringBefore(':')
+            .substringBefore(" - ")
+            .substringBefore(" – ")
+            .substringBefore(" — ")
+            .trim()
+
+    private suspend fun stalkerVodSearch(
+        portal: StalkerPortalEntry,
+        fingerprint: String,
+        api: com.arflix.tv.data.api.StalkerApi,
+        query: String
+    ): List<com.arflix.tv.data.api.StalkerApi.StalkerVodItem> {
+        val term = query.trim()
+        if (term.isBlank()) return emptyList()
+        val key = StalkerVodSearchCacheKey(portal.id, fingerprint, term.lowercase(Locale.US))
+        val now = System.currentTimeMillis()
+        stalkerVodSearchCache[key]?.let { cached ->
+            if (now - cached.fetchedAtMs < cacheTtlFor(cached.items)) return cached.items
+            stalkerVodSearchCache.remove(key)
+        }
+        // null means the request itself failed. Caching that would turn one
+        // bad moment into hours of "this portal has no such film".
+        val items = api.searchVod(term) ?: return emptyList()
+        if (stalkerVodSearchCache.size >= maxStalkerVodSearchCacheEntries) {
+            // Bounded on purpose: one answer is small, but a long browsing
+            // session must not accumulate an entry per looked-up movie.
+            stalkerVodSearchCache.clear()
+        }
+        stalkerVodSearchCache[key] = StalkerVodSearchCacheEntry(now, items)
+        return items
+    }
+
+    /** Movie entries of a portal search, scored by [matchStalkerCatalogEntries]. */
+    internal fun matchStalkerVodItems(
+        items: List<com.arflix.tv.data.api.StalkerApi.StalkerVodItem>,
+        normalizedTitle: String,
+        normalizedTmdb: String?,
+        inputYear: Int?,
+        normalizedOriginalTitle: String? = null
+    ): List<com.arflix.tv.data.api.StalkerApi.StalkerVodItem> = matchStalkerCatalogEntries(
+        items = items,
+        normalizedTitle = normalizedTitle,
+        normalizedTmdb = normalizedTmdb,
+        inputYear = inputYear,
+        normalizedOriginalTitle = normalizedOriginalTitle
+    ) { StalkerCatalogFields(it.name, it.cmd, it.year, it.tmdbId) }
+
+    /** The fields a Stalker catalog entry is scored on. */
+    private data class StalkerCatalogFields(
+        val name: String?,
+        val cmd: String?,
+        val year: String?,
+        val tmdbId: String?
+    )
+
+    /**
+     * Scores portal entries against a wanted title. Written over the entry's
+     * fields rather than over one item type: `get_ordered_list` answers with
+     * the same four fields for every catalog it serves.
+     *
+     * Two stages, as on the Xtream path: a portal-supplied `tmdb_id` wins
+     * outright, otherwise entries are scored on their title with the existing
+     * [scoreNameMatch] plus the year bonus/penalty and score window
+     * [findMovieCandidatesIndexed] applies. Entries without a `cmd` are dropped
+     * either way - there would be nothing to play.
+     *
+     * [normalizedOriginalTitle] is scored as an equal alternative, not as a
+     * fallback: [stalkerVodSearchQueries] asks the portal for the original
+     * title as well, and a catalog listing the film only under that name -
+     * "EN - Project Hail Mary (2026)" for a user browsing in German - would
+     * otherwise be found and then thrown away. Both names denote the same
+     * film, so the better of the two scores is the entry's score. Portals that
+     * supply a `tmdb_id` never reach this stage.
+     */
+    private fun <T> matchStalkerCatalogEntries(
+        items: List<T>,
+        normalizedTitle: String,
+        normalizedTmdb: String?,
+        inputYear: Int?,
+        normalizedOriginalTitle: String? = null,
+        fields: (T) -> StalkerCatalogFields
+    ): List<T> {
+        if (items.isEmpty()) return emptyList()
+        if (!normalizedTmdb.isNullOrBlank()) {
+            val idMatches = items.filter { normalizeTmdbId(fields(it).tmdbId) == normalizedTmdb }
+            if (idMatches.isNotEmpty()) return idMatches
+        }
+        val wantedNames = listOfNotNull(
+            normalizedTitle.takeIf { it.isNotBlank() },
+            normalizedOriginalTitle?.takeIf { it.isNotBlank() }
+        ).distinct()
+        if (wantedNames.isEmpty()) return emptyList()
+
+        val scored = items
+            .mapNotNull { item ->
+                val entry = fields(item)
+                val itemName = entry.name?.trim().orEmpty()
+                if (itemName.isBlank()) return@mapNotNull null
+                if (entry.cmd.isNullOrBlank()) return@mapNotNull null
+                val score = wantedNames.maxOf { scoreNameMatch(itemName, it) }
+                if (score <= 0) return@mapNotNull null
+                val providerYear = parseYear(entry.year?.trim().orEmpty().ifBlank { itemName })
+                val yearDelta = if (inputYear != null && providerYear != null) {
+                    kotlin.math.abs(providerYear - inputYear)
+                } else null
+                val yearAdjust = when {
+                    yearDelta == null -> 0
+                    yearDelta == 0 -> 20
+                    yearDelta == 1 -> 8
+                    else -> -25
+                }
+                item to (score + yearAdjust)
+            }
+            .sortedByDescending { it.second }
+        val bestScore = scored.firstOrNull()?.second ?: return emptyList()
+        val minScore = maxOf(65, bestScore - 8)
+        return scored.takeWhile { it.second >= minScore }.map { it.first }
+    }
+
+    private fun com.arflix.tv.data.api.StalkerApi.StalkerVodItem.toStalkerMovieVodSource(
+        portal: StalkerPortalEntry,
+        fallbackTitle: String
+    ): StreamSource? {
+        val marker = StalkerVodLink.buildMarker(portal.id, cmd.orEmpty()) ?: return null
+        val sourceName = name?.trim().orEmpty().ifBlank { fallbackTitle }
+        return StreamSource(
+            source = sourceName,
+            addonName = "IPTV VOD",
+            addonId = IptvVodSourceIds.STALKER,
+            quality = stalkerVodQuality(sourceName, hd),
+            size = "",
+            url = marker,
+            description = stalkerVodDescription(portal, time, ratingImdb)
+        )
+    }
+
+    /**
+     * Stalker knows no resolution field - the portal only flags `hd` - so the
+     * title is still the better source when it names one. Falling back to the
+     * flag at least separates HD entries from the rest.
+     */
+    private fun stalkerVodQuality(sourceName: String, hdFlag: String?): String {
+        val inferred = inferQuality(sourceName)
+        if (inferred != "VOD") return inferred
+        return if (hdFlag?.trim() == "1") "HD" else "VOD"
+    }
+
+    /**
+     * The little the portal knows beyond the title, which is what makes two
+     * entries of the same movie tellable apart: which portal it came from, how
+     * long it runs, and its IMDb rating.
+     */
+    private fun stalkerVodDescription(
+        portal: StalkerPortalEntry,
+        runtime: String?,
+        ratingImdb: String?
+    ): String? {
+        val parts = mutableListOf<String>()
+        portal.name.trim().takeIf { it.isNotBlank() }?.let(parts::add)
+        runtime?.trim()?.takeIf { it.isNotBlank() }?.let { value ->
+            val minutes = value.toIntOrNull()
+            parts += if (minutes != null && minutes > 0) "$minutes min" else value
+        }
+        ratingImdb?.trim()?.toDoubleOrNull()?.takeIf { it > 0.0 }?.let { parts += "IMDb $it" }
+        return parts.joinToString(" \u00b7 ").ifBlank { null }
+    }
+
+    /**
+     * Stable, secret-free identity of a portal. Used as the cache fingerprint,
+     * so a portal that gets re-pointed at another server or MAC drops its own
+     * cached matches without touching any other source.
+     */
+    private fun stalkerPortalFingerprint(portal: StalkerPortalEntry): String {
+        val raw = "${portal.portalUrl.trim().trimEnd('/').lowercase(Locale.ROOT)}|" +
+            portal.macAddress.trim().uppercase(Locale.ROOT)
+        return MessageDigest.getInstance("MD5").digest(raw.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * Turns the `stalker_vod://` placeholder of a matched movie into a playable
+     * URL. Called from [StreamRepository.resolveStreamForPlayback] the moment
+     * playback starts - never while a source list is being built.
+     */
+    suspend fun resolveStalkerVodStreamUrl(markerUrl: String): String? {
+        val (portalId, command) = StalkerVodLink.parseMarker(markerUrl) ?: return null
+        val config = observeConfig().first()
+        // No "fall back to the first portal" here: the marker always carries the
+        // portal it came from, and guessing would resolve against a stranger.
+        val portal = config.stalkerPortals.firstOrNull { it.id == portalId } ?: return null
+        if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return null
+        val api = getOrCreateStalkerApi(portal) ?: return null
+        val resolved = api.resolveVodStreamUrl(command)
+        System.err.println(
+            "[Stalker-VOD] create_link portal=$portalId resolved=${!resolved.isNullOrBlank()}"
+        )
+        return resolved
+    }
+
     suspend fun findEpisodeVodSource(
         title: String,
         season: Int,
@@ -5308,7 +6053,7 @@ class IptvRepository @Inject constructor(
                 StreamSource(
                     source = sourceName,
                     addonName = "IPTV Series VOD",
-                    addonId = "iptv_xtream_vod",
+                    addonId = IptvVodSourceIds.XTREAM,
                     quality = inferQuality(sourceName),
                     size = "",
                     url = streamUrl
@@ -5474,7 +6219,7 @@ class IptvRepository @Inject constructor(
         return StreamSource(
             source = sourceName,
             addonName = "IPTV VOD",
-            addonId = "iptv_xtream_vod",
+            addonId = IptvVodSourceIds.XTREAM,
             quality = inferQuality(sourceName),
             size = "",
             url = streamUrl
@@ -5492,7 +6237,7 @@ class IptvRepository @Inject constructor(
         return StreamSource(
             source = sourceName,
             addonName = "IPTV Episode VOD",
-            addonId = "iptv_xtream_vod",
+            addonId = IptvVodSourceIds.XTREAM,
             quality = inferQuality(sourceName),
             size = "",
             url = streamUrl
@@ -5510,10 +6255,24 @@ class IptvRepository @Inject constructor(
             )
     }
 
-    suspend fun warmXtreamVodCachesIfPossible() {
+    /**
+     * Background pre-warm for every configured VOD provider, called from the
+     * home, TV and settings screens so the first movie lookup after start-up is
+     * not the one that pays for the cold caches.
+     *
+     * Stalker has no catalog to pre-download - its searches run server-side -
+     * but the portal handshake does probe up to five base paths before the
+     * first request succeeds, so that is what gets warmed here. A new source
+     * that skips this path still works, it just silently loses the head start
+     * this function exists for.
+     */
+    suspend fun warmVodCachesIfPossible() {
         withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext
             val config = observeConfig().first()
+            activeStalkerPortals(config).forEach { portal ->
+                runCatching { getOrCreateStalkerApi(portal) }
+            }
             xtreamCredentialsForVodImport(config).forEach { creds ->
                 runCatching {
                     loadXtreamVodStreams(creds)
@@ -6317,11 +7076,11 @@ class IptvRepository @Inject constructor(
                 list.allEpgUrls().forEach { add(ScopedEpgCandidate(it, list.id)) }
                 val creds = resolveXtreamCredentials(list)
                 if (creds != null) {
-                    add(ScopedEpgCandidate("${creds.baseUrl}/xmltv.php?username=${creds.username}&password=${creds.password}", list.id))
-                    add(ScopedEpgCandidate("${creds.baseUrl}/get.php?username=${creds.username}&password=${creds.password}&type=xmltv", list.id))
-                    add(ScopedEpgCandidate("${creds.baseUrl}/get.php?username=${creds.username}&password=${creds.password}&type=xml", list.id))
-                    add(ScopedEpgCandidate("${creds.baseUrl}/xmltv.php", list.id))
-                    add(ScopedEpgCandidate("${creds.baseUrl}/get.php?username=${creds.username}&password=${creds.password}", list.id))
+                    add(ScopedEpgCandidate("${creds.baseUrl}/xmltv.php?username=${creds.username}&password=${creds.password}", list.id, providerFallback = true))
+                    add(ScopedEpgCandidate("${creds.baseUrl}/get.php?username=${creds.username}&password=${creds.password}&type=xmltv", list.id, providerFallback = true))
+                    add(ScopedEpgCandidate("${creds.baseUrl}/get.php?username=${creds.username}&password=${creds.password}&type=xml", list.id, providerFallback = true))
+                    add(ScopedEpgCandidate("${creds.baseUrl}/xmltv.php", list.id, providerFallback = true))
+                    add(ScopedEpgCandidate("${creds.baseUrl}/get.php?username=${creds.username}&password=${creds.password}", list.id, providerFallback = true))
                 }
             }
             discoveredM3uEpgUrls.forEach { add(ScopedEpgCandidate(it)) }
@@ -6459,7 +7218,9 @@ class IptvRepository @Inject constructor(
             val name = stream.name?.trim().orEmpty().ifBlank { return@mapIndexedNotNull null }
             val categoryId = stream.categoryId.orEmpty().trim()
             val group = categoryMap[categoryId].orEmpty().ifBlank { "Uncategorized" }
-            val streamUrl = "${creds.baseUrl}/live/${creds.username}/${creds.password}/$streamId.ts"
+            val streamUrl = buildXtreamLiveStreamUrl(
+                creds.baseUrl, creds.username, creds.password, streamId, stream.containerExtension,
+            )
 
             categoryId to IptvChannel(
                 id = "xtream:$streamId",
@@ -6482,6 +7243,17 @@ class IptvRepository @Inject constructor(
         url: String,
         type: Type,
         client: OkHttpClient = iptvHttpClient
+    ): T? = if (client === xtreamGuideHttpClient || client === xtreamCatchupGuideHttpClient) {
+        guideRequestBudget.request(url) { requestJsonUnbudgeted<T>(url, type, client, guideRequest = true) }
+    } else {
+        requestJsonUnbudgeted(url, type, client)
+    }
+
+    private suspend fun <T> requestJsonUnbudgeted(
+        url: String,
+        type: Type,
+        client: OkHttpClient,
+        guideRequest: Boolean = false,
     ): T? = suspendCancellableCoroutine { continuation ->
         val request = Request.Builder()
             .url(url)
@@ -6507,6 +7279,9 @@ class IptvRepository @Inject constructor(
                     return
                 }
                 response.use {
+                    if (guideRequest) {
+                        guideRequestBudget.onResponse(url, it.code, it.header("Retry-After")?.toLongOrNull())
+                    }
                     if (!it.isSuccessful) {
                         continuation.resume(null)
                         return
@@ -6584,11 +7359,14 @@ class IptvRepository @Inject constructor(
         }
     }
 
-    private fun fetchAndParseEpg(url: String, channels: List<IptvChannel>): Map<String, IptvNowNext> {
-        abortLargeEpgWorkIfInteractive(channels.size)
-        val hasDbEntries = currentEpgIndexKey.isNotBlank() && runCatching {
-            epgIndex.countPrograms(currentEpgIndexKey)
-        }.getOrDefault(0) > 0
+    private fun fetchAndParseEpg(
+        url: String,
+        channels: List<IptvChannel>,
+        checkActive: () -> Unit = {},
+    ): Map<String, IptvNowNext> {
+        checkActive()
+        // A 304 is only useful when this exact request can be served from cache.
+        val hasDbEntries = channels.all { hasProgramData(cachedNowNext[it.id]) }
 
         fun epgRequest(targetUrl: String, userAgent: String, forceFull: Boolean = false): Request {
             val builder = Request.Builder()
@@ -6613,29 +7391,30 @@ class IptvRepository @Inject constructor(
         val primaryUserAgent = OkHttpProvider.userAgentOr(IPTV_USER_AGENT)
         val fallbackUserAgent = OkHttpProvider.userAgentOr(BROWSER_USER_AGENT)
         var response = iptvHttpClient.newCall(epgRequest(url, primaryUserAgent)).execute()
-        abortLargeEpgWorkIfInteractive(channels.size)
+        guideRequestBudget.onResponse(url, response.code, response.header("Retry-After")?.toLongOrNull())
+        try {
+            checkActive()
+        } catch (error: Exception) {
+            response.close()
+            throw error
+        }
         if (response.code == 304) {
             response.close()
             throw EpgNotModifiedException()
         }
-        if (!response.isSuccessful && response.code in setOf(511, 403, 401)) {
+        if (!response.isSuccessful && response.code == 511) {
             response.close()
             response = iptvHttpClient.newCall(
                 epgRequest(url, fallbackUserAgent)
             ).execute()
+            guideRequestBudget.onResponse(url, response.code, response.header("Retry-After")?.toLongOrNull())
             if (response.code == 304) {
                 response.close()
                 throw EpgNotModifiedException()
             }
         }
         response.use { safeResponse ->
-            if (safeResponse.isSuccessful) {
-                val etag = safeResponse.header("ETag")?.trim()
-                val lastModified = safeResponse.header("Last-Modified")?.trim()
-                if (etag != null || lastModified != null) {
-                    saveEpgHttpCacheHeaders(url, etag, lastModified)
-                }
-            }
+            checkActive()
             val stream = safeResponse.body?.byteStream() ?: throw IllegalStateException(context.getString(R.string.epg_empty))
             val prepared = BufferedInputStream(prepareInputStream(stream, url))
             if (!safeResponse.isSuccessful && !looksLikeXmlTv(prepared)) {
@@ -6648,9 +7427,14 @@ class IptvRepository @Inject constructor(
             // Only spool to disk and retry if the stream parse fails.
             try {
                 val sanitized = BackslashEscapeSanitizingInputStream(prepared)
-                return parseXmlTvNowNext(BufferedInputStream(sanitized), channels)
+                val parsed = parseXmlTvToIndex(BufferedInputStream(sanitized), channels, checkActive, url)
+                if (parsed.isNotEmpty()) {
+                    saveEpgHttpCacheHeaders(url, safeResponse.header("ETag"), safeResponse.header("Last-Modified"))
+                }
+                return parsed
             } catch (streamError: Exception) {
                 if (streamError is kotlinx.coroutines.CancellationException) throw streamError
+                checkActive()
                 // Streaming parse failed – the network stream is consumed, so we
                 // cannot retry from it.  Check if we got a useful partial result
                 // or need to re-download.  Re-download and spool to disk for retries.
@@ -6661,25 +7445,35 @@ class IptvRepository @Inject constructor(
                         epgRequest(url, primaryUserAgent, forceFull = true)
                     ).execute()
                     retryResponse.use { rr ->
+                        checkActive()
+                        guideRequestBudget.onResponse(url, rr.code, rr.header("Retry-After")?.toLongOrNull())
                         val retryStream = rr.body?.byteStream()
                             ?: throw IllegalStateException(context.getString(R.string.epg_retry_empty))
                         BufferedInputStream(prepareInputStream(retryStream, url)).use { input ->
                             BufferedOutputStream(tmpFile.outputStream()).use { output ->
-                                input.copyTo(output, DEFAULT_BUFFER_SIZE)
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                while (true) {
+                                    checkActive()
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    output.write(buffer, 0, count)
+                                }
                             }
                         }
                     }
 
                     try {
                         return FileInputStream(tmpFile).use { input ->
-                            parseXmlTvNowNext(BufferedInputStream(input), channels)
+                            parseXmlTvToIndex(BufferedInputStream(input), channels, checkActive, url)
                         }
                     } catch (retryError: Exception) {
                         if (retryError is kotlinx.coroutines.CancellationException) throw retryError
+                        checkActive()
                         // Final fallback: SAX parser (different engine).
                         return FileInputStream(tmpFile).use { input ->
                             val sanitized2 = BackslashEscapeSanitizingInputStream(BufferedInputStream(input))
-                            parseXmlTvNowNextWithSax(BufferedInputStream(sanitized2), channels)
+                            if (channels.size > LargeIptvListChannelCount) throw retryError
+                            parseXmlTvNowNextWithSax(BufferedInputStream(sanitized2), channels, checkActive)
                         }
                     }
                 } finally {
@@ -7119,11 +7913,8 @@ class IptvRepository @Inject constructor(
         val rest = xtreamChannels.filter { it.id !in alreadyPrioritized }
         val prioritized = favChannels + favGroupChannels + rest
 
-        // Fetch up to 25000 channels — well beyond what the provider tends
-        // to serve per playlist, so effectively "all available". Combined
-        // with the widened concurrency in fetchXtreamEpgListingsAsync this
-        // completes within the 60s budget for most providers.
-        val toFetch = prioritized
+        // Full guides come from XMLTV, not thousands of per-stream API calls.
+        val toFetch = prioritized.take(startupShortEpgChannelLimit)
         val includeStreamsWithoutGuideKey = toFetch.size <= xtreamShortEpgBatchSize
         System.err.println(
             "[EPG] Xtream short EPG: preparing stream sweep for ${toFetch.size} channels " +
@@ -7273,7 +8064,7 @@ class IptvRepository @Inject constructor(
         channels: List<IptvChannel>,
         includeStreamsWithoutGuideKey: Boolean
     ): XtreamEpgRepresentativeStreams {
-        val withGuideKey = LinkedHashSet<Int>()
+        val withGuideKey = LinkedHashMap<String, Int>()
         val withoutGuideKey = LinkedHashSet<Int>()
         var skippedWithoutGuideKey = 0
 
@@ -7287,12 +8078,12 @@ class IptvRepository @Inject constructor(
                     skippedWithoutGuideKey++
                 }
             } else {
-                withGuideKey += streamId
+                withGuideKey.putIfAbsent(guideKey, streamId)
             }
         }
 
         val streamIds = buildList {
-            addAll(withGuideKey)
+            addAll(withGuideKey.values)
             addAll(withoutGuideKey)
         }.distinct()
         return XtreamEpgRepresentativeStreams(streamIds, skippedWithoutGuideKey)
@@ -7333,13 +8124,10 @@ class IptvRepository @Inject constructor(
         streamIds: List<Int>,
         timeoutMillis: Long = 180_000L,
         listingLimit: Int = xtreamShortEpgLimit,
-        allowUnboundedFallback: Boolean = true,
+        allowUnboundedFallback: Boolean = false,
         onStreamProcessed: (Int, Boolean) -> Unit = { _, _ -> }
     ): List<XtreamEpgListing> {
-        // Concurrency bumped 20 → 32 so a 25k-channel sweep finishes inside
-        // the enlarged 180s budget. Providers typically tolerate this; any
-        // over-limit request simply fails and the fallback per-channel call
-        // handles it silently.
+        // The repository-wide budget also covers overlapping viewport and catch-up requests.
         val distinctStreamIds = streamIds.distinct()
         if (distinctStreamIds.isEmpty()) return emptyList()
         val gate = Semaphore(xtreamShortEpgConcurrency)
@@ -7363,7 +8151,7 @@ class IptvRepository @Inject constructor(
                                         client = xtreamGuideHttpClient
                                     )
                                     listings = resp?.epgListings
-                                    if (listings.isNullOrEmpty() && allowUnboundedFallback) {
+                                    if (resp != null && listings.isNullOrEmpty() && allowUnboundedFallback) {
                                         val fallbackUrl = "${creds.baseUrl}/player_api.php?username=${creds.username}" +
                                             "&password=${creds.password}&action=get_short_epg&stream_id=$sid"
                                         resp = requestJson(
@@ -7373,7 +8161,10 @@ class IptvRepository @Inject constructor(
                                         )
                                         listings = resp?.epgListings
                                     }
-                                    if (listings.isNullOrEmpty() && allowUnboundedFallback) {
+                                    // A deferred/failed request is not proof that this provider
+                                    // has no guide. Do not give it the ten-minute empty-feed TTL.
+                                    if (resp == null) hadError = true
+                                    if (resp != null && listings.isNullOrEmpty() && allowUnboundedFallback) {
                                         val simpleUrl = "${creds.baseUrl}/player_api.php?username=${creds.username}" +
                                             "&password=${creds.password}&action=get_simple_data_table&stream_id=$sid"
                                         val simpleResp: JsonObject? = requestJson(
@@ -7397,7 +8188,10 @@ class IptvRepository @Inject constructor(
                                             System.err.println("[EPG] Sample response for stream_id=$sid: channelId=${sample.channelId} epgId=${sample.epgId} streamId=${sample.streamId} start=${sample.start} startTs=${sample.startTimestamp} title=${sample.title?.take(40)}")
                                         }
                                     }
-                                } catch (_: Exception) { hadError = true }
+                                } catch (error: Exception) {
+                                    if (error is kotlinx.coroutines.CancellationException) throw error
+                                    hadError = true
+                                }
                                 onStreamProcessed(sid, hadError)
                             }
                         }
@@ -7448,12 +8242,16 @@ class IptvRepository @Inject constructor(
                                 if (resp == null) {
                                     hadError = true
                                 }
-                                val listings = trimXtreamListingsToGuideWindow(parseXtreamListingsFromJson(resp))
+                                val listings = trimXtreamListingsToGuideWindow(
+                                    parseXtreamListingsFromJson(resp),
+                                    pastWindowMs = IptvGuideHistory.MAX_WINDOW_MS,
+                                )
                                     .withRequestedStreamId(sid)
                                 if (listings.isNotEmpty()) {
                                     listingsResult.addAll(listings)
                                 }
-                            } catch (_: Exception) {
+                            } catch (error: Exception) {
+                                if (error is kotlinx.coroutines.CancellationException) throw error
                                 hadError = true
                             }
                             onStreamProcessed(sid, hadError)
@@ -7913,17 +8711,71 @@ class IptvRepository @Inject constructor(
             .distinct()
     }
 
-    private fun parseXmlTvNowNext(
+    private fun parseXmlTvToIndex(
         input: InputStream,
-        channels: List<IptvChannel>
+        channels: List<IptvChannel>,
+        checkActive: () -> Unit,
+        feedUrl: String,
+    ): Map<String, IptvNowNext> {
+        if (channels.size <= LargeIptvListChannelCount || currentEpgIndexKey.isBlank()) {
+            return parseXmlTvNowNext(input, channels, checkActive)
+        }
+        val key = currentEpgIndexKey
+        val updatedAt = System.currentTimeMillis()
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        val pending = LinkedHashMap<String, MutableList<IptvProgram>>()
+        val pendingAliases = LinkedHashMap<String, List<String>>()
+        val registered = HashSet<String>()
+        val feedPrefix = "@xml:" + MessageDigest.getInstance("SHA-256")
+            .digest(feedUrl.toByteArray(StandardCharsets.UTF_8)).take(16).joinToString("") { "%02x".format(it) } + ":"
+        val sampleIds = LinkedHashSet<String>()
+        var pendingCount = 0
+        var indexedCount = 0
+        fun flush() {
+            checkActive()
+            if (pendingCount == 0) return
+            epgIndex.replaceChannels(key, pending.mapValues { IptvNowNext(upcoming = it.value) }, updatedAt, pendingAliases)
+            indexedCount += pendingCount
+            pending.clear()
+            pendingAliases.clear()
+            pendingCount = 0
+        }
+        val threadId = android.os.Process.myTid()
+        val priority = android.os.Process.getThreadPriority(threadId)
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            parseXmlTvNowNext(input, channels, checkActive) { xmlId, matches, program ->
+                val guideId = feedPrefix + xmlId
+                if (registered.add(guideId)) {
+                    pendingAliases[guideId] = matches.map { it.id }
+                    matches.forEach { if (sampleIds.size < 16) sampleIds.add(it.id) }
+                }
+                pending.getOrPut(guideId) { ArrayList() }.add(program)
+                if (++pendingCount >= 4_096) flush()
+            }
+            flush()
+            checkActive()
+            epgIndex.finishStreamingRefresh(key, updatedAt)
+            System.err.println("[EPG-Timing] streamed XMLTV rows=$indexedCount channels=${channels.size} elapsed_ms=${android.os.SystemClock.elapsedRealtime() - startedAt}")
+            return epgIndex.loadNowNext(key, sampleIds)
+        } finally {
+            android.os.Process.setThreadPriority(priority)
+        }
+    }
+
+    internal fun parseXmlTvNowNext(
+        input: InputStream,
+        channels: List<IptvChannel>,
+        checkActive: () -> Unit = {},
+        onProgram: ((String, List<IptvChannel>, IptvProgram) -> Unit)? = null,
     ): Map<String, IptvNowNext> {
         if (channels.isEmpty()) return emptyMap()
 
         val nowUtc = System.currentTimeMillis()
         val recentCutoff = xmlTvRecentCutoff(channels, nowUtc)
         val futureCutoff = nowUtc + xmlTvFutureWindowMs
-        val recentCutoffByChannelId = buildRecentCutoffByChannelId(channels, nowUtc)
-        val recentLimitByChannelId = buildRecentLimitByChannelId(channels)
+        val recentCutoffByChannelId = if (onProgram == null) buildRecentCutoffByChannelId(channels, nowUtc) else emptyMap()
+        val recentLimitByChannelId = if (onProgram == null) buildRecentLimitByChannelId(channels) else emptyMap()
 
         val keyLookup = buildChannelKeyLookup(channels)
         val xmlChannelNameMap = mutableMapOf<String, MutableSet<String>>()
@@ -7940,6 +8792,8 @@ class IptvRepository @Inject constructor(
         var currentDesc: String? = null
 
         val parser = android.util.Xml.newPullParser()
+        var currentArtwork: String? = null
+        var currentCategory: String? = null
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
         parser.setInput(input, null)
         var eventType = parser.eventType
@@ -7947,7 +8801,8 @@ class IptvRepository @Inject constructor(
 
         while (eventType != XmlPullParser.END_DOCUMENT) {
             if ((parsedEvents++ and 0xFF) == 0) {
-                abortLargeEpgWorkIfInteractive(channels.size)
+                checkActive()
+                if (onProgram == null) abortLargeEpgWorkIfInteractive(channels.size)
             }
             when (eventType) {
                 XmlPullParser.START_TAG -> {
@@ -7958,7 +8813,7 @@ class IptvRepository @Inject constructor(
                         "display-name" -> {
                             val xmlId = currentXmlChannelId
                             val displayText = parser.nextText().orEmpty()
-                            if (!xmlId.isNullOrBlank() && keyLookup[xmlId].isNullOrEmpty()) {
+                            if (!xmlId.isNullOrBlank()) {
                                 val display = normalizeChannelKey(displayText)
                                 if (display.isNotBlank()) {
                                     val isUseful = guideKeyCandidates(display).any { it in keyLookup }
@@ -7970,10 +8825,15 @@ class IptvRepository @Inject constructor(
                         }
                         "programme" -> {
                             val rawKey = normalizeChannelKey(parser.getAttributeValue(null, "channel") ?: "")
-                            val start = parseXmlTvDate(parser.getAttributeValue(null, "start"))
-                            val stop = parseXmlTvDate(parser.getAttributeValue(null, "stop"))
+                            // Most entries in a large XMLTV file are not in this
+                            // viewport. Do not parse their dates/titles/descriptions.
+                            val resolved = xmlChannelResolveCache.getOrPut(rawKey) {
+                                resolveXmlTvChannels(rawKey, xmlChannelNameMap, keyLookup)
+                            }
+                            val start = if (resolved.isNotEmpty()) parseXmlTvDate(parser.getAttributeValue(null, "start")) else 0L
+                            val stop = if (resolved.isNotEmpty()) parseXmlTvDate(parser.getAttributeValue(null, "stop")) else 0L
                             // Skip programmes that ended before the recent cutoff
-                            if ((stop > 0L && stop <= recentCutoff) || (start > 0L && start >= futureCutoff)) {
+                            if (resolved.isEmpty() || (stop > 0L && stop <= recentCutoff) || (start > 0L && start >= futureCutoff)) {
                                 currentChannelKey = null
                             } else {
                                 currentChannelKey = rawKey
@@ -7981,6 +8841,8 @@ class IptvRepository @Inject constructor(
                                 currentStop = stop
                                 currentTitle = null
                                 currentDesc = null
+                                currentArtwork = null
+                                currentCategory = null
                             }
                         }
                         "title" -> {
@@ -7992,6 +8854,13 @@ class IptvRepository @Inject constructor(
                             if (currentChannelKey != null) {
                                 currentDesc = parser.nextText().trim().ifBlank { null }
                             }
+                        }
+                        "icon" -> if (currentChannelKey != null) {
+                            currentArtwork = com.arflix.tv.data.model.safeSportsImage(parser.getAttributeValue(null, "src"))
+                        }
+                        "category" -> if (currentChannelKey != null) {
+                            val value = parser.nextText().trim()
+                            currentCategory = listOfNotNull(currentCategory, value).joinToString(" ").take(200)
                         }
                     }
                 }
@@ -8011,10 +8880,14 @@ class IptvRepository @Inject constructor(
                                 title = currentTitle ?: context.getString(R.string.program_unknown),
                                 description = currentDesc,
                                 startUtcMillis = currentStart,
-                                endUtcMillis = currentStop
+                                endUtcMillis = currentStop,
+                                artworkUrl = currentArtwork,
+                                category = currentCategory,
                             )
 
-                            resolvedChannels.forEach { channel ->
+                            if (onProgram != null) {
+                                onProgram(key!!, resolvedChannels, program)
+                            } else resolvedChannels.forEach { channel ->
                                 val nowProgram = pickNow(nowCandidates[channel.id], program, nowUtc)
                                 nowCandidates[channel.id] = nowProgram
                                 if (program.startUtcMillis > nowUtc) {
@@ -8035,12 +8908,14 @@ class IptvRepository @Inject constructor(
             eventType = parser.next()
         }
 
-        return buildParsedNowNextResult(channels, nowCandidates, upcomingCandidates, recentCandidates)
+        return if (onProgram != null) emptyMap()
+        else buildParsedNowNextResult(channels, nowCandidates, upcomingCandidates, recentCandidates)
     }
 
     private fun parseXmlTvNowNextWithSax(
         input: InputStream,
-        channels: List<IptvChannel>
+        channels: List<IptvChannel>,
+        checkActive: () -> Unit = {},
     ): Map<String, IptvNowNext> {
         if (channels.isEmpty()) return emptyMap()
 
@@ -8075,6 +8950,9 @@ class IptvRepository @Inject constructor(
         var readingDisplayName = false
         var readingTitle = false
         var readingDesc = false
+        var readingCategory = false
+        var currentArtwork: String? = null
+        var currentCategory: String? = null
         val textBuffer = StringBuilder(128)
 
         val handler = object : DefaultHandler() {
@@ -8082,9 +8960,10 @@ class IptvRepository @Inject constructor(
 
             override fun startElement(uri: String?, localName: String?, qName: String?, attributes: Attributes?) {
                 if ((parsedElements++ and 0xFF) == 0) {
+                    checkActive()
                     abortLargeEpgWorkIfInteractive(channels.size)
                 }
-                val name = (localName ?: qName ?: "").lowercase(Locale.US)
+                val name = (localName?.takeIf { it.isNotEmpty() } ?: qName ?: "").lowercase(Locale.US)
                 when (name) {
                     "channel" -> {
                         currentXmlChannelId = normalizeChannelKey(attributes?.getValue("id").orEmpty())
@@ -8109,6 +8988,8 @@ class IptvRepository @Inject constructor(
                         }
                         currentTitle = null
                         currentDesc = null
+                        currentArtwork = null
+                        currentCategory = null
                     }
                     "title" -> {
                         if (!currentChannelKey.isNullOrBlank()) {
@@ -8122,18 +9003,25 @@ class IptvRepository @Inject constructor(
                             textBuffer.setLength(0)
                         }
                     }
+                    "icon" -> if (!currentChannelKey.isNullOrBlank()) {
+                        currentArtwork = com.arflix.tv.data.model.safeSportsImage(attributes?.getValue("src"))
+                    }
+                    "category" -> if (!currentChannelKey.isNullOrBlank()) {
+                        readingCategory = true
+                        textBuffer.setLength(0)
+                    }
                 }
             }
 
             override fun characters(ch: CharArray?, start: Int, length: Int) {
                 if (ch == null || length <= 0) return
-                if (readingDisplayName || readingTitle || readingDesc) {
+                if (readingDisplayName || readingTitle || readingDesc || readingCategory) {
                     textBuffer.append(ch, start, length)
                 }
             }
 
             override fun endElement(uri: String?, localName: String?, qName: String?) {
-                val name = (localName ?: qName ?: "").lowercase(Locale.US)
+                val name = (localName?.takeIf { it.isNotEmpty() } ?: qName ?: "").lowercase(Locale.US)
                 when (name) {
                     "display-name" -> {
                         if (readingDisplayName) {
@@ -8168,6 +9056,11 @@ class IptvRepository @Inject constructor(
                             textBuffer.setLength(0)
                         }
                     }
+                    "category" -> if (readingCategory) {
+                        currentCategory = listOfNotNull(currentCategory, textBuffer.toString().trim()).joinToString(" ").take(200)
+                        readingCategory = false
+                        textBuffer.setLength(0)
+                    }
                     "programme" -> {
                         val key = currentChannelKey
                         val resolvedChannels = key?.let {
@@ -8179,7 +9072,9 @@ class IptvRepository @Inject constructor(
                                 title = currentTitle ?: context.getString(R.string.program_unknown),
                                 description = currentDesc,
                                 startUtcMillis = currentStart,
-                                endUtcMillis = currentStop
+                                endUtcMillis = currentStop,
+                                artworkUrl = currentArtwork,
+                                category = currentCategory,
                             )
                             resolvedChannels.forEach { channel ->
                                 val nowProgram = pickNow(nowCandidates[channel.id], program, nowUtc)
@@ -8344,15 +9239,7 @@ class IptvRepository @Inject constructor(
     }
 
     private fun effectiveCatchupDays(channel: IptvChannel?, forceCatchupHistory: Boolean = false): Int {
-        if (channel == null) return 0
-        val explicitDays = channel.catchupDays.coerceIn(0, 7)
-        if (explicitDays > 0) return explicitDays
-        val hasCatchupMetadata = !channel.catchupType.isNullOrBlank() || !channel.catchupSource.isNullOrBlank()
-        val hasTimeshiftUrl = channel.streamUrl.contains("/timeshift/", ignoreCase = true)
-        if (hasCatchupMetadata || hasTimeshiftUrl) return 7
-        if (channel.xtreamStreamId != null || channel.streamUrl.contains("/live/", ignoreCase = true)) return 2
-        if (forceCatchupHistory) return 2
-        return 0
+        return IptvGuideHistory.days(channel, forceCatchupHistory)
     }
 
     private fun shouldLoadIndexedGuide(item: IptvNowNext?, channel: IptvChannel?, nowMs: Long): Boolean {
@@ -8378,45 +9265,11 @@ class IptvRepository @Inject constructor(
 
     private fun hasEnoughCatchupHistory(item: IptvNowNext, channel: IptvChannel?, nowMs: Long): Boolean {
         val days = effectiveCatchupDays(channel)
-        if (days <= 0) return true
-        val targetWindowMs = minOf(catchupGuideHistoryWindowMs, days * 24L * 60L * 60_000L)
-        val recent = item.recent
-            .asSequence()
-            .filter { it.endUtcMillis <= nowMs && it.endUtcMillis >= nowMs - targetWindowMs }
-            .toList()
-        if (recent.size < 6) return false
-        val oldestStart = recent.minOfOrNull { it.startUtcMillis } ?: return false
-        val coveredMs = nowMs - oldestStart
-        return coveredMs >= (targetWindowMs * 3) / 4 || recent.size >= 24
+        return IptvGuideHistory.hasCoverage(item, days * IptvGuideHistory.DAY_MS, nowMs)
     }
 
     private fun mergeCachedGuideSlice(existing: IptvNowNext?, fresh: IptvNowNext): IptvNowNext {
-        if (existing == null) return fresh
-        return IptvNowNext(
-            now = fresh.now ?: existing.now,
-            next = fresh.next ?: existing.next,
-            later = fresh.later ?: existing.later,
-            upcoming = mergeCachedPrograms(existing.upcoming, fresh.upcoming)
-                .asSequence()
-                .filter { it.startUtcMillis > 0L }
-                .take(epgUpcomingProgramLimit)
-                .toList(),
-            recent = mergeCachedPrograms(existing.recent, fresh.recent)
-                .takeLast(catchupRecentProgramLimit)
-        )
-    }
-
-    private fun mergeCachedPrograms(
-        existing: List<IptvProgram>,
-        fresh: List<IptvProgram>
-    ): List<IptvProgram> {
-        if (existing.isEmpty()) return fresh
-        if (fresh.isEmpty()) return existing
-        return (existing.asSequence() + fresh.asSequence())
-            .filter { it.title.isNotBlank() && it.endUtcMillis > it.startUtcMillis }
-            .distinctBy { programKey(it) }
-            .sortedBy { it.startUtcMillis }
-            .toList()
+        return IptvGuideHistory.mergeSchedules(existing, fresh, epgUpcomingProgramLimit)
     }
 
     private fun programKey(program: IptvProgram): String {
@@ -8895,9 +9748,10 @@ class IptvRepository @Inject constructor(
                     addNormalized(normalizeLooseKey(raw))
                 }
 
-            if (epgId.isBlank() && tvgName.isBlank()) {
-                addNormalized(normalizeLooseKey(stripQualitySuffixes(name)))
-            }
+            // Numeric API EPG IDs often differ from the XMLTV IDs. Keep the
+            // country prefix, but let HD/FHD/SD/LQ variants share its schedule.
+            addNormalized(normalizeLooseKey(stripQualitySuffixes(name)))
+            if (tvgName.isNotBlank()) addNormalized(normalizeLooseKey(stripQualitySuffixes(tvgName)))
         }
         return map
     }
@@ -8909,13 +9763,17 @@ class IptvRepository @Inject constructor(
     ): List<IptvChannel> {
         val normalized = normalizeChannelKey(xmlChannelKey)
 
-        keyLookup[normalized]?.let { return it }
+        val exact = keyLookup[normalized].orEmpty()
+        val names = xmlChannelNameMap[normalized].orEmpty()
+        val named = names.flatMap { display ->
+            keyLookup[normalizeLooseKey(stripQualitySuffixes(display))].orEmpty()
+        }
+        if (exact.isNotEmpty() || named.isNotEmpty()) return (exact + named).distinctBy { it.id }
 
         guideKeyCandidates(xmlChannelKey).forEach { key ->
             keyLookup[key]?.let { return it }
         }
 
-        val names = xmlChannelNameMap[normalized].orEmpty()
         names.forEach { display ->
             guideKeyCandidates(display).forEach { key ->
                 keyLookup[key]?.let { return it }
@@ -9337,11 +10195,7 @@ class IptvRepository @Inject constructor(
                 return@runCatching
             }
             if (count > 0) {
-                val channels = if (count > LargeIptvListChannelCount) {
-                    channelStore.window(key, offset = 0, limit = 240)
-                } else {
-                    channelStore.loadAll(key)
-                }
+                val channels = channelStore.loadStartupChannels(key, LargeIptvListChannelCount, LargeListMemoryChannelLimit)
                 if (channels.isNotEmpty()) {
                     if (count > LargeIptvListChannelCount) {
                         System.err.println("[IPTV-Paged] Large channel cache first paint window=${channels.size}/$count")
@@ -10120,7 +10974,7 @@ class IptvRepository @Inject constructor(
         val HTML_TAG_REGEX = Regex("<[^>]+>")
         val CSS_BRACE_REGEX = Regex("\\{[^}]*\\}")
         val NON_ALPHA_NUM_REGEX_INLINE = Regex("[^a-z0-9]")
-        val QUALITY_SUFFIX_REGEX = Regex("\\b(hd|fhd|uhd|sd|4k|hevc|x265|x264|h264|h265)\\b")
+        val QUALITY_SUFFIX_REGEX = Regex("\\b(hd|fhd|uhd|sd|lq|hq|4k|8k|2160p|1080p|720p|hevc|x265|x264|h264|h265)\\b")
         val GUIDE_PREFIX_REGEX = Regex("""^\s*[a-z]{2,4}\s*[\|:：/\-]+\s*""", RegexOption.IGNORE_CASE)
 
         val XMLTV_LOCAL_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")

@@ -1,7 +1,20 @@
 package com.arflix.tv.ui.screens.player.preview
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
 
 class SeekPreviewFrameProviderTest {
     @Test
@@ -96,5 +109,104 @@ class SeekPreviewFrameProviderTest {
 
         assertEquals(9f / 16f, ratio, 0.001f)
         assertEquals(132 to 234, fitSeekPreviewAspectRatio(ratio, 416, 234))
+    }
+
+    @Test
+    fun `hysteresis prevents bucket flipping from small jitter across boundaries`() {
+        val duration = 7_200_000L
+
+        // Initial scrub with uninitialized bucket (-1L)
+        val initialBucket = quantizeSeekPreviewPositionWithHysteresis(-1L, 20_000L, duration)
+        assertEquals(20_000L, initialBucket)
+
+        // Micro-tremor moving slightly forward past the 5s rounding midpoint (25_500ms):
+        // Normal quantize would jump to 30_000L, but hysteresis holds 20_000L
+        assertEquals(20_000L, quantizeSeekPreviewPositionWithHysteresis(20_000L, 25_500L, duration))
+        assertEquals(20_000L, quantizeSeekPreviewPositionWithHysteresis(20_000L, 27_000L, duration))
+
+        // Micro-tremor moving backwards (14_500ms):
+        // Normal quantize would jump to 10_000L, but hysteresis holds 20_000L
+        assertEquals(20_000L, quantizeSeekPreviewPositionWithHysteresis(20_000L, 14_500L, duration))
+        assertEquals(20_000L, quantizeSeekPreviewPositionWithHysteresis(20_000L, 13_000L, duration))
+
+        // Deliberate movement beyond the ±7,500ms hysteresis threshold switches buckets
+        assertEquals(30_000L, quantizeSeekPreviewPositionWithHysteresis(20_000L, 28_000L, duration))
+        assertEquals(10_000L, quantizeSeekPreviewPositionWithHysteresis(20_000L, 12_000L, duration))
+    }
+
+    @Test
+    fun `metadata round trip preserves actual timestamp instead of requested bucket`() {
+        val metadata = PreviewMetadata("media-account-version", 30_000, 28_160, null, null, SeekPreviewOrigin.DECODER, SeekPreviewValidity.TIMESTAMP)
+        val bytes = ByteArrayOutputStream().also { metadata.write(DataOutputStream(it)) }.toByteArray()
+        val restored = PreviewMetadata.read(DataInputStream(ByteArrayInputStream(bytes)))
+        assertEquals(30_000L, restored.extractedForMs)
+        assertEquals(28_160L, restored.actualMs)
+        assertTrue(restored.matches(30_000))
+        assertFalse(restored.matches(40_000))
+    }
+
+    @Test
+    fun `cue metadata keeps exclusive interval and does not manufacture a timestamp`() {
+        val metadata = PreviewMetadata("sprite-v2", 19_999, null, 10_000, 20_000, SeekPreviewOrigin.PROVIDER, SeekPreviewValidity.CUE)
+        val bytes = ByteArrayOutputStream().also { metadata.write(DataOutputStream(it)) }.toByteArray()
+        val restored = PreviewMetadata.read(DataInputStream(ByteArrayInputStream(bytes)))
+        assertEquals(null, restored.actualMs)
+        assertTrue(restored.matches(10_000))
+        assertTrue(restored.matches(19_999))
+        assertFalse(restored.matches(20_000))
+    }
+
+    @Test(expected = java.io.IOException::class)
+    fun `v4 cache entries cannot be promoted into verified v5 frames`() {
+        val bytes = ByteArrayOutputStream().also { DataOutputStream(it).writeInt(4) }.toByteArray()
+        PreviewMetadata.read(DataInputStream(ByteArrayInputStream(bytes)))
+    }
+
+    @Test
+    fun `unverified and distant sync frames are not valid even at requested bucket`() {
+        assertFalse(seekPreviewTimeMatches(30_000, null, null, null, SeekPreviewValidity.UNVERIFIED))
+        assertFalse(seekPreviewTimeMatches(30_000, 10_000, null, null, SeekPreviewValidity.TIMESTAMP))
+        assertFalse(seekPreviewTimeMatches(Long.MAX_VALUE, 0, null, null, SeekPreviewValidity.TIMESTAMP))
+    }
+
+    @Test
+    fun `scheduler retains only latest target until cancelled operation really exits`() = runTest {
+        val scheduler = SeekPreviewExtractionScheduler<Int>(backgroundScope)
+        val cleanup = CompletableDeferred<Unit>()
+        val started = mutableListOf<Int>()
+        val first = async {
+            scheduler.submit {
+                started += 1
+                try { awaitCancellation() } finally { withContext(NonCancellable) { cleanup.await() } }
+            }
+        }
+        runCurrent()
+        val obsolete = (2..99).map { target ->
+            async { scheduler.submit { started += target; target } }.also { runCurrent() }
+        }
+        val latest = async { scheduler.submit { started += 100; 100 } }
+        runCurrent()
+        assertTrue(first.isCancelled)
+        assertTrue(obsolete.all { it.isCancelled })
+        assertEquals(listOf(1), started)
+        cleanup.complete(Unit)
+        runCurrent()
+        assertEquals(100, latest.await())
+        assertEquals(listOf(1, 100), started)
+        scheduler.close()
+    }
+
+    @Test
+    fun `idle warming never cancels foreground extraction`() = runTest {
+        val scheduler = SeekPreviewExtractionScheduler<Int>(backgroundScope)
+        val release = CompletableDeferred<Unit>()
+        val foreground = async { scheduler.submit { release.await(); 7 } }
+        runCurrent()
+        assertEquals(null, scheduler.submit(background = true) { error("Background must not run") })
+        assertFalse(foreground.isCancelled)
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(7, foreground.await())
+        scheduler.close()
     }
 }

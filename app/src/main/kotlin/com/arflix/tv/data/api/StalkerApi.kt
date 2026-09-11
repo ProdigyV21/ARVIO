@@ -1,6 +1,8 @@
 package com.arflix.tv.data.api
 
 import com.arflix.tv.data.model.IptvChannel
+import com.arflix.tv.network.withIptvProviderRequestGuard
+import com.arflix.tv.data.repository.StalkerPortalSupport
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.stream.JsonReader
@@ -24,6 +26,7 @@ open class StalkerApi(
     private var apiBaseResolved = false
 
     private val client = OkHttpClient.Builder()
+        .withIptvProviderRequestGuard()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -49,6 +52,9 @@ open class StalkerApi(
         return try {
             if (!apiBaseResolved) {
                 resolveApiBase()
+                // Probing the base path is itself a handshake and keeps the token it
+                // received, so a second one here would only throw that token away.
+                if (token.isNotBlank()) return true
             }
             val url = "$apiBase/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
             val response = doGet(url)
@@ -95,6 +101,7 @@ open class StalkerApi(
                     return
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 // continue to next candidate
             }
         }
@@ -139,13 +146,23 @@ open class StalkerApi(
                     newChannelIdCount++
                     val streamCmd = ch.cmd ?: continue
                     val groupName = ch.tvGenreId?.let { genreMap[it] } ?: "Uncategorized"
+                    // Portals that announce no temporary link publish the finished
+                    // address here. Preserve that decision separately: even bare URLs
+                    // can require create_link when the portal says so or omits the flags.
+                    val directUrl = StalkerPortalSupport.directLiveStreamUrl(
+                        cmd = streamCmd,
+                        useHttpTmpLink = ch.useHttpTmpLink,
+                        wowzaTmpLink = ch.wowzaTmpLink,
+                        flussonicTmpLink = ch.flussonicTmpLink,
+                    )
                     channels.add(
                         IptvChannel(
                             id = channelId,
                             name = ch.name ?: "Unknown",
                             logo = ch.logo,
                             group = groupName,
-                            streamUrl = streamCmd // Will be resolved via create_link before playback
+                            streamUrl = directUrl ?: streamCmd,
+                            stalkerDirectStream = directUrl != null,
                         )
                     )
                 }
@@ -165,6 +182,8 @@ open class StalkerApi(
             if (e is kotlinx.coroutines.CancellationException) throw e
 
             System.err.println("[Stalker] Get channels failed: ${e.message}")
+            // Never publish a partial page set as the complete provider catalog.
+            throw e
         }
         return channels
     }
@@ -421,6 +440,106 @@ open class StalkerApi(
         }
     }
 
+    /**
+     * Ask the portal itself for movies matching [query] instead of downloading
+     * the whole catalog first.
+     *
+     * A Stalker portal only serves `get_ordered_list` in pages of (typically)
+     * 14 entries, so mirroring the Xtream approach - fetch the complete catalog,
+     * index it locally - would cost hundreds of requests per refresh on a large
+     * portal. `search` narrows the same endpoint server-side, which keeps a
+     * movie lookup at one request.
+     *
+     * Returns an empty list when the portal does not implement VOD listing at
+     * all: such builds answer with an HTML page or a bare `{"js":""}` under a
+     * plain HTTP 200, so success is measured on the parsed payload, never on the
+     * status code.
+     */
+    suspend fun searchVod(
+        query: String,
+        maxPages: Int = DEFAULT_VOD_SEARCH_PAGES
+    ): List<StalkerVodItem>? {
+        require(maxPages > 0) { "maxPages must be positive" }
+        val term = query.trim()
+        if (term.isBlank()) return emptyList()
+
+        val results = mutableListOf<StalkerVodItem>()
+        val seenKeys = HashSet<String>()
+        try {
+            val encodedTerm = java.net.URLEncoder.encode(term, "UTF-8")
+            var page = 1
+            while (page <= maxPages) {
+                // `category=0` means "every category" here. The category list
+                // spells the same idea as `id: "*"`, but get_ordered_list does
+                // not accept it: a portal that reads `*` as a literal category
+                // name finds nothing, or drops `search` altogether and answers
+                // with the head of its catalogue.
+                // `sortby=name` keeps the matches for one term together. Sorted
+                // by date added instead, a catalogue of six figures pushes them
+                // past [maxPages] purely by age.
+                val url = "$apiBase/server/load.php?type=vod&action=get_ordered_list" +
+                    "&category=0&sortby=name&search=$encodedTerm&p=$page&JsHttpRequest=1-xml"
+                val response = doGet(url)
+                val parsed = gson.fromJson(response, StalkerVodResponse::class.java)
+                val data = parsed?.js?.data ?: break
+                if (data.isEmpty()) break
+
+                var newEntries = 0
+                for (item in data) {
+                    val command = item.cmd?.trim().orEmpty()
+                    if (command.isBlank()) continue
+                    val key = item.id?.trim()?.ifBlank { null } ?: command
+                    if (!seenKeys.add(key)) continue
+                    newEntries++
+                    results += item
+                }
+
+                val totalItems = parsed.js?.totalItems ?: 0
+                val maxPageItems = (parsed.js?.maxPageItems ?: data.size).coerceAtLeast(1)
+                // Some portals ignore `p` and answer every page with the same
+                // result set - stop as soon as a page adds nothing new. A
+                // portal that reports no total at all keeps paging until then
+                // or until [maxPages].
+                if (newEntries == 0) break
+                if (totalItems > 0 && data.size >= totalItems) break
+                if (totalItems > 0 && page * maxPageItems >= totalItems) break
+                page++
+            }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
+            System.err.println("[Stalker] VOD search failed: ${e.message}")
+            // null, not the partial list: the caller caches what it gets back,
+            // and a failed request must never be stored as "this portal has
+            // nothing" - see the null contract on the return type.
+            return null
+        }
+        return results
+    }
+
+    /**
+     * Exchange a VOD `cmd` for a playable URL (`type=vod&action=create_link`).
+     *
+     * Only ever called when playback actually starts - see [StalkerVodItem].
+     */
+    suspend fun resolveVodStreamUrl(cmd: String): String? {
+        val command = cmd.trim()
+        if (command.isBlank()) return null
+        return try {
+            val encodedCmd = java.net.URLEncoder.encode(command, "UTF-8")
+            val url = "$apiBase/server/load.php?type=vod&action=create_link&cmd=$encodedCmd" +
+                "&forced_storage=undefined&disable_ad=0&JsHttpRequest=1-xml"
+            val response = doGet(url)
+            val parsed = gson.fromJson(response, StalkerLinkResponse::class.java)
+            sanitizePlaybackCommand(parsed?.js?.cmd)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+
+            System.err.println("[Stalker] Resolve VOD stream failed: ${e.message}")
+            null
+        }
+    }
+
     /** Resolve a channel's cmd to a playable stream URL */
     suspend fun resolveStreamUrl(cmd: String): String? {
         return try {
@@ -428,7 +547,7 @@ open class StalkerApi(
             val url = "$apiBase/server/load.php?type=itv&action=create_link&cmd=$encodedCmd&forced_storage=undefined&disable_ad=0&JsHttpRequest=1-xml"
             val response = doGet(url)
             val parsed = gson.fromJson(response, StalkerLinkResponse::class.java)
-            parsed?.js?.cmd?.replace("ffmpeg ", "")?.trim()
+            StalkerPortalSupport.sanitizePlaybackCommand(parsed?.js?.cmd).takeIf { it.isNotBlank() }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -484,11 +603,71 @@ open class StalkerApi(
         val name: String?,
         val logo: String?,
         val cmd: String?,
-        @SerializedName("tv_genre_id") val tvGenreId: String?
+        @SerializedName("tv_genre_id") val tvGenreId: String?,
+        // Read as text on purpose: portals send these as 0/1, as "0"/"1", and
+        // occasionally as an empty string, which a numeric field would reject —
+        // taking the whole channel page down with it.
+        @SerializedName("use_http_tmp_link") val useHttpTmpLink: String? = null,
+        @SerializedName("wowza_tmp_link") val wowzaTmpLink: String? = null,
+        @SerializedName("flussonic_tmp_link") val flussonicTmpLink: String? = null
     )
 
     data class StalkerLinkResponse(val js: StalkerLink?)
     data class StalkerLink(val cmd: String?)
+
+    /**
+     * One entry of the portal's VOD catalog.
+     *
+     * Every field is a String because portals disagree on whether ids, years
+     * and ratings arrive as JSON numbers or strings; Gson accepts both for a
+     * String field but throws on a mismatched primitive type, which would lose
+     * the whole response. [cmd] is the token that has to go through
+     * `create_link` before it can be played. [tmdbId] is only filled in by some
+     * portal builds - matching falls back to title and year without it.
+     */
+    data class StalkerVodItem(
+        val id: String? = null,
+        val name: String? = null,
+        val cmd: String? = null,
+        val year: String? = null,
+        /** Runtime in minutes on most builds; a few send "hh:mm:ss" instead. */
+        val time: String? = null,
+        /** 1 when the portal flags the entry as HD. Not an actual resolution. */
+        val hd: String? = null,
+        @SerializedName("screenshot_uri") val screenshotUri: String? = null,
+        @SerializedName("rating_imdb") val ratingImdb: String? = null,
+        @SerializedName(value = "tmdb_id", alternate = ["tmdb", "tmdbid"]) val tmdbId: String? = null,
+        @SerializedName("category_id") val categoryId: String? = null
+    )
+
+    data class StalkerVodResponse(val js: StalkerVodData?)
+    data class StalkerVodData(
+        val data: List<StalkerVodItem>?,
+        @SerializedName("total_items") val totalItems: Int?,
+        @SerializedName("max_page_items") val maxPageItems: Int?
+    )
+
+    companion object {
+        /**
+         * Search results are already narrow; a handful of pages is plenty and
+         * keeps a single lookup from turning into a crawl.
+         */
+        const val DEFAULT_VOD_SEARCH_PAGES = 3
+
+        /**
+         * Portals return the playable URL prefixed with the player they expect
+         * ("ffmpeg http://...", "auto http://..."). Strip that hint, but leave a
+         * value that is already a bare URL untouched.
+         */
+        fun sanitizePlaybackCommand(raw: String?): String? {
+            val trimmed = raw?.trim().orEmpty()
+            if (trimmed.isEmpty()) return null
+            val separator = trimmed.indexOf(' ')
+            if (separator <= 0) return trimmed
+            if (trimmed.substring(0, separator).contains("://")) return trimmed
+            return trimmed.substring(separator + 1).trim().ifBlank { null }
+        }
+    }
 
     data class StalkerEpgResponse(val js: List<StalkerEpgProgram?>?)
 

@@ -1,5 +1,5 @@
 const { json, options, parseBody, resolveIdentity } = require("./_backend");
-const { PREMIUM_EVENTS, recordPremiumEvent } = require("./_premium-funnel");
+const { CLIENT_PREMIUM_EVENTS, recordPremiumEvent } = require("./_premium-funnel");
 
 exports.handler = async (event) => {
   const cors = options(event);
@@ -10,7 +10,7 @@ exports.handler = async (event) => {
     const identity = await resolveIdentity(event);
     const body = parseBody(event);
     const eventName = String(body.event_name || "").trim();
-    if (!PREMIUM_EVENTS.has(eventName)) {
+    if (!CLIENT_PREMIUM_EVENTS.has(eventName)) {
       return json(400, { error: "unsupported_event" });
     }
     await recordPremiumEvent(event, {

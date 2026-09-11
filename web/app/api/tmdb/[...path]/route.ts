@@ -11,14 +11,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
     process.env.NETLIFY_BACKEND_URL ??
     "https://auth.arvio.tv/.netlify/functions"
   ).replace(/\/+$/, "");
-  const appAnonKey = envValue(process.env.NEXT_PUBLIC_ARVIO_APP_ANON_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "");
+  const appAnonKey = envValue(process.env.APP_ANON_KEY, envValue(process.env.NEXT_PUBLIC_ARVIO_APP_ANON_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""));
   const input = new URL(request.url);
   const customKey = (request.headers.get("x-tmdb-api-key") ?? "").trim();
   const tmdbKey = customKey || process.env.TMDB_API_KEY || "";
   input.searchParams.delete("api_key");
 
   let target: URL;
-  const usesNetlifyProxy = !customKey && netlifyBackendUrl.startsWith("https://") && appAnonKey.length > 40;
+  const usesNetlifyProxy = process.env.NEXT_PUBLIC_SELF_HOSTED !== "true" && !customKey && netlifyBackendUrl.startsWith("https://") && appAnonKey.length > 40;
   if (usesNetlifyProxy) {
     target = new URL(`${netlifyBackendUrl}/tmdb-proxy`);
     target.searchParams.set("path", `/${path.join("/")}`);
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pat
   const headers = new Headers();
   headers.set("content-type", response.headers.get("content-type") ?? "application/json");
 
-  if (customKey) {
+  if (customKey || !response.ok) {
     headers.set("cache-control", "private, no-store");
   } else {
     // Short browser cache; long CDN cache for shared system key requests.

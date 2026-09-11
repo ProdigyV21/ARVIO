@@ -11,9 +11,8 @@ export type BrowserMediaCapabilities = {
   /**
    * True only when the browser advertises a Dolby Vision decoder.
    *
-   * Without one, a DV title decodes its HEVC layer but renders black while the
-   * audio and subtitles play — the exact symptom users report. Desktop Chrome,
-   * Edge and Firefox all report false here; some TV and mobile builds do not.
+   * HEVC support alone does not prove correct Dolby Vision decoding. Unsupported
+   * profiles can produce a black picture or incorrect colours with working audio.
    */
   dolbyVision: boolean;
   av1: boolean;
@@ -45,7 +44,7 @@ let cached: BrowserMediaCapabilities | null = null;
 
 function mseSupports(type: string) {
   try {
-    return typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(type);
+    return mediaSourceConstructor()?.isTypeSupported(type) ?? false;
   } catch {
     return false;
   }
@@ -59,17 +58,26 @@ function videoCanPlay(video: HTMLVideoElement, type: string) {
   }
 }
 
+export function mediaSourceConstructor(): typeof MediaSource | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as Window & { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource ?? window.MediaSource;
+}
+
 export function getMediaCapabilities(): BrowserMediaCapabilities {
   if (cached) return cached;
   if (typeof window === "undefined" || typeof document === "undefined") return NO_CAPABILITIES;
   const video = document.createElement("video");
   const supports = (type: string) => mseSupports(type) || videoCanPlay(video, type);
   cached = {
-    mse: typeof MediaSource !== "undefined",
+    mse: !!mediaSourceConstructor(),
     nativeHls: videoCanPlay(video, "application/vnd.apple.mpegurl"),
     h264: supports('video/mp4; codecs="avc1.640028"'),
     hevc: supports('video/mp4; codecs="hvc1.1.6.L120.90"') || supports('video/mp4; codecs="hev1.1.6.L120.90"'),
-    hevc10: supports('video/mp4; codecs="hvc1.2.4.L153.B0"') || supports('video/mp4; codecs="hev1.2.4.L153.B0"'),
+    // This is a discovery hint, not a promise about every resolution/frame rate.
+    // A decoder supporting level 5.0 (including 4K30) may reject level 5.1.
+    // The remux probe still checks the selected track's exact codec string.
+    hevc10: ["L123", "L150", "L153"].some((level) =>
+      ["hvc1", "hev1"].some((entry) => supports(`video/mp4; codecs="${entry}.2.4.${level}.B0"`))),
     // Profile 5 (single layer) and profile 8.1 (HDR10-compatible base) cover
     // the two shapes a browser could plausibly render.
     dolbyVision: supports('video/mp4; codecs="dvhe.05.06"')

@@ -1,326 +1,195 @@
-// Tier 3 — client-side remux. Opens an MKV/WebM (or any mediabunny-readable
-// container) straight from its URL via range requests, passes the video through
-// untouched (no re-encode), and muxes it with the best *browser-decodable* audio
-// track into fragmented MP4 that we feed to a <video> through MSE. TrueHD/DTS
-// tracks are skipped in favour of the AC-3/E-AC-3/AAC compatibility track that
-// virtually every remux also ships — no transcoding, no debrid, no server.
-
-import type { Input, InputAudioTrack } from "mediabunny";
-
-export type RemuxAudioTrack = {
-  index: number;
-  codec: string;
-  label: string;
-  language?: string;
-  channels?: number;
-  browserPlayable: boolean;
-};
-
-export type RemuxProbe = {
-  container: string;
-  videoCodec?: string;
-  videoPlayable: boolean;
-  audioTracks: RemuxAudioTrack[];
-  // Index into audioTracks of the track we'll play, or -1 if none are usable.
-  chosenAudioIndex: number;
-};
+import { mediaSourceConstructor } from "./capabilities";
+import type { RemuxCommand, RemuxEvent, RemuxProbe } from "./remuxProtocol";
+export type { RemuxAudioTrack, RemuxProbe } from "./remuxProtocol";
 
 export type RemuxHandle = {
   probe: RemuxProbe;
-  /** Start remuxing into the given media element. Resolves once playback can begin. */
-  start: (video: HTMLVideoElement, audioIndex?: number) => Promise<void>;
+  start: (video: HTMLVideoElement, audioIndex?: number, startTime?: number) => Promise<void>;
   destroy: () => void;
 };
 
-const LOSSLESS_AUDIO = /truehd|mlp|dts|dca/i;
-
-// Never await a mediabunny call unbounded: they read over range requests, and a
-// CDN that accepts the connection without answering leaves the promise pending
-// forever — the visible symptom is a blob: src stuck at readyState 0.
-function bounded<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    promise.catch(() => null),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))
-  ]);
-}
-
-// Whether MSE can *mux* this audio codec inside fMP4 on this browser. Distinct
-// from WebCodecs decode support: Chrome can decode E-AC-3 via a WebCodecs
-// decoder but its MSE demuxer rejects ec-3 in the stsd box, so such tracks must
-// be re-encoded to AAC before muxing.
-function mseCanMuxAudio(codec: string) {
-  const c = codec.toLowerCase();
-  const mp4Codec =
-    /aac|mp4a/.test(c) ? "mp4a.40.2"
-      : /e-?ac-?3|ec-?3/.test(c) ? "ec-3"
-        : /ac-?3|ac3/.test(c) ? "ac-3"
-          : /opus/.test(c) ? "opus"
-            : /flac/.test(c) ? "flac"
-              : null;
-  if (!mp4Codec) return false;
-  try {
-    return MediaSource.isTypeSupported(`audio/mp4; codecs="${mp4Codec}"`);
-  } catch {
-    return false;
-  }
-}
-
-function audioLabel(codec: string, language: string | undefined, channels: number | undefined, lossless: boolean) {
-  const codecName =
-    /ac-?3/i.test(codec) && !/e-?ac-?3|ec-?3/i.test(codec) ? "Dolby Digital"
-      : /e-?ac-?3|ec-?3/i.test(codec) ? "Dolby Digital+"
-        : /aac|mp4a/i.test(codec) ? "AAC"
-          : /opus/i.test(codec) ? "Opus"
-            : /flac/i.test(codec) ? "FLAC"
-              : /truehd|mlp/i.test(codec) ? "TrueHD"
-                : /dts|dca/i.test(codec) ? "DTS"
-                  : codec.toUpperCase();
-  const parts = [codecName];
-  if (channels) parts.push(channels >= 7 ? "7.1" : channels >= 6 ? "5.1" : channels === 2 ? "2.0" : `${channels}ch`);
-  if (language) parts.push(language.toUpperCase());
-  if (lossless) parts.push("lossless");
-  return parts.join(" · ");
-}
-
-async function describeAudioTrack(track: InputAudioTrack, index: number): Promise<RemuxAudioTrack> {
-  const codec = (await bounded(track.getCodecParameterString(), 8000)) ?? (track.codec ?? "");
-  const lossless = LOSSLESS_AUDIO.test(codec);
-  // Lossless codecs are never browser-decodable; for the rest, ask mediabunny
-  // whether this browser (natively or via a registered decoder) can decode it.
-  const browserPlayable = lossless ? false : ((await bounded(track.canDecode(), 8000)) ?? false);
-  return {
-    index,
-    codec,
-    label: audioLabel(codec, track.languageCode ?? undefined, track.numberOfChannels ?? undefined, lossless),
-    language: track.languageCode ?? undefined,
-    channels: track.numberOfChannels ?? undefined,
-    browserPlayable
-  };
-}
-
-let ac3Registered = false;
-
-async function ensureAudioDecoders() {
-  // AC-3 / E-AC-3 aren't in WebCodecs; register mediabunny's WASM decoder so
-  // canDecode() reports true and playback works everywhere (one call covers both
-  // AC-3 and E-AC-3). Idempotent — only register once per page.
-  if (ac3Registered) return;
-  try {
-    const { registerAc3Decoder } = await import("@mediabunny/ac3");
-    registerAc3Decoder();
-    ac3Registered = true;
-  } catch {
-    // Decoder package failed to load — AC-3/E-AC-3 still work where the browser
-    // decodes them natively (Safari/Edge). AAC/Opus tracks play regardless.
-  }
-}
-
-function normalizeLangPref(pref?: string): string {
-  const p = (pref ?? "").trim().toLowerCase();
-  if (!p || p === "auto" || p.startsWith("auto")) return "";
-  // Map common display values to ISO 639 prefixes.
-  const map: Record<string, string> = {
-    english: "en", dutch: "nl", nederlands: "nl", german: "de", deutsch: "de",
-    french: "fr", spanish: "es", italian: "it", portuguese: "pt", russian: "ru",
-    japanese: "ja", korean: "ko", chinese: "zh", hindi: "hi", arabic: "ar", turkish: "tr"
-  };
-  return map[p] ?? p.slice(0, 3);
-}
-
 export async function probeAndPrepareRemux(
-  url: string,
-  requestHeaders?: Record<string, string>,
-  preferredAudioLang?: string
+  url: string, requestHeaders?: Record<string, string>, preferredAudioLang?: string,
+  options: { signal?: AbortSignal; onError?: (message: string) => void; expectDolbyVision?: boolean } = {}
 ): Promise<RemuxHandle | null> {
-  const { Input, UrlSource, ALL_FORMATS } = await import("mediabunny");
-  await ensureAudioDecoders();
+  const Mse = mediaSourceConstructor();
+  if (!Mse || options.signal?.aborted) return null;
+  const worker = new Worker(new URL("./remux.worker.ts", import.meta.url), { type: "module" });
+  const send = (message: RemuxCommand) => { if (!destroyed) worker.postMessage(message); };
+  let destroyed = false;
+  let objectUrl: string | undefined;
+  let element: HTMLVideoElement | undefined;
+  let previousRemotePlayback = false;
+  let source: MediaSource | undefined;
+  let buffer: SourceBuffer | undefined;
+  let generation = 0;
+  let clockTimer: ReturnType<typeof setInterval> | undefined;
+  const cleanups = new Set<() => void>();
+  const destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
+    clearInterval(clockTimer);
+    for (const cleanup of [...cleanups]) cleanup();
+    cleanups.clear();
+    worker.terminate(); // Cancels range reads, decoder work and all outstanding packet queues.
+    options.signal?.removeEventListener("abort", destroy);
+    if (element && element.getAttribute("src") === objectUrl) {
+      element.disableRemotePlayback = previousRemotePlayback;
+      element.removeAttribute("src"); element.load();
+    }
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  };
+  options.signal?.addEventListener("abort", destroy, { once: true });
 
-  const input = new Input({
-    formats: ALL_FORMATS,
-    source: new UrlSource(url, requestHeaders ? { requestInit: { headers: requestHeaders } } : undefined)
-  });
-
-  // Bound the probe. mediabunny reads the container header over range requests;
-  // when the CDN accepts the connection but never answers (dead debrid link,
-  // throttled host), these awaits never settle — the player then sits on a
-  // blob: src with readyState 0 and ZERO network activity, which is exactly the
-  // "nothing plays, spinner forever" symptom. A rejected probe lets the caller
-  // fall through to the next source instead of hanging.
-  const withTimeout = <T,>(promise: Promise<T>, ms = 12000): Promise<T | null> =>
-    Promise.race([
-      promise.catch(() => null),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))
-    ]);
-
-  const format = await withTimeout(input.getFormat());
-  const videoTrack = await withTimeout(input.getPrimaryVideoTrack());
-  const audioInputTracks = (await withTimeout(input.getAudioTracks())) ?? [];
-  if (!videoTrack) {
-    input.dispose?.();
+  function event(target: EventTarget, name: string, timeout = 12000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const done = (error?: Error) => {
+        clearTimeout(timer); target.removeEventListener(name, ready); target.removeEventListener("error", failed);
+        cleanups.delete(cancel); error ? reject(error) : resolve();
+      };
+      const ready = () => done();
+      const failed = () => done(new Error("Media buffer could not be decoded"));
+      const cancel = () => done(new Error("Playback cancelled"));
+      const timer = setTimeout(() => done(new Error(`Timed out waiting for ${name}`)), timeout);
+      target.addEventListener(name, ready, { once: true });
+      target.addEventListener("error", failed, { once: true });
+      cleanups.add(cancel);
+    });
+  }
+  const audioCodecs = ["mp4a.40.2", "ac-3", "ec-3", "opus", "flac", "mp3"]
+    .filter((codec) => Mse.isTypeSupported(`audio/mp4; codecs="${codec}"`));
+  let probe: RemuxProbe;
+  try {
+    probe = await new Promise<RemuxProbe>((resolve, reject) => {
+      const finish = (value?: RemuxProbe, error?: string) => {
+        clearTimeout(timer); cleanups.delete(cancel);
+        value ? resolve(value) : reject(new Error(error ?? "Probe cancelled"));
+      };
+      const cancel = () => finish();
+      const timer = setTimeout(() => finish(undefined, "Source probe timed out"), 15000);
+      cleanups.add(cancel);
+      worker.onerror = () => finish(undefined, "Browser conversion worker failed to load");
+      worker.onmessage = ({ data }: MessageEvent<RemuxEvent>) => {
+        if (data.type === "probe") finish(data.probe);
+        if (data.type === "error") finish(undefined, data.message);
+      };
+      send({ type: "probe", url, headers: requestHeaders, audioCodecs, language: preferredAudioLang, expectDolbyVision: options.expectDolbyVision });
+    });
+    probe.videoPlayable = probe.videoPlayable && !!probe.videoCodec && Mse.isTypeSupported(`video/mp4; codecs="${probe.videoCodec}"`);
+    if (!probe.videoPlayable && !probe.videoReason) probe.videoReason = `This browser cannot decode the selected video track (${probe.videoCodec ?? "unknown codec"}).`;
+  } catch (error) {
+    destroy();
+    if (!options.signal?.aborted) options.onError?.(error instanceof Error ? error.message : "Source probe failed");
     return null;
   }
 
-  const videoCodecParam = (await withTimeout(videoTrack.getCodecParameterString(), 8000)) ?? undefined;
-  const videoPlayable = (await withTimeout(videoTrack.canDecode(), 8000)) ?? false;
-  const audioTracks = await Promise.all(audioInputTracks.map((track, i) => describeAudioTrack(track, i)));
-  const fileDuration = (await withTimeout(input.computeDuration(), 8000)) ?? 0;
-
-  // Prefer a browser-playable track. Honor the user's preferred audio language
-  // first; among the remaining candidates prefer more channels, then the first
-  // declared (usually the primary/default language).
-  const langPref = normalizeLangPref(preferredAudioLang);
-  const playable = audioTracks.filter((track) => track.browserPlayable);
-  const inPreferred = langPref
-    ? playable.filter((track) => (track.language ?? "").toLowerCase().startsWith(langPref))
-    : [];
-  const pool = inPreferred.length ? inPreferred : playable;
-  const chosen = pool.sort((a, b) => (b.channels ?? 0) - (a.channels ?? 0))[0];
-  const chosenAudioIndex = chosen ? audioTracks.indexOf(chosen) : -1;
-
-  const probe: RemuxProbe = {
-    container: format?.name ?? "unknown",
-    videoCodec: videoCodecParam,
-    videoPlayable,
-    audioTracks,
-    chosenAudioIndex
-  };
-
-  let conversion: Awaited<ReturnType<typeof import("mediabunny").Conversion.init>> | null = null;
-  let mediaSource: MediaSource | null = null;
-  let objectUrl: string | null = null;
-
-  const destroy = () => {
-    void conversion?.cancel().catch(() => undefined);
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    try {
-      if (mediaSource && mediaSource.readyState === "open") mediaSource.endOfStream();
-    } catch {
-      // endOfStream can throw if already ended.
+  const start = async (video: HTMLVideoElement, audioIndex = probe.chosenAudioIndex, startTime = 0) => {
+    if (destroyed || element) throw new Error("Conversion is closed or already started");
+    if (!probe.videoPlayable) throw new Error(probe.videoReason ?? "The browser cannot decode this video codec");
+    if (probe.audioTracks.length && (audioIndex < 0 || !probe.audioTracks[audioIndex]?.browserPlayable)) {
+      throw new Error("No compatible audio track; use server conversion or an external player");
     }
-    input.dispose?.();
-  };
-
-  const start = async (video: HTMLVideoElement, audioIndex = chosenAudioIndex) => {
-    const { Output, Mp4OutputFormat, StreamTarget, Conversion } = await import("mediabunny");
-
-    mediaSource = new MediaSource();
-    objectUrl = URL.createObjectURL(mediaSource);
+    element = video;
+    previousRemotePlayback = video.disableRemotePlayback;
+    const audio = probe.audioTracks[audioIndex];
+    const codecs = [probe.videoCodec, audio ? audio.passthrough ? audio.codec : "mp4a.40.2" : undefined].filter(Boolean);
+    const mime = `video/mp4; codecs="${codecs.join(",")}"`;
+    if (!Mse.isTypeSupported(mime)) throw new Error("The browser cannot combine these video/audio codecs");
+    source = new Mse();
+    const opened = event(source, "sourceopen");
+    objectUrl = URL.createObjectURL(source);
+    video.disableRemotePlayback = true; // Required when Safari uses ManagedMediaSource.
     video.src = objectUrl;
-
-    await new Promise<void>((resolve) => {
-      mediaSource!.addEventListener("sourceopen", () => resolve(), { once: true });
-    });
-
-    // Pin the real file duration up front — otherwise the player's total time
-    // starts near zero and counts upward as fragments append, which reads as
-    // "it's loading the whole file" in the UI.
-    if (fileDuration && Number.isFinite(fileDuration)) {
-      try {
-        mediaSource!.duration = fileDuration;
-      } catch {
-        // Non-fatal: duration then grows with appended fragments as before.
-      }
-    }
-
-    // fMP4 with hvc1/mp4a; MSE mime is set once we see the init segment's codecs.
-    // Buffer appends are serialized through a queue because SourceBuffer.appendBuffer
-    // is asynchronous and single-flight.
-    let sourceBuffer: SourceBuffer | null = null;
-    const queue: BufferSource[] = [];
-    let ended = false;
-    const pump = () => {
-      if (!sourceBuffer || sourceBuffer.updating || queue.length === 0) return;
-      const chunk = queue.shift()!;
-      try {
-        sourceBuffer.appendBuffer(chunk);
-      } catch {
-        // QuotaExceeded on very long buffers — drop; live seek/rebuffer handles it.
-      }
+    await opened;
+    if (destroyed) return;
+    buffer = source.addSourceBuffer(mime);
+    if (Number.isFinite(probe.duration) && probe.duration > 0) source.duration = probe.duration;
+    let pending = Promise.resolve();
+    let target = Math.max(0, Math.min(startTime, Math.max(0, probe.duration - 0.1)));
+    let positionPending = true;
+    let failed = false;
+    const fail = (error: unknown) => {
+      if (destroyed || failed) return;
+      failed = true;
+      options.onError?.(error instanceof Error ? error.message : "Browser conversion failed");
+      destroy();
     };
-
-    // If MSE can't mux the chosen audio codec (e.g. E-AC-3 in Chrome), re-encode
-    // just that track to AAC — cheap, video still passes through untouched.
-    const chosenCodec = audioTracks[audioIndex]?.codec ?? "";
-    const audioNeedsAac = audioIndex >= 0 && !mseCanMuxAudio(chosenCodec);
-    const outputAudioCodec = audioNeedsAac ? "mp4a.40.2" : chosenCodec;
-
-    const mimeFor = (codecs: string[]) => `video/mp4; codecs="${codecs.join(",")}"`;
-    let initialised = false;
-
-    const writable = new WritableStream<{ data: Uint8Array; type: string; position: number }>({
-      write(chunk) {
-        if (!initialised) {
-          initialised = true;
-          const codecs = [probe.videoCodec, outputAudioCodec].filter(Boolean) as string[];
-          const mime = mimeFor(codecs.length ? codecs : ["hvc1"]);
-          try {
-            sourceBuffer = mediaSource!.addSourceBuffer(MediaSource.isTypeSupported(mime) ? mime : 'video/mp4; codecs="hvc1.1.6.L153.B0,mp4a.40.2"');
-          } catch {
-            sourceBuffer = mediaSource!.addSourceBuffer('video/mp4; codecs="avc1.640028,mp4a.40.2"');
-          }
-          sourceBuffer.addEventListener("updateend", pump);
+    const update = async (action: () => void) => {
+      if (destroyed || !buffer) throw new Error("Playback cancelled");
+      const completed = event(buffer, "updateend");
+      try { action(); } catch (error) {
+        // Abort the waiter too; never leave rejected promises or a stuck append queue.
+        buffer.dispatchEvent(new Event("error"));
+        await completed.catch(() => undefined);
+        throw error;
+      }
+      await completed;
+    };
+    const bufferedAt = (time: number) => {
+      for (let i = 0; i < video.buffered.length; i++) {
+        if (time >= video.buffered.start(i) && time + 0.25 < video.buffered.end(i)) return true;
+      }
+      return false;
+    };
+    const begin = () => send({ type: "start", generation, time: target, audioIndex });
+    const onSeek = () => {
+      if (destroyed || (positionPending && Math.abs(video.currentTime - target) < 0.05) || bufferedAt(video.currentTime)) return;
+      target = video.currentTime;
+      const run = ++generation;
+      positionPending = true;
+      // Cancel the producer first, then serialize removal after any active append.
+      send({ type: "start", generation: run, time: target, audioIndex });
+      pending = pending.then(async () => {
+        if (destroyed || run !== generation || !buffer) return;
+        if (buffer.buffered.length) await update(() => buffer!.remove(0, Infinity));
+        if (destroyed || run !== generation) return;
+        positionPending = false;
+      }).catch(fail);
+    };
+    video.addEventListener("seeking", onSeek);
+    cleanups.add(() => video.removeEventListener("seeking", onSeek));
+    worker.onerror = () => fail(new Error("Browser conversion worker stopped"));
+    worker.onmessage = ({ data }: MessageEvent<RemuxEvent>) => {
+      if (data.type === "probe") return;
+      if (data.generation !== generation || destroyed) {
+        if (data.type === "chunk") send({ type: "ack", id: data.id });
+        return;
+      }
+      if (data.type === "error") { fail(new Error(data.message)); return; }
+      if (data.type === "end") {
+        pending = pending.then(() => { if (!destroyed && data.generation === generation && source?.readyState === "open") source.endOfStream(); }).catch(fail);
+        return;
+      }
+      pending = pending.then(async () => {
+        if (destroyed || data.generation !== generation) return;
+        // Keep a short backward buffer. The producer only reads 25 seconds ahead.
+        const before = Math.max(0, video.currentTime - 15);
+        if (buffer!.buffered.length && buffer!.buffered.start(0) < before - 5) {
+          await update(() => buffer!.remove(0, before));
         }
-        // fastStart:'fragmented' emits append-only, in-order chunks, so we can
-        // stream them straight into the SourceBuffer. Copy into a fresh
-        // ArrayBuffer so the typed-array's backing store is a plain BufferSource.
-        queue.push(chunk.data.slice().buffer);
-        pump();
-      },
-      close() {
-        ended = true;
-        const finish = () => {
-          if (queue.length || sourceBuffer?.updating) {
-            setTimeout(finish, 50);
-            return;
-          }
-          try {
-            if (mediaSource!.readyState === "open") mediaSource!.endOfStream();
-          } catch {
-            // already ended
-          }
-        };
-        finish();
-      }
-    });
-
-    const output = new Output({
-      format: new Mp4OutputFormat({ fastStart: "fragmented" }),
-      target: new StreamTarget(writable as WritableStream)
-    });
-
-    conversion = await Conversion.init({
-      input,
-      output,
-      video: () => ({}), // passthrough copy — no re-encode
-      audio: (track, n) => {
-        if (n - 1 !== audioIndex) return { discard: true };
-        // Passthrough when MSE can mux it; otherwise transcode audio-only to AAC.
-        return audioNeedsAac ? { codec: "aac" as const } : {};
-      }
-    });
-
-    // Run in the background; playback starts as soon as MSE has enough buffered.
-    void conversion.execute().catch(() => {
-      if (!ended) destroy();
-    });
-
-    // Resolve once the element can actually start playing.
-    await new Promise<void>((resolve) => {
-      const onReady = () => resolve();
-      video.addEventListener("loadeddata", onReady, { once: true });
-      video.addEventListener("canplay", onReady, { once: true });
-      setTimeout(resolve, 12000);
-    });
+        if (destroyed || data.generation !== generation) return;
+        try { await update(() => buffer!.appendBuffer(data.data)); }
+        catch (error) {
+          if (!(error instanceof DOMException) || error.name !== "QuotaExceededError" || video.currentTime < 2) throw error;
+          await update(() => buffer!.remove(0, video.currentTime - 1));
+          if (destroyed || data.generation !== generation) return;
+          await update(() => buffer!.appendBuffer(data.data));
+        }
+        if (destroyed || data.generation !== generation) return;
+        if (positionPending && video.readyState >= 1) {
+          positionPending = false;
+          if (target > 0) video.currentTime = target;
+        }
+      }).then(() => send({ type: "ack", id: data.id })).catch(fail);
+    };
+    clockTimer = setInterval(() => send({ type: "clock", time: positionPending ? target : video.currentTime }), 250);
+    const ready = event(video, "loadeddata", 20000);
+    begin();
+    try { await ready; } catch (error) { fail(error); throw error; }
   };
-
   return { probe, start, destroy };
 }
 
 export function remuxWorthTrying(url: string, text: string) {
-  // Only attempt for container/codec combos a remux can actually rescue, and only
-  // for direct http(s) file URLs (addon direct links, not torrents/magnets).
-  if (!/^https?:\/\//i.test(url)) return false;
-  const hay = `${url} ${text}`.toLowerCase();
-  const mkv = /\.mkv(?:[?#/]|$)/.test(hay) || hay.includes("matroska") || hay.includes("remux") || hay.includes("x-matroska");
-  return mkv;
+  return /^https?:\/\//i.test(url) && /\.mkv(?:[?#/\s]|$)|\bmatroska\b|\bremux\b/i.test(`${url} ${text}`);
 }

@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.watchlist
 
+import com.arflix.tv.ui.components.LocalBottomBarInset
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
@@ -8,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -67,7 +70,11 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -107,6 +114,7 @@ import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.tr
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 
 private enum class WatchlistFocusZone {
     TOP_BAR,
@@ -210,6 +218,7 @@ fun WatchlistScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var sortFocusIndex by remember { mutableIntStateOf(0) }
     var selectedProviderId by remember { mutableStateOf(WATCHLIST_PROVIDER_ID) }
+    var listSort by remember { mutableStateOf(HomeServerLibrarySort.RECENTLY_ADDED) }
     var trackerSearchQuery by remember { mutableStateOf("") }
     val longPressThresholdMs = 500L
     val watchlistColumnState = rememberLazyListState()
@@ -272,12 +281,13 @@ fun WatchlistScreen(
             else -> emptyList()
         }
     }
-    val trackerItems = remember(uiState.allItems, trackerSearchQuery, activeProvider.id) {
+    val trackerItems = remember(uiState.allItems, trackerSearchQuery, activeProvider.id, listSort) {
         val query = trackerSearchQuery.trim()
-        if (!isTrackerMode || query.isBlank()) uiState.allItems else uiState.allItems.filter { item ->
+        val filtered = if (!isTrackerMode || query.isBlank()) uiState.allItems else uiState.allItems.filter { item ->
             item.title.contains(query, ignoreCase = true) ||
                 item.overview.contains(query, ignoreCase = true)
         }
+        sortLibraryItems(filtered, listSort)
     }
     val activeLibraryState = when {
         isHomeServerMode -> libraryState
@@ -287,14 +297,15 @@ fun WatchlistScreen(
             isLoading = uiState.isLoading,
             isLoadingMore = uiState.isLoadingMore,
             hasMore = uiState.hasMore,
+            sort = listSort,
             searchQuery = trackerSearchQuery,
             error = uiState.error
         )
-        else -> HomeLibraryUiState()
+        else -> HomeLibraryUiState(sort = listSort)
     }
     val selectedLibraryIndex = providerLibraries.indexOfFirst { it.sourceRef == activeLibraryState.selectedSourceRef }
         .coerceAtLeast(0)
-    val filters = if (isHomeServerMode) {
+    val filters = if (isHomeServerMode || isTrackerMode) {
         listOf(
             LibraryFilter(tr("Sort"), isSort = true),
             LibraryFilter(tr("Search"), isSearch = true, iconOnly = true),
@@ -302,29 +313,39 @@ fun WatchlistScreen(
         )
     } else {
         listOf(
-            LibraryFilter(tr("Search"), isSearch = true, iconOnly = true),
-            LibraryFilter(tr("Refresh"), isRefresh = true, iconOnly = true)
+            LibraryFilter(tr("Sort"), isSort = true)
         )
     }
     val sortOptions = listOf(
         tr("Recently added") to HomeServerLibrarySort.RECENTLY_ADDED,
+        stringResource(R.string.library_sort_release_newest) to HomeServerLibrarySort.RELEASE_DATE_NEWEST,
+        stringResource(R.string.library_sort_release_oldest) to HomeServerLibrarySort.RELEASE_DATE_OLDEST,
         tr("Highest rated") to HomeServerLibrarySort.RATING,
         tr("Title A-Z") to HomeServerLibrarySort.TITLE
     )
-    val watchlistSections = listOf(
-        "movies" to uiState.movies,
-        "series" to uiState.series
-    ).filter { it.second.isNotEmpty() }
+    val watchlistSections = remember(uiState.movies, uiState.series, listSort) {
+        listOf(
+            "movies" to sortLibraryItems(uiState.movies, listSort),
+            "series" to sortLibraryItems(uiState.series, listSort)
+        ).filter { it.second.isNotEmpty() }
+    }
     val watchlistTotal = uiState.movies.size + uiState.series.size
     val isLibraryMode = isHomeServerMode || isTrackerMode
     val visibleLibraryItems = activeLibraryState.items
 
+    fun selectSort(sort: HomeServerLibrarySort) {
+        if (isHomeServerMode) viewModel.setLibrarySort(sort) else listSort = sort
+        focusedSectionIndex = 0
+        focusedItemIndex = 0
+    }
+
     fun moveToContent() {
         focusZone = WatchlistFocusZone.CONTENT
+        val count = if (isLibraryMode) visibleLibraryItems.size else watchlistSections.firstOrNull()?.second?.size ?: 0
         focusedItemIndex = focusedItemIndex.coerceIn(
             0,
-            ((if (isLibraryMode) visibleLibraryItems.size else watchlistSections.firstOrNull()?.second?.size) ?: 1) - 1
-        ).coerceAtLeast(0)
+            (count - 1).coerceAtLeast(0)
+        )
     }
 
     fun activateProvider(index: Int) {
@@ -354,7 +375,7 @@ fun WatchlistScreen(
             filter.isSearch -> showSearchModal = true
             filter.isRefresh -> if (isHomeServerMode) viewModel.refreshLibrary() else viewModel.refresh()
             filter.isSort -> {
-                sortFocusIndex = sortOptions.indexOfFirst { it.second == libraryState.sort }.coerceAtLeast(0)
+                sortFocusIndex = sortOptions.indexOfFirst { it.second == activeLibraryState.sort }.coerceAtLeast(0)
                 showSortMenu = true
             }
         }
@@ -398,6 +419,7 @@ fun WatchlistScreen(
     ) {
         focusedItemIndex = 0
         if (isLibraryMode) libraryGridState.scrollToItem(0)
+        else watchlistColumnState.scrollToItem(0)
     }
     LaunchedEffect(watchlistSections.size, uiState.movies.size, uiState.series.size) {
         if (watchlistSections.isNotEmpty() && focusedSectionIndex >= watchlistSections.size) {
@@ -410,10 +432,19 @@ fun WatchlistScreen(
             watchlistColumnState.animateScrollToItem(focusedSectionIndex)
         }
     }
-    LaunchedEffect(focusedItemIndex, isLibraryMode, visibleLibraryItems.size) {
-        if (isLibraryMode && visibleLibraryItems.isNotEmpty()) {
+    LaunchedEffect(focusedItemIndex, isLibraryMode, focusZone, visibleLibraryItems.size, isMobile) {
+        if (!isMobile && isLibraryMode && focusZone == WatchlistFocusZone.CONTENT && visibleLibraryItems.isNotEmpty()) {
             val safe = focusedItemIndex.coerceIn(0, visibleLibraryItems.lastIndex)
-            libraryGridState.animateScrollToItem(safe)
+            val layout = snapshotFlow { libraryGridState.layoutInfo }.first { it.totalItemsCount > safe }
+            val target = layout.visibleItemsInfo.firstOrNull { it.index == safe }
+            if (target == null) {
+                libraryGridState.animateScrollToItem(safe)
+            } else {
+                val delta = libraryRevealScrollDelta(target.offset.y, target.size.height,
+                    layout.viewportStartOffset + layout.beforeContentPadding,
+                    layout.viewportEndOffset - layout.afterContentPadding)
+                if (delta != 0) libraryGridState.animateScrollBy(delta.toFloat(), tween(120))
+            }
             if (safe >= visibleLibraryItems.size - libraryColumns * 2) {
                 if (isHomeServerMode) viewModel.loadMoreLibrary() else viewModel.loadMoreActiveSource()
             }
@@ -432,6 +463,7 @@ fun WatchlistScreen(
 
     Box(
         modifier = Modifier
+            .testTag("library-screen")
             .fillMaxSize()
             .background(appBackgroundDark())
             .focusRequester(rootFocusRequester)
@@ -460,7 +492,7 @@ fun WatchlistScreen(
                             true
                         }
                         Key.Enter, Key.DirectionCenter -> {
-                            sortOptions.getOrNull(sortFocusIndex)?.second?.let(viewModel::setLibrarySort)
+                            sortOptions.getOrNull(sortFocusIndex)?.second?.let(::selectSort)
                             showSortMenu = false
                             focusZone = WatchlistFocusZone.FILTERS
                             true
@@ -490,7 +522,10 @@ fun WatchlistScreen(
                                 WatchlistFocusZone.CONTENT -> {
                                     if (isLibraryMode) {
                                         if (focusedItemIndex % libraryColumns > 0) focusedItemIndex--
-                                        else if (providerLibraries.isNotEmpty()) focusZone = WatchlistFocusZone.LIBRARIES
+                                        else if (providerLibraries.isNotEmpty()) {
+                                            libraryFocusIndex = selectedLibraryIndex.coerceAtLeast(0)
+                                            focusZone = WatchlistFocusZone.LIBRARIES
+                                        }
                                     } else if (focusedItemIndex > 0) focusedItemIndex--
                                 }
                             }
@@ -500,14 +535,17 @@ fun WatchlistScreen(
                             when (focusZone) {
                                 WatchlistFocusZone.TOP_BAR -> sidebarFocusIndex = (sidebarFocusIndex + 1).coerceAtMost(maxSidebarIndex)
                                 WatchlistFocusZone.PROVIDERS -> {
-                                    if (isLibraryMode && providerFocusIndex >= providers.lastIndex) {
+                                    if (providerFocusIndex >= providers.lastIndex) {
                                         filterFocusIndex = 0
                                         focusZone = WatchlistFocusZone.FILTERS
                                     } else {
                                         providerFocusIndex = (providerFocusIndex + 1).coerceAtMost(providers.lastIndex)
                                     }
                                 }
-                                WatchlistFocusZone.LIBRARIES -> focusZone = WatchlistFocusZone.FILTERS
+                                WatchlistFocusZone.LIBRARIES -> {
+                                    if (visibleLibraryItems.isNotEmpty()) moveToContent()
+                                    else focusZone = WatchlistFocusZone.FILTERS
+                                }
                                 WatchlistFocusZone.FILTERS -> filterFocusIndex = (filterFocusIndex + 1).coerceAtMost(filters.lastIndex)
                                 WatchlistFocusZone.CONTENT -> {
                                     val max = if (isLibraryMode) visibleLibraryItems.lastIndex else watchlistSections.getOrNull(focusedSectionIndex)?.second?.lastIndex ?: -1
@@ -546,11 +584,13 @@ fun WatchlistScreen(
                                 WatchlistFocusZone.LIBRARIES -> {
                                     if (libraryFocusIndex < providerLibraries.lastIndex) libraryFocusIndex++
                                 }
-                                WatchlistFocusZone.FILTERS -> if (visibleLibraryItems.isNotEmpty()) moveToContent()
+                                WatchlistFocusZone.FILTERS -> if (if (isLibraryMode) visibleLibraryItems.isNotEmpty() else watchlistSections.isNotEmpty()) moveToContent()
                                 WatchlistFocusZone.CONTENT -> {
                                     if (isLibraryMode) {
                                         val next = focusedItemIndex + libraryColumns
-                                        if (next < visibleLibraryItems.size) focusedItemIndex = next
+                                        if (visibleLibraryItems.isNotEmpty()) {
+                                            focusedItemIndex = next.coerceAtMost(visibleLibraryItems.lastIndex)
+                                        }
                                     } else if (focusedSectionIndex < watchlistSections.lastIndex) {
                                         focusedSectionIndex++
                                         focusedItemIndex = 0
@@ -641,7 +681,7 @@ fun WatchlistScreen(
                 libraryState = activeLibraryState,
                 filters = filters,
                 focusedFilterIndex = if (focusZone == WatchlistFocusZone.FILTERS) filterFocusIndex else -1,
-                showLibraryControls = isLibraryMode,
+                showLibraryControls = true,
                 isMobile = isMobile,
                 onSelect = ::activateProvider,
                 onFilterSelect = { index ->
@@ -738,7 +778,7 @@ fun WatchlistScreen(
                 isMobile = isMobile,
                 onFocus = { sortFocusIndex = it },
                 onSelect = { sort ->
-                    viewModel.setLibrarySort(sort)
+                    selectSort(sort)
                     showSortMenu = false
                     focusZone = WatchlistFocusZone.FILTERS
                 },
@@ -957,6 +997,21 @@ private fun LibrarySidebar(
     focusedIndex: Int,
     onSelect: (Int, HomeServerCatalogCandidate) -> Unit
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(focusedIndex, selectedIndex, libraries.firstOrNull()?.sourceRef, libraries.size) {
+        if (libraries.isEmpty()) return@LaunchedEffect
+        val targetIndex = (if (focusedIndex >= 0) focusedIndex else selectedIndex).coerceIn(libraries.indices)
+        val layout = snapshotFlow { listState.layoutInfo }.first { it.totalItemsCount == libraries.size }
+        val target = layout.visibleItemsInfo.firstOrNull { it.index == targetIndex }
+        if (target == null) {
+            listState.animateScrollToItem(targetIndex)
+        } else {
+            val delta = libraryRevealScrollDelta(target.offset, target.size,
+                layout.viewportStartOffset + layout.beforeContentPadding,
+                layout.viewportEndOffset - layout.afterContentPadding)
+            if (delta != 0) listState.animateScrollBy(delta.toFloat(), tween(120))
+        }
+    }
     Column(
         modifier = Modifier
             .width(184.dp)
@@ -981,12 +1036,22 @@ private fun LibrarySidebar(
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier.padding(start = 10.dp, top = 2.dp, bottom = 7.dp)
         )
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.testTag("library-sidebar").weight(1f),
+            contentPadding = PaddingValues(vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
             itemsIndexed(libraries, key = { _, item -> item.sourceRef }) { index, library ->
                 val selected = index == selectedIndex
                 val focused = index == focusedIndex
                 Row(
                     modifier = Modifier
+                        .testTag("library-sidebar-${library.sourceRef}")
+                        .semantics {
+                            this.selected = selected
+                            this.focused = focused
+                        }
                         .fillMaxWidth()
                         .height(44.dp)
                         .background(
@@ -1054,6 +1119,8 @@ private fun LibraryFilterControl(
             HomeServerLibrarySort.RECENTLY_ADDED -> tr("Recently added")
             HomeServerLibrarySort.RATING -> tr("Highest rated")
             HomeServerLibrarySort.TITLE -> tr("Title A-Z")
+            HomeServerLibrarySort.RELEASE_DATE_NEWEST -> stringResource(R.string.library_sort_release_newest)
+            HomeServerLibrarySort.RELEASE_DATE_OLDEST -> stringResource(R.string.library_sort_release_oldest)
         }
         filter.isSearch && state.searchQuery.isNotBlank() -> state.searchQuery
         else -> filter.label
@@ -1195,10 +1262,11 @@ private fun ColumnScope.LibraryResults(
                     columns = GridCells.Fixed(columns),
                     state = gridState,
                     modifier = Modifier
+                        .testTag("library-grid")
                         .fillMaxSize()
                         .graphicsLayer { alpha = contentAlpha }
                         .padding(horizontal = 24.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 24.dp + LocalBottomBarInset.current),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(15.dp),
                     userScrollEnabled = isMobile && !state.isLoading
@@ -1212,6 +1280,8 @@ private fun ColumnScope.LibraryResults(
                             onItemVisible(item)
                         }
                         MediaCard(
+                            modifier = Modifier.testTag("library-card-$index")
+                                .semantics { selected = index == focusedItemIndex },
                             item = item,
                             width = cardWidth,
                             isLandscape = isLandscape,
@@ -1301,7 +1371,7 @@ private fun ColumnScope.WatchlistContent(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(start = 24.dp, end = 48.dp),
-                contentPadding = PaddingValues(top = 10.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(top = 10.dp, bottom = 16.dp + LocalBottomBarInset.current),
                 verticalArrangement = Arrangement.spacedBy(if (isMobile) 24.dp else 16.dp),
                 userScrollEnabled = isMobile
             ) {

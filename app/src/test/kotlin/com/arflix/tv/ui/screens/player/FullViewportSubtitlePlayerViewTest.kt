@@ -1,6 +1,7 @@
 package com.arflix.tv.ui.screens.player
 
 import androidx.media3.common.text.Cue
+import com.arflix.tv.ui.screens.player.engine.exoplayer.requiresVideoFrameSubtitleViewport
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 

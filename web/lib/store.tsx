@@ -3,26 +3,37 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getStreams, getStreamsProgressive, installAddon as installAddonManifest, loadLocalAddons, normalizeAddons, saveLocalAddons } from "./addons";
 import { AuthClient, SESSION_KEY, decodeJwtPayload } from "./auth";
-import { getAuthPortalUrl } from "./config";
+import { config, getAuthPortalUrl } from "./config";
 import { defaultCatalogs, mergeCatalogs } from "./catalogs";
 import { getContinueWatching, isLiveStreamOrSportsItem, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudProfiles, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, removeContinueWatchingProgress, saveCloudAddons, saveCloudProfiles, saveCloudSettings, saveCloudTrackingSelection, saveCloudWatchlist, saveWatchedState } from "./cloud";
-import { cachedDebridDirectUrl, parseDebridStream, resolveDebridDirectUrl, resolveTranscodeStream } from "./debrid";
+import { completionTimes, includeIptvContinueWatching, isUnwatchedContinueWatching, mergePartialContinueWatching, mergeTrackerContinueWatching, pruneCompletedResume, traktProgressActivityKey } from "./continueWatching";
+import { cachedDebridDirectUrl, parseDebridStream } from "./debrid";
 import { createPendingExternalPlayback } from "./externalPlayback";
+import { trackPremiumEvent } from "./premiumAnalytics";
 import { externalLaunchMode, openExternalPlayer } from "./externalPlayers";
-import { canDirectPlayMkvStream, playbackPlan, streamPlayability } from "./streamCompatibility";
+import { playbackPlan } from "./streamCompatibility";
+import { prepareBrowserStream } from "./prepareBrowserStream";
+import { reportHomeServerPlayback } from "./homeServerPlayback";
 import { loadHomeServerRows } from "./homeserver";
-import { buildXtreamCatchupUrl, iptvPlaylistSignature, loadIptvGuideForChannels, loadIptvSnapshot, loadPlaylists, savePlaylists } from "./iptv";
+import { buildXtreamCatchupUrl, iptvPlaylistSignature, loadIptvChannelIdentities, loadIptvGuideForChannels, loadIptvSnapshot, loadPlaylists, savePlaylists } from "./iptv";
+import { isCurrentIptvSnapshot, recordTvPlayback } from "./iptvSession";
 import { dedupeMedia, historyToItem, hydrateTraktItems, traktItemToMedia, traktPlaybackToMedia, traktUpNextToMedia } from "./mappers";
 import { loadStored, purgeLegacyStorage, removeStored, saveStored } from "./storage";
-import { getDetails, getSeasonEpisodes, loadCatalog, searchMedia } from "./tmdb";
+import { getDetails, getSeasonEpisodes, loadCatalog, searchMedia, resolveTmdbId } from "./tmdb";
+import { verifyProfilePin } from "./profilePin";
+import { hydratedProfileId } from "./profiles";
+import { flushSettingsOutbox, hasPendingSettings, queueSettings } from "./settingsOutbox";
 import type { MetadataProviderId, ProviderPriorityConfig } from "./metadata/types";
 import { TraktClient, type TraktDeviceCode } from "./trakt";
+import { continueWatchingActivitySignature, createTraktActivityCheck, type TraktActivitySnapshot } from "./traktActivity";
 import { mdblistClient } from "./mdblist";
 import { simklClient, type SimklPinCode } from "./simkl";
 import {
   activeSyncProvider,
   defaultTrackingPreferences,
   loadTrackingPreferences,
+  readsFrom,
+  sameTrackingSources,
   saveTrackingPreferences,
   syncClient,
   type TrackingPreferences
@@ -273,13 +284,10 @@ function traktWatchedKeys(movies: unknown[], shows: unknown[]) {
   return keys;
 }
 
-function filterWatchedContinueWatching(items: MediaItem[], watchedKeys: Set<string>, addons: InstalledAddon[]) {
+function filterWatchedContinueWatching(items: MediaItem[], watchedKeys: Set<string>, addons: InstalledAddon[], completions?: Map<string, number>) {
   const nonLive = items.filter((item) => !isLiveStreamOrSportsItem(item, addons));
   if (!watchedKeys.size) return nonLive;
-  return nonLive.filter((item) => {
-    const key = mediaWatchKey(item);
-    return !key || !watchedKeys.has(key);
-  });
+  return nonLive.filter((item) => isUnwatchedContinueWatching(item, watchedKeys, completions));
 }
 
 
@@ -303,12 +311,6 @@ function traktActivityTime(raw: unknown) {
   return Date.parse(item.last_watched_at ?? item.last_updated_at ?? "") || 0;
 }
 
-// Per-show progress responses cached by show + last activity: a show whose
-// last_watched_at hasn't moved has unchanged progress, so refreshes after the
-// first cost zero Trakt calls for it. Keeps us far away from Trakt's rate
-// limits (their July 2026 API update made bursts much more failure-prone).
-const showProgressCache = new Map<string, unknown>();
-
 // How many watched shows we ask Trakt for per-show progress. The activity-keyed
 // progress cache means only shows whose last_watched_at MOVED cost a call on a
 // repeat refresh, so this ceiling mostly bounds the very first sync of a large
@@ -319,7 +321,7 @@ const UP_NEXT_SHOW_LIMIT = 300;
 // us — instead of being dropped from the rail entirely.
 const CW_HYDRATE_LIMIT = 50;
 
-async function loadTraktUpNext(watchedShowsRows: unknown[], includeSpecials: boolean, hiddenShowIds: Set<number>) {
+async function loadTraktUpNext(watchedShowsRows: unknown[], includeSpecials: boolean, hiddenShowIds: Set<number>, isCurrent = () => true) {
   // Fetch per-show progress for the whole watched-shows list (newest-activity
   // first) so Continue Watching surfaces every show with an unwatched next
   // episode — not just the most recent handful. The activity-keyed cache means
@@ -342,33 +344,17 @@ async function loadTraktUpNext(watchedShowsRows: unknown[], includeSpecials: boo
   // outage, not an empty Continue Watching.
   let fetchFailures = 0;
   const workers = Array.from({ length: Math.min(8, watchedShows.length) }, async () => {
-    while (cursor < watchedShows.length) {
+    while (cursor < watchedShows.length && isCurrent()) {
       const index = cursor;
       cursor += 1;
       const watched = watchedShows[index];
       const row = watched as { show?: { ids?: { trakt?: number } } };
       const traktId = row.show?.ids?.trakt;
       if (!traktId) continue;
-      const activityAt = traktActivityTime(watched);
-      const cacheKey = `${traktId}:${activityAt}:${includeSpecials}`;
-      let progress: unknown = showProgressCache.get(cacheKey) ?? null;
-      if (progress === undefined || progress === null) {
-        // activityAt keys the persistent cache: unchanged activity = identical
-        // progress, so repeat boots read from localStorage instead of firing
-        // ~120 Trakt calls — the difference between CW enriching in seconds vs
-        // half a minute (and the reason the CW cache never got written on
-        // devices where sessions were shorter than the old pipeline).
-        progress = await traktClient.showProgress(traktId, includeSpecials, activityAt).catch(() => null);
-        if (progress) {
-          showProgressCache.set(cacheKey, progress);
-          if (showProgressCache.size > 200) {
-            const oldest = showProgressCache.keys().next().value;
-            if (oldest) showProgressCache.delete(oldest);
-          }
-        } else {
-          fetchFailures += 1;
-        }
-      }
+      // The client owns the account-scoped, expiring cache. A second, timeless
+      // cache here hid newly aired episodes and could leak progress by profile.
+      const progress = await traktClient.showProgress(traktId, includeSpecials, traktProgressActivityKey(watched)).catch(() => null);
+      if (!progress) fetchFailures += 1;
       results[index] = traktUpNextToMedia(watched, progress);
     }
   });
@@ -395,6 +381,9 @@ function mergeTraktWithLocalResume(traktItems: MediaItem[], localItems: MediaIte
       episodeStill: item.episodeStill || local.episodeStill,
       episodeTitle: item.episodeTitle ?? local.episodeTitle ?? null,
       progress: Math.max(item.progress ?? 0, local.progress ?? 0),
+      resumePositionSeconds: Math.max(item.resumePositionSeconds ?? 0, local.resumePositionSeconds ?? 0),
+      durationSeconds: Math.max(item.durationSeconds ?? 0, local.durationSeconds ?? 0),
+      streamAddonId: item.streamAddonId ?? local.streamAddonId,
       timeRemainingLabel: local.timeRemainingLabel ?? item.timeRemainingLabel ?? null
     };
   });
@@ -424,7 +413,7 @@ async function hydrateContinueWatchingItems(items: MediaItem[]) {
         getDetails(item).catch(() => item),
         episodeStillPromise
       ]);
-      const clamped = clampUpNextEpisode({
+      const enriched = {
         ...details,
         ...item,
         image: item.image || details.image,
@@ -433,60 +422,31 @@ async function hydrateContinueWatchingItems(items: MediaItem[]) {
         overview: details.overview || item.overview,
         rating: details.rating || item.rating,
         duration: details.duration || item.duration
-      });
-      if (!clamped) {
-        hydrated[index] = null;
-        continue;
-      }
-      const episodeChanged = clamped.seasonNumber !== item.seasonNumber || clamped.episodeNumber !== item.episodeNumber;
-      const correctedStill = episodeChanged && clamped.seasonNumber != null && clamped.episodeNumber != null
-        ? await getSeasonEpisodes(clamped.id, clamped.seasonNumber)
-            .then((episodes) => episodes.find((episode) => episode.episodeNumber === clamped.episodeNumber)?.still ?? null)
-            .catch(() => null)
-        : null;
+      };
       hydrated[index] = {
-        ...clamped,
-        episodeStill: episodeChanged
-          ? correctedStill
-          : episodeStill || item.episodeStill || null
+        ...enriched,
+        episodeStill: episodeStill || item.episodeStill || null
       };
     }
   });
   await Promise.all(workers);
-  // The unhydrated tail still gets the episode clamp — that guard reads only
-  // TMDB season data the item may already carry, and returns the item as-is
-  // when it doesn't.
-  const tailClamped = tail.map(clampUpNextEpisode);
-  return [...hydrated, ...tailClamped].filter((item): item is MediaItem => Boolean(item));
+  // Metadata providers can disagree about season numbering. Artwork must never
+  // change Trakt's selected episode or remove it based on TMDB episode counts.
+  return [...hydrated, ...tail].filter((item): item is MediaItem => Boolean(item));
 }
 
-// Trakt's episode database can list MORE episodes than TMDB does for the same
-// season (specials folded in, split-release counting) — its next_episode then
-// points past the last episode the app can actually show ("Up next S1 E11" on
-// a 10-episode season, which plays nothing). Clamp against the hydrated TMDB
-// season data: advance to the next real season when one exists, otherwise the
-// show is finished and the row is dropped from Continue Watching.
-function clampUpNextEpisode(item: MediaItem): MediaItem | null {
-  if (item.timeRemainingLabel !== "Up next") return item;
-  const seasonNumber = item.seasonNumber;
-  const episodeNumber = item.episodeNumber;
-  if (item.mediaType !== "tv" || !seasonNumber || !episodeNumber) return item;
+
+// Only locally advancing playback uses TMDB's season boundaries, not imported
+// tracker progress (which may use a different episode ordering).
+function nextLocalEpisode(item: MediaItem): MediaItem | null {
+  const { seasonNumber, episodeNumber } = item;
+  if (!seasonNumber || !episodeNumber) return item;
   const seasons = (item.seasons ?? []).filter((season) => season.seasonNumber > 0);
-  if (!seasons.length) return item;
   const current = seasons.find((season) => season.seasonNumber === seasonNumber);
   if (!current?.episodeCount || episodeNumber <= current.episodeCount) return item;
-  const nextSeason = seasons
-    .filter((season) => season.seasonNumber > seasonNumber && (season.episodeCount ?? 0) > 0)
+  const next = seasons.filter((season) => season.seasonNumber > seasonNumber && (season.episodeCount ?? 0) > 0)
     .sort((a, b) => a.seasonNumber - b.seasonNumber)[0];
-  if (!nextSeason) return null; // watched past the final episode — show done
-  return {
-    ...item,
-    seasonNumber: nextSeason.seasonNumber,
-    episodeNumber: 1,
-    episodeTitle: null,
-    episodeStill: null,
-    subtitle: `S${nextSeason.seasonNumber} E1`
-  };
+  return next ? { ...item, seasonNumber: next.seasonNumber, episodeNumber: 1, episodeTitle: null, episodeStill: null, subtitle: `S${next.seasonNumber} E1` } : null;
 }
 
 function sameSettings(a: AppSettings, b: AppSettings) {
@@ -501,7 +461,7 @@ export interface AppStore {
   avatarImages: Record<string, string>;
   manageMode: boolean;
   setManageMode: (value: boolean) => void;
-  selectProfile: (profile: Profile) => Promise<void>;
+  selectProfile: (profile: Profile, pin?: string) => Promise<void>;
   createProfile: (name: string, avatarColor: number, avatarId: number) => Promise<void>;
   updateProfile: (profile: Profile) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
@@ -554,9 +514,10 @@ export interface AppStore {
   loadIptvGuide: (channels: IptvChannel[]) => Promise<void>;
   openDetails: (item: MediaItem) => Promise<void>;
   closeDetails: () => void;
-  playStream: (stream: StreamSource, options?: { forceTranscode?: boolean; forceRemux?: boolean }) => void;
+  playStream: (stream: StreamSource, options?: { forceTranscode?: boolean; forceRemux?: boolean; forceBrowser?: boolean }) => void;
   playTrailer: (item: MediaItem) => Promise<void>;
   playChannel: (channel: IptvChannel) => void;
+  recordChannelPlayback: (channel: IptvChannel) => void;
   playCatchup: (channel: IptvChannel, program: IptvProgram) => void;
   closePlayer: () => void;
   installAddon: (url: string) => Promise<void>;
@@ -575,9 +536,12 @@ export interface AppStore {
   // Watchlist list-source switcher (Trakt custom lists / collection).
   loadTraktLists: () => Promise<Array<{ id: string; name: string }>>;
   loadTraktListItems: (source: string) => Promise<MediaItem[]>;
+  loadTrackerLibrary: (provider: "trakt" | "simkl", source: string) => Promise<MediaItem[]>;
+  settingsSyncState: "local" | "saved" | "pending" | "error";
+  searchState: "idle" | "loading" | "error";
 
   toggleWatchlist: (item: MediaItem) => Promise<void>;
-  toggleWatched: (item: MediaItem, seasonNumber?: number | null, episodeNumber?: number | null) => Promise<void>;
+  toggleWatched: (item: MediaItem, seasonNumber?: number | null, episodeNumber?: number | null, skipSync?: boolean) => Promise<void>;
   removeFromContinueWatching: (item: MediaItem) => Promise<void>;
   activeContextMenu: ContextMenuTarget | null;
   openContextMenu: (target: ContextMenuTarget) => void;
@@ -599,7 +563,7 @@ export interface ContextMenuTarget {
   }>;
 }
 
-const AppContext = createContext<AppStore | null>(null);
+export const AppContext = createContext<AppStore | null>(null);
 
 export function useApp(): AppStore {
   const store = useContext(AppContext);
@@ -638,17 +602,23 @@ export function AppProvider({
   // previous profile check this before writing state, so switching profiles can
   // never end with the old profile's rows landing after the new profile's.
   const refreshKeyRef = useRef<string | null>(null);
+  const refreshGenerationRef = useRef(0);
+  const traktActivityRef = useRef<TraktActivitySnapshot>(null);
   const [watchedKeys, setWatchedKeys] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const [selectedEpisode, setSelectedEpisode] = useState<{ season: number; episode: number } | null>(null);
   const [activeStream, setActiveStream] = useState<StreamSource | null>(null);
   const [activeChannel, setActiveChannel] = useState<IptvChannel | null>(null);
+  const playingRef = useRef(false);
+  playingRef.current = Boolean(activeStream || activeChannel);
   const [addons, setAddons] = useState<InstalledAddon[]>([]);
   const [addonsReady, setAddonsReady] = useState(false);
   const [iptvSnapshot, setIptvSnapshot] = useState<IptvSnapshot>(emptyIptv);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
+  const [searchState, setSearchState] = useState<"idle" | "loading" | "error">("idle");
+  const [settingsSyncState, setSettingsSyncState] = useState<"local" | "saved" | "pending" | "error">("local");
   const [settings, setSettings] = useState<AppSettings>(() => {
     const stored = loadStored<AppSettings>(settingsKey, defaultSettings);
     return {
@@ -673,6 +643,17 @@ export function AppProvider({
   // effect can skip pushing settings that just CAME from the cloud (an echo
   // write every app boot = a wasted account-sync-push per user per session).
   const lastSyncedSettingsRef = useRef<string | null>(null);
+  const sourceGeneration = useRef(0);
+  const playbackGeneration = useRef(0);
+  const playbackPreparation = useRef<AbortController | null>(null);
+  const ownedPlayback = useRef<{ stream: StreamSource; settings: AppSettings } | null>(null);
+  const stopOwnedPlayback = useCallback(() => {
+    const owned = ownedPlayback.current;
+    ownedPlayback.current = null;
+    if (owned) void reportHomeServerPlayback(owned.stream, owned.settings, "stop").catch(() => undefined);
+  }, []);
+  const iptvRefresh = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const guideRetryAfter = useRef(new Map<string, number>());
 
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     // Don't surface a previous account's cached profiles when a different account
@@ -685,6 +666,7 @@ export function AppProvider({
   );
   const activeProfileIdRef = useRef(activeProfileId);
   activeProfileIdRef.current = activeProfileId;
+  useEffect(() => () => { playbackPreparation.current?.abort(); stopOwnedPlayback(); }, [activeProfileId, auth?.userId, stopOwnedPlayback]);
   const [trackingPreferences, setTrackingPreferences] = useState<TrackingPreferences>(() =>
     loadTrackingPreferences(activeProfileId)
   );
@@ -701,7 +683,7 @@ export function AppProvider({
     const stored = loadStored<Profile[]>(PROFILES_KEY, []);
     const activeId = loadStored<string | null>(ACTIVE_PROFILE_KEY, null);
     const skip = loadStored<AppSettings>(settingsKey, defaultSettings).skipProfileSelection;
-    if (skip && activeId && stored.some((p) => p.id === activeId)) return "app";
+    if (skip && activeId && stored.some((p) => p.id === activeId && !p.isLocked)) return "app";
     return "profiles";
   });
 
@@ -780,12 +762,16 @@ export function AppProvider({
     await saveCloudAddons(authClient, normalized, activeProfileId, { removedIds: options.removedIds }).catch(() => undefined);
   }, [activeProfileId]);
 
-  const refreshData = useCallback((profileIdOverride?: string | null) => {
+  const refreshData = useCallback((profileIdOverride?: string | null, background = false) => {
     const profileId = profileIdOverride ?? activeProfileId;
-    const key = profileId ?? "no-profile";
+    const accountId = authClient.session?.userId;
+    const key = `${accountId ?? "local"}:${profileId ?? "no-profile"}`;
     refreshKeyRef.current = key;
     const existing = refreshInFlightRef.current;
     if (existing?.key === key) return existing.promise;
+    const generation = ++refreshGenerationRef.current;
+    const isCurrent = () => refreshGenerationRef.current === generation && refreshKeyRef.current === key &&
+      activeProfileIdRef.current === profileId && authClient.session?.userId === accountId;
     traktClient.setProfile(profileId);
     mdblistClient.setProfile(profileId);
     simklClient.setProfile(profileId);
@@ -793,10 +779,16 @@ export function AppProvider({
     setTraktConnected(traktClient.isConnected);
     setMdblistConnected(mdblistClient.isConnected);
     setSimklConnected(simklClient.isConnected);
+    // Capture the version BEFORE history reads; otherwise a watch arriving mid-
+    // refresh could be acknowledged without ever fetching that updated history.
+    const activityRead = readsFrom("continueWatching", "trakt")
+      ? traktClient.continueWatchingActivity().catch(() => null) : Promise.resolve(null);
     const run = (async () => {
       const currentSettings = settingsRef.current;
-      setAddonsReady(false);
-      setBusy("Syncing catalogs");
+      if (!background) {
+        setAddonsReady(false);
+        setBusy("Syncing catalogs");
+      }
       // Paint Continue Watching instantly from the last known list for this
       // profile — the fresh Trakt fetch replaces it seconds later. Without
       // this the rail sits empty while up to ~17 Trakt calls round-trip.
@@ -822,11 +814,12 @@ export function AppProvider({
       }
       try {
       const localAddons = loadLocalAddons();
-      const cloud = authClient.session ? await pullCloudPayload(authClient, profileId).catch(() => null) : null;
+      await flushSettingsOutbox(authClient).catch(() => setSettingsSyncState("error"));
+      const cloud = authClient.session && !hasPendingSettings(authClient, profileId) ? await pullCloudPayload(authClient, profileId).catch(() => null) : null;
       let effectiveSettings = currentSettings;
       if (authClient.session && profileId) {
         const cloudTracking = await pullCloudTrackingSelection(authClient, profileId).catch(() => null);
-        if (refreshKeyRef.current !== key) return;
+        if (!isCurrent()) return;
         if (cloudTracking) {
           if (!cloudTracking.hasCloudState) {
             const localPreferences = loadTrackingPreferences(profileId);
@@ -841,7 +834,7 @@ export function AppProvider({
               : null;
             if (localTracking) {
               await saveCloudTrackingSelection(authClient, profileId, localTracking).catch(() => undefined);
-              if (refreshKeyRef.current !== key) return;
+              if (!isCurrent()) return;
             }
           } else {
             traktClient.setToken(cloudTracking.traktToken);
@@ -856,7 +849,11 @@ export function AppProvider({
           setMdblistConnected(mdblistClient.isConnected);
         }
       }
-      if (cloud?.settings) {
+      if (!isCurrent()) return;
+      // A user can edit favorites while the cloud/tracker requests above are
+      // in flight. Do not replace those edits with the earlier cloud response.
+      const settingsChangedDuringPull = settingsRef.current !== currentSettings || hasPendingSettings(authClient, profileId);
+      if (cloud?.settings && !settingsChangedDuringPull) {
         effectiveSettings = {
           ...defaultSettings,
           ...currentSettings,
@@ -864,8 +861,10 @@ export function AppProvider({
           catalogs: mergeCatalogs(cloud.settings?.catalogs ?? currentSettings.catalogs, cloud.settings?.hiddenCatalogIds ?? currentSettings.hiddenCatalogIds),
           iptvPlaylists: cloud.settings?.iptvPlaylists ?? currentSettings.iptvPlaylists,
           favoriteChannelIds: cloud.settings?.favoriteChannelIds ?? currentSettings.favoriteChannelIds,
+          iptvTvSession: cloud.settings?.iptvTvSession ?? currentSettings.iptvTvSession,
           favoriteGroupIds: cloud.settings?.favoriteGroupIds ?? currentSettings.favoriteGroupIds,
           hiddenGroupIds: cloud.settings?.hiddenGroupIds ?? currentSettings.hiddenGroupIds,
+          lockedIptvGroupIds: cloud.settings?.lockedIptvGroupIds ?? currentSettings.lockedIptvGroupIds,
           groupOrder: cloud.settings?.groupOrder ?? currentSettings.groupOrder
         };
         if (!sameSettings(settingsRef.current, effectiveSettings)) setSettings(effectiveSettings);
@@ -873,6 +872,8 @@ export function AppProvider({
         // effect compares against) so it doesn't push it straight back.
         lastSyncedSettingsRef.current = JSON.stringify({ settings: effectiveSettings, activeProfileId: profileId });
         savePlaylists(effectiveSettings.iptvPlaylists);
+      } else if (settingsChangedDuringPull) {
+        effectiveSettings = settingsRef.current;
       }
       // Addon-wipe protection. Prefer cloud, fall back to local, but NEVER let a
       // failed/empty pull replace a non-empty list. A null `cloud` means the pull
@@ -908,22 +909,69 @@ export function AppProvider({
 
       const client = syncClient();
       const traktReady = client.isConnected;
-      const currentSyncProvider = activeSyncProvider();
-      const [historyRows, traktRows, playbackRows, watchedMoviesRows, watchedShowsRows, cloudWatchlistRows, cloudWatchedKeys, cloudDismissals, hiddenShowIds] = await Promise.all([
+      const activitySignature = continueWatchingActivitySignature(await activityRead);
+      if (!isCurrent()) return;
+      const readFailures = new Set<string>();
+      const failedRead = (feature: string) => { readFailures.add(feature); return []; };
+      const watchedMoviesRead = traktReady ? client.watched("movies").catch(() => failedRead("watched-movies")) : Promise.resolve([]);
+      const watchedShowsRead = traktReady ? client.watched("shows").catch(() => failedRead("watched-shows")) : Promise.resolve([]);
+      const cwUsesTrakt = readsFrom("continueWatching", "trakt");
+      const cwOnlyTrakt = cwUsesTrakt && !readsFrom("continueWatching", "simkl") && !readsFrom("continueWatching", "mdblist");
+      const sameHistorySources = sameTrackingSources("watched", "continueWatching");
+      // Reconcile each successful history read before progress, watchlist or artwork requests finish.
+      const readCwHistory = (type: "movies" | "shows", shared: Promise<unknown[]>) => {
+        const read = sameHistorySources
+          ? shared.then((rows) => {
+            if (readFailures.has(`watched-${type}`)) readFailures.add(`cw-${type}`);
+            return rows;
+          })
+          : client.watched(type, "continueWatching").catch(() => failedRead(`cw-${type}`));
+        return read.then((rows) => {
+          if (!isCurrent()) return rows;
+          const completions = completionTimes(type === "movies" ? rows : [], type === "shows" ? rows : []);
+          if (!completions.size) return rows;
+          setContinueWatching((current) => pruneCompletedResume(current, completions));
+          setCategories((current) => current.flatMap((category) => {
+            if (category.id !== "continue_watching") return [category];
+            const items = pruneCompletedResume(category.items, completions);
+            return items.length ? [items === category.items ? category : { ...category, items }] : [];
+          }));
+          const cached = readCachedList(cwCacheKey);
+          const pruned = pruneCompletedResume(cached, completions);
+          if (pruned !== cached) {
+            if (pruned.length) saveCachedList(cwCacheKey, pruned, 20);
+            else removeStored(cwCacheKey);
+          }
+          return rows;
+        });
+      };
+      const cwMoviesRead = traktReady ? readCwHistory("movies", watchedMoviesRead) : Promise.resolve([]);
+      const cwShowsRead = traktReady ? readCwHistory("shows", watchedShowsRead) : Promise.resolve([]);
+      // Per-show progress specifically needs Trakt history, even when both trackers supply CW.
+      const cwTraktShowsRead = !cwUsesTrakt ? Promise.resolve([])
+        : cwOnlyTrakt ? cwShowsRead
+        : traktClient.watched("shows").catch(() => failedRead("cw-watched"));
+      const watchlistReady = ["trakt", "simkl", "mdblist"].some((provider) => readsFrom("watchlist", provider as "trakt" | "simkl" | "mdblist"));
+      const [historyRows, traktRows, playbackRows, watchedMoviesRows, watchedShowsRows, cloudWatchlistRows, cloudWatchedKeys, cloudDismissals, hiddenShowIds, cwMovies, cwShows] = await Promise.all([
         authClient.session ? getContinueWatching(authClient, profileId, addonState).catch(() => []) : Promise.resolve([]),
-        traktReady ? client.watchlist().catch(() => []) : Promise.resolve([]),
-        traktReady ? client.playback().catch(() => []) : Promise.resolve([]),
-        traktReady ? client.watched("movies").catch(() => []) : Promise.resolve([]),
-        traktReady ? client.watched("shows").catch(() => []) : Promise.resolve([]),
+        traktReady ? client.watchlist().catch(() => failedRead("watchlist")) : Promise.resolve([]),
+        traktReady ? client.playback().catch(() => failedRead("playback")) : Promise.resolve([]),
+        watchedMoviesRead,
+        watchedShowsRead,
         authClient.session ? pullCloudWatchlist(authClient, profileId).catch(() => []) : Promise.resolve([]),
         authClient.session ? pullCloudWatchedKeys(authClient, profileId).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
         authClient.session ? pullCloudContinueWatchingDismissals(authClient, profileId).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
         // Only Trakt has a hidden-from-progress concept; MDBList reads return an
         // empty set so the filters below are no-ops for it.
-        traktReady && currentSyncProvider === "trakt"
+        readsFrom("continueWatching", "trakt")
           ? traktClient.hiddenProgressShowIds().catch(() => new Set<number>())
-          : Promise.resolve(new Set<number>())
+          : Promise.resolve(new Set<number>()),
+        cwMoviesRead,
+        cwShowsRead
       ]);
+      if (!isCurrent()) return;
+      const cwCompletions = completionTimes(cwMovies, cwShows);
+      const cwWatchedKeys = traktWatchedKeys(cwMovies, cwShows);
 
       // Shows dropped on Trakt ("hide from progress") must not resurface here —
       // Trakt omits them from Up Next, so both the playback and up-next paths
@@ -955,7 +1003,7 @@ export function AppProvider({
         : cloudWatchlistRows;
       if (fastWatchlistSource.length) {
         void hydrateTraktItems(fastWatchlistSource).then((hydrated) => {
-          if (hydrated.length && refreshKeyRef.current === key) {
+          if (hydrated.length && isCurrent()) {
             setWatchlist((current) => current.length ? current : hydrated);
             saveCachedList(watchlistCacheKey, hydrated, 60);
           }
@@ -967,7 +1015,7 @@ export function AppProvider({
       // episode subtitle — which rendered that series twice until the enriched
       // pass tidied up. Trakt playback is the newer truth, so it wins.
       const fastSeen = new Set<string>();
-      const fastCw = [...traktPlaybackCw, ...cloudCw.filter((item) => !isHiddenShow(item) && !isDismissed(item))]
+      const fastCw = pruneCompletedResume([...traktPlaybackCw, ...cloudCw.filter((item) => isPausedPlaybackItem(item) && !isHiddenShow(item) && !isDismissed(item))], cwCompletions)
         .filter((item) => {
           const key = `${item.mediaType}:${item.id}`;
           if (fastSeen.has(key)) return false;
@@ -980,7 +1028,7 @@ export function AppProvider({
           // Only fill an empty rail: replacing a seeded cache list with this
           // playback-only list would visibly shrink the rail for a few seconds
           // until the enriched list lands.
-          if (refreshKeyRef.current !== key || cwSourceRef.current !== "none") return;
+          if (!isCurrent() || cwSourceRef.current !== "none") return;
           cwSourceRef.current = "fast";
           setContinueWatching(hydrated);
           setCategories((current) => current.some((c) => c.id === "continue_watching")
@@ -997,41 +1045,51 @@ export function AppProvider({
       }
       // ───────────────────────────────────────────────────────────────────────
 
-      const upNext = traktReady && currentSyncProvider === "trakt"
-        ? await loadTraktUpNext(watchedShowsRows, effectiveSettings.includeSpecials, hiddenShowIds).catch(() => ({ items: [] as MediaItem[], fetchFailures: 1 }))
+      const cwTraktShows = await cwTraktShowsRead;
+      const upNext = cwUsesTrakt
+        ? await loadTraktUpNext(cwTraktShows, effectiveSettings.includeSpecials, hiddenShowIds, isCurrent).catch(() => ({ items: [] as MediaItem[], fetchFailures: 1 }))
         : { items: [] as MediaItem[], fetchFailures: 0 };
       const upNextRows = upNext.items;
-      const playbackShowKeys = new Set(traktPlaybackCw.filter((item) => item.mediaType === "tv").map((item) => `${item.mediaType}:${item.id}`));
-      const traktCw = mergeTraktWithLocalResume([
-        ...traktPlaybackCw,
-        ...upNextRows.filter((item) => !playbackShowKeys.has(`${item.mediaType}:${item.id}`))
-      ], cloudCw);
       const watchedKeys = new Set([...traktWatchedKeys(watchedMoviesRows, watchedShowsRows), ...cloudWatchedKeys]);
-      if (refreshKeyRef.current === key) setWatchedKeys(watchedKeys);
-      const cwBase = traktReady ? traktCw : cloudCw.filter(isPausedPlaybackItem);
+      // Cloud watched flags may be older than a provider's reset/progress response.
+      // Keep those flags for badges, but do not let them veto tracker Continue Watching.
+      const traktCw = mergeTraktWithLocalResume(
+        mergeTrackerContinueWatching(traktPlaybackCw, upNextRows, cwWatchedKeys, cwCompletions), cloudCw
+      );
+      if (!readFailures.has("watched-movies") && !readFailures.has("watched-shows") && isCurrent()) setWatchedKeys(watchedKeys);
+      const cwBase = includeIptvContinueWatching(
+        traktReady ? traktCw : cloudCw.filter(isPausedPlaybackItem),
+        cloudCw.filter((item) => !isHiddenShow(item) && !isDismissed(item))
+      );
       // Order newest-activity-first across playback + up-next (matches the app's
       // updatedAt-descending sort) so the row leads with what you last watched.
       const cwSorted = dedupeMedia(cwBase).filter((item) => !isDismissed(item)).sort((a, b) => (b.activityAt ?? 0) - (a.activityAt ?? 0));
-      const cw = await hydrateContinueWatchingItems(filterWatchedContinueWatching(cwSorted, watchedKeys, addonState));
+      const cw = await hydrateContinueWatchingItems(filterWatchedContinueWatching(cwSorted, traktReady ? cwWatchedKeys : watchedKeys, addonState, traktReady ? cwCompletions : undefined));
       // Trakt outage guard: when Trakt is connected but every read came back
       // empty, the calls were blocked (Cloudflare challenges the CORS
       // preflight intermittently, especially on VPN/datacenter IPs) — keep
       // showing the cached rail instead of wiping it with an empty list.
-      const traktOutage = traktReady && !cw.length &&
-        !playbackRows.length && !watchedShowsRows.length && !watchedMoviesRows.length && !traktRows.length;
+      const traktOutage = readFailures.has("playback") || readFailures.has("cw-watched") || readFailures.has("cw-movies") || readFailures.has("cw-shows");
+      if (!traktOutage && upNext.fetchFailures === 0 && isCurrent() && activitySignature) {
+        traktActivityRef.current = { key: `${accountId ?? "local"}:${profileId}`, signature: activitySignature };
+      }
       // Enriched CW (adds Trakt up-next episodes) replaces the fast paint. When
       // the fresh list is non-empty we swap it in. An empty result with Trakt
       // connected and reads healthy means the rail is GENUINELY empty — clear it
       // and its cache so a finished library can't resurrect a stale rail. During
       // an outage (all reads empty) we keep whatever is painted.
-      if (!traktOutage && refreshKeyRef.current === key) {
+      if (!traktOutage && isCurrent()) {
+        const reconcile = (current: MediaItem[]) => upNext.fetchFailures > 0
+          ? mergePartialContinueWatching(cw, current.filter((item) => !isHiddenShow(item) && !isDismissed(item)), cwCompletions)
+          : cw;
         if (cw.length) {
           cwSourceRef.current = "fresh";
-          setContinueWatching(cw);
-          saveCachedList(cwCacheKey, cw, 20);
+          setContinueWatching(reconcile);
+          saveCachedList(cwCacheKey, reconcile(readCachedList(cwCacheKey)), 20);
           setCategories((current) => {
             const others = current.filter((c) => c.id !== "continue_watching");
-            return [{ id: "continue_watching", title: "Continue Watching", items: cw }, ...others];
+            const previous = current.find((c) => c.id === "continue_watching")?.items ?? [];
+            return [{ id: "continue_watching", title: "Continue Watching", items: reconcile(previous) }, ...others];
           });
         } else if (traktReady && upNext.fetchFailures === 0) {
           // Only clear on a CLEAN pass: any per-show progress failure means this
@@ -1044,19 +1102,21 @@ export function AppProvider({
         }
       }
       // Refresh the watchlist with the authoritative Trakt list if it differs.
-      const watchlistSource = traktRows.length
+      const watchlistSource = watchlistReady && !readFailures.has("watchlist")
         ? dedupeMedia(traktRows.map(traktItemToMedia))
         : cloudWatchlistRows;
       const hydratedWatchlist = await hydrateTraktItems(watchlistSource);
-      if (hydratedWatchlist.length && refreshKeyRef.current === key) {
+      if (!readFailures.has("watchlist") && isCurrent()) {
         setWatchlist(hydratedWatchlist);
         saveCachedList(watchlistCacheKey, hydratedWatchlist, 60);
       }
       } catch (error) {
-        setAddonsReady(true);
-        setToast(error instanceof Error ? error.message : "Failed to load ARVIO");
+        if (isCurrent()) {
+          setAddonsReady(true);
+          if (!background) setToast(error instanceof Error ? error.message : "Failed to load ARVIO");
+        }
       } finally {
-        setBusy("");
+        if (isCurrent() && !background) setBusy("");
       }
     })();
     refreshInFlightRef.current = { key, promise: run };
@@ -1068,6 +1128,13 @@ export function AppProvider({
 
   const refreshIptv = useCallback(async () => {
     const currentSettings = settingsRef.current;
+    const profileId = activeProfileIdRef.current;
+    const account = authClient.session?.userId;
+    const signature = iptvPlaylistSignature(currentSettings.iptvPlaylists);
+    const key = `${account}:${profileId}:${signature}`;
+    if (iptvRefresh.current?.key === key) return iptvRefresh.current.promise;
+    const isCurrent = () => activeProfileIdRef.current === profileId && authClient.session?.userId === account && iptvPlaylistSignature(settingsRef.current.iptvPlaylists) === signature;
+    const run = (async () => {
     setBusy("Loading TV");
     try {
       const loadedIptv = await loadIptvSnapshot(
@@ -1080,17 +1147,39 @@ export function AppProvider({
       );
       // Stamp which playlists this snapshot came from so Live TV can reuse it
       // on re-entry instead of rebuilding ~139k channels every visit.
-      setIptvSnapshot({ ...loadedIptv, signature: iptvPlaylistSignature(currentSettings.iptvPlaylists) });
+      if (isCurrent()) setIptvSnapshot({ ...loadedIptv, signature, scopeKey: `${account ?? "local"}:${profileId ?? "local"}` });
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Failed to load Live TV");
+      if (isCurrent()) setToast(error instanceof Error ? error.message : "Failed to load Live TV");
     } finally {
-      setBusy("");
+      if (isCurrent()) setBusy("");
     }
+    })();
+    iptvRefresh.current = { key, promise: run };
+    return run.finally(() => { if (iptvRefresh.current?.promise === run) iptvRefresh.current = null; });
   }, []);
+
+  useEffect(() => {
+    const channels = iptvSnapshot.allChannels ?? iptvSnapshot.channels;
+    if (!channels.length || iptvSnapshot.identitiesLoaded || iptvSnapshot.signature !== iptvPlaylistSignature(settings.iptvPlaylists)) return;
+    let cancelled = false;
+    const profileId = activeProfileId;
+    void loadIptvChannelIdentities(settings.iptvPlaylists, channels, { userAgent: settings.customUserAgent }).then(enriched => {
+      if (cancelled || activeProfileIdRef.current !== profileId) return;
+      const byId = new Map(enriched.map(channel => [channel.id, channel]));
+      setIptvSnapshot(current => current.scopeKey !== iptvSnapshot.scopeKey || current.signature !== iptvSnapshot.signature
+        || (current.allChannels ?? current.channels) !== channels ? current : ({ ...current, identitiesLoaded: true, allChannels: enriched,
+        channels: current.channels.map(channel => byId.get(channel.id) ?? channel) }));
+    });
+    return () => { cancelled = true; };
+  }, [iptvSnapshot.allChannels, iptvSnapshot.channels, iptvSnapshot.signature, iptvSnapshot.identitiesLoaded, settings.iptvPlaylists, settings.customUserAgent, activeProfileId]);
 
   const loadIptvGuide = useCallback(async (channels: IptvChannel[]) => {
     if (!channels.length) return;
     const currentSettings = settingsRef.current;
+    const profileId = activeProfileIdRef.current;
+    const account = authClient.session?.userId;
+    const signature = iptvPlaylistSignature(currentSettings.iptvPlaylists);
+    const scopedKey = (id: string) => `${account}:${profileId}:${signature}:${id}`;
     // A guide entry whose "now" programme already ended is stale — refetch it so
     // the rows keep showing what is actually on air.
     const isFresh = (channelId: string) => {
@@ -1099,11 +1188,13 @@ export function AppProvider({
       if (entry.now) return entry.now.endUtcMillis > Date.now();
       return true;
     };
-    const missing = channels.filter((channel) => !isFresh(channel.id) && !iptvGuideInFlightRef.current.has(channel.id));
+    const missing = channels.filter((channel) => !isFresh(channel.id) && !iptvGuideInFlightRef.current.has(scopedKey(channel.id)) && (guideRetryAfter.current.get(scopedKey(channel.id)) ?? 0) < Date.now());
     if (!missing.length) return;
-    missing.forEach((channel) => iptvGuideInFlightRef.current.add(channel.id));
+    missing.forEach((channel) => { iptvGuideInFlightRef.current.add(scopedKey(channel.id)); guideRetryAfter.current.set(scopedKey(channel.id), Date.now() + 60_000); });
+    if (guideRetryAfter.current.size > 2000) for (const [key, expiry] of guideRetryAfter.current) if (expiry < Date.now()) guideRetryAfter.current.delete(key);
     try {
       const guide = await loadIptvGuideForChannels(currentSettings.iptvPlaylists, missing);
+      if (activeProfileIdRef.current !== profileId || authClient.session?.userId !== account || iptvPlaylistSignature(settingsRef.current.iptvPlaylists) !== signature) return;
       if (!Object.keys(guide).length) return;
       setIptvSnapshot((current) => ({
         ...current,
@@ -1115,7 +1206,7 @@ export function AppProvider({
     } catch {
       // Guide is helpful but should never block channel browsing/playback.
     } finally {
-      missing.forEach((channel) => iptvGuideInFlightRef.current.delete(channel.id));
+      missing.forEach((channel) => iptvGuideInFlightRef.current.delete(scopedKey(channel.id)));
     }
   }, [iptvSnapshot.nowNext]);
 
@@ -1123,6 +1214,10 @@ export function AppProvider({
     if (typeof window === "undefined") return;
     const hash = window.location.hash || "";
     if (hash.includes("access_token=") && hash.includes("refresh_token=")) {
+      if (config.selfHosted) {
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        return;
+      }
       try {
         const params = new URLSearchParams(hash.replace(/^#/, ""));
         const access_token = params.get("access_token");
@@ -1155,7 +1250,7 @@ export function AppProvider({
           const stored = loadStored<Profile[]>(PROFILES_KEY, []);
           const activeId = loadStored<string | null>(ACTIVE_PROFILE_KEY, null);
           const skip = settings.skipProfileSelection;
-          if (skip && activeId && stored.some((p) => p.id === activeId)) {
+          if (skip && activeId && stored.some((p) => p.id === activeId && !p.isLocked)) {
             setView("app");
           } else {
             setView("profiles");
@@ -1175,6 +1270,21 @@ export function AppProvider({
     if (authClient.session && !cloudProfilesHydrated) return;
     void refreshData();
   }, [cloudProfilesHydrated, refreshData, view]);
+
+  useEffect(() => {
+    if (view !== "app" || !traktConnected || (authClient.session && !cloudProfilesHydrated)) return;
+    const monitor = createTraktActivityCheck({
+      key: `${auth?.userId ?? "local"}:${activeProfileId}`,
+      snapshot: traktActivityRef,
+      isActive: () => document.visibilityState === "visible" && !playingRef.current && !refreshInFlightRef.current && readsFrom("continueWatching", "trakt"),
+      read: async () => continueWatchingActivitySignature(await traktClient.continueWatchingActivity()),
+      refresh: () => refreshData(undefined, true)
+    });
+    // No media polling or full sync loop: one tiny direct Trakt check every two
+    // visible, idle minutes. Unchanged activity costs zero Netlify calls.
+    const timer = window.setInterval(() => { void monitor.check(); }, 120_000);
+    return () => { monitor.dispose(); window.clearInterval(timer); };
+  }, [activeProfileId, auth?.userId, cloudProfilesHydrated, refreshData, traktConnected, view]);
 
   useEffect(() => {
     if (view === "login" || (authClient.session && !cloudProfilesHydrated)) return undefined;
@@ -1197,6 +1307,7 @@ export function AppProvider({
   useEffect(() => {
     saveStored(settingsKey, settings);
     savePlaylists(settings.iptvPlaylists);
+    if (!authClient.session || !activeProfileId) { setSettingsSyncState("local"); return; }
     if (authClient.session && !cloudProfilesHydrated) return;
     // Skip the cloud push when settings + active profile still match what we
     // last synced from the cloud — otherwise every boot echoes the just-pulled
@@ -1205,27 +1316,49 @@ export function AppProvider({
     // snapshot and still saves.
     const snapshot = JSON.stringify({ settings, activeProfileId });
     if (lastSyncedSettingsRef.current !== null && snapshot === lastSyncedSettingsRef.current) {
+      setSettingsSyncState(hasPendingSettings(authClient) ? "pending" : "saved");
       return;
     }
-    const handle = setTimeout(() => {
-      // The settings we last synced for THIS profile — lets saveCloudSettings detect exactly which
-      // fields this session changed so it only asserts (and timestamps) those, never reverting a
-      // field another device changed. Ignore the baseline if the active profile has since changed.
-      let baseline: AppSettings | null = null;
-      try {
-        if (lastSyncedSettingsRef.current) {
-          const parsed = JSON.parse(lastSyncedSettingsRef.current) as { settings?: AppSettings; activeProfileId?: string | null };
-          if (parsed.activeProfileId === activeProfileId && parsed.settings) baseline = parsed.settings;
-        }
-      } catch {
-        baseline = null;
+    // Persist immediately; only the network flush is debounced.
+    // Compare only this profile's acknowledged values, preserving other devices' edits.
+    let baseline: AppSettings | null = null;
+    try {
+      if (lastSyncedSettingsRef.current) {
+        const parsed = JSON.parse(lastSyncedSettingsRef.current) as { settings?: AppSettings; activeProfileId?: string | null };
+        if (parsed.activeProfileId === activeProfileId && parsed.settings) baseline = parsed.settings;
       }
-      lastSyncedSettingsRef.current = JSON.stringify({ settings: settingsRef.current, activeProfileId });
-      void saveCloudSettings(authClient, settingsRef.current, addonsRef.current, activeProfileId, profiles, baseline).catch(() => undefined);
+    } catch {
+      baseline = null;
+    }
+    // Profile hydration is asynchronous. Until this profile has an acknowledged
+    // baseline, settings still belong to the previous profile or browser defaults.
+    if (!baseline) return;
+    const accountId = authClient.session?.userId;
+    const submitted = { settings, activeProfileId };
+    setSettingsSyncState("pending");
+    try { queueSettings(authClient, activeProfileId, settings, baseline); }
+    catch (error) { setSettingsSyncState("error"); setToast(error instanceof Error ? error.message : "Could not save settings"); return; }
+    const handle = setTimeout(() => {
+      void flushSettingsOutbox(authClient).then(() => {
+        if (authClient.session?.userId !== accountId || activeProfileIdRef.current !== activeProfileId) return;
+        lastSyncedSettingsRef.current = JSON.stringify(submitted);
+        setSettingsSyncState(hasPendingSettings(authClient) ? "pending" : "saved");
+      }).catch(() => setSettingsSyncState("error"));
     }, 1200);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, activeProfileId, profiles, cloudProfilesHydrated]);
+
+  useEffect(() => {
+    const retry = () => {
+      if (!hasPendingSettings(authClient)) return;
+      setSettingsSyncState("pending");
+      void flushSettingsOutbox(authClient).then(() => setSettingsSyncState("saved")).catch(() => setSettingsSyncState("error"));
+    };
+    window.addEventListener("online", retry);
+    const timer = window.setInterval(retry, 30_000);
+    return () => { window.removeEventListener("online", retry); window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     saveStored(PROFILES_KEY, profiles);
@@ -1249,13 +1382,12 @@ export function AppProvider({
         if (cloud.profiles.length) {
           setProfiles(cloud.profiles);
           setAvatarImages(cloud.avatarImages);
-          if (cloud.activeProfileId) {
-            setActiveProfileId(cloud.activeProfileId);
-            void refreshData(cloud.activeProfileId);
-          } else if (cloud.profiles[0]) {
-            setActiveProfileId(cloud.profiles[0].id);
-            void refreshData(cloud.profiles[0].id);
-          }
+          // Read the current selection when the request completes: a user may
+          // have chosen a profile while this older cloud snapshot was loading.
+          const selectedId = hydratedProfileId(activeProfileIdRef.current, cloud.profiles, cloud.activeProfileId);
+          activeProfileIdRef.current = selectedId;
+          setActiveProfileId(selectedId);
+          void refreshData(selectedId);
         } else {
           // New account with no cloud profiles yet. If the local profiles were
           // stamped for a DIFFERENT account, they leaked from a previous
@@ -1267,7 +1399,7 @@ export function AppProvider({
             saveStored(PROFILES_OWNER_KEY, currentAccountEmail());
             void refreshData(fresh[0].id);
           } else {
-            void refreshData(activeProfileId);
+            void refreshData(activeProfileIdRef.current);
           }
         }
         setCloudProfilesHydrated(true);
@@ -1278,17 +1410,22 @@ export function AppProvider({
     return () => {
       cancelled = true;
     };
-  }, [activeProfileId, auth, refreshData]);
+  }, [auth, refreshData]);
 
   useEffect(() => {
+    let current = true;
+    setSearchState(query.trim() ? "loading" : "idle");
     const handle = setTimeout(async () => {
       if (!query.trim()) {
         setResults([]);
         return;
       }
-      setResults(await searchMedia(query, settings.language).catch(() => []));
+      try {
+        const found = await searchMedia(query, settings.language);
+        if (current) { setResults(found); setSearchState("idle"); }
+      } catch { if (current) setSearchState("error"); }
     }, 260);
-    return () => clearTimeout(handle);
+    return () => { current = false; clearTimeout(handle); };
   }, [query, settings.language]);
 
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
@@ -1338,23 +1475,26 @@ export function AppProvider({
   // Look up the opened title in the Xtream VOD/series catalog and append any
   // match as a supplemental source (parity with the Android app).
   const appendVodSources = useCallback((item: MediaItem, season?: number, episode?: number) => {
+    const generation = sourceGeneration.current;
     const playlists = settingsRef.current.iptvPlaylists;
-    if (!playlists?.length) return;
-    void (async () => {
+    if (!playlists?.length) return Promise.resolve([] as StreamSource[]);
+    return (async () => {
       try {
         const { findMovieVodSources, findEpisodeVodSource } = await import("./xtreamVod");
         const ua = settingsRef.current.customUserAgent;
         const sources = season && episode
           ? await findEpisodeVodSource(playlists, item, season, episode, ua)
           : await findMovieVodSources(playlists, item, ua);
-        if (!sources.length) return;
+        if (!sources.length || sourceGeneration.current !== generation) return [];
         setStreams((prev) => {
           const seen = new Set(prev.map((s) => s.url ?? s.source));
           const fresh = sources.filter((s) => s.url && !seen.has(s.url));
           return fresh.length ? [...prev, ...fresh] : prev;
         });
+        return sources;
       } catch {
         // VOD is best-effort; addon sources are unaffected on failure.
+        return [];
       }
     })();
   }, []);
@@ -1363,9 +1503,10 @@ export function AppProvider({
   // append any files found as sources — parity with the Android app, which
   // surfaces home-server media in the same source list as addons.
   const appendHomeServerSources = useCallback((item: MediaItem, season?: number, episode?: number) => {
+    const generation = sourceGeneration.current;
     const servers = settingsRef.current.homeServers;
-    if (!servers?.length) return;
-    void (async () => {
+    if (!servers?.length) return Promise.resolve([] as StreamSource[]);
+    return (async () => {
       try {
         const { resolveHomeServerMovieSources, resolveHomeServerEpisodeSources } = await import("./homeserver");
         const target = {
@@ -1377,14 +1518,16 @@ export function AppProvider({
         const sources = season && episode
           ? await resolveHomeServerEpisodeSources(servers, target, season, episode)
           : await resolveHomeServerMovieSources(servers, target);
-        if (!sources.length) return;
+        if (!sources.length || sourceGeneration.current !== generation) return [];
         setStreams((prev) => {
           const seen = new Set(prev.map((s) => s.url ?? s.source));
           const fresh = sources.filter((s) => s.url && !seen.has(s.url));
           return fresh.length ? [...prev, ...fresh] : prev;
         });
+        return sources;
       } catch {
         // Best-effort; addon/debrid sources are unaffected on failure.
+        return [];
       }
     })();
   }, []);
@@ -1393,27 +1536,33 @@ export function AppProvider({
   // any matching video files as sources — parity with the Android app, which
   // surfaces Telegram media in the same source list as addons.
   const appendTelegramSources = useCallback((item: MediaItem, season?: number, episode?: number) => {
-    if (item.isHomeServer) return;
-    void (async () => {
+    const generation = sourceGeneration.current;
+    if (item.isHomeServer) return Promise.resolve([] as StreamSource[]);
+    return (async () => {
       try {
         const { resolveTelegramSources, isConnected } = await import("./telegram");
-        if (!isConnected()) return;
+        if (!isConnected()) return [];
         const sources = await resolveTelegramSources(item, season, episode, {
           language: settingsRef.current.language
         });
-        if (!sources.length) return;
+        if (!sources.length || sourceGeneration.current !== generation) return [];
         setStreams((prev) => {
           const seen = new Set(prev.map((s) => s.url ?? s.source));
           const fresh = sources.filter((s) => !seen.has(s.url ?? s.source));
           return fresh.length ? [...prev, ...fresh] : prev;
         });
+        return sources;
       } catch {
         // Best-effort; addon/debrid sources are unaffected on failure.
+        return [];
       }
     })();
   }, []);
 
   const openDetails = useCallback(async (item: MediaItem) => {
+    const generation = ++sourceGeneration.current;
+    const publish = (rows: StreamSource[]) => { if (sourceGeneration.current === generation) mergeStreams(rows); };
+    setSelected(item);
     setSelectedEpisode(null);
     // Home-server items carry their own metadata + a direct stream URL — no TMDB.
     if (item.isHomeServer && !item.tmdbId) {
@@ -1427,8 +1576,12 @@ export function AppProvider({
     setBusy("Opening details");
     setStreams([]);
     const priorityConfig = getPriorityConfig(settingsRef.current);
-    const detailsTarget = item.isHomeServer && item.tmdbId ? { ...item, id: item.tmdbId } : item;
+    const resolvedId = item.id > 0 ? item.id : await resolveTmdbId(item).catch(() => null);
+    if (sourceGeneration.current !== generation) return;
+    if (!resolvedId && !item.isHomeServer) { setBusy(""); setToast("Metadata could not be matched for this title."); return; }
+    const detailsTarget = item.isHomeServer && item.tmdbId ? { ...item, id: item.tmdbId } : { ...item, id: resolvedId ?? item.id };
     const detailed = await getDetails(detailsTarget, priorityConfig).catch(() => item);
+    if (sourceGeneration.current !== generation) return;
     const withResumeEpisode = {
       ...detailed,
       ...(item.isHomeServer ? {
@@ -1453,8 +1606,8 @@ export function AppProvider({
       appendVodSources(withResumeEpisode);
       appendHomeServerSources(withResumeEpisode);
       appendTelegramSources(withResumeEpisode);
-      const found = await getStreamsProgressive(addonsRef.current, withResumeEpisode, undefined, undefined, mergeStreams).catch(() => []);
-      mergeStreams(found);
+      const found = await getStreamsProgressive(addonsRef.current, withResumeEpisode, undefined, undefined, publish).catch(() => []);
+      publish(found);
     } else if (withResumeEpisode.seasonNumber && withResumeEpisode.episodeNumber) {
       setSelectedEpisode({ season: withResumeEpisode.seasonNumber, episode: withResumeEpisode.episodeNumber });
       setBusy("Finding sources");
@@ -1466,15 +1619,17 @@ export function AppProvider({
         withResumeEpisode,
         withResumeEpisode.seasonNumber,
         withResumeEpisode.episodeNumber,
-        mergeStreams
+        publish
       ).catch(() => []);
-      mergeStreams(found);
+      publish(found);
     }
-    setBusy("");
+    if (sourceGeneration.current === generation) setBusy("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadEpisodeStreams = useCallback(async (item: MediaItem, season: number, episode: number) => {
+    const generation = ++sourceGeneration.current;
+    const publish = (rows: StreamSource[]) => { if (sourceGeneration.current === generation) mergeStreams(rows); };
     setSelectedEpisode({ season, episode });
     setStreams([]);
     setBusy("Finding sources");
@@ -1482,31 +1637,35 @@ export function AppProvider({
     appendVodSources(item, season, episode);
     appendHomeServerSources(item, season, episode);
     appendTelegramSources(item, season, episode);
-    const found = await getStreamsProgressive(addonsRef.current, item, season, episode, mergeStreams).catch(() => []);
-    mergeStreams(found);
-    setBusy("");
+    const found = await getStreamsProgressive(addonsRef.current, item, season, episode, publish).catch(() => []);
+    publish(found);
+    if (sourceGeneration.current === generation) setBusy("");
     return found;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const advanceEpisode = useCallback(async (): Promise<boolean> => {
-    if (!selected || selected.mediaType !== "tv" || !selectedEpisode) return false;
-    const nextEpisode = selectedEpisode.episode + 1;
-    setSelectedEpisode({ season: selectedEpisode.season, episode: nextEpisode });
-    const found = await getStreams(addonsRef.current, selected, selectedEpisode.season, nextEpisode).catch(() => []);
-    setStreams(found);
-    const best = found.find((stream) => stream.url);
-    setActiveStream(best ?? null);
-    return Boolean(best);
-  }, [selected, selectedEpisode]);
-
   const closeDetails = useCallback(() => {
+    sourceGeneration.current++;
+    playbackGeneration.current++;
     setSelected(null);
     setSelectedEpisode(null);
     setStreams([]);
   }, []);
 
   const playStream = useCallback((stream: StreamSource, options: { forceTranscode?: boolean; forceRemux?: boolean; forceBrowser?: boolean } = {}) => {
+    playbackPreparation.current?.abort();
+    stopOwnedPlayback();
+    setActiveStream(null);
+    const sameEpisode = selected?.mediaType === "movie" || (selected?.seasonNumber === selectedEpisode?.season && selected?.episodeNumber === selectedEpisode?.episode);
+    if (stream.resumePositionSeconds === undefined && selected && sameEpisode && !selected.isWatched) {
+      stream = { ...stream, resumePositionSeconds: selected.resumePositionSeconds };
+    }
+    const controller = new AbortController();
+    playbackPreparation.current = controller;
+    const generation = ++playbackGeneration.current;
+    const profileId = activeProfileIdRef.current;
+    const accountId = authClient.session?.userId;
+    const isCurrent = () => generation === playbackGeneration.current && profileId === activeProfileIdRef.current && accountId === authClient.session?.userId;
     if (!stream.url) {
       setToast("This source has no direct stream URL yet.");
       return;
@@ -1543,89 +1702,63 @@ export function AppProvider({
         episode: selectedEpisode?.episode ?? null
       });
       openExternalPlayer(preferredPlayer, target, externalTitle, preferredSub);
+      void trackPremiumEvent(authClient, "external_playback_requested", { player: preferredPlayer, playback_type: "vod" }, true);
       return;
     }
-    // Explicit escalations (from the player's fallback buttons) resolve the
-    // heavier paths. These are opt-in, never the default click.
-    if (options.forceTranscode) {
-      const debrid = parseDebridStream(stream.url);
-      if (debrid) {
-        setToast("Preparing transcoded stream...");
-        void resolveTranscodeStream(debrid).then((result) => {
-          if (result.url) setActiveStream({ ...stream, url: result.url, originalUrl: stream.url, transcoded: true });
-          else setToast(result.error ?? "Transcoding is unavailable for this source.");
-        });
+    setToast(stream.homeServer || options.forceTranscode ? "Preparing browser playback..." : null);
+    const timeout = window.setTimeout(() => { controller.abort(); if (isCurrent()) setToast("The source did not respond. Please try again or choose another source."); }, 20000);
+    void prepareBrowserStream(stream, settingsRef.current, { ...options, signal: controller.signal }).then((prepared) => {
+      if (!isCurrent() || controller.signal.aborted) {
+        void reportHomeServerPlayback(prepared, settingsRef.current, "stop").catch(() => undefined);
         return;
       }
-    }
-    if (options.forceRemux) {
-      const debrid = parseDebridStream(stream.url);
-      if (debrid) {
-        // Remux reads via fetch/UrlSource, which the torrentio /resolve/ redirect
-        // blocks with CORS — so resolve to the direct CDN URL first for remux only.
-        setToast("Preparing stream...");
-        void resolveDebridDirectUrl(debrid).then((result) => {
-          if (result.url) {
-            setActiveStream({ ...stream, url: result.url, originalUrl: stream.url, remux: true });
-          } else {
-            // Resolution failed (uncached, quota, provider hiccup) — hand the raw
-            // stream back to the player so its ladder fails fast and auto-hops to
-            // the next source instead of dead-ending on a toast.
-            setToast(result.error ?? "Source not ready — trying the next one.");
-            setActiveStream({ ...stream, remux: true });
-          }
-        });
-        return;
-      }
-      setActiveStream({ ...stream, remux: true });
-      return;
-    }
-    // A debrid source the browser can only play after remuxing (MKV / lossless
-    // audio): go STRAIGHT to remux with the resolved CDN URL instead of first
-    // handing the raw torrentio link to <video>, which can only fail and burn a
-    // ~13s stall-timeout before escalating. This is the biggest "not instant"
-    // win — the top pick is almost always an MKV.
-    //
-    // EXCEPT on Chromium, whose <video> demuxes Matroska natively: an MKV whose
-    // codecs the device decodes (H.264/HEVC + AAC/Opus) plays directly from the
-    // CDN URL — instant, zero remux CPU, and immune to remux-pipeline stalls.
-    // The player's ladder still auto-escalates to remux if direct really fails.
-    const debrid = parseDebridStream(stream.url);
-    if (debrid && streamPlayability(stream).mode === "remux" && canDirectPlayMkvStream(stream)) {
-      const cachedDirect = cachedDebridDirectUrl(stream.url);
-      if (cachedDirect) {
-        setActiveStream({ ...stream, url: cachedDirect, originalUrl: stream.url });
-        return;
-      }
-      void resolveDebridDirectUrl(debrid).then((result) => {
-        if (result.url) setActiveStream({ ...stream, url: result.url, originalUrl: stream.url });
-        else { setToast(result.error ?? "Source not ready — trying the next one."); setActiveStream(stream); }
-      });
-      return;
-    }
-    // Only pre-resolve into the remux pipeline when the plan actually calls for
-    // it. A source the plan routes to VLC must not silently start a CPU-heavy
-    // in-browser remux that is going to fail anyway.
-    if (debrid && playbackPlan(stream).method === "remux" && playbackPlan(stream).route === "here") {
-      const cached = cachedDebridDirectUrl(stream.url);
-      if (cached) {
-        setActiveStream({ ...stream, url: cached, originalUrl: stream.url, remux: true });
-        return;
-      }
-      void resolveDebridDirectUrl(debrid).then((result) => {
-        if (result.url) setActiveStream({ ...stream, url: result.url, originalUrl: stream.url, remux: true });
-        else { setToast(result.error ?? "Source not ready — trying the next one."); setActiveStream({ ...stream, remux: true }); }
-      });
-      return;
-    }
-    // Otherwise hand the URL straight to the player for instant playback (like
-    // the Android app — the <video>/hls element follows redirects itself). If
-    // the source-list prefetch already resolved the debrid CDN URL, start on
-    // that directly and skip the torrentio redirect chain. The player escalates
-    // to remux/transcode only if playback actually fails to decode.
-    const resolved = cachedDebridDirectUrl(stream.url);
-    setActiveStream(resolved ? { ...stream, url: resolved, originalUrl: stream.url } : stream);
+      setActiveChannel(null);
+      ownedPlayback.current = { stream: prepared, settings: settingsRef.current };
+      setActiveStream(prepared);
+    }).catch((error: unknown) => {
+      if (isCurrent() && !controller.signal.aborted) setToast(error instanceof Error ? error.message : "Could not prepare this source.");
+    }).finally(() => window.clearTimeout(timeout));
   }, [selected, activeProfile, selectedEpisode]);
+
+  const advanceEpisode = useCallback(async (): Promise<boolean> => {
+    if (!selected || selected.mediaType !== "tv" || !selectedEpisode) return false;
+    const generation = ++sourceGeneration.current;
+    const playback = ++playbackGeneration.current;
+    const isCurrent = () => sourceGeneration.current === generation && playbackGeneration.current === playback;
+    try {
+      const next = nextLocalEpisode({ ...selected, timeRemainingLabel: "Up next", seasonNumber: selectedEpisode.season, episodeNumber: selectedEpisode.episode + 1 });
+      if (!next?.seasonNumber || !next.episodeNumber) { setToast("You have reached the last available episode."); return false; }
+      const episodes = await getSeasonEpisodes(selected.tmdbId ?? selected.id, next.seasonNumber);
+      if (!isCurrent()) return false;
+      const episode = episodes.find((item) => item.episodeNumber === next.episodeNumber);
+      if (!episode || (episode.airDate && Date.parse(episode.airDate) > Date.now())) { setToast("The next episode is not available yet."); return false; }
+      let started = false;
+      const choose = (rows: StreamSource[]) => {
+        if (!isCurrent() || started) return;
+        const candidate = rows.find((row) => row.url && playbackPlan(row).route === "here");
+        if (!candidate) return;
+        started = true;
+        setSelectedEpisode({ season: next.seasonNumber!, episode: next.episodeNumber! });
+        setSelected((item) => item ? { ...item, seasonNumber: next.seasonNumber, episodeNumber: next.episodeNumber, episodeTitle: episode.name, episodeStill: episode.still } : item);
+        setActiveStream(null);
+        playStream({ ...candidate, autoSelect: true, resumePositionSeconds: 0 }, { forceBrowser: true });
+      };
+      setStreams([]);
+      const publish = (rows: StreamSource[]) => { if (sourceGeneration.current === generation) { mergeStreams(rows); choose(rows); } };
+      // All source types participate; one unavailable provider does not hold up another.
+      await Promise.allSettled([
+        getStreamsProgressive(addonsRef.current, selected, next.seasonNumber, next.episodeNumber, publish).then(publish),
+        appendHomeServerSources(selected, next.seasonNumber, next.episodeNumber).then(choose),
+        appendVodSources(selected, next.seasonNumber, next.episodeNumber).then(choose),
+        appendTelegramSources(selected, next.seasonNumber, next.episodeNumber).then(choose)
+      ]);
+      if (!started && isCurrent()) setToast("No browser-playable source for the next episode. Choose a source manually.");
+      return started;
+    } catch {
+      if (isCurrent()) setToast("Could not load the next episode. Please retry.");
+      return false;
+    }
+  }, [selected, selectedEpisode, playStream, mergeStreams, appendHomeServerSources, appendVodSources, appendTelegramSources]);
 
   const playTrailer = useCallback(async (item: MediaItem) => {
     let url = item.trailerUrl ?? null;
@@ -1666,27 +1799,40 @@ export function AppProvider({
           : "Opening in VLC..."
     );
     openExternalPlayer(player, stream, title, settingsRef.current.defaultSubtitle);
+    void trackPremiumEvent(authClient, "external_playback_requested", { player, playback_type: "live_or_catchup" }, true);
     return true;
   }, []);
 
+  const recordChannelPlayback = useCallback((channel: IptvChannel) => {
+    setSettings(current => ({ ...current, iptvTvSession: recordTvPlayback(current.iptvTvSession, channel) }));
+  }, []);
+
   const playChannel = useCallback((channel: IptvChannel) => {
+    playbackPreparation.current?.abort();
+    stopOwnedPlayback();
+    playbackGeneration.current++;
     const stream: StreamSource = {
       source: channel.name,
       addonName: "Live TV",
       quality: "Live",
       size: "",
       url: channel.streamUrl,
-      description: channel.group
+      description: channel.group,
+      behaviorHints: { proxyHeaders: { request: channel.requestHeaders } }
     };
+    recordChannelPlayback(channel);
     if (openLiveExternally(stream, channel.name)) return;
     setActiveChannel(channel);
     setActiveStream(stream);
-  }, [openLiveExternally]);
+  }, [openLiveExternally, recordChannelPlayback]);
 
   // Catch-up plays a finished programme from the panel's archive. It is a
   // seekable VOD stream (no activeChannel → scrubber works), but the player
   // still gives it the IPTV proxy ladder via the "Catch-up" addonName marker.
   const playCatchup = useCallback((channel: IptvChannel, program: IptvProgram) => {
+    playbackPreparation.current?.abort();
+    stopOwnedPlayback();
+    playbackGeneration.current++;
     const url = buildXtreamCatchupUrl(settingsRef.current.iptvPlaylists, channel, program);
     if (!url) {
       setToast("Catch-up is not available for this channel.");
@@ -1699,7 +1845,8 @@ export function AppProvider({
       quality: "Catch-up",
       size: "",
       url,
-      description: channel.group
+      description: channel.group,
+      behaviorHints: { proxyHeaders: { request: channel.requestHeaders } }
     };
     if (openLiveExternally(stream, title)) return;
     setActiveChannel(null);
@@ -1707,6 +1854,9 @@ export function AppProvider({
   }, [setToast, openLiveExternally]);
 
   const closePlayer = useCallback(() => {
+    playbackPreparation.current?.abort();
+    stopOwnedPlayback();
+    playbackGeneration.current++;
     setActiveStream(null);
     setActiveChannel(null);
   }, []);
@@ -2031,7 +2181,7 @@ export function AppProvider({
   // populate the dropdown (built-in Watchlist/Collection are added by the UI).
   const loadTraktLists = useCallback(async (): Promise<Array<{ id: string; name: string }>> => {
     if (!traktClient.isConnected) return [];
-    const lists = await traktClient.userLists().catch(() => []);
+    const lists = await traktClient.userLists();
     return (lists as Array<Record<string, unknown>>)
       .map((list) => {
         const ids = (list.ids ?? {}) as Record<string, unknown>;
@@ -2048,19 +2198,17 @@ export function AppProvider({
     let rows: unknown[] = [];
     if (source === "collection") {
       const [movies, shows] = await Promise.all([
-        traktClient.collection("movies").catch(() => []),
-        traktClient.collection("shows").catch(() => [])
+        traktClient.collection("movies"),
+        traktClient.collection("shows")
       ]);
       rows = [...(movies as unknown[]), ...(shows as unknown[])];
     } else if (source.startsWith("list:")) {
-      rows = await traktClient.listItems(source.slice(5)).catch(() => []);
+      rows = await traktClient.listItems(source.slice(5));
     } else {
-      rows = await traktClient.watchlist().catch(() => []);
+      rows = await traktClient.watchlist();
     }
     const hydrated = await hydrateTraktItems(rows.map(traktItemToMedia));
-    if (hydrated.length) {
-      saveCachedList(cacheKey, hydrated, 200);
-    }
+    saveCachedList(cacheKey, hydrated, 200);
     return hydrated;
   }, []);
 
@@ -2068,7 +2216,7 @@ export function AppProvider({
   // fetches. Cached per-source for instant re-selection.
   const loadTraktListItems = useCallback(async (source: string): Promise<MediaItem[]> => {
     if (!traktClient.isConnected) return [];
-    const cacheKey = `arvio.web.traktlist.v1:${source}`;
+    const cacheKey = `arvio.web.traktlist.v2:${authClient.session?.userId ?? "local"}:${traktClient.currentProfileId}:${source}`;
     try {
       const cached = loadStored<{ at: number; items: MediaItem[] } | null>(cacheKey, null);
       if (cached?.items?.length && Date.now() - cached.at < 30 * 60 * 1000) {
@@ -2081,6 +2229,21 @@ export function AppProvider({
     return fetchTraktListItems(source, cacheKey);
   }, [fetchTraktListItems]);
 
+  const loadTrackerLibrary = useCallback(async (provider: "trakt" | "simkl", source: string): Promise<MediaItem[]> => {
+    if (provider === "trakt") {
+      if (!traktClient.isConnected) throw new Error("Connect Trakt in Settings.");
+      if (source === "watched") {
+        const [movies, shows] = await Promise.all([traktClient.watched("movies"), traktClient.watched("shows")]);
+        return hydrateTraktItems(dedupeMedia([...(movies as unknown[]), ...(shows as unknown[])].map(traktItemToMedia)));
+      }
+      return fetchTraktListItems(source, `arvio.web.traktlist.v2:${authClient.session?.userId ?? "local"}:${traktClient.currentProfileId}:${source}`);
+    }
+    if (!simklClient.isConnected) throw new Error("Connect Simkl in Settings.");
+    if (!["plantowatch", "watching", "completed", "hold", "dropped"].includes(source)) throw new Error("Unknown Simkl library");
+    const rows = await simklClient.library(source as "plantowatch" | "watching" | "completed" | "hold" | "dropped");
+    return hydrateTraktItems(dedupeMedia(rows.map(traktItemToMedia)));
+  }, [fetchTraktListItems]);
+
   const persistProfiles = useCallback((next: Profile[], activeId: string | null) => {
     activeProfileIdRef.current = activeId;
     setProfiles(next);
@@ -2090,7 +2253,11 @@ export function AppProvider({
     void saveCloudProfiles(authClient, next, activeId).catch(() => undefined);
   }, []);
 
-  const selectProfile = useCallback(async (profile: Profile) => {
+  const selectProfile = useCallback(async (profile: Profile, pin?: string) => {
+    if (profile.isLocked && profile.pin && !await verifyProfilePin(pin ?? "", profile.pin)) {
+      setToast("Unlock this profile with its PIN.");
+      return;
+    }
     const updated = profiles.map((p) => (p.id === profile.id ? { ...p, lastUsedAt: Date.now() } : p));
     const switching = profile.id !== activeProfileId;
     persistProfiles(updated, profile.id);
@@ -2140,6 +2307,7 @@ export function AppProvider({
   }, []);
 
   const goToLogin = useCallback(() => {
+    if (config.selfHosted) { setView("profiles"); return; }
     if (typeof window !== "undefined") {
       const redirectUri = window.location.origin + "/";
       const portalUrl = getAuthPortalUrl();
@@ -2198,7 +2366,7 @@ export function AppProvider({
     }
   }, [watchlist, activeProfileId, authClient]);
 
-  const toggleWatched = useCallback(async (item: MediaItem, seasonNumber?: number | null, episodeNumber?: number | null) => {
+  const toggleWatched = useCallback(async (item: MediaItem, seasonNumber?: number | null, episodeNumber?: number | null, skipSync?: boolean) => {
     const currentlyWatched = isWatched(item, seasonNumber, episodeNumber);
     markWatchedLocally({ mediaType: item.mediaType, id: item.id, season: seasonNumber, episode: episodeNumber }, !currentlyWatched);
     setToast(!currentlyWatched ? "Marked as watched." : "Marked as unwatched.");
@@ -2216,7 +2384,7 @@ export function AppProvider({
       }
     }
 
-    if (activeSyncProvider() !== "none") {
+    if (!skipSync && activeSyncProvider() !== "none") {
       try {
         const ref = {
           mediaType: item.mediaType,
@@ -2305,10 +2473,13 @@ export function AppProvider({
     activeChannel,
     addons,
     addonsReady,
-    iptvSnapshot,
+    iptvSnapshot: isCurrentIptvSnapshot(iptvSnapshot, `${auth?.userId ?? "local"}:${activeProfileId ?? "local"}`,
+      iptvPlaylistSignature(settings.iptvPlaylists)) ? iptvSnapshot : emptyIptv,
     query,
     setQuery,
     results,
+    searchState,
+    settingsSyncState,
     settings,
     setSettings,
     updateSettings,
@@ -2331,6 +2502,7 @@ export function AppProvider({
     playStream,
     playTrailer,
     playChannel,
+    recordChannelPlayback,
     playCatchup,
     closePlayer,
     installAddon,
@@ -2348,6 +2520,7 @@ export function AppProvider({
     disconnectSimkl,
     loadTraktLists,
     loadTraktListItems,
+    loadTrackerLibrary,
     toggleWatchlist,
     toggleWatched,
     removeFromContinueWatching,
@@ -2355,15 +2528,15 @@ export function AppProvider({
     openContextMenu,
     closeContextMenu
   }), [
-    view, cloudLoginRequired, profiles, activeProfile, avatarImages, manageMode,
+    view, cloudLoginRequired, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
     selectProfile, createProfile, updateProfileAction, deleteProfileAction, switchProfile, goToLogin, backToProfiles,
     section, categories, catalogConfigs, loadCatalogRow, homeServerRows, continueWatching, watchlist, isWatched, hero, heroPreview, selected, streams, selectedEpisode, loadEpisodeStreams, advanceEpisode, activeStream, activeChannel,
-    addons, addonsReady, iptvSnapshot, query, results, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, busy, toast,
-    updateSettings, refreshData, openDetails, closeDetails, playStream, playTrailer, playChannel, playCatchup, closePlayer,
+    addons, addonsReady, iptvSnapshot, query, results, searchState, settingsSyncState, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, busy, toast,
+    updateSettings, refreshData, openDetails, closeDetails, playStream, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer,
     refreshIptv, loadIptvGuide,
     installAddon, removeAddon, setAddonsState, signIn, signOut, beginTrakt, pollTrakt, disconnectTrakt,
     connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences,
-    loadTraktLists, loadTraktListItems,
+    loadTraktLists, loadTraktListItems, loadTrackerLibrary,
     toggleWatchlist, toggleWatched, removeFromContinueWatching, activeContextMenu, openContextMenu, closeContextMenu
   ]);
 

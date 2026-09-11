@@ -119,40 +119,24 @@ class LauncherContinueWatchingRepository @Inject constructor(
             )
         }
 
-        val selectedItems = if (filteredPrimary.isNotEmpty()) {
-            filteredPrimary.take(Constants.MAX_CONTINUE_WATCHING)
-        } else {
-            val historyFallback = runCatching { watchHistoryRepository.getContinueWatching() }.getOrDefault(emptyList())
-            historyFallback
-                .sortedByDescending { it.updated_at ?: it.paused_at.orEmpty() }
-                .map { entry ->
-                    ContinueWatchingItem(
-                        id = entry.show_tmdb_id,
-                        title = entry.title.orEmpty(),
-                        mediaType = if (entry.media_type == "tv") MediaType.TV else MediaType.MOVIE,
-                        progress = (entry.progress * 100f).toInt().coerceIn(0, 99),
-                        season = entry.season,
-                        episode = entry.episode,
-                        episodeTitle = entry.episode_title,
-                        posterPath = entry.poster_path,
-                        backdropPath = entry.backdrop_path,
-                        resumePositionSeconds = entry.position_seconds,
-                        durationSeconds = entry.duration_seconds,
-                        streamAddonId = entry.stream_addon_id
-                    )
-                }
-                .filterNot { item ->
-                    SportsAddonCapabilities.isLiveStreamOrSportsItem(
-                        mediaType = item.mediaType,
-                        id = item.id,
-                        streamAddonId = item.streamAddonId,
-                        title = item.title,
-                        addons = installedAddons
-                    )
-                }
-                .distinctBy { "${it.mediaType}:${it.id}:${it.season ?: -1}:${it.episode ?: -1}" }
-                .take(Constants.MAX_CONTINUE_WATCHING)
+        val localItems = runCatching { traktRepository.getLocalContinueWatchingSnapshot() }.getOrDefault(emptyList())
+        val historyItems = runCatching { watchHistoryRepository.getContinueWatching() }.getOrDefault(emptyList())
+            .map(ContinueWatchingMerge::fromHistory)
+            .sortedByDescending { it.updatedAtMs }
+            .distinctBy { "${it.mediaType}:${it.id}" }
+        val mergedItems = ContinueWatchingMerge.merge(
+            filteredPrimary.ifEmpty { historyItems.ifEmpty { localItems } }, localItems, historyItems
+        ).filterNot { item ->
+            SportsAddonCapabilities.isLiveStreamOrSportsItem(
+                mediaType = item.mediaType,
+                id = item.id,
+                streamAddonId = item.streamAddonId,
+                title = item.title,
+                addons = installedAddons
+            )
         }
+        val selectedItems = traktRepository.filterDismissedContinueWatchingItems(mergedItems)
+            .take(Constants.MAX_CONTINUE_WATCHING)
 
        // Limit of 4 simultaneous calls to avoid saturating the network
         val semaphore = Semaphore(4)

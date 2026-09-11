@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.compose.foundation.focusable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusRequester
@@ -71,7 +72,8 @@ import com.arflix.tv.util.LocalDeviceType
  */
 data class ContextAction(
     val id: String,
-    val label: String,
+    /** Label resource; the id above stays the stable English key for dispatching. */
+    @param:StringRes val labelRes: Int,
     val icon: ImageVector,
     val color: Color = TextPrimary
 )
@@ -80,15 +82,15 @@ data class ContextAction(
  * Predefined context actions
  */
 object ContextActions {
-    val play = ContextAction("play", "Play", Icons.Default.PlayArrow, Pink)
-    val selectSource = ContextAction("sources", "Select Source", Icons.Default.Info, TextPrimary)
-    val markWatched = ContextAction("mark_watched", "Mark as Watched", Icons.Default.Visibility, Color(0xFF22C55E))
-    val markUnwatched = ContextAction("mark_unwatched", "Mark as Unwatched", Icons.Default.VisibilityOff, TextSecondary)
-    val addWatchlist = ContextAction("add_watchlist", "Add to Watchlist", Icons.Default.BookmarkBorder, Pink)
-    val removeWatchlist = ContextAction("remove_watchlist", "Remove from Watchlist", Icons.Default.Bookmark, TextSecondary)
-    val viewDetails = ContextAction("view_details", "View Details", Icons.Default.Info, TextPrimary)
-    val markSeasonWatched = ContextAction("mark_season_watched", "Mark Season Watched", Icons.Default.Check, Color(0xFF22C55E))
-    val markSeasonUnwatched = ContextAction("mark_season_unwatched", "Mark Season Unwatched", Icons.Default.Clear, TextSecondary)
+    val play = ContextAction("play", R.string.play, Icons.Default.PlayArrow, Pink)
+    val selectSource = ContextAction("sources", R.string.stream_title_select_source, Icons.Default.Info, TextPrimary)
+    val markWatched = ContextAction("mark_watched", R.string.component_ctx_mark_watched, Icons.Default.Visibility, Color(0xFF22C55E))
+    val markUnwatched = ContextAction("mark_unwatched", R.string.component_ctx_mark_unwatched, Icons.Default.VisibilityOff, TextSecondary)
+    val addWatchlist = ContextAction("add_watchlist", R.string.add_to_watchlist, Icons.Default.BookmarkBorder, Pink)
+    val removeWatchlist = ContextAction("remove_watchlist", R.string.remove_from_watchlist, Icons.Default.Bookmark, TextSecondary)
+    val viewDetails = ContextAction("view_details", R.string.component_ctx_view_details, Icons.Default.Info, TextPrimary)
+    val markSeasonWatched = ContextAction("mark_season_watched", R.string.component_ctx_mark_season_watched, Icons.Default.Check, Color(0xFF22C55E))
+    val markSeasonUnwatched = ContextAction("mark_season_unwatched", R.string.component_ctx_mark_season_unwatched, Icons.Default.Clear, TextSecondary)
 }
 
 /**
@@ -338,7 +340,7 @@ fun ContextMenu(
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Text(
-                                    text = action.label,
+                                    text = stringResource(action.labelRes),
                                     style = ArflixTypography.body,
                                     color = TextPrimary
                                 )
@@ -392,7 +394,7 @@ private fun ContextMenuItem(
         Spacer(modifier = Modifier.width(16.dp))
 
         Text(
-            text = action.label,
+            text = stringResource(action.labelRes),
             style = ArflixTypography.body,
             color = if (isFocused) TextPrimary else action.color
         )
@@ -464,8 +466,8 @@ fun SeasonContextMenu(
 ) {
     ContextMenu(
         isVisible = isVisible,
-        title = "Season $seasonNumber",
-        subtitle = "Quick Actions",
+        title = stringResource(R.string.component_ctx_season_title, seasonNumber),
+        subtitle = stringResource(R.string.component_ctx_quick_actions),
         actions = listOf(
             ContextActions.markSeasonWatched,
             ContextActions.markSeasonUnwatched

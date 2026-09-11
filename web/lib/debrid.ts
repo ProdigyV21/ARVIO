@@ -12,18 +12,18 @@ export type DebridStreamInfo = {
   apiKey: string;
   infoHash: string;
   fileName?: string;
+  // Torrentio's file selector, not an arbitrary provider file ID.
+  fileIndex?: number;
 };
 
 export type TranscodeResult =
   | { url: string; error?: undefined }
   | { url?: undefined; error: string };
 
-// Matches torrentio-style debrid stream URLs, both the newer
-// /resolve/<provider>/<key>/<hash>[/idx][/file] shape and the older
-// /<provider>/<key>/<hash>[/idx][/file] shape. Provider may be separated by
-// "/" or "=" (config-in-path style). Provider tokens are the full names
-// torrentio emits (verified against live torrentio stream URLs).
-const TORRENTIO_RESOLVE = /\/(?:resolve\/)?(torbox|realdebrid|real-debrid|premiumize|alldebrid)(?:=|\/)([^/]+)\/([a-fA-F0-9]{40})(?:\/(\d+))?(?:\/([^/?#]+))?/;
+// Torrentio emits /<provider>/<key>/<hash>/<filename-or-null>/<fileIdx>.
+// Also retain the /resolve prefix and legacy /<index>/<filename> inputs.
+// https://github.com/TheBeastLT/torrentio-scraper/tree/master/addon/moch
+const TORRENTIO_RESOLVE = /\/(?:resolve\/)?(torbox|realdebrid|real-debrid|premiumize|alldebrid)(?:=|\/)([^/]+)\/([a-fA-F0-9]{40})(?:\/([^/]+))?(?:\/([^/]+))?\/?$/;
 
 function normalizeProvider(raw: string): DebridProvider {
   if (raw === "torbox") return "torbox";
@@ -34,19 +34,41 @@ function normalizeProvider(raw: string): DebridProvider {
 
 export function parseDebridStream(url: string | null | undefined): DebridStreamInfo | null {
   if (!url) return null;
-  const match = url.match(TORRENTIO_RESOLVE);
+  let path: string;
+  try { path = new URL(url).pathname; } catch { return null; }
+  const match = path.match(TORRENTIO_RESOLVE);
   if (!match) return null;
-  const [, provider, apiKey, infoHash, , fileName] = match;
+  const [, provider, apiKey, infoHash, first, second] = match;
   if (!apiKey || apiKey.length < 8) return null;
+  let fileName: string | undefined = first;
+  let fileIndex: number | undefined;
+  if (second !== undefined) {
+    if (/^\d+$/.test(second)) {
+      fileIndex = Number(second);
+      if (first === "null" || first === "undefined") fileName = undefined;
+    } else if (/^\d+$/.test(first)) {
+      fileIndex = Number(first);
+      fileName = second;
+    } else if (second !== "null" && second !== "undefined") {
+      return null;
+    } else if (first === "null" || first === "undefined") {
+      fileName = undefined;
+    }
+    if (fileIndex !== undefined && !Number.isSafeInteger(fileIndex)) return null;
+  }
   return {
     provider: normalizeProvider(provider),
     apiKey,
     infoHash: infoHash.toLowerCase(),
-    fileName: fileName ? safeDecode(fileName) : undefined
+    fileName: fileName ? safeDecode(fileName) : undefined,
+    fileIndex
   };
 }
 
 export async function resolveTranscodeStream(info: DebridStreamInfo): Promise<TranscodeResult> {
+  info = { ...info, infoHash: info.infoHash.toLowerCase() };
+  const selectionError = validateFileSelection(info);
+  if (selectionError) return { error: selectionError };
   try {
     if (info.provider === "torbox") return await torboxTranscode(info);
     if (info.provider === "realdebrid") return await realDebridTranscode(info);
@@ -83,18 +105,35 @@ export function isUncachedDebridStream(stream: { url?: string | null; source?: s
 // Resolve a debrid stream to its final, browser-fetchable direct file URL (the
 // CDN URL). Used by the in-browser remux path — the torrentio /resolve/ redirect
 // chain isn't CORS-traversable by the browser, but the CDN file itself is.
-// Results are cached briefly so a prefetch at details-open makes the actual
-// Play press instant (no mylist/requestdl round-trips at click time).
-const directUrlCache = new Map<string, { at: number; result: TranscodeResult }>();
+// Cache only explicit playback resolutions, scoped to this tab and account.
+const directUrlCache = new Map<string, { at: number; url: string }>();
+const directUrlInFlight = new Map<string, Promise<TranscodeResult>>();
 // Debrid CDN links are presigned and short-lived — TorBox answers an expired one
 // with "Invalid Presigned Token" (HTTP 400). Cache them for well under their
 // lifetime, and drop an entry the moment playback proves it dead (see
 // invalidateDebridDirectUrl) so the next attempt mints a fresh link instead of
 // replaying the broken one.
 const DIRECT_URL_TTL_MS = 3 * 60 * 1000;
+const DIRECT_URL_LIMIT = 100;
 
 function directUrlCacheKey(info: DebridStreamInfo) {
-  return `${info.provider}:${info.infoHash}:${info.fileName ?? ""}`;
+  return JSON.stringify([info.provider, info.apiKey, info.infoHash.toLowerCase(), info.fileName ?? null, info.fileIndex ?? null]);
+}
+
+function pruneDirectUrlCache() {
+  const now = Date.now();
+  for (const [key, entry] of directUrlCache) {
+    if (now < entry.at || now - entry.at >= DIRECT_URL_TTL_MS) directUrlCache.delete(key);
+  }
+}
+
+function readDirectUrlCache(key: string): string | null {
+  pruneDirectUrlCache();
+  const cached = directUrlCache.get(key);
+  if (!cached) return null;
+  directUrlCache.delete(key);
+  directUrlCache.set(key, cached);
+  return cached.url;
 }
 
 /**
@@ -106,38 +145,57 @@ function directUrlCacheKey(info: DebridStreamInfo) {
 export function invalidateDebridDirectUrl(url: string | null | undefined) {
   const info = parseDebridStream(url);
   if (!info) return false;
-  return directUrlCache.delete(directUrlCacheKey(info));
-}
-
-export async function resolveDebridDirectUrl(info: DebridStreamInfo): Promise<TranscodeResult> {
   const key = directUrlCacheKey(info);
-  const cached = directUrlCache.get(key);
-  if (cached && cached.result.url && Date.now() - cached.at < DIRECT_URL_TTL_MS) return cached.result;
-  try {
-    const result = await directUrlForProvider(info);
-    if (result.url) directUrlCache.set(key, { at: Date.now(), result });
-    return result;
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Could not resolve direct URL" };
-  }
+  const cached = directUrlCache.delete(key);
+  const pending = directUrlInFlight.delete(key);
+  return cached || pending;
 }
 
-/** Fire-and-forget warm-up of the direct CDN URL for a debrid stream. */
-export function prefetchDebridDirectUrl(url: string | null | undefined) {
-  const info = parseDebridStream(url);
-  if (!info) return;
-  const cached = directUrlCache.get(directUrlCacheKey(info));
-  if (cached && cached.result.url && Date.now() - cached.at < DIRECT_URL_TTL_MS) return;
-  void resolveDebridDirectUrl(info).catch(() => undefined);
+export function resolveDebridDirectUrl(info: DebridStreamInfo): Promise<TranscodeResult> {
+  const snapshot = { ...info, infoHash: info.infoHash.toLowerCase() };
+  const selectionError = validateFileSelection(snapshot);
+  if (selectionError) return Promise.resolve({ error: selectionError });
+  const key = directUrlCacheKey(snapshot);
+  const cached = readDirectUrlCache(key);
+  if (cached) return Promise.resolve({ url: cached });
+  const existing = directUrlInFlight.get(key);
+  if (existing) return existing;
+  if (directUrlInFlight.size >= DIRECT_URL_LIMIT) {
+    return Promise.resolve({ error: "Too many source resolutions are in progress. Try again shortly." });
+  }
+  const pending: Promise<TranscodeResult> = Promise.resolve().then(() => directUrlForProvider(snapshot)).catch((error: unknown): TranscodeResult => ({
+    error: error instanceof Error ? error.message : "Could not resolve direct URL"
+  })).then((result) => {
+    // Invalidation also detaches pending work. A late response must neither
+    // publish a rejected link nor replace the cache entry of a newer attempt.
+    if (directUrlInFlight.get(key) !== pending) return { error: "This source resolution was invalidated. Try again." };
+    if (result.url) {
+      pruneDirectUrlCache();
+      directUrlCache.set(key, { at: Date.now(), url: result.url });
+      while (directUrlCache.size > DIRECT_URL_LIMIT) {
+        directUrlCache.delete(directUrlCache.keys().next().value!);
+      }
+    }
+    return result;
+  }).finally(() => {
+    if (directUrlInFlight.get(key) === pending) directUrlInFlight.delete(key);
+  });
+  directUrlInFlight.set(key, pending);
+  return pending;
+}
+
+/** Kept for callers; browsing sources must never create provider downloads. */
+export function prefetchDebridDirectUrl(_url: string | null | undefined): void {
+  // All supported resolvers can mutate provider state or mint metered links.
+  // Resolution is intentionally deferred until the user selects playback.
 }
 
 /** Synchronous cache lookup — lets playback start on the final CDN URL and skip
- * the torrentio redirect chain entirely when the prefetch already resolved it. */
+ * the torrentio redirect chain after a previous explicit resolution. */
 export function cachedDebridDirectUrl(url: string | null | undefined): string | null {
   const info = parseDebridStream(url);
   if (!info) return null;
-  const cached = directUrlCache.get(directUrlCacheKey(info));
-  return cached && cached.result.url && Date.now() - cached.at < DIRECT_URL_TTL_MS ? cached.result.url : null;
+  return readDirectUrlCache(directUrlCacheKey(info));
 }
 
 // ---------- TorBox ----------
@@ -162,27 +220,27 @@ async function torboxApi<T>(path: string, apiKey: string, form?: Record<string, 
   );
 }
 
-// One retry on transport failures: on production every TorBox call rides the
-// Netlify proxy, whose cold starts / hiccups otherwise surface as bogus
-// "not cached" errors (locally the proxy is instant, hiding the problem).
-async function torboxApiRetry<T>(path: string, apiKey: string, form?: Record<string, string>): Promise<TorboxEnvelope<T>> {
+// Only read-only account lookup is retried. An uncertain create/requestdl
+// response may already have created a download or minted a metered link.
+async function torboxApiRetry<T>(path: string, apiKey: string): Promise<TorboxEnvelope<T>> {
   try {
-    return await torboxApi<T>(path, apiKey, form);
+    return await torboxApi<T>(path, apiKey);
   } catch {
     await new Promise((resolve) => setTimeout(resolve, 600));
-    return torboxApi<T>(path, apiKey, form);
+    return torboxApi<T>(path, apiKey);
   }
 }
 
 async function findTorboxTorrent(info: DebridStreamInfo): Promise<TorboxTorrent | null> {
   const list = await torboxApiRetry<TorboxTorrent[]>("/torrents/mylist?bypass_cache=true&limit=1000", info.apiKey);
+  if (!list.success) throw new Error(torboxError(list));
   return (list.data ?? []).find((entry) => entry.hash?.toLowerCase() === info.infoHash) ?? null;
 }
 
 type TorboxFile = { id: number; name?: string; short_name?: string; size?: number };
 type TorboxFileResolution =
   | { ok: false; error: string }
-  | { ok: true; torrent: TorboxTorrent; file?: TorboxFile };
+  | { ok: true; torrent: TorboxTorrent; file: TorboxFile };
 
 async function resolveTorboxTorrentAndFile(info: DebridStreamInfo): Promise<TorboxFileResolution> {
   let torrent = await findTorboxTorrent(info);
@@ -190,7 +248,7 @@ async function resolveTorboxTorrentAndFile(info: DebridStreamInfo): Promise<Torb
   if (!torrent) {
     // Cached torrents attach instantly, so add it on the user's behalf — they
     // just clicked Play on this exact source.
-    const added = await torboxApiRetry<{ torrent_id?: number }>("/torrents/createtorrent", info.apiKey, {
+    const added = await torboxApi<{ torrent_id?: number }>("/torrents/createtorrent", info.apiKey, {
       magnet: `magnet:?xt=urn:btih:${info.infoHash}`,
       add_only_if_cached: "true"
     }).catch(() => { sawTransportFailure = true; return null; });
@@ -208,11 +266,8 @@ async function resolveTorboxTorrentAndFile(info: DebridStreamInfo): Promise<Torb
   }
 
   const files = (torrent.files ?? []).filter((file) => VIDEO_FILE.test(file.short_name ?? file.name ?? ""));
-  const wanted = info.fileName?.toLowerCase();
-  const file =
-    files.find((candidate) => wanted && (candidate.short_name ?? candidate.name ?? "").toLowerCase() === wanted) ??
-    files.find((candidate) => wanted && (candidate.name ?? "").toLowerCase().includes(wanted)) ??
-    files.sort((a, b) => (b.size ?? 0) - (a.size ?? 0))[0];
+  const file = pickDebridFile(files, info.fileName, (candidate) => candidate.name ?? candidate.short_name ?? "", (candidate) => candidate.size ?? 0);
+  if (!file) return { ok: false, error: SELECTED_FILE_UNAVAILABLE };
   return { ok: true, torrent, file };
 }
 
@@ -220,8 +275,8 @@ async function torboxDirectUrl(info: DebridStreamInfo): Promise<TranscodeResult>
   const resolved = await resolveTorboxTorrentAndFile(info);
   if (!resolved.ok) return { error: resolved.error };
   const params = new URLSearchParams({ token: info.apiKey, torrent_id: String(resolved.torrent.id), redirect: "false" });
-  if (resolved.file) params.set("file_id", String(resolved.file.id));
-  const dl = await torboxApiRetry<string>(`/torrents/requestdl?${params.toString()}`, info.apiKey);
+  params.set("file_id", String(resolved.file.id));
+  const dl = await torboxApi<string>(`/torrents/requestdl?${params.toString()}`, info.apiKey);
   if (!dl.success || typeof dl.data !== "string" || !/^https?:\/\//i.test(dl.data)) {
     return { error: torboxError(dl) };
   }
@@ -234,7 +289,7 @@ async function torboxTranscode(info: DebridStreamInfo): Promise<TranscodeResult>
   const { torrent, file } = resolved;
 
   const params = new URLSearchParams({ id: String(torrent.id), type: "torrent" });
-  if (file) params.set("file_id", String(file.id));
+  params.set("file_id", String(file.id));
   const created = await torboxApi<Record<string, unknown>>(`/stream/createstream?${params.toString()}`, info.apiKey);
   if (!created.success) return { error: torboxError(created) };
 
@@ -297,18 +352,17 @@ async function rdUnrestrict(info: DebridStreamInfo): Promise<RdUnrestrict | { er
   }
   const detail = await rdGet<RdTorrentInfo>(`/torrents/info/${torrent.id}`, info.apiKey);
   const selected = (detail.files ?? []).filter((file) => file.selected === 1);
-  const wanted = info.fileName?.toLowerCase();
-  let linkIndex = selected.findIndex((file) => wanted && (file.path ?? "").toLowerCase().includes(wanted));
-  if (linkIndex < 0) {
-    let largest = -1;
-    selected.forEach((file, index) => {
-      if ((file.bytes ?? 0) > largest) {
-        largest = file.bytes ?? 0;
-        linkIndex = index;
-      }
-    });
-  }
-  const link = detail.links?.[Math.max(0, linkIndex)];
+  const videos = selected.filter((file) => VIDEO_FILE.test(file.path ?? ""));
+  // Torrentio's Real-Debrid /null/<index> route explicitly uses file.id - 1.
+  // No such mapping is assumed for other providers or their array ordering.
+  // https://github.com/TheBeastLT/torrentio-scraper/blob/master/addon/moch/realdebrid.js
+  const file = info.fileName === undefined && info.fileIndex !== undefined
+    ? videos.find((candidate) => candidate.id === info.fileIndex! + 1)
+    : pickDebridFile(videos, info.fileName, (candidate) => candidate.path ?? "", (candidate) => candidate.bytes ?? 0);
+  if (!file) return { error: SELECTED_FILE_UNAVAILABLE };
+  // A bundled archive cannot safely be associated with one selected episode.
+  if (detail.links?.length !== selected.length) return { error: "Real-Debrid did not expose separate links for the selected files." };
+  const link = detail.links[selected.indexOf(file)];
   if (!link) return { error: "Real-Debrid did not expose a link for this file." };
   const unrestricted = await rdPost<RdUnrestrict>("/unrestrict/link", info.apiKey, { link });
   if (!unrestricted.id) return { error: "Real-Debrid could not unrestrict this file." };
@@ -358,7 +412,7 @@ async function premiumizeDirectUrl(info: DebridStreamInfo): Promise<TranscodeRes
   const videos = (payload.content ?? []).filter((item) => item.link && VIDEO_FILE.test(item.path ?? ""));
   if (!videos.length) return { error: "Premiumize returned no downloadable video file for this source." };
   const pick = pickDebridFile(videos, info.fileName, (item) => item.path ?? "", (item) => item.size ?? 0);
-  return pick?.link ? { url: pick.link } : { error: "Premiumize returned no direct download URL." };
+  return pick?.link ? { url: pick.link } : { error: SELECTED_FILE_UNAVAILABLE };
 }
 
 // ---------- AllDebrid ----------
@@ -411,7 +465,7 @@ async function allDebridDirectUrl(info: DebridStreamInfo): Promise<TranscodeResu
   const candidates = flat.length ? flat : nested;
   if (!candidates.length) return { error: "AllDebrid returned no downloadable video file for this source." };
   const pick = pickDebridFile(candidates, info.fileName, (c) => c.name, (c) => c.size);
-  if (!pick?.link) return { error: "AllDebrid returned no link for this file." };
+  if (!pick?.link) return { error: SELECTED_FILE_UNAVAILABLE };
 
   // The link from status is a locked AllDebrid link — unlock it to the CDN url.
   const unlocked = await adPost<{ link?: string }>("/link/unlock", info.apiKey, { link: pick.link }).catch(() => null);
@@ -431,17 +485,34 @@ function flattenAdFiles(files: AdStatusFile[], prefix = ""): Array<{ name: strin
   return out;
 }
 
-// Shared file picker for Premiumize/AllDebrid: prefer the exact filename the
-// stream URL named, then a substring match, then the largest video file —
-// identical to the TorBox/RD heuristic so multi-file torrents resolve the right
-// episode.
+const SELECTED_FILE_UNAVAILABLE = "The selected file is missing or ambiguous in this provider's available files. Choose another source.";
+
+function validateFileSelection(info: DebridStreamInfo): string | null {
+  if (info.fileName !== undefined && !info.fileName.trim()) return SELECTED_FILE_UNAVAILABLE;
+  if (info.fileIndex !== undefined) {
+    if (!Number.isSafeInteger(info.fileIndex) || info.fileIndex < 0 || info.fileIndex >= Number.MAX_SAFE_INTEGER) {
+      return "The selected file index is invalid.";
+    }
+    if (info.fileName === undefined && info.provider !== "realdebrid") {
+      return "The selected file needs a filename; this provider's file IDs cannot be inferred from a torrent index.";
+    }
+  }
+  return null;
+}
+
+// A requested episode must match a unique filename/path, never a substring or
+// the largest fallback. Provider-added root directories are allowed at a path
+// boundary; duplicate basenames require a more specific path.
 function pickDebridFile<T>(items: T[], wantedName: string | undefined, nameOf: (item: T) => string, sizeOf: (item: T) => number): T | undefined {
-  const wanted = wantedName?.toLowerCase();
-  return (
-    items.find((item) => wanted && nameOf(item).toLowerCase().split("/").pop() === wanted) ??
-    items.find((item) => wanted && nameOf(item).toLowerCase().includes(wanted)) ??
-    items.slice().sort((a, b) => sizeOf(b) - sizeOf(a))[0]
-  );
+  if (wantedName === undefined) return items.slice().sort((a, b) => sizeOf(b) - sizeOf(a))[0];
+  const normalize = (name: string) => name.replace(/\\/g, "/").replace(/^\/+/, "").toLowerCase();
+  const wanted = normalize(wantedName);
+  if (!wanted) return undefined;
+  const matches = items.filter((item) => {
+    const name = normalize(nameOf(item));
+    return name === wanted || name.endsWith(`/${wanted}`);
+  });
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 // ---------- helpers ----------

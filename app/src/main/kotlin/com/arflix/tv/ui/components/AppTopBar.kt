@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -101,9 +102,6 @@ fun AppTopBar(
     hasUpdateBadge: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    // Always show the profile avatar when a profile exists — it's clickable
-    // and opens the profile switcher. The name text was removed per the mockup
-    // (avatar-only, no label).
     val showProfile = profile != null
     val hasProfile = showProfile
     val currentTime = rememberTopBarTime(clockFormat)
@@ -115,6 +113,7 @@ fun AppTopBar(
 
     Box(
         modifier = modifier
+            .testTag("app-topbar")
             .fillMaxWidth()
             .height(AppTopBarContentTopInset)
             .background(
@@ -158,7 +157,7 @@ fun AppTopBar(
                         TopBarNavChip(
                             item = item,
                             isFocused = isFocused && focusedIndex == itemFocusIndex,
-                            isSelected = selectedIndex == itemFocusIndex
+                            isSelected = selectedIndex == itemFocusIndex,
                         )
                     }
                 }
@@ -167,7 +166,7 @@ fun AppTopBar(
             // ── RIGHT: Settings gear + clock ──
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.End)
             ) {
                 // Settings gear icon (no text label)
                 TopBarSettingsGear(
@@ -192,7 +191,7 @@ fun AppTopBar(
 private fun TopBarNavChip(
     item: SidebarItem,
     isFocused: Boolean,
-    isSelected: Boolean
+    isSelected: Boolean,
 ) {
     val accent = resolveAccentColor(fallback = Color.White)
 
@@ -236,6 +235,7 @@ private fun TopBarNavChip(
 
     Row(
         modifier = Modifier
+            .testTag("topbar-item-${item.name}")
             .clip(RoundedCornerShape(16.dp))
             .background(containerColor)
             .graphicsLayer {
@@ -255,7 +255,8 @@ private fun TopBarNavChip(
         Text(
             text = label,
             fontSize = 14.sp,
-            fontWeight = if (isFocused || isSelected) FontWeight.SemiBold else FontWeight.Medium,
+            // Keep label metrics stable when selection/focus moves between pages.
+            fontWeight = FontWeight.SemiBold,
             color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -301,6 +302,7 @@ private fun TopBarSettingsGear(
 
     Box(
         modifier = Modifier
+            .testTag("topbar-item-SETTINGS")
             .size(36.dp)
             .clip(CircleShape)
             .background(containerColor)
@@ -354,6 +356,7 @@ private fun TopBarProfileAvatar(
 
     Box(
         modifier = Modifier
+            .testTag("topbar-profile")
             .size(40.dp)
             .clip(CircleShape)
             .background(containerColor)

@@ -116,7 +116,37 @@ function preserveTraktTokens(existingSnapshot, incomingPayload) {
   return { ...incomingPayload, traktTokens: merged };
 }
 
-exports._test = { preserveTrackingRouting, preserveTraktTokens };
+function preserveIptvFields(existingSnapshot, incomingPayload) {
+  const previous = existingSnapshot?.payload;
+  if (!previous?.iptvByProfile || !previous?.fieldUpdatedAt) return incomingPayload;
+  const fields = new Set(["m3uUrl", "epgUrl", "playlists", "stalkerPortals", "stalkerPortalUrl",
+    "stalkerMacAddress", "favoriteGroups", "favoriteChannels", "hiddenGroups", "lockedGroups",
+    "groupOrder", "groupOrderSchema", "sortOrder"]);
+  const profiles = { ...incomingPayload.iptvByProfile };
+  const timestamps = { ...incomingPayload.fieldUpdatedAt };
+  const activeIds = Array.isArray(incomingPayload.profiles)
+    ? new Set(incomingPayload.profiles.map((profile) => profile?.id)) : null;
+  for (const [id, previousState] of Object.entries(previous.iptvByProfile)) {
+    if (activeIds && !activeIds.has(id)) continue;
+    if (!previousState || typeof previousState !== "object" || Array.isArray(previousState)) continue;
+    const next = { ...profiles[id] };
+    let changed = false;
+    for (const field of fields) {
+      const key = `i:${id}:${field}`;
+      const oldTime = timestampOf(previous.fieldUpdatedAt, key);
+      const newTime = timestampOf(timestamps, key);
+      if (oldTime > 0 && oldTime >= newTime) {
+        copyOptionalField(next, previousState, field);
+        timestamps[key] = oldTime;
+        changed = true;
+      }
+    }
+    if (changed) profiles[id] = next;
+  }
+  return { ...incomingPayload, iptvByProfile: profiles, fieldUpdatedAt: timestamps };
+}
+
+exports._test = { preserveTrackingRouting, preserveTraktTokens, preserveIptvFields };
 
 exports.handler = async (event) => {
   const cors = options(event);
@@ -138,10 +168,10 @@ exports.handler = async (event) => {
     // the addon list (recurring client bug); existing addons are merged back.
     const parsedPayload = typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
     const { payload: addonGuardedPayload, guarded } = applyAddonWipeGuard(existing, parsedPayload);
-    const guardedPayload = preserveTraktTokens(
+    const guardedPayload = preserveIptvFields(existing, preserveTraktTokens(
       existing,
       preserveTrackingRouting(existing, addonGuardedPayload)
-    );
+    ));
     if (guarded) {
       console.warn("account-sync-push: addon wipe guard engaged", {
         user: identity.supabaseUserId,

@@ -1531,6 +1531,12 @@ async function handleTraktProxy(event) {
 
     const response = await fetch(traktUrl, { method, headers, body: requestBody });
     const text = await response.text();
+    if (response.status === 403 && /<html|<!doctype html/i.test(text)) {
+      return json(503, {
+        error: "trakt_upstream_blocked",
+        message: "Trakt is temporarily rejecting requests from our server. Your account is still connected; please try again later."
+      });
+    }
     let data;
     try {
       data = text ? JSON.parse(text) : { status: response.status };
@@ -1560,7 +1566,7 @@ const SIMKL_REQUEST_RULES = [
   { path: /^\/users\/settings$/, methods: new Set(["POST"]) },
   { path: /^\/scrobble\/(?:start|pause|stop)$/, methods: new Set(["POST"]) },
   { path: /^\/sync\/activities$/, methods: new Set(["GET"]) },
-  { path: /^\/sync\/all-items\/(?:movies|shows|anime|all)\/(?:watching|plantowatch|hold|completed|dropped|all)$/, methods: new Set(["GET"]) },
+  { path: /^\/sync\/all-items(?:\/(?:movies|shows|anime|all)(?:\/(?:watching|plantowatch|hold|completed|dropped|all))?)?$/, methods: new Set(["GET"]) },
   { path: /^\/sync\/playback(?:\/(?:movies|episodes|shows|anime|all))?$/, methods: new Set(["GET"]) },
   { path: /^\/sync\/playback\/\d+$/, methods: new Set(["DELETE"]) },
   { path: /^\/sync\/(?:history|history\/remove|add-to-list)$/, methods: new Set(["POST"]) }
@@ -1658,7 +1664,17 @@ async function handleSimklProxy(event) {
         simklUrl.searchParams.set(key, String(value));
       }
     });
-    if (pathParam.startsWith("/oauth/pin")) simklUrl.searchParams.set("client_id", clientId);
+
+    // Simkl convention requires client_id, app-name, and app-version on EVERY request
+    // https://api.simkl.org/conventions/headers
+    simklUrl.searchParams.set("client_id", clientId);
+    if (!simklUrl.searchParams.has("app-name") || simklUrl.searchParams.get("app-name") === "ARVIO") {
+      simklUrl.searchParams.set("app-name", "arvio");
+    }
+    if (!simklUrl.searchParams.has("app-version")) {
+      const incomingVersion = getHeader(event.headers, "x-app-version") || "1.9.996";
+      simklUrl.searchParams.set("app-version", incomingVersion);
+    }
 
     let requestBody = undefined;
     if (method === "POST" || method === "DELETE") {
@@ -1677,9 +1693,16 @@ async function handleSimklProxy(event) {
       requestBody = Object.keys(body).length > 0 ? JSON.stringify(body) : undefined;
     }
 
+    const appVersion = simklUrl.searchParams.get("app-version") || "1.9.996";
+    const incomingUa = getHeader(event.headers, "user-agent").trim();
+    const userAgent = incomingUa && !incomingUa.startsWith("node-fetch")
+      ? incomingUa
+      : `ARVIO/${appVersion} (Netlify Proxy)`;
+
     const headers = {
       "content-type": "application/json",
-      "simkl-api-key": clientId
+      "simkl-api-key": clientId,
+      "user-agent": userAgent
     };
     const userToken = getHeader(event.headers, "x-user-token").trim();
     if (userToken) headers.authorization = `Bearer ${userToken}`;
@@ -1692,14 +1715,19 @@ async function handleSimklProxy(event) {
     } catch {
       data = text ? { raw: text } : { status: response.status };
     }
+    const returnHeaders = {
+      ...JSON_HEADERS,
+      "cache-control": "no-store",
+      "x-ratelimit-remaining": String(rate.remaining),
+      "x-ratelimit-reset": String(rate.resetSeconds)
+    };
+    const upstreamRetryAfter = response.headers.get("retry-after");
+    if (upstreamRetryAfter) {
+      returnHeaders["retry-after"] = upstreamRetryAfter;
+    }
     return {
       statusCode: response.status,
-      headers: {
-        ...JSON_HEADERS,
-        "cache-control": "no-store",
-        "x-ratelimit-remaining": String(rate.remaining),
-        "x-ratelimit-reset": String(rate.resetSeconds)
-      },
+      headers: returnHeaders,
       body: JSON.stringify(data)
     };
   } catch (error) {

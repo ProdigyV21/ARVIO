@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { allowsMediaProxy, safeProxyFetch, withinProxyBudget } from "@/lib/server/safeProxy";
 
 const BLOCKED_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
-const PROXY_TIMEOUT_MS = 18_000;
-const ALLOW_MEDIA_PROXY =
-  process.env.ALLOW_NETLIFY_MEDIA_PROXY === "true" ||
-  process.env.NEXT_PUBLIC_ALLOW_NETLIFY_MEDIA_PROXY === "true";
+const ALLOW_MEDIA_PROXY = allowsMediaProxy();
 
 export async function GET(request: NextRequest) {
+  if (!withinProxyBudget(request.headers.get("x-nf-client-connection-ip") ?? "local")) return NextResponse.json({ error: "Proxy request limit reached. Please wait." }, { status: 429, headers: { "retry-after": "60" } });
   const input = new URL(request.url);
   const raw = input.searchParams.get("url");
   if (!raw) return NextResponse.json({ error: "Missing url" }, { status: 400 });
@@ -39,25 +38,38 @@ export async function GET(request: NextRequest) {
   const response = await fetchWithTimeout(target, {
     headers: forwardedHeaders,
     cache: "no-store",
-    redirect: "follow"
+    redirect: "follow",
+    signal: request.signal
   });
 
   const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-  if (rewriteMode !== "0" && shouldRewritePlaylist(target, contentType)) {
-    const text = await response.text();
-    const rewritten = rewriteMode === "worker"
-      ? rewritePlaylistToWorker(text, target, input.searchParams.get("headers"))
-      : rewriteMode === "direct" ? rewritePlaylistToAbsolute(text, target) : rewritePlaylist(text, target, request);
+  if (response.ok && shouldRewritePlaylist(target, contentType)) {
+    let text: string;
+    try { text = await response.text(); }
+    catch (error) { return proxyFailure(error); }
+    const hls = /^#EXT-X-/m.test(text);
+    if (hls && Buffer.byteLength(text) > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: "Playlist exceeds the size limit" }, { status: 502, headers: { "cache-control": "no-store" } });
+    }
+    const rewritten = rewriteMode === "0" ? text : rewriteMode === "worker"
+      ? rewritePlaylistToWorker(text, new URL(response.headers.get("x-arvio-final-url") ?? target), input.searchParams.get("headers"))
+      : rewriteMode === "direct" || !ALLOW_MEDIA_PROXY ? rewritePlaylistToAbsolute(text, new URL(response.headers.get("x-arvio-final-url") ?? target)) : rewritePlaylist(text, new URL(response.headers.get("x-arvio-final-url") ?? target), request);
     const headers = new Headers();
     headers.set("content-type", contentType.includes("mpegurl") ? contentType : "application/vnd.apple.mpegurl");
-    headers.set("cache-control", rewriteMode === "direct" ? "private, max-age=20" : "private, max-age=30, stale-while-revalidate=120");
+    headers.set("cache-control", "private, max-age=5");
     headers.set("access-control-allow-origin", "*");
+    if (!hls) cacheIptvCatalog(headers, target);
     return new NextResponse(rewritten, { status: response.status, headers });
   }
 
   const headers = new Headers();
   headers.set("content-type", contentType);
-  headers.set("cache-control", playlistOnlyRequest ? "private, max-age=3600, stale-while-revalidate=86400" : "no-store");
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) headers.set("retry-after", retryAfter);
+  headers.set("x-content-type-options", "nosniff");
+  const contentPolicy = response.headers.get("content-security-policy");
+  if (contentPolicy) headers.set("content-security-policy", contentPolicy);
+  headers.set("cache-control", playlistOnlyRequest ? "private, max-age=5" : "no-store");
   headers.set("access-control-allow-origin", "*");
   headers.set("accept-ranges", response.headers.get("accept-ranges") ?? "bytes");
   const contentLength = response.headers.get("content-length");
@@ -72,10 +84,7 @@ export async function GET(request: NextRequest) {
   // mandatory here — without it every variant collapses into one entry), which
   // includes the user's credentials, so entries are effectively per-account.
   // Live "what's on now" data (get_short_epg etc.) is deliberately excluded.
-  if (request.method === "GET" && response.ok && isCacheableIptvCatalog(target)) {
-    headers.set("netlify-cdn-cache-control", "public, durable, max-age=3600, stale-while-revalidate=86400");
-    headers.set("netlify-vary", "query");
-  }
+  if (response.ok) cacheIptvCatalog(headers, target);
 
   return new NextResponse(response.body, { status: response.status, headers });
 }
@@ -95,10 +104,18 @@ function isCacheableIptvCatalog(target: URL) {
     const action = target.searchParams.get("action")?.toLowerCase() ?? "";
     return CACHEABLE_XTREAM_ACTIONS.has(action);
   }
-  return isLikelyPlaylistTarget(target);
+  return isLikelyPlaylistTarget(target) && !lowerPath.endsWith(".m3u8");
+}
+
+function cacheIptvCatalog(headers: Headers, target: URL) {
+  if (!isCacheableIptvCatalog(target)) return;
+  headers.set("cache-control", "private, max-age=3600, stale-while-revalidate=86400");
+  headers.set("netlify-cdn-cache-control", "public, durable, max-age=3600, stale-while-revalidate=86400");
+  headers.set("netlify-vary", "query");
 }
 
 export async function POST(request: NextRequest) {
+  if (!withinProxyBudget(request.headers.get("x-nf-client-connection-ip") ?? "local")) return NextResponse.json({ error: "Proxy request limit reached. Please wait." }, { status: 429, headers: { "retry-after": "60" } });
   const input = new URL(request.url);
   const raw = input.searchParams.get("url");
   if (!raw) return NextResponse.json({ error: "Missing url" }, { status: 400 });
@@ -121,16 +138,23 @@ export async function POST(request: NextRequest) {
 
   const forwardedHeaders = decodeHeaders(input.searchParams.get("headers")) ?? {};
   const body = await request.text();
+  if (body.length > 1024 * 1024) return NextResponse.json({ error: "Request too large" }, { status: 413 });
   const response = await fetchWithTimeout(target, {
     method: "POST",
     headers: { "content-type": "application/json", ...forwardedHeaders },
     body,
     cache: "no-store",
-    redirect: "follow"
+    redirect: "follow",
+    signal: request.signal
   });
 
   const headers = new Headers();
   headers.set("content-type", response.headers.get("content-type") ?? "application/json");
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) headers.set("retry-after", retryAfter);
+  headers.set("x-content-type-options", "nosniff");
+  const contentPolicy = response.headers.get("content-security-policy");
+  if (contentPolicy) headers.set("content-security-policy", contentPolicy);
   headers.set("cache-control", "no-store");
   headers.set("access-control-allow-origin", "*");
   return new NextResponse(response.body, { status: response.status, headers });
@@ -256,16 +280,16 @@ function rewritePlaylistToAbsolute(text: string, baseUrl: URL) {
 }
 
 async function fetchWithTimeout(target: URL, init: RequestInit) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
   try {
-    return await fetch(target, { ...init, signal: controller.signal });
+    return await safeProxyFetch(target, init, target.pathname.toLowerCase().endsWith(".m3u8") ? { maxBytes: 2 * 1024 * 1024, textOnly: true } : undefined);
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      return NextResponse.json({ error: "Proxy target timed out" }, { status: 504 });
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+    return proxyFailure(error);
   }
+}
+
+function proxyFailure(error: unknown) {
+  if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) {
+    return NextResponse.json({ error: "Proxy target timed out" }, { status: 504, headers: { "cache-control": "no-store" } });
+  }
+  return NextResponse.json({ error: "Proxy target unavailable or blocked" }, { status: 502, headers: { "cache-control": "no-store" } });
 }

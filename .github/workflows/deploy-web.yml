@@ -42,7 +42,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run web regression tests
+        run: npm test
+
+      # CLI builds do not reliably inherit the site's browser build variables.
+      # Export only these public client values, never the OAuth client secret.
+      - name: Load required public build configuration
+        shell: bash
+        env:
+          PUBLIC_TRAKT_ID: ${{ secrets.WEB_PUBLIC_TRAKT_CLIENT_ID }}
+          PUBLIC_APP_KEY: ${{ secrets.WEB_PUBLIC_APP_ANON_KEY }}
+        run: |
+          trakt_id="$PUBLIC_TRAKT_ID"
+          app_key="$PUBLIC_APP_KEY"
+          if [[ ${#trakt_id} -lt 10 || ${#app_key} -lt 40 || "$trakt_id" == *'*'* || "$app_key" == *'*'* ]]; then
+            echo "Missing required public Trakt/cloud configuration; refusing to publish a stale-only client." >&2
+            exit 1
+          fi
+          echo "::add-mask::$trakt_id"
+          echo "::add-mask::$app_key"
+          printf 'NEXT_PUBLIC_TRAKT_CLIENT_ID=%s\n' "$trakt_id" >> "$GITHUB_ENV"
+          printf 'NEXT_PUBLIC_ARVIO_APP_ANON_KEY=%s\n' "$app_key" >> "$GITHUB_ENV"
+          printf 'ARVIO_BUILD_APP_ANON_KEY=%s\n' "$app_key" >> "$GITHUB_ENV"
+          echo 'ARVIO_VERIFY_BUILD_CONFIG=true' >> "$GITHUB_ENV"
+
       - name: Build Netlify bundle
+        env:
+          NEXT_PUBLIC_TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          NEXT_PUBLIC_TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
         run: npx --yes netlify-cli@25.6.0 build --context production
 
       - name: Record expected build stamp

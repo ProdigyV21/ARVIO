@@ -36,11 +36,13 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,8 +75,10 @@ import java.util.Locale
 
 /**
  * Fullscreen playback HUD matching the full-width reference player layout.
- * Auto-hides 5s after the last `pokeSignal` bump; parent bumps the counter on any DPAD key so the HUD re-surfaces.
- * Initial focus immediately lands on the central Play/Pause button when surfaced from hidden state.
+ * Auto-hides 5s after the last `pokeSignal` bump; `hideSignal` dismisses it straight away (Back).
+ * With `showControls` off the seek bar and the button row are not composed at all: what surfaces on
+ * its own after a channel zap is then pure information with nothing focusable in it. With it on the
+ * controls are drawn and focused in the same breath, so anything visible is always operable.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -100,14 +104,22 @@ fun FullscreenHud(
     onSeekToPosition: ((Long) -> Unit)? = null,
     onOpenQuickZap: (() -> Unit)? = null,
     onVisibilityChanged: ((Boolean) -> Unit)? = null,
+    hideSignal: Int = 0,
+    showControls: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var visible by remember { mutableStateOf(true) }
     var lastPoke by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    androidx.compose.runtime.DisposableEffect(onVisibilityChanged) {
+    // Keyed on Unit, never on the callback: a caller that hands in a fresh
+    // lambda per recomposition would otherwise have this effect torn down and
+    // rebuilt constantly, reporting "hidden" each time. This HUD redraws every
+    // second for the clock, so that would fire relentlessly — and the caller
+    // uses the report to drop out of control mode.
+    val latestVisibilityChanged = rememberUpdatedState(onVisibilityChanged)
+    DisposableEffect(Unit) {
         onDispose {
-            onVisibilityChanged?.invoke(false)
+            latestVisibilityChanged.value?.invoke(false)
         }
     }
 
@@ -136,16 +148,44 @@ fun FullscreenHud(
     val playPauseFocusRequester = remember { FocusRequester() }
     var initialFocusApplied by remember { mutableStateOf(false) }
 
-    // Request initial focus ONLY when HUD first becomes visible from hidden state
-    LaunchedEffect(visible) {
-        if (visible && !initialFocusApplied) {
-            initialFocusApplied = true
-            delay(100)
-            runCatching {
-                playPauseFocusRequester.requestFocus()
-            }
-        } else if (!visible) {
+    // Dismiss on request (Back), without leaving fullscreen.
+    LaunchedEffect(hideSignal) {
+        if (hideSignal > 0) {
+            visible = false
+            onVisibilityChanged?.invoke(false)
+        }
+    }
+
+    // Whenever the controls are on screen they are focused, so "visible" and
+    // "operable" can never disagree — showing buttons that ignore the remote is
+    // what the first device test rightly called broken.
+    //
+    // The flag records that focus actually *landed*, not that it was attempted,
+    // and it clears whenever the controls leave the screen. Both matter:
+    //  - Opening the controls from a bare screen flips `visible` and
+    //    `showControls` in the same breath, so this effect is relaunched a
+    //    second time while the first run still waits for the row to attach.
+    //    Marking the attempt up front made that second run believe the work was
+    //    done, while the cancelled first run never got to ask — the bar appeared
+    //    and ignored the remote. Opening it while the info bar was already up
+    //    changes only one key, so that path worked and hid the other one.
+    //  - Closing the controls with Back and opening them again leaves `visible`
+    //    untouched, so a flag that only cleared on `!visible` would have stayed
+    //    set and swallowed the second open the same way.
+    // Retrying costs nothing once focus has landed, and covers the row simply
+    // not being attached yet on the frame the HUD fades in.
+    LaunchedEffect(visible, showControls) {
+        if (!visible || !showControls) {
             initialFocusApplied = false
+        } else {
+            var attempts = 0
+            while (!initialFocusApplied && attempts < ControlFocusAttempts) {
+                attempts++
+                delay(ControlFocusRetryMs)
+                if (runCatching { playPauseFocusRequester.requestFocus() }.isSuccess) {
+                    initialFocusApplied = true
+                }
+            }
         }
     }
 
@@ -404,109 +444,115 @@ fun FullscreenHud(
                     }
                 }
 
-                // --- Row 2: Full-Width Seek Bar with Scrubber Ball ---
-                HudSeekBar(
-                    progress = progress,
-                    positionMs = elapsedShowMs,
-                    durationMs = totalShowMs,
-                    onSeekToPosition = onSeekToPosition,
-                    onOpenQuickZap = onOpenQuickZap,
-                )
+                // Seek bar and control buttons together are "the controls".
+                // On a remote they appear only once the user asks for them with
+                // OK, so that what surfaces on its own carries no focusable
+                // element at all and cannot look operable while it is not.
+                if (showControls) {
+                    // --- Row 2: Full-Width Seek Bar with Scrubber Ball ---
+                    HudSeekBar(
+                        progress = progress,
+                        positionMs = elapsedShowMs,
+                        durationMs = totalShowMs,
+                        onSeekToPosition = onSeekToPosition,
+                        onOpenQuickZap = onOpenQuickZap,
+                    )
 
-                // --- Row 3: Bottom Control Bar (Exact Centering & Time on Left) ---
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                ) {
-                    // Left Side: Time Text below Seek Bar
+                    // --- Row 3: Bottom Control Bar (Exact Centering & Time on Left) ---
                     Box(
-                        modifier = Modifier.align(Alignment.CenterStart),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
                     ) {
-                        Text(
-                            text = positionText,
-                            style = LiveType.TimeMono.copy(
-                                color = Color.White.copy(alpha = 0.85f),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                            ),
-                        )
-                    }
-
-                    // EXACT CENTER: Playback Controls Bar
-                    Row(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Previous channel (|<)
-                        HudIconButton(
-                            icon = Icons.Filled.SkipPrevious,
-                            contentDescription = "Previous Channel",
-                            onClick = { onPreviousCatchupClick?.invoke() },
-                        )
-
-                        // Rewind (<<)
-                        HudIconButton(
-                            icon = Icons.Filled.FastRewind,
-                            contentDescription = "Rewind",
-                            onClick = { onRewindClick?.invoke() },
-                        )
-
-                        // Central Play/Pause button (Instant local state toggle!)
-                        HudIconButton(
-                            icon = if (localIsPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (localIsPlaying) "Pause" else "Play",
-                            emphasis = true,
-                            focusRequester = playPauseFocusRequester,
-                            onClick = {
-                                localIsPlaying = !localIsPlaying
-                                onPlayPauseClick?.invoke()
-                            },
-                        )
-
-                        // Fast Forward (>>)
-                        HudIconButton(
-                            icon = Icons.Filled.FastForward,
-                            contentDescription = "Fast Forward",
-                            onClick = { onFastForwardClick?.invoke() },
-                        )
-
-                        // Next channel (>|)
-                        HudIconButton(
-                            icon = Icons.Filled.SkipNext,
-                            contentDescription = "Next Channel",
-                            onClick = { onNextCatchupClick?.invoke() },
-                        )
-                    }
-
-                    // Right Side: Replay, LIVE, GUIDE
-                    Row(
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Replay / Restart
-                        HudIconButton(
-                            icon = Icons.Filled.Replay,
-                            contentDescription = "Replay",
-                            onClick = { onReplayClick?.invoke() },
-                        )
-
-                        // LIVE button
-                        if (isCatchupMode) {
-                            HudActionButton(
-                                label = stringResource(R.string.live_badge_live),
-                                onClick = { onGoLiveClick?.invoke() },
+                        // Left Side: Time Text below Seek Bar
+                        Box(
+                            modifier = Modifier.align(Alignment.CenterStart),
+                        ) {
+                            Text(
+                                text = positionText,
+                                style = LiveType.TimeMono.copy(
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                ),
                             )
                         }
 
-                        // Guide button at far right
-                        if (onGuideClick != null) {
-                            HudActionButton(
-                                label = stringResource(R.string.live_btn_guide),
-                                onClick = onGuideClick,
+                        // EXACT CENTER: Playback Controls Bar
+                        Row(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Previous channel (|<)
+                            HudIconButton(
+                                icon = Icons.Filled.SkipPrevious,
+                                contentDescription = stringResource(R.string.live_cd_previous_channel),
+                                onClick = { onPreviousCatchupClick?.invoke() },
                             )
+
+                            // Rewind (<<)
+                            HudIconButton(
+                                icon = Icons.Filled.FastRewind,
+                                contentDescription = stringResource(R.string.live_cd_rewind),
+                                onClick = { onRewindClick?.invoke() },
+                            )
+
+                            // Central Play/Pause button (Instant local state toggle!)
+                            HudIconButton(
+                                icon = if (localIsPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = stringResource(if (localIsPlaying) R.string.live_cd_pause else R.string.play),
+                                emphasis = true,
+                                focusRequester = playPauseFocusRequester,
+                                onClick = {
+                                    localIsPlaying = !localIsPlaying
+                                    onPlayPauseClick?.invoke()
+                                },
+                            )
+
+                            // Fast Forward (>>)
+                            HudIconButton(
+                                icon = Icons.Filled.FastForward,
+                                contentDescription = stringResource(R.string.live_cd_fast_forward),
+                                onClick = { onFastForwardClick?.invoke() },
+                            )
+
+                            // Next channel (>|)
+                            HudIconButton(
+                                icon = Icons.Filled.SkipNext,
+                                contentDescription = stringResource(R.string.live_cd_next_channel),
+                                onClick = { onNextCatchupClick?.invoke() },
+                            )
+                        }
+
+                        // Right Side: Replay, LIVE, GUIDE
+                        Row(
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Replay / Restart
+                            HudIconButton(
+                                icon = Icons.Filled.Replay,
+                                contentDescription = stringResource(R.string.live_cd_replay),
+                                onClick = { onReplayClick?.invoke() },
+                            )
+
+                            // LIVE button
+                            if (isCatchupMode) {
+                                HudActionButton(
+                                    label = stringResource(R.string.live_badge_live),
+                                    onClick = { onGoLiveClick?.invoke() },
+                                )
+                            }
+
+                            // Guide button at far right
+                            if (onGuideClick != null) {
+                                HudActionButton(
+                                    label = stringResource(R.string.live_btn_guide),
+                                    onClick = onGuideClick,
+                                )
+                            }
                         }
                     }
                 }
@@ -699,3 +745,9 @@ private fun HudActionButton(
         )
     }
 }
+
+// The control row is asked for focus until it answers: on the frame the HUD
+// fades in from nothing the row may not be attached yet. Ten tries 50 ms apart
+// is half a second at the outside, and it stops at the first one that lands.
+private const val ControlFocusAttempts = 10
+private const val ControlFocusRetryMs = 50L

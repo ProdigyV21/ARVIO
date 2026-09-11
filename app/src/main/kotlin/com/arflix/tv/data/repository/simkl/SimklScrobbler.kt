@@ -43,13 +43,13 @@ class SimklScrobbler @Inject constructor(
     private val queueMutex = Mutex()
     private var hasWritten = false
     private var lastWriteAt = 0L
-    private var pendingCommand: Command? = null
-    private var pendingJob: Job? = null
+    private val commandQueue = ArrayDeque<Command>()
+    private var workerJob: Job? = null
     internal var elapsedRealtimeMs: () -> Long = { android.os.SystemClock.elapsedRealtime() }
 
     private fun normalizeProgress(progress: Float): Float {
-        // If progress is in 0.0 - 1.0 range, scale to 0.0 - 100.0
-        return if (progress in 0.0f..1.0f) progress * 100f else progress.coerceIn(0f, 100f)
+        // Enforce consistent 0.0 - 100.0 scale without multiplier heuristic
+        return progress.coerceIn(0f, 100f)
     }
 
     suspend fun scrobbleStart(
@@ -100,32 +100,57 @@ class SimklScrobbler @Inject constructor(
     private suspend fun submit(command: Command) {
         var immediate: Command? = null
         queueMutex.withLock {
+            val now = elapsedRealtimeMs()
             val remaining = if (hasWritten) {
-                WRITE_LOCK_MS - (elapsedRealtimeMs() - lastWriteAt)
+                WRITE_LOCK_MS - (now - lastWriteAt)
             } else {
                 0L
             }
-            if (remaining <= 0L && pendingJob == null) {
+            if (remaining <= 0L && commandQueue.isEmpty() && workerJob == null) {
                 hasWritten = true
-                lastWriteAt = elapsedRealtimeMs()
+                lastWriteAt = now
                 immediate = command
             } else {
-                pendingCommand = command
-                if (pendingJob == null) {
-                    pendingJob = queueScope.launch {
-                        delay(remaining.coerceAtLeast(1L))
-                        val pending = queueMutex.withLock {
-                            pendingJob = null
-                            hasWritten = true
-                            lastWriteAt = elapsedRealtimeMs()
-                            pendingCommand.also { pendingCommand = null }
-                        }
-                        pending?.let { execute(it) }
-                    }
-                }
+                commandQueue.addLast(command)
+                ensureWorkerLocked()
             }
         }
         immediate?.let { execute(it) }
+    }
+
+    private fun ensureWorkerLocked() {
+        if (workerJob?.isActive == true) return
+        workerJob = queueScope.launch {
+            while (true) {
+                var waitTime = 0L
+                val nextCommand: Command? = queueMutex.withLock {
+                    if (commandQueue.isEmpty()) {
+                        workerJob = null
+                        return@launch
+                    }
+                    val now = elapsedRealtimeMs()
+                    val remaining = if (hasWritten) {
+                        WRITE_LOCK_MS - (now - lastWriteAt)
+                    } else {
+                        0L
+                    }
+                    if (remaining > 0L) {
+                        waitTime = remaining
+                        null
+                    } else {
+                        hasWritten = true
+                        lastWriteAt = now
+                        commandQueue.removeFirst()
+                    }
+                }
+
+                if (nextCommand != null) {
+                    execute(nextCommand)
+                } else if (waitTime > 0L) {
+                    delay(waitTime)
+                }
+            }
+        }
     }
 
     private suspend fun execute(command: Command) {
@@ -166,10 +191,12 @@ class SimklScrobbler @Inject constructor(
                 progress = normProgress
             )
         } else {
-            val series = SimklShowRef(ids = SimklIds(tmdb = tmdbId))
+            val series = SimklShowRef(
+                ids = SimklIds(tmdb = tmdbId),
+                useTvdbAnimeSeasons = if (isAnime) true else null
+            )
             SimklScrobbleBody(
-                show = series.takeUnless { isAnime },
-                anime = series.takeIf { isAnime },
+                show = series,
                 episode = if (season != null && episode != null) {
                     SimklEpisodeRef(season = season, number = episode)
                 } else null,

@@ -254,6 +254,7 @@ private fun Quality.rank(): Int = when (this) {
     Quality.FHD -> 3
     Quality.HD -> 2
     Quality.SD -> 1
+    Quality.UNKNOWN -> 0
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -450,8 +451,15 @@ fun PlaybackDiagnosticBanner(
     diagnostic: PlaybackDiagnostic?,
     modifier: Modifier = Modifier,
 ) {
+    var visible by remember(diagnostic) { mutableStateOf(diagnostic != null) }
+    LaunchedEffect(diagnostic) {
+        if (diagnostic != null) {
+            kotlinx.coroutines.delay(8_000)
+            visible = false
+        }
+    }
     AnimatedVisibility(
-        visible = diagnostic != null,
+        visible = visible,
         enter = fadeIn(),
         exit = fadeOut(),
         modifier = modifier,
@@ -628,7 +636,7 @@ private fun VariantRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text(
+        if (channel.quality != Quality.UNKNOWN) Text(
             text = channel.quality.label,
             style = LiveType.Badge.copy(color = LiveColors.Fg),
             modifier = Modifier

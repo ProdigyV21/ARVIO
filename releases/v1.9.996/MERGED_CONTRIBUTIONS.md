@@ -1,0 +1,61 @@
+# ARVIO v1.9.996: Merged Contributions
+
+The **55 pull requests merged in the history** between v1.9.995 and [e3ffc89f](https://github.com/ProdigyV21/ARVIO/commit/e3ffc89fe52815560decf82f63a488f4c0efe3f0). **54 remain effective; #655 was reverted before release.** Titles retain the authors' wording. Follow the PR links for the implementation and review history, including maintainer follow-up fixes.
+
+- [#518](https://github.com/ProdigyV21/ARVIO/pull/518) fix: “Continue watching” does not display titles with the updated language - [@Aaronnn17](https://github.com/Aaronnn17).
+- [#580](https://github.com/ProdigyV21/ARVIO/pull/580) refactor(core): harden exception safety, coroutine cancellation, and memory optimization - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#586](https://github.com/ProdigyV21/ARVIO/pull/586) perf(build): reduce APK size via WebP assets, resource shrinking, and ARM-universal APK - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#591](https://github.com/ProdigyV21/ARVIO/pull/591) feat(settings): Add Stalker portal configuration for live TV - [@ReichiMD](https://github.com/ReichiMD).
+- [#592](https://github.com/ProdigyV21/ARVIO/pull/592) fix(discord): streamline mobile direct auth, polish TV QR pairing, and secure OAuth flow - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#593](https://github.com/ProdigyV21/ARVIO/pull/593) AI bitmap subtitle fixes and translations - [@silentbil](https://github.com/silentbil).
+- [#596](https://github.com/ProdigyV21/ARVIO/pull/596) subtitles best match improvements - [@silentbil](https://github.com/silentbil).
+- [#598](https://github.com/ProdigyV21/ARVIO/pull/598) feat(mobile): progressive home UX, smooth transitions, predictive back, and instant details hydration - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#599](https://github.com/ProdigyV21/ARVIO/pull/599) fix(mobile): compact bottom navigation in phone landscape - [@Saelon600](https://github.com/Saelon600).
+- [#600](https://github.com/ProdigyV21/ARVIO/pull/600) fix(iptv): keep the guide visible on landscape phones - [@Saelon600](https://github.com/Saelon600).
+- [#601](https://github.com/ProdigyV21/ARVIO/pull/601) fix(iptv): reload EPG during manual playlist refresh - [@Saelon600](https://github.com/Saelon600).
+- [#602](https://github.com/ProdigyV21/ARVIO/pull/602) fix(player): stop autoplay before unaired episodes - [@Saelon600](https://github.com/Saelon600).
+- [#603](https://github.com/ProdigyV21/ARVIO/pull/603) feat(iptv): group Live TV categories by playlist order - [@Saelon600](https://github.com/Saelon600).
+- [#604](https://github.com/ProdigyV21/ARVIO/pull/604) feat(iptv): add Watch Live and Stream Now guide actions - [@Saelon600](https://github.com/Saelon600).
+- [#605](https://github.com/ProdigyV21/ARVIO/pull/605) telegram fixes - [@silentbil](https://github.com/silentbil).
+- [#606](https://github.com/ProdigyV21/ARVIO/pull/606) feat(subtitles): add selectable accessible font families - [@Saelon600](https://github.com/Saelon600).
+- [#607](https://github.com/ProdigyV21/ARVIO/pull/607) feat(iptv): support multiple configurable Stalker portals with per-portal groups - [@ReichiMD](https://github.com/ReichiMD).
+- [#608](https://github.com/ProdigyV21/ARVIO/pull/608) fix(mobile): compact details backdrop in phone landscape - [@Saelon600](https://github.com/Saelon600).
+- [#610](https://github.com/ProdigyV21/ARVIO/pull/610) feat(mobile-player): comprehensive mobile player interface overhaul &amp; modular architecture - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#611](https://github.com/ProdigyV21/ARVIO/pull/611) fix: EPG hidden categories dropdown shows even when all groups in a category are hidden - [@Saelon600](https://github.com/Saelon600).
+- [#612](https://github.com/ProdigyV21/ARVIO/pull/612) fix(home): preserve profile catalog ordering on progressive mobile loads - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#613](https://github.com/ProdigyV21/ARVIO/pull/613) fix(tv): guard focus restorer against uninitialized FocusRequester - [@ReichiMD](https://github.com/ReichiMD).
+- [#615](https://github.com/ProdigyV21/ARVIO/pull/615) i18n(de): translate player, subtitles, trailer and media detail - [@ReichiMD](https://github.com/ReichiMD).
+- [#616](https://github.com/ProdigyV21/ARVIO/pull/616) i18n(de): translate settings - [@ReichiMD](https://github.com/ReichiMD).
+- [#617](https://github.com/ProdigyV21/ARVIO/pull/617) i18n(de): translate live tv, epg, iptv, collections and stalker portals - [@ReichiMD](https://github.com/ReichiMD).
+- [#618](https://github.com/ProdigyV21/ARVIO/pull/618) i18n(de): translate updates, errors, profile, auth, plugins and streams - [@ReichiMD](https://github.com/ReichiMD).
+- [#619](https://github.com/ProdigyV21/ARVIO/pull/619) docs: improve README branding and badges - [@keviiixaviiii](https://github.com/keviiixaviiii).
+- [#620](https://github.com/ProdigyV21/ARVIO/pull/620) feat(web): update arvio-logo.svg with centered official brand mark - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#621](https://github.com/ProdigyV21/ARVIO/pull/621) fix(iptv): stop resurrecting a disabled M3U playlist via the legacy m3uUrl fallback - [@ReichiMD](https://github.com/ReichiMD).
+- [#622](https://github.com/ProdigyV21/ARVIO/pull/622) fix(stalker): show the configured portal name instead of the raw id in the playlist sidebar (multi-portal setups) - [@ReichiMD](https://github.com/ReichiMD).
+- [#623](https://github.com/ProdigyV21/ARVIO/pull/623) feat(stalker): add EPG guide support - [@ReichiMD](https://github.com/ReichiMD).
+- [#624](https://github.com/ProdigyV21/ARVIO/pull/624) chore(ios): remove ios builds, workflows, and documentation - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#626](https://github.com/ProdigyV21/ARVIO/pull/626) feat: Iptv toggles - [@Aaronnn17](https://github.com/Aaronnn17).
+- [#627](https://github.com/ProdigyV21/ARVIO/pull/627) fix encoding issue in subtitles - [@silentbil](https://github.com/silentbil).
+- [#628](https://github.com/ProdigyV21/ARVIO/pull/628) feat(iptv): add VOD search toggle and fix IPTV catalog resolution &amp; legacy compatibility - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#630](https://github.com/ProdigyV21/ARVIO/pull/630) Cache home screen and fix slowness on cold start - [@silentbil](https://github.com/silentbil).
+- [#631](https://github.com/ProdigyV21/ARVIO/pull/631) i18n(de): add the two missing German IPTV VOD strings - [@ReichiMD](https://github.com/ReichiMD).
+- [#632](https://github.com/ProdigyV21/ARVIO/pull/632) i18n(plugins/crash/watchlist): move hardcoded UI strings into string resources - [@ReichiMD](https://github.com/ReichiMD).
+- [#633](https://github.com/ProdigyV21/ARVIO/pull/633) feat(details): show age certification on movie and show details - [@ReichiMD](https://github.com/ReichiMD).
+- [#634](https://github.com/ProdigyV21/ARVIO/pull/634) i18n(player): move hardcoded UI strings into string resources - [@ReichiMD](https://github.com/ReichiMD).
+- [#635](https://github.com/ProdigyV21/ARVIO/pull/635) fix(iptv): normalize non-ASCII letters in title matching instead of dropping them - [@ReichiMD](https://github.com/ReichiMD).
+- [#636](https://github.com/ProdigyV21/ARVIO/pull/636) iptv improvements - [@silentbil](https://github.com/silentbil).
+- [#640](https://github.com/ProdigyV21/ARVIO/pull/640) i18n(home): localize the remaining preinstalled catalog rows - [@ReichiMD](https://github.com/ReichiMD).
+- [#641](https://github.com/ProdigyV21/ARVIO/pull/641) i18n(player): resolve PlayerViewModel messages in the composable - [@ReichiMD](https://github.com/ReichiMD).
+- [#642](https://github.com/ProdigyV21/ARVIO/pull/642) i18n(home/search): localize TMDB genre names and discover row titles - [@ReichiMD](https://github.com/ReichiMD).
+- [#643](https://github.com/ProdigyV21/ARVIO/pull/643) i18n(settings): move SettingsViewModel status messages into string resources - [@ReichiMD](https://github.com/ReichiMD).
+- [#645](https://github.com/ProdigyV21/ARVIO/pull/645) Unify TV hero layout and refine positioning and scrolling - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#647](https://github.com/ProdigyV21/ARVIO/pull/647) feat(tv): unify IPTV, Xtream, and Stalker portal setup into widescreen modal - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#649](https://github.com/ProdigyV21/ARVIO/pull/649) fix(search): fix TV filter focus reversion and align mobile catalog layout - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#650](https://github.com/ProdigyV21/ARVIO/pull/650) feat(i18n): add Brazilian Portuguese (pt-BR) translation (closes #648) - [@procopio1000](https://github.com/procopio1000).
+- [#651](https://github.com/ProdigyV21/ARVIO/pull/651) fix(player): restore stream loading screen overlay and launch player instantly on play click - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#652](https://github.com/ProdigyV21/ARVIO/pull/652) fix(player): resolve mobile landscape exit flow and key back handling - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#653](https://github.com/ProdigyV21/ARVIO/pull/653) fix(navigation): load mobile bottom nav bar on initial cloud connect - [@Himanth-reddy](https://github.com/Himanth-reddy).
+- [#654](https://github.com/ProdigyV21/ARVIO/pull/654) i18n(settings/live): move hardcoded UI strings into string resources - [@ReichiMD](https://github.com/ReichiMD).
+- [#655](https://github.com/ProdigyV21/ARVIO/pull/655) Refactor to decouple plugins and extensions from main branch - [@Himanth-reddy](https://github.com/Himanth-reddy). **Reverted before release; listed for historical credit only.**
+
+Direct maintainer commits, co-authors, test work, and automated development contributions are credited individually in [the complete commit changelog](COMMIT_CHANGELOG.md).

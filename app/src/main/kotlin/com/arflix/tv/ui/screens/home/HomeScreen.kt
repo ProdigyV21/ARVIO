@@ -2,6 +2,7 @@
 
 package com.arflix.tv.ui.screens.home
 
+import com.arflix.tv.ui.components.LocalBottomBarInset
 import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.graphics.Bitmap
@@ -47,6 +48,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -137,8 +139,9 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.isPortrait
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.ui.components.FeaturedMediaCard
+import com.arflix.tv.ui.components.movieGenreNameRes
+import com.arflix.tv.ui.components.tvGenreNameRes
 import com.arflix.tv.ui.components.MediaCard as ArvioMediaCard
-import com.arflix.tv.ui.components.TrailerPlayer
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
@@ -197,7 +200,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import dagger.hilt.android.EntryPointAccessors
-import com.arflix.tv.ui.components.TrailerPlayerEntryPoint
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.abs
@@ -216,32 +218,23 @@ private object HomeRegexes {
     val WHITESPACE = Regex("\\s+")
 }
 
-private fun cleanOverviewText(value: String): String {
+private fun Context.cleanOverviewText(value: String): String {
     return value
         .replace(HomeRegexes.HTML_TAG, " ")
         .replace(HomeRegexes.NON_BREAKING_SPACE, " ")
         .replace(HomeRegexes.UNICODE_SPACE, " ")
         .replace(HomeRegexes.WHITESPACE, " ")
         .trim()
-        .ifBlank { "No description available." }
+        .ifBlank { getString(R.string.home_no_description) }
 }
 
-// Genre ID to name mapping (TMDB standard)
-private val movieGenres = mapOf(
-    28 to "Action", 12 to "Adventure", 16 to "Animation", 35 to "Comedy",
-    80 to "Crime", 99 to "Documentary", 18 to "Drama", 10751 to "Family",
-    14 to "Fantasy", 36 to "History", 27 to "Horror", 10402 to "Music",
-    9648 to "Mystery", 10749 to "Romance", 878 to "Sci-Fi", 10770 to "TV Movie",
-    53 to "Thriller", 10752 to "War", 37 to "Western"
-)
-
-private val tvGenres = mapOf(
-    10759 to "Action & Adventure", 16 to "Animation", 35 to "Comedy",
-    80 to "Crime", 99 to "Documentary", 18 to "Drama", 10751 to "Family",
-    10762 to "Kids", 9648 to "Mystery", 10763 to "News", 10764 to "Reality",
-    10765 to "Sci-Fi & Fantasy", 10766 to "Soap", 10767 to "Talk",
-    10768 to "War & Politics", 37 to "Western"
-)
+// Genre ID to display name (TMDB standard). The numeric id stays the key;
+// only the rendered label is localized — see `TmdbGenreNames.kt`.
+private fun Context.genreNames(mediaType: MediaType, genreIds: List<Int>): List<String> =
+    genreIds.mapNotNull { id ->
+        val res = if (mediaType == MediaType.TV) tvGenreNameRes(id) else movieGenreNameRes(id)
+        res?.let { getString(it) }
+    }
 
 @Stable
 private class HomeFocusState(
@@ -480,9 +473,9 @@ private suspend fun androidx.compose.foundation.lazy.LazyListState.animateHomeSc
         animate(
             initialValue = 0f,
             targetValue = targetDelta,
-            animationSpec = spring(
-                dampingRatio = 0.85f,
-                stiffness = 200f
+            animationSpec = tween(
+                durationMillis = durationMillis,
+                easing = FastOutSlowInEasing
             )
         ) { value, _ ->
             val step = value - previousValue
@@ -1120,16 +1113,6 @@ fun HomeScreen(
                     )
                 }
 
-                // YouTube trailer auto-play — on TV, trailer plays inside the focused card instead
-                if ((isMobile || !uiState.trailerInCards) && heroVideoUrl == null && uiState.trailerAutoPlay && uiState.heroTrailerKey != null && !trailerSuppressed && !heroRowIsContinueWatching) {
-                    TrailerPlayer(
-                        youtubeKey = uiState.heroTrailerKey!!,
-                        delayMs = uiState.trailerDelaySeconds * 1000L,
-                        volume = if (uiState.trailerSoundEnabled) 1f else 0f,
-                        onPlayingChanged = { playing -> isTrailerPlaying = playing },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
 
                 // === SCRIM SYSTEM ===
                 Box(
@@ -1261,7 +1244,7 @@ fun HomeScreen(
             onNavigateToSettings = onNavigateToSettings,
             onSwitchProfile = onSwitchProfile,
             onExitApp = onExitApp,
-            featuredTrailerKey = if (!isMobile && uiState.trailerInCards && uiState.trailerAutoPlay && !trailerSuppressed && !heroRowIsContinueWatching) uiState.heroTrailerKey else null,
+            featuredTrailerKey = null,
             featuredTrailerDelayMs = uiState.trailerDelaySeconds * 1000L,
             featuredTrailerVolume = if (uiState.trailerSoundEnabled) 1f else 0f,
             onOpenContextMenu = { item, isContinue ->
@@ -1437,17 +1420,18 @@ private fun HeroSection(
     // Use primary shadow for text (Compose only supports one shadow per text)
     // But the frosted pill provides additional protection
     val textShadow = textShadowPrimary
-    val heroTextWidth = 360.dp
+    val heroTextWidth = 420.dp
+    val configuration = LocalConfiguration.current
+    val isCompactHeight = configuration.screenHeightDp < 720
+    val logoHeight = if (isCompactHeight) 64.dp else 72.dp
 
     Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Bottom
+        modifier = modifier
     ) {
         // Performance: Instant logo transition, no animation overhead
         key(logoUrl, item.id) {
             val currentLogoUrl = logoUrl
             val currentItem = item
-            val configuration = LocalConfiguration.current
             val showInCinema = remember(currentItem.releaseDate, currentItem.mediaType) {
                 isInCinema(currentItem)
             }
@@ -1457,7 +1441,7 @@ private fun HeroSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Box(
-                    modifier = Modifier.height(72.dp),
+                    modifier = Modifier.height(logoHeight),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     if (currentLogoUrl != null) {
@@ -1561,9 +1545,8 @@ private fun HeroSection(
                     }
                 } else {
                     // Get actual genre names from genre IDs (memoized to avoid list allocations per recomposition)
-                    val genreText = remember(currentItem.id, currentItem.genreIds) {
-                        val genreMap = if (currentItem.mediaType == MediaType.TV) tvGenres else movieGenres
-                        currentItem.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" / ")
+                    val genreText = remember(currentItem.id, currentItem.genreIds, context) {
+                        context.genreNames(currentItem.mediaType, currentItem.genreIds).take(2).joinToString(" / ")
                     }
                     val displayDate = currentItem.releaseDate?.takeIf { it.isNotEmpty() } ?: currentItem.year
                     val hasDuration = currentItem.duration.isNotEmpty() && currentItem.duration != "0m"
@@ -1587,10 +1570,10 @@ private fun HeroSection(
 
                     Column(
                         modifier = Modifier.width(heroTextWidth),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -1613,7 +1596,7 @@ private fun HeroSection(
                                             fontSize = 13.sp,
                                             shadow = textShadow
                                         ),
-                                        color = Color.White.copy(alpha = 0.7f)
+                                        color = Color.White.copy(alpha = 0.6f)
                                     )
                                 }
                             }
@@ -1641,7 +1624,7 @@ private fun HeroSection(
                                             fontSize = 13.sp,
                                             shadow = textShadow
                                         ),
-                                        color = Color.White.copy(alpha = 0.7f)
+                                        color = Color.White.copy(alpha = 0.6f)
                                     )
                                 }
                                 Text(
@@ -1676,9 +1659,10 @@ private fun HeroSection(
                                         imageLoader = metadataLogoImageLoader,
                                         contentDescription = stringResource(R.string.home_cd_primary_provider),
                                         contentScale = ContentScale.Fit,
+                                        alignment = Alignment.CenterStart,
                                         modifier = Modifier
                                             .height(16.dp)
-                                            .width(58.dp)
+                                            .width(52.dp)
                                     )
 
                                     if (hasRatingMetadata || hasBudgetMetadata) {
@@ -1698,8 +1682,8 @@ private fun HeroSection(
                                         rating = rating,
                                         imageLoader = metadataLogoImageLoader,
                                         ratingFontSize = 13,
-                                        logoWidth = 36.dp,
-                                        logoHeight = 15.dp,
+                                        logoWidth = 28.dp,
+                                        logoHeight = 14.dp,
                                         textShadow = textShadow
                                     )
 
@@ -1734,29 +1718,29 @@ private fun HeroSection(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Overview text (EPG data for IPTV, synopsis for movies/shows)
-                val displayOverview = remember(overviewOverride, currentItem.overview) {
-                    cleanOverviewText(overviewOverride ?: currentItem.overview)
+                val displayOverview = remember(overviewOverride, currentItem.overview, context) {
+                    context.cleanOverviewText(overviewOverride ?: currentItem.overview)
                 }
 
-                val overviewMaxHeight = 72.dp
+                val overviewMaxHeight = if (isCompactHeight) 38.dp else 56.dp
                 Box(
                     modifier = Modifier
-                        .width(360.dp)
-                        .height(overviewMaxHeight)
+                        .width(heroTextWidth)
+                        .heightIn(max = overviewMaxHeight)
                 ) {
                     Text(
                         text = displayOverview,
                         style = ArflixTypography.body.copy(
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
-                            lineHeight = 16.sp,
+                            lineHeight = 15.sp,
                             shadow = textShadow
                         ),
                         color = Color.White.copy(alpha = 0.9f),
-                        maxLines = 4,
+                        maxLines = if (isCompactHeight) 2 else 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -1845,16 +1829,12 @@ private fun HomeHeroLayer(
     } else {
         // TV hero: full-screen overlay with clearlogo
         val configuration = LocalConfiguration.current
-        val contentRowHeight = (configuration.screenHeightDp * 0.34f).dp.coerceIn(240.dp, 320.dp)
-        val contentRowBottomPadding = 12.dp
-        val contentRowTopPadding = contentRowHeight + contentRowBottomPadding
-        val buttonsBottomPadding = contentRowTopPadding - 10.dp
-        val heroBottomPadding = buttonsBottomPadding + if (configuration.screenHeightDp < 720) 34.dp else 34.dp
+        val isCompactHeight = configuration.screenHeightDp < 720
+        val heroTopPadding = AppTopBarContentTopInset + if (isCompactHeight) 10.dp else 16.dp
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = AppTopBarContentTopInset)
                 .zIndex(3f)
         ) {
             heroItem?.let { item ->
@@ -1865,12 +1845,12 @@ private fun HomeHeroLayer(
                         overviewOverride = heroOverviewOverride,
                         showBudget = showBudget,
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
+                            .align(Alignment.TopStart)
                             .padding(
+                                top = heroTopPadding,
                                 start = contentStartPadding,
                                 end = 400.dp
                             )
-                            .offset(y = -heroBottomPadding)
                     )
                 }
             }
@@ -1906,17 +1886,16 @@ private fun MobileHeroOverlay(
         blurRadius = 8f
     )
 
-    val genreText = remember(item.id, item.genreIds) {
-        val genreMap = if (item.mediaType == MediaType.TV) tvGenres else movieGenres
-        item.genreIds.mapNotNull { genreMap[it] }.take(2).joinToString(" | ")
+    val genreText = remember(item.id, item.genreIds, context) {
+        context.genreNames(item.mediaType, item.genreIds).take(2).joinToString(" | ")
     }
     val year = item.releaseDate?.take(4)?.takeIf { it.isNotEmpty() } ?: item.year
     val rating = imdbRatingFor(item)
     val ratingValue = parseRatingValue(rating)
     val hasMetadata = genreText.isNotEmpty() || year.isNotEmpty() || ratingValue > 0f
 
-    val displayOverview = remember(overviewOverride, item.overview) {
-        cleanOverviewText(overviewOverride ?: item.overview)
+    val displayOverview = remember(overviewOverride, item.overview, context) {
+        context.cleanOverviewText(overviewOverride ?: item.overview)
     }
 
     Box(
@@ -2101,6 +2080,7 @@ private fun MobileHeroCarousel(
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit,
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val heroItems = remember(categories) {
         val eligibleRows = categories.filter {
             it.id != "continue_watching" &&
@@ -2244,9 +2224,8 @@ private fun MobileHeroCarousel(
             modifier = Modifier.fillMaxWidth()
         ) { page ->
             val item = heroItems[page % heroItems.size]
-            val genres = remember(item.id, item.genreIds) {
-                val genreMap = if (item.mediaType == MediaType.TV) tvGenres else movieGenres
-                item.genreIds.mapNotNull { genreMap[it] }.take(3)
+            val genres = remember(item.id, item.genreIds, context) {
+                context.genreNames(item.mediaType, item.genreIds).take(3)
             }
             // releaseDate is stored as "d MMM yyyy" by MediaRepository.formatDate()
             val year = remember(item.id, item.releaseDate, item.year) {
@@ -2945,7 +2924,7 @@ private fun MobileHomeRowsLayer(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp),
+        contentPadding = PaddingValues(bottom = 16.dp + LocalBottomBarInset.current),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // Hero carousel — profile/search row + banner card pager
@@ -3147,12 +3126,12 @@ private fun MobileHomeRowsLayer(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Still loading your catalogue…",
+                        text = stringResource(R.string.home_still_loading_catalogue),
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 14.sp
                     )
                     TextButton(onClick = onRetry) {
-                        Text("Retry", color = Color(0xFF00F0D0), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.retry), color = Color(0xFF00F0D0), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -3259,7 +3238,7 @@ private fun TvHomeRowsLayer(
             .fillMaxSize()
             .padding(top = 24.dp)
     ) {
-        val rowsViewportHeight = (maxHeight * 0.31f).coerceIn(260.dp, 340.dp)
+        val rowsViewportHeight = if (maxHeight < 600.dp) 238.dp else (maxHeight * 0.35f).coerceIn(260.dp, 340.dp)
         val listState = rememberLazyListState()
         var lastAppliedTargetIndex by remember { mutableIntStateOf(-1) }
         val targetIndex = localCurrentRowIndex.coerceIn(0, (renderedCategories.size - 1).coerceAtLeast(0))
@@ -3283,30 +3262,13 @@ private fun TvHomeRowsLayer(
                 if (smoothScrolling) {
                     val visibleTarget = listState.layoutInfo.visibleItemsInfo
                         .firstOrNull { it.index == targetIndex }
-                    val deltaPx = if (visibleTarget != null) {
-                        visibleTarget.offset.toFloat()
+                    if (visibleTarget != null) {
+                        listState.animateHomeScrollDelta(
+                            deltaPx = visibleTarget.offset.toFloat(),
+                            durationMillis = if (jumpDistance >= 3) 150 else 120
+                        )
                     } else {
-                        if (targetIndex < currentIndex) {
-                            val intermediateSum = (targetIndex until currentIndex).sumOf { idx ->
-                                categoryHeightsPx.getOrNull(idx)?.toDouble() ?: (202.0 * density.density)
-                            }.toFloat()
-                            -(intermediateSum + currentOffset)
-                        } else {
-                            val intermediateSum = (currentIndex until targetIndex).sumOf { idx ->
-                                categoryHeightsPx.getOrNull(idx)?.toDouble() ?: (202.0 * density.density)
-                            }.toFloat()
-                            intermediateSum - currentOffset
-                        }
-                    }
-                    listState.animateHomeScrollDelta(
-                        deltaPx = deltaPx,
-                        durationMillis = if (jumpDistance >= 3) 180 else 150
-                    )
-                    if (
-                        listState.firstVisibleItemIndex != targetIndex ||
-                        abs(listState.firstVisibleItemScrollOffset) > 6
-                    ) {
-                        listState.scrollToItem(index = targetIndex, scrollOffset = 0)
+                        listState.animateScrollToItem(index = targetIndex, scrollOffset = 0)
                     }
                 } else {
                     listState.animateScrollToItem(index = targetIndex, scrollOffset = 0)
@@ -3329,8 +3291,7 @@ private fun TvHomeRowsLayer(
                 contentPadding = PaddingValues(bottom = rowsViewportHeight),
                 modifier = Modifier
                     .fillMaxSize()
-                    .arvioDpadFocusGroup(enableFocusRestorer = false)
-                    .clipToBounds(),
+                    .arvioDpadFocusGroup(enableFocusRestorer = false),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 itemsIndexed(
@@ -3660,22 +3621,6 @@ private fun ContentRow(
     val featuredExpanded = hasFeaturedCard && isCurrentRow &&
         featuredExpandedForIndex == focusedItemIndex && focusedItemIndex >= 0
     val context = LocalContext.current
-    val trailerExtractor = remember {
-        EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            TrailerPlayerEntryPoint::class.java
-        ).inAppYouTubeExtractor()
-    }
-    // Pre-warm the URL cache the moment a card gets focus — races ahead of the
-    // expansion delay so the cache is populated by the time the card expands.
-    LaunchedEffect(focusedItemIndex, featuredTrailerKey) {
-        val key = featuredTrailerKey ?: return@LaunchedEffect
-        if (!hasFeaturedCard || !isCurrentRow || focusedItemIndex < 0) return@LaunchedEffect
-        withContext(Dispatchers.IO) {
-            try { trailerExtractor.extractPlaybackSource("https://www.youtube.com/watch?v=$key") }
-            catch (_: Exception) {}
-        }
-    }
     LaunchedEffect(focusedItemIndex, hasFeaturedCard) {
         featuredExpandedForIndex = -1
         if (hasFeaturedCard && isCurrentRow && focusedItemIndex >= 0) {

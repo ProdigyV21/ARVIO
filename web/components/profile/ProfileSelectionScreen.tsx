@@ -3,9 +3,11 @@
 import { Cloud, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/lib/store";
+import { config } from "@/lib/config";
 import type { Profile } from "@/lib/types";
 import { ProfileAvatarVisual } from "./ProfileAvatar";
 import { ProfileDialog } from "./ProfileDialog";
+import { PinDialog } from "./PinDialog";
 
 export function ProfileSelectionScreen() {
   const {
@@ -16,14 +18,16 @@ export function ProfileSelectionScreen() {
 
   const [dialog, setDialog] = useState<{ mode: "add" | "edit"; profile?: Profile } | null>(null);
   const [openingProfileId, setOpeningProfileId] = useState<string | null>(null);
+  const [lockedProfile, setLockedProfile] = useState<Profile | null>(null);
 
-  const openProfile = (profile: Profile) => {
+  const openProfile = (profile: Profile, pin?: string) => {
+    if (profile.isLocked && profile.pin && !pin) { setLockedProfile(profile); return; }
     if (manageMode) {
       setDialog({ mode: "edit", profile });
       return;
     }
     setOpeningProfileId(profile.id);
-    void selectProfile(profile);
+    void selectProfile(profile, pin).finally(() => setOpeningProfileId(null));
   };
 
   return (
@@ -68,7 +72,7 @@ export function ProfileSelectionScreen() {
           {manageMode ? "Done" : "Manage Profiles"}
         </button>
 
-        {!auth && (
+        {!auth && !config.selfHosted && (
           <button
             type="button"
             className="cloud-connect-btn"
@@ -83,6 +87,10 @@ export function ProfileSelectionScreen() {
         )}
       </div>
 
+      {lockedProfile && <PinDialog profile={lockedProfile} onClose={() => setLockedProfile(null)} onUnlock={(pin) => {
+        openProfile(lockedProfile, pin);
+        setLockedProfile(null);
+      }} />}
       {dialog && (
         <ProfileDialog
           mode={dialog.mode}

@@ -385,7 +385,7 @@ private fun SearchResultRow(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
+            if (channel.quality != Quality.UNKNOWN) Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .background(LiveColors.Panel)

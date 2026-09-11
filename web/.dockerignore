@@ -1,0 +1,10 @@
+node_modules
+.next
+.netlify
+.git
+.env*
+*.log
+*.tsbuildinfo
+tests
+docs
+compose.yaml

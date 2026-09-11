@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.arflix.tv.data.model.DrmInfo
 import com.arflix.tv.data.model.IptvChannel
+import com.arflix.tv.data.model.PlaylistGroupKey
 import com.google.gson.Gson
 
 /**
@@ -63,6 +64,7 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
                 quality_label TEXT,
                 variant_key TEXT,
                 drm_json TEXT,
+                stalker_direct_stream INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(source_key, ord)
             )
             """.trimIndent()
@@ -82,7 +84,7 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion in 3..5) {
+        if (oldVersion in 3..6) {
             if (oldVersion < 4 && newVersion >= 4) {
                 db.execSQL("ALTER TABLE channel_sources ADD COLUMN group_summary_json TEXT")
             }
@@ -93,9 +95,12 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
                 db.execSQL("DROP INDEX IF EXISTS idx_channels_group")
                 db.execSQL("CREATE INDEX idx_channels_group ON channels(source_key, group_title, ord)")
             }
+            if (oldVersion < 7 && newVersion >= 7) {
+                db.execSQL("ALTER TABLE channels ADD COLUMN stalker_direct_stream INTEGER NOT NULL DEFAULT 0")
+            }
             return
         }
-        if (oldVersion !in 3..5) {
+        if (oldVersion !in 3..6) {
             db.execSQL("DROP TABLE IF EXISTS channels")
             db.execSQL("DROP TABLE IF EXISTS channel_sources")
             onCreate(db)
@@ -125,7 +130,7 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
                                 (source_key, ord, id, name, stream_url, group_title, logo, epg_id, raw_title,
                                  xtream_stream_id, catchup_days, catchup_type, catchup_source, tvg_name,
                                  provider_channel_number, request_headers_json, language, country, quality_label,
-                                 variant_key, drm_json)
+                                 variant_key, drm_json, stalker_direct_stream)
                                 VALUES $values
                                 """.trimIndent()
                             )
@@ -198,6 +203,9 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
     /** Read every channel for [sourceKey] in original order, streamed from the cursor. */
     fun loadAll(sourceKey: String): List<IptvChannel> = window(sourceKey, offset = 0, limit = -1)
 
+    fun loadStartupChannels(sourceKey: String, fullLoadThreshold: Int, previewLimit: Int): List<IptvChannel> =
+        if (count(sourceKey) > fullLoadThreshold) window(sourceKey, 0, previewLimit) else loadAll(sourceKey)
+
     /**
      * Windowed read — `ORDER BY ord LIMIT/OFFSET`. Pass [limit] < 0 for "all".
      * Used by the paged channel list so only the visible slice is materialised.
@@ -226,12 +234,25 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
         return windowForPlaylistGroup(sourceKey, playlistId = null, groupTitle = groupTitle, offset = offset, limit = limit)
     }
 
+    /** Sequential metadata scan without decoding stream headers, DRM or channel objects. */
+    fun visitLabels(sourceKey: String, playlistId: String?, visitor: (String, String, String) -> Unit) {
+        if (sourceKey.isBlank()) return
+        val scoped = !playlistId.isNullOrBlank()
+        val sql = "SELECT id,name,group_title FROM channels WHERE source_key = ?" +
+            (if (scoped) " AND (id LIKE ? OR id LIKE ?)" else "") + " ORDER BY ord"
+        val args = if (scoped) arrayOf(sourceKey, "$playlistId:%", "stalker:$playlistId:%") else arrayOf(sourceKey)
+        readableDatabase.rawQuery(sql, args).use { cursor ->
+            while (cursor.moveToNext()) visitor(cursor.getString(0), cursor.getString(1), cursor.getString(2))
+        }
+    }
+
     fun windowForPlaylistGroup(
         sourceKey: String,
         playlistId: String?,
         groupTitle: String?,
         offset: Int,
-        limit: Int
+        limit: Int,
+        excludedGroups: Set<String> = emptySet(),
     ): List<IptvChannel> {
         if (sourceKey.isBlank()) return emptyList()
         fun query(normalizedGroup: Boolean): List<IptvChannel> {
@@ -245,6 +266,9 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
                 if (byGroup) {
                     if (normalizedGroup) append(" AND trim(group_title) = ?") else append(" AND group_title = ?")
                 }
+                excludedGroups.forEach { _ ->
+                    append(" AND NOT (trim(group_title) = ? AND (id LIKE ? OR id LIKE ?))")
+                }
                 append(" ORDER BY ord")
                 if (limit >= 0) append(" LIMIT ").append(limit).append(" OFFSET ").append(offset.coerceAtLeast(0))
             }
@@ -255,6 +279,12 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
                     add("stalker:${playlistId}:%")
                 }
                 if (byGroup) add(if (normalizedGroup) groupTitle!!.trim() else groupTitle!!)
+                excludedGroups.forEach { rawKey ->
+                    val key = PlaylistGroupKey(rawKey)
+                    add(key.groupName.trim())
+                    add("${key.playlistId}:%")
+                    add("stalker:${key.playlistId}:%")
+                }
             }.toTypedArray()
             return readableDatabase.rawQuery(sql, args).use { cursor ->
                 val out = ArrayList<IptvChannel>(if (limit in 1..100_000) limit else cursor.count)
@@ -304,9 +334,24 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
         val byGroup = !groupTitle.isNullOrEmpty()
         val normalizedPlaylistId = playlistId?.trim().orEmpty()
         val byPlaylist = normalizedPlaylistId.isNotEmpty()
+        val targetSql = buildString {
+            append("SELECT ord FROM channels WHERE source_key = ? AND id = ?")
+            if (byPlaylist) append(" AND (id LIKE ? OR id LIKE ?)")
+            if (byGroup) append(" AND group_title = ?")
+            append(" LIMIT 1")
+        }
+        val targetArgs = buildList {
+            add(sourceKey)
+            add(channelId)
+            if (byPlaylist) {
+                add("$normalizedPlaylistId:%")
+                add("stalker:$normalizedPlaylistId:%")
+            }
+            if (byGroup) add(groupTitle!!)
+        }.toTypedArray()
         val target = readableDatabase.rawQuery(
-            "SELECT ord FROM channels WHERE source_key = ? AND id = ? LIMIT 1",
-            arrayOf(sourceKey, channelId)
+            targetSql,
+            targetArgs
         ).use { c -> if (c.moveToFirst()) c.getLong(0) else return -1 }
         val sql = buildString {
             append("SELECT COUNT(*) FROM channels WHERE source_key = ?")
@@ -503,6 +548,7 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
             qualityLabel = if (cursor.isNull(c.quality)) null else cursor.getString(c.quality),
             variantKey = if (cursor.isNull(c.variantKey)) null else cursor.getString(c.variantKey),
             drmInfo = drm,
+            stalkerDirectStream = cursor.getInt(c.stalkerDirectStream) != 0,
         )
     }
 
@@ -526,6 +572,7 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
         val quality = cursor.getColumnIndexOrThrow("quality_label")
         val variantKey = cursor.getColumnIndexOrThrow("variant_key")
         val drm = cursor.getColumnIndexOrThrow("drm_json")
+        val stalkerDirectStream = cursor.getColumnIndexOrThrow("stalker_direct_stream")
     }
 
     private data class StoredGroupSummary(
@@ -596,6 +643,7 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
         bindNullableString(statement, index++, channel.qualityLabel)
         bindNullableString(statement, index++, channel.variantKey)
         bindNullableString(statement, index++, channel.drmInfo?.let { gson.toJson(it) })
+        statement.bindLong(index++, if (channel.stalkerDirectStream) 1L else 0L)
         return index
     }
 
@@ -609,9 +657,10 @@ internal class IptvChannelStore(context: Context) : SQLiteOpenHelper(
         // v4 stores the provider/category summary next to the snapshot.
         // v5 indexes channel ids so focus/EPG actions never scan a 50k-row table.
         // v6 keeps provider order in the group index for instant deep-category reads.
-        const val DATABASE_VERSION = 6
+        // v7 preserves the portal's direct-live decision; old snapshots still resolve links.
+        const val DATABASE_VERSION = 7
         const val MAX_SQL_ARGS = 900
-        const val CHANNEL_BINDINGS_PER_ROW = 21
+        const val CHANNEL_BINDINGS_PER_ROW = 22
         const val MAX_CHANNEL_INSERT_ROWS = MAX_SQL_ARGS / CHANNEL_BINDINGS_PER_ROW
     }
 }

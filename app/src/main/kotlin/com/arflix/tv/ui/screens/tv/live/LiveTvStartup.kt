@@ -51,6 +51,7 @@ object LiveTvStartup {
         hasOpenedBefore: Boolean,
         favoriteChannelIds: List<String>,
         isFullyLoaded: Boolean,
+        resolvedSessionChannelId: String? = null,
     ): String? {
         // Prefer the in-window match so the guide can also scroll to it.
         explicitChannelId
@@ -66,6 +67,10 @@ object LiveTvStartup {
         if (explicitChannelId != null) return explicitChannelId
 
         if (hasOpenedBefore) {
+            // A validated SQLite lookup is authoritative even when the saved
+            // channel is not among the first 144 rows of the selected category.
+            resolvedSessionChannelId?.takeIf { it.isNotBlank() && it == sessionLastChannelId }
+                ?.let { return it }
             sessionLastChannelId
                 ?.takeIf { it.isNotBlank() && it in availableChannelIds }
                 ?.let { return it }

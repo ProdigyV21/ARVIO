@@ -166,3 +166,4 @@ _tmp_tv_perf/
 
 # Agent skills & customizations
 .agents/
+/.playback-fixtures/

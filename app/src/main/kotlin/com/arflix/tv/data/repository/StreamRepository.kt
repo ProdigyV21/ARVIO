@@ -23,6 +23,8 @@ import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.data.telegram.TelegramSourceResolver
 import com.arflix.tv.data.model.ProxyHeaders as ModelProxyHeaders
 import com.arflix.tv.data.model.StreamBehaviorHints as ModelStreamBehaviorHints
+import com.arflix.tv.data.model.IptvVodSourceIds
+import com.arflix.tv.data.model.StalkerVodLink
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.network.OkHttpProvider
@@ -1757,7 +1759,7 @@ class StreamRepository @Inject constructor(
         val url = stream.url?.trim().orEmpty()
         return when {
             addonId == HomeServerRepository.ADDON_ID -> "home_server"
-            addonId == "iptv_xtream_vod" -> "iptv_vod"
+            IptvVodSourceIds.isIptvVodAddonId(addonId) -> "iptv_vod"
             url.startsWith("magnet:", ignoreCase = true) || !stream.infoHash.isNullOrBlank() -> "p2p"
             url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true) -> "http"
             else -> "unknown"
@@ -2452,7 +2454,8 @@ class StreamRepository @Inject constructor(
         title: String = "",
         year: Int? = null,
         tmdbId: Int? = null,
-        timeoutMs: Long = 15_000L
+        timeoutMs: Long = 15_000L,
+        originalTitle: String? = null
     ): List<StreamSource> = withContext(Dispatchers.IO) {
         withTimeoutOrNull(timeoutMs.coerceIn(500L, 90_000L)) {
             runCatching {
@@ -2461,7 +2464,8 @@ class StreamRepository @Inject constructor(
                     year = year,
                     imdbId = imdbId,
                     tmdbId = tmdbId,
-                    allowNetwork = true
+                    allowNetwork = true,
+                    originalTitle = originalTitle
                 )
             }.onFailure { e ->
                 System.err.println("[VOD] resolveMovieVodSources failed: ${e.message}")
@@ -3657,6 +3661,19 @@ class StreamRepository @Inject constructor(
 
         // Debrid/direct-only playback path: ignore magnet/infoHash-only P2P streams.
         if (url.startsWith("magnet:", ignoreCase = true)) return null
+
+        // Stalker VOD sources carry a `stalker_vod://` placeholder instead of a
+        // URL: the portal only issues a playable link on demand, so it is
+        // exchanged here - once per source, at playback time - rather than while
+        // the source list is built. A null result marks the source unresolvable
+        // and the caller fails over to the next one.
+        if (StalkerVodLink.isMarker(url)) {
+            val direct = iptvRepository.resolveStalkerVodStreamUrl(url)?.trim().orEmpty()
+            val playable = direct.startsWith("http://", ignoreCase = true) ||
+                direct.startsWith("https://", ignoreCase = true)
+            if (!playable) return null
+            return stream.copy(url = direct)
+        }
 
         val normalizedUrl = when {
             url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true) -> url

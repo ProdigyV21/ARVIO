@@ -9,6 +9,8 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.ProxyHeaders
 import com.arflix.tv.data.model.StreamBehaviorHints
 import com.arflix.tv.data.model.StreamSource
+import com.arflix.tv.data.model.StreamPreviewKind
+import com.arflix.tv.data.model.StreamPreviewMetadata
 import com.arflix.tv.util.SecureStorage
 import com.arflix.tv.util.settingsDataStore
 import com.google.gson.Gson
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
@@ -120,10 +123,16 @@ data class HomeServerCatalogItem(
     val providerName: String = ""
 )
 
-enum class HomeServerLibrarySort {
-    RECENTLY_ADDED,
-    TITLE,
-    RATING
+enum class HomeServerLibrarySort(
+    val plexSort: String,
+    val jellyfinSort: String,
+    val ascending: Boolean = false
+) {
+    RECENTLY_ADDED("addedAt:desc", "DateCreated"),
+    TITLE("titleSort:asc", "SortName", ascending = true),
+    RATING("rating:desc", "CommunityRating"),
+    RELEASE_DATE_NEWEST("originallyAvailableAt:desc", "PremiereDate"),
+    RELEASE_DATE_OLDEST("originallyAvailableAt:asc", "PremiereDate", ascending = true)
 }
 
 internal fun homeServerCatalogMediaType(
@@ -321,8 +330,11 @@ class HomeServerRepository @Inject constructor(
         profileManager.activeProfileId,
         context.settingsDataStore.data
     ) { profileId, prefs ->
-        parseConnections(prefs[connectionKeyFor(profileId)])
+        prefs[connectionKeyFor(profileId)]
     }.distinctUntilChanged()
+        .map { parseConnections(it) }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.IO)
 
     val connection: Flow<HomeServerConnection?> = connections
         .map { it.firstOrNull() }
@@ -616,13 +628,23 @@ class HomeServerRepository @Inject constructor(
 
     suspend fun hasUsableConnections(): Boolean = currentConnections().any { it.isUsable }
 
+    /** Library navigation uses the saved connection snapshot, never server discovery. */
+    fun getSavedCatalogCandidates(connections: List<HomeServerConnection>): List<HomeServerCatalogCandidate> =
+        connections.asSequence()
+            .filter { it.isUsable }
+            .flatMap { connection ->
+                connection.collections.asSequence()
+                    .filter { it.enabled && it.id.isNotBlank() }
+                    .map { connection.toCatalogCandidate(it) }
+            }
+            .distinctBy { it.sourceRef }
+            .toList()
+
     suspend fun getCatalogCandidates(): List<HomeServerCatalogCandidate> = withContext(Dispatchers.IO) {
         currentConnections()
             .filter { it.isUsable }
             .flatMap { connection ->
-                val libraryCandidates = connection.collections
-                    .filter { it.enabled && it.id.isNotBlank() }
-                    .map { collection -> connection.toCatalogCandidate(collection) }
+                val libraryCandidates = getSavedCatalogCandidates(listOf(connection))
                 val serverCollectionCandidates = try {
                     fetchServerCollectionCatalogs(connection)
                 } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; emptyList() }
@@ -1662,11 +1684,7 @@ class HomeServerRepository @Inject constructor(
                 mapOf(
                     "type" to plexType,
                     "includeGuids" to "1",
-                    "sort" to when (sort) {
-                        HomeServerLibrarySort.RECENTLY_ADDED -> "addedAt:desc"
-                        HomeServerLibrarySort.RATING -> "rating:desc"
-                        HomeServerLibrarySort.TITLE -> "titleSort:asc"
-                    },
+                    "sort" to sort.plexSort,
                     "title" to searchQuery.trim().takeIf { it.isNotBlank() },
                     "X-Plex-Container-Start" to offset.toString(),
                     "X-Plex-Container-Size" to limit.toString()
@@ -1710,12 +1728,8 @@ class HomeServerRepository @Inject constructor(
                         null -> "Movie,Series"
                     },
                     "Fields" to catalogItemFields(),
-                    "SortBy" to when (sort) {
-                        HomeServerLibrarySort.RECENTLY_ADDED -> "DateCreated"
-                        HomeServerLibrarySort.RATING -> "CommunityRating"
-                        HomeServerLibrarySort.TITLE -> "SortName"
-                    },
-                    "SortOrder" to if (sort == HomeServerLibrarySort.TITLE) "Ascending" else "Descending",
+                    "SortBy" to sort.jellyfinSort,
+                    "SortOrder" to if (sort.ascending) "Ascending" else "Descending",
                     "SearchTerm" to searchQuery.trim().takeIf { it.isNotBlank() },
                     "StartIndex" to offset.toString(),
                     "Limit" to limit.toString()
@@ -2232,6 +2246,7 @@ class HomeServerRepository @Inject constructor(
             size = formatBytes(sizeBytes),
             sizeBytes = sizeBytes.takeIf { it > 0L },
             url = url,
+            preview = previewMetadata(connection, item),
             behaviorHints = StreamBehaviorHints(
                 cached = true,
                 filename = name.ifBlank { item.name },
@@ -2248,6 +2263,38 @@ class HomeServerRepository @Inject constructor(
             ?: path.takeIf { it.isNotBlank() }
             ?: name.takeIf { it.isNotBlank() }
             ?: "$container|$sizeBytes|$videoWidth|$videoHeight"
+    }
+
+    private fun HomeServerMediaSource.previewMetadata(
+        connection: HomeServerConnection,
+        item: HomeServerItem
+    ): StreamPreviewMetadata? {
+        val kind = when (connection.serverKind) {
+            HomeServerKind.JELLYFIN -> StreamPreviewKind.JELLYFIN
+            HomeServerKind.PLEX -> StreamPreviewKind.PLEX
+            HomeServerKind.EMBY -> StreamPreviewKind.EMBY
+            else -> return null
+        }
+        if (id.isBlank() || item.id.isBlank()) return null
+        // Neither Emby's item-only BIF endpoint nor Plex multipart playback has a proven mapping
+        // to an alternate version/concatenated timeline here. Leave those sources unsupported.
+        if (kind == StreamPreviewKind.EMBY && item.mediaSources.size != 1) return null
+        if (kind == StreamPreviewKind.PLEX && previewPartCount != 1) return null
+        return StreamPreviewMetadata(
+            kind = kind,
+            serverId = catalogServerKey(connection),
+            accountId = listOf(profileManager.getProfileIdSync(), connection.connectionId, connection.userId)
+                .joinToString("|"),
+            itemId = item.id,
+            mediaSourceId = id,
+            mediaVersion = listOf(identityKey(), eTag, sizeBytes, previewDurationMs, videoWidth, videoHeight)
+                .joinToString("|"),
+            mediaETag = eTag,
+            serverUrl = connection.serverUrl,
+            userId = connection.userId,
+            headers = playbackHeaders(connection),
+            durationMs = previewDurationMs
+        )
     }
 
     private fun HomeServerMediaSource.playbackUrl(connection: HomeServerConnection, itemId: String): String? {
@@ -2557,6 +2604,8 @@ class HomeServerRepository @Inject constructor(
                 audioProfile = audioStream?.string("profile").orEmpty().ifBlank { parentMedia?.string("audioProfile").orEmpty() },
                 videoBitDepth = videoStream?.int("bitDepth") ?: parentMedia?.int("bitDepth") ?: int("bitDepth") ?: 0,
                 mediaIndex = mediaIndex,
+                previewDurationMs = long("duration") ?: parentMedia?.long("duration") ?: 0L,
+                previewPartCount = parentMedia?.array("Part")?.size ?: 1,
                 partIndex = partIndex
             )
         }
@@ -2573,6 +2622,7 @@ class HomeServerRepository @Inject constructor(
             sizeBytes = long("Size") ?: long("RunTimeTicks")?.let { 0L } ?: 0L,
             transcodingUrl = string("TranscodingUrl"),
             videoWidth = videoStream?.int("Width") ?: 0,
+            previewDurationMs = (long("RunTimeTicks") ?: 0L) / 10_000L,
             videoHeight = videoStream?.int("Height") ?: 0
         )
     }
@@ -2723,6 +2773,8 @@ class HomeServerRepository @Inject constructor(
         val audioProfile: String = "",
         val videoBitDepth: Int = 0,
         val mediaIndex: Int = 0,
+        val previewDurationMs: Long = 0L,
+        val previewPartCount: Int = 1,
         val partIndex: Int = 0
     )
 
