@@ -54,6 +54,24 @@ class IptvRepositoryStalkerVodTest {
     }
 
     @Test
+    fun `the movie path is unaffected by the series binding limit`() {
+        val repository = newRepository()
+        // The series path learned to ask how a show was matched, and both paths
+        // share the scorer. The movie path follows every match - a film needs no
+        // second request to be playable - so nothing here may be capped.
+        val items = (1..10).map { item("$it", "Dune", year = "2021", tmdbId = "438631") }
+
+        val matches = repository.matchStalkerVodItems(
+            items = items,
+            normalizedTitle = "dune",
+            normalizedTmdb = "438631",
+            inputYear = 2021
+        )
+
+        assertEquals(10, matches.size)
+    }
+
+    @Test
     fun `an unmatched tmdb id falls through to title scoring`() {
         val repository = newRepository()
         val items = listOf(item("1", "Dune", year = "2021"))
@@ -296,6 +314,44 @@ class IptvRepositoryStalkerVodTest {
         )
     }
 
+    @Test
+    fun `a show listed only under its original name is matched too`() {
+        val repository = newRepository()
+        val shows = listOf(
+            StalkerApi.StalkerSeriesItem(
+                id = "1",
+                name = "EN - Money Heist",
+                cmd = "/media/1.mpg",
+                year = "2017"
+            )
+        )
+
+        val matches = repository.matchStalkerSeriesItems(
+            items = shows,
+            normalizedTitle = "haus des geldes",
+            normalizedTmdb = null,
+            inputYear = 2017,
+            normalizedOriginalTitle = "money heist"
+        )
+
+        assertEquals(listOf("1"), matches.map { it.id })
+    }
+
+    @Test
+    fun `a plain show title is unaffected by the extra term`() {
+        val repository = newRepository()
+
+        // Series and movies share stalkerVodSearchQueries, so the series path
+        // must stay a single request when both names agree.
+        assertEquals(
+            listOf("Breaking Bad"),
+            repository.stalkerVodSearchQueries(
+                title = "Breaking Bad",
+                originalTitle = "Breaking Bad"
+            )
+        )
+    }
+
     // ── Portal isolation (C1) ─────────────────────────────────────────────
 
     @Test
@@ -304,8 +360,14 @@ class IptvRepositoryStalkerVodTest {
         val second = StalkerVodLink.buildMarker("stalker2", "/media/file_1.mpg")
 
         assertNotEquals(first, second)
-        assertEquals("stalker1" to "/media/file_1.mpg", StalkerVodLink.parseMarker(first!!))
-        assertEquals("stalker2" to "/media/file_1.mpg", StalkerVodLink.parseMarker(second!!))
+        assertEquals(
+            StalkerVodLink.Target("stalker1", "/media/file_1.mpg"),
+            StalkerVodLink.parseMarker(first!!)
+        )
+        assertEquals(
+            StalkerVodLink.Target("stalker2", "/media/file_1.mpg"),
+            StalkerVodLink.parseMarker(second!!)
+        )
     }
 
     @Test
@@ -314,7 +376,7 @@ class IptvRepositoryStalkerVodTest {
         val marker = StalkerVodLink.buildMarker("stalker1", cmd)
 
         assertTrue(StalkerVodLink.isMarker(marker!!))
-        assertEquals("stalker1" to cmd, StalkerVodLink.parseMarker(marker))
+        assertEquals(StalkerVodLink.Target("stalker1", cmd), StalkerVodLink.parseMarker(marker))
     }
 
     @Test

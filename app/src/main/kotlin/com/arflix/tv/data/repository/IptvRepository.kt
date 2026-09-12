@@ -497,6 +497,81 @@ class IptvRepository @Inject constructor(
      */
     private val minStalkerVodQueryHeadLength = 3
 
+    private data class StalkerSeriesSearchCacheEntry(
+        val fetchedAtMs: Long,
+        val items: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>
+    )
+
+    /**
+     * Show searches, the series counterpart of [stalkerVodSearchCache]. Keyed
+     * the same way, and kept apart from it on purpose: the two endpoints answer
+     * with different entries for the same term, and mixing them would let a
+     * movie search satisfy a series lookup.
+     */
+    private val stalkerSeriesSearchCache =
+        ConcurrentHashMap<StalkerVodSearchCacheKey, StalkerSeriesSearchCacheEntry>()
+
+    private data class StalkerSeasonsCacheKey(
+        val portalId: String,
+        val apiIdentity: String,
+        val seriesId: String
+    )
+
+    /**
+     * Season lists per bound show.
+     *
+     * This is the cache that makes episode lookups cheap: binding a show costs
+     * a search, and its seasons cost a second request, but every further
+     * episode of that show - the rest of the season, the next one - is then
+     * answered without touching the portal at all.
+     */
+    private val stalkerSeasonsCache =
+        ConcurrentHashMap<StalkerSeasonsCacheKey, StalkerSeriesSearchCacheEntry>()
+    private val maxStalkerSeasonsCacheEntries = 32
+
+    /**
+     * How many shows of one portal are followed up with a season request when a
+     * title score is all that identifies them. Portals do list a show twice
+     * (language versions), and the user should get both, but an unbounded list
+     * would turn one lookup into a request per near-miss.
+     */
+    private val maxStalkerSeriesBindings = 2
+
+    /**
+     * The same cap for shows the portal identified by its own `tmdb_id`.
+     *
+     * Higher on purpose. A `tmdb_id` hit is proof rather than an estimate -
+     * every such entry is a version of the wanted show, normally one per
+     * language - and two was measured to be far too strict there. A portal
+     * carrying "Breaking Bad" ten times, all of them with `tmdb_id` 1396, lists
+     * German on place four and English on place five; a cap of two bound
+     * Albanian and Arabic and never asked for either of the two the user could
+     * watch. Six covers that list with a margin and still bounds the cost.
+     */
+    private val maxStalkerSeriesBindingsById = 6
+
+    /**
+     * Season requests one lookup may spend beyond its binding limit.
+     *
+     * [bindStalkerSeriesShows] does not let a show that answers with no seasons
+     * consume one of the places, so the walk needs an end of its own: a portal
+     * with a long tail of such entries must not cost one request per entry.
+     */
+    private val maxStalkerSeriesBindingAttemptSlack = 2
+
+    /**
+     * "Season 2", "Staffel 2", "S02", "Sezon 2", "2. Staffel" - the season word
+     * may stand on either side of the number.
+     */
+    private val STALKER_SEASON_WORD_REGEX = Regex(
+        """\b(?:season|staffel|saison|temporada|stagione|sezon|seizoen|sezona|series|s)\s*[.:#-]?\s*(\d{1,3})\b""" +
+            """|\b(\d{1,3})\s*[.:]?\s*(?:season|staffel|saison|temporada|stagione|sezon|seizoen|sezona)""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** A season entry whose whole name is the number, e.g. "2" or "02". */
+    private val STALKER_SEASON_BARE_NUMBER_REGEX = Regex("""^\s*(\d{1,3})\s*$""")
+
     /**
      * Public accessor kept for compatibility with code that previously read the
      * single cached Stalker API instance. Returns the first cached portal API.
@@ -3886,6 +3961,8 @@ class IptvRepository @Inject constructor(
         stalkerEpgCache.clear()
         stalkerShortEpgCache.clear()
         stalkerVodSearchCache.clear()
+        stalkerSeriesSearchCache.clear()
+        stalkerSeasonsCache.clear()
         discoveredM3uEpgUrls.clear()
         xtreamVodCacheKey = null
         xtreamVodLoadedAtMs = 0L
@@ -5830,7 +5907,22 @@ class IptvRepository @Inject constructor(
         normalizedTmdb = normalizedTmdb,
         inputYear = inputYear,
         normalizedOriginalTitle = normalizedOriginalTitle
-    ) { StalkerCatalogFields(it.name, it.cmd, it.year, it.tmdbId) }
+    ) { StalkerCatalogFields(it.name, it.cmd, it.year, it.tmdbId) }.matches
+
+    /**
+     * What scoring one catalog page produced: the entries that match, and
+     * whether the portal's own `tmdb_id` is what identified them.
+     *
+     * The second half is not bookkeeping. A `tmdb_id` hit is proof - the portal
+     * named the very same work - while a title score is an estimate, and the
+     * series path is allowed to follow up more candidates once the identity is
+     * proven (see [maxStalkerSeriesBindingsById]). The caller could not tell the
+     * two apart from a plain list.
+     */
+    internal data class StalkerCatalogMatches<T>(
+        val matches: List<T>,
+        val matchedById: Boolean
+    )
 
     /** The fields a Stalker catalog entry is scored on. */
     private data class StalkerCatalogFields(
@@ -5866,17 +5958,20 @@ class IptvRepository @Inject constructor(
         inputYear: Int?,
         normalizedOriginalTitle: String? = null,
         fields: (T) -> StalkerCatalogFields
-    ): List<T> {
-        if (items.isEmpty()) return emptyList()
+    ): StalkerCatalogMatches<T> {
+        val nothing = StalkerCatalogMatches<T>(emptyList(), matchedById = false)
+        if (items.isEmpty()) return nothing
         if (!normalizedTmdb.isNullOrBlank()) {
             val idMatches = items.filter { normalizeTmdbId(fields(it).tmdbId) == normalizedTmdb }
-            if (idMatches.isNotEmpty()) return idMatches
+            if (idMatches.isNotEmpty()) {
+                return StalkerCatalogMatches(idMatches, matchedById = true)
+            }
         }
         val wantedNames = listOfNotNull(
             normalizedTitle.takeIf { it.isNotBlank() },
             normalizedOriginalTitle?.takeIf { it.isNotBlank() }
         ).distinct()
-        if (wantedNames.isEmpty()) return emptyList()
+        if (wantedNames.isEmpty()) return nothing
 
         val scored = items
             .mapNotNull { item ->
@@ -5899,9 +5994,12 @@ class IptvRepository @Inject constructor(
                 item to (score + yearAdjust)
             }
             .sortedByDescending { it.second }
-        val bestScore = scored.firstOrNull()?.second ?: return emptyList()
+        val bestScore = scored.firstOrNull()?.second ?: return nothing
         val minScore = maxOf(65, bestScore - 8)
-        return scored.takeWhile { it.second >= minScore }.map { it.first }
+        return StalkerCatalogMatches(
+            matches = scored.takeWhile { it.second >= minScore }.map { it.first },
+            matchedById = false
+        )
     }
 
     private fun com.arflix.tv.data.api.StalkerApi.StalkerVodItem.toStalkerMovieVodSource(
@@ -5970,18 +6068,360 @@ class IptvRepository @Inject constructor(
      * playback starts - never while a source list is being built.
      */
     suspend fun resolveStalkerVodStreamUrl(markerUrl: String): String? {
-        val (portalId, command) = StalkerVodLink.parseMarker(markerUrl) ?: return null
+        val target = StalkerVodLink.parseMarker(markerUrl) ?: return null
         val config = observeConfig().first()
         // No "fall back to the first portal" here: the marker always carries the
         // portal it came from, and guessing would resolve against a stranger.
-        val portal = config.stalkerPortals.firstOrNull { it.id == portalId } ?: return null
+        val portal = config.stalkerPortals.firstOrNull { it.id == target.portalId } ?: return null
         if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return null
         val api = getOrCreateStalkerApi(portal) ?: return null
-        val resolved = api.resolveVodStreamUrl(command)
+        // For an episode the season cmd goes out unchanged and the episode
+        // number rides along as `series` - that parameter is the only thing
+        // that distinguishes one episode of a season from another.
+        val resolved = api.resolveVodStreamUrl(target.cmd, target.series)
         System.err.println(
-            "[Stalker-VOD] create_link portal=$portalId resolved=${!resolved.isNullOrBlank()}"
+            "[Stalker-VOD] create_link portal=${target.portalId} " +
+                "series=${target.series ?: "-"} resolved=${!resolved.isNullOrBlank()}"
         )
         return resolved
+    }
+
+    // ── Stalker VOD (series/episodes) ───────────────────────────
+
+    /**
+     * Stalker counterpart to [findEpisodeVodSourcesForCredentials].
+     *
+     * Stalker has no flat episode model. Where Xtream hands out one playable
+     * `stream_id` per episode, a Stalker portal answers in two levels: a search
+     * finds the show, `get_ordered_list&movie_id=<show>` lists its seasons, and
+     * the episode itself only exists as the `series` parameter of that season's
+     * `create_link`. So the walk is: bind the show -> load its seasons -> find
+     * the season -> check the episode is one the season reports.
+     *
+     * The show search runs against the portal for the same reason the movie
+     * path does - a local catalog copy would cost hundreds of paged requests -
+     * and both steps are cached, so only the first episode of a show pays for
+     * them.
+     */
+    private suspend fun findStalkerEpisodeVodSources(
+        portal: StalkerPortalEntry,
+        title: String,
+        season: Int,
+        episode: Int,
+        tmdbId: Int?,
+        imdbId: String?,
+        allowNetwork: Boolean,
+        originalTitle: String? = null
+    ): List<StreamSource> {
+        if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return emptyList()
+        if (season <= 0 || episode <= 0) return emptyList()
+        val fingerprint = stalkerPortalFingerprint(portal)
+        // Season and episode belong in the key: without them every episode of a
+        // show would read the first one's cached source back.
+        val cacheKey = iptvMovieSourceCacheKey(
+            profileIdHash = profileIdHash(),
+            imdbId = imdbId,
+            tmdbId = tmdbId,
+            title = title,
+            year = null
+        )?.let { base -> "stalker_series|${portal.id}|$base|s${season}e$episode" }
+        if (cacheKey != null) {
+            lookupCachedMovieSources(cacheKey, fingerprint)?.let { return it }
+        }
+        // Nothing to fall back on offline: there is no local Stalker catalog,
+        // the cached result above is the only network-free answer.
+        if (!allowNetwork) return emptyList()
+
+        val normalizedTitle = normalizeLookupText(title)
+        if (normalizedTitle.isBlank()) return emptyList()
+        val api = getOrCreateStalkerApi(portal) ?: return emptyList()
+
+        val normalizedTmdb = normalizeTmdbId(tmdbId)
+        val normalizedOriginalTitle = normalizeLookupText(originalTitle.orEmpty())
+            .takeIf { it.isNotBlank() && it != normalizedTitle }
+        val inputYear = parseYear(title)
+
+        var matched = StalkerCatalogMatches<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>(
+            matches = emptyList(),
+            matchedById = false
+        )
+        // See the movie path: the offered count separates "the portal sent
+        // nothing" from "the portal sent a catalogue page that matched nothing".
+        var offered = 0
+        for (query in stalkerVodSearchQueries(title, originalTitle)) {
+            val items = stalkerSeriesSearch(portal, fingerprint, api, query)
+            offered += items.size
+            if (items.isEmpty()) continue
+            matched = matchStalkerSeriesMatches(
+                items = items,
+                normalizedTitle = normalizedTitle,
+                normalizedTmdb = normalizedTmdb,
+                inputYear = inputYear,
+                normalizedOriginalTitle = normalizedOriginalTitle
+            )
+            if (matched.matches.isNotEmpty()) break
+        }
+        val shows = matched.matches
+        if (shows.isEmpty()) {
+            System.err.println(
+                "[Stalker-VOD] portal=${portal.id} series='$title' " +
+                    "offered=$offered shows=0"
+            )
+            return emptyList()
+        }
+
+        // A portal can carry the same show more than once - one entry per
+        // language is the normal case. Every bound show costs one season
+        // request, so the walk is bounded; how far it may go depends on how the
+        // shows were identified, and a dead entry does not consume a place.
+        val limit = stalkerSeriesBindingLimit(matched.matchedById)
+        val bindings = bindStalkerSeriesShows(shows, limit) { showId ->
+            stalkerSeasons(portal, fingerprint, api, showId)
+        }
+        val sources = mutableListOf<StreamSource>()
+        for (binding in bindings) {
+            val entry = selectStalkerSeason(binding.seasons, season) ?: continue
+            val episodes = com.arflix.tv.data.api.StalkerApi.episodeNumbers(entry.series)
+            // An empty list means the portal does not report its episodes, not
+            // that the season is empty - only a populated list can rule the
+            // episode out.
+            if (episodes.isNotEmpty() && episode !in episodes) continue
+            entry.toStalkerEpisodeVodSource(
+                portal = portal,
+                show = binding.show,
+                season = season,
+                episode = episode,
+                fallbackTitle = title
+            )?.let(sources::add)
+        }
+
+        System.err.println(
+            "[Stalker-VOD] portal=${portal.id} series='$title' s${season}e$episode " +
+                "shows=${shows.size} byId=${matched.matchedById} limit=$limit " +
+                "bound=${bindings.size} sources=${sources.size}"
+        )
+        if (sources.isEmpty()) return emptyList()
+
+        val sorted = sortVodSources(sources)
+        if (cacheKey != null) {
+            storeCachedMovieSources(cacheKey, sorted, fingerprint)
+        }
+        return sorted
+    }
+
+    /** Show entries of a portal search, scored by [matchStalkerCatalogEntries]. */
+    internal fun matchStalkerSeriesItems(
+        items: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>,
+        normalizedTitle: String,
+        normalizedTmdb: String?,
+        inputYear: Int?,
+        normalizedOriginalTitle: String? = null
+    ): List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem> = matchStalkerSeriesMatches(
+        items = items,
+        normalizedTitle = normalizedTitle,
+        normalizedTmdb = normalizedTmdb,
+        inputYear = inputYear,
+        normalizedOriginalTitle = normalizedOriginalTitle
+    ).matches
+
+    /**
+     * [matchStalkerSeriesItems] plus the half the series path needs: whether the
+     * portal identified the shows by `tmdb_id`, which decides how many of them
+     * are worth a season request ([stalkerSeriesBindingLimit]).
+     */
+    internal fun matchStalkerSeriesMatches(
+        items: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>,
+        normalizedTitle: String,
+        normalizedTmdb: String?,
+        inputYear: Int?,
+        normalizedOriginalTitle: String? = null
+    ): StalkerCatalogMatches<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem> =
+        matchStalkerCatalogEntries(
+            items = items,
+            normalizedTitle = normalizedTitle,
+            normalizedTmdb = normalizedTmdb,
+            inputYear = inputYear,
+            normalizedOriginalTitle = normalizedOriginalTitle
+        ) { StalkerCatalogFields(it.name, it.cmd, it.year, it.tmdbId) }
+
+    /** How many shows a lookup may bind, given how they were identified. */
+    internal fun stalkerSeriesBindingLimit(matchedById: Boolean): Int =
+        if (matchedById) maxStalkerSeriesBindingsById else maxStalkerSeriesBindings
+
+    /** A show that answered with seasons, together with those seasons. */
+    internal data class StalkerSeriesBinding(
+        val show: com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem,
+        val seasons: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>
+    )
+
+    /**
+     * Walks [shows] until [limit] of them have answered with seasons.
+     *
+     * The plain `take(limit)` this replaces counted the attempt instead of the
+     * result. Portals carry dead show entries - "A+ - Ted Lasso (US)" announces
+     * `has_files: 1` like every other hit and has nothing behind it - and one of
+     * those consumed a place, which is how a lookup with two places ended up
+     * with a single usable version. They are not recognizable before the season
+     * request either, so skipping them can only happen here, after asking.
+     *
+     * Hence the second bound: [maxStalkerSeriesBindingAttemptSlack] season
+     * requests on top of [limit]. Without it a portal with a long tail of dead
+     * entries would turn one lookup into a request per entry - the opposite of
+     * what the cap is for.
+     *
+     * [fetchSeasons] is passed in rather than called directly so the walk can be
+     * tested without a portal.
+     */
+    internal suspend fun bindStalkerSeriesShows(
+        shows: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>,
+        limit: Int,
+        fetchSeasons: suspend (String) -> List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>
+    ): List<StalkerSeriesBinding> {
+        if (limit <= 0) return emptyList()
+        val maxAttempts = limit + maxStalkerSeriesBindingAttemptSlack
+        val bindings = mutableListOf<StalkerSeriesBinding>()
+        var attempts = 0
+        for (show in shows) {
+            if (bindings.size >= limit || attempts >= maxAttempts) break
+            val showId = show.id?.trim().orEmpty()
+            // Costs no portal request, so it does not count as an attempt.
+            if (showId.isBlank()) continue
+            attempts++
+            val seasons = fetchSeasons(showId)
+            if (seasons.isEmpty()) continue
+            bindings += StalkerSeriesBinding(show, seasons)
+        }
+        return bindings
+    }
+
+    private suspend fun stalkerSeriesSearch(
+        portal: StalkerPortalEntry,
+        fingerprint: String,
+        api: com.arflix.tv.data.api.StalkerApi,
+        query: String
+    ): List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem> {
+        val term = query.trim()
+        if (term.isBlank()) return emptyList()
+        val key = StalkerVodSearchCacheKey(portal.id, fingerprint, term.lowercase(Locale.US))
+        val now = System.currentTimeMillis()
+        stalkerSeriesSearchCache[key]?.let { cached ->
+            if (now - cached.fetchedAtMs < cacheTtlFor(cached.items)) return cached.items
+            stalkerSeriesSearchCache.remove(key)
+        }
+        // See stalkerVodSearch: a failed request is not an answer.
+        val items = api.searchSeries(term) ?: return emptyList()
+        if (stalkerSeriesSearchCache.size >= maxStalkerVodSearchCacheEntries) {
+            stalkerSeriesSearchCache.clear()
+        }
+        stalkerSeriesSearchCache[key] = StalkerSeriesSearchCacheEntry(now, items)
+        return items
+    }
+
+    /**
+     * The fast path for every episode after the first: a bound show's seasons
+     * are fetched once and then answer from memory, so browsing a series costs
+     * no further portal requests until the entry expires.
+     */
+    private suspend fun stalkerSeasons(
+        portal: StalkerPortalEntry,
+        fingerprint: String,
+        api: com.arflix.tv.data.api.StalkerApi,
+        seriesId: String
+    ): List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem> {
+        val key = StalkerSeasonsCacheKey(portal.id, fingerprint, seriesId)
+        val now = System.currentTimeMillis()
+        stalkerSeasonsCache[key]?.let { cached ->
+            if (now - cached.fetchedAtMs < cacheTtlFor(cached.items)) return cached.items
+            stalkerSeasonsCache.remove(key)
+        }
+        // A failed season fetch must not be remembered as "this show has no
+        // seasons" - that is what left a bound show unplayable for hours.
+        val items = api.getSeasons(seriesId) ?: return emptyList()
+        if (stalkerSeasonsCache.size >= maxStalkerSeasonsCacheEntries) {
+            stalkerSeasonsCache.clear()
+        }
+        stalkerSeasonsCache[key] = StalkerSeriesSearchCacheEntry(now, items)
+        return items
+    }
+
+    /**
+     * Picks the entry for [wantedSeason] out of a show's season list.
+     *
+     * The portal states the season only in the entry's name, and every build
+     * words it differently ("Season 2", "Staffel 2", "S02", plain "2"), so the
+     * number is read from the name first. Position is the fallback - the list
+     * arrives in season order - but only when no entry names a number at all:
+     * mixing the two would let a show whose first entry is "Season 0" (extras,
+     * a common case) answer every lookup off by one.
+     *
+     * And the fallback is refused unless the entries look like seasons in the
+     * first place, i.e. at least one reports the episodes it holds. Some portal
+     * builds answer `movie_id=<show>` with episodes rather than seasons; on
+     * those, counting positions would hand back episode 2 for season 2 and
+     * play the wrong thing. Returning nothing is the honest answer there - the
+     * user still sees every other configured source.
+     */
+    internal fun selectStalkerSeason(
+        seasons: List<com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem>,
+        wantedSeason: Int
+    ): com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem? {
+        if (seasons.isEmpty() || wantedSeason <= 0) return null
+        val named = seasons.mapNotNull { entry ->
+            parseStalkerSeasonNumber(entry.name)?.let { entry to it }
+        }
+        if (named.isNotEmpty()) {
+            return named.firstOrNull { it.second == wantedSeason }?.first
+        }
+        val looksLikeSeasons = seasons.any {
+            com.arflix.tv.data.api.StalkerApi.episodeNumbers(it.series).isNotEmpty()
+        }
+        if (!looksLikeSeasons) return null
+        return seasons.getOrNull(wantedSeason - 1)
+    }
+
+    /**
+     * Reads a season number out of a season entry's name, or null when the name
+     * carries none.
+     *
+     * Anchored on a season word or a lone number on purpose: a bare "take the
+     * last number in the name" would read "Stranger Things 1983" as season 1983
+     * and, worse, silently mis-map shows whose title ends in a number.
+     */
+    internal fun parseStalkerSeasonNumber(name: String?): Int? {
+        val value = name?.trim().orEmpty()
+        if (value.isBlank()) return null
+        STALKER_SEASON_WORD_REGEX.find(value)?.let { match ->
+            // Group 1 is "word then number", group 2 the reverse ("2. Staffel");
+            // exactly one of them participates in any given match.
+            val number = match.groupValues.getOrNull(1)?.toIntOrNull()
+                ?: match.groupValues.getOrNull(2)?.toIntOrNull()
+            if (number != null) return number
+        }
+        return STALKER_SEASON_BARE_NUMBER_REGEX.find(value)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    }
+
+    private fun com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem.toStalkerEpisodeVodSource(
+        portal: StalkerPortalEntry,
+        show: com.arflix.tv.data.api.StalkerApi.StalkerSeriesItem,
+        season: Int,
+        episode: Int,
+        fallbackTitle: String
+    ): StreamSource? {
+        val marker = StalkerVodLink.buildMarker(portal.id, cmd.orEmpty(), episode) ?: return null
+        val showName = show.name?.trim().orEmpty().ifBlank { fallbackTitle }
+        val sourceName = "$showName S" + season.toString().padStart(2, '0') +
+            "E" + episode.toString().padStart(2, '0')
+        return StreamSource(
+            source = sourceName,
+            addonName = "IPTV Series VOD",
+            addonId = IptvVodSourceIds.STALKER,
+            // The season entry's own name ("Staffel 2") says nothing about
+            // quality, so the show's name is what gets inspected.
+            quality = stalkerVodQuality(showName, hd ?: show.hd),
+            size = "",
+            url = marker,
+            description = stalkerVodDescription(portal, time ?: show.time, ratingImdb ?: show.ratingImdb)
+        )
     }
 
     suspend fun findEpisodeVodSource(
@@ -6006,12 +6446,13 @@ class IptvRepository @Inject constructor(
         episode: Int,
         imdbId: String? = null,
         tmdbId: Int? = null,
-        allowNetwork: Boolean = true
+        allowNetwork: Boolean = true,
+        originalTitle: String? = null
     ): List<StreamSource> {
         return withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext emptyList()
             val config = observeConfig().first()
-            xtreamCredentialsForSeriesImport(config)
+            val xtreamSources = xtreamCredentialsForSeriesImport(config)
                 .flatMap { creds ->
                     runCatching {
                         findEpisodeVodSourcesForCredentials(
@@ -6025,7 +6466,25 @@ class IptvRepository @Inject constructor(
                         )
                     }.getOrDefault(emptyList())
                 }
-                .let(::sortVodSources)
+            // Additive second provider, exactly as on the movie path: each
+            // Stalker portal is searched on its own, and a failing portal never
+            // removes Xtream results.
+            val stalkerSources = activeStalkerPortals(config)
+                .flatMap { portal ->
+                    runCatching {
+                        findStalkerEpisodeVodSources(
+                            portal = portal,
+                            title = title,
+                            season = season,
+                            episode = episode,
+                            tmdbId = tmdbId,
+                            imdbId = imdbId,
+                            allowNetwork = allowNetwork,
+                            originalTitle = originalTitle
+                        )
+                    }.getOrDefault(emptyList())
+                }
+            sortVodSources(xtreamSources + stalkerSources)
         }
     }
 
@@ -6297,7 +6756,8 @@ class IptvRepository @Inject constructor(
         season: Int,
         episode: Int,
         imdbId: String? = null,
-        tmdbId: Int? = null
+        tmdbId: Int? = null,
+        originalTitle: String? = null
     ) {
         withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext
@@ -6319,13 +6779,31 @@ class IptvRepository @Inject constructor(
                     )
                 }
             }
+            // Same work the real lookup does, run early so the source list is
+            // already cached when the user presses play. Discarding the result
+            // is the point: what is kept is the cache it filled.
+            activeStalkerPortals(config).forEach { portal ->
+                runCatching {
+                    findStalkerEpisodeVodSources(
+                        portal = portal,
+                        title = title,
+                        season = season,
+                        episode = episode,
+                        tmdbId = tmdbId,
+                        imdbId = imdbId,
+                        allowNetwork = true,
+                        originalTitle = originalTitle
+                    )
+                }
+            }
         }
     }
 
     suspend fun prefetchSeriesInfoForShow(
         title: String,
         imdbId: String? = null,
-        tmdbId: Int? = null
+        tmdbId: Int? = null,
+        originalTitle: String? = null
     ) {
         withContext(Dispatchers.IO) {
             if (!isVodSearchEnabled()) return@withContext
@@ -6344,6 +6822,57 @@ class IptvRepository @Inject constructor(
                     )
                 }
             }
+            activeStalkerPortals(config).forEach { portal ->
+                runCatching { warmStalkerSeriesBinding(portal, title, tmdbId, originalTitle) }
+            }
+        }
+    }
+
+    /**
+     * Binds a show and loads its seasons ahead of time, so opening an episode
+     * of it costs no portal request at all.
+     *
+     * This is the whole reason the two-level walk stays cheap: the search and
+     * the season list are the expensive half, and they are per show, not per
+     * episode.
+     */
+    private suspend fun warmStalkerSeriesBinding(
+        portal: StalkerPortalEntry,
+        title: String,
+        tmdbId: Int?,
+        originalTitle: String? = null
+    ) {
+        if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return
+        val normalizedTitle = normalizeLookupText(title)
+        if (normalizedTitle.isBlank()) return
+        val fingerprint = stalkerPortalFingerprint(portal)
+        val api = getOrCreateStalkerApi(portal) ?: return
+        val normalizedTmdb = normalizeTmdbId(tmdbId)
+        val normalizedOriginalTitle = normalizeLookupText(originalTitle.orEmpty())
+            .takeIf { it.isNotBlank() && it != normalizedTitle }
+        val inputYear = parseYear(title)
+
+        // Warming must ask exactly what the real lookup will ask: a different
+        // term list would bind a show here and search again on open.
+        for (query in stalkerVodSearchQueries(title, originalTitle)) {
+            val items = stalkerSeriesSearch(portal, fingerprint, api, query)
+            if (items.isEmpty()) continue
+            val matched = matchStalkerSeriesMatches(
+                items = items,
+                normalizedTitle = normalizedTitle,
+                normalizedTmdb = normalizedTmdb,
+                inputYear = inputYear,
+                normalizedOriginalTitle = normalizedOriginalTitle
+            )
+            if (matched.matches.isEmpty()) continue
+            // The same walk as the real lookup, for the same reason as the term
+            // list above: warming a different set of shows would leave the open
+            // asking the portal again for the ones it skipped.
+            bindStalkerSeriesShows(
+                shows = matched.matches,
+                limit = stalkerSeriesBindingLimit(matched.matchedById)
+            ) { showId -> stalkerSeasons(portal, fingerprint, api, showId) }
+            return
         }
     }
 
