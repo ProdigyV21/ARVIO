@@ -1156,7 +1156,7 @@ fun PlayerScreen(
             )
             .buildWithAssSupport( // Enable ASS subtitle rendering for stylized subtitles
                 context,
-                AssRenderType.OVERLAY_OPEN_GL
+                AssRenderType.OVERLAY_OPEN_GL,
             ).apply {
                 // Ensure volume is at maximum
                 volume = 1.0f
@@ -6111,20 +6111,45 @@ private fun buildExternalSubtitleConfigurations(subtitles: List<Subtitle>): List
 }
 
 private fun subtitleMimeTypeFromUrl(url: String): String {
-    // Trailing slash before the query is real-world (AIOStreams: ".../sub.vtt/?lang=…") — trim it
-    // so the extension check still sees ".vtt"; the SRT fallback would silently fail on WEBVTT.
-    val cleanUrl = url.substringBefore('?').trimEnd('/').lowercase()
+    // idealy the subtitle format should be retrived from the metadata of the subtitle file.
+    // though that would require downloading the subtitle file first, which is not ideal.
+    // maybe you could do some download magic where you download the first few bytes of the subtitle file to get the metadata and then determine the format from that.
+    // this works for now though I suppose but it should really be updated to use the metadata later.
+
+    val lower = url.lowercase()
+
+    val path = lower
+        .substringBefore('?')
+        .trimEnd('/')
+
+    val query = lower
+        .substringAfter('?', "")
+
     return when {
-        cleanUrl.endsWith(".vtt") -> MimeTypes.TEXT_VTT
-        cleanUrl.endsWith(".srt") || cleanUrl.endsWith(".srt.gz") -> MimeTypes.APPLICATION_SUBRIP
-        cleanUrl.endsWith(".ass") || cleanUrl.endsWith(".ssa") -> MimeTypes.TEXT_SSA
-        cleanUrl.endsWith(".ttml") || cleanUrl.endsWith(".dfxp") -> MimeTypes.APPLICATION_TTML
-        // OpenSubtitles serves SRT through extensionless URLs - use SRT as default
-        // since it's the dominant format from subtitle addons (OpenSubtitles, Comet).
-        // SRT and VTT are similar but SRT uses comma for milliseconds (00:01:23,456)
-        // while VTT uses period and requires a WEBVTT header. Using SRT avoids silent
-        // parse failures when the actual content is SRT.
-        else -> MimeTypes.APPLICATION_SUBRIP
+        // Detection by file name
+        path.endsWith(".vtt") ->
+            MimeTypes.TEXT_VTT
+
+        path.endsWith(".srt") || path.endsWith(".srt.gz") ->
+            MimeTypes.APPLICATION_SUBRIP
+
+        path.endsWith(".ass") || path.endsWith(".ssa") ->
+            MimeTypes.TEXT_SSA
+
+        // detection by query string
+        query.contains("format=ass") ||
+        query.contains("format=ssa") ||
+        query.contains("type=ass") ||
+        query.contains("type=ssa") ||
+        query.contains("mime=text/x-ass") ||
+        query.contains("mime=text/x-ssa") ->
+            MimeTypes.TEXT_SSA
+
+        path.endsWith(".ttml") || path.endsWith(".dfxp") ->
+            MimeTypes.APPLICATION_TTML
+
+        else ->
+            MimeTypes.APPLICATION_SUBRIP
     }
 }
 
