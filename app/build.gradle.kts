@@ -274,9 +274,12 @@ ksp {
     // Hilt 2.57 can process Kotlin 2.3.0 metadata without moving to Hilt 2.59 (AGP 9).
     configurations.all {
         resolutionStrategy {
-            force("org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0")
+            force("org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.7.3")
             force("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+            force("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.7.3")
             force("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+            force("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.7.3")
+            force("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.7.3")
         }
     }
 
@@ -367,6 +370,9 @@ ksp {
     // (libffmpegJNI.so) is the likely source of the Play Console warning.
     add("sideloadImplementation", "org.jellyfin.media3:media3-ffmpeg-decoder:1.9.0+1")
 
+    // ASS/SSA subtitle rendering for Media3.
+    implementation("io.github.peerless2012:ass-media:0.5.1")
+
     // Networking - Retrofit + OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
@@ -456,7 +462,7 @@ ksp {
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("io.mockk:mockk:1.13.8")
     testImplementation("app.cash.turbine:turbine:1.0.0")  // Flow testing
     testImplementation("com.google.truth:truth:1.1.5")    // Better assertions
@@ -471,7 +477,7 @@ ksp {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
     androidTestImplementation("io.mockk:mockk-android:1.13.8")
-    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 
 secrets {
@@ -608,5 +614,3 @@ dependencies {
     add("sideloadImplementation", "org.mozilla:rhino:1.8.1")
     add("sideloadImplementation", "com.google.re2j:re2j:1.8")
 }
-
-
