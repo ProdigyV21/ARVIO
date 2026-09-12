@@ -68,6 +68,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Clock
+import com.arflix.tv.ui.screens.player.subtitles.AiLineSync
+import com.arflix.tv.ui.screens.player.subtitles.AiVerdict
+import com.arflix.tv.ui.screens.player.subtitles.mayRememberMatch
+import com.arflix.tv.ui.screens.player.subtitles.verdict
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleAutoSync
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleSyncMatcher
@@ -4165,8 +4169,13 @@ class PlayerViewModel @Inject constructor(
             // So whenever a key exists, the candidate we are about to commit to gets its TEXT
             // checked — and if it is rejected, so does the next one, up to a small call budget.
             var aiChecks = 0
-            /** Candidates the model looked at and did not reject. */
-            val aiVerified = HashSet<String>()
+            /**
+             * What the model established for each candidate it looked at and did not reject. Only
+             * [AiVerdict.CONFIRMED] is a verification: an UNCONFIRMED check (the request failed, too
+             * few pairs to measure, pairs that disagree) still lets the candidate win on timing, but
+             * it is not remembered as a verified match (PR #688 review).
+             */
+            val aiVerdicts = HashMap<String, AiVerdict>()
             while (aiChecks < MATCH_AI_MAX_VERIFICATIONS && referenceCues.isNotEmpty() &&
                 aiSubtitleEnabled && aiApiKey.isNotBlank()
             ) {
@@ -4183,6 +4192,7 @@ class PlayerViewModel @Inject constructor(
                     it.first.provider == aiTarget.sub.provider && it.first.id == aiTarget.sub.id
                 }?.second
                 if (targetCues == null) break
+                var outcome = AiVerdict.UNCONFIRMED
                 run {
                     matchStep(
                         when {
@@ -4192,6 +4202,7 @@ class PlayerViewModel @Inject constructor(
                         }
                     )
                     val aiSync = measureOffsetWithAi(referenceCues, targetCues, aiTarget.sub.label)
+                    outcome = aiSync.verdict()
                     val aiOffset = aiSync?.offsetMs
                     suspend fun scoreAt(offsetMs: Long) = withContext(Dispatchers.Default) {
                         SubtitleSyncMatcher.scoreByTiming(
@@ -4241,8 +4252,14 @@ class PlayerViewModel @Inject constructor(
                             replaceTarget(0.0, 0L)
                         }
 
+                        // A failed request, or an answer too thin or inconsistent to measure. The
+                        // timing verdict stands and the candidate may still be selected on it, but
+                        // this is NOT a confirmation — see aiVerdicts.
                         aiOffset == null ->
-                            Log.i("SubMatch", "[ai-sync] no answer from the model — leaving the timing verdict alone")
+                            Log.i(
+                                "SubMatch",
+                                "[ai-sync] could not confirm the dialogue — timing verdict stands (unverified)"
+                            )
 
                         // The two instruments agree: the shift is real, keep it.
                         kotlin.math.abs(aiOffset - aiTarget.offsetMs) <= MATCH_AI_OUTLIER_MS ->
@@ -4296,9 +4313,10 @@ class PlayerViewModel @Inject constructor(
                         }
                     }
                 }
-                // Not rejected — this really is the episode's dialogue, so stop asking.
+                // Not rejected: stop asking, and record what the model actually established — a
+                // confirmed dialogue, or only a failed/inconclusive check that leaves timing standing.
                 if ("${aiTarget.sub.provider}|${aiTarget.sub.id}" !in aiRejected) {
-                    aiVerified.add("${aiTarget.sub.provider}|${aiTarget.sub.id}")
+                    aiVerdicts["${aiTarget.sub.provider}|${aiTarget.sub.id}"] = outcome
                     break
                 }
                 // Rejected. Bring in the rest of the pack (first time only) and go round again for
@@ -4321,16 +4339,19 @@ class PlayerViewModel @Inject constructor(
             // rejected subtitles at 0.81-0.82 in one scan, so "highest remaining score" is not a
             // safe default — silence from the verifier means unverified, not approved.
             val aiIsArbiter = referenceCues.isNotEmpty() && aiSubtitleEnabled && aiApiKey.isNotBlank()
-            fun verified(candidate: ScoredCandidate): Boolean =
-                !aiIsArbiter || "${candidate.sub.provider}|${candidate.sub.id}" in aiVerified
+            // "Cleared" = the model looked at it and did not reject it. That is enough to SELECT it:
+            // a failed or inconclusive check leaves a timing-only fallback, which is fine. Whether it
+            // counts as VERIFIED, and may be remembered, is a separate question — see the cache write.
+            fun cleared(candidate: ScoredCandidate): Boolean =
+                !aiIsArbiter || "${candidate.sub.provider}|${candidate.sub.id}" in aiVerdicts
 
             val winner = when {
-                provisionalScored != null && accepted(provisionalScored) && verified(provisionalScored) ->
+                provisionalScored != null && accepted(provisionalScored) && cleared(provisionalScored) ->
                     provisionalScored
-                best == null || !accepted(best) || !verified(best) -> null
+                best == null || !accepted(best) || !cleared(best) -> null
                 else -> best
             }
-            if (winner == null && best != null && accepted(best) && !verified(best)) {
+            if (winner == null && best != null && accepted(best) && !cleared(best)) {
                 Log.w(
                     "SubMatch",
                     "no verified candidate: best was \"${best.sub.label}\" at " +
@@ -4396,8 +4417,19 @@ class PlayerViewModel @Inject constructor(
                 }
                 // Cache the original (addon) identity + any rescue offset — the local file is
                 // per-session transient, but the offset must be re-applied on the next playback.
-                // Deferred until the match has survived real viewing (see rememberMatchAfterDwell).
-                rememberMatchAfterDwell(winner.sub, winner.offsetMs)
+                // Deferred until the match has survived real viewing (see rememberMatchAfterDwell),
+                // and only for a VERIFIED match: with AI available, one whose dialogue the model
+                // confirmed. A timing-only fallback is selected but not remembered, so the next
+                // playback scans again instead of skipping straight to an unconfirmed subtitle.
+                val winnerVerdict = aiVerdicts["${winner.sub.provider}|${winner.sub.id}"]
+                if (mayRememberMatch(aiIsArbiter, winnerVerdict)) {
+                    rememberMatchAfterDwell(winner.sub, winner.offsetMs)
+                } else {
+                    Log.i(
+                        "SubMatch",
+                        "not remembering \"${winner.sub.label}\": AI could not confirm the dialogue (timing-only)"
+                    )
+                }
                 showMatchToast(
                     if (winner.offsetMs != 0L) {
                         PlayerMessage.Res(
@@ -4460,37 +4492,6 @@ class PlayerViewModel @Inject constructor(
      *
      * Returns null when AI isn't configured, the inputs are too thin, or the request fails.
      */
-    /**
-     * [pairs] is how many reference lines the model could confidently match in the candidate.
-     * **Zero is the important value**: it means the two files are not the same dialogue at all —
-     * the wrong episode, or a wholly different cut — which timing scoring cannot detect. [offsetMs]
-     * is null when there is no usable shift (no answer, already aligned, or beyond plausibility).
-     */
-    private data class AiLineSync(
-        val pairs: Int,
-        val offsetMs: Long?,
-        /**
-         * Set when the lines DID pair but the shift they imply is beyond [MATCH_OFFSET_MAX_MS].
-         * That is a positive finding, not a missing one: this is the right episode cut to a
-         * different length, and no constant offset makes it usable. It must not be confused with
-         * "the model had no answer", which leaves the timing verdict standing.
-         */
-        val unfixableShiftMs: Long? = null,
-        /** How many reference lines were sent; set when the answer paired too few to measure. */
-        val sent: Int = 0,
-    ) {
-        /**
-         * The model answered and could pair none, or almost none, of the reference lines: these are
-         * not the same dialogue. Exactly zero used to be the only veto, so a reply pairing 1 of 8
-         * lines was treated like no reply at all and the coincidental timing score it should have
-         * overruled stood — The Office S01E03 (Sept 2026): 0.75 on timing, 1/8 lines paired, the wrong
-         * subtitle selected while the right one sat third. Correct subtitles have paired 8/8, 8/8, 4/5
-         * and 3/7, so the bar sits well below them.
-         */
-        val notThisDialogue: Boolean
-            get() = pairs == 0 || pairs < sent * MATCH_AI_MIN_PAIR_FRACTION
-    }
-
     private suspend fun measureOffsetWithAi(
         referenceCues: List<SubtitleSyncMatcher.TimedCue>,
         candidateCues: List<SubtitleSyncMatcher.TimedCue>,
@@ -6447,11 +6448,6 @@ class PlayerViewModel @Inject constructor(
         private const val MATCH_AI_REFERENCE_LINES = 8   // reference lines sent per request
         private const val MATCH_AI_CANDIDATE_LINES = 40  // candidate window sent per request
         private const val MATCH_AI_MIN_PAIRS = 3         // fewer pairs than this can't measure an offset
-        /**
-         * An answer pairing fewer than this share of the reference lines sent is a veto, like zero:
-         * 1 of 8 is different dialogue, not a thin measurement. 2 of 8 stays inconclusive.
-         */
-        private const val MATCH_AI_MIN_PAIR_FRACTION = 0.25
         private const val MATCH_AI_OUTLIER_MS = 450L     // pairs this far from the median are mis-pairings
         /**
          * How much a MODEL-measured shift must improve the timing score. Deliberately far smaller
@@ -6463,7 +6459,7 @@ class PlayerViewModel @Inject constructor(
         /**
          * Call budget per scan. Must be large enough to work down a realistic candidate list,
          * because running out is NOT a licence to accept the next one unverified — see the
-         * aiVerified check after the loop.
+         * cleared check after the loop.
          */
         private const val MATCH_AI_MAX_VERIFICATIONS = 6
 

@@ -238,6 +238,10 @@ the **median** of `referenceTime − candidateTime` over confident pairs, with >
 - **When AI is available it has the final say.** A candidate it never cleared is not accepted, even
   if it scores highest — exhausting `MATCH_AI_MAX_VERIFICATIONS` (6) means *unverified*, not
   approved. The scan then ends on AI translation rather than on a subtitle nothing corroborated.
+  *Cleared* and *confirmed* are different, though: a failed or inconclusive check (request failed,
+  too few pairs to measure, pairs disagree) clears a candidate to be **selected** on timing, but only
+  a confirmed dialogue counts as verified and is remembered (`AiVerdict`, `mayRememberMatch` in
+  `subtitles/AiLineSync.kt`, covered by `AiVerdictTest`).
 - Cost: one small request on a clean scan; up to the budget when candidates are being rejected.
 - **Keyless users get none of this** — timing alone, with the weaknesses above.
 
@@ -460,7 +464,9 @@ default is SRT for extensionless URLs.
   of the file).
 - Value = candidate `provider|id` (not URL — addon URLs are ephemeral). Stored as JSON list in
   `subtitle_match_cache_v1` (global DataStore), LRU 50. **Not cloud-synced** (deliberate).
-- Written on verified match only (never for unverified fallback picks), and **only after the user
+- Written on verified match only (never for unverified fallback picks — and with AI available,
+  "verified" means the model confirmed the dialogue: a timing-only fallback after a failed or
+  inconclusive AI check is selected but not remembered), and **only after the user
   has kept watching it for `MATCH_CACHE_DWELL_MS` (2 min) of *playing* time**. A cache entry is a
   claim about the file that skips the entire scan on every future playback, so it must not be
   written on the strength of a verdict the user rejected ten seconds later — that would make one bad
