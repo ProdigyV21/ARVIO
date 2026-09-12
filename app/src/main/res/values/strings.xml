@@ -1016,7 +1016,7 @@
     <string name="player_subtitle_find_best_match">Find Best Match</string>
     <string name="player_subtitle_scanning">Scanning…</string>
     <string name="player_subtitle_best_match_hint">Auto-pick the best-synced subtitle</string>
-    <string name="player_subtitle_searching_match">Searching for a match…</string>
+    <string name="player_subtitle_searching_match">Adjusting subtitles…</string>
     <string name="player_audio_translate">Translate Audio</string>
     <string name="player_skip_intro">Skip Intro</string>
     <string name="player_skip_recap">Skip Recap</string>
@@ -1049,6 +1049,9 @@
     <string name="player_match_sync_unverified">Selected %1$s (sync unverified)</string>
     <string name="player_match_scored">Matched: %1$s · %2$d%% (%3$s)</string>
     <string name="player_match_scored_offset">Matched: %1$s · %2$d%% (%3$s) (auto-offset %4$s)</string>
+    <!-- Marks a subtitle row whose timing auto-match corrected: it is no longer the file as the
+         addon published it. Shown with the shift, e.g. "fixed +1.0s". -->
+    <string name="player_subtitle_auto_fixed">fixed</string>
     <string name="player_match_none_keeping_ai">No well-synced subtitle found — keeping AI translation</string>
     <string name="player_match_none_score_keeping_ai">No well-synced subtitle found (best %1$d%%) — keeping AI translation</string>
     <string name="player_match_none_using_ai">No well-synced subtitle found — using AI translation</string>

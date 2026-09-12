@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Handler
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleTranslationManager
 import com.arflix.tv.ui.screens.player.subtitles.AudioCaptureProcessor
+import com.arflix.tv.ui.screens.player.subtitles.SubtitleAutoSync
+import com.arflix.tv.ui.screens.player.subtitles.SubtitleSyncMatcher
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -34,6 +36,14 @@ class AiSubtitleRenderersFactory(
     val syncOffsetUs = java.util.concurrent.atomic.AtomicLong(0L)
     val audioDelayUs = java.util.concurrent.atomic.AtomicLong(0L)
 
+    /**
+     * Timing correction found by subtitle auto-match, applied live at the renderer instead of being
+     * baked into the served file — so a correction (and a later refinement of it) lands with no
+     * MediaItem rebuild. Set/cleared by PlayerScreen for the *currently selected* track only: that
+     * scoping is what keeps a correction from leaking onto a different subtitle or a new file.
+     */
+    val autoSync = java.util.concurrent.atomic.AtomicReference<SubtitleAutoSync?>(null)
+
     var audioCaptureProcessor: AudioCaptureProcessor? = null
         private set
 
@@ -49,6 +59,22 @@ class AiSubtitleRenderersFactory(
         for (renderer in offsetRenderers) {
             val intervals = renderer.extractBufferedIntervals(maxCount)
             if (intervals.isNotEmpty()) return intervals
+        }
+        return emptyList()
+    }
+
+    /**
+     * Buffered cues of the selected text track **with their text**.
+     *
+     * Only a valid *reference* while AI translation is on screen: the embedded English track it
+     * translates from is then the selected one, so these are the reference cues, free. At any other
+     * time the selected track is the user's own subtitle and scoring against it is a self-match —
+     * the caller must check that by text before trusting the result.
+     */
+    fun extractBufferedReferenceCues(maxCount: Int): List<SubtitleSyncMatcher.TimedCue> {
+        for (renderer in offsetRenderers) {
+            val cues = renderer.extractBufferedTimedCues(maxCount)
+            if (cues.isNotEmpty()) return cues
         }
         return emptyList()
     }
@@ -151,7 +177,8 @@ class AiSubtitleRenderersFactory(
                 baseRenderer = out[index],
                 translationManager = translationManager,
                 translationScope = scope,
-                syncOffsetUs = syncOffsetUs
+                syncOffsetUs = syncOffsetUs,
+                autoSync = autoSync
             )
             offsetRenderers.add(offsetRenderer)
             out[index] = offsetRenderer
@@ -348,7 +375,9 @@ private class SubtitleOffsetRenderer(
     private val baseRenderer: Renderer,
     private val translationManager: SubtitleTranslationManager,
     private val translationScope: CoroutineScope,
-    private val syncOffsetUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0L)
+    private val syncOffsetUs: java.util.concurrent.atomic.AtomicLong = java.util.concurrent.atomic.AtomicLong(0L),
+    private val autoSync: java.util.concurrent.atomic.AtomicReference<SubtitleAutoSync?> =
+        java.util.concurrent.atomic.AtomicReference(null)
 ) : Renderer by baseRenderer {
 
     companion object {
@@ -364,14 +393,14 @@ private class SubtitleOffsetRenderer(
     private var lastSeekRetryMs = 0L
     private var lastRenderPositionUs = Long.MIN_VALUE
     private var lookaheadJob: Job? = null
-    @Volatile private var cachedResolverField: java.lang.reflect.Field? = null
-    @Volatile private var cachedResolverCuesField: java.lang.reflect.Field? = null
-    @Volatile private var cachedCueWrapperField: java.lang.reflect.Field? = null
 
     override fun render(positionUs: Long, elapsedRealtimeUs: Long) {
         currentPositionUs = positionUs
         val prevPositionUs = lastRenderPositionUs
-        val offset = syncOffsetUs.get()
+        // The manual delay knob and the auto-match correction compose: a cue authored at t is meant
+        // to show at t + offset, so to display it at player position p the base renderer must be
+        // driven at t = p - offset. This runs on every render tick — keep it to one subtraction.
+        val offset = syncOffsetUs.get() + (autoSync.get()?.offsetUs ?: 0L)
         val adjustedUs = if (offset != 0L) (positionUs - offset).coerceAtLeast(0L) else positionUs
         baseRenderer.render(adjustedUs, elapsedRealtimeUs)
 
@@ -439,265 +468,21 @@ private class SubtitleOffsetRenderer(
     }
 
     // ── Reflection-based cue extraction ──────────────────────────────────────
+    // Reflection lives in BufferedCueReader.
 
-    fun extractAllCueTexts(maxCount: Int = WINDOW_CUES): List<String> {
-        val removeHI = translationManager.removeHearingImpaired
-        val texts = LinkedHashSet<String>()
-
-        // Modern Media3: TextRenderer holds a MergingCuesResolver (field: cuesResolver)
-        try {
-            val resolverField = cachedResolverField ?: findField(baseRenderer.javaClass, "cuesResolver")?.also {
-                cachedResolverField = it
-            }
-            val resolver = resolverField?.get(baseRenderer)
-            if (resolver != null) {
-                var extracted = false
-                val cachedField = cachedResolverCuesField
-                if (cachedField != null) {
-                    val v = runCatching { cachedField.get(resolver) }.getOrNull()
-                    if (v != null) {
-                        val count = extractFromCollectionOrMap(v, texts, removeHI, maxCount)
-                        if (count > 0) extracted = true
-                    }
-                }
-                if (!extracted) {
-                    for (candidate in listOf("cuesWithTimingList", "cuesWithTimings", "cueGroupsByStartTime", "cueGroups", "cueGroupList", "groups")) {
-                        val f = findField(resolver.javaClass, candidate) ?: continue
-                        val v = f.get(resolver) ?: continue
-                        val count = extractFromCollectionOrMap(v, texts, removeHI, maxCount)
-                        if (count > 0) {
-                            cachedResolverCuesField = f
-                            extracted = true
-                            break
-                        }
-                    }
-                }
-                if (!extracted) {
-                    // Fall back to scanning all fields on the resolver
-                    var cls: Class<*>? = resolver.javaClass
-                    outer@ while (cls != null && cls != Any::class.java) {
-                        for (f in cls.declaredFields) {
-                            try {
-                                f.isAccessible = true
-                                val v = f.get(resolver) ?: continue
-                                val count = extractFromCollectionOrMap(v, texts, removeHI, maxCount)
-                                if (count > 0) {
-                                    cachedResolverCuesField = f
-                                    extracted = true
-                                    break@outer
-                                }
-                            } catch (_: Exception) {}
-                        }
-                        cls = cls.superclass
-                    }
-                }
-            }
-        } catch (_: Exception) {
-        }
-
-        if (texts.isNotEmpty()) return texts.take(maxCount)
-
-        // Legacy Media3: subtitle + nextSubtitle fields (SubtitleOutputBuffer)
-        fun extractFromSubtitleField(fieldName: String) {
-            try {
-                if (texts.size >= maxCount) return
-                val field = findField(baseRenderer.javaClass, fieldName) ?: return
-                val subtitle = field.get(baseRenderer) ?: return
-                val getEventTimeCount = subtitle.javaClass.getMethod("getEventTimeCount")
-                val getEventTime = subtitle.javaClass.getMethod("getEventTime", Int::class.java)
-                val getCues = subtitle.javaClass.getMethod("getCues", Long::class.java)
-                val count = getEventTimeCount.invoke(subtitle) as Int
-                for (i in 0 until count) {
-                    if (texts.size >= maxCount) break
-                    val timeUs = getEventTime.invoke(subtitle, i) as Long
-                    @Suppress("UNCHECKED_CAST")
-                    val cues = getCues.invoke(subtitle, timeUs) as? List<Cue> ?: continue
-                    val joined = joinCues(cues, removeHI)
-                    if (joined.isNotBlank()) texts.add(joined)
-                }
-            } catch (_: Exception) {
-            }
-        }
-        extractFromSubtitleField("subtitle")
-        extractFromSubtitleField("nextSubtitle")
-        return texts.take(maxCount)
-    }
+    /**
+     * Text of the buffered cues, at most [maxCount] — the pre-translation batch cap by default.
+     * Stops as soon as it has enough (see [BufferedCueReader.allCueTexts]).
+     */
+    fun extractAllCueTexts(maxCount: Int = WINDOW_CUES): List<String> =
+        BufferedCueReader.allCueTexts(baseRenderer, translationManager.removeHearingImpaired, maxCount)
 
     /** Buffered cue intervals (startMs, endMs) for text-carrying cues, from the modern resolver. */
-    fun extractBufferedIntervals(maxCount: Int): List<Pair<Long, Long>> {
-        val intervals = ArrayList<Pair<Long, Long>>()
-        // Cue buffer timestamps are on ExoPlayer's internal stream timeline, which adds a large
-        // base offset; subtract the renderer's stream offset to get 0-based media time.
-        val offsetMs = readStreamOffsetUs() / 1000L
-        try {
-            val resolverField = cachedResolverField ?: findField(baseRenderer.javaClass, "cuesResolver")?.also {
-                cachedResolverField = it
-            }
-            val resolver = resolverField?.get(baseRenderer)
-            if (resolver != null) {
-                // Media3 has multiple resolver impls chosen per track cue-replacement behavior
-                // (MergingCuesResolver, ReplacingCuesResolver) — probe the known field names.
-                for (candidate in listOf(
-                    "cuesWithTimingList", "cuesWithTimings",
-                    "cueGroupsByStartTime", "cueGroups", "cueGroupList", "groups"
-                )) {
-                    val f = findField(resolver.javaClass, candidate) ?: continue
-                    val v = f.get(resolver) ?: continue
-                    val items: Collection<*> = when (v) {
-                        is Map<*, *> -> v.values
-                        is Collection<*> -> v
-                        else -> continue
-                    }
-                    for (item in items) {
-                        val (s, e) = item?.let(::intervalFromCueWrapper) ?: continue
-                        intervals.add((s - offsetMs) to (e - offsetMs))
-                    }
-                    if (intervals.isNotEmpty()) break
-                }
-                if (intervals.isEmpty()) {
-                    // Unknown impl/field name (new media3 version?) — scan every field for a
-                    // cue-carrying collection, like the text extractor already does.
-                    var cls: Class<*>? = resolver.javaClass
-                    outer@ while (cls != null && cls != Any::class.java) {
-                        for (f in cls.declaredFields) {
-                            try {
-                                f.isAccessible = true
-                                val v = f.get(resolver) ?: continue
-                                val items: Collection<*> = when (v) {
-                                    is Map<*, *> -> v.values
-                                    is Collection<*> -> v
-                                    else -> continue
-                                }
-                                for (item in items) {
-                                    val (s, e) = item?.let(::intervalFromCueWrapper) ?: continue
-                                    intervals.add((s - offsetMs) to (e - offsetMs))
-                                }
-                                if (intervals.isNotEmpty()) break@outer
-                            } catch (_: Exception) {
-                            }
-                        }
-                        cls = cls.superclass
-                    }
-                }
-            }
-        } catch (_: Exception) {
-        }
-        return intervals.filter { it.first >= 0 }.distinct().sortedBy { it.first }.take(maxCount)
-    }
+    fun extractBufferedIntervals(maxCount: Int): List<Pair<Long, Long>> =
+        BufferedCueReader.intervals(baseRenderer, maxCount)
 
-    /** The renderer's stream offset (µs) — the base added to buffer sample timestamps. */
-    private fun readStreamOffsetUs(): Long {
-        for (name in listOf("streamOffsetUs", "outputStreamOffsetUs")) {
-            val v = runCatching { findField(baseRenderer.javaClass, name)?.getLong(baseRenderer) }.getOrNull()
-            if (v != null && v > 0L) return v
-        }
-        return 0L
-    }
-
-    private fun intervalFromCueWrapper(obj: Any): Pair<Long, Long>? {
-        val cues: List<Cue>? = when (obj) {
-            is CueGroup -> obj.cues
-            is List<*> -> obj.filterIsInstance<Cue>()
-            else -> {
-                val cuesField = cachedCueWrapperField ?: findField(obj.javaClass, "cues")?.also {
-                    cachedCueWrapperField = it
-                }
-                (cuesField?.get(obj) as? List<*>)?.filterIsInstance<Cue>()
-            }
-        }
-        if (cues.isNullOrEmpty() || cues.none { !it.text?.toString()?.trim().isNullOrBlank() }) return null
-
-        val startUs: Long
-        val endUs: Long
-        if (obj is CueGroup) {
-            startUs = obj.presentationTimeUs
-            endUs = startUs + 2_000_000L // CueGroup carries no duration — assume 2s on screen
-        } else {
-            val start = runCatching { findField(obj.javaClass, "startTimeUs")?.getLong(obj) }.getOrNull() ?: return null
-            // REPLACE-behavior tracks (ReplacingCuesResolver, e.g. MKV SubRip) carry
-            // durationUs = C.TIME_UNSET (large negative) — each cue lasts until replaced. The
-            // negative value made endUs < startUs and every item got rejected, silently killing
-            // the buffered fast path for that whole content category. Fall back to a nominal
-            // duration: the start timestamp carries the alignment signal.
-            val dur = runCatching { findField(obj.javaClass, "durationUs")?.getLong(obj) }.getOrNull()
-                ?.takeIf { it > 0L } ?: 2_000_000L
-            startUs = start
-            endUs = start + dur
-        }
-        if (endUs <= startUs) return null
-        return (startUs / 1000L) to (endUs / 1000L)
-    }
-
-    private fun extractFromCollectionOrMap(v: Any, texts: MutableSet<String>, removeHI: Boolean, maxCount: Int = WINDOW_CUES): Int {
-        var count = 0
-        when (v) {
-            is Map<*, *> -> {
-                for (value in v.values) {
-                    if (texts.size >= maxCount) break
-                    if (extractCueGroupTexts(value, texts, removeHI)) count++
-                }
-            }
-            is Collection<*> -> {
-                for (item in v) {
-                    if (texts.size >= maxCount) break
-                    if (extractCueGroupTexts(item, texts, removeHI)) count++
-                }
-            }
-        }
-        return count
-    }
-
-    private fun extractCueGroupTexts(obj: Any?, texts: MutableSet<String>, removeHI: Boolean): Boolean {
-        if (obj == null) return false
-        if (obj is CueGroup) {
-            val joined = joinCues(obj.cues, removeHI)
-            if (joined.isNotBlank()) texts.add(joined)
-            return true
-        }
-        if (obj is List<*>) {
-            val cues = obj.filterIsInstance<Cue>()
-            val joined = joinCues(cues, removeHI)
-            if (joined.isNotBlank()) texts.add(joined)
-            return obj.isNotEmpty()
-        }
-        // CuesWithTiming or similar wrapper — look for a 'cues' field
-        try {
-            val cuesField = cachedCueWrapperField ?: findField(obj.javaClass, "cues")?.also {
-                cachedCueWrapperField = it
-            }
-            val cues = cuesField?.get(obj)
-            if (cues is List<*>) {
-                val joined = joinCues(cues.filterIsInstance<Cue>(), removeHI)
-                if (joined.isNotBlank()) texts.add(joined)
-                return cues.isNotEmpty()
-            }
-        } catch (_: Exception) {}
-        return false
-    }
-
-    private fun joinCues(cues: List<Cue>, removeHI: Boolean): String =
-        cues.mapNotNull { it.text?.toString()?.trim() }
-            .filter { it.isNotBlank() }
-            .joinToString("\n")
-            .let { if (removeHI) stripHI(it) else it }
-
-    private fun stripHI(text: String): String =
-        text.replace(AiSubtitleRegexes.BRACKET_REGEX, "")
-            .replace(AiSubtitleRegexes.MUSIC_REGEX, "")
-            .trim()
-
-    private fun findField(startClass: Class<*>, name: String): java.lang.reflect.Field? {
-        var cls: Class<*>? = startClass
-        while (cls != null && cls != Any::class.java) {
-            try {
-                val f = cls.getDeclaredField(name)
-                f.isAccessible = true
-                return f
-            } catch (_: NoSuchFieldException) {}
-            cls = cls.superclass
-        }
-        return null
-    }
+    fun extractBufferedTimedCues(maxCount: Int): List<SubtitleSyncMatcher.TimedCue> =
+        BufferedCueReader.timedCues(baseRenderer, maxCount)
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)

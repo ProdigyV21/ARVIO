@@ -70,6 +70,18 @@ object SubtitleSyncMatcher {
      * Cancellable: cancelling the calling coroutine aborts the HTTP call rather than waiting it out.
      */
     suspend fun loadRaw(url: String, lang: String? = null): String? = withContext(Dispatchers.IO) {
+        // Already-localized copies (preload mode / a previous scan) are plain UTF-8 files on disk —
+        // OkHttp can't open a file: URL, and re-decoding is pointless since localizeSubtitle already
+        // normalized the encoding. Reading them locally is what makes the scan's "download" phase
+        // free when Preload Subtitles has run.
+        if (url.startsWith("file:")) {
+            return@withContext runCatching {
+                java.io.File(java.net.URI(url)).readText()
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                Log.w(TAG, "loadRaw local read failed url=$url err=${error.message}")
+            }.getOrNull()
+        }
         runCatching {
             val request = Request.Builder().url(url).build()
             client.newCall(request).await().use { response ->

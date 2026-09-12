@@ -183,6 +183,7 @@ import com.arflix.tv.ui.screens.player.engine.exoplayer.AiSubtitleRenderersFacto
 import com.arflix.tv.ui.screens.player.engine.PlayerEngine
 import com.arflix.tv.ui.screens.player.engine.PlayerEngineFactory
 import com.arflix.tv.ui.screens.player.engine.PlayerEngineType
+import com.arflix.tv.ui.screens.player.subtitles.SubtitleAutoSync
 import com.arflix.tv.ui.screens.player.common.NextEpisodePromptGate
 import com.arflix.tv.ui.screens.player.common.PlaybackEpisodeKey
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
@@ -1107,12 +1108,25 @@ fun PlayerScreen(
         viewModel.bufferedCueTextsProvider = { max ->
             aiRenderersFactory.extractBufferedCueTexts(max)
         }
+        viewModel.bufferedReferenceCuesProvider = { max ->
+            aiRenderersFactory.extractBufferedReferenceCues(max)
+        }
+    }
+    // The auto-match correction reaches the renderer only while its own track is the selected one.
+    LaunchedEffect(uiState.autoSync, uiState.autoSyncSubtitleKey, uiState.selectedSubtitle) {
+        val selectedKey = uiState.selectedSubtitle?.let { "${it.provider}|${it.id}" }
+        aiRenderersFactory.autoSync.set(
+            uiState.autoSync?.takeIf { uiState.autoSyncSubtitleKey != null && uiState.autoSyncSubtitleKey == selectedKey }
+        )
     }
     DisposableEffect(aiRenderersFactory) {
         onDispose {
             aiRenderersFactory.audioCaptureProcessor?.onChunk = null
+            aiRenderersFactory.autoSync.set(null)
             viewModel.bufferedReferenceIntervalsProvider = null
             viewModel.bufferedCueTextsProvider = null
+            viewModel.bufferedReferenceCuesProvider = null
+            viewModel.selectedTextTrackProvider = null
             viewModel.geminiLiveService.disconnect()
         }
     }
@@ -1686,6 +1700,22 @@ fun PlayerScreen(
     }
 
     // BroadcastReceiver for PiP control actions (rewind, play/pause, forward) — touch devices only
+    // Which text track the player has ACTUALLY selected, as (groupIndex, trackIndex) in
+    // currentTracks.groups. Auto-match reads its reference from the text renderer's buffer, and a
+    // selection change takes a moment to land — read before it does and the buffer still holds the
+    // previous track (From S01E10: a perfect subtitle shifted 4s against the one shown before it).
+    LaunchedEffect(exoPlayer) {
+        viewModel.selectedTextTrackProvider = {
+            exoPlayer.currentTracks.groups.withIndex().firstNotNullOfOrNull { (groupIndex, group) ->
+                if (group.type != C.TRACK_TYPE_TEXT || !group.isSelected) {
+                    null
+                } else {
+                    (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { groupIndex to it }
+                }
+            }
+        }
+    }
+
     DisposableEffect(exoPlayer) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !deviceType.isTouchDevice()) return@DisposableEffect onDispose {}
         val receiver = object : BroadcastReceiver() {
@@ -3509,8 +3539,14 @@ fun PlayerScreen(
                         // track under the hood to read its timing — hide its raw (e.g. English)
                         // cues while the scan runs. Display-only: the scan's cue collection
                         // listens on the player, not this view. With AI translating, the
-                        // on-screen text is the translation, so nothing is hidden.
-                        visibility = if (uiState.isFindingBestMatch && !uiState.isAiTranslating) {
+                        // on-screen text is the translation, so nothing is hidden — and while an
+                        // optimistic pick is still showing, the visible track is the user's own
+                        // subtitle, so there is nothing to hide either. The in-player reference
+                        // clears provisionalMatch when it takes the track, which is what re-enables
+                        // hiding for the rest of the scan.
+                        visibility = if (uiState.isFindingBestMatch && !uiState.isAiTranslating &&
+                            uiState.provisionalMatch == null
+                        ) {
                             android.view.View.INVISIBLE
                         } else {
                             android.view.View.VISIBLE
@@ -3602,12 +3638,13 @@ fun PlayerScreen(
         // (AI-hearing on-screen overlay removed — the hearing still runs under the hood to power
         // "Find Best Match", but its transcription is no longer displayed.)
 
-        // "Find Best Match" persistent searching indicator
+        // "Find Best Match" indicator — one generic message for the whole run, not a running
+        // commentary on its internal stages (those live in logcat via matchStep).
         if (hasPlaybackStarted && uiState.isFindingBestMatch) {
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
+                    .align(Alignment.TopStart)
+                    .padding(top = 16.dp, start = 24.dp)
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f),
                         shape = RoundedCornerShape(20.dp)
@@ -3623,8 +3660,7 @@ fun PlayerScreen(
                     color = androidx.compose.ui.graphics.Color(0xFF7EC8F0)
                 )
                 Text(
-                    text = uiState.matchStatus?.localizedText()
-                        ?: stringResource(R.string.player_subtitle_searching_match),
+                    text = stringResource(R.string.player_subtitle_searching_match),
                     style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f)
                 )
@@ -4452,6 +4488,7 @@ fun PlayerScreen(
                     subtitles = uiState.subtitles,
                     selectedSubtitle = uiState.selectedSubtitle,
                     isAiTranslating = uiState.isAiTranslating,
+                    autoSync = uiState.autoSync,
                     isAiAvailable = uiState.isAiAvailable,
                     aiTargetLanguageName = uiState.aiTargetLanguageName,
                     matchLanguageName = uiState.matchLanguageName,
@@ -5460,6 +5497,8 @@ private fun SubtitleMenu(
     matchLanguageName: String = "",
     isLiveAudioTranslating: Boolean = false,
     isFindingBestMatch: Boolean = false,
+    // Auto-match timing correction on the selected track, shown as "· fixed +1.0s" on its row.
+    autoSync: SubtitleAutoSync? = null,
     audioTracks: List<AudioTrackInfo>,
     selectedAudioIndex: Int,
     activeTab: Int,
@@ -5656,8 +5695,9 @@ private fun SubtitleMenu(
                                     itemsIndexed(selectedGroup.second) { idx, (_, subtitle) ->
                                         val score = subtitleMatchScore(streamSource, subtitle)
                                         val langName = getFullLanguageName(subtitle.lang)
-                                        val offsetNote = matchedOffsetMsFor(selectedSubtitle, subtitle.id)
-                                            ?.let { " · ${formatMatchOffset(it)}" } ?: ""
+                                        val offsetNote = autoSyncNote(
+                                            autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, subtitle.id) }
+                                        )
                                         // Built-in tracks show no match % — muxed is assumed synced,
                                         // so a fake 100% is misleading; only addon subs carry a real score.
                                         val mainLabel = (if (!subtitle.isEmbedded && score > 0) "$langName ($score%)" else langName) + offsetNote
@@ -5977,8 +6017,9 @@ private fun SubtitleMenu(
                                 item(key = "mobile_${sub.id}") {
                                     val score = subtitleMatchScore(streamSource, sub)
                                     val langFullName = getFullLanguageName(sub.lang)
-                                    val offsetNote = matchedOffsetMsFor(selectedSubtitle, sub.id)
-                                        ?.let { " · ${formatMatchOffset(it)}" } ?: ""
+                                    val offsetNote = autoSyncNote(
+                                        autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, sub.id) }
+                                    )
                                     // No fake % on built-in tracks; only addon subs carry a real score.
                                     val displayName = (if (!sub.isEmbedded && score > 0) "$langFullName ($score%)" else langFullName) + offsetNote
                                     val description = when {
@@ -6344,21 +6385,24 @@ private fun detectAudioCodecLabel(codec: String?, trackLabel: String?): String? 
 // match (which strips at the last ':', past ExoPlayer's "periodIndex:") still resolves the base id.
 private const val ADDON_SUB_ID_PREFIX = "arvio-addon-sub:"
 
-// Marker appended to a served subtitle's id when a constant-offset rescue was baked in
-// ("…#ofs2000"). Kept in sync with PlayerViewModel.MATCH_OFFSET_ID_MARKER.
-private const val MATCH_OFFSET_ID_MARKER = "#ofs"
-
-/** A subtitle id with any offset-rescue marker stripped. */
-private fun subtitleBaseId(id: String): String = id.substringBefore(MATCH_OFFSET_ID_MARKER)
-
-/** True when [selected] is [rowId]'s track, ignoring an offset marker on either side. */
+/**
+ * True when [selected] is [rowId]'s track. Auto-match corrections used to be baked into a shifted
+ * copy carrying an "…#ofs2000" id, which this had to see through; they are now applied live by the
+ * text renderer, so the served copy keeps the addon's own id.
+ */
 private fun isSameSubtitleTrack(selected: Subtitle?, rowId: String): Boolean =
-    selected != null && subtitleBaseId(selected.id) == subtitleBaseId(rowId)
+    selected != null && selected.id == rowId
 
-/** The baked-in rescue offset (ms) when [selected] is [rowId]'s shifted copy, else null. */
-private fun matchedOffsetMsFor(selected: Subtitle?, rowId: String): Long? {
-    if (!isSameSubtitleTrack(selected, rowId)) return null
-    return selected!!.id.substringAfter(MATCH_OFFSET_ID_MARKER, "").toLongOrNull()?.takeIf { it != 0L }
+/**
+ * Menu suffix for an auto-corrected subtitle: " · fixed +1.0s". The word matters more than the
+ * number — it tells the user this row is no longer the file the addon published, which a bare
+ * "+1.0s" does not.
+ */
+@Composable
+private fun autoSyncNote(sync: SubtitleAutoSync?): String {
+    if (sync == null || sync.isIdentity) return ""
+    val fixed = stringResource(R.string.player_subtitle_auto_fixed)
+    return " · $fixed ${formatMatchOffset(sync.offsetMs)}"
 }
 
 /** "+2.0s" / "-1.5s". */
