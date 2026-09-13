@@ -53,6 +53,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -214,6 +215,7 @@ class HomeViewModel @Inject constructor(
     private val apkDownloader: com.arflix.tv.updater.ApkDownloader,
     private val updatePreferences: com.arflix.tv.updater.UpdatePreferences,
     private val updateStatusManager: com.arflix.tv.updater.UpdateStatusManager,
+    private val youTubeExtractor: com.arflix.tv.data.api.InAppYouTubeExtractor,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val imageLoader: ImageLoader by lazy(LazyThreadSafetyMode.NONE) {
@@ -1260,6 +1262,8 @@ class HomeViewModel @Inject constructor(
     // Debounce job for hero updates (Phase 6.1)
     private var heroUpdateJob: Job? = null
     private var heroDetailsJob: Job? = null
+    private var heroTrailerJob: Job? = null
+    private var prefetchTrailerJob: Job? = null
     private var prefetchJob: Job? = null
     private var preloadCategoryPriorityJob: Job? = null
     private val preloadCategoryJobs = ConcurrentHashMap<Int, Job>()
@@ -1698,6 +1702,7 @@ class HomeViewModel @Inject constructor(
                     preferences = context.settingsDataStore.data
                 ).collect { preferences ->
                     val previousState = _uiState.value
+                    val autoplayJustEnabled = !previousState.trailerAutoPlay && preferences.trailerAutoPlay
                     mediaRepository.contentLanguage = preferences.contentLanguage
                     val normalizedLanguage = mediaRepository.contentLanguage
                     val langChanged = observedContentLanguage?.let { it != normalizedLanguage } ?: false
@@ -1708,7 +1713,7 @@ class HomeViewModel @Inject constructor(
                     observedIptvFavoritesOnHome = preferences.iptvFavoritesOnHome
 
                     _uiState.value = previousState.copy(
-                        trailerAutoPlay = false,
+                        trailerAutoPlay = preferences.trailerAutoPlay,
                         trailerSoundEnabled = preferences.trailerSoundEnabled,
                         trailerDelaySeconds = preferences.trailerDelaySeconds,
                         trailerInCards = preferences.trailerInCards,
@@ -1717,11 +1722,21 @@ class HomeViewModel @Inject constructor(
                         smoothScrolling = preferences.smoothScrolling
                     )
 
+                    if (!preferences.trailerAutoPlay) {
+                        heroTrailerJob?.cancel()
+                        prefetchTrailerJob?.cancel()
+                        if (_uiState.value.heroTrailerKey != null) {
+                            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
+                        }
+                    }
+
                     if (langChanged) {
                         invalidateContentLanguageCaches()
                         loadHomeData()
                     } else if (iptvFavoritesPlacementChanged) {
                         loadHomeData()
+                    } else if (autoplayJustEnabled) {
+                        _uiState.value.heroItem?.let(::hydrateHeroDetailsIfNeeded)
                     }
                 }
             } catch (e: Exception) {
@@ -4504,6 +4519,8 @@ class HomeViewModel @Inject constructor(
         // Phase 6.1 + 6.2-6.3: Adaptive debounce
         heroUpdateJob?.cancel()
         heroDetailsJob?.cancel()
+        heroTrailerJob?.cancel()
+        prefetchTrailerJob?.cancel()
         heroUpdateJob = viewModelScope.launch {
             if (debounceMs > 0) {
                 delay(debounceMs)
@@ -4568,27 +4585,38 @@ class HomeViewModel @Inject constructor(
         )
     }
 
+    private fun loadTrailerForHero(item: MediaItem) {
+        if (!_uiState.value.trailerAutoPlay) {
+            heroTrailerJob?.cancel()
+            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
+            return
+        }
+        if (_uiState.value.heroItem?.id == item.id && _uiState.value.heroTrailerKey != null) {
+            return
+        }
+
+        heroTrailerJob?.cancel()
+        _uiState.value = _uiState.value.copy(heroTrailerKey = null)
+        heroTrailerJob = viewModelScope.launch(networkDispatcher) {
+            try {
+                val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
+                if (isActive && trailerKey != null && _uiState.value.heroItem?.id == item.id) {
+                    _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
+                    prefetchTrailerUrl(trailerKey)
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
+        }
+    }
+
     private fun hydrateHeroDetailsIfNeeded(item: MediaItem) {
         if (!isActionableMediaItem(item) || isIptvItem(item) || isCollectionItem(item)) {
             return
         }
 
-        // Fetch trailer for new hero item; skip if already loaded for this item (prevents restart mid-play)
-        if (_uiState.value.trailerAutoPlay &&
-            !(_uiState.value.heroItem?.id == item.id && _uiState.value.heroTrailerKey != null)
-        ) {
-            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
-            viewModelScope.launch(networkDispatcher) {
-                try {
-                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
-                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
-                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
-                    }
-                        } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
-            }
-        }
+        // Fetch trailer for new hero item with active job cancellation
+        loadTrailerForHero(item)
 
         val normalizedOverview = item.overview.trim()
         val looksTruncated = normalizedOverview.endsWith("...") || normalizedOverview.length < 120
@@ -4611,8 +4639,19 @@ class HomeViewModel @Inject constructor(
                 applyHeroDetailsSnapshotIfCurrent(item, snapshot)
                 snapshot.primaryNetworkLogo?.let { preloadLogoImages(listOf(it)) }
 
-                    } catch (e: Exception) {
+                // Fetch trailer key for hero (YouTube) if not yet resolved
+                loadTrailerForHero(item)
+            } catch (e: Exception) {
                 if (e is CancellationException) throw e
+            }
+        }
+    }
+
+    private fun prefetchTrailerUrl(trailerKey: String) {
+        prefetchTrailerJob?.cancel()
+        prefetchTrailerJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                youTubeExtractor.extractPlaybackSource("https://www.youtube.com/watch?v=$trailerKey")
             }
         }
     }
@@ -4620,22 +4659,8 @@ class HomeViewModel @Inject constructor(
     private fun scheduleHeroDetailsFetch(item: MediaItem, fastScrolling: Boolean) {
         heroDetailsJob?.cancel()
 
-        // Fetch trailer for new hero item; skip if already loaded for this item (prevents restart mid-play)
-        if (_uiState.value.trailerAutoPlay &&
-            !(_uiState.value.heroItem?.id == item.id && _uiState.value.heroTrailerKey != null)
-        ) {
-            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
-            viewModelScope.launch(networkDispatcher) {
-                try {
-                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
-                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
-                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
-                    }
-                        } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
-            }
-        }
+        // Fetch trailer for new hero item with active job cancellation
+        loadTrailerForHero(item)
 
         heroDetailsJob = viewModelScope.launch(networkDispatcher) {
             val detailsKey = heroDetailsKey(item)

@@ -179,6 +179,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var iptvRepository: Lazy<com.arflix.tv.data.repository.IptvRepository>
 
+    @Inject
+    lateinit var trailerPlayerPool: com.arflix.tv.core.player.TrailerPlayerPool
+
     private var jankStats: JankStats? = null
     private var pendingLauncherRequest by mutableStateOf<LauncherContinueWatchingRequest?>(null)
     private var pendingInstallPackUrl by mutableStateOf<String?>(null)
@@ -352,7 +355,8 @@ class MainActivity : ComponentActivity() {
                 LocalHasTouchScreen provides hasTouchScreen,
                 androidx.compose.ui.platform.LocalLayoutDirection provides
                     if (isRtl) androidx.compose.ui.unit.LayoutDirection.Rtl
-                    else androidx.compose.ui.unit.LayoutDirection.Ltr
+                    else androidx.compose.ui.unit.LayoutDirection.Ltr,
+                com.arflix.tv.core.player.LocalTrailerPlayerPool provides trailerPlayerPool
             ) {
                 ArflixTvTheme(
                     oledBlackBackground = oledBlackBackground,
@@ -439,6 +443,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         jankStats?.isTrackingEnabled = false
         jankStats = null
+        runCatching { trailerPlayerPool.release() }
         super.onDestroy()
     }
 }
