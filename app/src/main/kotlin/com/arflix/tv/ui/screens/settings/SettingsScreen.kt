@@ -125,6 +125,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Icon
 import com.arflix.tv.ui.components.LoadingIndicator
+import com.arflix.tv.ui.components.dragReorderItem
+import com.arflix.tv.ui.components.rememberDragReorderState
 import com.arflix.tv.ui.components.MobileSettingsCategory
 import com.arflix.tv.ui.components.MobileSettingsRow
 import com.arflix.tv.ui.components.IptvPlaylistModal
@@ -4213,8 +4215,13 @@ private fun MobileSettingsLayout(
     onDisconnectCloud: () -> Unit = {},
     onDisconnectTrakt: () -> Unit = {}
 ) {
+    // Every phone sub-page is opened from the main list and goes back to it. The
+    // categories list is the one exception: it is opened from the TV sources page,
+    // so sending Back to the main list skips a level and loses the page the user
+    // was actually on.
+    val backTarget = if (page == "IPTV_CATEGORIES") "TV" else "MAIN"
     val backMotion = rememberArvioPredictiveBack(enabled = page != "MAIN") {
-        onNavigate("MAIN")
+        onNavigate(backTarget)
     }
 
     var lastSubPage by remember { mutableStateOf(if (page != "MAIN") page else "") }
@@ -4295,7 +4302,7 @@ private fun MobileSettingsLayout(
                         contentDescription = stringResource(R.string.back),
                         tint = TextPrimary,
                         modifier = Modifier
-                            .clickable { onNavigate("MAIN") }
+                            .clickable { onNavigate(backTarget) }
                             .padding(end = 16.dp)
                             .size(28.dp)
                     )
@@ -4359,6 +4366,7 @@ private fun mobileCategoryTitle(page: String): String = when (page) {
     "Tracking Integrations" -> stringResource(R.string.settings_tracking_integrations)
     "Privacy & Data" -> stringResource(R.string.settings_privacy_data_title)
     "Cloud Sync & Account" -> stringResource(R.string.settings_cloud_account_sub_title)
+    "IPTV_CATEGORIES" -> stringResource(R.string.settings_iptv_categories)
     else -> page
 }
 
@@ -4585,6 +4593,32 @@ private fun MobileSettingsSubPage(
     var showStalkerRename by remember { mutableStateOf(false) }
     var stalkerRenameId by remember { mutableStateOf("") }
     var stalkerRenameName by remember { mutableStateOf("") }
+
+    // The categories page is caught before the shared scrolling column and gets the full height
+    // to itself. Press-and-hold reordering needs a list that scrolls itself while a row is held
+    // against an edge, and that is impossible inside a page that is already scrolling. Every other
+    // sub-page carries on unchanged below; the back arrow and the title live in the caller.
+    if (page == "IPTV_CATEGORIES") {
+        val categoriesPlaylistId = uiState.iptvSelectedPlaylistId.orEmpty()
+        IptvCategoriesSettings(
+            playlistId = categoriesPlaylistId,
+            availableGroups = uiState.iptvAvailableGroups,
+            hiddenGroups = uiState.iptvHiddenGroups,
+            groupOrder = uiState.iptvGroupOrder,
+            focusedIndex = -1,
+            focusedActionIndex = 0,
+            onToggleHidden = { viewModel.toggleIptvHiddenGroup(categoriesPlaylistId, it) },
+            onReset = { viewModel.resetIptvGroupOrder(categoriesPlaylistId) },
+            onBulkToggle = { visible -> viewModel.setAllIptvGroupsVisible(categoriesPlaylistId, visible) },
+            onMoveUp = { viewModel.moveIptvGroupUp(categoriesPlaylistId, it) },
+            onMoveDown = { viewModel.moveIptvGroupDown(categoriesPlaylistId, it) },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -5020,19 +5054,6 @@ private fun MobileSettingsSubPage(
                     onFallbackChannelLogosToggle = viewModel::setFallbackChannelLogosEnabled,
                     favoritesOnHomeEnabled = uiState.iptvFavoritesOnHome,
                     onFavoritesOnHomeToggle = viewModel::setIptvFavoritesOnHome,
-                )
-            }
-            "IPTV_CATEGORIES" -> {
-                IptvCategoriesSettings(
-                    playlistId = uiState.iptvSelectedPlaylistId ?: "",
-                    availableGroups = uiState.iptvAvailableGroups,
-                    hiddenGroups = uiState.iptvHiddenGroups,
-                    groupOrder = uiState.iptvGroupOrder,
-                    focusedIndex = -1,
-                    focusedActionIndex = 0,
-                    onToggleHidden = { viewModel.toggleIptvHiddenGroup(uiState.iptvSelectedPlaylistId ?: "", it) },
-                    onReset = { viewModel.resetIptvGroupOrder(uiState.iptvSelectedPlaylistId ?: "") },
-                    onBulkToggle = { visible -> viewModel.setAllIptvGroupsVisible(uiState.iptvSelectedPlaylistId ?: "", visible) }
                 )
             }
             "Home Server" -> {
@@ -11616,7 +11637,12 @@ private fun IptvCategoriesSettings(
     // Hold-and-move is a D-pad affair: the phone route renders rows without
     // chips at all, so both of these stay at their defaults there.
     heldGroup: String? = null,
-    onToggleHold: (String) -> Unit = {}
+    onToggleHold: (String) -> Unit = {},
+    // The phone route moves a group by name while the finger is still down. The
+    // TV route never calls these: there, the D-pad does the moving.
+    onMoveUp: (String) -> Unit = {},
+    onMoveDown: (String) -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val heldAccent = resolveAccentColor(fallback = Pink)
@@ -11655,7 +11681,7 @@ private fun IptvCategoriesSettings(
         }
     }
 
-    Column {
+    Column(modifier = modifier) {
         if (!isMobile) {
             Text(
                 text = stringResource(R.string.settings_iptv_categories),
@@ -11665,15 +11691,30 @@ private fun IptvCategoriesSettings(
             )
         }
 
-        SettingsRow(
-            icon = Icons.Default.Refresh,
-            title = stringResource(R.string.settings_reset_order),
-            subtitle = stringResource(R.string.settings_reset_order_desc),
-            value = stringResource(R.string.settings_badge_reset),
-            isFocused = focusedIndex == 0,
-            onClick = onReset,
-            modifier = Modifier.settingsFocusSlot(0)
-        )
+        if (isMobile) {
+            // The TV row squeezes its title, its description and its badge into one line and
+            // relies on a focus frame to be readable; on a phone that came out overlapping.
+            MobileSettingsRow(
+                icon = Icons.Default.Refresh,
+                title = stringResource(R.string.settings_reset_order),
+                subtitle = stringResource(R.string.settings_reset_order_desc),
+                // No badge on the phone: the row is the button, and the badge took away so much
+                // width that the title was cut off mid-word.
+                value = "",
+                onClick = onReset,
+                showDivider = false
+            )
+        } else {
+            SettingsRow(
+                icon = Icons.Default.Refresh,
+                title = stringResource(R.string.settings_reset_order),
+                subtitle = stringResource(R.string.settings_reset_order_desc),
+                value = stringResource(R.string.settings_badge_reset),
+                isFocused = focusedIndex == 0,
+                onClick = onReset,
+                modifier = Modifier.settingsFocusSlot(0)
+            )
+        }
 
         if (orderedGroups.isNotEmpty()) {
             Spacer(modifier = Modifier.height(10.dp))
@@ -11705,28 +11746,25 @@ private fun IptvCategoriesSettings(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (isMobile) {
-            MobileSettingsCategory(title = stringResource(R.string.settings_section_categories)) {
-                if (orderedGroups.isEmpty()) {
+            if (orderedGroups.isEmpty()) {
+                MobileSettingsCategory(title = stringResource(R.string.settings_section_categories)) {
                     Text(
                         text = stringResource(R.string.settings_no_categories_available),
                         style = ArflixTypography.body,
                         color = TextSecondary,
                         modifier = Modifier.padding(16.dp)
                     )
-                } else {
-                    orderedGroups.forEachIndexed { index, group ->
-                        val groupKey = com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group)
-                        val isHidden = hiddenGroups.contains(groupKey)
-                        MobileSettingsRow(
-                            icon = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Check,
-                            title = group,
-                            subtitle = if (isHidden) stringResource(R.string.settings_hidden) else stringResource(R.string.settings_visible),
-                            value = "",
-                            onClick = { onToggleHidden(group) },
-                            showDivider = index < orderedGroups.lastIndex
-                        )
-                    }
                 }
+            } else {
+                MobileIptvCategoryReorderList(
+                    playlistId = playlistId,
+                    orderedGroups = orderedGroups,
+                    hiddenGroups = hiddenGroups,
+                    onToggleHidden = onToggleHidden,
+                    onMoveUp = onMoveUp,
+                    onMoveDown = onMoveDown,
+                    modifier = Modifier.weight(1f)
+                )
             }
         } else {
             if (orderedGroups.isEmpty()) {
@@ -11819,6 +11857,153 @@ private fun IptvCategoriesSettings(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The phone list of IPTV categories: tap a row to show or hide it, press and hold it to move it.
+ *
+ * A LazyColumn with stable keys is what makes the second gesture work. It reports where every row
+ * actually sits and how tall it is, it scrolls itself while a row is held against an edge, and it
+ * slides the other rows out of the way on its own. None of that is available in the plain Column
+ * the phone settings pages are otherwise built from, which is why this page escapes them.
+ */
+@Composable
+private fun MobileIptvCategoryReorderList(
+    playlistId: String,
+    orderedGroups: List<String>,
+    hiddenGroups: List<String>,
+    onToggleHidden: (String) -> Unit,
+    onMoveUp: (String) -> Unit,
+    onMoveDown: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val listState = rememberLazyListState()
+    // The gesture hands back the row's key, and the key is what the move is addressed by. Nothing
+    // here counts positions: a group that has already moved keeps its name, its position does not.
+    val groupsByKey = remember(playlistId, orderedGroups) {
+        orderedGroups.associateBy { com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, it) }
+    }
+    val reorderState = rememberDragReorderState(listState) { key, from, to ->
+        val group = groupsByKey[key]
+        if (group != null) {
+            if (to > from) onMoveDown(group) else onMoveUp(group)
+        }
+    }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.settings_section_categories),
+            style = ArflixTypography.caption.copy(fontSize = 12.sp, letterSpacing = 1.sp),
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+        )
+        LazyColumn(
+            state = listState,
+            // While a row is held the list must not follow the finger as well: the
+            // gesture belongs to the row, and the only scrolling a move needs is the
+            // one the list does by itself at its edges.
+            userScrollEnabled = reorderState.draggedKey == null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(BackgroundElevated)
+        ) {
+            itemsIndexed(
+                items = orderedGroups,
+                key = { _, group -> com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group) }
+            ) { index, group ->
+                val groupKey = com.arflix.tv.data.model.PlaylistGroupKey.build(playlistId, group)
+                MobileIptvCategoryRow(
+                    group = group,
+                    isHidden = hiddenGroups.contains(groupKey),
+                    isDragged = reorderState.isDragging(groupKey),
+                    showDivider = index < orderedGroups.lastIndex,
+                    onClick = {
+                        if (!reorderState.consumeClickAfterPickUp()) onToggleHidden(group)
+                    },
+                    modifier = dragReorderItem(reorderState, groupKey)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One category row on the phone. Built here rather than reusing MobileSettingsRow, which belongs to
+ * every phone settings page: this one carries a drag handle and a held state that none of the
+ * others have any use for. The handle is a sign that the row can be moved, not a button - the whole
+ * row is what gets held.
+ */
+@Composable
+private fun MobileIptvCategoryRow(
+    group: String,
+    isHidden: Boolean,
+    isDragged: Boolean,
+    showDivider: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val heldAccent = resolveAccentColor(fallback = Pink)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            // Opaque underneath, so a held row covers the rows it floats over.
+            .background(BackgroundElevated)
+            .background(if (isDragged) heldAccent.copy(alpha = 0.20f) else Color.Transparent)
+            .then(
+                // The same frame the remote control draws around a held group, so both ways of
+                // moving a group look like the same thing happening.
+                if (isDragged) Modifier.border(2.dp, heldAccent, RoundedCornerShape(12.dp))
+                else Modifier
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick() }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Check,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = group,
+                    style = ArflixTypography.cardTitle.copy(fontSize = 16.sp),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = if (isHidden) stringResource(R.string.settings_hidden) else stringResource(R.string.settings_visible),
+                    style = ArflixTypography.caption.copy(fontSize = 13.sp, lineHeight = 17.sp),
+                    color = TextSecondary
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = stringResource(R.string.settings_cd_drag_reorder),
+                tint = if (isDragged) heldAccent else TextSecondary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        if (showDivider && !isDragged) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .padding(horizontal = 16.dp)
+                    .background(Color.White.copy(alpha = 0.05f))
+            )
         }
     }
 }
