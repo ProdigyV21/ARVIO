@@ -40,7 +40,7 @@ fun LoadingPane(message: String?, percent: Int) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        CircularProgressIndicator(color = LiveColors.Accent)
+        CircularProgressIndicator(color = liveAccent())
         if (!message.isNullOrBlank()) {
             Box(Modifier.padding(top = 20.dp)) {
                 Text(message, style = LiveType.CellTitle.copy(color = LiveColors.FgDim))
@@ -50,7 +50,7 @@ fun LoadingPane(message: String?, percent: Int) {
             LinearProgressIndicator(
                 progress = { (percent / 100f).coerceIn(0f, 1f) },
                 modifier = Modifier.padding(top = 12.dp).width(260.dp),
-                color = LiveColors.Accent,
+                color = liveAccent(),
                 trackColor = LiveColors.Divider,
             )
         }

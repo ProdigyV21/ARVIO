@@ -190,6 +190,8 @@
     <string name="trailer_sound_desc">TV: play trailer audio in the home background</string>
     <string name="trailer_delay">Trailer Delay</string>
     <string name="trailer_delay_desc">Seconds before trailer starts playing</string>
+    <string name="guide_rows">Guide Rows</string>
+    <string name="guide_rows_desc">Channel rows shown in the TV guide</string>
     <string name="trailer_in_cards">Trailers In Cards</string>
     <string name="trailer_in_cards_desc">TV: play trailers inside the focused card instead of full screen</string>
     <string name="frame_rate_desc">Off, Seamless, or Always</string>

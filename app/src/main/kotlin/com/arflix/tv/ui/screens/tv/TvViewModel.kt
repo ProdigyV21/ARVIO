@@ -167,6 +167,11 @@ class TvViewModel @Inject constructor(
         val key = profileId?.let { profileManager.profileStringKeyFor(it, "clock_format") } ?: profileManager.profileStringKey("clock_format")
         prefs[key] ?: "24h"
     }
+    /** Rows the TV guide is divided into, or null for the fixed row height. */
+    fun guideRowCount(profileId: String?) = context.settingsDataStore.data.map { prefs ->
+        val key = profileId?.let { profileManager.profileStringKeyFor(it, "guide_row_count") } ?: profileManager.profileStringKey("guide_row_count")
+        prefs[key]?.toIntOrNull()?.takeIf { it in 6..10 }
+    }
 
     /**
      * Resolve an EPG title to a confident TMDB movie/series match.

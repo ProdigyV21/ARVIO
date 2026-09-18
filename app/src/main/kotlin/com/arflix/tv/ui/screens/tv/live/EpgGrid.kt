@@ -142,6 +142,8 @@ fun EpgGrid(
     favorites: Set<String>,
     variantCountFor: (EnrichedChannel) -> Int = { 1 },
     compact: Boolean = false,
+    /** Divide the guide into this many rows instead of using the fixed row height. */
+    rowCount: Int? = null,
     gridFocused: Boolean = false,
     backHandlingEnabled: Boolean = true,
     onMoveLeftFromChannels: () -> Unit = {},
@@ -166,7 +168,6 @@ fun EpgGrid(
     val channelColumnWidth = channelColumnWidthOverride
         ?: if (compact) 164.dp else LiveDims.EpgChannelColWidth
     val halfHourWidth = (pxPerMin * 30f).dp
-    val rowHeight = if (compact) 52.dp else LiveDims.EpgRowHeight
     val channelFocusRequesters = remember { LinkedHashMap<String, FocusRequester>() }
     val programFocusRequesters = remember { LinkedHashMap<String, List<FocusRequester>>() }
     val programFocusTargets = remember { LinkedHashMap<String, List<ProgramFocusTarget>>() }
@@ -670,7 +671,7 @@ fun EpgGrid(
                                 }
                             }
                             .clip(RoundedCornerShape(4.dp))
-                            .background(LiveColors.Accent)
+                            .background(liveAccent())
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
@@ -692,6 +693,10 @@ fun EpgGrid(
 
         // ─── Body ───────────────────────────────────────────────────
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // The clamp keeps rows readable and under the 60dp at which cells
+            // start showing descriptions.
+            val rowHeight = rowCount?.let { (maxHeight / it).coerceIn(24.dp, 56.dp) }
+                ?: if (compact) 52.dp else LiveDims.EpgRowHeight
             val totalWidth = halfHourWidth * slots.size
             val viewportWidth = (maxWidth - channelColumnWidth - 1.dp).coerceAtLeast(0.dp)
             val renderWindow by remember(hScroll, density, viewportWidth, pxPerMin) {
@@ -957,13 +962,14 @@ fun EpgGrid(
                 }
 
                 // Read scrolling in the drawing phase, not the whole guide composition.
+                val nowLineColor = liveAccent()
                 Canvas(Modifier.fillMaxSize()) {
                     if (clockTickMillis in windowStartMillis until windowEndMillis) {
                         val nowMin = ((clockTickMillis - windowStartMillis) / 60_000L).toInt()
                         val inside = (nowMin * pxPerMin).dp.toPx() - hScroll.value
                         val x = (channelColumnWidth + 1.dp).toPx() + inside
                         if (inside >= 0f && x < size.width) {
-                            drawRect(LiveColors.Accent, Offset(x, 0f), Size(1.dp.toPx(), size.height))
+                            drawRect(nowLineColor, Offset(x, 0f), Size(1.dp.toPx(), size.height))
                         }
                     }
                 }
@@ -1156,7 +1162,7 @@ private fun NowLine(
             .offset(x = xDp)
             .fillMaxHeight()
             .width(2.dp)
-            .background(LiveColors.Accent),
+            .background(liveAccent()),
     )
     // Glow behind the 2dp line
     Box(
@@ -1164,7 +1170,7 @@ private fun NowLine(
             .offset(x = xDp - 3.dp)
             .fillMaxHeight()
             .width(8.dp)
-            .background(LiveColors.Accent.copy(alpha = 0.22f)),
+            .background(liveAccent().copy(alpha = 0.22f)),
     )
 }
 

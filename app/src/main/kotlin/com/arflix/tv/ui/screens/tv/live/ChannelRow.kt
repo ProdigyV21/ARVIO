@@ -272,7 +272,7 @@ fun ChannelRow(
                     Icon(
                         imageVector = Icons.Filled.History,
                         contentDescription = stringResource(R.string.live_cd_catchup_available),
-                        tint = if (visuallyFocused) Color.Black else LiveColors.Accent.copy(alpha = 0.8f),
+                        tint = if (visuallyFocused) Color.Black else liveAccent().copy(alpha = 0.8f),
                         modifier = Modifier.size(11.dp),
                     )
                 }
@@ -285,7 +285,7 @@ fun ChannelRow(
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier.width(80.dp).height(2.dp),
-                    color = if (visuallyFocused) Color.Black else LiveColors.Accent,
+                    color = if (visuallyFocused) Color.Black else liveAccent(),
                     trackColor = LiveColors.Divider,
                 )
             }
@@ -307,7 +307,7 @@ fun ChannelRow(
         if (rowHeight < 48.dp) {
             if (isActive) Row(Modifier.width(18.dp).height(16.dp).padding(end = 5.dp),
                 verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                listOf(7, 12, 9).forEach { h -> Box(Modifier.width(2.dp).height(h.dp).background(if (visuallyFocused) Color.Black else LiveColors.Accent)) }
+                listOf(7, 12, 9).forEach { h -> Box(Modifier.width(2.dp).height(h.dp).background(if (visuallyFocused) Color.Black else liveAccent())) }
             } else Spacer(Modifier.width(6.dp))
         }
     }

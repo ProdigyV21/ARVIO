@@ -1812,6 +1812,7 @@ fun LiveTvScreen(
         state.snapshot.nowNext.size / 64)
     var sportsFocusSignal by remember { mutableIntStateOf(0) }
     val sportsClockFormat by remember(currentProfile?.id) { viewModel.sportsClockFormat(currentProfile?.id) }.collectAsStateWithLifecycle(initialValue = "24h")
+    val guideRowCount by remember(currentProfile?.id) { viewModel.guideRowCount(currentProfile?.id) }.collectAsStateWithLifecycle(initialValue = null)
     var sportsEvents by remember(currentProfile?.id, selectedProviderId, hiddenGroupSet, restrictedGroupSet) {
         mutableStateOf(viewModel.cachedSportsSchedule?.takeIf { it.key == sportsScheduleKey }?.events.orEmpty())
     }
@@ -2459,14 +2460,16 @@ fun LiveTvScreen(
         focusEpgSignal += 1
     }
 
-    fun enterSelectedCategory(categoryId: String) {
+    fun enterSelectedCategory(categoryId: String, closeDrawer: Boolean = true) {
         noteGuideUserNavigation()
         focusCommitJob[0]?.cancel()
         focusedChannelObject[0] = null
         selectedCategoryId = categoryId
         if (isTouchDevice) currentMode = LiveTvStartup.LiveTvMode.Guide
-        categoryDrawerOpen = false
-        focusGuideAfterDrawerClose = true
+        if (closeDrawer) {
+            categoryDrawerOpen = false
+            focusGuideAfterDrawerClose = true
+        }
         viewModel.rememberTvSession(
             lastGroupName = categoryId,
             lastFocusedZone = "CATEGORY",
@@ -2483,7 +2486,7 @@ fun LiveTvScreen(
         }
     }
 
-    fun requestCategorySelection(categoryId: String) {
+    fun requestCategorySelection(categoryId: String, closeDrawer: Boolean = true) {
         if (categoryId == SPORTS_GUIDE_CATEGORY) {
             sportsSelected = true
             // Selection opens the destination; moving right into its cards closes the drawer.
@@ -2503,7 +2506,7 @@ fun LiveTvScreen(
             }
             return
         }
-        enterSelectedCategory(categoryId)
+        enterSelectedCategory(categoryId, closeDrawer)
     }
 
     fun requestCategoryLockToggle(playlistId: String?, groupName: String, wasLocked: Boolean) {
@@ -3886,7 +3889,7 @@ fun LiveTvScreen(
                         onFullscreenClick = openFullScreenPlayer,
                         variantCount = playingChannel?.let { variantCountFor(it, variantGroups) } ?: 1,
                         onOpenVariants = playingChannel?.let { channel -> { openVariantPicker(channel) } },
-                        compact = true,
+                        compact = miniPlayerLayout != LiveTvMiniPlayerLayout.STANDARD,
                         landscapeCompact = landscapeCompactMiniPlayer,
                         playerActive = miniPlayerActive,
                         modifier = Modifier.fillMaxWidth(),
@@ -3976,6 +3979,7 @@ fun LiveTvScreen(
                     onSelect = { id ->
                         requestCategorySelection(id)
                     },
+                    onSelectKeepOpen = { id -> requestCategorySelection(id, closeDrawer = false) },
                     onOpenSearch = { searchOpen = true },
                     onHideCategory = { playlistId, groupName ->
                         noteGuideUserNavigation()
@@ -4087,6 +4091,7 @@ fun LiveTvScreen(
                         },
                         scrollResetKey = filteredChannelsScopeKey,
                         compact = compactTouchLayout,
+                        rowCount = guideRowCount,
                         gridFocused = focusZone == LiveTvFocusZone.CHANNEL_LIST || focusZone == LiveTvFocusZone.EPG,
                         backHandlingEnabled = channelMenu == null && !searchOpen && variantPickerChannel == null,
                         onChannelSelect = { channel ->

@@ -73,13 +73,26 @@ private val sportsDayFormat: java.time.format.DateTimeFormatter =
     java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.getDefault())
 
 internal const val SPORTS_GUIDE_CATEGORY = "sports-hub"
+internal const val SPORTS_CHANNEL_CATEGORY = "g-sports"
 
+/**
+ * Puts the match guide inside "All Channels", right before the "Sports · Global"
+ * channel list. The two belong together — one is the fixtures, the other the
+ * channels — and apart they read as duplicates. With no sports channels there is
+ * nothing to sit beside, so nothing is added.
+ *
+ * The label stays in English so grouping and comparison keep working;
+ * liveCategoryLabel() localizes it at render time like the other categories.
+ */
 internal fun LiveCategoryTree.withSportsDestination(): LiveCategoryTree = copy(
-    top = top.filterNot { it.id == SPORTS_GUIDE_CATEGORY }.flatMap { category ->
-        // The label stays in English so grouping/comparison logic keeps working;
-        // liveCategoryLabel() localizes it at render time (same pattern as the other categories).
-        if (category.id == "all") listOf(category, LiveCategory(SPORTS_GUIDE_CATEGORY, "Sports", 0, CategoryIcon.Sport))
-        else listOf(category)
+    top = top.filterNot { it.id == SPORTS_GUIDE_CATEGORY }.map { category ->
+        if (category.id != "all") category
+        else category.copy(
+            children = category.children.flatMap { child ->
+                if (child.id != SPORTS_CHANNEL_CATEGORY) listOf(child)
+                else listOf(LiveCategory(SPORTS_GUIDE_CATEGORY, "Sports", 0, CategoryIcon.Sport), child)
+            },
+        )
     },
 )
 
@@ -293,7 +306,7 @@ internal fun SportsGuidePane(
         if (rows.isEmpty()) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                if (loading) CircularProgressIndicator(color = LiveColors.Accent, modifier = Modifier.size(24.dp))
+                if (loading) CircularProgressIndicator(color = liveAccent(), modifier = Modifier.size(24.dp))
                 else Icon(Icons.Default.SportsSoccer, null, tint = LiveColors.FgDim, modifier = Modifier.size(32.dp))
                 Text(if (loading) stringResource(R.string.live_sports_reading_schedule) else if (failed) stringResource(R.string.live_sports_schedule_unavailable)
                     else if (events.any { it.hasChannels(now) && (it.isOnAir(now) || it.programme.startUtcMillis > now) }) stringResource(R.string.live_sports_artwork_unavailable)

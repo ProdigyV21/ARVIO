@@ -302,7 +302,7 @@ fun ProviderSelector(
                         width = if (focused) 2.dp else 1.dp,
                         color = when {
                             focused -> LiveColors.FocusRing
-                            selected -> LiveColors.Accent
+                            selected -> liveAccent()
                             else -> LiveColors.Divider
                         },
                         shape = RoundedCornerShape(999.dp),
@@ -351,7 +351,7 @@ fun ProviderSelector(
                     Icon(
                         imageVector = Icons.Filled.SettingsInputAntenna,
                         contentDescription = null,
-                        tint = if (selected) LiveColors.Accent else LiveColors.FgMute,
+                        tint = if (selected) liveAccent() else LiveColors.FgMute,
                         modifier = Modifier.size(14.dp),
                     )
                     Text(
@@ -406,7 +406,7 @@ fun EpgStatusStrip(
             Icon(
                 imageVector = Icons.Filled.Info,
                 contentDescription = null,
-                tint = if (warning.isNullOrBlank()) LiveColors.Accent else Color(0xFFFFC04A),
+                tint = if (warning.isNullOrBlank()) liveAccent() else Color(0xFFFFC04A),
                 modifier = Modifier.size(14.dp),
             )
             Text(
@@ -477,7 +477,7 @@ fun PlaybackDiagnosticBanner(
     ) {
         val current = diagnostic ?: return@AnimatedVisibility
         val tint = when (current.severity) {
-            PlaybackDiagnosticSeverity.Info -> LiveColors.Accent
+            PlaybackDiagnosticSeverity.Info -> liveAccent()
             PlaybackDiagnosticSeverity.Warning -> Color(0xFFFFC04A)
             PlaybackDiagnosticSeverity.Error -> Color(0xFFFF6B81)
         }
@@ -602,7 +602,7 @@ fun VariantPickerOverlay(
                 Icon(
                     imageVector = Icons.Filled.SwapHoriz,
                     contentDescription = null,
-                    tint = LiveColors.Accent,
+                    tint = liveAccent(),
                     modifier = Modifier.size(22.dp),
                 )
                 Column {
@@ -672,7 +672,7 @@ private fun VariantRow(
         Box(
             modifier = Modifier
                 .size(8.dp)
-                .background(if (focused) LiveColors.Accent else LiveColors.FgMute, CircleShape),
+                .background(if (focused) liveAccent() else LiveColors.FgMute, CircleShape),
         )
         Text(
             text = channel.number.toString(),

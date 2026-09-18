@@ -207,7 +207,7 @@ fun SearchOverlay(
                     keyboardActions = KeyboardActions(
                         onSearch = { runCatching { firstResultFocus.requestFocus() } },
                     ),
-                    cursorBrush = SolidColor(LiveColors.Accent),
+                    cursorBrush = SolidColor(liveAccent()),
                     textStyle = TextStyle(
                         color = LiveColors.Fg,
                         fontSize = 18.sp,

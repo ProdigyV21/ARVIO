@@ -106,7 +106,7 @@ fun TouchCategoryRail(
                 modifier = Modifier
                     .height(38.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (active) LiveColors.Accent else LiveColors.Panel)
+                    .background(if (active) liveAccent() else LiveColors.Panel)
                     .clickable {
                         if (sectionId != null) {
                             expandedPlaylistIds = if (isSectionOpen) {

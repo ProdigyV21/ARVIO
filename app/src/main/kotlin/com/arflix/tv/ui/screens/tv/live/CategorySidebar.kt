@@ -118,6 +118,8 @@ fun CategorySidebar(
     listState: LazyListState,
     focusRequester: FocusRequester? = null,
     onSelect: (String) -> Unit,
+    /** Select a category without closing the drawer; used by rows that expand. */
+    onSelectKeepOpen: (String) -> Unit = onSelect,
     onOpenSearch: () -> Unit,
     onHideCategory: (String?, String) -> Unit = { _, _ -> },
     onUnhideCategory: (String?, String) -> Unit = { _, _ -> },
@@ -616,9 +618,13 @@ fun CategorySidebar(
                         },
                         onClick = {
                             if (isAllGroup) {
+                                // Expanding must not close the drawer, or the
+                                // children are never reachable.
                                 expandedAll = !expandedAll
+                                onSelectKeepOpen(cat.id)
+                            } else {
+                                onSelect(cat.id)
                             }
-                            onSelect(cat.id)
                         },
                     )
                     if (isOpen && contentVisible) {
@@ -824,7 +830,7 @@ fun CategorySidebar(
                                     expandedCountry = null
                                 } else {
                                     expandedCountry = country.id
-                                    onSelect(country.id)
+                                    onSelectKeepOpen(country.id)
                                 }
                             },
                         )

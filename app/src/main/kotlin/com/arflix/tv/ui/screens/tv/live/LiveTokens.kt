@@ -1,5 +1,6 @@
 package com.arflix.tv.ui.screens.tv.live
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -10,6 +11,7 @@ import androidx.compose.ui.text.font.FontVariation
 import com.arflix.tv.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.InterFontFamily
 
 // ARVIO Live TV — design tokens. OKLCH reference kept in spec.md §2.
@@ -35,8 +37,8 @@ object LiveColors {
     val FgDim  = Color(0xFFB5B6BE)
     val FgMute = Color(0xFF7D7E86)
 
-    // Time and playback use turquoise; selection stays neutral and focus white.
-    val Accent    = Color(0xFF56D8C5)
+    // Time and playback follow the accent colour (see liveAccent()); selection
+    // stays neutral and focus white.
     val AccentDim = Color(0xFF266B62)
     val FocusBg   = Color(0xFF272727)
 
@@ -108,6 +110,14 @@ object LiveDims {
     val FocusBorder     = 2.dp
     val ActiveIndicator = 3.dp
 }
+
+/**
+ * The accent colour chosen under Settings → Appearance, falling back to white
+ * like the rest of the app. Read it in composable scope; a draw lambda cannot
+ * read a CompositionLocal.
+ */
+@Composable
+fun liveAccent(): Color = LocalAccentColorOverride.current ?: Color.White
 
 val LocalLiveColors = staticCompositionLocalOf { LiveColors }
 val LocalLiveType   = staticCompositionLocalOf { LiveType }

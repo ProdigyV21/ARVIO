@@ -257,7 +257,7 @@ fun QuickZapOverlay(
                         "< ${stringResource(R.string.channel_categories).uppercase()}"
                     },
                     style = LiveType.SectionTag.copy(
-                        color = if (categoryListFocused) LiveColors.Accent else LiveColors.FgMute,
+                        color = if (categoryListFocused) liveAccent() else LiveColors.FgMute,
                         fontSize = 11.sp,
                         letterSpacing = 1.sp,
                         fontWeight = if (categoryListFocused) FontWeight.Bold else FontWeight.Normal
@@ -401,14 +401,14 @@ private fun FocusedCategoryRow(label: String, isFocused: Boolean) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowUp,
                     contentDescription = null,
-                    tint = LiveColors.Accent,
+                    tint = liveAccent(),
                     modifier = Modifier.size(10.dp)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = LiveColors.Accent,
+                    tint = liveAccent(),
                     modifier = Modifier.size(10.dp)
                 )
             }
@@ -416,7 +416,7 @@ private fun FocusedCategoryRow(label: String, isFocused: Boolean) {
         Text(
             text = label,
             style = LiveType.CellTitle.copy(
-                color = if (isFocused) LiveColors.Accent else LiveColors.Fg,
+                color = if (isFocused) liveAccent() else LiveColors.Fg,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             ),
@@ -575,7 +575,7 @@ private fun FocusedChannelSlot(
             Text(
                 text = number.toString(),
                 style = LiveType.NumberMono.copy(
-                    color = if (isFocused) LiveColors.Accent else LiveColors.FgDim,
+                    color = if (isFocused) liveAccent() else LiveColors.FgDim,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -625,7 +625,7 @@ private fun FocusedChannelSlot(
                     Text(
                         text = formatTimeWindow(it),
                         style = LiveType.TimeMono.copy(
-                            color = LiveColors.Accent,
+                            color = liveAccent(),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         ),
@@ -643,7 +643,7 @@ private fun FocusedChannelSlot(
                     .fillMaxWidth()
                     .height(3.dp)
                     .clip(RoundedCornerShape(1.5.dp)),
-                color = LiveColors.Accent,
+                color = liveAccent(),
                 trackColor = LiveColors.Divider
             )
         }
