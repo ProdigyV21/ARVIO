@@ -239,6 +239,7 @@ fun DetailsScreen(
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
+    onNavigateToVod: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
     onFullscreenChanged: (Boolean) -> Unit = {},
@@ -813,6 +814,7 @@ fun DetailsScreen(
                                         SidebarItem.HOME -> onNavigateToHome()
                                         SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                         SidebarItem.TV -> onNavigateToTv()
+                                        SidebarItem.VOD -> onNavigateToVod()
                                         SidebarItem.SETTINGS -> onNavigateToSettings()
                                         null -> Unit
                                     }

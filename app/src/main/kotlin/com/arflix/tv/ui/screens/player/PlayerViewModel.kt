@@ -5752,7 +5752,7 @@ class PlayerViewModel @Inject constructor(
                 title = currentTitle,
                 isLiveStream = currentIsLiveStreamPlayback,
                 addons = currentInstalledAddons
-            )
+            ) || currentMediaId <= 0 // IPTV VOD played without a TMDB match: no scrobble/history
 
             // Scrobble start/pause/updates with debounce
             if (!isLiveStreamOrSports && isPlaying && !lastIsPlaying) {
