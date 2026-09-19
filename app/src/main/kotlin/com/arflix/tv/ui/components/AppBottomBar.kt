@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -148,6 +149,7 @@ internal fun shouldShowBottomBar(
         route == Screen.Search.route -> true
         route == Screen.Watchlist.route -> true
         route == "tv" -> true
+        route == "vod" -> true
         route == "settings" -> true
         else -> false
     }
@@ -164,6 +166,7 @@ val bottomBarItems = listOf(
     BottomBarItem(R.string.search, Icons.Default.Search, "search"),
     BottomBarItem(R.string.nav_library, Icons.Default.Bookmark, "watchlist"),
     BottomBarItem(R.string.topbar_tv, Icons.Default.LiveTv, "tv"),
+    BottomBarItem(R.string.nav_vod, Icons.Default.VideoLibrary, "vod"),
     BottomBarItem(R.string.settings, Icons.Default.Settings, "settings")
 )
 

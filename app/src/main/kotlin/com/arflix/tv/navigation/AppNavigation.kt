@@ -33,6 +33,8 @@ import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
+import com.arflix.tv.ui.screens.vod.IptvVodScreen
+import com.arflix.tv.data.model.IptvVodSourceIds
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
 
@@ -44,6 +46,7 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object Search : Screen("search")
     data object Watchlist : Screen("watchlist")
+    data object Vod : Screen("vod")
     data object CollectionDetails : Screen("collections/{catalogId}") {
         fun createRoute(catalogId: String): String {
             return "collections/${android.net.Uri.encode(catalogId)}"
@@ -230,6 +233,7 @@ fun AppNavigation(
                 onNavigateToWatchlist = {
                     navigateTopLevel(Screen.Watchlist.route)
                 },
+                onNavigateToVod = { navigateTopLevel(Screen.Vod.route) },
                 onNavigateToTv = { channelId, streamUrl ->
                     navigateTopLevel(Screen.Tv.createRoute(channelId, streamUrl))
                 },
@@ -265,6 +269,7 @@ fun AppNavigation(
                 },
                 onNavigateToHome = { navigateHome() },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                onNavigateToVod = { navigateTopLevel(Screen.Vod.route) },
                 onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
                 onSwitchProfile = {
@@ -286,6 +291,40 @@ fun AppNavigation(
                 },
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                onNavigateToVod = { navigateTopLevel(Screen.Vod.route) },
+                onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
+                onNavigateToSettings = { section ->
+                    navigateTopLevel(Screen.Settings.createRoute(initialSection = section))
+                },
+                onSwitchProfile = {
+                    onSwitchProfile()
+                    navController.navigateToProfileSelection()
+                },
+                onBack = { navigateHome() }
+            )
+        }
+
+        // IPTV VOD catalogue (top-bar entry next to TV)
+        composable(Screen.Vod.route) {
+            IptvVodScreen(
+                currentProfile = currentProfile,
+                onNavigateToDetails = { mediaType, mediaId ->
+                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                },
+                onPlayDirect = { mediaId, streamUrl, title ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            mediaType = MediaType.MOVIE,
+                            mediaId = mediaId,
+                            streamUrl = streamUrl,
+                            preferredAddonId = IptvVodSourceIds.XTREAM,
+                            preferredSourceName = title
+                        )
+                    )
+                },
+                onNavigateToHome = { navigateHome() },
+                onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
                 onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
                 onNavigateToSettings = { section ->
                     navigateTopLevel(Screen.Settings.createRoute(initialSection = section))
@@ -317,6 +356,7 @@ fun AppNavigation(
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
+                onNavigateToVod = { navigateTopLevel(Screen.Vod.route) },
                 onNavigateToSettings = { navigateTopLevel(Screen.Settings.route) },
                 onNavigateToIptvSettings = { navigateTopLevel(Screen.Settings.createRoute(initialSection = "iptv")) },
                 onNavigateToDetails = { mediaType, mediaId ->
@@ -367,6 +407,7 @@ fun AppNavigation(
                 installAddonUrl = installAddonUrl,
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
+                onNavigateToVod = { navigateTopLevel(Screen.Vod.route) },
                 onNavigateToTv = { navigateTopLevel(Screen.Tv.createRoute()) },
                 onNavigateToWatchlist = { navigateTopLevel(Screen.Watchlist.route) },
                 onNavigateToTelegramSettings = { navController.navigate(Screen.TelegramSettings.route) },
@@ -527,6 +568,7 @@ fun AppNavigation(
                 onNavigateToSearch = {
                     navigateTopLevel(Screen.Search.route)
                 },
+                onNavigateToVod = { navigateTopLevel(Screen.Vod.route) },
                 onNavigateToTv = {
                     navigateTopLevel(Screen.Tv.createRoute())
                 },

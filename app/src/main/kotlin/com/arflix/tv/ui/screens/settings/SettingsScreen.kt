@@ -543,6 +543,7 @@ fun SettingsScreen(
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToTv: () -> Unit = {},
+    onNavigateToVod: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
     onNavigateToTelegramSettings: () -> Unit = {},
     onSwitchProfile: () -> Unit = {},
@@ -1406,6 +1407,7 @@ fun SettingsScreen(
                                             SidebarItem.SEARCH -> onNavigateToSearch()
                                             SidebarItem.HOME -> onNavigateToHome()
                                             SidebarItem.TV -> onNavigateToTv()
+                                            SidebarItem.VOD -> onNavigateToVod()
                                             SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                             SidebarItem.SETTINGS -> { /* Already here */ }
                                             null -> Unit
