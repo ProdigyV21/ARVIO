@@ -67,6 +67,8 @@
     <string name="secondary_subtitle_desc">Legenda alternativa caso a principal não esteja disponível</string>
     <string name="filter_subtitles">Filtrar legendas por idioma</string>
     <string name="filter_subtitles_desc">Exibir apenas legendas no seu idioma de preferência</string>
+    <string name="use_forced_subtitles">Legendas forçadas</string>
+    <string name="use_forced_subtitles_desc">Prefere legendas forçadas quando o áudio corresponde ao idioma das legendas; se não houver nenhuma, nada é selecionado</string>
 
     <!-- Playback -->
     <string name="auto_play_next">Reproduzir próximo automaticamente</string>

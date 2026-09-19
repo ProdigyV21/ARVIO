@@ -285,7 +285,7 @@ private val tvGeneralSectionIds = setOf(
 private fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
         "language" -> listOf(0, 3, 1, 2)
-        "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38, 39, 9)
+        "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38, 39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
         "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 16, 15, 40, 27)
         "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 41, 36)
@@ -1231,6 +1231,7 @@ fun SettingsScreen(
                                                 42 -> viewModel.cycleSubtitleFont()
                                                 8 -> viewModel.toggleSubtitleStylized()
                                                 9 -> viewModel.setFilterSubtitlesByLanguage(!uiState.filterSubtitlesByLanguage)
+                                                45 -> viewModel.setUseForcedSubtitles(!uiState.useForcedSubtitles)
                                                 10 -> viewModel.setAutoPlayNext(!uiState.autoPlayNext)
                                                 11 -> viewModel.setAutoPlaySingleSource(!uiState.autoPlaySingleSource)
                                                 12 -> viewModel.cycleAutoPlayMinQuality()
@@ -1842,6 +1843,8 @@ fun SettingsScreen(
                             onSubtitleStylizedToggle = { viewModel.toggleSubtitleStylized() },
                             filterSubtitlesByLanguage = uiState.filterSubtitlesByLanguage,
                             onFilterSubtitlesByLanguageToggle = { viewModel.setFilterSubtitlesByLanguage(it) },
+                            useForcedSubtitles = uiState.useForcedSubtitles,
+                            onUseForcedSubtitlesToggle = { viewModel.setUseForcedSubtitles(it) },
                             qualityFilterValue = uiState.qualityFilterPresetLabel,
                             onQualityFiltersClick = { showQualityFiltersModal = true },
                             subtitleAiEnabled = uiState.subtitleAiEnabled,
@@ -4867,8 +4870,18 @@ private fun MobileSettingsSubPage(
                         toggleChecked = uiState.filterSubtitlesByLanguage,
                         isToggle = true,
                         isFocused = false,
-                        showDivider = false,
                         onClick = { viewModel.setFilterSubtitlesByLanguage(!uiState.filterSubtitlesByLanguage) }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Subtitles,
+                        title = stringResource(R.string.use_forced_subtitles),
+                        subtitle = stringResource(R.string.use_forced_subtitles_desc),
+                        value = stringResource(if (uiState.useForcedSubtitles) R.string.on else R.string.off),
+                        toggleChecked = uiState.useForcedSubtitles,
+                        isToggle = true,
+                        isFocused = false,
+                        showDivider = false,
+                        onClick = { viewModel.setUseForcedSubtitles(!uiState.useForcedSubtitles) }
                     )
                 }
                 MobileSettingsCategory(title = stringResource(R.string.ai_subtitles_section)) {
@@ -6099,6 +6112,8 @@ private fun TvGeneralSettingsRows(
     onSubtitleStylizedToggle: () -> Unit = {},
     filterSubtitlesByLanguage: Boolean = true,
     onFilterSubtitlesByLanguageToggle: (Boolean) -> Unit = {},
+    useForcedSubtitles: Boolean = false,
+    onUseForcedSubtitlesToggle: (Boolean) -> Unit = {},
     onTrailerAutoPlayToggle: (Boolean) -> Unit = {},
     onTrailerSoundEnabledToggle: (Boolean) -> Unit = {},
     trailerInCards: Boolean = true,
@@ -6174,6 +6189,7 @@ private fun TvGeneralSettingsRows(
                 42 -> SettingsRow(Icons.Default.Subtitles, stringResource(R.string.subtitle_font), stringResource(R.string.subtitle_font_desc), subtitleFont, focusedIndex == localIndex, onSubtitleFontClick, Modifier.settingsFocusSlot(localIndex))
                 8 -> SettingsToggleRow(stringResource(R.string.subtitle_stylized), stringResource(R.string.subtitle_stylized_desc), subtitleStylized, focusedIndex == localIndex, { onSubtitleStylizedToggle() }, Modifier.settingsFocusSlot(localIndex))
                 9 -> SettingsToggleRow(stringResource(R.string.filter_subtitles), stringResource(R.string.filter_subtitles_desc), filterSubtitlesByLanguage, focusedIndex == localIndex, onFilterSubtitlesByLanguageToggle, Modifier.settingsFocusSlot(localIndex))
+                45 -> SettingsToggleRow(stringResource(R.string.use_forced_subtitles), stringResource(R.string.use_forced_subtitles_desc), useForcedSubtitles, focusedIndex == localIndex, onUseForcedSubtitlesToggle, Modifier.settingsFocusSlot(localIndex))
                 10 -> SettingsToggleRow(stringResource(R.string.auto_play_next_title), stringResource(R.string.auto_play_desc), autoPlayNext, focusedIndex == localIndex, onAutoPlayToggle, Modifier.settingsFocusSlot(localIndex))
                 11 -> SettingsToggleRow(stringResource(R.string.autoplay), stringResource(R.string.autoplay_desc), autoPlaySingleSource, focusedIndex == localIndex, onAutoPlaySingleSourceToggle, Modifier.settingsFocusSlot(localIndex))
                 12 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.auto_play_min_quality), stringResource(R.string.auto_play_quality_desc), autoPlayMinQuality, focusedIndex == localIndex, onAutoPlayMinQualityClick, Modifier.settingsFocusSlot(localIndex))

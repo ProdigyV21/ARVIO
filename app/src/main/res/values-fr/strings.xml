@@ -67,6 +67,8 @@
     <string name="secondary_subtitle_desc">Langue de sous-titres de secours quand la principale est indisponible</string>
     <string name="filter_subtitles">Filtrer les sous-titres par langue</string>
     <string name="filter_subtitles_desc">N’affiche que les sous-titres dans votre langue préférée</string>
+    <string name="use_forced_subtitles">Sous-titres forcés</string>
+    <string name="use_forced_subtitles_desc">Préfère les sous-titres forcés lorsque la langue audio correspond à celle des sous-titres ; s’il n’y en a aucun, rien n’est sélectionné</string>
 
     <!-- Playback -->
     <string name="auto_play_next">Lecture auto. du suivant</string>

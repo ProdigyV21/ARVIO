@@ -77,6 +77,8 @@
     <string name="secondary_subtitle_desc">Fallback subtitle language when primary is unavailable</string>
     <string name="filter_subtitles">Filter Subtitles by Language</string>
     <string name="filter_subtitles_desc">Show only subtitles in your preferred language</string>
+    <string name="use_forced_subtitles">Forced Subtitles</string>
+    <string name="use_forced_subtitles_desc">Prefer forced subtitles when the audio matches the subtitle language; if there is none, select nothing</string>
 
     <!-- Playback -->
     <string name="auto_play_next">Auto-Play Next</string>

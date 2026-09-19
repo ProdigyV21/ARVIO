@@ -136,6 +136,8 @@
     <string name="secondary_subtitle_desc">שפת כתוביות חלופית כאשר הראשונה אינה זמינה</string>
     <string name="filter_subtitles">סנן כתוביות לפי שפה</string>
     <string name="filter_subtitles_desc">הצג רק כתוביות בשפה המועדפת</string>
+    <string name="use_forced_subtitles">כתוביות מאולצות</string>
+    <string name="use_forced_subtitles_desc">העדף כתוביות מאולצות כאשר שפת השמע תואמת לשפת הכתוביות; אם אין כזו, לא תיבחר אף אחת</string>
     <string name="auto_play_next">הפעלה אוטומטית של הבא</string>
     <string name="next_episode">הפרק הבא</string>
     <string name="continue_watching">המשך צפייה</string>

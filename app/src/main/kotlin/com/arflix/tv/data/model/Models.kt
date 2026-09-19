@@ -301,6 +301,11 @@ data class Subtitle(
     val groupIndex: Int? = null,
     val trackIndex: Int? = null,
     val isForced: Boolean = false,
+    // True only when the CONTAINER marked the track forced (C.SELECTION_FLAG_FORCED).
+    // [isForced] is deliberately broader — it also trusts a "forced" name hint — so the two
+    // must stay separate: a genuinely flagged track outranks one that merely says "forced".
+    // Addon subtitles never carry the flag, so this is false for all of them.
+    val hasForcedFlag: Boolean = false,
     // True for image-based subtitle tracks (PGS/VOBSUB/DVB). These carry no text and
     // therefore cannot be used as an AI translation source.
     val isBitmap: Boolean = false,

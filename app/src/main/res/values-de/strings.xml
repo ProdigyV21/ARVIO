@@ -928,6 +928,8 @@
     <string name="secondary_subtitle_desc">Ausweichsprache für Untertitel, wenn die Hauptsprache nicht verfügbar ist</string>
     <string name="filter_subtitles">Untertitel nach Sprache filtern</string>
     <string name="filter_subtitles_desc">Zeigt nur Untertitel in deiner bevorzugten Sprache</string>
+    <string name="use_forced_subtitles">Forced Subtitles</string>
+    <string name="use_forced_subtitles_desc">Untertitelt nur fremdsprachige Stellen: wählt eine forced-Spur in deiner Untertitelsprache, wenn die Tonspur dazu passt — gibt es keine, wird nichts gewählt</string>
     <string name="auto_play_next">Nächste automatisch abspielen</string>
     <string name="next_episode">Nächste Episode</string>
     <string name="loading">Wird geladen…</string>

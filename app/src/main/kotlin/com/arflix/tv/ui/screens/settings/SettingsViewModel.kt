@@ -170,6 +170,7 @@ data class SettingsUiState(
     val subtitleOffset: String = "Bottom",
     val subtitleStylized: Boolean = true,
     val filterSubtitlesByLanguage: Boolean = true,
+    val useForcedSubtitles: Boolean = false,
     val secondarySubtitle: String = "Off",
     val trailerAutoPlay: Boolean = true,
     val trailerSoundEnabled: Boolean = false,
@@ -386,6 +387,7 @@ class SettingsViewModel @Inject constructor(
     private fun subtitleFontKey() = profileManager.profileStringKey("subtitle_font")
     private fun subtitleStylizedKey() = profileManager.profileBooleanKey("subtitle_stylized")
     private fun filterSubtitlesByLanguageKey() = profileManager.profileBooleanKey("filter_subtitles_by_lang")
+    private fun useForcedSubtitlesKey() = profileManager.profileBooleanKey("use_forced_subtitles")
     private fun secondarySubtitleKey() = profileManager.profileStringKey("secondary_subtitle")
     private val dnsProviderKey = stringPreferencesKey(OkHttpProvider.DNS_PROVIDER_PREF_KEY)
     private val customUserAgentKey = stringPreferencesKey(OkHttpProvider.USER_AGENT_PREF_KEY)
@@ -605,6 +607,7 @@ class SettingsViewModel @Inject constructor(
             val subtitleOffset = prefs[subtitleOffsetKey()] ?: "Bottom"
             val subtitleStylized = prefs[subtitleStylizedKey()] ?: true
             val filterSubtitlesByLanguage = prefs[filterSubtitlesByLanguageKey()] ?: true
+            val useForcedSubtitles = prefs[useForcedSubtitlesKey()] ?: false
             val secondarySubtitle = prefs[secondarySubtitleKey()]?.trim()?.takeIf { it.isNotBlank() } ?: "Off"
             val dnsProviderValue = normalizeDnsProviderValue(prefs[dnsProviderKey])
             val customUserAgent = prefs[customUserAgentKey].orEmpty().trim()
@@ -700,6 +703,7 @@ class SettingsViewModel @Inject constructor(
                 subtitleOffset = subtitleOffset,
                 subtitleStylized = subtitleStylized,
                 filterSubtitlesByLanguage = filterSubtitlesByLanguage,
+                useForcedSubtitles = useForcedSubtitles,
                 secondarySubtitle = secondarySubtitle,
                 dnsProvider = dnsProviderLabel(dnsProviderValue),
                 customUserAgent = customUserAgent,
@@ -1408,6 +1412,16 @@ class SettingsViewModel @Inject constructor(
                 prefs[filterSubtitlesByLanguageKey()] = enabled
             }
             _uiState.value = _uiState.value.copy(filterSubtitlesByLanguage = enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun setUseForcedSubtitles(enabled: Boolean) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[useForcedSubtitlesKey()] = enabled
+            }
+            _uiState.value = _uiState.value.copy(useForcedSubtitles = enabled)
             syncLocalStateToCloud(silent = true)
         }
     }

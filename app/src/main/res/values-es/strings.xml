@@ -76,6 +76,8 @@
     <string name="secondary_subtitle_desc">Idioma de subtítulo alternativo cuando el principal no esté disponible</string>
     <string name="filter_subtitles">Filtrar subtítulos por idioma</string>
     <string name="filter_subtitles_desc">Mostrar solo subtítulos en tu idioma preferido</string>
+    <string name="use_forced_subtitles">Subtítulos forzados</string>
+    <string name="use_forced_subtitles_desc">Prefiere subtítulos forzados cuando el audio coincide con el idioma de los subtítulos; si no hay ninguno, no se selecciona nada</string>
 
     <!-- Playback -->
     <string name="auto_play_next">Reproducción automática del siguiente episodio</string>

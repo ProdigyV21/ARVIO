@@ -1538,7 +1538,8 @@ fun PlayerScreen(
                                     // release groups often ship promo/"songs & signs" tracks without
                                     // setting the flag, so the name is a second signal.
                                     val trackTexts = listOfNotNull(format.label, format.language, format.id)
-                                    val isForced = (format.selectionFlags and C.SELECTION_FLAG_FORCED != 0) ||
+                                    val hasForcedFlag = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0
+                                    val isForced = hasForcedFlag ||
                                         trackTexts.any { it.contains("forced", ignoreCase = true) } ||
                                         trackTexts.any { it.contains("songs", ignoreCase = true) && it.contains("sign", ignoreCase = true) }
                                     // Image-based subtitle tracks (PGS/VOBSUB/DVB) carry no text — they
@@ -1582,11 +1583,18 @@ fun PlayerScreen(
                                         groupIndex = groupIndex,
                                         trackIndex = i,
                                         isForced = isForced,
+                                        hasForcedFlag = hasForcedFlag,
                                         isBitmap = isBitmap,
                                     ))
                                 }
                             }
                         }
+                        // The forced-subtitles rule needs to know what language is being SPOKEN,
+                        // and this is the only place that knows it. onTracksChanged also fires when
+                        // the viewer switches audio track, so the rule re-runs on its own.
+                        viewModel.updatePlayerAudioLanguage(
+                            extractedAudioTracks.getOrNull(selectedAudioIndex)?.language
+                        )
                         viewModel.updatePlayerTextTracks(textTracks)
                     }
                 })
@@ -5750,18 +5758,26 @@ private fun SubtitleMenu(
                                         val offsetNote = autoSyncNote(
                                             autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, subtitle.id) }
                                         )
+                                        // A file can carry ten built-in English tracks. With only the
+                                        // language on the main line they all read "English" and nobody —
+                                        // viewer or reviewer — can tell which one is playing or pick a
+                                        // different one on purpose. The track's own name is the only thing
+                                        // that separates them, so it belongs on the line people read.
+                                        // Built-in only: addon labels are full release names and would
+                                        // overflow the row.
+                                        val builtInName = subtitle.label.takeIf {
+                                            subtitle.isEmbedded && it.isNotBlank() &&
+                                                !it.equals(langName, ignoreCase = true)
+                                        }
+                                        val namedLabel = if (builtInName != null) "$langName — $builtInName" else langName
                                         // Built-in tracks show no match % — muxed is assumed synced,
                                         // so a fake 100% is misleading; only addon subs carry a real score.
-                                        val mainLabel = (if (!subtitle.isEmbedded && score > 0) "$langName ($score%)" else langName) + offsetNote
+                                        val mainLabel = (if (!subtitle.isEmbedded && score > 0) "$namedLabel ($score%)" else namedLabel) + offsetNote
                                         val badge: String?
                                         val detail: String?
                                         if (subtitle.isEmbedded && subtitle.url.isBlank()) {
-                                            val langFullName = getFullLanguageName(subtitle.lang)
-                                            val trackLabel = subtitle.label.takeIf { it.isNotBlank() &&
-                                                !it.equals(langFullName, ignoreCase = true) }
                                             badge = listOfNotNull(
                                                 stringResource(R.string.settings_source_builtin),
-                                                trackLabel,
                                                 if (subtitle.isForced) stringResource(R.string.settings_value_forced) else null
                                             ).joinToString(" · ")
                                             detail = null
@@ -6072,15 +6088,19 @@ private fun SubtitleMenu(
                                     val offsetNote = autoSyncNote(
                                         autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, sub.id) }
                                     )
+                                    // Same reason as the list above: without the track's own name, every
+                                    // built-in English track reads "English" and none can be told apart.
+                                    val builtInName = sub.label.takeIf {
+                                        sub.isEmbedded && it.isNotBlank() &&
+                                            !it.equals(langFullName, ignoreCase = true)
+                                    }
+                                    val namedLabel = if (builtInName != null) "$langFullName — $builtInName" else langFullName
                                     // No fake % on built-in tracks; only addon subs carry a real score.
-                                    val displayName = (if (!sub.isEmbedded && score > 0) "$langFullName ($score%)" else langFullName) + offsetNote
+                                    val displayName = (if (!sub.isEmbedded && score > 0) "$namedLabel ($score%)" else namedLabel) + offsetNote
                                     val description = when {
                                         sub.isEmbedded && sub.url.isBlank() -> {
-                                            val trackLabel = sub.label.takeIf { it.isNotBlank() &&
-                                                !it.equals(langFullName, ignoreCase = true) }
                                             listOfNotNull(
                                                 stringResource(R.string.settings_source_builtin),
-                                                trackLabel,
                                                 if (sub.isForced) stringResource(R.string.settings_value_forced) else null
                                             ).joinToString(" · ")
                                         }
