@@ -4640,7 +4640,11 @@ class IptvRepository @Inject constructor(
         @SerializedName("container_extension") val containerExtension: String? = null,
         @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
         @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        // Browse-only fields (IPTV VOD screen): artwork, rating, added timestamp.
+        @SerializedName("stream_icon") val streamIcon: String? = null,
+        val rating: String? = null,
+        val added: String? = null
     )
 
     private data class XtreamSeriesItem(
@@ -4648,7 +4652,12 @@ class IptvRepository @Inject constructor(
         val name: String? = null,
         @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
         @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        // Browse-only fields (IPTV VOD screen).
+        val cover: String? = null,
+        val rating: String? = null,
+        @SerializedName(value = "releaseDate", alternate = ["release_date"]) val releaseDate: String? = null,
+        @SerializedName("last_modified") val lastModified: String? = null
     )
 
     private data class XtreamSeriesEpisode(
@@ -6972,10 +6981,10 @@ class IptvRepository @Inject constructor(
     }
 
     private fun vodDiskCacheFile(creds: XtreamCredentials): File =
-        File(xtreamDiskCacheDir(), "vod_${xtreamDiskCacheHash(creds)}.json")
+        File(xtreamDiskCacheDir(), "vod_v2_${xtreamDiskCacheHash(creds)}.json")
 
     private fun seriesDiskCacheFile(creds: XtreamCredentials): File =
-        File(xtreamDiskCacheDir(), "series_${xtreamDiskCacheHash(creds)}.json")
+        File(xtreamDiskCacheDir(), "series_v2_${xtreamDiskCacheHash(creds)}.json")
 
     private fun <T> readDiskCache(file: File, type: Type): XtreamDiskCache<T>? {
         val parentExists = file.parentFile?.exists() == true
@@ -11341,6 +11350,96 @@ class IptvRepository @Inject constructor(
         return loadXtreamSeriesCategoriesInternal(creds, allowNetwork = false)
             .mapNotNull { it.toInfoOrNull() }
     }
+
+    // ── IPTV VOD browsing (the VOD tab next to TV) ──────────────────────────
+
+    data class IptvVodBrowseCategory(val id: String, val name: String)
+
+    data class IptvVodBrowseItem(
+        val key: String,
+        val isSeries: Boolean,
+        val name: String,
+        val posterUrl: String?,
+        val year: Int?,
+        val rating: String?,
+        val categoryId: String?,
+        val tmdbId: Int?,
+        /** Direct play URL (movies only; series resolve episodes through Details). */
+        val streamUrl: String?,
+        val addedAt: Long
+    )
+
+    data class IptvVodBrowseCatalog(
+        val categories: List<IptvVodBrowseCategory>,
+        val items: List<IptvVodBrowseItem>
+    )
+
+    /** True when at least one active Xtream playlist can provide movies or series. */
+    suspend fun hasVodBrowseSource(): Boolean {
+        val config = observeConfig().first()
+        return xtreamCredentialsForVodImport(config).isNotEmpty() ||
+            xtreamCredentialsForSeriesImport(config).isNotEmpty()
+    }
+
+    /**
+     * The provider's full movie or series catalogue for browsing, in the provider's
+     * own categories. Uses the same memory/disk caches as VOD source matching, so
+     * opening the screen after the first load is instant.
+     */
+    suspend fun getVodBrowseCatalog(series: Boolean): IptvVodBrowseCatalog = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        if (series) {
+            val creds = xtreamCredentialsForSeriesImport(config).firstOrNull()
+                ?: return@withContext IptvVodBrowseCatalog(emptyList(), emptyList())
+            val categories = loadXtreamSeriesCategoriesInternal(creds, allowNetwork = true)
+                .mapNotNull { it.toInfoOrNull() }
+                .map { IptvVodBrowseCategory(it.categoryId, it.categoryName) }
+            val items = loadXtreamSeriesList(creds).mapNotNull { item ->
+                val id = item.seriesId ?: return@mapNotNull null
+                val name = item.name?.trim().orEmpty().ifBlank { return@mapNotNull null }
+                IptvVodBrowseItem(
+                    key = "series_$id",
+                    isSeries = true,
+                    name = name,
+                    posterUrl = item.cover?.trim()?.takeIf { it.startsWith("http") },
+                    year = parseBrowseYear(item.releaseDate) ?: parseBrowseYear(name),
+                    rating = item.rating?.trim()?.takeIf { it.isNotEmpty() && it != "0" },
+                    categoryId = item.categoryId,
+                    tmdbId = normalizeTmdbId(item.tmdb)?.toIntOrNull(),
+                    streamUrl = null,
+                    addedAt = item.lastModified?.trim()?.toLongOrNull() ?: 0L
+                )
+            }
+            IptvVodBrowseCatalog(categories, items)
+        } else {
+            val creds = xtreamCredentialsForVodImport(config).firstOrNull()
+                ?: return@withContext IptvVodBrowseCatalog(emptyList(), emptyList())
+            val categories = loadXtreamVodCategoriesInternal(creds, allowNetwork = true)
+                .mapNotNull { it.toInfoOrNull() }
+                .map { IptvVodBrowseCategory(it.categoryId, it.categoryName) }
+            val items = loadXtreamVodStreams(creds).mapNotNull { item ->
+                val id = item.streamId ?: return@mapNotNull null
+                val name = item.name?.trim().orEmpty().ifBlank { return@mapNotNull null }
+                val ext = item.containerExtension?.trim()?.ifBlank { null } ?: "mp4"
+                IptvVodBrowseItem(
+                    key = "movie_$id",
+                    isSeries = false,
+                    name = name,
+                    posterUrl = item.streamIcon?.trim()?.takeIf { it.startsWith("http") },
+                    year = parseBrowseYear(item.year) ?: parseBrowseYear(name),
+                    rating = item.rating?.trim()?.takeIf { it.isNotEmpty() && it != "0" },
+                    categoryId = item.categoryId,
+                    tmdbId = normalizeTmdbId(item.tmdb)?.toIntOrNull(),
+                    streamUrl = "${creds.baseUrl}/movie/${creds.username}/${creds.password}/$id.$ext",
+                    addedAt = item.added?.trim()?.toLongOrNull() ?: 0L
+                )
+            }
+            IptvVodBrowseCatalog(categories, items)
+        }
+    }
+
+    private fun parseBrowseYear(raw: String?): Int? =
+        raw?.let { Regex("(19|20)\\d{2}").find(it)?.value?.toIntOrNull() }
 
     private fun XtreamVodCategoryWire.toInfoOrNull(): XtreamVodCategoryInfo? {
         val id = categoryId?.trim().orEmpty()

@@ -244,4 +244,20 @@
     <string name="settings_telegram_desc">חפש קובצי וידאו בערוצים ובקבוצות שלך</string>
     <string name="home_top10_movies_today">10 הסרטים הנצפים היום</string>
     <string name="home_top10_shows_today">10 הסדרות הנצפות היום</string>
+    <string name="nav_vod">VOD</string>
+    <string name="vod_movies">סרטים</string>
+    <string name="vod_series">סדרות</string>
+    <string name="vod_all">הכל</string>
+    <string name="vod_recent">נוספו לאחרונה</string>
+    <string name="vod_titles_count">%1$d כותרים</string>
+    <string name="vod_search">חיפוש ב-VOD</string>
+    <string name="vod_refresh">רענון</string>
+    <string name="vod_loading">טוען את הקטלוג של הספק. בטעינה הראשונה של קטלוג גדול זה יכול לקחת רגע</string>
+    <string name="vod_no_source_title">אין מקור VOD של IPTV</string>
+    <string name="vod_no_source_desc">הוסף פלייליסט IPTV מסוג Xtream Codes בהגדרות, IPTV, כדי לדפדף כאן בסרטים ובסדרות שלו.</string>
+    <string name="vod_open_settings">פתח הגדרות IPTV</string>
+    <string name="vod_empty">לא נמצאו כותרים</string>
+    <string name="vod_load_failed">לא ניתן לטעון את קטלוג ה-VOD</string>
+    <string name="vod_retry">נסה שוב</string>
+    <string name="vod_not_matched">לא ניתן לפתוח את \"%1$s\"</string>
 </resources>

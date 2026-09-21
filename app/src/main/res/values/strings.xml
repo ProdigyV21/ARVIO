@@ -1730,4 +1730,20 @@
     <string name="live_sources_failed">Could not load sources. Please try again.</string>
     <string name="settings_iptv_fallback_logos">Fallback channel logos</string>
     <string name="settings_iptv_fallback_logos_desc">Use alternative artwork only when the provider logo is missing or fails to load.</string>
+    <string name="nav_vod">VOD</string>
+    <string name="vod_movies">Movies</string>
+    <string name="vod_series">Series</string>
+    <string name="vod_all">All</string>
+    <string name="vod_recent">Recently added</string>
+    <string name="vod_titles_count">%1$d titles</string>
+    <string name="vod_search">Search VOD</string>
+    <string name="vod_refresh">Refresh</string>
+    <string name="vod_loading">Loading the provider catalog. The first load of a large catalog can take a moment</string>
+    <string name="vod_no_source_title">No IPTV VOD source</string>
+    <string name="vod_no_source_desc">Add an Xtream Codes IPTV playlist in Settings, IPTV, to browse its movies and series here.</string>
+    <string name="vod_open_settings">Open IPTV settings</string>
+    <string name="vod_empty">No titles found</string>
+    <string name="vod_load_failed">Could not load the VOD catalog</string>
+    <string name="vod_retry">Retry</string>
+    <string name="vod_not_matched">Could not open \"%1$s\"</string>
 </resources>
