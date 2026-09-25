@@ -91,4 +91,23 @@ class HomeWatchedBadgesTest {
         val elsewhere = movie(99)
         assertThat(heroWithWatchedBadge(elsewhere, rows)).isSameInstanceAs(elsewhere)
     }
+
+    @Test
+    fun `fresh rows are marked even right after a pass, the marked rows themselves are throttled`() {
+        val marked = listOf(Category(id = "trending", title = "Trending", items = listOf(movie(7, watched = true))))
+        // A catalog load a few seconds later publishes the same titles again, unmarked.
+        val fresh = listOf(Category(id = "trending", title = "Trending", items = listOf(movie(7))))
+
+        assertThat(watchedBadgesPassIsRedundant(fresh, marked, force = false, sinceLastPassMs = 3_000L, throttleMs = 90_000L))
+            .isFalse()
+        assertThat(watchedBadgesPassIsRedundant(marked, marked, force = false, sinceLastPassMs = 3_000L, throttleMs = 90_000L))
+            .isTrue()
+        assertThat(watchedBadgesPassIsRedundant(marked, marked, force = false, sinceLastPassMs = 91_000L, throttleMs = 90_000L))
+            .isFalse()
+        // Back from Details: same rows, but the history may have changed.
+        assertThat(watchedBadgesPassIsRedundant(marked, marked, force = true, sinceLastPassMs = 3_000L, throttleMs = 90_000L))
+            .isFalse()
+        assertThat(watchedBadgesPassIsRedundant(fresh, null, force = false, sinceLastPassMs = 0L, throttleMs = 90_000L))
+            .isFalse()
+    }
 }

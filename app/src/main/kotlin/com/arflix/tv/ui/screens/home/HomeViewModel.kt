@@ -73,6 +73,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -269,6 +270,19 @@ internal fun applyWatchedBadges(
     }
     return if (anyChange) updated else categories
 }
+
+/**
+ * Whether a tick pass may be skipped: only when nothing asks for it ([force]), the rows are the
+ * very ones the last pass marked, and that pass is recent. Freshly published rows (a catalog
+ * load, a next page, a cloud reload) always carry unmarked cards, so they are never skipped.
+ */
+internal fun watchedBadgesPassIsRedundant(
+    rows: List<Category>,
+    lastMarkedRows: List<Category>?,
+    force: Boolean,
+    sinceLastPassMs: Long,
+    throttleMs: Long
+): Boolean = !force && rows === lastMarkedRows && sinceLastPassMs < throttleMs
 
 /**
  * Carries the tick of [hero]'s card in [categories] over to the hero. The hero keeps its own
@@ -1352,6 +1366,7 @@ class HomeViewModel @Inject constructor(
     /** True once [loadHomeData] has been started at least once, successfully or not. */
     private var homeDataLoadAttempted = false
     private var lastWatchedBadgesRefreshMs: Long = 0L
+    @Volatile private var lastWatchedBadgesCategories: List<Category>? = null
     private val HOME_PLACEHOLDER_ITEM_COUNT = 8
 
     // EPG refresh intervals for Favorite TV row
@@ -1579,6 +1594,7 @@ class HomeViewModel @Inject constructor(
         // The next profile's rows arrive unmarked; its first tick pass must not wait out the
         // throttle of the previous profile.
         lastWatchedBadgesRefreshMs = 0L
+        lastWatchedBadgesCategories = null
         lastResolvedBaseCategories = emptyList()
         dismissedContinueWatchingAt.clear()
         categoryPaginationStates.clear()
@@ -1781,6 +1797,18 @@ class HomeViewModel @Inject constructor(
     }
 
     init {
+        // Rows are published from many places (startup cache, catalog load, next pages, cloud
+        // reloads), always with unmarked cards. Mark every new set of rows; the pass is debounced
+        // and a set it has already marked does not trigger it again.
+        viewModelScope.launch {
+            _uiState
+                .map { it.categories }
+                .distinctUntilChanged { old, new -> old === new }
+                .collect { rows ->
+                    if (rows.isNotEmpty() && rows !== lastWatchedBadgesCategories) refreshWatchedBadges()
+                }
+        }
+
         viewModelScope.launch {
             profileManager.activeProfileId
                 .distinctUntilChanged()
@@ -4547,9 +4575,21 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun refreshWatchedBadges(immediate: Boolean = false) {
+    /** Home resumed (e.g. back from Details): the watched history may have changed meanwhile. */
+    fun refreshWatchedBadgesOnResume() {
+        refreshWatchedBadges(force = true)
+    }
+
+    private fun refreshWatchedBadges(immediate: Boolean = false, force: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
-        if (!immediate && now - lastWatchedBadgesRefreshMs < WATCHED_BADGES_REFRESH_MS) return
+        if (!immediate && watchedBadgesPassIsRedundant(
+                rows = _uiState.value.categories,
+                lastMarkedRows = lastWatchedBadgesCategories,
+                force = force,
+                sinceLastPassMs = now - lastWatchedBadgesRefreshMs,
+                throttleMs = WATCHED_BADGES_REFRESH_MS
+            )
+        ) return
 
         watchedBadgesJob?.cancel()
         watchedBadgesJob = viewModelScope.launch(networkDispatcher) {
@@ -4569,7 +4609,7 @@ class HomeViewModel @Inject constructor(
 
                     // Mark the latest state rather than a snapshot from before the reads, so rows
                     // published meanwhile (catalogs, Continue Watching) are not rolled back.
-                    _uiState.update { state ->
+                    val marked = _uiState.updateAndGet { state ->
                         val updatedCategories = applyWatchedBadges(state.categories, watchedMovies, startedShows)
                         if (updatedCategories === state.categories) {
                             state
@@ -4580,6 +4620,7 @@ class HomeViewModel @Inject constructor(
                             )
                         }
                     }
+                    lastWatchedBadgesCategories = marked.categories
                 }
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
