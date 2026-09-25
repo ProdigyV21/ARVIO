@@ -72,6 +72,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -218,6 +219,55 @@ internal fun applyIptvFavoritesPlacement(
     if (favIdx < 0) return savedCatalogs
     if (!enabled) return savedCatalogs.filterNot { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
     return savedCatalogs
+}
+
+/**
+ * Show ids with at least one watched episode, built once from the watched-episode keys
+ * ("show_tmdb:<id>:<season>:<episode>") instead of scanning the history for every show.
+ * Trakt-only keys ("show_trakt:…") carry no TMDB id and are skipped.
+ */
+internal fun startedShowIds(watchedEpisodeKeys: Set<String>): Set<Int> =
+    watchedEpisodeKeys.mapNotNullTo(HashSet()) { key ->
+        if (key.startsWith("show_tmdb:")) {
+            key.removePrefix("show_tmdb:").substringBefore(':', "").toIntOrNull()
+        } else null
+    }
+
+/**
+ * Sets [MediaItem.isWatched] on the Home cards: a film when it is in the watched list, a series
+ * when it has been started — the same reading Search and Discover use. Continue Watching keeps
+ * its own progress bars and is left alone. Rows (and the list) that do not change come back as
+ * the same instances, so a refresh that finds nothing new recomposes nothing.
+ */
+internal fun applyWatchedBadges(
+    categories: List<Category>,
+    watchedMovies: Set<Int>,
+    startedShows: Set<Int>
+): List<Category> {
+    var anyChange = false
+    val updated = categories.map { category ->
+        if (category.id == "continue_watching") return@map category
+        var categoryChanged = false
+        val items = category.items.map { item ->
+            val watched = when (item.mediaType) {
+                MediaType.MOVIE -> item.id in watchedMovies
+                MediaType.TV -> item.id in startedShows
+            }
+            if (item.isWatched == watched) {
+                item
+            } else {
+                categoryChanged = true
+                item.copy(isWatched = watched)
+            }
+        }
+        if (categoryChanged) {
+            anyChange = true
+            category.copy(items = items)
+        } else {
+            category
+        }
+    }
+    return if (anyChange) updated else categories
 }
 
 enum class ToastType {
@@ -4490,71 +4540,31 @@ class HomeViewModel @Inject constructor(
                 delay(if (isLowRamDevice) 3_000L else 1_800L)
             }
             try {
-                val isAuth = traktRepository.isAuthenticated.first()
-                if (!isAuth) return@launch
-
+                // Not gated on Trakt: the watched cache also holds local, Cloud, MDBList and
+                // SIMKL history, the same source Search, Discover and Details mark from.
                 traktRepository.initializeWatchedCache()
-                val categories = _uiState.value.categories
-                if (categories.isEmpty()) return@launch
+                if (_uiState.value.categories.isEmpty()) return@launch
 
                 val watchedMovies = traktRepository.getWatchedMoviesFromCache()
+                // Index the history once instead of scanning it for every distinct show.
+                val startedShows = startedShowIds(traktRepository.getWatchedEpisodesFromCache())
 
-                // Performance: Build show watched map only for unique TV shows
-                val showWatched = mutableMapOf<Int, Boolean>()
-                val seenShows = mutableSetOf<Int>()
-                for (category in categories) {
-                    if (category.id == "continue_watching") continue
-                    for (item in category.items) {
-                        if (item.mediaType == MediaType.TV && seenShows.add(item.id)) {
-                            showWatched[item.id] = traktRepository.hasWatchedEpisodes(item.id)
-                        }
-                    }
-                }
-
-                var anyChange = false
-                val updatedCategories = categories.map { category ->
-                    if (category.id == "continue_watching") {
-                        category
+                // Mark the latest state rather than a snapshot from before the reads, so rows
+                // published meanwhile (catalogs, Continue Watching) are not rolled back.
+                _uiState.update { state ->
+                    val updatedCategories = applyWatchedBadges(state.categories, watchedMovies, startedShows)
+                    if (updatedCategories === state.categories) {
+                        state
                     } else {
-                        var categoryChanged = false
-                        val updatedItems = category.items.map { item ->
-                            val newWatched = when (item.mediaType) {
-                                MediaType.MOVIE -> watchedMovies.contains(item.id)
-                                MediaType.TV -> showWatched[item.id] == true
-                            }
-                            if (item.isWatched != newWatched) {
-                                categoryChanged = true
-                                item.copy(isWatched = newWatched)
-                            } else {
-                                item
-                            }
+                        val updatedHero = state.heroItem?.let { hero ->
+                            updatedCategories.asSequence()
+                                .flatMap { it.items.asSequence() }
+                                .firstOrNull { it.id == hero.id && it.mediaType == hero.mediaType }
+                                ?: hero
                         }
-                        if (categoryChanged) {
-                            anyChange = true
-                            category.copy(items = updatedItems)
-                        } else {
-                            category
-                        }
+                        state.copy(categories = updatedCategories, heroItem = updatedHero)
                     }
                 }
-
-                if (!anyChange) {
-                    lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
-                    return@launch
-                }
-
-                val heroItem = _uiState.value.heroItem
-                val updatedHero = heroItem?.let { hero ->
-                    updatedCategories.asSequence()
-                        .flatMap { it.items.asSequence() }
-                        .firstOrNull { it.id == hero.id && it.mediaType == hero.mediaType }
-                        ?: hero
-                }
-
-                _uiState.value = _uiState.value.copy(
-                    categories = updatedCategories,
-                    heroItem = updatedHero
-                )
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
