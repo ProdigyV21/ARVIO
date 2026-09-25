@@ -270,6 +270,20 @@ internal fun applyWatchedBadges(
     return if (anyChange) updated else categories
 }
 
+/**
+ * Carries the tick of [hero]'s card in [categories] over to the hero. The hero keeps its own
+ * instance: runtime, ratings, budget and the network logo are hydrated into the hero only, so
+ * swapping in the plain row card would drop them until focus moves.
+ */
+internal fun heroWithWatchedBadge(hero: MediaItem?, categories: List<Category>): MediaItem? {
+    if (hero == null) return null
+    val card = categories.asSequence()
+        .flatMap { it.items.asSequence() }
+        .firstOrNull { it.id == hero.id && it.mediaType == hero.mediaType }
+        ?: return hero
+    return if (card.isWatched == hero.isWatched) hero else hero.copy(isWatched = card.isWatched)
+}
+
 enum class ToastType {
     SUCCESS, ERROR, INFO
 }
@@ -1562,6 +1576,9 @@ class HomeViewModel @Inject constructor(
         activeEpgRefreshJob?.cancel()
         lastContinueWatchingItems = emptyList()
         lastContinueWatchingUpdateMs = 0L
+        // The next profile's rows arrive unmarked; its first tick pass must not wait out the
+        // throttle of the previous profile.
+        lastWatchedBadgesRefreshMs = 0L
         lastResolvedBaseCategories = emptyList()
         dismissedContinueWatchingAt.clear()
         categoryPaginationStates.clear()
@@ -4545,24 +4562,23 @@ class HomeViewModel @Inject constructor(
                 traktRepository.initializeWatchedCache()
                 if (_uiState.value.categories.isEmpty()) return@launch
 
-                val watchedMovies = traktRepository.getWatchedMoviesFromCache()
-                // Index the history once instead of scanning it for every distinct show.
-                val startedShows = startedShowIds(traktRepository.getWatchedEpisodesFromCache())
+                withContext(Dispatchers.Default) {
+                    val watchedMovies = traktRepository.getWatchedMoviesFromCache()
+                    // Index the history once instead of scanning it for every distinct show.
+                    val startedShows = startedShowIds(traktRepository.getWatchedEpisodesFromCache())
 
-                // Mark the latest state rather than a snapshot from before the reads, so rows
-                // published meanwhile (catalogs, Continue Watching) are not rolled back.
-                _uiState.update { state ->
-                    val updatedCategories = applyWatchedBadges(state.categories, watchedMovies, startedShows)
-                    if (updatedCategories === state.categories) {
-                        state
-                    } else {
-                        val updatedHero = state.heroItem?.let { hero ->
-                            updatedCategories.asSequence()
-                                .flatMap { it.items.asSequence() }
-                                .firstOrNull { it.id == hero.id && it.mediaType == hero.mediaType }
-                                ?: hero
+                    // Mark the latest state rather than a snapshot from before the reads, so rows
+                    // published meanwhile (catalogs, Continue Watching) are not rolled back.
+                    _uiState.update { state ->
+                        val updatedCategories = applyWatchedBadges(state.categories, watchedMovies, startedShows)
+                        if (updatedCategories === state.categories) {
+                            state
+                        } else {
+                            state.copy(
+                                categories = updatedCategories,
+                                heroItem = heroWithWatchedBadge(state.heroItem, updatedCategories)
+                            )
                         }
-                        state.copy(categories = updatedCategories, heroItem = updatedHero)
                     }
                 }
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()

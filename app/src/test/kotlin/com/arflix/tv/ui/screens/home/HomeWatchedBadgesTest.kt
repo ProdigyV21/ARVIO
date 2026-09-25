@@ -15,7 +15,7 @@ class HomeWatchedBadgesTest {
         MediaItem(id = id, title = "Show $id", mediaType = MediaType.TV, isWatched = watched)
 
     @Test
-    fun `large history is indexed into started show ids`() {
+    fun `history is indexed into started show ids, keys without a tmdb id are skipped`() {
         val history = (1..20_000).mapTo(HashSet()) { "show_tmdb:${it / 10 + 1}:1:$it" } +
             setOf("show_trakt:5000:1:1", "show_tmdb:5000", "show_tmdb:bad:1:1")
 
@@ -70,5 +70,25 @@ class HomeWatchedBadgesTest {
         val changed = applyWatchedBadges(categories, setOf(7), setOf(3))
         assertThat(changed[0]).isSameInstanceAs(marked)
         assertThat(changed[1].items.single().isWatched).isTrue()
+    }
+
+    @Test
+    fun `hero keeps its hydrated details and only takes over the tick`() {
+        val hero = movie(7).copy(duration = "2h 5m", imdbRating = "8.1", primaryNetworkLogo = "logo")
+        val rows = applyWatchedBadges(
+            listOf(Category(id = "trending", title = "Trending", items = listOf(movie(7)))),
+            watchedMovies = setOf(7),
+            startedShows = emptySet()
+        )
+
+        val updated = heroWithWatchedBadge(hero, rows)!!
+
+        assertThat(updated.isWatched).isTrue()
+        assertThat(updated.duration).isEqualTo("2h 5m")
+        assertThat(updated.imdbRating).isEqualTo("8.1")
+        assertThat(updated.primaryNetworkLogo).isEqualTo("logo")
+        assertThat(heroWithWatchedBadge(updated, rows)).isSameInstanceAs(updated)
+        val elsewhere = movie(99)
+        assertThat(heroWithWatchedBadge(elsewhere, rows)).isSameInstanceAs(elsewhere)
     }
 }
