@@ -285,6 +285,22 @@ internal fun watchedBadgesPassIsRedundant(
 ): Boolean = !force && rows === lastMarkedRows && sinceLastPassMs < throttleMs
 
 /**
+ * How long a tick pass waits before it runs. The first pass after launch or a profile switch keeps
+ * the startup pause, so it does not compete with the first frames. Once a pass has run, a pass
+ * Home asks for on resume (back from Details) — or one that replaces such a pending pass — only
+ * debounces briefly: the cache is loaded and the pass itself takes milliseconds.
+ */
+internal fun watchedBadgesPassDelayMs(
+    quickRequested: Boolean,
+    hadPass: Boolean,
+    isLowRamDevice: Boolean
+): Long = when {
+    quickRequested && hadPass -> 300L
+    isLowRamDevice -> 3_000L
+    else -> 1_800L
+}
+
+/**
  * Carries the tick of [hero]'s card in [categories] over to the hero. The hero keeps its own
  * instance: runtime, ratings, budget and the network logo are hydrated into the hero only, so
  * swapping in the plain row card would drop them until focus moves.
@@ -1367,6 +1383,7 @@ class HomeViewModel @Inject constructor(
     private var homeDataLoadAttempted = false
     private var lastWatchedBadgesRefreshMs: Long = 0L
     @Volatile private var lastWatchedBadgesCategories: List<Category>? = null
+    @Volatile private var watchedBadgesQuickPending = false
     private val HOME_PLACEHOLDER_ITEM_COUNT = 8
 
     // EPG refresh intervals for Favorite TV row
@@ -4591,10 +4608,18 @@ class HomeViewModel @Inject constructor(
             )
         ) return
 
+        // A resume pass stays quick even when rows published right after it restart the debounce.
+        val quick = force || (watchedBadgesQuickPending && watchedBadgesJob?.isActive == true)
         watchedBadgesJob?.cancel()
+        watchedBadgesQuickPending = quick
+        val passDelayMs = watchedBadgesPassDelayMs(
+            quickRequested = quick,
+            hadPass = lastWatchedBadgesRefreshMs != 0L,
+            isLowRamDevice = isLowRamDevice
+        )
         watchedBadgesJob = viewModelScope.launch(networkDispatcher) {
             if (!immediate) {
-                delay(if (isLowRamDevice) 3_000L else 1_800L)
+                delay(passDelayMs)
             }
             try {
                 // Not gated on Trakt: the watched cache also holds local, Cloud, MDBList and

@@ -110,4 +110,16 @@ class HomeWatchedBadgesTest {
         assertThat(watchedBadgesPassIsRedundant(fresh, null, force = false, sinceLastPassMs = 0L, throttleMs = 90_000L))
             .isFalse()
     }
+
+    @Test
+    fun `back from details the tick pass is quick, the first pass keeps the startup pause`() {
+        // Back from Details after a pass has run: short debounce only.
+        assertThat(watchedBadgesPassDelayMs(quickRequested = true, hadPass = true, isLowRamDevice = true)).isEqualTo(300L)
+        // Launch also reports a resume, but no pass has run yet: keep the startup pause.
+        assertThat(watchedBadgesPassDelayMs(quickRequested = true, hadPass = false, isLowRamDevice = true)).isEqualTo(3_000L)
+        assertThat(watchedBadgesPassDelayMs(quickRequested = true, hadPass = false, isLowRamDevice = false)).isEqualTo(1_800L)
+        // Newly published rows keep the regular debounce.
+        assertThat(watchedBadgesPassDelayMs(quickRequested = false, hadPass = true, isLowRamDevice = true)).isEqualTo(3_000L)
+        assertThat(watchedBadgesPassDelayMs(quickRequested = false, hadPass = true, isLowRamDevice = false)).isEqualTo(1_800L)
+    }
 }
