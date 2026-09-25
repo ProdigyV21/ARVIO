@@ -272,6 +272,15 @@ internal fun applyWatchedBadges(
 }
 
 /**
+ * Marks the rows and the hero of [this] state; the same instance comes back when nothing changes.
+ */
+internal fun HomeUiState.withWatchedBadges(watchedMovies: Set<Int>, startedShows: Set<Int>): HomeUiState {
+    val updatedCategories = applyWatchedBadges(categories, watchedMovies, startedShows)
+    if (updatedCategories === categories) return this
+    return copy(categories = updatedCategories, heroItem = heroWithWatchedBadge(heroItem, updatedCategories))
+}
+
+/**
  * Whether a tick pass may be skipped: only when nothing asks for it ([force]), the rows are the
  * very ones the last pass marked, and that pass is recent. Freshly published rows (a catalog
  * load, a next page, a cloud reload) always carry unmarked cards, so they are never skipped.
@@ -1384,6 +1393,8 @@ class HomeViewModel @Inject constructor(
     private var lastWatchedBadgesRefreshMs: Long = 0L
     @Volatile private var lastWatchedBadgesCategories: List<Category>? = null
     @Volatile private var watchedBadgesQuickPending = false
+    // What the last pass found watched (films, started shows), to mark re-published rows at once.
+    @Volatile private var lastWatchedBadgesLookup: Pair<Set<Int>, Set<Int>>? = null
     private val HOME_PLACEHOLDER_ITEM_COUNT = 8
 
     // EPG refresh intervals for Favorite TV row
@@ -1612,6 +1623,7 @@ class HomeViewModel @Inject constructor(
         // throttle of the previous profile.
         lastWatchedBadgesRefreshMs = 0L
         lastWatchedBadgesCategories = null
+        lastWatchedBadgesLookup = null
         lastResolvedBaseCategories = emptyList()
         dismissedContinueWatchingAt.clear()
         categoryPaginationStates.clear()
@@ -1815,14 +1827,20 @@ class HomeViewModel @Inject constructor(
 
     init {
         // Rows are published from many places (startup cache, catalog load, next pages, cloud
-        // reloads), always with unmarked cards. Mark every new set of rows; the pass is debounced
-        // and a set it has already marked does not trigger it again.
+        // reloads), always with unmarked cards. Once a pass has run, new rows take over what it
+        // found at once, so the ticks do not blink off while a catalog load lands; before that,
+        // or when the rows are still not the marked ones, a debounced pass runs.
         viewModelScope.launch {
             _uiState
                 .map { it.categories }
                 .distinctUntilChanged { old, new -> old === new }
                 .collect { rows ->
-                    if (rows.isNotEmpty() && rows !== lastWatchedBadgesCategories) refreshWatchedBadges()
+                    if (rows.isEmpty() || rows === lastWatchedBadgesCategories) return@collect
+                    lastWatchedBadgesLookup?.let { (watchedMovies, startedShows) ->
+                        val marked = _uiState.updateAndGet { it.withWatchedBadges(watchedMovies, startedShows) }
+                        lastWatchedBadgesCategories = marked.categories
+                    }
+                    refreshWatchedBadges()
                 }
         }
 
@@ -4634,18 +4652,9 @@ class HomeViewModel @Inject constructor(
 
                     // Mark the latest state rather than a snapshot from before the reads, so rows
                     // published meanwhile (catalogs, Continue Watching) are not rolled back.
-                    val marked = _uiState.updateAndGet { state ->
-                        val updatedCategories = applyWatchedBadges(state.categories, watchedMovies, startedShows)
-                        if (updatedCategories === state.categories) {
-                            state
-                        } else {
-                            state.copy(
-                                categories = updatedCategories,
-                                heroItem = heroWithWatchedBadge(state.heroItem, updatedCategories)
-                            )
-                        }
-                    }
+                    val marked = _uiState.updateAndGet { it.withWatchedBadges(watchedMovies, startedShows) }
                     lastWatchedBadgesCategories = marked.categories
+                    lastWatchedBadgesLookup = watchedMovies to startedShows
                 }
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
             } catch (e: Exception) {

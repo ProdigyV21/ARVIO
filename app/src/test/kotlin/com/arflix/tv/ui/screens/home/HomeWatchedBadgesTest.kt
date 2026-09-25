@@ -122,4 +122,20 @@ class HomeWatchedBadgesTest {
         assertThat(watchedBadgesPassDelayMs(quickRequested = false, hadPass = true, isLowRamDevice = true)).isEqualTo(3_000L)
         assertThat(watchedBadgesPassDelayMs(quickRequested = false, hadPass = true, isLowRamDevice = false)).isEqualTo(1_800L)
     }
+
+    @Test
+    fun `re-published rows take over the known ticks and the state stays the same when nothing changes`() {
+        // A catalog load publishes the same titles again, unmarked; the last pass found film 7 and show 2.
+        val state = HomeUiState(
+            categories = listOf(Category(id = "trending", title = "Trending", items = listOf(movie(7), show(2), movie(8)))),
+            heroItem = movie(7).copy(imdbRating = "8.1")
+        )
+
+        val marked = state.withWatchedBadges(watchedMovies = setOf(7), startedShows = setOf(2))
+
+        assertThat(marked.categories.single().items.map { it.isWatched }).containsExactly(true, true, false).inOrder()
+        assertThat(marked.heroItem?.isWatched).isTrue()
+        assertThat(marked.heroItem?.imdbRating).isEqualTo("8.1")
+        assertThat(marked.withWatchedBadges(setOf(7), setOf(2))).isSameInstanceAs(marked)
+    }
 }
