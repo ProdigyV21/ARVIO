@@ -58,6 +58,7 @@ object Constants {
     val TRAKT_CLIENT_SECRET: String
         get() = usableSecret(BuildConfig.TRAKT_CLIENT_SECRET)
     val SIMKL_CLIENT_ID: String get() = usableSecret(BuildConfig.SIMKL_CLIENT_ID)
+    val MDBLIST_CLIENT_ID: String get() = usableSecret(BuildConfig.MDBLIST_CLIENT_ID)
 
     // Image URLs - tuned for TV quality with smooth scrolling/perf.
     const val IMAGE_BASE = "https://image.tmdb.org/t/p/w780"

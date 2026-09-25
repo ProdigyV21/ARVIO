@@ -16,6 +16,8 @@ import com.arflix.tv.data.api.MdbWatchedBody
 import com.arflix.tv.data.api.MdbWatchedEpisodeRef
 import com.arflix.tv.data.api.MdbWatchedSeasonRef
 import com.arflix.tv.data.api.MdbWatchedShowRef
+import com.arflix.tv.data.api.MdbDeviceAuthorizationResponse
+import com.arflix.tv.data.api.MdbTokenResponse
 import com.arflix.tv.data.api.MdbWatchlistItem
 import com.arflix.tv.data.api.MdbWatchlistModifyBody
 import com.arflix.tv.data.model.MediaItem
@@ -72,28 +74,46 @@ class MdbListRepository @Inject constructor(
     private data class RatingsCacheEntry(val storedAt: Long, val ratings: List<MdbExternalRating>)
     private val ratingsCache = ConcurrentHashMap<String, RatingsCacheEntry>()
 
-    private suspend fun key(): String? = store.getMdbListApiKey()
-
-    /** True when a non-empty key is stored AND it validates against /user. */
-    suspend fun validateKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            !api.getUser(apiKey.trim()).username.isNullOrBlank()
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            false
-        }
-    }
+    private suspend fun key(): String? = store.getMdbListAuthToken()
+    private fun authHeader(k: String): String =
+        if (k.startsWith("Bearer ", ignoreCase = true)) k else "Bearer $k"
 
     suspend fun isConnected(): Boolean = key() != null
 
+    /** Initiates OAuth 2.0 Device Code flow. */
+    suspend fun requestDeviceCode(clientId: String): MdbDeviceAuthorizationResponse = withContext(Dispatchers.IO) {
+        api.requestDeviceAuthorization(clientId = clientId.trim())
+    }
+
+    /** Polls for OAuth token with user-approved device code. */
+    suspend fun pollDeviceToken(deviceCode: String, clientId: String): MdbTokenResponse = withContext(Dispatchers.IO) {
+        api.pollDeviceToken(deviceCode = deviceCode.trim(), clientId = clientId.trim())
+    }
+
+    /** Saves OAuth access & refresh tokens and notifies SyncProviderStore. */
+    suspend fun saveTokens(tokenResponse: MdbTokenResponse) {
+        store.setMdbListOAuthTokens(
+            accessToken = tokenResponse.accessToken,
+            refreshToken = tokenResponse.refreshToken,
+            expiresInSeconds = tokenResponse.expiresIn
+        )
+        store.onProviderConnected(com.arflix.tv.data.repository.sync.SyncProvider.MDBLIST)
+    }
+
+    /** Disconnects MDBList by clearing OAuth tokens. */
+    suspend fun disconnect() {
+        store.setMdbListOAuthTokens(null, null, null)
+        store.onProviderDisconnected(com.arflix.tv.data.repository.sync.SyncProvider.MDBLIST)
+    }
+
     /**
-     * Fetches the MDBList username for the currently connected API key.
+     * Fetches the MDBList username for the currently connected API key or token.
      * Returns null gracefully if not connected or if the request fails.
      */
     suspend fun fetchUsername(): String? = withContext(Dispatchers.IO) {
         try {
             val k = key() ?: return@withContext null
-            api.getUser(k).username
+            api.getUser(authHeader = authHeader(k), apiKey = k).username
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -113,7 +133,12 @@ class MdbListRepository @Inject constructor(
                 ?.let { return@withContext it.ratings }
             try {
                 val apiType = if (mediaType == MediaType.MOVIE) "movie" else "show"
-                val ratings = api.getMediaInfo(apiType, tmdbId, k).ratings
+                val ratings = api.getMediaInfo(
+                    mediaType = apiType,
+                    mediaId = tmdbId,
+                    authHeader = authHeader(k),
+                    apiKey = k
+                ).ratings
                     .orEmpty()
                     .mapNotNull(::normalizeRating)
                     .distinctBy { it.source }
@@ -186,7 +211,7 @@ class MdbListRepository @Inject constructor(
             } else {
                 MdbWatchlistModifyBody(shows = listOf(MdbTmdbRef(tmdbId)))
             }
-            api.modifyWatchlist(action, k, body)
+            api.modifyWatchlist(action = action, authHeader = authHeader(k), apiKey = k, body = body)
             true
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -215,7 +240,13 @@ class MdbListRepository @Inject constructor(
         val limit = 1000
         var offset = 0
         while (true) {
-            val page = api.getWatchlistItems(apiKey, limit = limit, offset = offset, unified = "true")
+            val page = api.getWatchlistItems(
+                authHeader = authHeader(apiKey),
+                apiKey = apiKey,
+                limit = limit,
+                offset = offset,
+                unified = "true"
+            )
             all.addAll(page)
             if (page.size < limit) break
             offset += limit
@@ -272,7 +303,7 @@ class MdbListRepository @Inject constructor(
             )
         }
         try {
-            api.scrobble(action, k, body)
+            api.scrobble(action = action, authHeader = authHeader(k), apiKey = k, body = body)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.e(TAG, "scrobble $action failed", e)
@@ -295,7 +326,7 @@ class MdbListRepository @Inject constructor(
                 )
             }
             try {
-                api.scrobbleClear(k, body)
+                api.scrobbleClear(authHeader = authHeader(k), apiKey = k, body = body)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 AppLogger.e(TAG, "scrobble clear failed", e)
@@ -305,26 +336,27 @@ class MdbListRepository @Inject constructor(
     // ===== Watched mirror (Trakt-style ids objects) =====
 
     suspend fun markMovieWatched(tmdbId: Int): Boolean = watchedCall {
-        api.addWatched(it, MdbWatchedBody(movies = listOf(MdbIdsItem(MdbIds(tmdb = tmdbId)))))
+        api.addWatched(authHeader = authHeader(it), apiKey = it, body = MdbWatchedBody(movies = listOf(MdbIdsItem(MdbIds(tmdb = tmdbId)))))
     }
 
     suspend fun markMovieUnwatched(tmdbId: Int): Boolean = watchedCall {
-        api.removeWatched(it, MdbWatchedBody(movies = listOf(MdbIdsItem(MdbIds(tmdb = tmdbId)))))
+        api.removeWatched(authHeader = authHeader(it), apiKey = it, body = MdbWatchedBody(movies = listOf(MdbIdsItem(MdbIds(tmdb = tmdbId)))))
     }
 
     suspend fun markEpisodeWatched(showTmdbId: Int, season: Int, episode: Int): Boolean = watchedCall {
-        api.addWatched(it, episodeBody(showTmdbId, season, episode))
+        api.addWatched(authHeader = authHeader(it), apiKey = it, body = episodeBody(showTmdbId, season, episode))
     }
 
     suspend fun markEpisodeUnwatched(showTmdbId: Int, season: Int, episode: Int): Boolean = watchedCall {
-        api.removeWatched(it, episodeBody(showTmdbId, season, episode))
+        api.removeWatched(authHeader = authHeader(it), apiKey = it, body = episodeBody(showTmdbId, season, episode))
     }
 
     /** Batch-mark a whole season's episodes watched in one /sync/watched call. */
     suspend fun markSeasonWatched(showTmdbId: Int, season: Int, episodes: List<Int>): Boolean = watchedCall {
         api.addWatched(
-            it,
-            MdbWatchedBody(
+            authHeader = authHeader(it),
+            apiKey = it,
+            body = MdbWatchedBody(
                 shows = listOf(
                     MdbWatchedShowRef(
                         ids = MdbIds(tmdb = showTmdbId),
@@ -370,7 +402,7 @@ class MdbListRepository @Inject constructor(
             var offset = 0
             val limit = 1000
             while (true) {
-                val response = api.getWatched(k, limit = limit, offset = offset)
+                val response = api.getWatched(authHeader = authHeader(k), apiKey = k, limit = limit, offset = offset)
                 response.movies?.forEach { row ->
                     row.movie?.ids?.tmdb?.let(movies::add)
                 }
@@ -400,7 +432,7 @@ class MdbListRepository @Inject constructor(
             var offset = 0
             val limit = 1000
             while (true) {
-                val resp = api.getWatched(k, limit = limit, offset = offset)
+                val resp = api.getWatched(authHeader = authHeader(k), apiKey = k, limit = limit, offset = offset)
                 resp.movies?.forEach { row -> row.movie?.ids?.tmdb?.let { out.add(it) } }
                 if (resp.pagination?.hasMore != true) break
                 offset += limit
@@ -429,7 +461,7 @@ class MdbListRepository @Inject constructor(
             var offset = 0
             val limit = 1000
             while (true) {
-                val resp = api.getWatched(k, limit = limit, offset = offset)
+                val resp = api.getWatched(authHeader = authHeader(k), apiKey = k, limit = limit, offset = offset)
                 resp.episodes?.forEach { row ->
                     val ep = row.episode ?: return@forEach
                     val showTmdb = ep.show?.ids?.tmdb ?: return@forEach
@@ -469,7 +501,7 @@ class MdbListRepository @Inject constructor(
             var offset = 0
             val limit = 1000
             while (true) {
-                val resp = api.getWatched(k, limit = limit, offset = offset)
+                val resp = api.getWatched(authHeader = authHeader(k), apiKey = k, limit = limit, offset = offset)
                 resp.episodes?.forEach { row ->
                     val ep = row.episode ?: return@forEach
                     val showTmdb = ep.show?.ids?.tmdb ?: return@forEach
@@ -492,7 +524,11 @@ class MdbListRepository @Inject constructor(
     suspend fun getContinueWatching(forceRefresh: Boolean = false): List<ContinueWatchingItem> = withContext(Dispatchers.IO) {
         val k = key() ?: return@withContext emptyList()
         try {
-            api.getPlayback(k, cacheControl = if (forceRefresh) "no-cache" else null)
+            api.getPlayback(
+                authHeader = authHeader(k),
+                apiKey = k,
+                cacheControl = if (forceRefresh) "no-cache" else null
+            )
                 .mapNotNull { mapPlaybackItem(it) }
                 .sortedByDescending { it.updatedAtMs }
                 // One card per title. A paused session is kept for every episode

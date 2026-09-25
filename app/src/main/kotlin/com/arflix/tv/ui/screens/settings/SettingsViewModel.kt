@@ -16,6 +16,7 @@ import com.arflix.tv.server.AiKeyConfigServer
 import com.arflix.tv.ui.screens.player.SubtitleFontOption
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleAiModel
 import com.arflix.tv.util.AppLogger
+import com.arflix.tv.util.Constants
 import com.arflix.tv.util.DeviceIpAddress
 import com.arflix.tv.util.DiagnosticsManager
 import com.arflix.tv.util.QrCodeGenerator
@@ -249,7 +250,10 @@ data class SettingsUiState(
     val traktUsername: String? = null,
     // MDBList (alternative remote sync provider)
     val isMdbListConnected: Boolean = false,
-    val mdbListConnecting: Boolean = false,
+    val isMdbListAuthStarting: Boolean = false,
+    val isMdbListPolling: Boolean = false,
+    val mdbListCode: String? = null,
+    val mdbListUrl: String? = null,
     val mdbListUsername: String? = null,
     // Simkl (alternative remote sync provider)
     val isSimklConnected: Boolean = false,
@@ -479,6 +483,7 @@ class SettingsViewModel @Inject constructor(
 
     private var traktPollingJob: Job? = null
     private var simklPollingJob: Job? = null
+    private var mdbListPollingJob: Job? = null
     private var traktStartupJob: Job? = null
     private var loadSettingsJob: Job? = null
     private var integrationMetadataJob: Job? = null
@@ -804,6 +809,10 @@ class SettingsViewModel @Inject constructor(
                 historyCount = historyCount,
                 traktUsername = null,
                 isMdbListConnected = isMdbList,
+                isMdbListAuthStarting = false,
+                isMdbListPolling = false,
+                mdbListCode = null,
+                mdbListUrl = null,
                 mdbListUsername = null,
                 isSimklConnected = isSimkl,
                 simklUsername = null,
@@ -4559,65 +4568,180 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // ========== MDBList Authentication (API key) ==========
+    // ========== MDBList Authentication ==========
 
-    /** Connect MDBList using a user API key from mdblist.com/preferences. */
-    fun connectMdbList(apiKey: String) {
-        val trimmed = apiKey.trim()
-        if (trimmed.isEmpty() || _uiState.value.mdbListConnecting) return
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(mdbListConnecting = true)
-            val valid = runCatching { mdbListRepository.validateKey(trimmed) }.getOrDefault(false)
-            if (!valid) {
+    fun startMdbListAuth() {
+        val clientId = Constants.MDBLIST_CLIENT_ID
+        if (clientId.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                toastMessage = SettingsMessage.Res(
+                    R.string.mdblist_auth_error,
+                    listOf("Client ID not configured")
+                ),
+                toastType = ToastType.ERROR
+            )
+            return
+        }
+
+        mdbListPollingJob?.cancel()
+        mdbListPollingJob = viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isMdbListAuthStarting = true)
+            runCatching {
+                val deviceRes = mdbListRepository.requestDeviceCode(clientId)
                 _uiState.value = _uiState.value.copy(
-                    mdbListConnecting = false,
-                    toastMessage = SettingsMessage.Res(R.string.mdblist_invalid_key),
+                    isMdbListAuthStarting = false,
+                    isMdbListPolling = true,
+                    mdbListCode = deviceRes.userCode,
+                    mdbListUrl = deviceRes.verificationUriComplete ?: deviceRes.verificationUri
+                )
+                startMdbListPolling(
+                    deviceCode = deviceRes.deviceCode,
+                    clientId = clientId,
+                    expiresInSec = deviceRes.expiresIn ?: 600,
+                    intervalSec = deviceRes.interval ?: 5
+                )
+            }.onFailure { e ->
+                if (e is CancellationException) throw e
+                _uiState.value = _uiState.value.copy(
+                    isMdbListAuthStarting = false,
+                    isMdbListPolling = false,
+                    mdbListCode = null,
+                    mdbListUrl = null,
+                    toastMessage = SettingsMessage.Res(
+                        R.string.mdblist_auth_error,
+                        listOf(e.message.orEmpty())
+                    ),
                     toastType = ToastType.ERROR
                 )
-                return@launch
             }
-            syncProviderStore.setMdbListApiKey(trimmed)
-            syncProviderStore.onProviderConnected(com.arflix.tv.data.repository.sync.SyncProvider.MDBLIST)
-            val traktStillConnected = traktRepository.hasTrakt()
-            val simklStillConnected = simklAuthManager.isConnected()
-            val trackingPreferences = syncProviderStore.getTrackingPreferences()
-            _uiState.value = _uiState.value.copy(
-                mdbListConnecting = false,
-                isMdbListConnected = true,
-                mdbListUsername = null,
-                isTraktAuthenticated = traktStillConnected,
-                isSimklConnected = simklStillConnected,
-                lastSyncTime = null,
-                syncedMovies = 0,
-                syncedEpisodes = 0,
-                trackingWatchlistReadMode = trackingPreferences.watchlistReadMode,
-                trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
-                trackingWatchedReadMode = trackingPreferences.watchedReadMode,
-                trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
-                trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
-                toastMessage = SettingsMessage.Res(R.string.mdblist_connected),
-                toastType = ToastType.SUCCESS
-            )
-            refreshIntegrationUsernames(
-                profileManager.getProfileIdSync(),
-                isTraktConnected = traktStillConnected,
-                isMdbListConnected = true,
-                isSimklConnected = simklStillConnected
-            )
-            // The MDBList watchlist is pulled when the Watchlist screen next loads.
-            syncLocalStateToCloud(silent = true, force = true)
-            runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
         }
+    }
+
+    private fun startMdbListPolling(
+        deviceCode: String,
+        clientId: String,
+        expiresInSec: Int,
+        intervalSec: Int
+    ) {
+        mdbListPollingJob?.cancel()
+        mdbListPollingJob = viewModelScope.launch {
+            val expiresAt = System.currentTimeMillis() + (expiresInSec.coerceAtLeast(60) * 1000L)
+            var pollDelayMs = intervalSec.coerceAtLeast(3) * 1000L
+            var lastFailure: SettingsMessage? = null
+
+            while (System.currentTimeMillis() < expiresAt) {
+                delay(minOf(pollDelayMs, (expiresAt - System.currentTimeMillis()).coerceAtLeast(0L)))
+                if (System.currentTimeMillis() >= expiresAt) break
+
+                try {
+                    val token = mdbListRepository.pollDeviceToken(deviceCode, clientId)
+                    if (token != null) {
+                        mdbListRepository.saveTokens(token)
+                        syncProviderStore.onProviderConnected(com.arflix.tv.data.repository.sync.SyncProvider.MDBLIST)
+                        val traktStillConnected = traktRepository.hasTrakt()
+                        val simklStillConnected = simklAuthManager.isConnected()
+                        val trackingPreferences = syncProviderStore.getTrackingPreferences()
+                        _uiState.value = _uiState.value.copy(
+                            isMdbListPolling = false,
+                            isMdbListConnected = true,
+                            mdbListCode = null,
+                            mdbListUrl = null,
+                            mdbListUsername = null,
+                            isTraktAuthenticated = traktStillConnected,
+                            isSimklConnected = simklStillConnected,
+                            lastSyncTime = null,
+                            syncedMovies = 0,
+                            syncedEpisodes = 0,
+                            trackingWatchlistReadMode = trackingPreferences.watchlistReadMode,
+                            trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
+                            trackingWatchedReadMode = trackingPreferences.watchedReadMode,
+                            trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                            trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
+                            toastMessage = SettingsMessage.Res(R.string.mdblist_connected),
+                            toastType = ToastType.SUCCESS
+                        )
+                        refreshIntegrationUsernames(
+                            profileManager.getProfileIdSync(),
+                            isTraktConnected = traktStillConnected,
+                            isMdbListConnected = true,
+                            isSimklConnected = simklStillConnected
+                        )
+                        syncLocalStateToCloud(silent = true, force = true)
+                        runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+
+                    val httpError = e as? retrofit2.HttpException
+                    val isPending = when {
+                        httpError?.code() == 400 -> {
+                            val errorBody = runCatching { httpError.response()?.errorBody()?.string() }.getOrNull()
+                            errorBody?.contains("authorization_pending", ignoreCase = true) == true ||
+                                errorBody?.contains("pending", ignoreCase = true) == true ||
+                                e.message?.contains("pending", ignoreCase = true) == true
+                        }
+                        else -> e.message?.contains("pending", ignoreCase = true) == true
+                    }
+                    if (isPending) continue
+
+                    if (httpError?.code() == 429) {
+                        pollDelayMs = (pollDelayMs + 2_000L).coerceAtMost(30_000L)
+                        continue
+                    }
+
+                    if (httpError?.code() == 403 || httpError?.code() == 401) {
+                        val errorBody = runCatching { httpError.response()?.errorBody()?.string() }.getOrNull()
+                        if (errorBody?.contains("access_denied", ignoreCase = true) == true) {
+                            lastFailure = SettingsMessage.Res(R.string.mdblist_code_denied)
+                            break
+                        }
+                    }
+
+                    AppLogger.e("SettingsViewModel", "MDBList polling error: ${e.message}")
+                    lastFailure = SettingsMessage.Res(
+                        R.string.mdblist_auth_error,
+                        listOf(e.message.orEmpty())
+                    )
+                    break
+                }
+            }
+
+            _uiState.value = _uiState.value.copy(
+                isMdbListPolling = false,
+                mdbListCode = null,
+                mdbListUrl = null,
+                toastMessage = lastFailure ?: SettingsMessage.Res(R.string.mdblist_code_expired),
+                toastType = ToastType.ERROR
+            )
+        }
+    }
+
+    fun cancelMdbListAuth() {
+        mdbListPollingJob?.cancel()
+        mdbListPollingJob = null
+        _uiState.value = _uiState.value.copy(
+            isMdbListAuthStarting = false,
+            isMdbListPolling = false,
+            mdbListCode = null,
+            mdbListUrl = null
+        )
     }
 
     fun disconnectMdbList() {
         viewModelScope.launch {
-            syncProviderStore.setMdbListApiKey(null)
+            cancelMdbListAuth()
+            mdbListRepository.disconnect()
+            syncProviderStore.setMdbListOAuthTokens(null, null, null)
             syncProviderStore.onProviderDisconnected(com.arflix.tv.data.repository.sync.SyncProvider.MDBLIST)
             val trackingPreferences = syncProviderStore.getTrackingPreferences()
             _uiState.value = _uiState.value.copy(
                 isMdbListConnected = false,
                 mdbListUsername = null,
+                isMdbListAuthStarting = false,
+                isMdbListPolling = false,
+                mdbListCode = null,
+                mdbListUrl = null,
                 trackingWatchlistReadMode = trackingPreferences.watchlistReadMode,
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
@@ -4834,6 +4958,8 @@ class SettingsViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         traktPollingJob?.cancel()
+        simklPollingJob?.cancel()
+        mdbListPollingJob?.cancel()
         stopAiKeyServerInternal()
         plexHomeServerPollingJob?.cancel()
     }

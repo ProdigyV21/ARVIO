@@ -539,14 +539,17 @@
     <string name="settings_trakt_connected">Trakt connected</string>
     <string name="settings_trakt_off">Trakt off</string>
     <string name="mdblist_account">MDBList</string>
-    <string name="mdblist_connected">MDBList connected</string>
-    <string name="mdblist_disconnected">MDBList disconnected</string>
-    <string name="mdblist_invalid_key">Invalid MDBList API key</string>
-    <string name="mdblist_key_hint">Paste your MDBList API key</string>
-    <string name="mdblist_key_help">Get your API key from mdblist.com/preferences</string>
+    <string name="mdblist_connected">Connected to MDBList!</string>
+    <string name="mdblist_disconnected">Disconnected from MDBList</string>
     <string name="mdblist_connect_title">Connect MDBList</string>
     <string name="mdblist_disconnect_confirm_title">Disconnect MDBList?</string>
     <string name="mdblist_disconnect_confirm_desc">Your watch history and lists will no longer sync.</string>
+    <string name="mdblist_invalid_key">Invalid MDBList API key</string>
+    <string name="mdblist_key_hint">Paste your MDBList API key</string>
+    <string name="mdblist_key_help">Get your API key from mdblist.com/preferences</string>
+    <string name="mdblist_auth_error">MDBList connection failed: %1$s</string>
+    <string name="mdblist_code_expired">MDBList code expired. Please try again.</string>
+    <string name="mdblist_code_denied">MDBList authorization denied.</string>
     <!-- Tracking Integrations sub-page -->
     <string name="settings_tracking_integrations">Tracking Integrations</string>
     <string name="settings_connected_as">Connected as %1$s</string>

@@ -2,6 +2,8 @@ package com.arflix.tv.data.api
 
 import com.google.gson.annotations.SerializedName
 import retrofit2.http.Body
+import retrofit2.http.Field
+import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.Headers
@@ -12,25 +14,57 @@ import retrofit2.http.Query
 /**
  * MDBList API (https://api.mdblist.com). Optional per-profile tracking and ratings integration.
  *
- * Auth is a static user API key passed as the `apikey` query param on every
- * call. Shapes below are verified against the live API (see the
- * project_mdblist_api memory). Progress is 0-100 and comes back as a String
- * ("30.00") — parse tolerantly.
+ * Auth is supported via OAuth 2.0 Bearer tokens (Device Code flow) or legacy user API keys.
+ * Progress is 0-100 and comes back as a String ("30.00") — parse tolerantly.
  */
 interface MdbListApi {
 
+    // ===== OAuth Device Code & Token =====
+
+    @POST("oauth/device-authorization/")
+    @FormUrlEncoded
+    suspend fun requestDeviceAuthorization(
+        @Field("client_id") clientId: String,
+        @Field("scope") scope: String = "write"
+    ): MdbDeviceAuthorizationResponse
+
+    @POST("oauth/token/")
+    @FormUrlEncoded
+    suspend fun pollDeviceToken(
+        @Field("grant_type") grantType: String = "urn:ietf:params:oauth:grant-type:device_code",
+        @Field("device_code") deviceCode: String,
+        @Field("client_id") clientId: String
+    ): MdbTokenResponse
+
+    @POST("oauth/token/")
+    @FormUrlEncoded
+    suspend fun refreshToken(
+        @Field("grant_type") grantType: String = "refresh_token",
+        @Field("refresh_token") refreshToken: String,
+        @Field("client_id") clientId: String
+    ): MdbTokenResponse
+
+    // ===== User & Ratings =====
+
     @GET("user")
-    suspend fun getUser(@Query("apikey") apiKey: String): MdbUser
+    suspend fun getUser(
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null
+    ): MdbUser
 
     @GET("sync/last_activities")
-    suspend fun getLastActivities(@Query("apikey") apiKey: String): MdbLastActivities
+    suspend fun getLastActivities(
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null
+    ): MdbLastActivities
 
     /** Ratings and metadata for one TMDB title. mediaType is "movie" or "show". */
     @GET("tmdb/{mediaType}/{mediaId}/")
     suspend fun getMediaInfo(
         @Path("mediaType") mediaType: String,
         @Path("mediaId") mediaId: Int,
-        @Query("apikey") apiKey: String
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null
     ): MdbMediaInfo
 
     // ===== Watchlist =====
@@ -38,7 +72,8 @@ interface MdbListApi {
     /** Unified flat array of movies + shows. */
     @GET("watchlist/items")
     suspend fun getWatchlistItems(
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Query("limit") limit: Int = 1000,
         @Query("offset") offset: Int = 0,
         @Query("unified") unified: String = "true"
@@ -49,7 +84,8 @@ interface MdbListApi {
     @Headers("Content-Type: application/json")
     suspend fun modifyWatchlist(
         @Path("action") action: String,
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Body body: MdbWatchlistModifyBody
     ): MdbCountResponse
 
@@ -57,7 +93,8 @@ interface MdbListApi {
 
     @GET("sync/watched")
     suspend fun getWatched(
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Query("limit") limit: Int = 1000,
         @Query("offset") offset: Int = 0
     ): MdbWatchedResponse
@@ -65,14 +102,16 @@ interface MdbListApi {
     @POST("sync/watched")
     @Headers("Content-Type: application/json")
     suspend fun addWatched(
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Body body: MdbWatchedBody
     ): MdbCountResponse
 
     @POST("sync/watched/remove")
     @Headers("Content-Type: application/json")
     suspend fun removeWatched(
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Body body: MdbWatchedBody
     ): MdbCountResponse
 
@@ -89,7 +128,8 @@ interface MdbListApi {
      */
     @GET("sync/playback")
     suspend fun getPlayback(
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Header("Cache-Control") cacheControl: String? = null
     ): List<MdbPlaybackItem>
 
@@ -98,7 +138,8 @@ interface MdbListApi {
     @Headers("Content-Type: application/json")
     suspend fun scrobble(
         @Path("action") action: String,
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Body body: MdbScrobbleBody
     ): MdbScrobbleResponse
 
@@ -106,10 +147,30 @@ interface MdbListApi {
     @POST("scrobble/clear")
     @Headers("Content-Type: application/json")
     suspend fun scrobbleClear(
-        @Query("apikey") apiKey: String,
+        @Header("Authorization") authHeader: String? = null,
+        @Query("apikey") apiKey: String? = null,
         @Body body: MdbScrobbleClearBody
     ): MdbScrobbleClearResponse
 }
+
+// ========== OAuth Response Models ==========
+
+data class MdbDeviceAuthorizationResponse(
+    @SerializedName("device_code") val deviceCode: String,
+    @SerializedName("user_code") val userCode: String,
+    @SerializedName("verification_uri") val verificationUri: String,
+    @SerializedName("verification_uri_complete") val verificationUriComplete: String? = null,
+    @SerializedName("expires_in") val expiresIn: Int = 300,
+    val interval: Int = 5
+)
+
+data class MdbTokenResponse(
+    @SerializedName("access_token") val accessToken: String,
+    @SerializedName("token_type") val tokenType: String = "Bearer",
+    @SerializedName("expires_in") val expiresIn: Long = 2592000L,
+    @SerializedName("refresh_token") val refreshToken: String? = null,
+    val scope: String? = null
+)
 
 // ========== Shared ids ==========
 
