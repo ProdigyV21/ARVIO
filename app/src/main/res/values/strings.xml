@@ -960,6 +960,11 @@
     <string name="telegram_disconnect_btn">DISCONNECT</string>
     <string name="telegram_video_cache">Video Cache</string>
     <string name="telegram_clear_cache_btn">CLEAR</string>
+    <string name="telegram_search_on_click_title">Only search Telegram when clicking the Telegram source</string>
+    <string name="telegram_search_on_click_desc">Avoids Telegram\'s search limit. Turn off to search Telegram automatically with the other sources.</string>
+    <string name="telegram_search_row_idle">Click to search Telegram</string>
+    <string name="telegram_search_row_searching">Searching Telegram…</string>
+    <string name="telegram_search_row_none">No Telegram sources found — select to search again</string>
     <string name="telegram_connection_failed">Connection Failed</string>
     <string name="telegram_try_again">TRY AGAIN</string>
     <string name="telegram_disconnect_confirm_title">Disconnect Telegram?</string>

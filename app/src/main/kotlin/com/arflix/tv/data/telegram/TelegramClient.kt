@@ -81,6 +81,11 @@ class TelegramClient @Inject constructor(
             stepLog("library loaded OK")
             _authState.value = TelegramAuthState.Initializing
             try {
+                // TDLib's default verbosity writes every request, update and file event to
+                // logcat — thousands of lines a minute, enough for Android to start dropping the
+                // app's own logs ("chatty … expire"). Errors only.
+                runCatching { Client.execute(TdApi.SetLogVerbosityLevel(1)) }
+                    .onFailure { Log.w(TAG, "SetLogVerbosityLevel failed: ${it.message}") }
                 stepLog("calling Client.create")
                 client = Client.create(
                     { update -> handleUpdate(update) },

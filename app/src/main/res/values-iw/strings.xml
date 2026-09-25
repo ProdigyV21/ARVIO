@@ -250,4 +250,9 @@
     <string name="settings_builtin_collections_desc">הצג את שורות האוספים המובנות של ARVIO (שירותים / ז׳אנרים / זיכיונות). כבה כדי להשתמש רק באוספים שייבאת</string>
     <string name="settings_collections_installed">אוספים הותקנו: %1$s (%2$d שורות)</string>
     <string name="catalog_collections_invalid">זה לא קובץ אוספים תקין (נדרש JSON של ייצוא אוספים מ-Nuvio)</string>
+    <string name="telegram_search_on_click_title">חפש בטלגרם רק בלחיצה על מקור הטלגרם</string>
+    <string name="telegram_search_on_click_desc">מונע חריגה ממגבלת החיפוש של טלגרם. כבה כדי לחפש בטלגרם אוטומטית יחד עם שאר המקורות.</string>
+    <string name="telegram_search_row_idle">לחץ לחיפוש בטלגרם</string>
+    <string name="telegram_search_row_searching">מחפש בטלגרם…</string>
+    <string name="telegram_search_row_none">לא נמצאו מקורות בטלגרם — לחץ לחיפוש חוזר</string>
 </resources>

@@ -1718,6 +1718,16 @@ class StreamRepository @Inject constructor(
         return "$profileId|$type|$imdbId|${season ?: 0}|${episode ?: 0}$providerPart|addons:$addonRevision"
     }
 
+    /**
+     * Where the addon-only lookups ([resolveMovieStreams], [resolveEpisodeStreams]) store their
+     * result. They share [streamCacheKey] with the progressive lookups, which also carry Telegram
+     * sources — and writing the addon-only list under that key replaced the complete one: The
+     * Shards S01E01 (Sept 2026) showed a Telegram source, the player refreshed its source list
+     * through the addon-only path, and reopening the episode within the cache's 10 minutes served
+     * the list without Telegram. They still READ the complete list first; they only never write it.
+     */
+    private fun addonOnlyCacheKey(cacheKey: String): String = "$cacheKey|addon-only"
+
     private fun cacheTtlMsFor(result: StreamResult): Long {
         val streams = result.streams
         if (streams.isEmpty()) return STREAM_RESULT_EMPTY_CACHE_TTL_MS
@@ -2293,16 +2303,22 @@ class StreamRepository @Inject constructor(
             addonRevision = integrationCacheRevision(streamAddons)
         )
         val profileId = profileManager.getProfileIdSync()
+        // This lookup is addon-only; see addonOnlyCacheKey for why it never writes the full key.
+        val ownCacheKey = addonOnlyCacheKey(cacheKey)
         if (!forceRefresh) {
             synchronized(streamResultCache) {
-                val cached = streamResultCache[cacheKey]
-                if (cached != null && isStreamCacheFresh(cached)) {
-                    return@withContext cached.result
+                for (key in listOf(cacheKey, ownCacheKey)) {
+                    val cached = streamResultCache[key]
+                    if (cached != null && isStreamCacheFresh(cached)) {
+                        return@withContext cached.result
+                    }
                 }
             }
-            loadPersistedStreamResult(profileId, cacheKey)?.let { persisted ->
-                synchronized(streamResultCache) { streamResultCache[cacheKey] = persisted }
-                return@withContext persisted.result
+            for (key in listOf(cacheKey, ownCacheKey)) {
+                loadPersistedStreamResult(profileId, key)?.let { persisted ->
+                    synchronized(streamResultCache) { streamResultCache[key] = persisted }
+                    return@withContext persisted.result
+                }
             }
         }
 
@@ -2318,11 +2334,13 @@ class StreamRepository @Inject constructor(
         // IPTV VOD enrichment is appended separately in ViewModels.
 
         val result = StreamResult(streams = filteredStreams, subtitles = emptyList())
-        val finalCacheKey = streamCacheKey(
-            profileId = profileId,
-            type = "movie",
-            imdbId = imdbId,
-            addonRevision = integrationCacheRevision(streamAddons)
+        val finalCacheKey = addonOnlyCacheKey(
+            streamCacheKey(
+                profileId = profileId,
+                type = "movie",
+                imdbId = imdbId,
+                addonRevision = integrationCacheRevision(streamAddons)
+            )
         )
         val cachedResult = CachedStreamResult(result, System.currentTimeMillis())
         synchronized(streamResultCache) {
@@ -2392,7 +2410,14 @@ class StreamRepository @Inject constructor(
             }
 
             val prioritizedAddons = prioritizeStreamingAddons(streamAddons)
-            val telegramEnabled = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
+            val telegramConnected = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
+            // "Search Telegram only on click" (Telegram settings): list only what an earlier search
+            // found; the details screen offers the search itself as a source row.
+            val telegramOnClick = telegramConnected && telegramSourceResolver.searchOnClickOnly()
+            val telegramEnabled = telegramConnected && !telegramOnClick
+            val telegramCached = if (telegramOnClick) {
+                telegramSourceResolver.cachedResults(title = title, imdbId = imdbId)
+            } else emptyList()
             if (prioritizedAddons.isEmpty() && !telegramEnabled) {
                 Log.w(
                     TAG,
@@ -2429,8 +2454,12 @@ class StreamRepository @Inject constructor(
             )
 
             val mutex = Mutex()
-            val aggregatedStreams = mutableListOf<StreamSource>()
+            val aggregatedStreams = mutableListOf<StreamSource>().apply { addAll(telegramCached) }
             var completed = 0
+            // Set when the Telegram lookup did not run to the end (timed out, refused, or stopped
+            // because playback started). The list is then not the answer and is not cached — the
+            // next source list searches again (see TelegramResolution).
+            var telegramIncomplete = false
             val totalAddons = prioritizedAddons.size + (if (telegramEnabled) 1 else 0)
 
             suspend fun sendProgress() {
@@ -2444,14 +2473,16 @@ class StreamRepository @Inject constructor(
                 if (completed == totalAddons) {
                     val createdAtMs = System.currentTimeMillis()
                     val finalResult = StreamResult(filtered, emptyList())
-                    synchronized(streamResultCache) {
-                        streamResultCache[cacheKey] = CachedStreamResult(finalResult, createdAtMs)
+                    if (!telegramIncomplete) {
+                        synchronized(streamResultCache) {
+                            streamResultCache[cacheKey] = CachedStreamResult(finalResult, createdAtMs)
+                        }
+                        persistStreamResult(
+                            profileId = profileId,
+                            cacheKey = cacheKey,
+                            cached = CachedStreamResult(finalResult, createdAtMs)
+                        )
                     }
-                    persistStreamResult(
-                        profileId = profileId,
-                        cacheKey = cacheKey,
-                        cached = CachedStreamResult(finalResult, createdAtMs)
-                    )
                     if (filtered.isEmpty()) {
                         AppLogger.breadcrumb(
                             tag = "Sources",
@@ -2505,12 +2536,15 @@ class StreamRepository @Inject constructor(
 
                 if (telegramEnabled) {
                     val telegramStreams = try {
-                        withTimeoutOrNull(3_500L) {
-                            telegramSourceResolver.resolve(title = title, year = year, imdbId = imdbId, isMovie = true)
-                        } ?: emptyList()
+                        val resolution = withTimeoutOrNull(3_500L) {
+                            telegramSourceResolver.resolveDetailed(title = title, year = year, imdbId = imdbId, isMovie = true)
+                        }
+                        if (resolution?.complete != true) mutex.withLock { telegramIncomplete = true }
+                        resolution?.streams.orEmpty()
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e
                         Log.e(TAG, "[StreamFetch][Movie] telegram resolve failed", e)
+                        mutex.withLock { telegramIncomplete = true }
                         emptyList()
                     }
                     val valid = telegramStreams.filter { stream ->
@@ -2560,15 +2594,32 @@ class StreamRepository @Inject constructor(
 
                 if (telegramEnabled) {
                     launch {
+                        // Telegram results are shown as they are found (the lookup runs in stages);
+                        // each update is the whole list so far and replaces the previous one.
+                        var shownTelegram: List<StreamSource> = emptyList()
                         val telegramStreams = try {
-                            telegramSourceResolver.resolve(title = title, year = year, imdbId = imdbId, isMovie = true)
+                            val resolution = telegramSourceResolver.resolveDetailed(
+                                title = title, year = year, imdbId = imdbId, isMovie = true,
+                                onFound = { partial ->
+                                    mutex.withLock {
+                                        aggregatedStreams.removeAll(shownTelegram)
+                                        aggregatedStreams.addAll(partial)
+                                        shownTelegram = partial
+                                        sendProgress()
+                                    }
+                                }
+                            )
+                            if (!resolution.complete) mutex.withLock { telegramIncomplete = true }
+                            resolution.streams
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e
 
                             Log.e(TAG, "[StreamFetch][Movie] telegram resolve failed", e)
+                            mutex.withLock { telegramIncomplete = true }
                             emptyList()
                         }
                         mutex.withLock {
+                            aggregatedStreams.removeAll(shownTelegram)
                             aggregatedStreams.addAll(telegramStreams)
                             completed += 1
                             sendProgress()
@@ -2637,6 +2688,44 @@ class StreamRepository @Inject constructor(
         }.orEmpty()
     }
 
+    /**
+     * Whether source lists should offer Telegram as a "Search Telegram" row instead of searching
+     * by themselves (the Telegram setting, when Telegram is connected and enabled).
+     */
+    suspend fun isTelegramSearchOnClick(): Boolean =
+        telegramSourceResolver.isEnabled() &&
+            streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM) &&
+            telegramSourceResolver.searchOnClickOnly()
+
+    /**
+     * The search the user asked for from a source list. Same lookup, cache key and staged results
+     * as the automatic one: [onFound] gets the whole list so far each time it grows.
+     */
+    suspend fun searchTelegramNow(
+        mediaType: MediaType,
+        title: String,
+        year: Int?,
+        season: Int?,
+        episode: Int?,
+        imdbId: String,
+        onFound: suspend (List<StreamSource>) -> Unit
+    ): List<StreamSource> = withContext(Dispatchers.IO) {
+        if (mediaType == MediaType.MOVIE) {
+            telegramSourceResolver.resolveDetailed(title = title, year = year, imdbId = imdbId, isMovie = true, onFound = onFound)
+        } else {
+            telegramSourceResolver.resolveDetailed(
+                title = title, year = null, season = season, episode = episode,
+                imdbId = imdbId, isMovie = false, onFound = onFound
+            )
+        }.streams
+    }
+
+    /** Playback is starting: stop running Telegram searches and keep new ones quiet. */
+    fun onPlaybackStarted() = telegramSourceResolver.onPlaybackStarted()
+
+    /** The player closed; Telegram searches may notify again. */
+    fun onPlaybackEnded() = telegramSourceResolver.onPlaybackEnded()
+
     suspend fun resolveTelegramStreams(
         mediaType: MediaType,
         title: String,
@@ -2648,6 +2737,15 @@ class StreamRepository @Inject constructor(
     ): List<StreamSource> = withContext(Dispatchers.IO) {
         if (!telegramSourceResolver.isEnabled() || !streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)) {
             return@withContext emptyList()
+        }
+        if (telegramSourceResolver.searchOnClickOnly()) {
+            // No search from the player: only what the user's own search already found.
+            return@withContext telegramSourceResolver.cachedResults(
+                title = title,
+                season = if (mediaType == MediaType.MOVIE) null else season ?: 1,
+                episode = if (mediaType == MediaType.MOVIE) null else episode ?: 1,
+                imdbId = imdbId.orEmpty()
+            )
         }
         withTimeoutOrNull(timeoutMs) {
             try {
@@ -2889,11 +2987,15 @@ class StreamRepository @Inject constructor(
             providerEpisodeId = animeQueryOverride,
             addonRevision = integrationCacheRevision(streamAddons)
         )
+        // This lookup is addon-only; see addonOnlyCacheKey for why it never writes the full key.
+        val ownCacheKey = addonOnlyCacheKey(cacheKey)
         if (!forceRefresh) {
             synchronized(streamResultCache) {
-                val cached = streamResultCache[cacheKey]
-                if (cached != null && isStreamCacheFresh(cached)) {
-                    return@withContext cached.result
+                for (key in listOf(cacheKey, ownCacheKey)) {
+                    val cached = streamResultCache[key]
+                    if (cached != null && isStreamCacheFresh(cached)) {
+                        return@withContext cached.result
+                    }
                 }
             }
         }
@@ -2922,7 +3024,7 @@ class StreamRepository @Inject constructor(
 
         val result = StreamResult(filteredStreams, subtitles)
         synchronized(streamResultCache) {
-            streamResultCache[cacheKey] = CachedStreamResult(result = result, createdAtMs = System.currentTimeMillis())
+            streamResultCache[ownCacheKey] = CachedStreamResult(result = result, createdAtMs = System.currentTimeMillis())
         }
         result
     }
@@ -2992,7 +3094,14 @@ class StreamRepository @Inject constructor(
             }
 
             val prioritizedAddons = prioritizeStreamingAddons(streamAddons)
-            val telegramEnabled = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
+            val telegramConnected = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
+            // "Search Telegram only on click" (Telegram settings): list only what an earlier search
+            // found; the details screen offers the search itself as a source row.
+            val telegramOnClick = telegramConnected && telegramSourceResolver.searchOnClickOnly()
+            val telegramEnabled = telegramConnected && !telegramOnClick
+            val telegramCached = if (telegramOnClick) {
+                telegramSourceResolver.cachedResults(title = title, season = season, episode = episode, imdbId = imdbId)
+            } else emptyList()
             if (prioritizedAddons.isEmpty() && !telegramEnabled) {
                 Log.w(
                     TAG,
@@ -3022,8 +3131,12 @@ class StreamRepository @Inject constructor(
             )
 
             val mutex = Mutex()
-            val aggregatedStreams = mutableListOf<StreamSource>()
+            val aggregatedStreams = mutableListOf<StreamSource>().apply { addAll(telegramCached) }
             var completed = 0
+            // Set when the Telegram lookup did not run to the end (timed out, refused, or stopped
+            // because playback started). The list is then not the answer and is not cached — the
+            // next source list searches again (see TelegramResolution).
+            var telegramIncomplete = false
             val totalAddons = prioritizedAddons.size + (if (telegramEnabled) 1 else 0)
 
             suspend fun sendProgress() {
@@ -3037,8 +3150,10 @@ class StreamRepository @Inject constructor(
                 if (completed == totalAddons) {
                     val createdAtMs = System.currentTimeMillis()
                     val finalResult = StreamResult(filtered, emptyList())
-                    synchronized(streamResultCache) {
-                        streamResultCache[cacheKey] = CachedStreamResult(finalResult, createdAtMs)
+                    if (!telegramIncomplete) {
+                        synchronized(streamResultCache) {
+                            streamResultCache[cacheKey] = CachedStreamResult(finalResult, createdAtMs)
+                        }
                     }
                     if (filtered.isEmpty()) {
                         AppLogger.breadcrumb(
@@ -3105,8 +3220,8 @@ class StreamRepository @Inject constructor(
 
                 if (telegramEnabled) {
                     val telegramStreams = try {
-                        withTimeoutOrNull(3_500L) {
-                            telegramSourceResolver.resolve(
+                        val resolution = withTimeoutOrNull(3_500L) {
+                            telegramSourceResolver.resolveDetailed(
                                 title = title,
                                 year = null,
                                 season = season,
@@ -3114,10 +3229,13 @@ class StreamRepository @Inject constructor(
                                 imdbId = imdbId,
                                 isMovie = false
                             )
-                        } ?: emptyList()
+                        }
+                        if (resolution?.complete != true) mutex.withLock { telegramIncomplete = true }
+                        resolution?.streams.orEmpty()
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e
                         Log.e(TAG, "[StreamFetch][Episode] telegram resolve failed", e)
+                        mutex.withLock { telegramIncomplete = true }
                         emptyList()
                     }
                     val valid = telegramStreams.filter { stream ->
@@ -3181,22 +3299,37 @@ class StreamRepository @Inject constructor(
 
                 if (telegramEnabled) {
                     launch {
+                        // Telegram results are shown as they are found (the lookup runs in stages);
+                        // each update is the whole list so far and replaces the previous one.
+                        var shownTelegram: List<StreamSource> = emptyList()
                         val telegramStreams = try {
-                            telegramSourceResolver.resolve(
+                            val resolution = telegramSourceResolver.resolveDetailed(
                                 title = title,
                                 year = null,
                                 season = season,
                                 episode = episode,
                                 imdbId = imdbId,
-                                isMovie = false
+                                isMovie = false,
+                                onFound = { partial ->
+                                    mutex.withLock {
+                                        aggregatedStreams.removeAll(shownTelegram)
+                                        aggregatedStreams.addAll(partial)
+                                        shownTelegram = partial
+                                        sendProgress()
+                                    }
+                                }
                             )
+                            if (!resolution.complete) mutex.withLock { telegramIncomplete = true }
+                            resolution.streams
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e
 
                             Log.e(TAG, "[StreamFetch][Episode] telegram resolve failed", e)
+                            mutex.withLock { telegramIncomplete = true }
                             emptyList()
                         }
                         mutex.withLock {
+                            aggregatedStreams.removeAll(shownTelegram)
                             aggregatedStreams.addAll(telegramStreams)
                             completed += 1
                             sendProgress()

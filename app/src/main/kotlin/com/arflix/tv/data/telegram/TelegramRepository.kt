@@ -2,8 +2,12 @@ package com.arflix.tv.data.telegram
 
 import android.content.Context
 import android.util.Log
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.arflix.tv.data.repository.CloudSyncInvalidationBus
+import com.arflix.tv.data.repository.CloudSyncScope
+import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.telegramDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -37,11 +41,18 @@ data class TelegramVideoMessage(
 class TelegramRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val client: TelegramClient,
-    private val proxy: TelegramStreamingProxy
+    private val proxy: TelegramStreamingProxy,
+    private val invalidationBus: CloudSyncInvalidationBus
 ) {
     companion object {
         private const val TAG = "TelegramRepository"
+        private const val SEARCH_REQUEST_TIMEOUT_MS = 20_000L
         private val KEY_EXCLUDED_CHATS = stringPreferencesKey("excluded_chat_ids")
+        /**
+         * In the main settings store, not [telegramDataStore]: it is cloud-synced across devices
+         * (CloudSyncRepository "telegramSearchOnClickOnly"), and cloud sync only reads that store.
+         */
+        val KEY_SEARCH_ON_CLICK_ONLY = booleanPreferencesKey("telegram_search_on_click_only")
 
         fun sessionMarker(context: Context) = File(context.filesDir, "tdlib_session_ok")
 
@@ -180,28 +191,32 @@ class TelegramRepository @Inject constructor(
     }
 
     /**
-     * Searches globally across all chats (equivalent to Telethon's iter_messages(None, ...)).
-     * Runs two parallel searches — Document filter and Video filter — then merges results.
+     * Searches globally across all chats (equivalent to Telethon's iter_messages(None, ...)) and
+     * keeps the video files.
+     *
+     * ONE request, with no type filter; videos and video documents are picked out below. It used to
+     * be two per phrase (Document, then Video), and global search is exactly what Telegram rate-
+     * limits: one episode lookup sent 26 of them, most of which TDLib then held back until the
+     * caller gave up (Special Ops S1E1, Sept 2026: 8 of 9 requests unanswered after 10s).
      */
     suspend fun searchVideoMessages(
         query: String,
         limit: Int = 50
     ): List<TelegramVideoMessage> {
-        val filters = listOf(
-            TdApi.SearchMessagesFilterDocument(),
-            TdApi.SearchMessagesFilterVideo()
-        )
+        val filters = listOf<TdApi.SearchMessagesFilter?>(null)
         val seen = mutableSetOf<Pair<String, Long>>() // dedupe by (fileName, fileSize)
         val results = mutableListOf<TelegramVideoMessage>()
 
         for (filter in filters) {
+            // Global search answers in 1–9s (Special Ops S1E1, Sept 2026: "פרק 1" 7.9s,
+            // "lioness s01e01" 8.9s); the default 10s cut those off on a slower second try.
             val result = client.sendRequest(TdApi.SearchMessages().also { req ->
                 req.chatList = null  // null = search all chats (like Telethon's iter_messages(None))
                 req.query = query
                 req.offset = ""
                 req.limit = limit
                 req.filter = filter
-            })
+            }, timeoutMs = SEARCH_REQUEST_TIMEOUT_MS)
             val found = (result as? TdApi.FoundMessages) ?: continue
 
             for (msg in found.messages) {
@@ -247,6 +262,21 @@ class TelegramRepository @Inject constructor(
     }
 
     fun getStreamUrl(fileId: Int): String = proxy.getUrl(fileId)
+
+    /**
+     * "Only search Telegram when clicking the Telegram source" (Telegram settings, on by default).
+     * Every source list used to search Telegram by itself — opening a show, pre-selecting an
+     * episode, the player's own list — and global search is what Telegram rate-limits, so the
+     * lookups nobody looked at used up the ones the user wanted. When on, a source list shows only
+     * what an earlier search found and offers the search as a row the user selects.
+     */
+    val searchOnClickOnly: Flow<Boolean> =
+        context.settingsDataStore.data.map { prefs -> prefs[KEY_SEARCH_ON_CLICK_ONLY] ?: true }
+
+    suspend fun setSearchOnClickOnly(enabled: Boolean) {
+        context.settingsDataStore.edit { prefs -> prefs[KEY_SEARCH_ON_CLICK_ONLY] = enabled }
+        invalidationBus.markDirty(CloudSyncScope.PROFILE_SETTINGS, reason = "telegram search on click")
+    }
 
     fun getExcludedChatIds(): Flow<Set<Long>> =
         context.telegramDataStore.data.map { prefs ->

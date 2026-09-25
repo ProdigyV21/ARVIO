@@ -469,7 +469,7 @@ class CloudSyncRepository @Inject constructor(
         "accentColor", "oledBlackBackground", "skipProfileSelection", "customUserAgent",
         "dnsProvider", "subtitleAiEnabled", "subtitleAiAutoSelect", "subtitleAiFindBestMatch",
         "subtitlePreloadEnabled", "dolbyVisionCompatEnabled", "subtitleAiApiKey",
-        "subtitleAiModel", "subtitleRemoveHearingImpaired"
+        "subtitleAiModel", "subtitleRemoveHearingImpaired", "telegramSearchOnClickOnly"
     )
     // Per-profile fields excluded from the generic merge (handled by their own logic / not values).
     private val profileMergeExclude = setOf("defaultSubtitle", "subtitleSettingsUpdatedAt")
@@ -750,6 +750,10 @@ class CloudSyncRepository @Inject constructor(
         root.put("subtitleAiApiKey", prefs[subtitleAiApiKeyKey] ?: "")
         root.put("subtitleAiModel", prefs[subtitleAiModelKey] ?: "GROQ_LLAMA_70B")
         root.put("subtitleRemoveHearingImpaired", prefs[subtitleRemoveHearingImpairedKey] ?: true)
+        root.put(
+            "telegramSearchOnClickOnly",
+            prefs[com.arflix.tv.data.telegram.TelegramRepository.KEY_SEARCH_ON_CLICK_ONLY] ?: true
+        )
 
         root.put("activeProfileId", profileRepository.getActiveProfileId() ?: JSONObject.NULL)
         root.put("profiles", JSONArray(gson.toJson(profiles)))
@@ -1746,6 +1750,10 @@ class CloudSyncRepository @Inject constructor(
                 // has() guard: backups from app versions predating this field must not reset it.
                 if (root.has("dolbyVisionCompatEnabled")) {
                     prefs[dolbyVisionCompatKey] = root.optBoolean("dolbyVisionCompatEnabled", true)
+                }
+                if (root.has("telegramSearchOnClickOnly")) {
+                    prefs[com.arflix.tv.data.telegram.TelegramRepository.KEY_SEARCH_ON_CLICK_ONLY] =
+                        root.optBoolean("telegramSearchOnClickOnly", true)
                 }
                 val apiKey = root.optString("subtitleAiApiKey", "")
                 if (apiKey.isNotBlank()) prefs[subtitleAiApiKeyKey] = apiKey
