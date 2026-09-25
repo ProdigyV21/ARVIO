@@ -266,24 +266,32 @@ class MatroskaSubtitleIndexTest {
     }
 
     @Test
-    fun `returns null when too few cue points to trust`() = runBlocking {
+    fun `too few cue points is no reference, reported as a sparse track`() = runBlocking {
         val file = buildFile(
             tracks = elem(idTracks, subtitleTrack(2L, "eng")),
             cues = elem(idCues, (0 until 4).map { cuePoint(it * 5_000L, 2L) }.reduce { a, b -> a + b }),
         )
 
-        assertThat(MatroskaSubtitleIndex.load(MemorySource(file))).isNull()
+        val timeline = MatroskaSubtitleIndex.load(MemorySource(file))!!
+
+        // Not a usable reference — but "this English track has 4 cues" is itself the answer the
+        // scan needs to stop waiting for dialogue that is not there (Selling Sunset GalaxyTV).
+        assertThat(timeline.tracks).isEmpty()
+        assertThat(timeline.sparseTracks.single().cues).hasSize(4)
     }
 
     @Test
-    fun `returns null when the span is too short to describe the file`() = runBlocking {
+    fun `a span too short to describe the file is no reference`() = runBlocking {
         // 10 cues, but all inside the first 9 seconds — a title sequence, not a reference.
         val file = buildFile(
             tracks = elem(idTracks, subtitleTrack(2L, "eng")),
             cues = tenCues(track = 2L, stepMs = 1_000L),
         )
 
-        assertThat(MatroskaSubtitleIndex.load(MemorySource(file))).isNull()
+        val timeline = MatroskaSubtitleIndex.load(MemorySource(file))!!
+
+        assertThat(timeline.tracks).isEmpty()
+        assertThat(timeline.sparseTracks.single().trackNumber).isEqualTo(2L)
     }
 
     private fun cue(startMs: Long) = SubtitleSyncMatcher.TimedCue(startMs, startMs + 2_000L, "")
@@ -328,7 +336,6 @@ class MatroskaSubtitleIndexTest {
 
     @Test
     fun `matches an ietf regional tag against the plain language`() {
-        // Reacher S03E02: tracks were ru / en-US / en-US while the player reported "en".
         val tracks = listOf(track(9, "ru"), track(10, "en-US"), track(11, "en-US"))
 
         val picked = MatroskaSubtitleIndex.pickTrackForLanguage(tracks, "en")
@@ -427,6 +434,81 @@ class MatroskaSubtitleIndexTest {
         val refs = refsEvery10s(9)
         val cues = cuesShiftedBy(9, 2_000L)
 
+        assertThat(
+            SubtitleSyncMatcher.segmentConsistentOffset(cues, refs, minOffsetMs = 300L, maxOffsetMs = 10_000L)
+        ).isNull()
+    }
+
+    /** A track with [count] cues evenly spread over [spanMs]. */
+    private fun shapedTrack(
+        number: Long,
+        count: Int,
+        spanMs: Long = 3_000_000L,
+        forced: Boolean = false,
+        codec: String = "S_TEXT/UTF8",
+        name: String? = null,
+    ) = MatroskaSubtitleIndex.IndexedTrack(
+        trackNumber = number,
+        language = "en",
+        codecId = codec,
+        name = name,
+        isDefault = true,
+        isForced = forced,
+        isHearingImpaired = false,
+        cues = (0 until count).map { cue(it * spanMs / (count - 1).coerceAtLeast(1)) },
+    )
+
+    @Test
+    fun `a dense track flagged forced is the reference when it is the only one`() {
+        // Peaky Blinders S01E04, MoviezAddiction "ESub": the only embedded text track was a full
+        // English subtitle flagged forced.
+        val picked = MatroskaSubtitleIndex.pickReferenceTracks(listOf(shapedTrack(3, 700, forced = true)), 2.0)
+
+        assertThat(picked.map { it.trackNumber }).containsExactly(3L)
+    }
+
+    @Test
+    fun `a genuinely forced track is too sparse to be a reference`() {
+        // Signs-and-songs tracks carry a few cues over the whole film (The Shards: 17 over 40 min).
+        val picked = MatroskaSubtitleIndex.pickReferenceTracks(listOf(shapedTrack(9, 17, forced = true)), 2.0)
+
+        assertThat(picked).isEmpty()
+    }
+
+    @Test
+    fun `unforced dialogue tracks outrank a dense forced one`() {
+        val picked = MatroskaSubtitleIndex.pickReferenceTracks(
+            listOf(shapedTrack(3, 900, forced = true), shapedTrack(4, 600), shapedTrack(5, 700)),
+            2.0,
+        )
+
+        assertThat(picked.map { it.trackNumber }).containsExactly(5L, 4L).inOrder()
+    }
+
+    @Test
+    fun `image tracks are never a timing-shape reference`() {
+        val picked = MatroskaSubtitleIndex.pickReferenceTracks(listOf(shapedTrack(3, 1400, codec = "S_HDMV/PGS")), 2.0)
+
+        assertThat(picked).isEmpty()
+    }
+
+    @Test
+    fun `a speed mismatch shows as offsets walking across the thirds`() {
+        // Reference runs 0.1% fast against the subtitle (24 vs 23.976) over a 40-minute span —
+        // The Shards S01E03's built-in English track against a correct Hebrew subtitle.
+        val refs = (0 until 60).map { index ->
+            val start = index * 40_000L
+            val drifted = (start / 1.001).toLong()
+            drifted to drifted + 2_000L
+        }
+        val cues = (0 until 60).map { SubtitleSyncMatcher.TimedCue(it * 40_000L, it * 40_000L + 2_000L, "") }
+
+        val thirds = SubtitleSyncMatcher.segmentOffsets(cues, refs, maxOffsetMs = 10_000L)!!
+
+        // Each later third needs a larger negative shift; no constant offset fits them all.
+        assertThat(thirds[0]).isGreaterThan(thirds[1])
+        assertThat(thirds[1]).isGreaterThan(thirds[2])
+        assertThat(thirds.first() - thirds.last()).isGreaterThan(500L)
         assertThat(
             SubtitleSyncMatcher.segmentConsistentOffset(cues, refs, minOffsetMs = 300L, maxOffsetMs = 10_000L)
         ).isNull()

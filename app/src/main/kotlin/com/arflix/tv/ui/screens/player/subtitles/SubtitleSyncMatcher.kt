@@ -399,20 +399,7 @@ object SubtitleSyncMatcher {
         segments: Int = 3,
         agreementMs: Long = 500L,
     ): OffsetMatch? {
-        if (segments < 2 || referenceIntervals.size < segments * 5) return null
-        val sliceSize = referenceIntervals.size / segments
-        val offsets = ArrayList<Long>(segments)
-        for (index in 0 until segments) {
-            val from = index * sliceSize
-            val to = if (index == segments - 1) referenceIntervals.size else (index + 1) * sliceSize
-            // minOffsetMs 0: a slice that is already aligned must report 0, not "no answer" —
-            // three zeroes are agreement (and are rejected below as negligible), whereas a null
-            // would hide a disagreement.
-            val fit = estimateOffsetMatch(cues, referenceIntervals.subList(from, to), 0L, maxOffsetMs)
-                ?: return null
-            offsets += fit.offsetMs
-        }
-        val sorted = offsets.sorted()
+        val sorted = segmentOffsets(cues, referenceIntervals, maxOffsetMs, segments)?.sorted() ?: return null
         if (sorted.last() - sorted.first() > agreementMs) return null
         val median = sorted[sorted.size / 2]
         if (Math.abs(median) < minOffsetMs) return null
@@ -422,6 +409,37 @@ object SubtitleSyncMatcher {
             correctedScore = scoreSortedShifted(sortedCues, referenceIntervals, median),
             baseScore = scoreSortedShifted(sortedCues, referenceIntervals, 0L),
         )
+    }
+
+    /**
+     * The best-fit offset of each of [segments] consecutive slices of the reference, in file order,
+     * or null when there are too few windows to slice meaningfully (or a slice is too thin to fit).
+     *
+     * A constant delay fits every slice alike; a frame-rate mismatch between the subtitle and the
+     * reference shows up as offsets that walk steadily across the file instead. The Shards S01E03
+     * (Sept 2026): a correct Hebrew subtitle against a built-in English track that ran ~0.1% fast
+     * fitted −625/−975/−1925ms, while the file's Russian track fitted the same subtitle at
+     * 200/150/375ms.
+     */
+    fun segmentOffsets(
+        cues: List<TimedCue>,
+        referenceIntervals: List<Pair<Long, Long>>,
+        maxOffsetMs: Long,
+        segments: Int = 3,
+    ): List<Long>? {
+        if (segments < 2 || referenceIntervals.size < segments * 5) return null
+        val sliceSize = referenceIntervals.size / segments
+        val offsets = ArrayList<Long>(segments)
+        for (index in 0 until segments) {
+            val from = index * sliceSize
+            val to = if (index == segments - 1) referenceIntervals.size else (index + 1) * sliceSize
+            // minOffsetMs 0: a slice that is already aligned must report 0, not "no answer" —
+            // three zeroes are agreement, whereas a null would hide a disagreement.
+            val fit = estimateOffsetMatch(cues, referenceIntervals.subList(from, to), 0L, maxOffsetMs)
+                ?: return null
+            offsets += fit.offsetMs
+        }
+        return offsets
     }
 
     /**
@@ -438,6 +456,21 @@ object SubtitleSyncMatcher {
             "${formatTimestamp(start + offsetMs, useComma)} --> ${formatTimestamp(end + offsetMs, useComma)}"
         }
     }
+
+    /**
+     * Rewrite every cue's timing in raw SRT/WEBVTT text through [map] (authored start/end in, new
+     * start/end out), preserving format and any trailing cue settings — the served copy of a
+     * subtitle the retimer corrected cue by cue. Times are parsed exactly as [parseCues] parses
+     * them, so the retimer's (start, end) pairs key straight back onto these lines.
+     */
+    fun retimeTimestamps(raw: String, map: (startMs: Long, endMs: Long) -> Pair<Long, Long>): String =
+        TIME_LINE.replace(raw) { m ->
+            val start = parseTimestamp(m.groupValues[1]) ?: return@replace m.value
+            val end = parseTimestamp(m.groupValues[2]) ?: return@replace m.value
+            val useComma = m.groupValues[1].contains(',')
+            val (newStart, newEnd) = map(start, end)
+            "${formatTimestamp(newStart, useComma)} --> ${formatTimestamp(newEnd.coerceAtLeast(newStart + 1), useComma)}"
+        }
 
     private fun formatTimestamp(ms: Long, useComma: Boolean): String {
         val v = ms.coerceAtLeast(0L)

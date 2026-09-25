@@ -72,7 +72,7 @@ flowchart TD
     D -->|yes| E[Select it — muxed = guaranteed sync<br/>toast: Matched embedded]
     D -->|no| F[Candidates: external subs in pref language,<br/>sorted by release-name score, capped at 10]
     F -->|none| G[toast: no well-synced subtitle]
-    F --> H{Remembered match for this exact stream?<br/>only when useCache}
+    F --> H{Remembered match for this exact stream?<br/>only when useCache — cache disabled, §4}
     H -->|hit| I[Re-download text → local file → select<br/>toast: remembered]
     H -->|miss| J[Show something now: AI translation if available,<br/>else download the TOP candidate only<br/>and select it as an optimistic pick]
     J --> K{Reference source?}
@@ -115,7 +115,9 @@ Resuming mid-file it typically has 12 reference cues within a second.
   playhead*, and how far ahead depends on the track — From exposed 12 cues, The Office's SDH track
   exposed 1 — and a file started from 0:00 is near-empty. It accepts as soon as it has enough
   (4 cues over 15 s, or the ideal 8 over 30 s) and gives up after `MATCH_PLAYER_REF_GIVE_UP_MS` (4 s)
-  with fewer than 2: `player buffer not filling … handing over now`. The Office S01E01 once spent a
+  with fewer than 2: `player buffer not filling … handing over now`. The container index (below) is
+  read *alongside* this wait; once it is in, the give-up is `MATCH_PLAYER_REF_GIVE_UP_WITH_INDEX_MS`
+  (1 s), since a thin buffer ends on the index anyway. The Office S01E01 once spent a
   full 20 s budget collecting one cue ahead of a 122 s fallback; that 20 s was pure overhead.
 - **Stale buffer after AI activation.** For a moment after AI is switched on the player has not yet
   selected the English track, and the buffer still holds the *previous* one — the subtitle the user
@@ -153,8 +155,19 @@ index must line up with them — `MatroskaSubtitleIndex.agreesWithObserved`, ≥
 checked against the full cue list before downsampling — or it is rejected and the buffer stands. Where it hits, it dominates the alternatives: the
 optimistic pick **stays on screen** (the text track is never taken), the reference spans the film
 instead of the next few seconds, and a scan that used to spend minutes collecting realtime cues
-decides immediately. Budget: 7 s, ≤16 range requests, ≤16 MB, and a server that answers `200`
+decides immediately. Budget: 7 s, ≤16 range requests, ≤24 MB, and a server that answers `200`
 to a `Range` request disables the source rather than stream the file.
+
+**MP4.** The same reference is read from an MP4's `moov` sample tables (`Mp4SubtitleIndex`): the `moov` box is fetched whole — several MB on a long 4K file, hence
+the 24 MB budget — and its `tx3g`/`wvtt` text tracks become indexed tracks like Matroska's.
+Fragmented MP4 (`mvex`) is not supported and falls through as before.
+
+**Read once per stream (`MatroskaIndexSource`).** One shared load per URL: the automatic scan starts
+it when the stream opens (`container index: prefetch at stream open`), every scan starts it as it
+begins waiting on the player's buffer, and later callers join it (`joined the load started at stream
+open`). A load that produced a timeline is reused by rescans of the same file at no cost; one that
+produced nothing is retried on the next request — a debrid redirect that is still resolving when
+the stream opens is a transient refusal, not a property of the file.
 
 - **Timings only — there is no text in a Cues index.** AI verification (§2d) stays gated on
   `referenceCues` and therefore does not run for this path; the timing evidence is complete but
@@ -165,8 +178,11 @@ to a `Range` request disables the source rather than stream the file.
 - Downsampled to `MATCH_INDEX_MAX_REFS` (60) evenly-spread windows: a feature-length index holds
   hundreds to thousands of cues and the offset sweep re-scores every window at ~80 steps per
   candidate.
-- Returns nothing for MP4/HLS/DASH, servers without range support, and the common muxer that
-  indexed only the video track — all fall through to the paths below, unchanged.
+- Returns nothing for fragmented MP4, HLS/DASH, servers without range support, and the common muxer
+  that indexed only the video track — all fall through to the paths below, unchanged.
+- **Not-dialogue tracks.** When the index covers the reference's own track and it holds almost no
+  cues over the whole file (a release group's tagline track), there is no reference at all and the
+  scan says so instead of waiting on the player.
 - The parser is player- and network-independent (`MatroskaSubtitleIndex`, an injected
   `ByteRangeSource`) and unit-tested on synthetic EBML in `MatroskaSubtitleIndexTest`. It carries
   no `android.util.Log` on purpose: diagnostics come back through an `onDiagnostic` callback the
@@ -178,6 +194,64 @@ scan. `runInPlayerReference` owns the bookkeeping for an optimistic pick it disp
 (`provisionalDisplaced`, `provisionalMatch = null`). Keep it in that one place: when it lived in a
 branch that was later deleted, it went with the branch and the verdict logic kept believing a
 subtitle was on screen that wasn't.
+
+### 2f. Whole-file timing: alternate tracks, the retimer and the checks around them (Sept 2026)
+
+A whole-file reference makes three things possible that a few buffered cues never could. Each is
+guarded, because every one of them can also produce a confident wrong answer.
+
+**Alternate references.** The preferred-language track is not guaranteed to be timed to the video:
+The Shards S01E03's built-in English ran ~0.1 % fast while the same file's Russian track was right.
+The index's other dialogue tracks (up to `MATCH_ALT_REFERENCE_MAX` = 3, at least
+`MATCH_ALT_REFERENCE_MIN_CUES_PER_MIN` = 2 cues/min) are scored too when the preferred one gives no
+clean as-authored verdict (`[alt-ref]`). Where the player offers no usable text track at all (every
+track flagged forced), the reference is chosen by timing shape — density and span — rather than by
+language (`MatroskaSubtitleIndex.pickReferenceTracks`).
+
+**Timing families.** Candidates whose cues are the same file shifted by a constant (re-uploads,
+re-encodes of one translation) are scored once, by a representative (`timing families: N -> M
+distinct`), and the winner can be served as any member with the shift folded in.
+
+**Per-third profile.** `SubtitleSyncMatcher.segmentOffsets` fits the best offset separately in each
+third of the file (`[offset-profile] … thirds=a/b/c`). It separates a constant delay (thirds agree
+within `MATCH_SEGMENT_AGREEMENT_MS`) from drift or a different cut, and it catches a false
+as-authored score: when every third wants more than `MATCH_OFFSET_MISALIGNED_MS` (1 s) the same
+way, an unshifted score is chance overlap in dense dialogue, not alignment, and is capped below the
+accept bar (The Shards S01E04 scored 0.77 as authored with thirds 5.8/7.1/8.7 s).
+
+**The retimer (`AutoSyncTimelineRetimer`).** Where
+nothing fits as authored at `MATCH_RETIME_SKIP_SCORE` (0.85) it correlates the *whole* timelines —
+every indexed cue — over ±180 s and the standard frame-rate ratios, then pairs cues in order
+(1:1, 1:2, 2:1, …) and calls a result confident only when nearly every cue found its partner. That
+covers a 25/23.976 fps mismatch and shifts far beyond the ±10 s sweep (Peaky Blinders S01E04:
+−47.8 s; House of the Dragon S02E05 NHTFS: −147 s). Up to `MATCH_RETIME_MAX_CANDIDATES` (6) distinct
+candidates × `MATCH_RETIME_MAX_REFERENCES` (3) reference tracks; the best-quality pair wins, and two
+references that disagree by more than 300 ms defer to the one whose paired lines fit tighter. A
+uniform result is applied as a plain offset; anything else is served as a rewritten local file
+(`#retimed` id suffix, "re-timed" in the toast) and never remembered. Index path only, and never on
+an image track.
+
+**Checks on a retime or shift:**
+
+- **Consistency (`RetimeConsistency`).** "Confident" means lines found partners, not that they are
+  close. The residuals are split into 6 windows along the file; a spread of window medians over
+  `MAX_WINDOW_SPREAD_MS` (1 s) — right in one part of the episode, seconds out in another — refuses
+  the map (`[retime-check] … refused`). A genuine different-cut (piecewise) map is therefore refused
+  rather than applied: no real case has been seen yet, and this check is what stopped a wrong
+  subtitle on The Shards S01E04.
+- **Other-track veto.** A shift or retime is dropped when any indexed track takes the subtitle as
+  published at the identity-good bar (0.85, not the 0.70 accept bar — chance overlap reaches
+  0.70–0.75 on a subtitle 47 s out) (`[veto]`).
+- **AI shift must fit the whole file.** AI measures lines around the playhead; its shift is applied
+  only when it matches every measured third within 1 s (thirds whose fit ran to the ±10 s search
+  edge are no answer and are ignored; at least two are needed). The Shards S01E04: +5.8 s from 6/6
+  lines at the start, while the file needed 5.8/7.1/8.7 s.
+
+**Candidate pool.** The whole same-language pool, not the ten best release names: OpenSubtitles
+publishes numeric ids, so it never ranked into the ten (Peaky Blinders S01E04's matching subtitle
+was never downloaded). The cost is bounded by throttling (`MATCH_PARALLEL_DOWNLOADS` = 6,
+`MATCH_PARALLEL_PARSES` = 2) and timing families, and the first candidate alone still decides the
+common case. The first pick and every fallback is the highest-scored subtitle by release name.
 
 #### Why not a second player
 
@@ -503,11 +577,16 @@ default is SRT for extensionless URLs.
 
 ## 4. Per-stream remembered cache
 
+> **Disabled (Sept 2026).** `MATCH_CACHE_ENABLED = false`: every playback scans. A remembered match
+> replays without scanning, so a stale one kept serving an old wrong result, and with the container
+> index read at stream open a scan settles in ~10 s. The design below is kept for reference; read,
+> remember and write are all gated on that one switch.
+
 - Key = stream identity, **not** title: `infoHash:fileIdx` → `videoHash` → `filename:size` →
   URL hash. Same episode from a different source ⇒ different key ⇒ fresh scan (sync is a property
   of the file).
 - Value = candidate `provider|id` (not URL — addon URLs are ephemeral). Stored as JSON list in
-  `subtitle_match_cache_v1` (global DataStore), LRU 50. **Not cloud-synced** (deliberate).
+  `subtitle_match_cache_v2` (global DataStore; v2 dropped once the matches earlier builds verified with since-fixed logic), LRU 50. **Not cloud-synced** (deliberate).
 - Written on verified match only (never for unverified fallback picks — and with AI available,
   "verified" means the model confirmed the dialogue: a timing-only fallback after a failed or
   inconclusive AI check is selected but not remembered), and **only after the user

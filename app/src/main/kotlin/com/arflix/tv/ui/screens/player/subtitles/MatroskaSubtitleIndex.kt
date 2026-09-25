@@ -85,12 +85,29 @@ internal object MatroskaSubtitleIndex {
         val isForced: Boolean,
         val isHearingImpaired: Boolean,
         val cues: List<SubtitleSyncMatcher.TimedCue>,
+        /**
+         * Starts of the cues whose end is the nominal guess (no `CueDuration` indexed). Only their
+         * starts carry timing evidence; the retimer's DP is told so rather than trusting the ends.
+         */
+        val estimatedEndStartsMs: Set<Long> = emptySet(),
     ) {
         val spanMs: Long
             get() = if (cues.size < 2) 0L else cues.last().endMs - cues.first().startMs
     }
 
-    internal data class IndexedTimeline(val tracks: List<IndexedTrack>)
+    internal data class IndexedTimeline(
+        val tracks: List<IndexedTrack>,
+        /** Absolute byte offset of the Segment body — CueClusterPosition is relative to it. */
+        val segmentDataStart: Long = 0L,
+        val timestampScaleNs: Long = DEFAULT_TIMESTAMP_SCALE_NS,
+        /**
+         * Subtitle tracks the index DID cover but that are too sparse to be a dialogue timeline
+         * (fewer than MIN_INDEXED_CUES cues, or under MIN_INDEXED_SPAN_MS). Reported rather than
+         * dropped: "this file's English track has 1 cue" is an answer, not a miss — see
+         * PlayerViewModel's not-dialogue exit.
+         */
+        val sparseTracks: List<IndexedTrack> = emptyList(),
+    )
 
     internal fun sampleCues(cues: List<SubtitleSyncMatcher.TimedCue>, limit: Int): List<SubtitleSyncMatcher.TimedCue> {
         require(limit >= 2)
@@ -117,6 +134,8 @@ internal object MatroskaSubtitleIndex {
     ): IndexedTimeline? {
         val head = source.read(0L, headProbeBytes) ?: return null
         if (head.size < 8) return null
+        // MP4/MOV carry the same whole-file timeline in their moov sample tables, so an MP4 source gets a container reference too.
+        if (Mp4SubtitleIndex.looksLikeMp4(head)) return Mp4SubtitleIndex.load(source, head, onDiagnostic)
 
         val ebml = readHeader(head, 0, 0L) ?: return null
         if (ebml.id != ID_EBML) {
@@ -207,23 +226,48 @@ internal object MatroskaSubtitleIndex {
                 return null
             }
 
-        val byTrack = parseCueTimes(cuesBytes, timestampScaleNs, tracks.map { it.trackNumber }.toSet())
+        val estimatedStarts = HashSet<Long>()
+        val byTrack = parseCueTimes(
+            cuesBytes, timestampScaleNs, tracks.map { it.trackNumber }.toSet(), estimatedStarts,
+        )
         val indexed = tracks.mapNotNull { track ->
             val cues = byTrack[track.trackNumber].orEmpty()
-            if (cues.isEmpty()) null else track.copy(cues = cues)
+            if (cues.isEmpty()) {
+                null
+            } else {
+                track.copy(
+                    cues = cues,
+                    estimatedEndStartsMs = cues
+                        .filter { it.endMs - it.startMs == NOMINAL_CUE_DURATION_MS && it.startMs in estimatedStarts }
+                        .mapTo(HashSet()) { it.startMs },
+                )
+            }
         }.filter { it.cues.size >= MIN_INDEXED_CUES && it.spanMs >= MIN_INDEXED_SPAN_MS }
 
         if (indexed.isEmpty()) {
             // Very common: the muxer indexed only the video track. Not a failure, just a miss.
-            onDiagnostic("matroska index: subtitle tracks=${tracks.size} but none carry usable cue points")
-            return null
+            val sparse = tracks.map { it.copy(cues = byTrack[it.trackNumber].orEmpty()) }
+            onDiagnostic(
+                "matroska index: subtitle tracks=${tracks.size} but none carry usable cue points (" +
+                    sparse.joinToString { "track=${it.trackNumber} lang=${it.language ?: "-"} cues=${it.cues.size}" } + ")"
+            )
+            // Cue points exist for the file (some track is indexed) but these subtitle tracks have
+            // next to none: that is evidence about the tracks, so hand it back. With no cue point
+            // for any subtitle track, the muxer simply indexed video only — a plain miss.
+            if (sparse.none { it.cues.isNotEmpty() }) return null
+            return IndexedTimeline(
+                tracks = emptyList(),
+                segmentDataStart = segmentDataStart,
+                timestampScaleNs = timestampScaleNs,
+                sparseTracks = sparse,
+            )
         }
         onDiagnostic(
             "matroska index: " + indexed.joinToString(" | ") {
                 "track=${it.trackNumber} lang=${it.language ?: "-"} cues=${it.cues.size} span=${it.spanMs / 1000}s"
             }
         )
-        return IndexedTimeline(indexed)
+        return IndexedTimeline(indexed, segmentDataStart = segmentDataStart, timestampScaleNs = timestampScaleNs)
     }
 
     /**
@@ -278,6 +322,70 @@ internal object MatroskaSubtitleIndex {
      * Matching is on the primary subtag, and on the 2- vs 3-letter forms of it (`en`/`eng`,
      * `he`/`heb`/`iw`), which is as much as the container's tags justify.
      */
+    /**
+     * Reference rule, by TIMING SHAPE rather than by metadata: a track
+     * is a dialogue timeline when it has enough cues, spans enough of the film and is dense enough
+     * (≥ [minCuesPerMinute]) — whatever its language, and even when it is flagged forced. Returned
+     * best first: tracks that are both dense and not forced, then (only if there are none) dense
+     * forced ones, ranked like the fork (more cues, then denser, SDH/hearing-impaired last).
+     *
+     * Why the forced flag is not trusted: web releases routinely flag their only, FULL English
+     * subtitle as forced so players show it by default. Peaky Blinders S01E04 (MoviezAddiction
+     * "ESub", Sept 2026) had exactly one embedded text track, flagged that way; excluding it left
+     * the scan with no reference at all, while the fork used it and matched an OpenSubtitles file.
+     * A genuine forced track (signs and foreign lines) fails the density bar on its own.
+     *
+     * Image codecs are excluded: a PGS/VobSub index lists "clear screen" events as cues too, which
+     * doubles the count and would pass the density bar on half of it being noise.
+     */
+    fun pickReferenceTracks(
+        tracks: List<IndexedTrack>,
+        minCuesPerMinute: Double,
+        minCues: Int = MIN_INDEXED_CUES,
+        minSpanMs: Long = 45_000L,
+    ): List<IndexedTrack> {
+        fun density(track: IndexedTrack) = if (track.spanMs <= 0L) 0.0 else track.cues.size * 60_000.0 / track.spanMs
+        fun looksForced(track: IndexedTrack): Boolean {
+            val name = track.name.orEmpty().lowercase()
+            return track.isForced || name.contains("forced") || name.contains("foreign only") ||
+                name.contains("signs") || name.contains("songs only")
+        }
+        fun looksSdh(track: IndexedTrack): Boolean {
+            val name = track.name.orEmpty().lowercase()
+            return track.isHearingImpaired || name.contains("sdh") || name.contains("hearing impaired")
+        }
+        fun isImage(track: IndexedTrack): Boolean {
+            val codec = track.codecId.orEmpty().uppercase()
+            return codec.startsWith("S_HDMV") || codec.startsWith("S_VOBSUB") || codec.startsWith("S_DVBSUB")
+        }
+        val dense = tracks.filter {
+            !isImage(it) && it.cues.size >= minCues && it.spanMs >= minSpanMs &&
+                density(it) >= minCuesPerMinute &&
+                !it.name.orEmpty().contains("commentary", ignoreCase = true)
+        }
+        val ranked = dense.sortedWith(
+            compareByDescending<IndexedTrack> { it.cues.size * 2.0 + density(it).coerceAtMost(20.0) * 1.5 - if (looksSdh(it)) 5.0 else 0.0 }
+                .thenBy { looksSdh(it) }
+                .thenBy { it.trackNumber }
+        )
+        return ranked.filter { !looksForced(it) }.ifEmpty { ranked }
+    }
+
+    /** One-line description of a track for diagnostics: every field that decides whether it is a reference. */
+    fun describe(track: IndexedTrack): String {
+        val density = if (track.spanMs <= 0L) 0.0 else track.cues.size * 60_000.0 / track.spanMs
+        val flags = listOfNotNull(
+            "forced".takeIf { track.isForced },
+            "default".takeIf { track.isDefault },
+            "hi".takeIf { track.isHearingImpaired },
+        ).joinToString(",").ifEmpty { "-" }
+        return "#${track.trackNumber} lang=${track.language ?: "-"} codec=${track.codecId ?: "-"}" +
+            " " +
+            "name=\"${track.name.orEmpty()}\" flags=$flags cues=${track.cues.size} " +
+            "span=${track.spanMs / 1000}s density=${"%.1f".format(java.util.Locale.US, density)}/min " +
+            "estimatedEnds=${track.estimatedEndStartsMs.size}"
+    }
+
     fun pickTrackForLanguage(tracks: List<IndexedTrack>, preferredLanguage: String): IndexedTrack? {
         val wanted = languageKeys(preferredLanguage)
         if (wanted.isEmpty()) return null
@@ -502,6 +610,8 @@ internal object MatroskaSubtitleIndex {
         cuesBody: ByteArray,
         timestampScaleNs: Long,
         wantedTracks: Set<Long>,
+        // Receives the start of every cue whose duration was not indexed (see estimatedEndStartsMs).
+        estimatedStarts: MutableSet<Long>,
     ): Map<Long, List<SubtitleSyncMatcher.TimedCue>> {
         val result = HashMap<Long, MutableList<SubtitleSyncMatcher.TimedCue>>()
         val tickToMs = timestampScaleNs.toDouble() / 1_000_000.0
@@ -532,7 +642,7 @@ internal object MatroskaSubtitleIndex {
                 val durationMs = durationTicks
                     ?.let { (it * tickToMs).toLong() }
                     ?.takeIf { it > 0L }
-                    ?: NOMINAL_CUE_DURATION_MS
+                    ?: NOMINAL_CUE_DURATION_MS.also { estimatedStarts += startMs }
                 result.getOrPut(track) { ArrayList() }
                     .add(SubtitleSyncMatcher.TimedCue(startMs, startMs + durationMs, ""))
             }
