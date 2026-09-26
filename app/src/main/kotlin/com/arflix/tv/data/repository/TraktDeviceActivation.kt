@@ -16,6 +16,16 @@ internal fun traktRetryDelayMs(header: String?, fallbackMs: Long, nowMs: Long = 
     return maxOf(fallbackMs, milliseconds ?: 0L)
 }
 
+/**
+ * A poll that never reached Trakt (DNS, timeout, dropped connection) says nothing about the
+ * activation. Phones often lose the network for a moment while the user approves the code in a
+ * browser, so polling keeps going until the code expires instead of ending the sign-in.
+ * A rejected certificate (wrong device clock, intercepting network) will not heal by waiting.
+ */
+internal fun isTransientTraktPollFailure(error: Throwable): Boolean =
+    error is java.io.IOException &&
+        generateSequence<Throwable>(error) { it.cause }.take(8).none { it is java.security.cert.CertificateException }
+
 /** Serialize activation requests and retain the server cooldown even if the dialog is cancelled. */
 internal class TraktDeviceActivation(
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 },

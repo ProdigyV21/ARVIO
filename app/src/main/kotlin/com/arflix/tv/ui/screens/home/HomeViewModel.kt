@@ -2079,6 +2079,11 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            // COMPLETED goes out before the watched cache is reloaded, so the ticks follow the
+            // reload itself - otherwise a fresh Trakt connection shows its ticks only after restart.
+            traktRepository.watchedCacheReloaded.collect { refreshWatchedBadges(immediate = true) }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             delay(if (isLowRamDevice) 8 * 60_000L else 6 * 60_000L)
             // Warm IPTV channels + EPG in background after startup settles.

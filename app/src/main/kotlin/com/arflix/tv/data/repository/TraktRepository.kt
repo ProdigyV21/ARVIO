@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -157,6 +158,8 @@ class TraktRepository @Inject constructor(
         movieWriteGenerations.clear()
         cacheInitialized = false
         cacheInitializing = false
+        watchedCacheGeneration++
+        watchedCacheReloads.reset()
         showWatchedEpisodesCache.clear()
         showWatchedCacheTime = 0L
         showCompletionCache.clear()
@@ -4837,6 +4840,13 @@ class TraktRepository @Inject constructor(
     private val movieWriteGenerations = ConcurrentHashMap<Int, Long>()
     private var cacheInitialized = false
     @Volatile private var cacheInitializing = false
+    // Bumped by every invalidation and profile switch, so a load that started before one does not
+    // mark the cache initialized with data from before it.
+    @Volatile private var watchedCacheGeneration = 0L
+    private val watchedCacheReloads = WatchedCacheReloads()
+
+    /** Emits after the watched cache was reloaded following [invalidateWatchedCache]. */
+    val watchedCacheReloaded: SharedFlow<Unit> get() = watchedCacheReloads.reloads
 
     /**
      * Invalidate watched cache - forces reload on next access
@@ -4845,6 +4855,8 @@ class TraktRepository @Inject constructor(
     fun invalidateWatchedCache() {
         ensureProfileCacheScope()
         cacheInitialized = false
+        watchedCacheGeneration++
+        watchedCacheReloads.invalidated()
         watchedMoviesCache.clear()
         watchedEpisodesCache.clear()
         episodeWriteGenerations.clear()
@@ -4867,9 +4879,12 @@ class TraktRepository @Inject constructor(
             while (cacheInitializing && !cacheInitialized) {
                 delay(50)
             }
+            // The load we waited for was overtaken by an invalidation: load the current state.
+            if (!cacheInitialized && !cacheInitializing) return initializeWatchedCache()
             return
         }
         cacheInitializing = true
+        val generation = watchedCacheGeneration
         try {
             val readProviders = syncProviderStore.readProviders(
                 com.arflix.tv.data.repository.sync.TrackingFeature.WATCHED
@@ -4899,27 +4914,32 @@ class TraktRepository @Inject constructor(
                 watchedMoviesCache.addAll(localSnapshotMovies)
                 watchedEpisodesCache.clear()
                 watchedEpisodesCache.addAll(localSnapshotEpisodes)
-                cacheInitialized = true
+                cacheInitialized = generation == watchedCacheGeneration
                 return
             }
 
-            // Only fall back to Trakt API if we have Trakt auth and no Supabase data
-            val traktMovies = if (supabaseMovies.isEmpty() && hasTraktAuth) getWatchedMovies() else emptySet()
-            val traktEpisodes = if (supabaseEpisodes.isEmpty() && hasTraktAuth) getWatchedEpisodes() else emptySet()
+            // Always read Trakt when it is connected. Without a Supabase account the sync service
+            // only returns what the last full sync kept in memory, and that expands just the 15
+            // most recently watched shows when a show was rewatched - it cannot stand in for the
+            // Trakt history. (With USE_NETLIFY_CLOUD_SYNC the Supabase reads are empty anyway.)
+            val traktMovies = if (hasTraktAuth) getWatchedMovies() else emptySet()
+            val traktEpisodes = if (hasTraktAuth) getWatchedEpisodes() else emptySet()
 
             watchedMoviesCache.clear()
             watchedMoviesCache.addAll(localSnapshotMovies)
-            watchedMoviesCache.addAll(if (supabaseMovies.isNotEmpty()) supabaseMovies else traktMovies)
+            watchedMoviesCache.addAll(supabaseMovies)
+            watchedMoviesCache.addAll(traktMovies)
             watchedMoviesCache.addAll(mdbMovies)
             watchedMoviesCache.addAll(simklMovies)
 
             watchedEpisodesCache.clear()
             watchedEpisodesCache.addAll(localSnapshotEpisodes)
-            watchedEpisodesCache.addAll(if (supabaseEpisodes.isNotEmpty()) supabaseEpisodes else traktEpisodes)
+            watchedEpisodesCache.addAll(supabaseEpisodes)
+            watchedEpisodesCache.addAll(traktEpisodes)
             watchedEpisodesCache.addAll(mdbEpisodes)
             watchedEpisodesCache.addAll(simklEpisodes)
 
-            cacheInitialized = true
+            cacheInitialized = generation == watchedCacheGeneration
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -4940,13 +4960,14 @@ class TraktRepository @Inject constructor(
                     watchedEpisodesCache.clear()
                     watchedEpisodesCache.addAll(localSnapshotEpisodes)
                 }
-                cacheInitialized = true
+                cacheInitialized = generation == watchedCacheGeneration
             } catch (_: Exception) {
                 // No data available - mark as initialized with empty caches
-                cacheInitialized = true
+                cacheInitialized = generation == watchedCacheGeneration
             }
         } finally {
             cacheInitializing = false
+            if (cacheInitialized) watchedCacheReloads.loaded()
         }
     }
 
