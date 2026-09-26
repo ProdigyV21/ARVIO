@@ -72,6 +72,8 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -218,6 +220,108 @@ internal fun applyIptvFavoritesPlacement(
     if (favIdx < 0) return savedCatalogs
     if (!enabled) return savedCatalogs.filterNot { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
     return savedCatalogs
+}
+
+/**
+ * Show ids with at least one watched episode, built once from the watched-episode keys
+ * ("show_tmdb:<id>:<season>:<episode>") instead of scanning the history for every show.
+ * Trakt-only keys ("show_trakt:…") carry no TMDB id and are skipped.
+ */
+internal fun startedShowIds(watchedEpisodeKeys: Set<String>): Set<Int> =
+    watchedEpisodeKeys.mapNotNullTo(HashSet()) { key ->
+        if (key.startsWith("show_tmdb:")) {
+            key.removePrefix("show_tmdb:").substringBefore(':', "").toIntOrNull()
+        } else null
+    }
+
+/**
+ * Sets [MediaItem.isWatched] on the Home cards: a film when it is in the watched list, a series
+ * when it has been started — the same reading Search and Discover use. Continue Watching keeps
+ * its own progress bars and is left alone. Rows (and the list) that do not change come back as
+ * the same instances, so a refresh that finds nothing new recomposes nothing.
+ */
+internal fun applyWatchedBadges(
+    categories: List<Category>,
+    watchedMovies: Set<Int>,
+    startedShows: Set<Int>
+): List<Category> {
+    var anyChange = false
+    val updated = categories.map { category ->
+        if (category.id == "continue_watching") return@map category
+        var categoryChanged = false
+        val items = category.items.map { item ->
+            val watched = when (item.mediaType) {
+                MediaType.MOVIE -> item.id in watchedMovies
+                MediaType.TV -> item.id in startedShows
+            }
+            if (item.isWatched == watched) {
+                item
+            } else {
+                categoryChanged = true
+                item.copy(isWatched = watched)
+            }
+        }
+        if (categoryChanged) {
+            anyChange = true
+            category.copy(items = items)
+        } else {
+            category
+        }
+    }
+    return if (anyChange) updated else categories
+}
+
+/**
+ * Marks the rows and the hero of [this] state; the same instance comes back when nothing changes.
+ */
+internal fun HomeUiState.withWatchedBadges(watchedMovies: Set<Int>, startedShows: Set<Int>): HomeUiState {
+    val updatedCategories = applyWatchedBadges(categories, watchedMovies, startedShows)
+    val updatedHero = heroWithWatchedBadge(heroItem, updatedCategories)
+    if (updatedCategories === categories && updatedHero === heroItem) return this
+    return copy(categories = updatedCategories, heroItem = updatedHero)
+}
+
+/**
+ * Whether a tick pass may be skipped: only when nothing asks for it ([force]), the rows are the
+ * very ones the last pass marked, and that pass is recent. Freshly published rows (a catalog
+ * load, a next page, a cloud reload) always carry unmarked cards, so they are never skipped.
+ */
+internal fun watchedBadgesPassIsRedundant(
+    rows: List<Category>,
+    lastMarkedRows: List<Category>?,
+    force: Boolean,
+    sinceLastPassMs: Long,
+    throttleMs: Long
+): Boolean = !force && rows === lastMarkedRows && sinceLastPassMs < throttleMs
+
+/**
+ * How long a tick pass waits before it runs. The first pass after launch or a profile switch keeps
+ * the startup pause, so it does not compete with the first frames. Once a pass has run, a pass
+ * Home asks for on resume (back from Details) — or one that replaces such a pending pass — only
+ * debounces briefly: the cache is loaded and the pass itself takes milliseconds.
+ */
+internal fun watchedBadgesPassDelayMs(
+    quickRequested: Boolean,
+    hadPass: Boolean,
+    isLowRamDevice: Boolean
+): Long = when {
+    quickRequested && hadPass -> 300L
+    isLowRamDevice -> 3_000L
+    else -> 1_800L
+}
+
+/**
+ * Carries the tick of [hero]'s card in [categories] over to the hero. The hero keeps its own
+ * instance: runtime, ratings, budget and the network logo are hydrated into the hero only, so
+ * swapping in the plain row card would drop them until focus moves.
+ */
+internal fun heroWithWatchedBadge(hero: MediaItem?, categories: List<Category>): MediaItem? {
+    if (hero == null) return null
+    val card = categories.asSequence()
+        .flatMap { it.items.asSequence() }
+        .firstOrNull { it.id == hero.id && it.mediaType == hero.mediaType }
+        ?: return hero
+    return if (card.isWatched == hero.isWatched) hero else hero.copy(isWatched = card.isWatched)
 }
 
 enum class ToastType {
@@ -1288,6 +1392,10 @@ class HomeViewModel @Inject constructor(
     /** True once [loadHomeData] has been started at least once, successfully or not. */
     private var homeDataLoadAttempted = false
     private var lastWatchedBadgesRefreshMs: Long = 0L
+    @Volatile private var lastWatchedBadgesCategories: List<Category>? = null
+    @Volatile private var watchedBadgesQuickPending = false
+    // What the last pass found watched (films, started shows), to mark re-published rows at once.
+    @Volatile private var lastWatchedBadgesLookup: Pair<Set<Int>, Set<Int>>? = null
     private val HOME_PLACEHOLDER_ITEM_COUNT = 8
 
     // EPG refresh intervals for Favorite TV row
@@ -1512,6 +1620,12 @@ class HomeViewModel @Inject constructor(
         activeEpgRefreshJob?.cancel()
         lastContinueWatchingItems = emptyList()
         lastContinueWatchingUpdateMs = 0L
+        // The next profile's rows arrive unmarked; its first tick pass must not wait out the
+        // throttle of the previous profile.
+        lastWatchedBadgesRefreshMs = 0L
+        lastWatchedBadgesCategories = null
+        lastWatchedBadgesLookup = null
+        watchedBadgesQuickPending = false
         lastResolvedBaseCategories = emptyList()
         dismissedContinueWatchingAt.clear()
         categoryPaginationStates.clear()
@@ -1714,6 +1828,24 @@ class HomeViewModel @Inject constructor(
     }
 
     init {
+        // Rows are published from many places (startup cache, catalog load, next pages, cloud
+        // reloads), always with unmarked cards. Once a pass has run, new rows take over what it
+        // found at once, so the ticks do not blink off while a catalog load lands; before that,
+        // or when the rows are still not the marked ones, a debounced pass runs.
+        viewModelScope.launch {
+            _uiState
+                .map { it.categories }
+                .distinctUntilChanged { old, new -> old === new }
+                .collect { rows ->
+                    if (rows.isEmpty() || rows === lastWatchedBadgesCategories) return@collect
+                    lastWatchedBadgesLookup?.let { (watchedMovies, startedShows) ->
+                        val marked = _uiState.updateAndGet { it.withWatchedBadges(watchedMovies, startedShows) }
+                        lastWatchedBadgesCategories = marked.categories
+                    }
+                    refreshWatchedBadges()
+                }
+        }
+
         viewModelScope.launch {
             profileManager.activeProfileId
                 .distinctUntilChanged()
@@ -4480,82 +4612,58 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun refreshWatchedBadges(immediate: Boolean = false) {
-        val now = SystemClock.elapsedRealtime()
-        if (!immediate && now - lastWatchedBadgesRefreshMs < WATCHED_BADGES_REFRESH_MS) return
+    /** Home resumed (e.g. back from Details): the watched history may have changed meanwhile. */
+    fun refreshWatchedBadgesOnResume() {
+        refreshWatchedBadges(force = true)
+    }
 
+    private fun refreshWatchedBadges(immediate: Boolean = false, force: Boolean = false) {
+        val now = SystemClock.elapsedRealtime()
+        if (!immediate && watchedBadgesPassIsRedundant(
+                rows = _uiState.value.categories,
+                lastMarkedRows = lastWatchedBadgesCategories,
+                force = force,
+                sinceLastPassMs = now - lastWatchedBadgesRefreshMs,
+                throttleMs = WATCHED_BADGES_REFRESH_MS
+            )
+        ) return
+
+        // A resume pass stays quick even when rows published right after it restart the debounce.
+        val quick = force || (watchedBadgesQuickPending && watchedBadgesJob?.isActive == true)
         watchedBadgesJob?.cancel()
-        watchedBadgesJob = viewModelScope.launch(networkDispatcher) {
+        watchedBadgesQuickPending = quick
+        val passDelayMs = watchedBadgesPassDelayMs(
+            quickRequested = quick,
+            hadPass = lastWatchedBadgesRefreshMs != 0L,
+            isLowRamDevice = isLowRamDevice
+        )
+        val profileId = profileManager.getProfileIdSync()
+        watchedBadgesJob = viewModelScope.launch {
             if (!immediate) {
-                delay(if (isLowRamDevice) 3_000L else 1_800L)
+                delay(passDelayMs)
             }
             try {
-                val isAuth = traktRepository.isAuthenticated.first()
-                if (!isAuth) return@launch
-
-                traktRepository.initializeWatchedCache()
-                val categories = _uiState.value.categories
-                if (categories.isEmpty()) return@launch
-
-                val watchedMovies = traktRepository.getWatchedMoviesFromCache()
-
-                // Performance: Build show watched map only for unique TV shows
-                val showWatched = mutableMapOf<Int, Boolean>()
-                val seenShows = mutableSetOf<Int>()
-                for (category in categories) {
-                    if (category.id == "continue_watching") continue
-                    for (item in category.items) {
-                        if (item.mediaType == MediaType.TV && seenShows.add(item.id)) {
-                            showWatched[item.id] = traktRepository.hasWatchedEpisodes(item.id)
-                        }
-                    }
+                // Not gated on Trakt: the watched cache also holds local, Cloud, MDBList and
+                // SIMKL history, the same source Search, Discover and Details mark from.
+                withContext(networkDispatcher) {
+                    traktRepository.initializeWatchedCache()
                 }
+                if (_uiState.value.categories.isEmpty()) return@launch
 
-                var anyChange = false
-                val updatedCategories = categories.map { category ->
-                    if (category.id == "continue_watching") {
-                        category
-                    } else {
-                        var categoryChanged = false
-                        val updatedItems = category.items.map { item ->
-                            val newWatched = when (item.mediaType) {
-                                MediaType.MOVIE -> watchedMovies.contains(item.id)
-                                MediaType.TV -> showWatched[item.id] == true
-                            }
-                            if (item.isWatched != newWatched) {
-                                categoryChanged = true
-                                item.copy(isWatched = newWatched)
-                            } else {
-                                item
-                            }
-                        }
-                        if (categoryChanged) {
-                            anyChange = true
-                            category.copy(items = updatedItems)
-                        } else {
-                            category
-                        }
-                    }
+                val (watchedMovies, startedShows) = withContext(Dispatchers.Default) {
+                    val watchedMovies = traktRepository.getWatchedMoviesFromCache()
+                    // Index the history once instead of scanning it for every distinct show.
+                    val startedShows = startedShowIds(traktRepository.getWatchedEpisodesFromCache())
+                    watchedMovies to startedShows
                 }
+                if (profileManager.getProfileIdSync() != profileId) return@launch
 
-                if (!anyChange) {
-                    lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
-                    return@launch
-                }
-
-                val heroItem = _uiState.value.heroItem
-                val updatedHero = heroItem?.let { hero ->
-                    updatedCategories.asSequence()
-                        .flatMap { it.items.asSequence() }
-                        .firstOrNull { it.id == hero.id && it.mediaType == hero.mediaType }
-                        ?: hero
-                }
-
-                _uiState.value = _uiState.value.copy(
-                    categories = updatedCategories,
-                    heroItem = updatedHero
-                )
+                // Install the lookup before notifying the Main-thread rows collector, which
+                // must never reapply the previous history to a newly marked state.
+                lastWatchedBadgesLookup = watchedMovies to startedShows
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
+                val marked = _uiState.updateAndGet { it.withWatchedBadges(watchedMovies, startedShows) }
+                lastWatchedBadgesCategories = marked.categories
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 AppLogger.e("HomeVM", "refreshWatchedBadges failed: ${e.message}", e)
