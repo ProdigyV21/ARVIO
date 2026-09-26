@@ -157,6 +157,7 @@ import com.arflix.tv.ui.components.MobileHeroLayoutSpec
 import com.arflix.tv.ui.components.resolveMobileHeroLayout
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.TmdbImageSizing
 import com.arflix.tv.ui.components.MediaContextMenu
 import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
@@ -642,10 +643,13 @@ private fun HomeBackdropCrossfade(
         pendingAlpha.snapTo(0f)
     }
 
-    fun buildBackdropRequest(url: String): ImageRequest =
-        "$url|${backdropWidthPx}x$backdropHeightPx".let { cacheKey ->
-        ImageRequest.Builder(context)
-            .data(url)
+    fun buildBackdropRequest(url: String): ImageRequest {
+        val imageUrl = TmdbImageSizing.forSlot(
+            url, backdropWidthPx, backdropHeightPx, TmdbImageSizing.Kind.BACKDROP
+        )
+        val cacheKey = "$imageUrl|${backdropWidthPx}x$backdropHeightPx"
+        return ImageRequest.Builder(context)
+            .data(imageUrl)
             .size(backdropWidthPx, backdropHeightPx)
             .precision(Precision.INEXACT)
             .allowHardware(true)
@@ -653,7 +657,7 @@ private fun HomeBackdropCrossfade(
             .placeholderMemoryCacheKey(cacheKey)
             .crossfade(false)
             .build()
-        }
+    }
 
     Box(modifier = modifier) {
         displayedBackdropUrl?.let { stableBackdropUrl ->
@@ -2172,6 +2176,7 @@ private fun MobileHeroCarousel(
     onPreloadHeroImdbRatings: (List<MediaItem>) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val heroItems = remember(categories) {
         val eligibleRows = categories.filter {
             it.id != "continue_watching" &&
@@ -2348,6 +2353,14 @@ private fun MobileHeroCarousel(
                 }
             }
             val logoUrl = remember(item.id) { cardLogoUrls["${item.mediaType}_${item.id}"] }
+            val heroImageUrl = remember(item.backdrop, item.image, heroLayout, density) {
+                TmdbImageSizing.forSlot(
+                    item.backdrop ?: item.image ?: "",
+                    with(density) { heroLayout.cardWidthDp.dp.roundToPx() },
+                    with(density) { heroLayout.cardHeightDp.dp.roundToPx() },
+                    TmdbImageSizing.Kind.BACKDROP
+                )
+            }
 
             // Scale down cards that aren't in the center; animate smoothly as they scroll in/out
             val scale by remember(page) {
@@ -2361,7 +2374,7 @@ private fun MobileHeroCarousel(
 
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 MobileHeroBanner(
-                    imageUrl = item.backdrop ?: item.image ?: "",
+                    imageUrl = heroImageUrl,
                     title = item.title,
                     genres = genres,
                     year = year,
@@ -3026,7 +3039,7 @@ private fun MobileHomeRowsLayer(
             val rowKey = remember(category.id) { "home:${category.id}" }
             val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
             val isPortrait = category.isPortrait(rowUsePosterCards)
-            val rowMobileItemWidth = if (isPortrait) 120.dp else 200.dp
+            val rowMobileItemWidth = if (isPortrait) 120.dp else HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP.dp
             // The keyed lazy item saves this state across disposal and navigation.
             val rowState = rememberLazyListState()
 
@@ -3719,7 +3732,7 @@ private fun ContentRow(
         usePosterCards
     }
     val cardAspectRatio = if (effectivePosterMode) 2f / 3f else 16f / 9f
-    val itemWidth = if (effectivePosterMode) 105.dp else 210.dp
+    val itemWidth = if (effectivePosterMode) 105.dp else HOME_TV_LANDSCAPE_CARD_WIDTH_DP.dp
     val itemSpacing = 14.dp
     val itemsToRender = remember(category.items) {
         if (category.items.isEmpty()) {
@@ -3950,6 +3963,7 @@ private fun ContentRow(
                                 item = item,
                                 width = expandedWidth,
                                 height = 146.dp,
+                                artworkWidth = 380.dp,
                                 trailerKey = featuredTrailerKey,
                                 trailerDelayMs = 0L,
                                 trailerVolume = featuredTrailerVolume,
@@ -4011,6 +4025,7 @@ private fun ContentRow(
                             item = item,
                             width = animatedCardWidth,
                             height = 146.dp,
+                            artworkWidth = 380.dp,
                             trailerKey = featuredTrailerKey,
                             trailerDelayMs = 0L,
                             trailerVolume = featuredTrailerVolume,

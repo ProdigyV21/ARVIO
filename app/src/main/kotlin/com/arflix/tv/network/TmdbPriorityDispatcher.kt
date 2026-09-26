@@ -21,10 +21,10 @@ import javax.inject.Singleton
  * - [Priority.IMMEDIATE]: 3 slots — metadata needed before first render
  *   (details, external IDs, logo, season episodes, visible Home pagination).
  * - [Priority.DEFERRED]: 2 slots — visible but not critical (trailer, cast,
- *   initial Home rows, providers, similar + logos, collection). Two slots so the 8-logo fan-out
- *   trickles in pairs instead of serializing behind a single permit.
+ *   initial Home rows, providers, similar + logos, collection, the focused Home hero logo).
+ *   Two slots so the 8-logo fan-out trickles in pairs instead of serializing behind a single permit.
  * - [Priority.BACKGROUND]: 1 slot — the user never waits on this (reviews,
- *   logo/hero decoration, season prefetch).
+ *   Home card-logo decoration, season prefetch).
  *
  * Properties:
  * - Fast networks: permits are usually free, so deferred work starts with no

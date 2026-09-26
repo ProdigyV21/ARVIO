@@ -50,6 +50,7 @@ import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.EpisodeAvailability
+import com.arflix.tv.util.TmdbImageSizing
 import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.detectDeviceType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -77,6 +78,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.cancelAndJoin
+import kotlin.math.roundToInt
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -218,6 +220,20 @@ internal fun applyIptvFavoritesPlacement(
     if (favIdx < 0) return savedCatalogs
     if (!enabled) return savedCatalogs.filterNot { it.id == HomeViewModel.FAVORITE_TV_CATEGORY_ID }
     return savedCatalogs
+}
+
+/** Landscape Home card widths; the backdrop preload must size its requests like the row. */
+internal const val HOME_TV_LANDSCAPE_CARD_WIDTH_DP = 210
+internal const val HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP = 200
+
+/**
+ * Pixel size of a landscape Home card, rounded the way Compose rounds `Dp.roundToPx()`, so the
+ * backdrop preload asks for the same TMDB size and memory-cache key as the card it warms.
+ */
+internal fun landscapeCardPixelSize(widthDp: Int, density: Float): Pair<Int, Int> {
+    val widthPx = (widthDp * density).roundToInt().coerceAtLeast(1)
+    val heightPx = (widthPx / (16f / 9f)).toInt().coerceAtLeast(1)
+    return widthPx to heightPx
 }
 
 enum class ToastType {
@@ -1332,7 +1348,8 @@ class HomeViewModel @Inject constructor(
     private val FOCUS_PREFETCH_COALESCE_MS = if (isLowRamDevice) 180L else 120L
     private val BACKDROP_IDLE_PREFETCH_MS = if (isLowRamDevice) 220L else 160L
 
-    private val homeLandscapeCardWidthDp = 210
+    private val homeLandscapeCardWidthDp =
+        if (isTvDevice) HOME_TV_LANDSCAPE_CARD_WIDTH_DP else HOME_MOBILE_LANDSCAPE_CARD_WIDTH_DP
     private val homeLogoWidthDp = 220
     private val homeLogoHeightDp = 64
     private val logoPreloadWidth = (homeLogoWidthDp * context.resources.displayMetrics.density)
@@ -1341,14 +1358,12 @@ class HomeViewModel @Inject constructor(
     private val logoPreloadHeight = (homeLogoHeightDp * context.resources.displayMetrics.density)
         .toInt()
         .coerceAtLeast(1)
-    private val cardBackdropWidth = (homeLandscapeCardWidthDp * context.resources.displayMetrics.density)
-        .toInt()
-        .coerceAtLeast(1)
-    private val cardBackdropHeight = (cardBackdropWidth / (16f / 9f))
-        .toInt()
-        .coerceAtLeast(1)
-    private val backdropPreloadWidth = cardBackdropWidth
-    private val backdropPreloadHeight = cardBackdropHeight
+    private val cardBackdropSize = landscapeCardPixelSize(
+        homeLandscapeCardWidthDp,
+        context.resources.displayMetrics.density
+    )
+    private val backdropPreloadWidth = cardBackdropSize.first
+    private val backdropPreloadHeight = cardBackdropSize.second
     private val initialLogoPrefetchRows = 1
     private val initialLogoPrefetchItemsPerRow = if (isLowRamDevice) 1 else 2
     // Prefetch enough backdrops to fill the first visible row on the home screen
@@ -3966,7 +3981,13 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun preloadBackdropImages(urls: List<String>) {
-        preloadImagesWithCoil(urls, backdropPreloadWidth, backdropPreloadHeight)
+        // Same TMDB size as the card, otherwise every image would be downloaded twice.
+        val sizedUrls = urls.map { url ->
+            TmdbImageSizing.forSlot(
+                url, backdropPreloadWidth, backdropPreloadHeight, TmdbImageSizing.Kind.BACKDROP
+            )
+        }
+        preloadImagesWithCoil(sizedUrls, backdropPreloadWidth, backdropPreloadHeight)
     }
 
     private fun scheduleIdleBackdropPreload(urls: List<String>) {
@@ -4658,8 +4679,12 @@ class HomeViewModel @Inject constructor(
             // Fetch logo async if not cached (skip IPTV — uses channel logo directly)
             if (currentCachedLogo == null && isActionableMediaItem(item) && !isIptvItem(item)) {
                 try {
-                    // Issue 1: hero logo fetch yields to Details IMMEDIATE traffic.
-                    val logoUrl = tmdbPriorityDispatcher.withPermit(Priority.BACKGROUND) {
+                    // Issue 1: hero logo fetch yields to Details IMMEDIATE traffic. Once
+                    // startup has settled it no longer queues behind the single-slot
+                    // card-logo fan-out; before that the initial rows keep DEFERRED.
+                    val heroLogoPriority =
+                        if (isStartupSettling()) Priority.BACKGROUND else Priority.DEFERRED
+                    val logoUrl = tmdbPriorityDispatcher.withPermit(heroLogoPriority) {
                         withContext(networkDispatcher) {
                             mediaRepository.getLogoUrl(item.mediaType, item.id)
                         }

@@ -47,6 +47,7 @@ import com.arflix.tv.ui.skin.ArvioFocusableSurface
 import com.arflix.tv.ui.skin.ArvioSkin
 import com.arflix.tv.ui.skin.rememberArvioCardShape
 import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.TmdbImageSizing
 import com.arflix.tv.util.Constants
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
@@ -154,13 +155,24 @@ fun MediaCard(
     val context = LocalContext.current
     val density = LocalDensity.current
     val overlayBrush: Brush? = null  // Gradient removed per user feedback
-    val imageRequest = remember(rawImageUrl, width, aspectRatio, isMobile, isChannelLogo) {
+    val imageRequest = remember(rawImageUrl, item.backdrop, width, aspectRatio, isMobile, isChannelLogo, isCollectionTile) {
         if (rawImageUrl == null) return@remember null
         val widthPx = with(density) { width.roundToPx() }
         val heightPx = (widthPx / aspectRatio).toInt().coerceAtLeast(1)
-        val cacheKey = "$rawImageUrl|${widthPx}x$heightPx" + if (isChannelLogo) "|channel-logo" else ""
+        // Collection tiles and channel logos keep their own artwork rules.
+        val imageUrl = if (isCollectionTile || isChannelLogo) {
+            rawImageUrl
+        } else {
+            TmdbImageSizing.forSlot(
+                rawImageUrl,
+                widthPx,
+                heightPx,
+                TmdbImageSizing.cardArtworkKind(rawImageUrl, item.backdrop, isLandscape)
+            )
+        }
+        val cacheKey = "$imageUrl|${widthPx}x$heightPx" + if (isChannelLogo) "|channel-logo" else ""
         ImageRequest.Builder(context)
-            .data(rawImageUrl)
+            .data(imageUrl)
             .size(widthPx, heightPx)
             .scale(if (isChannelLogo) Scale.FIT else Scale.FILL)
             .precision(Precision.INEXACT)
@@ -749,9 +761,21 @@ fun FeaturedMediaCard(
     trailerDelayMs: Long,
     trailerVolume: Float,
     onClick: () -> Unit,
+    // The expanded size, so the artwork size does not change while [width] animates.
+    artworkWidth: Dp = width,
 ) {
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
-    val imageUrl = (item.backdrop ?: item.image).takeIf { it.isNotBlank() }
+    val density = LocalDensity.current
+    val imageUrl = remember(item.backdrop, item.image, artworkWidth, height, density) {
+        (item.backdrop ?: item.image).takeIf { it.isNotBlank() }?.let { url ->
+            TmdbImageSizing.forSlot(
+                url,
+                with(density) { artworkWidth.roundToPx() },
+                with(density) { height.roundToPx() },
+                TmdbImageSizing.Kind.BACKDROP
+            )
+        }
+    }
 
     ArvioFocusableSurface(
         modifier = Modifier.size(width, height),
