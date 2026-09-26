@@ -151,6 +151,7 @@ class TraktRepository @Inject constructor(
     }
 
     private fun clearProfileScopedMemoryCaches(clearPreloaded: Boolean) {
+        watchedCacheResets++
         watchedMoviesCache.clear()
         watchedEpisodesCache.clear()
         episodeWriteGenerations.clear()
@@ -738,7 +739,7 @@ class TraktRepository @Inject constructor(
      * Mark movie as watched - updates local cache immediately (optimistic), then syncs to backend
      */
     suspend fun markMovieWatched(tmdbId: Int) {
-        ensureProfileCacheScope()
+        loadWatchedCacheBeforeWrite()
         // OPTIMISTIC UPDATE: Update caches immediately so the UI responds instantly
         updateWatchedCache(tmdbId, null, null, true)
         persistLocalWatchedSnapshotForCurrentProfile()
@@ -763,7 +764,7 @@ class TraktRepository @Inject constructor(
      * Mark movie as unwatched - updates local cache immediately (optimistic), then syncs to backend
      */
     suspend fun markMovieUnwatched(tmdbId: Int) {
-        ensureProfileCacheScope()
+        loadWatchedCacheBeforeWrite()
         // OPTIMISTIC UPDATE: Update cache immediately so the UI responds instantly
         updateWatchedCache(tmdbId, null, null, false)
         persistLocalWatchedSnapshotForCurrentProfile()
@@ -787,7 +788,7 @@ class TraktRepository @Inject constructor(
      * Mark episode as watched - updates local cache immediately (optimistic), then syncs to backend
      */
     suspend fun markEpisodeWatched(showTmdbId: Int, season: Int, episode: Int, isAnime: Boolean = false) {
-        ensureProfileCacheScope()
+        loadWatchedCacheBeforeWrite()
         // OPTIMISTIC UPDATE: Update all caches immediately so the UI responds instantly
         updateWatchedCache(showTmdbId, season, episode, true)
         updateShowWatchedCache(showTmdbId, season, episode, true)
@@ -816,7 +817,7 @@ class TraktRepository @Inject constructor(
      * Mark episode watched in local caches and Supabase without sending another Trakt request.
      */
     suspend fun markEpisodeWatchedWithoutTraktSync(showTmdbId: Int, season: Int, episode: Int) {
-        ensureProfileCacheScope()
+        loadWatchedCacheBeforeWrite()
         updateWatchedCache(showTmdbId, season, episode, true)
         updateShowWatchedCache(showTmdbId, season, episode, true)
         persistLocalWatchedSnapshotForCurrentProfile()
@@ -837,7 +838,7 @@ class TraktRepository @Inject constructor(
      * @param syncTrakt If true (default), also syncs to Trakt. Set false when batch Trakt removal is already done.
      */
     suspend fun markEpisodeUnwatched(showTmdbId: Int, season: Int, episode: Int, syncTrakt: Boolean = true, isAnime: Boolean = false) {
-        ensureProfileCacheScope()
+        loadWatchedCacheBeforeWrite()
         // OPTIMISTIC UPDATE: Update all caches immediately so the UI responds instantly
         updateWatchedCache(showTmdbId, season, episode, false)
         updateShowWatchedCache(showTmdbId, season, episode, false)
@@ -2857,6 +2858,26 @@ class TraktRepository @Inject constructor(
         }
     }
 
+    /**
+     * Local watched writes persist the whole cache as the profile's snapshot, so the cache must be
+     * loaded first. Right after launch or a profile switch it can still be empty; a write then
+     * would replace the stored history with just this one title, which a profile without Cloud
+     * sync cannot get back. Returns at once when the cache is already loaded.
+     *
+     * [initializeWatchedCache] can return unloaded: when it waited on another caller's load that
+     * was cancelled (Home restarts its tick pass while rows land). And a load that overlapped a
+     * reset (profile switch, cloud restore) may carry the history from before it. Both load again.
+     */
+    private suspend fun loadWatchedCacheBeforeWrite() {
+        repeat(3) {
+            val resets = watchedCacheResets
+            initializeWatchedCache()
+            if (watchedCacheResets == resets && cacheInitialized) return
+            if (watchedCacheResets != resets) invalidateWatchedCache()
+        }
+        initializeWatchedCache()
+    }
+
     private suspend fun persistLocalWatchedSnapshotForCurrentProfile() {
         val movieIds = watchedMoviesCache.toList().distinct().sorted()
         val episodeKeys = watchedEpisodesCache.toList().distinct().sorted()
@@ -4627,6 +4648,7 @@ class TraktRepository @Inject constructor(
             synced = simklSyncService.markSeasonWatched(showTmdbId, seasonNumber, episodes, watched = true, isAnime = isAnime) || synced
         }
 
+        loadWatchedCacheBeforeWrite()
         episodes.forEach { ep ->
             updateWatchedCache(showTmdbId, seasonNumber, ep, true)
             updateShowWatchedCache(showTmdbId, seasonNumber, ep, true)
@@ -4734,6 +4756,7 @@ class TraktRepository @Inject constructor(
             synced = simklSyncService.markSeasonWatched(showTmdbId, seasonNumber, episodes, watched = false, isAnime = isAnime) || synced
         }
 
+        loadWatchedCacheBeforeWrite()
         episodes.forEach { ep ->
             updateWatchedCache(showTmdbId, seasonNumber, ep, false)
             updateShowWatchedCache(showTmdbId, seasonNumber, ep, false)
@@ -4837,6 +4860,8 @@ class TraktRepository @Inject constructor(
     private val movieWriteGenerations = ConcurrentHashMap<Int, Long>()
     private var cacheInitialized = false
     @Volatile private var cacheInitializing = false
+    // Bumped whenever the watched cache is emptied, so a write can tell a load that overlapped it.
+    @Volatile private var watchedCacheResets = 0
 
     /**
      * Invalidate watched cache - forces reload on next access
@@ -4844,6 +4869,7 @@ class TraktRepository @Inject constructor(
      */
     fun invalidateWatchedCache() {
         ensureProfileCacheScope()
+        watchedCacheResets++
         cacheInitialized = false
         watchedMoviesCache.clear()
         watchedEpisodesCache.clear()
