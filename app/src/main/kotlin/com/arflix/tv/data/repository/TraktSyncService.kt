@@ -2056,6 +2056,12 @@ class TraktSyncService @Inject constructor(
         return "Bearer $token"
     }
 
+    /**
+     * True when watched history comes from the cloud account. Without one, [getWatchedMovies] and
+     * [getWatchedEpisodes] return what the last full sync kept in memory.
+     */
+    suspend fun hasCloudWatchedHistory(): Boolean = getUserId() != null && getSupabaseAuth() != null
+
     private fun getUserId(): String? {
         // Get user ID from AuthRepository
         return authRepository.getCurrentUserId()

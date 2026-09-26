@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -157,6 +158,7 @@ class TraktRepository @Inject constructor(
         movieWriteGenerations.clear()
         cacheInitialized = false
         cacheInitializing = false
+        watchedCacheReloads.reset()
         showWatchedEpisodesCache.clear()
         showWatchedCacheTime = 0L
         showCompletionCache.clear()
@@ -4837,6 +4839,10 @@ class TraktRepository @Inject constructor(
     private val movieWriteGenerations = ConcurrentHashMap<Int, Long>()
     private var cacheInitialized = false
     @Volatile private var cacheInitializing = false
+    private val watchedCacheReloads = WatchedCacheReloads()
+
+    /** Emits after the watched cache was reloaded following [invalidateWatchedCache]. */
+    val watchedCacheReloaded: SharedFlow<Unit> get() = watchedCacheReloads.reloads
 
     /**
      * Invalidate watched cache - forces reload on next access
@@ -4845,6 +4851,7 @@ class TraktRepository @Inject constructor(
     fun invalidateWatchedCache() {
         ensureProfileCacheScope()
         cacheInitialized = false
+        watchedCacheReloads.invalidated()
         watchedMoviesCache.clear()
         watchedEpisodesCache.clear()
         episodeWriteGenerations.clear()
@@ -4879,6 +4886,7 @@ class TraktRepository @Inject constructor(
             val (localSnapshotMovies, localSnapshotEpisodes) = loadLocalWatchedSnapshotForCurrentProfile()
 
             // Try to load from Supabase first (works for both Trakt and non-Trakt Cloud profiles)
+            val hasCloudAccount = syncService.hasCloudWatchedHistory()
             val supabaseMovies = syncService.getWatchedMovies()
             val supabaseEpisodes = syncService.getWatchedEpisodes()
 
@@ -4903,19 +4911,25 @@ class TraktRepository @Inject constructor(
                 return
             }
 
-            // Only fall back to Trakt API if we have Trakt auth and no Supabase data
-            val traktMovies = if (supabaseMovies.isEmpty() && hasTraktAuth) getWatchedMovies() else emptySet()
-            val traktEpisodes = if (supabaseEpisodes.isEmpty() && hasTraktAuth) getWatchedEpisodes() else emptySet()
+            // Read Trakt unless the cloud account already holds the history (see watchedCacheNeedsTrakt)
+            val traktMovies = if (watchedCacheNeedsTrakt(hasTraktAuth, hasCloudAccount, supabaseMovies.isEmpty())) {
+                getWatchedMovies()
+            } else emptySet()
+            val traktEpisodes = if (watchedCacheNeedsTrakt(hasTraktAuth, hasCloudAccount, supabaseEpisodes.isEmpty())) {
+                getWatchedEpisodes()
+            } else emptySet()
 
             watchedMoviesCache.clear()
             watchedMoviesCache.addAll(localSnapshotMovies)
-            watchedMoviesCache.addAll(if (supabaseMovies.isNotEmpty()) supabaseMovies else traktMovies)
+            watchedMoviesCache.addAll(supabaseMovies)
+            watchedMoviesCache.addAll(traktMovies)
             watchedMoviesCache.addAll(mdbMovies)
             watchedMoviesCache.addAll(simklMovies)
 
             watchedEpisodesCache.clear()
             watchedEpisodesCache.addAll(localSnapshotEpisodes)
-            watchedEpisodesCache.addAll(if (supabaseEpisodes.isNotEmpty()) supabaseEpisodes else traktEpisodes)
+            watchedEpisodesCache.addAll(supabaseEpisodes)
+            watchedEpisodesCache.addAll(traktEpisodes)
             watchedEpisodesCache.addAll(mdbEpisodes)
             watchedEpisodesCache.addAll(simklEpisodes)
 
@@ -4947,6 +4961,7 @@ class TraktRepository @Inject constructor(
             }
         } finally {
             cacheInitializing = false
+            if (cacheInitialized) watchedCacheReloads.loaded()
         }
     }
 

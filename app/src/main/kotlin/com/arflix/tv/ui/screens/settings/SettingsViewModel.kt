@@ -4638,8 +4638,10 @@ class SettingsViewModel @Inject constructor(
                 delay(minOf(pollDelayMs, (expiresAt - System.currentTimeMillis()).coerceAtLeast(0L)))
                 if (System.currentTimeMillis() >= expiresAt) break
 
+                var tokenSaved = false
                 try {
                     traktRepository.pollForToken(deviceCode.deviceCode)
+                    tokenSaved = true
 
                     // Get the expiration date
                     val expirationDate = traktRepository.getTokenExpirationDate()
@@ -4685,9 +4687,11 @@ class SettingsViewModel @Inject constructor(
                         isMdbListConnected = mdbListStillConnected,
                         isSimklConnected = simklStillConnected
                     )
+                    // The sync runs in its own job and fills the sync summary when it ends; start it
+                    // first so the summary does not also wait for the Continue Watching fetch.
+                    performFullSync(silent = true)
                     traktRepository.clearContinueWatchingCache()
                     runCatching { traktRepository.getContinueWatching() }
-                    performFullSync(silent = true)
                     syncLocalStateToCloud(silent = true, force = true)
                     runCatching { launcherContinueWatchingRepository.refreshForCurrentProfile() }
                     return@launch
@@ -4711,6 +4715,10 @@ class SettingsViewModel @Inject constructor(
                         )
                         continue
                     }
+
+                    // Only the poll itself is retried: once the token is saved, asking again would
+                    // report the code as already used.
+                    if (!tokenSaved && com.arflix.tv.data.repository.isTransientTraktPollFailure(e)) continue
 
                     lastFailure = when (httpError?.code()) {
                         404 -> SettingsMessage.Res(R.string.settings_trakt_code_invalid)

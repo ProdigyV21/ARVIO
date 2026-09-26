@@ -8,6 +8,8 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import retrofit2.HttpException
@@ -52,6 +54,15 @@ class TraktDeviceActivationTest {
         var calls = 0
         try { TraktDeviceActivation().request { calls++; throw failure(401) }; fail() } catch (_: HttpException) { }
         assertEquals(1, calls)
+    }
+
+    @Test fun pollFailuresWithoutAnAnswerFromTraktAreTransient() {
+        assertTrue(isTransientTraktPollFailure(java.net.UnknownHostException("Unable to resolve host \"api.trakt.tv\"")))
+        assertTrue(isTransientTraktPollFailure(java.net.SocketTimeoutException("timeout")))
+        assertTrue(isTransientTraktPollFailure(java.net.ConnectException("failed to connect")))
+        assertFalse(isTransientTraktPollFailure(failure(404)))
+        assertFalse(isTransientTraktPollFailure(failure(410)))
+        assertFalse(isTransientTraktPollFailure(IllegalStateException("Trakt credentials missing in this APK")))
     }
 
     @Test fun retryAfterSupportsDatesAndNeverShortensServerDelay() {
