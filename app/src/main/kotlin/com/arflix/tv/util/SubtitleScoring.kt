@@ -31,6 +31,9 @@ private val NOISE = setOf(
     "theatrical", "imax", "hdr", "hdr10", "hdr10plus", "sdr",
     "dv", "dolbyvision", "hlg", "dubbed", "subbed",
     "dl", "rip", "complete", "internal", "limited",
+    // bit depth and audio-format fragments that split off release names ("DTS-HDMa5.1",
+    // "DDP5.1", "10bit") — tech tags, not title words; unlisted, each counted as 10
+    "8bit", "10bit", "12bit", "hd", "hdma", "hdma5", "ma", "ddp", "ddp5", "ddp2", "dd", "x",
     "dc", "directors", "cut", "unrated", "retail",
     // subtitle type flags
     "esub", "engsub", "hsub", "sub", "subs",
@@ -53,11 +56,15 @@ private val PURE_NUMBERS_RE = Regex("\\d+")
 private val SUBTITLE_BRACKET_RE = Regex("^\\[[^]]+]")
 private val SEPARATOR_RE = Regex("[.\\-_\\s]+")
 
+private const val EPISODE_TITLE_WEIGHT = 2
+
 private fun tokenWeight(token: String): Int = when {
     token.matches(PURE_NUMBERS_RE) -> 0               // pure numbers: noise
     EPISODE_RE.matches(token) -> 8                  // S01E01
     token in RESOLUTIONS -> 3
-    token in SOURCES -> 4
+    // The source decides the CUT (BluRay vs WEB-DL vs HDTV edits differ by seconds), so it
+    // outweighs anything but the show title and episode. Was 4 — below an episode-title word.
+    token in SOURCES -> 8
     token in CODECS -> 2
     token in AUDIO -> 2
     token in NOISE -> 1
@@ -72,7 +79,8 @@ private fun tokenWeight(token: String): Int = when {
  *   Title word      → 10
  *   Series/episode  → 8  (S01E01)
  *   Release group   → 5  (last dash-separated segment, position-based)
- *   Source          → 4  (bluray, webrip, webdl…)
+ *   Source          → 8  (bluray, webrip, webdl…)
+ *   Episode title   → 2  (title words right after S01E01, e.g. "First Dance")
  *   Resolution      → 3  (1080p, 720p…)
  *   Codec/audio     → 2  (x264, aac…)
  *   Noise           → 1  (ntsc, proper, hdr…)
@@ -116,8 +124,18 @@ fun weightedSubtitleScore(streamSourceRaw: String, subtitleId: String): Int {
     var totalWeight   = 0
     var matchedWeight = 0
 
+
+    var afterEpisode = false
+    var inEpisodeTitle = false
     for (token in streamTokens) {
-        val w = tokenWeight(token)
+        val base = tokenWeight(token)
+        if (EPISODE_RE.matches(token)) {
+            afterEpisode = true
+            inEpisodeTitle = true
+        } else if (base != 10) {
+            inEpisodeTitle = false
+        }
+        val w = if (afterEpisode && inEpisodeTitle && base == 10) EPISODE_TITLE_WEIGHT else base
         if (w == 0) continue
         totalWeight += w
         if (token in subTokenSet) matchedWeight += w

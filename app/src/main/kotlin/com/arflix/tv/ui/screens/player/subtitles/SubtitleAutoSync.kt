@@ -15,6 +15,14 @@ package com.arflix.tv.ui.screens.player.subtitles
  * itself removed for costing ~260 MB of heap. Correcting drift now would need a trigger that costs
  * nothing when there is no drift, e.g. noticing a verified subtitle drift out later in the file.
  */
+/**
+ * Id suffix of a served copy whose timings were rewritten cue-by-cue by the retimer
+ * ([AutoSyncTimelineRetimer]) — a correction the live offset cannot express. The distinct id makes
+ * the player rebuild onto the rewritten file instead of switching back to the attached original,
+ * and the subtitle menu sees through it to the addon's own row.
+ */
+const val RETIMED_SUBTITLE_ID_SUFFIX = "#retimed"
+
 @JvmInline
 value class SubtitleAutoSync(val offsetUs: Long) {
 

@@ -176,6 +176,8 @@
     <string name="player_subtitle_scanning">Wird durchsucht …</string>
     <string name="player_subtitle_best_match_hint">Am besten synchronisierten Untertitel automatisch wählen</string>
     <string name="player_subtitle_searching_match">Übereinstimmung wird gesucht …</string>
+    <string name="player_subtitle_auto_retimed">neu getaktet</string>
+    <string name="player_match_scored_retimed">Treffer: %1$s · %2$d %% (%3$s) (neu getaktet)</string>
     <string name="player_subtitle_auto_fixed">korrigiert</string>
     <string name="player_audio_translate">Audio übersetzen</string>
     <string name="player_skip_intro">Vorspann überspringen</string>

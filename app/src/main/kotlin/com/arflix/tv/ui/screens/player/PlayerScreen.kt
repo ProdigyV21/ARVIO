@@ -184,6 +184,7 @@ import com.arflix.tv.ui.screens.player.engine.PlayerEngine
 import com.arflix.tv.ui.screens.player.engine.PlayerEngineFactory
 import com.arflix.tv.ui.screens.player.engine.PlayerEngineType
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleAutoSync
+import com.arflix.tv.ui.screens.player.subtitles.RETIMED_SUBTITLE_ID_SUFFIX
 import com.arflix.tv.ui.screens.player.common.NextEpisodePromptGate
 import com.arflix.tv.ui.screens.player.common.PlaybackEpisodeKey
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
@@ -398,14 +399,22 @@ fun PlayerScreen(
     // device (buildVideoRenderers forces MODE_ON), with enableDecoderFallback +
     // forceDisableMediaCodecAsynchronousQueueing handling real hardware failures/hangs reactively.
     val preferExtensionDecoder = false
-    val allowVideoExceedCodecCapabilities = remember(deviceType, preferExtensionDecoder) {
-        !preferExtensionDecoder && !deviceType.isTouchDevice()
+    // Permissive on EVERY device. Phones used to be strict (to stop black video on 4K remux/DV),
+    // but strict mode disqualifies a hardware decoder whenever it under-reports its level: a Redmi
+    // Note 13 Pro (Sept 2026) reports NoSupport for ordinary 4K HEVC Main10 (hvc1.2.4.L150) that its
+    // MediaTek decoder plays fine, and strict mode gave audio + a 0x0 video and a source skip on
+    // every such file. There is nothing else to hand the track to — the sideload FFmpeg extension's
+    // video renderer is an unimplemented stub (supportsFormat always "unsupported") — so strict only
+    // ever meant "no video". DV is handled by DvCompat, a truly failing decoder by the black-video
+    // recovery ladder.
+    val allowVideoExceedCodecCapabilities = remember(preferExtensionDecoder) {
+        !preferExtensionDecoder
     }
     val allowAudioExceedCodecCapabilities = remember(preferExtensionDecoder) {
         !preferExtensionDecoder
     }
-    val allowRendererExceedCodecCapabilities = remember(deviceType, preferExtensionDecoder) {
-        !preferExtensionDecoder && !deviceType.isTouchDevice()
+    val allowRendererExceedCodecCapabilities = remember(preferExtensionDecoder) {
+        !preferExtensionDecoder
     }
 
     // Remember the exact orientation state from before entering the player
@@ -3782,9 +3791,17 @@ fun PlayerScreen(
 
         // "Find best match" outcome — same top-center pill and spot as the scanning indicator
         // above (a bottom toast would sit on the subtitles and interrupt watching).
-        uiState.matchToast?.let { msg ->
+        // Held until the video has actually started: a remembered match is applied as soon as the
+        // subtitles load — usually behind the loading screen — and its 4s ran out unseen. A tester
+        // (Sept 2026) never saw "Remembered: …" and spent a round of debugging on a stale match
+        // replaying silently. The remembered toast then stays 6s: it is the only sign that no scan
+        // ran, and the cue to tap Find Best Match when the replayed subtitle is wrong.
+        uiState.matchToast?.takeIf { hasPlaybackStarted }?.let { msg ->
+            val remembered = (msg as? PlayerMessage.Res)?.resourceId.let {
+                it == R.string.player_match_remembered || it == R.string.player_match_remembered_offset
+            }
             LaunchedEffect(msg) {
-                delay(4000)
+                delay(if (remembered) 6000 else 4000)
                 viewModel.dismissMatchToast()
             }
             androidx.compose.foundation.layout.Row(
@@ -5802,7 +5819,8 @@ private fun SubtitleMenu(
                                         val score = subtitleMatchScore(streamSource, subtitle)
                                         val langName = getFullLanguageName(subtitle.lang)
                                         val offsetNote = autoSyncNote(
-                                            autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, subtitle.id) }
+                                            autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, subtitle.id) },
+                                            retimed = isRetimedCopyOf(selectedSubtitle, subtitle.id),
                                         )
                                         // A file can carry ten built-in English tracks. With only the
                                         // language on the main line they all read "English" and nobody —
@@ -6132,7 +6150,8 @@ private fun SubtitleMenu(
                                     val score = subtitleMatchScore(streamSource, sub)
                                     val langFullName = getFullLanguageName(sub.lang)
                                     val offsetNote = autoSyncNote(
-                                        autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, sub.id) }
+                                        autoSync.takeIf { isSameSubtitleTrack(selectedSubtitle, sub.id) },
+                                        retimed = isRetimedCopyOf(selectedSubtitle, sub.id),
                                     )
                                     // Same reason as the list above: without the track's own name, every
                                     // built-in English track reads "English" and none can be told apart.
@@ -6504,12 +6523,16 @@ private fun detectAudioCodecLabel(codec: String?, trackLabel: String?): String? 
 private const val ADDON_SUB_ID_PREFIX = "arvio-addon-sub:"
 
 /**
- * True when [selected] is [rowId]'s track. Auto-match corrections used to be baked into a shifted
- * copy carrying an "…#ofs2000" id, which this had to see through; they are now applied live by the
- * text renderer, so the served copy keeps the addon's own id.
+ * True when [selected] is [rowId]'s track. Constant corrections are applied live by the text
+ * renderer, so that copy keeps the addon's own id; a cue-by-cue retime is a rewritten file served
+ * under "…#retimed" (see [RETIMED_SUBTITLE_ID_SUFFIX]), which this sees through.
  */
 private fun isSameSubtitleTrack(selected: Subtitle?, rowId: String): Boolean =
-    selected != null && selected.id == rowId
+    selected != null && (selected.id == rowId || selected.id == rowId + RETIMED_SUBTITLE_ID_SUFFIX)
+
+/** True when [selected] is [rowId]'s retimed copy. */
+private fun isRetimedCopyOf(selected: Subtitle?, rowId: String): Boolean =
+    selected?.id == rowId + RETIMED_SUBTITLE_ID_SUFFIX
 
 /**
  * Menu suffix for an auto-corrected subtitle: " · fixed +1.0s". The word matters more than the
@@ -6517,7 +6540,8 @@ private fun isSameSubtitleTrack(selected: Subtitle?, rowId: String): Boolean =
  * "+1.0s" does not.
  */
 @Composable
-private fun autoSyncNote(sync: SubtitleAutoSync?): String {
+private fun autoSyncNote(sync: SubtitleAutoSync?, retimed: Boolean = false): String {
+    if (retimed) return " · ${stringResource(R.string.player_subtitle_auto_retimed)}"
     if (sync == null || sync.isIdentity) return ""
     val fixed = stringResource(R.string.player_subtitle_auto_fixed)
     return " · $fixed ${formatMatchOffset(sync.offsetMs)}"

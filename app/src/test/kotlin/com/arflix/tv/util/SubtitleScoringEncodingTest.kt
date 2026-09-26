@@ -38,4 +38,26 @@ class SubtitleScoringEncodingTest {
         assertThat(weightedSubtitleScore("", subtitleId)).isEqualTo(0)
         assertThat(weightedSubtitleScore(encoded, "")).isEqualTo(0)
     }
+
+    @Test
+    fun matchingSourceOutranksSharedEpisodeTitle() {
+        // Reacher S01E02 (Sept 2026): the AMZN WEB-DL subtitle names the episode ("First Dance"),
+        // the BluRay one does not. On a BluRay source the BluRay cut is the right one — the AMZN one
+        // was 3.3s out — but episode-title words used to count as full title words and ranked it
+        // first (48 vs 28).
+        val source = "Reacher S01E02 First Dance 2160p UHD BluRay HDR10 10bit Dts-HDMa5 1 HEVC-d3g.mkv"
+        val bluRay = weightedSubtitleScore(source, "[WIZDOM]Reacher.S01E02.1080p.BluRay.x264-BROADCAST")
+        val amzn = weightedSubtitleScore(source, "[WIZDOM]Reacher.S01E02.First.Dance.720p.AMZN.WEB-DL.DDP5.1.1.H.264-NTb")
+
+        assertThat(bluRay).isGreaterThan(amzn)
+    }
+
+    @Test
+    fun episodeTitleStillBreaksATieBetweenOtherwiseEqualReleases() {
+        val source = "Reacher S01E02 First Dance 1080p AMZN WEB-DL DDP5 1 H 264-NTb.mkv"
+        val named = weightedSubtitleScore(source, "Reacher.S01E02.First.Dance.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb")
+        val unnamed = weightedSubtitleScore(source, "Reacher.S01E02.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb")
+
+        assertThat(named).isGreaterThan(unnamed)
+    }
 }

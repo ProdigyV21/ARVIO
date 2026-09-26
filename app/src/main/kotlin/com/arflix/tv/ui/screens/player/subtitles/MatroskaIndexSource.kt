@@ -1,8 +1,12 @@
 package com.arflix.tv.ui.screens.player.subtitles
 
 import com.arflix.tv.network.OkHttpProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -31,7 +35,9 @@ internal object MatroskaIndexSource {
 
     /** Whole-operation ceiling. A miss must cost seconds, not a scan's worth of time. */
     private const val TOTAL_TIMEOUT_MS = 7_000L
-    private const val MAX_TOTAL_BYTES = 16L * 1024 * 1024
+    // 24MB budget: an MP4's moov (read whole for its subtitle sample tables) runs
+    // to several MB on a long 4K file, beyond what a Matroska index ever needed.
+    private const val MAX_TOTAL_BYTES = 24L * 1024 * 1024
     private const val MAX_REQUESTS = 16
 
     /**
@@ -45,6 +51,61 @@ internal object MatroskaIndexSource {
         url: String,
         headers: Map<String, String>,
         onDiagnostic: (String) -> Unit = {},
+    ): MatroskaSubtitleIndex.IndexedTimeline? {
+        val (entry, joined) = sharedLoad(url, headers)
+        if (joined) {
+            onDiagnostic("matroska index: joined the load started at stream open (${if (entry.result.isCompleted) "ready" else "in flight"})")
+        }
+        return entry.result.await()
+    }
+
+    /**
+     * Starts reading [url]'s index now, so the scan finds it ready — starts it when
+     * the stream opens rather than when a subtitle scan reaches the reference step (~2s on a 4K
+     * MP4). Fire-and-forget: a later [load] of the same URL joins it.
+     */
+    fun prefetch(url: String, headers: Map<String, String>) {
+        sharedLoad(url, headers)
+    }
+
+    /** Whether [url]'s index has already been read successfully — a later [load] returns at once. */
+    fun isReady(url: String): Boolean = synchronized(this) { shared?.let { it.url == url && it.produced } == true }
+
+    private class SharedLoad(val url: String) {
+        lateinit var result: Deferred<MatroskaSubtitleIndex.IndexedTimeline?>
+        @Volatile var produced = false
+    }
+
+    /** Only the stream being played is worth holding — a new URL replaces the entry. */
+    private var shared: SharedLoad? = null
+    private val sharedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * The one load for [url]: joined while in flight, reused once it produced a timeline (a rescan
+     * of the same file then costs no requests), and restarted when it produced nothing — that can
+     * be a transient refusal, and a fresh attempt costs no more than every scan paid before.
+     * It runs outside the caller's scope so a cancelled scan leaves it for the next one.
+     */
+    private fun sharedLoad(url: String, headers: Map<String, String>): Pair<SharedLoad, Boolean> = synchronized(this) {
+        shared?.takeIf { held ->
+            held.url == url && (!held.result.isCompleted || held.produced)
+        }?.let { return it to true }
+        val diagnostic: (String) -> Unit = { android.util.Log.i("SubMatch", it) }
+        val entry = SharedLoad(url)
+        entry.result = sharedScope.async {
+            runCatching { loadNow(url, headers, diagnostic) }
+                .onFailure { diagnostic("matroska index failed: ${it.message}") }
+                .getOrNull()
+                .also { entry.produced = it != null }
+        }
+        shared = entry
+        entry to false
+    }
+
+    private suspend fun loadNow(
+        url: String,
+        headers: Map<String, String>,
+        onDiagnostic: (String) -> Unit,
     ): MatroskaSubtitleIndex.IndexedTimeline? {
         if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
             onDiagnostic("matroska index: skipped, not an http(s) stream")
