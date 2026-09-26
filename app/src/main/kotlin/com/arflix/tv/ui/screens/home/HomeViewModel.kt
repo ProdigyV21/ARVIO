@@ -276,8 +276,9 @@ internal fun applyWatchedBadges(
  */
 internal fun HomeUiState.withWatchedBadges(watchedMovies: Set<Int>, startedShows: Set<Int>): HomeUiState {
     val updatedCategories = applyWatchedBadges(categories, watchedMovies, startedShows)
-    if (updatedCategories === categories) return this
-    return copy(categories = updatedCategories, heroItem = heroWithWatchedBadge(heroItem, updatedCategories))
+    val updatedHero = heroWithWatchedBadge(heroItem, updatedCategories)
+    if (updatedCategories === categories && updatedHero === heroItem) return this
+    return copy(categories = updatedCategories, heroItem = updatedHero)
 }
 
 /**
@@ -1624,6 +1625,7 @@ class HomeViewModel @Inject constructor(
         lastWatchedBadgesRefreshMs = 0L
         lastWatchedBadgesCategories = null
         lastWatchedBadgesLookup = null
+        watchedBadgesQuickPending = false
         lastResolvedBaseCategories = emptyList()
         dismissedContinueWatchingAt.clear()
         categoryPaginationStates.clear()
@@ -4635,28 +4637,33 @@ class HomeViewModel @Inject constructor(
             hadPass = lastWatchedBadgesRefreshMs != 0L,
             isLowRamDevice = isLowRamDevice
         )
-        watchedBadgesJob = viewModelScope.launch(networkDispatcher) {
+        val profileId = profileManager.getProfileIdSync()
+        watchedBadgesJob = viewModelScope.launch {
             if (!immediate) {
                 delay(passDelayMs)
             }
             try {
                 // Not gated on Trakt: the watched cache also holds local, Cloud, MDBList and
                 // SIMKL history, the same source Search, Discover and Details mark from.
-                traktRepository.initializeWatchedCache()
+                withContext(networkDispatcher) {
+                    traktRepository.initializeWatchedCache()
+                }
                 if (_uiState.value.categories.isEmpty()) return@launch
 
-                withContext(Dispatchers.Default) {
+                val (watchedMovies, startedShows) = withContext(Dispatchers.Default) {
                     val watchedMovies = traktRepository.getWatchedMoviesFromCache()
                     // Index the history once instead of scanning it for every distinct show.
                     val startedShows = startedShowIds(traktRepository.getWatchedEpisodesFromCache())
-
-                    // Mark the latest state rather than a snapshot from before the reads, so rows
-                    // published meanwhile (catalogs, Continue Watching) are not rolled back.
-                    val marked = _uiState.updateAndGet { it.withWatchedBadges(watchedMovies, startedShows) }
-                    lastWatchedBadgesCategories = marked.categories
-                    lastWatchedBadgesLookup = watchedMovies to startedShows
+                    watchedMovies to startedShows
                 }
+                if (profileManager.getProfileIdSync() != profileId) return@launch
+
+                // Install the lookup before notifying the Main-thread rows collector, which
+                // must never reapply the previous history to a newly marked state.
+                lastWatchedBadgesLookup = watchedMovies to startedShows
                 lastWatchedBadgesRefreshMs = SystemClock.elapsedRealtime()
+                val marked = _uiState.updateAndGet { it.withWatchedBadges(watchedMovies, startedShows) }
+                lastWatchedBadgesCategories = marked.categories
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 AppLogger.e("HomeVM", "refreshWatchedBadges failed: ${e.message}", e)

@@ -124,6 +124,29 @@ class HomeWatchedBadgesTest {
     }
 
     @Test
+    fun `hero tick updates even when the rows already have the correct ticks`() {
+        val rows = listOf(Category(id = "trending", title = "Trending", items = listOf(movie(7, watched = true))))
+        val state = HomeUiState(categories = rows, heroItem = movie(7).copy(imdbRating = "8.1"))
+
+        val marked = state.withWatchedBadges(setOf(7), emptySet())
+
+        assertThat(marked.categories).isSameInstanceAs(rows)
+        assertThat(marked.heroItem?.isWatched).isTrue()
+        assertThat(marked.heroItem?.imdbRating).isEqualTo("8.1")
+    }
+
+    @Test
+    fun `stale hero tick clears even when the rows are already unwatched`() {
+        val rows = listOf(Category(id = "trending", title = "Trending", items = listOf(movie(7))))
+        val state = HomeUiState(categories = rows, heroItem = movie(7, watched = true))
+
+        val marked = state.withWatchedBadges(emptySet(), emptySet())
+
+        assertThat(marked.categories).isSameInstanceAs(rows)
+        assertThat(marked.heroItem?.isWatched).isFalse()
+    }
+
+    @Test
     fun `re-published rows take over the known ticks and the state stays the same when nothing changes`() {
         // A catalog load publishes the same titles again, unmarked; the last pass found film 7 and show 2.
         val state = HomeUiState(
