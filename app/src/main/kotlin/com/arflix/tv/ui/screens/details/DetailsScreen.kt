@@ -214,6 +214,7 @@ import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.LocalDeviceType
+import com.arflix.tv.util.TmdbImageSizing
 import com.arflix.tv.util.formatGenreName
 import com.arflix.tv.util.isInCinema
 import com.arflix.tv.util.parseRatingValue
@@ -1160,6 +1161,7 @@ private fun DetailsContent(
             availableWidthDp = maxWidth.value,
             availableHeightDp = (maxHeight - navigationBottomPadding).coerceAtLeast(1.dp).value,
         ).dp
+        val backdropWidth = maxWidth
         val mobileScrollState = rememberScrollState()
         val density = LocalDensity.current
         var stickyThreshold by remember { mutableStateOf(-1f) }
@@ -1214,11 +1216,18 @@ private fun DetailsContent(
                         .height(backdropHeight)
                         .zIndex(10f)
                 ) {
-                    val backdropRequest = remember(item.backdrop, item.image, context) {
+                    val backdropRequest = remember(item.backdrop, item.image, context, backdropWidth, backdropHeight, density) {
                         val url = item.backdrop ?: item.image
                         if (url.isNullOrBlank()) null else {
                             ImageRequest.Builder(context)
-                                .data(url)
+                                .data(
+                                    TmdbImageSizing.forSlot(
+                                        url,
+                                        with(density) { backdropWidth.roundToPx() },
+                                        with(density) { backdropHeight.roundToPx() },
+                                        TmdbImageSizing.Kind.BACKDROP
+                                    )
+                                )
                                 .crossfade(250)
                                 .allowHardware(true)
                                 .build()
@@ -1841,9 +1850,19 @@ private fun DetailsContent(
     // ===================== END MOBILE LAYOUT =====================
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Full-screen hero background
+        // Full-screen hero background, sized like the Home hero so both share one file.
+        val heroConfiguration = LocalConfiguration.current
+        val heroDensity = LocalDensity.current
+        val heroBackdropUrl = remember(item.backdrop, item.image, heroConfiguration, heroDensity) {
+            TmdbImageSizing.forSlot(
+                item.backdrop ?: item.image,
+                with(heroDensity) { heroConfiguration.screenWidthDp.dp.roundToPx() },
+                with(heroDensity) { heroConfiguration.screenHeightDp.dp.roundToPx() },
+                TmdbImageSizing.Kind.BACKDROP
+            )
+        }
         AsyncImage(
-            model = item.backdrop ?: item.image,
+            model = heroBackdropUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
