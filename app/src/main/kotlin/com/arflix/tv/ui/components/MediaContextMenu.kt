@@ -261,7 +261,9 @@ fun MediaContextMenu(
                                 indication = null,
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                             ) { /* consume click so backdrop handler doesn't fire */ }
-                            .padding(top = 16.dp, bottom = 24.dp)
+                            // The mobile bottom bar is drawn over the screen; without its height
+                            // the last entries ("Watched", and "Remove" on Continue Watching) sit behind it.
+                            .padding(top = 16.dp, bottom = 24.dp + LocalBottomBarHeight.current)
                     ) {
                         // Drag handle indicator
                         Box(
