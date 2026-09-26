@@ -63,6 +63,12 @@ class TraktDeviceActivationTest {
         assertFalse(isTransientTraktPollFailure(failure(404)))
         assertFalse(isTransientTraktPollFailure(failure(410)))
         assertFalse(isTransientTraktPollFailure(IllegalStateException("Trakt credentials missing in this APK")))
+        // A rejected certificate (wrong device clock) will not heal by polling on.
+        assertFalse(isTransientTraktPollFailure(
+            javax.net.ssl.SSLHandshakeException("handshake").apply {
+                initCause(java.security.cert.CertificateExpiredException("expired"))
+            }
+        ))
     }
 
     @Test fun retryAfterSupportsDatesAndNeverShortensServerDelay() {

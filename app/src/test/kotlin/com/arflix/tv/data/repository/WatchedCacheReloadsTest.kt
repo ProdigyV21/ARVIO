@@ -7,28 +7,10 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class WatchedCacheReloadsTest {
-
-    @Test fun withoutCloudAccountTraktIsReadEvenWhenTheLastSyncLeftHistoryInMemory() {
-        // Without an account the sync service only holds the last full sync (15 recent shows).
-        assertTrue(watchedCacheNeedsTrakt(hasTraktAuth = true, hasCloudAccount = false, cloudHistoryEmpty = false))
-        assertTrue(watchedCacheNeedsTrakt(hasTraktAuth = true, hasCloudAccount = false, cloudHistoryEmpty = true))
-    }
-
-    @Test fun cloudAccountHistoryStillReplacesTrakt() {
-        assertFalse(watchedCacheNeedsTrakt(hasTraktAuth = true, hasCloudAccount = true, cloudHistoryEmpty = false))
-        assertTrue(watchedCacheNeedsTrakt(hasTraktAuth = true, hasCloudAccount = true, cloudHistoryEmpty = true))
-    }
-
-    @Test fun noTraktAuthNeverReadsTrakt() {
-        assertFalse(watchedCacheNeedsTrakt(hasTraktAuth = false, hasCloudAccount = false, cloudHistoryEmpty = true))
-        assertFalse(watchedCacheNeedsTrakt(hasTraktAuth = false, hasCloudAccount = true, cloudHistoryEmpty = true))
-    }
 
     @Test fun onlyAReloadAfterInvalidationIsReported() = runTest {
         val reloads = WatchedCacheReloads()

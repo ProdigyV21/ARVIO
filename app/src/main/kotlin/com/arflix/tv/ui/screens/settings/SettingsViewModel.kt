@@ -4632,6 +4632,8 @@ class SettingsViewModel @Inject constructor(
         traktPollingJob = viewModelScope.launch {
             val expiresAt = System.currentTimeMillis() + (deviceCode.expiresIn * 1000)
             var lastFailure: SettingsMessage? = null
+            // Set while polls fail without reaching Trakt; reported if the code runs out that way.
+            var networkFailure: SettingsMessage? = null
             var pollDelayMs = deviceCode.interval.coerceAtLeast(1) * 1000L
 
             while (System.currentTimeMillis() < expiresAt) {
@@ -4675,8 +4677,8 @@ class SettingsViewModel @Inject constructor(
                     )
                     // Let the dialog report the success for a moment instead of vanishing the
                     // instant the token arrives; the toast below it stays untouched. This runs in
-                    // its own coroutine on purpose: the sync work below belongs to the polling
-                    // job, and waiting here would put it at the mercy of a dismiss.
+                    // its own coroutine on purpose: the work below belongs to the polling job, and
+                    // waiting here would put it at the mercy of a dismiss.
                     viewModelScope.launch {
                         delay(2_000L)
                         _uiState.value = _uiState.value.dismissTraktSuccess(deviceCode.deviceCode)
@@ -4704,11 +4706,15 @@ class SettingsViewModel @Inject constructor(
                         else -> e.message?.contains("400") == true ||
                             e.message?.contains("pending", ignoreCase = true) == true
                     }
-                    if (isPending) continue
+                    if (isPending) {
+                        networkFailure = null
+                        continue
+                    }
 
                     // Trakt uses 429 to ask device clients to slow down. Keep the
                     // activation alive and honor Retry-After instead of aborting it.
                     if (httpError?.code() == 429) {
+                        networkFailure = null
                         pollDelayMs = com.arflix.tv.data.repository.traktRetryDelayMs(
                             httpError.response()?.headers()?.get("Retry-After"),
                             pollDelayMs + 1_000L
@@ -4716,13 +4722,18 @@ class SettingsViewModel @Inject constructor(
                         continue
                     }
 
-                    // Only the poll itself is retried: once the token is saved, asking again would
-                    // report the code as already used.
-                    if (!tokenSaved && com.arflix.tv.data.repository.isTransientTraktPollFailure(e)) continue
+                    // Only the poll itself is retried (pollForToken also stores the token): once
+                    // the token is saved, asking again would report the code as already used.
+                    if (!tokenSaved && com.arflix.tv.data.repository.isTransientTraktPollFailure(e)) {
+                        networkFailure = e.message.orMessage(SettingsMessage.Res(R.string.settings_trakt_auth_failed))
+                        continue
+                    }
 
                     lastFailure = when (httpError?.code()) {
                         404 -> SettingsMessage.Res(R.string.settings_trakt_code_invalid)
-                        409 -> SettingsMessage.Res(R.string.settings_trakt_code_used)
+                        // Right after a dropped poll, 409 most likely means Trakt issued the token
+                        // but the answer was lost - not that the user reused an old code.
+                        409 -> networkFailure ?: SettingsMessage.Res(R.string.settings_trakt_code_used)
                         410 -> SettingsMessage.Res(R.string.settings_trakt_code_expired)
                         418 -> SettingsMessage.Res(R.string.settings_trakt_denied)
                         null -> e.message.orMessage(
@@ -4738,8 +4749,9 @@ class SettingsViewModel @Inject constructor(
             }
 
             // Local timeout and server-reported expiry both offer Retry; other failures keep
-            // their error toast and dismiss the dialog.
-            _uiState.value = _uiState.value.finishTraktActivationPolling(lastFailure)
+            // their error toast and dismiss the dialog. A code that ran out while the network was
+            // down reports the network error instead of a plain expiry.
+            _uiState.value = _uiState.value.finishTraktActivationPolling(lastFailure ?: networkFailure)
         }
     }
 
