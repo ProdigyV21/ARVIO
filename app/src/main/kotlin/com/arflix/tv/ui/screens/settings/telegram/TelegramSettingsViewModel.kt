@@ -7,8 +7,10 @@ import com.arflix.tv.data.telegram.TelegramRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,6 +20,13 @@ class TelegramSettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val authState: StateFlow<TelegramAuthState> = repository.authState
+
+    val searchOnClickOnly: StateFlow<Boolean> = repository.searchOnClickOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), true)
+
+    fun setSearchOnClickOnly(enabled: Boolean) {
+        viewModelScope.launch { repository.setSearchOnClickOnly(enabled) }
+    }
 
     private val _cacheSizeBytes = MutableStateFlow(0L)
     val cacheSizeBytes: StateFlow<Long> = _cacheSizeBytes.asStateFlow()

@@ -88,6 +88,7 @@ fun TelegramSettingsScreen(
 ) {
     val authState by viewModel.authState.collectAsState()
     val cacheSizeBytes by viewModel.cacheSizeBytes.collectAsState()
+    val searchOnClickOnly by viewModel.searchOnClickOnly.collectAsState()
     var showDisconnectConfirm by remember { mutableStateOf(false) }
     val isMobile = LocalDeviceType.current.isTouchDevice()
     val backMotion = rememberArvioPredictiveBack(enabled = isMobile && showHeader && !showDisconnectConfirm) {
@@ -157,8 +158,10 @@ fun TelegramSettingsScreen(
                 is TelegramAuthState.Ready -> ConnectedContent(
                     firstName = state.firstName,
                     cacheSizeBytes = cacheSizeBytes,
+                    searchOnClickOnly = searchOnClickOnly,
                     onDisconnect = { showDisconnectConfirm = true },
-                    onClearCache = { viewModel.clearCache() }
+                    onClearCache = { viewModel.clearCache() },
+                    onToggleSearchOnClickOnly = { viewModel.setSearchOnClickOnly(!searchOnClickOnly) }
                 )
                 is TelegramAuthState.Error -> ErrorContent(
                     message = state.message,
@@ -493,8 +496,10 @@ private fun PasswordContent(onSubmit: (String) -> Unit) {
 private fun ConnectedContent(
     firstName: String,
     cacheSizeBytes: Long,
+    searchOnClickOnly: Boolean,
     onDisconnect: () -> Unit,
-    onClearCache: () -> Unit
+    onClearCache: () -> Unit,
+    onToggleSearchOnClickOnly: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -576,6 +581,47 @@ private fun ConnectedContent(
                     color = Pink
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        var searchModeFocused by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleSearchOnClickOnly() }
+                .onFocusChanged { searchModeFocused = it.isFocused }
+                .background(
+                    if (searchModeFocused) Pink.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f),
+                    RoundedCornerShape(12.dp)
+                )
+                .border(
+                    width = if (searchModeFocused) 2.dp else 1.dp,
+                    color = if (searchModeFocused) Pink else Color.White.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.telegram_search_on_click_title),
+                    style = ArflixTypography.cardTitle.copy(fontSize = 14.sp),
+                    color = if (searchModeFocused) Pink else TextPrimary
+                )
+                Text(
+                    text = stringResource(R.string.telegram_search_on_click_desc),
+                    style = ArflixTypography.caption.copy(fontSize = 13.sp),
+                    color = TextSecondary
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = stringResource(if (searchOnClickOnly) R.string.on else R.string.off),
+                style = ArflixTypography.label.copy(fontSize = 11.sp),
+                color = if (searchOnClickOnly) SuccessGreen else TextSecondary
+            )
         }
     }
 }

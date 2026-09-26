@@ -646,6 +646,17 @@ class PlayerViewModel @Inject constructor(
         "has_selected_url" to (!_uiState.value.selectedStreamUrl.isNullOrBlank()).toString()
     ).apply { putAll(extra) }
 
+    /** This player has told the Telegram search that playback is on (see loadMedia / onCleared). */
+    private var holdsTelegramQuiet = false
+
+    override fun onCleared() {
+        if (holdsTelegramQuiet) {
+            holdsTelegramQuiet = false
+            streamRepository.onPlaybackEnded()
+        }
+        super.onCleared()
+    }
+
     fun loadMedia(
         mediaType: MediaType,
         mediaId: Int,
@@ -665,6 +676,13 @@ class PlayerViewModel @Inject constructor(
         airDate: String? = null
     ) {
         currentAirDate = airDate
+        // Playback is starting: Telegram searches still running for the source list the user
+        // just chose from are stopped, and none may toast over the player (they used to: "Telegram
+        // search timed out" appearing mid-episode). Held until this player is cleared.
+        if (!holdsTelegramQuiet) {
+            holdsTelegramQuiet = true
+            streamRepository.onPlaybackStarted()
+        }
         currentMediaType = mediaType
         currentMediaId = mediaId
         currentSeason = seasonNumber
