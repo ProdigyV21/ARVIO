@@ -459,6 +459,55 @@ class MatroskaSubtitleIndexTest {
     )
 
     @Test
+    fun `the preferred-language reference is never an image track`() {
+        // An English PGS track listed before the English text track: its index is show/clear
+        // noise and must not become the timing reference (PR #756 review).
+        val pgs = shapedTrack(3, 1_400, codec = "S_HDMV/PGS")
+        val text = shapedTrack(4, 700)
+
+        assertThat(MatroskaSubtitleIndex.pickTrackForLanguage(listOf(pgs, text), "en")?.trackNumber).isEqualTo(4L)
+        assertThat(MatroskaSubtitleIndex.pickTrackForLanguage(listOf(pgs), "en")).isNull()
+    }
+
+    @Test
+    fun `alternate references are text tracks only`() {
+        val primary = shapedTrack(2, 700)
+        val pgs = shapedTrack(3, 1_400, codec = "S_HDMV/PGS")
+        val vobsub = shapedTrack(4, 1_200, codec = "S_VOBSUB")
+        val russian = shapedTrack(5, 600)
+        val forced = shapedTrack(6, 650, forced = true)
+
+        val alternates = MatroskaSubtitleIndex.alternateReferenceTracks(
+            tracks = listOf(primary, pgs, vobsub, russian, forced),
+            primaryTrackNumber = 2L,
+            allowForced = false,
+            minCues = 8,
+            minCuesPerMinute = 2.0,
+            max = 3
+        )
+        assertThat(alternates.map { it.trackNumber }).containsExactly(5L)
+
+        val shapePath = MatroskaSubtitleIndex.alternateReferenceTracks(
+            tracks = listOf(primary, pgs, vobsub, russian, forced),
+            primaryTrackNumber = 2L,
+            allowForced = true,
+            minCues = 8,
+            minCuesPerMinute = 2.0,
+            max = 3
+        )
+        assertThat(shapePath.map { it.trackNumber }).containsExactly(6L, 5L).inOrder()
+    }
+
+    @Test
+    fun `the timing-shape fallback skips image tracks`() {
+        val picked = MatroskaSubtitleIndex.pickReferenceTracks(
+            listOf(shapedTrack(3, 1_400, codec = "S_HDMV/PGS"), shapedTrack(4, 700)),
+            2.0
+        )
+        assertThat(picked.map { it.trackNumber }).containsExactly(4L)
+    }
+
+    @Test
     fun `a dense track flagged forced is the reference when it is the only one`() {
         // Peaky Blinders S01E04, MoviezAddiction "ESub": the only embedded text track was a full
         // English subtitle flagged forced.

@@ -354,12 +354,8 @@ internal object MatroskaSubtitleIndex {
             val name = track.name.orEmpty().lowercase()
             return track.isHearingImpaired || name.contains("sdh") || name.contains("hearing impaired")
         }
-        fun isImage(track: IndexedTrack): Boolean {
-            val codec = track.codecId.orEmpty().uppercase()
-            return codec.startsWith("S_HDMV") || codec.startsWith("S_VOBSUB") || codec.startsWith("S_DVBSUB")
-        }
         val dense = tracks.filter {
-            !isImage(it) && it.cues.size >= minCues && it.spanMs >= minSpanMs &&
+            !isImageTrack(it) && it.cues.size >= minCues && it.spanMs >= minSpanMs &&
                 density(it) >= minCuesPerMinute &&
                 !it.name.orEmpty().contains("commentary", ignoreCase = true)
         }
@@ -390,9 +386,40 @@ internal object MatroskaSubtitleIndex {
         val wanted = languageKeys(preferredLanguage)
         if (wanted.isEmpty()) return null
         return tracks.firstOrNull { track ->
-            !track.isForced && languageKeys(track.language.orEmpty()).any { it in wanted }
+            !track.isForced && !isImageTrack(track) && languageKeys(track.language.orEmpty()).any { it in wanted }
         }
     }
+
+    /**
+     * An image subtitle codec (PGS, VobSub, DVB). Its index lists every "show" AND "clear" event
+     * with placeholder durations — noise at double the dialogue density, never a timing reference.
+     * Applied to every reference path: the preferred-language track ([pickTrackForLanguage]), the
+     * alternates ([alternateReferenceTracks]) and the timing-shape fallback ([pickReferenceTracks]).
+     */
+    fun isImageTrack(track: IndexedTrack): Boolean {
+        val codec = track.codecId.orEmpty().uppercase()
+        return codec.startsWith("S_HDMV") || codec.startsWith("S_VOBSUB") || codec.startsWith("S_DVBSUB")
+    }
+
+    /**
+     * The file's other dialogue tracks to score against when the preferred one may be mistimed.
+     * Text tracks
+     * only; forced ones only when [allowForced] (the timing-shape path, where the forced flag is not
+     * trusted); dense enough to be dialogue; the fullest first.
+     */
+    fun alternateReferenceTracks(
+        tracks: List<IndexedTrack>,
+        primaryTrackNumber: Long,
+        allowForced: Boolean,
+        minCues: Int,
+        minCuesPerMinute: Double,
+        max: Int,
+    ): List<IndexedTrack> = tracks
+        .filter { it.trackNumber != primaryTrackNumber && (allowForced || !it.isForced) && !isImageTrack(it) }
+        .filter { it.cues.size >= minCues && it.spanMs > 0L }
+        .filter { it.cues.size * 60_000.0 / it.spanMs >= minCuesPerMinute }
+        .sortedByDescending { it.cues.size }
+        .take(max)
 
     /** Primary subtag plus its ISO-639-1/2 aliases, lowercased. */
     private fun languageKeys(language: String): Set<String> {

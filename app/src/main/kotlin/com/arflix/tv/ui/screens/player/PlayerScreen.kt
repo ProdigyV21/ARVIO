@@ -399,15 +399,14 @@ fun PlayerScreen(
     // device (buildVideoRenderers forces MODE_ON), with enableDecoderFallback +
     // forceDisableMediaCodecAsynchronousQueueing handling real hardware failures/hangs reactively.
     val preferExtensionDecoder = false
-    // Permissive on EVERY device, made
-    // phones strict to stop black video on 4K remux/DV, but strict does not avoid black video — it
-    // moves it: the hardware decoder is disqualified whenever it under-reports its level, and the
-    // FFmpeg software decoder takes 4K it cannot decode in real time. A Redmi Note 13 Pro (Sept
-    // 2026) reports NoSupport for ordinary 4K HEVC Main10 (hvc1.2.4.L150) that its MediaTek decoder
-    // plays fine; strict mode gave audio + a 0x0 video and a source skip on every such file,
-    // DV is handled by DvCompat and a truly failing decoder by the black-video
-    // recovery ladder, both added since; HardwareFirstVideoRenderer keeps FFmpeg from outranking
-    // the hardware decoder above 1080p.
+    // Permissive on EVERY device. Phones used to be strict (to stop black video on 4K remux/DV),
+    // but strict mode disqualifies a hardware decoder whenever it under-reports its level: a Redmi
+    // Note 13 Pro (Sept 2026) reports NoSupport for ordinary 4K HEVC Main10 (hvc1.2.4.L150) that its
+    // MediaTek decoder plays fine, and strict mode gave audio + a 0x0 video and a source skip on
+    // every such file. There is nothing else to hand the track to — the sideload FFmpeg extension's
+    // video renderer is an unimplemented stub (supportsFormat always "unsupported") — so strict only
+    // ever meant "no video". DV is handled by DvCompat, a truly failing decoder by the black-video
+    // recovery ladder.
     val allowVideoExceedCodecCapabilities = remember(preferExtensionDecoder) {
         !preferExtensionDecoder
     }

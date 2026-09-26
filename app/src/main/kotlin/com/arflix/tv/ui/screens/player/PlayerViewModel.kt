@@ -4206,8 +4206,8 @@ class PlayerViewModel @Inject constructor(
             // What bounds the cost now is not the count: downloads and parses are throttled
             // (MATCH_PARALLEL_DOWNLOADS / MATCH_PARALLEL_PARSES), identical timings collapse into
             // one family (see loadAll), and the first candidate alone still decides the common case.
-            // Ranked by release name, then taken alternately from the front and the back
-            // (broadCandidateOrder) so the unrankable tail is reached early rather than last.
+            // Ranked by release name, then providers in turn (MatchCandidatePool.providerInterleaved)
+            // so the unrankable tail is reached early and a bounded pool keeps every provider.
             val streamSrc = _uiState.value.selectedStream?.source.orEmpty()
             val candidates = subs.filter {
                 !it.isEmbedded && !it.isBitmap && it.url.isNotBlank() &&
@@ -4219,7 +4219,10 @@ class PlayerViewModel @Inject constructor(
             }
                 .distinctBy { it.url }
                 .sortedByDescending { weightedSubtitleScore(streamSrc, it.id) }
-                .let { broadCandidateOrder(it) }
+                .let { ranked ->
+                    com.arflix.tv.ui.screens.player.subtitles.MatchCandidatePool
+                        .providerInterleaved(ranked) { it.provider }
+                }
                 .also { ranked ->
                     Log.d(
                         "SubMatch",
@@ -4453,10 +4456,31 @@ class PlayerViewModel @Inject constructor(
                 return cues
             }
             val familyMembers = HashMap<String, List<Pair<Subtitle, Long>>>()
-            /** Every candidate, parsed, one per timing family. Only called once the first one has failed. */
+            var poolStartedAt = 0L
+            /**
+             * The candidates, parsed, one per timing family. Bounded (MatchCandidatePool.loadBounded):
+             * batches of MATCH_PARALLEL_DOWNLOADS, at most MATCH_POOL_MAX_CANDIDATES, and no new batch
+             * once MATCH_POOL_BUDGET_MS has passed since the first call of this scan — a long addon
+             * list must not make a scan download every subtitle on a TV box.
+             */
             suspend fun loadAll(): List<Pair<Subtitle, List<SubtitleSyncMatcher.TimedCue>>> {
-                val all = candidates.map { sub -> sub to async { load(sub) } }
-                    .mapNotNull { (sub, job) -> job.await()?.let { sub to it } }
+                if (poolStartedAt == 0L) poolStartedAt = System.currentTimeMillis()
+                val (all, tried) = com.arflix.tv.ui.screens.player.subtitles.MatchCandidatePool.loadBounded(
+                    pool = candidates,
+                    batchSize = MATCH_PARALLEL_DOWNLOADS,
+                    maxItems = MATCH_POOL_MAX_CANDIDATES,
+                    budgetMs = MATCH_POOL_BUDGET_MS,
+                    startedAtMs = poolStartedAt,
+                    now = System::currentTimeMillis,
+                    load = { sub -> load(sub) }
+                )
+                if (tried < candidates.size) {
+                    Log.i(
+                        "SubMatch",
+                        "pool bounded: tried $tried of ${candidates.size} candidates " +
+                            "(cap $MATCH_POOL_MAX_CANDIDATES, budget ${MATCH_POOL_BUDGET_MS / 1000}s)"
+                    )
+                }
                 val representatives = ArrayList<Pair<Subtitle, List<SubtitleSyncMatcher.TimedCue>>>()
                 familyMembers.clear()
                 for ((sub, cues) in all) {
@@ -5066,22 +5090,24 @@ class PlayerViewModel @Inject constructor(
                     "[retime] ${distinct.size}×${references.size} pairs in ${System.currentTimeMillis() - startedAt}ms, " +
                         "${bestBySignature.size} confident"
                 )
-                if (bestBySignature.isEmpty()) return@let current
-                // The retimer is the arbiter for what it evaluated: a candidate it could not pair
-                // with any reference fails here, even where the overlap sweep wanted to shift it —
-                // that shift is exactly the kind of guess the structural check exists to catch.
-                // Candidates past the evaluation cap keep their own verdict.
+                // The retimer is the arbiter for what it evaluated (applyRetimeVerdicts): a
+                // candidate it could not pair consistently with any reference fails here, even
+                // where the overlap sweep wanted to accept or shift it — and that holds when no
+                // candidate retimed at all. Candidates past the evaluation cap keep their own verdict.
                 val evaluated = distinct.mapTo(HashSet()) { (_, cues) -> signature(cues) }
-                current.map { candidate ->
-                    val cues = loaded.firstOrNull {
-                        it.first.provider == candidate.sub.provider && it.first.id == candidate.sub.id
-                    }?.second ?: return@map candidate
-                    val key = signature(cues)
-                    val (ref, result) = bestBySignature[key] ?: return@map if (key in evaluated) {
+                com.arflix.tv.ui.screens.player.subtitles.applyRetimeVerdicts(
+                    candidates = current,
+                    keyOf = { candidate ->
+                        loaded.firstOrNull {
+                            it.first.provider == candidate.sub.provider && it.first.id == candidate.sub.id
+                        }?.second?.let(::signature)
+                    },
+                    evaluated = evaluated,
+                    confident = bestBySignature,
+                    reject = { candidate ->
                         candidate.copy(score = minOf(candidate.score, MATCH_SUCCESS_THRESHOLD_TIMING - 0.01), offsetMs = 0L)
-                    } else {
-                        candidate
                     }
+                ) { candidate, (ref, result) ->
                     // A shift that pulls the first cues before 0:00 clamps them there, so their
                     // deltas differ from the rest — Peaky Blinders S01E04's −47.8s moved the
                     // opening cues (from 2.7s) to 0 and a plain offset was served as a rewritten
@@ -6079,12 +6105,15 @@ class PlayerViewModel @Inject constructor(
             "reference from container index: track=${track.trackNumber} lang=${track.language ?: "-"} " +
                 "cues=${track.cues.size} sampled=${sampled.size} span=${track.spanMs / 1000}s"
         )
-        val alternates = (if (byTimingShape) shapeRanked else timeline.tracks)
-            .filter { it.trackNumber != track.trackNumber && (byTimingShape || !it.isForced) }
-            .filter { it.cues.size >= MATCH_TARGET_REF_INTERVALS && it.spanMs > 0L }
-            .filter { it.cues.size * 60_000.0 / it.spanMs >= MATCH_ALT_REFERENCE_MIN_CUES_PER_MIN }
-            .sortedByDescending { it.cues.size }
-            .take(MATCH_ALT_REFERENCE_MAX)
+        val alternates = com.arflix.tv.ui.screens.player.subtitles.MatroskaSubtitleIndex
+            .alternateReferenceTracks(
+                tracks = if (byTimingShape) shapeRanked else timeline.tracks,
+                primaryTrackNumber = track.trackNumber,
+                allowForced = byTimingShape,
+                minCues = MATCH_TARGET_REF_INTERVALS,
+                minCuesPerMinute = MATCH_ALT_REFERENCE_MIN_CUES_PER_MIN,
+                max = MATCH_ALT_REFERENCE_MAX
+            )
             .map { alt ->
                 IndexedReference(
                     label = "track=${alt.trackNumber} lang=${alt.language ?: "-"}",
@@ -6159,23 +6188,6 @@ class PlayerViewModel @Inject constructor(
             if (right.startMs - left.startMs != shift || right.endMs - left.endMs != shift) return null
         }
         return shift
-    }
-
-    /**
-     * Front, back, front, back… of a ranked list. Release-name
-     * ranking puts addons without release names (OpenSubtitles' numeric ids) at the very end;
-     * alternating keeps the best-named candidate first while reaching that tail early.
-     */
-    private fun <T> broadCandidateOrder(ranked: List<T>): List<T> {
-        if (ranked.size < 3) return ranked
-        val ordered = ArrayList<T>(ranked.size)
-        var front = 0
-        var back = ranked.lastIndex
-        while (front <= back) {
-            ordered += ranked[front++]
-            if (front <= back) ordered += ranked[back--]
-        }
-        return ordered
     }
 
     /**
@@ -8013,6 +8025,9 @@ class PlayerViewModel @Inject constructor(
         // Candidate loading is throttled, not capped (see the candidate pool in findBestSubtitleMatch):
         // six downloads and two parses in flight.
         private const val MATCH_PARALLEL_DOWNLOADS = 6
+        // The whole pool used to be downloaded; these bound it (see loadAll).
+        private const val MATCH_POOL_MAX_CANDIDATES = 30
+        private const val MATCH_POOL_BUDGET_MS = 20_000L
         private const val MATCH_PARALLEL_PARSES = 2
         private const val MATCH_CACHE_MAX_ENTRIES = 50   // per-stream remembered matches (oldest evicted)
 

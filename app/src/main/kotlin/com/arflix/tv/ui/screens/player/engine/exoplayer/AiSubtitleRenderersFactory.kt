@@ -138,16 +138,7 @@ class AiSubtitleRenderersFactory(
             enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, baseOut
         )
         for (renderer in baseOut) {
-            // Mode ON puts the platform renderer first — but that order only decides TIES. Media3
-            // hands the video track to whichever renderer reports the HIGHEST support, and a
-            // hardware decoder that under-reports its level ("exceeds capabilities") loses to
-            // FFmpeg's "handled" outright. See HardwareFirstVideoRenderer.
-            val hardwareFirst = if (renderer is androidx.media3.exoplayer.mediacodec.MediaCodecRenderer) {
-                renderer
-            } else {
-                HardwareFirstVideoRenderer(renderer)
-            }
-            out.add(VideoOffsetRenderer(hardwareFirst, audioDelayUs))
+            out.add(VideoOffsetRenderer(renderer, audioDelayUs))
         }
     }
 
@@ -501,51 +492,6 @@ private class SubtitleOffsetRenderer(
 
     fun extractBufferedTimedCues(maxCount: Int): List<SubtitleSyncMatcher.TimedCue> =
         BufferedCueReader.timedCues(baseRenderer, maxCount)
-}
-
-/**
- * A software (FFmpeg) video renderer that never OUTRANKS the platform decoder on frames above
- * 1080p: its reported support is capped at "exceeds capabilities" there, so when the hardware
- * decoder reports the same, the tie goes to the hardware renderer (listed first).
- *
- * Why: Media3 gives a track to the renderer reporting the highest support. MediaTek's
- * `c2.mtk.hevc.decoder` (Redmi Note 13 Pro, Sept 2026) reports `NoSupport [codec.profileLevel]`
- * for ordinary 4K HEVC Main10 (`hvc1.2.4.L150`) that it decodes perfectly well — so FFmpeg's
- * "handled" won, software 4K 10-bit decode produced no frame at all (video 0x0, audio playing),
- * and the startup timeout skipped the source ~18s later.
- *
- * What it keeps: a codec the device has NO decoder for (the platform reports "unsupported")
- * still goes to FFmpeg, since "exceeds" beats "unsupported"; and up to 1080p FFmpeg keeps its
- * normal claim — software decoding can keep up there, and it rescues a hardware decoder that
- * under-reports at that size too.
- */
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-private class HardwareFirstVideoRenderer(
-    private val baseRenderer: Renderer,
-) : Renderer by baseRenderer {
-
-    private val capabilities = object : androidx.media3.exoplayer.RendererCapabilities by baseRenderer.capabilities {
-        override fun supportsFormat(format: androidx.media3.common.Format): Int {
-            val support = baseRenderer.capabilities.supportsFormat(format)
-            val formatSupport = androidx.media3.exoplayer.RendererCapabilities.getFormatSupport(support)
-            val large = format.width == androidx.media3.common.Format.NO_VALUE ||
-                format.height == androidx.media3.common.Format.NO_VALUE ||
-                format.width > 1920 || format.height > 1088
-            if (!large || formatSupport != androidx.media3.common.C.FORMAT_HANDLED) return support
-            android.util.Log.i(
-                "HardwareFirst",
-                "software video decoder capped for ${format.sampleMimeType} ${format.width}x${format.height} " +
-                    "(${format.codecs}) — the platform decoder gets it on a tie"
-            )
-            return androidx.media3.exoplayer.RendererCapabilities.create(
-                androidx.media3.common.C.FORMAT_EXCEEDS_CAPABILITIES,
-                androidx.media3.exoplayer.RendererCapabilities.getAdaptiveSupport(support),
-                androidx.media3.exoplayer.RendererCapabilities.getTunnelingSupport(support),
-            )
-        }
-    }
-
-    override fun getCapabilities(): androidx.media3.exoplayer.RendererCapabilities = capabilities
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
