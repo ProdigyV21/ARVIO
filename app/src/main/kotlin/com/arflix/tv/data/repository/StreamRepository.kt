@@ -150,6 +150,18 @@ internal fun shouldTryNativeAnimeFallback(
     return language.isNullOrBlank() || language == "ja"
 }
 
+/**
+ * A source list with the Telegram results an earlier Telegram search found. With "only search
+ * Telegram when clicking" those live in the Telegram lookup's cache, not in the saved source list,
+ * so every path that returns a saved list adds them here.
+ */
+internal fun withCachedTelegramSources(
+    streams: List<StreamSource>,
+    telegramCached: List<StreamSource>
+): List<StreamSource> =
+    if (telegramCached.isEmpty()) streams
+    else (streams + telegramCached).distinctBy(::providerScopedStreamIdentity)
+
 internal fun providerScopedStreamIdentity(stream: StreamSource): String {
     return listOf(
         stream.addonId.trim(),
@@ -2371,13 +2383,23 @@ class StreamRepository @Inject constructor(
                 addonRevision = integrationCacheRevision(streamAddons)
             )
             val cacheKey = if (sequential) "$baseCacheKey:seq" else baseCacheKey
+            val telegramConnected = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
+            // "Search Telegram only on click" (Telegram settings): list only what an earlier search
+            // found; the details screen offers the search itself as a source row. Worked out before
+            // the saved-list checks below: every list returned — saved, stale or addon-less — carries
+            // what a click-search already found, or reopening Sources dropped it (PR #757 review).
+            val telegramOnClick = telegramConnected && telegramSourceResolver.searchOnClickOnly()
+            val telegramEnabled = telegramConnected && !telegramOnClick
+            val telegramCached = if (telegramOnClick) {
+                telegramSourceResolver.cachedResults(title = title, imdbId = imdbId)
+            } else emptyList()
             if (!forceRefresh) {
                 var warmCache: CachedStreamResult? = null
                 synchronized(streamResultCache) {
                     val cached = streamResultCache[cacheKey]
                     if (cached != null) {
                         if (isStreamCacheFresh(cached)) {
-                            trySend(ProgressiveStreamResult(cached.result.streams, cached.result.subtitles, 1, 1, true))
+                            trySend(ProgressiveStreamResult(withCachedTelegramSources(cached.result.streams, telegramCached), cached.result.subtitles, 1, 1, true))
                             close()
                             return@launch
                         }
@@ -2395,7 +2417,7 @@ class StreamRepository @Inject constructor(
                     synchronized(streamResultCache) { streamResultCache[cacheKey] = cached }
                     trySend(
                         ProgressiveStreamResult(
-                            streams = cached.result.streams,
+                            streams = withCachedTelegramSources(cached.result.streams, telegramCached),
                             subtitles = cached.result.subtitles,
                             completedAddons = 1,
                             totalAddons = 1,
@@ -2410,14 +2432,6 @@ class StreamRepository @Inject constructor(
             }
 
             val prioritizedAddons = prioritizeStreamingAddons(streamAddons)
-            val telegramConnected = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
-            // "Search Telegram only on click" (Telegram settings): list only what an earlier search
-            // found; the details screen offers the search itself as a source row.
-            val telegramOnClick = telegramConnected && telegramSourceResolver.searchOnClickOnly()
-            val telegramEnabled = telegramConnected && !telegramOnClick
-            val telegramCached = if (telegramOnClick) {
-                telegramSourceResolver.cachedResults(title = title, imdbId = imdbId)
-            } else emptyList()
             if (prioritizedAddons.isEmpty() && !telegramEnabled) {
                 Log.w(
                     TAG,
@@ -2431,19 +2445,19 @@ class StreamRepository @Inject constructor(
                 if (!forceRefresh) {
                     val cached = synchronized(streamResultCache) { streamResultCache[cacheKey] }
                     if (cached != null) {
-                        trySend(ProgressiveStreamResult(cached.result.streams, cached.result.subtitles, 1, 1, true))
+                        trySend(ProgressiveStreamResult(withCachedTelegramSources(cached.result.streams, telegramCached), cached.result.subtitles, 1, 1, true))
                         close()
                         return@launch
                     }
                     val persisted = loadPersistedStreamResult(profileId = profileId, cacheKey = cacheKey)
                     if (persisted != null) {
                         synchronized(streamResultCache) { streamResultCache[cacheKey] = persisted }
-                        trySend(ProgressiveStreamResult(persisted.result.streams, persisted.result.subtitles, 1, 1, true))
+                        trySend(ProgressiveStreamResult(withCachedTelegramSources(persisted.result.streams, telegramCached), persisted.result.subtitles, 1, 1, true))
                         close()
                         return@launch
                     }
                 }
-                trySend(ProgressiveStreamResult(emptyList(), emptyList(), 0, 0, true))
+                trySend(ProgressiveStreamResult(telegramCached, emptyList(), 0, 0, true))
                 close()
                 return@launch
             }
@@ -3067,13 +3081,23 @@ class StreamRepository @Inject constructor(
                 addonRevision = integrationCacheRevision(streamAddons)
             )
             val cacheKey = if (sequential) "$baseCacheKey:seq" else baseCacheKey
+            val telegramConnected = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
+            // "Search Telegram only on click" (Telegram settings): list only what an earlier search
+            // found; the details screen offers the search itself as a source row. Worked out before
+            // the saved-list checks below: every list returned — saved, stale or addon-less — carries
+            // what a click-search already found, or reopening Sources dropped it (PR #757 review).
+            val telegramOnClick = telegramConnected && telegramSourceResolver.searchOnClickOnly()
+            val telegramEnabled = telegramConnected && !telegramOnClick
+            val telegramCached = if (telegramOnClick) {
+                telegramSourceResolver.cachedResults(title = title, season = season, episode = episode, imdbId = imdbId)
+            } else emptyList()
             if (!forceRefresh) {
                 var staleCache: CachedStreamResult? = null
                 synchronized(streamResultCache) {
                     val cached = streamResultCache[cacheKey]
                     if (cached != null) {
                         if (isStreamCacheFresh(cached)) {
-                            trySend(ProgressiveStreamResult(cached.result.streams, cached.result.subtitles, 1, 1, true))
+                            trySend(ProgressiveStreamResult(withCachedTelegramSources(cached.result.streams, telegramCached), cached.result.subtitles, 1, 1, true))
                             close()
                             return@launch
                         }
@@ -3083,7 +3107,7 @@ class StreamRepository @Inject constructor(
                 staleCache?.let { cached ->
                     trySend(
                         ProgressiveStreamResult(
-                            streams = cached.result.streams,
+                            streams = withCachedTelegramSources(cached.result.streams, telegramCached),
                             subtitles = cached.result.subtitles,
                             completedAddons = 0,
                             totalAddons = 1,
@@ -3094,14 +3118,6 @@ class StreamRepository @Inject constructor(
             }
 
             val prioritizedAddons = prioritizeStreamingAddons(streamAddons)
-            val telegramConnected = telegramSourceResolver.isEnabled() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.TELEGRAM)
-            // "Search Telegram only on click" (Telegram settings): list only what an earlier search
-            // found; the details screen offers the search itself as a source row.
-            val telegramOnClick = telegramConnected && telegramSourceResolver.searchOnClickOnly()
-            val telegramEnabled = telegramConnected && !telegramOnClick
-            val telegramCached = if (telegramOnClick) {
-                telegramSourceResolver.cachedResults(title = title, season = season, episode = episode, imdbId = imdbId)
-            } else emptyList()
             if (prioritizedAddons.isEmpty() && !telegramEnabled) {
                 Log.w(
                     TAG,
@@ -3115,12 +3131,12 @@ class StreamRepository @Inject constructor(
                 if (!forceRefresh) {
                     val cached = synchronized(streamResultCache) { streamResultCache[cacheKey] }
                     if (cached != null) {
-                        trySend(ProgressiveStreamResult(cached.result.streams, cached.result.subtitles, 1, 1, true))
+                        trySend(ProgressiveStreamResult(withCachedTelegramSources(cached.result.streams, telegramCached), cached.result.subtitles, 1, 1, true))
                         close()
                         return@launch
                     }
                 }
-                trySend(ProgressiveStreamResult(emptyList(), emptyList(), 0, 0, true))
+                trySend(ProgressiveStreamResult(telegramCached, emptyList(), 0, 0, true))
                 close()
                 return@launch
             }

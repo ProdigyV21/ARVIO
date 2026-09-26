@@ -16,7 +16,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -60,8 +59,7 @@ class TelegramSourceResolver @Inject constructor(
         private const val CACHE_TTL_LONG_MS  = 24 * 60 * 60 * 1_000L
     }
 
-    private data class CacheEntry(val results: List<StreamSource>, val expiresAt: Long)
-    private val cache = ConcurrentHashMap<String, CacheEntry>()
+    private val cache = TelegramResultCache<StreamSource>()
 
     /**
      * A running lookup: [found] holds every matching source so far (whole list, replaced as it
@@ -94,10 +92,7 @@ class TelegramSourceResolver @Inject constructor(
 
     /** What an earlier completed lookup found for this title/episode, without searching. */
     fun cachedResults(title: String, season: Int? = null, episode: Int? = null, imdbId: String = ""): List<StreamSource> =
-        cache[cacheKey(imdbId, title, season, episode)]
-            ?.takeIf { System.currentTimeMillis() < it.expiresAt }
-            ?.results
-            .orEmpty()
+        cache.get(cacheKey(imdbId, title, season, episode)).orEmpty()
 
     /**
      * Playback is starting: stop every running search (a source list the user has already chosen
@@ -153,9 +148,7 @@ class TelegramSourceResolver @Inject constructor(
         if (!repository.isAuthenticated()) return TelegramResolution(emptyList(), complete = true)
 
         val key = cacheKey(imdbId, title, season, episode)
-        cache[key]?.let { entry ->
-            if (System.currentTimeMillis() < entry.expiresAt) return TelegramResolution(entry.results, complete = true)
-        }
+        cache.get(key)?.let { return TelegramResolution(it, complete = true) }
 
         val search = inFlight.compute(key) { _, running ->
             running?.takeIf { it.result.isActive } ?: run {
@@ -193,25 +186,22 @@ class TelegramSourceResolver @Inject constructor(
         found: MutableStateFlow<List<StreamSource>>
     ): TelegramResolution = try {
         val startedAt = System.currentTimeMillis()
-        val finished = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+        // null: the whole lookup ran out of time; false: it ended but a request went unanswered.
+        val complete = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
             resolveInternal(title, year, season, episode, imdbId, isMovie, found)
-        } != null
+        } ?: false
         val results = found.value
         Log.i(
             TAG,
             "Telegram lookup '$title'${season?.let { " S${it}E$episode" }.orEmpty()}: " +
-                "${results.size} source(s)" + (if (finished) "" else ", timed out") +
+                "${results.size} source(s)" + (if (complete) "" else ", incomplete (Telegram did not answer in time)") +
                 " after ${System.currentTimeMillis() - startedAt}ms"
         )
-        if (!finished) {
-            // Not cached: a timeout says Telegram was slow, not that the groups have nothing.
-            // Caching it hid the sources for hours (2h for a series). What was found is kept.
-            if (results.isEmpty()) notifyUser(context.getString(R.string.telegram_search_timed_out))
-            TelegramResolution(results, complete = false)
-        } else {
-            cache[key] = CacheEntry(results, System.currentTimeMillis() + cacheTtl(year, isMovie))
-            TelegramResolution(results, complete = true)
-        }
+        // Not cached when incomplete: a timeout says Telegram was slow, not that the groups have
+        // nothing — caching it hid the sources for hours (2h for a series). What was found is kept.
+        cache.put(key, results, complete, cacheTtl(year, isMovie))
+        if (!complete && results.isEmpty()) notifyUser(context.getString(R.string.telegram_search_timed_out))
+        TelegramResolution(results, complete)
     } catch (e: TelegramApiException) {
         Log.w(TAG, "Telegram API error for '$title': ${e.message}")
         if (found.value.isEmpty()) notifyUser(friendlyError(e.message))
@@ -249,7 +239,7 @@ class TelegramSourceResolver @Inject constructor(
         imdbId: String,
         isMovie: Boolean,
         found: MutableStateFlow<List<StreamSource>>
-    ) {
+    ): Boolean {
         val excludedIds = repository.getExcludedChatIds().first()
         // Read content language from SharedPreferences (same store SettingsViewModel writes to).
         // Avoids a DI cycle: StreamRepository → TelegramSourceResolver → MediaRepository → StreamRepository.
@@ -269,70 +259,46 @@ class TelegramSourceResolver @Inject constructor(
             matcher.buildMovieQueries(title, year, localizedTitle, englishTitle, originalTitle)
         val (core, fallback) = splitCoreQueries(queries, season, episode)
 
-        val seen = mutableSetOf<Pair<String, Long>>()
-        // Matching sources by file, built once: the stream URL registers the file with the proxy.
-        val matched = LinkedHashMap<Pair<String, Long>, StreamSource>()
+        // Stream sources by file, built once: the stream URL registers the file with the proxy.
+        val sources = HashMap<Pair<String, Long>, StreamSource>()
         val searchStartedAt = System.currentTimeMillis()
 
-        fun matchesRequest(msg: TelegramVideoMessage): Boolean = matcher.score(
-            fileName = msg.fileName,
-            caption = msg.caption,
-            title = title,
-            localizedTitle = localizedTitle,
-            englishTitle = englishTitle,
-            originalTitle = originalTitle,
-            year = year,
-            season = season,
-            episode = episode
-        ) >= SCORE_THRESHOLD
-
-        suspend fun searchBatch(batch: List<String>) {
-            val messages = coroutineScope {
-                batch.map { query ->
-                    async {
-                        try {
-                            repository.searchVideoMessages(query, MAX_RESULTS)
-                                .filter { it.chatId !in excludedIds }
-                        } catch (e: TelegramApiException) {
-                            throw e
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Search failed for '$query'", e)
-                            emptyList()
-                        }
-                    }
-                }.awaitAll().flatten()
-            }
-            var grew = false
-            for (msg in messages) {
-                val fileKey = msg.fileName to msg.fileSize
-                if (!seen.add(fileKey) || !matchesRequest(msg)) continue
-                matched[fileKey] = toStreamSource(msg)
-                grew = true
-            }
+        val outcome = TelegramPhraseSearch(
+            fetchPage = { query, filter -> repository.searchPage(query, filter, MAX_RESULTS) },
+            parallelQueries = MAX_PARALLEL_QUERIES
+        ).run(
+            core = core,
+            fallback = fallback,
+            keep = { it.chatId !in excludedIds },
+            matches = { msg ->
+                matcher.score(
+                    fileName = msg.fileName,
+                    caption = msg.caption,
+                    title = title,
+                    localizedTitle = localizedTitle,
+                    englishTitle = englishTitle,
+                    originalTitle = originalTitle,
+                    year = year,
+                    season = season,
+                    episode = episode
+                ) >= SCORE_THRESHOLD
+            },
             // Shown as soon as they are found; the lookup keeps going.
-            if (grew) found.value = sortSources(matched.values, langCode)
-        }
-
-        var sent = 0
-        for (batch in core.chunked(MAX_PARALLEL_QUERIES)) {
-            searchBatch(batch)
-            sent += batch.size
-        }
-        if (matched.isEmpty()) {
-            for (batch in fallback.chunked(MAX_PARALLEL_QUERIES)) {
-                searchBatch(batch)
-                sent += batch.size
-                if (matched.isNotEmpty()) break
+            onMatchedGrew = { matched ->
+                found.value = sortSources(
+                    matched.map { msg -> sources.getOrPut(msg.fileName to msg.fileSize) { toStreamSource(msg) } },
+                    langCode
+                )
             }
-        }
+        )
         Log.i(
             TAG,
-            "Telegram search: $sent of ${queries.size} phrasings sent (${core.size} core, " +
-                "$MAX_PARALLEL_QUERIES at a time) in ${System.currentTimeMillis() - searchStartedAt}ms, " +
-                "${seen.size} distinct files, ${matched.size} matching"
+            "Telegram search: ${outcome.phrasingsSent} of ${queries.size} phrasings sent (${core.size} core, " +
+                "$MAX_PARALLEL_QUERIES at a time, ${outcome.requestsSent} requests) in " +
+                "${System.currentTimeMillis() - searchStartedAt}ms, ${outcome.distinctFiles} distinct files, " +
+                "${outcome.matched.size} matching" + if (outcome.complete) "" else ", some requests unanswered"
         )
+        return outcome.complete
     }
 
     private fun toStreamSource(msg: TelegramVideoMessage): StreamSource {

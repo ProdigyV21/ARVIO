@@ -191,74 +191,63 @@ class TelegramRepository @Inject constructor(
     }
 
     /**
-     * Searches globally across all chats (equivalent to Telethon's iter_messages(None, ...)) and
-     * keeps the video files.
-     *
-     * ONE request, with no type filter; videos and video documents are picked out below. It used to
-     * be two per phrase (Document, then Video), and global search is exactly what Telegram rate-
-     * limits: one episode lookup sent 26 of them, most of which TDLib then held back until the
-     * caller gave up (Special Ops S1E1, Sept 2026: 8 of 9 requests unanswered after 10s).
+     * One page of a global search across all chats (equivalent to Telethon's iter_messages(None, ...)),
+     * keeping the video files. [TelegramPhraseSearch] decides how many pages and which filters a
+     * phrasing needs; see there for why global search is kept to as few requests as possible.
      */
-    suspend fun searchVideoMessages(
+    suspend fun searchPage(
         query: String,
-        limit: Int = 50
-    ): List<TelegramVideoMessage> {
-        val filters = listOf<TdApi.SearchMessagesFilter?>(null)
-        val seen = mutableSetOf<Pair<String, Long>>() // dedupe by (fileName, fileSize)
-        val results = mutableListOf<TelegramVideoMessage>()
-
-        for (filter in filters) {
-            // Global search answers in 1–9s (Special Ops S1E1, Sept 2026: "פרק 1" 7.9s,
-            // "lioness s01e01" 8.9s); the default 10s cut those off on a slower second try.
-            val result = client.sendRequest(TdApi.SearchMessages().also { req ->
-                req.chatList = null  // null = search all chats (like Telethon's iter_messages(None))
-                req.query = query
-                req.offset = ""
-                req.limit = limit
-                req.filter = filter
-            }, timeoutMs = SEARCH_REQUEST_TIMEOUT_MS)
-            val found = (result as? TdApi.FoundMessages) ?: continue
-
-            for (msg in found.messages) {
-                when (val content = msg.content) {
-                    is TdApi.MessageDocument -> {
-                        val mime = content.document.mimeType
-                        if (!mime.startsWith("video/") && mime != "application/x-matroska") continue
-                        val key = content.document.fileName to content.document.document.size
-                        if (seen.add(key)) {
-                            results.add(TelegramVideoMessage(
-                                messageId = msg.id,
-                                chatId = msg.chatId,
-                                fileName = content.document.fileName,
-                                fileId = content.document.document.id,
-                                fileSize = content.document.document.size,
-                                duration = 0,
-                                mimeType = mime,
-                                caption = content.caption.text
-                            ))
-                        }
-                    }
-                    is TdApi.MessageVideo -> {
-                        val key = content.video.fileName to content.video.video.size
-                        if (seen.add(key)) {
-                            results.add(TelegramVideoMessage(
-                                messageId = msg.id,
-                                chatId = msg.chatId,
-                                fileName = content.video.fileName,
-                                fileId = content.video.video.id,
-                                fileSize = content.video.video.size,
-                                duration = content.video.duration,
-                                mimeType = content.video.mimeType,
-                                caption = content.caption.text
-                            ))
-                        }
-                    }
-                    else -> continue
-                }
+        filter: TelegramSearchFilter,
+        limit: Int
+    ): TelegramSearchPage {
+        // Global search answers in 1–9s (Special Ops S1E1, Sept 2026: "פרק 1" 7.9s,
+        // "lioness s01e01" 8.9s); the default 10s cut those off on a slower second try.
+        val result = client.sendRequest(TdApi.SearchMessages().also { req ->
+            req.chatList = null  // null = search all chats (like Telethon's iter_messages(None))
+            req.query = query
+            req.offset = ""
+            req.limit = limit
+            req.filter = when (filter) {
+                TelegramSearchFilter.ALL -> null
+                TelegramSearchFilter.VIDEO -> TdApi.SearchMessagesFilterVideo()
+                TelegramSearchFilter.DOCUMENT -> TdApi.SearchMessagesFilterDocument()
             }
-        }
+        }, timeoutMs = SEARCH_REQUEST_TIMEOUT_MS)
+        // No answer (timeout, or TDLib aborted it) is not an empty result — the caller must not
+        // treat the lookup as complete.
+        val found = result as? TdApi.FoundMessages
+            ?: return TelegramSearchPage(emptyList(), answered = false, hasMore = false)
 
-        return results
+        val videos = found.messages.mapNotNull { msg ->
+            when (val content = msg.content) {
+                is TdApi.MessageDocument -> {
+                    val mime = content.document.mimeType
+                    if (!mime.startsWith("video/") && mime != "application/x-matroska") return@mapNotNull null
+                    TelegramVideoMessage(
+                        messageId = msg.id,
+                        chatId = msg.chatId,
+                        fileName = content.document.fileName,
+                        fileId = content.document.document.id,
+                        fileSize = content.document.document.size,
+                        duration = 0,
+                        mimeType = mime,
+                        caption = content.caption.text
+                    )
+                }
+                is TdApi.MessageVideo -> TelegramVideoMessage(
+                    messageId = msg.id,
+                    chatId = msg.chatId,
+                    fileName = content.video.fileName,
+                    fileId = content.video.video.id,
+                    fileSize = content.video.video.size,
+                    duration = content.video.duration,
+                    mimeType = content.video.mimeType,
+                    caption = content.caption.text
+                )
+                else -> null
+            }
+        }.distinctBy { it.fileName to it.fileSize }
+        return TelegramSearchPage(videos, answered = true, hasMore = found.nextOffset.isNotEmpty())
     }
 
     fun getStreamUrl(fileId: Int): String = proxy.getUrl(fileId)
