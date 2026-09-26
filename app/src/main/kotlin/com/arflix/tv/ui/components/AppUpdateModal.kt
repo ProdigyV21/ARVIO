@@ -1,14 +1,19 @@
 package com.arflix.tv.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,26 +22,33 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.foundation.focusable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +65,7 @@ import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.updater.UpdateStatus
+import kotlinx.coroutines.launch
 
 private data class ActionButtonConfig(
     val label: String,
@@ -61,7 +74,21 @@ private data class ActionButtonConfig(
     val enabled: Boolean = true
 )
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalTvFoundationApi::class)
+// Real release notes are 3-15 KB; this only guards layout time against a runaway release body.
+private const val MAX_UPDATE_NOTES_CHARS = 20_000
+
+/**
+ * D-pad scroll step for the release notes. Returns null when the notes cannot move in that
+ * direction, so the key falls through to the existing focus handling.
+ */
+internal fun updateNotesScrollDelta(scrollDown: Boolean, value: Int, maxValue: Int, stepPx: Float): Float? =
+    when {
+        scrollDown && value < maxValue -> stepPx
+        !scrollDown && value > 0 -> -stepPx
+        else -> null
+    }
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalTvFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppUpdateModal(
     status: UpdateStatus,
@@ -115,6 +142,10 @@ fun AppUpdateModal(
 
     var focusedIndex by remember(buttons) { mutableIntStateOf(buttons.lastIndex) }
     val focusRequester = remember { FocusRequester() }
+    val notesScrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val notesScrollStepPx = with(LocalDensity.current) { 80.dp.toPx() }
+    val showNotes = status is UpdateStatus.UpdateAvailable && status.update.notes.isNotBlank()
 
     LaunchedEffect(Unit) {
         runCatching { focusRequester.requestFocus() }
@@ -158,6 +189,25 @@ fun AppUpdateModal(
                             Key.Enter, Key.DirectionCenter -> {
                                 buttons.getOrNull(focusedIndex)?.action?.invoke()
                                 true
+                            }
+                            Key.DirectionUp, Key.DirectionDown -> {
+                                val delta = if (showNotes) {
+                                    updateNotesScrollDelta(
+                                        scrollDown = event.key == Key.DirectionDown,
+                                        value = notesScrollState.value,
+                                        maxValue = notesScrollState.maxValue,
+                                        stepPx = notesScrollStepPx
+                                    )
+                                } else null
+                                if (delta != null) {
+                                    // A held key repeats faster than the animation; jump instead of restarting it.
+                                    val repeating = event.nativeKeyEvent.repeatCount > 0
+                                    scope.launch {
+                                        if (repeating) notesScrollState.scrollBy(delta)
+                                        else notesScrollState.animateScrollBy(delta, tween(durationMillis = 100))
+                                    }
+                                }
+                                delta != null
                             }
                             else -> false
                         }
@@ -227,12 +277,38 @@ fun AppUpdateModal(
                         androidx.compose.material3.Text(stringResource(R.string.update_msg_installer_hint), style = ArflixTypography.body, color = TextPrimary)
                     }
                     is UpdateStatus.UpdateAvailable -> {
-                        if (status.update.notes.isNotBlank()) {
+                        if (showNotes) {
+                            // Only the notes scroll; title and buttons stay on screen on short displays.
                             androidx.compose.material3.Text(
-                                text = status.update.notes.take(900),
+                                text = status.update.notes.take(MAX_UPDATE_NOTES_CHARS),
                                 style = ArflixTypography.caption.copy(lineHeight = 18.sp),
                                 color = TextSecondary,
-                                modifier = Modifier.heightIn(max = 260.dp)
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .heightIn(max = 260.dp)
+                                    .drawWithContent {
+                                        drawContent()
+                                        // Fade the cut edge so it is visible that the text goes on.
+                                        val fade = 24.dp.toPx().coerceAtMost(size.height / 2f)
+                                        if (notesScrollState.canScrollBackward) {
+                                            drawRect(
+                                                brush = Brush.verticalGradient(listOf(BackgroundElevated, Color.Transparent), endY = fade),
+                                                size = Size(size.width, fade)
+                                            )
+                                        }
+                                        if (notesScrollState.canScrollForward) {
+                                            drawRect(
+                                                brush = Brush.verticalGradient(
+                                                    listOf(Color.Transparent, BackgroundElevated),
+                                                    startY = size.height - fade,
+                                                    endY = size.height
+                                                ),
+                                                topLeft = Offset(0f, size.height - fade),
+                                                size = Size(size.width, fade)
+                                            )
+                                        }
+                                    }
+                                    .verticalScroll(notesScrollState)
                             )
                         }
                     }
@@ -241,7 +317,11 @@ fun AppUpdateModal(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Wraps on narrow phones so the last (primary) button is never squeezed off.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     buttons.forEachIndexed { index, btn ->
                         UpdateActionButton(
                             label = btn.label,
@@ -273,7 +353,8 @@ private fun ModalScrim(
                 interactionSource = scrimInteraction,
                 indication = null,
                 onClick = onDismiss
-            ),
+            )
+            .padding(vertical = 24.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
