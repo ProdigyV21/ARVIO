@@ -22,6 +22,15 @@ interface StreamApi {
         @Url url: String
     ): StremioManifestResponse
 
+    /**
+     * Fetch an `addon_catalog` resource: a list of addons, each with its full manifest.
+     * URL format: https://addon.example.com/addon_catalog/<type>/<id>.json
+     */
+    @GET
+    suspend fun getAddonCollection(
+        @Url url: String
+    ): StremioAddonCollectionResponse
+
     // ========== Generic Stremio Addon ==========
 
     @GET
@@ -148,6 +157,29 @@ data class StremioAddonBehaviorHints(
     val p2p: Boolean? = null,
     val configurable: Boolean? = null,
     val configurationRequired: Boolean? = null
+)
+
+// ========== Stremio Addon Catalog Models ==========
+
+data class StremioAddonCollectionResponse(
+    val addons: List<StremioAddonDescriptor>? = null
+)
+
+/** One entry of an `addon_catalog` response. Every field is optional: entries are third-party. */
+data class StremioAddonDescriptor(
+    val transportUrl: String? = null,
+    val transportName: String? = null,
+    val manifest: StremioAddonDescriptorManifest? = null
+)
+
+data class StremioAddonDescriptorManifest(
+    val id: String? = null,
+    val name: String? = null,
+    val version: String? = null,
+    val description: String? = null,
+    val logo: String? = null,
+    val types: List<String?>? = null,
+    val behaviorHints: StremioAddonBehaviorHints? = null
 )
 
 // ========== Stremio Stream Models ==========

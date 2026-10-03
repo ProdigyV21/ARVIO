@@ -77,7 +77,13 @@ internal val AddonSetupRequiredColor = Color(0xFFF59E0B)
 /** The addon's own logo from its manifest, or the generic addon icon when it has none. */
 @Composable
 internal fun AddonLogo(addon: Addon, size: Dp, fallbackTint: Color, modifier: Modifier = Modifier) {
-    val logo = addon.logo?.takeIf { it.isNotBlank() }
+    AddonLogo(logoUrl = addon.logo, size = size, fallbackTint = fallbackTint, modifier = modifier)
+}
+
+/** The logo at [logoUrl], or the generic addon icon when there is none or it fails to load. */
+@Composable
+internal fun AddonLogo(logoUrl: String?, size: Dp, fallbackTint: Color, modifier: Modifier = Modifier) {
+    val logo = logoUrl?.takeIf { it.isNotBlank() }
     var failed by remember(logo) { mutableStateOf(false) }
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
         if (logo == null || failed) {
@@ -115,7 +121,7 @@ internal fun AddonSetupRequiredChip() {
     }
 }
 
-private data class DialogOption(val label: String, val primary: Boolean, val onClick: () -> Unit)
+internal data class DialogOption(val label: String, val primary: Boolean, val onClick: () -> Unit)
 
 /**
  * Confirms an addon install. A link opened from a website always lands here; so does an
@@ -214,7 +220,7 @@ internal fun AddonInstallDialog(
 /** Shows an addon's settings page as a QR code, for TVs without a usable browser. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun AddonConfigureQrDialog(addon: Addon, url: String, onDismiss: () -> Unit) {
+internal fun AddonConfigureQrDialog(addonName: String, url: String, onDismiss: () -> Unit) {
     // Wide and with a modest QR code, so title, code, hint and button fit a 540 dp tall TV.
     AddonDialogFrame(
         onDismiss = onDismiss,
@@ -222,7 +228,7 @@ internal fun AddonConfigureQrDialog(addon: Addon, url: String, onDismiss: () -> 
         options = listOf(DialogOption(stringResource(R.string.close), true, onDismiss))
     ) {
         Text(
-            text = stringResource(R.string.settings_addon_configure_qr_title, addon.name),
+            text = stringResource(R.string.settings_addon_configure_qr_title, addonName),
             style = ArflixTypography.sectionTitle,
             color = TextPrimary
         )
@@ -260,7 +266,7 @@ internal fun AddonConfigureQrDialog(addon: Addon, url: String, onDismiss: () -> 
 /** Dialog shell with a vertical list of buttons that works with touch and with the D-pad. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun AddonDialogFrame(
+internal fun AddonDialogFrame(
     onDismiss: () -> Unit,
     options: List<DialogOption>,
     tvWidth: Dp = 440.dp,

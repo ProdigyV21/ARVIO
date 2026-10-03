@@ -103,6 +103,7 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.CheckCircle
@@ -667,6 +668,10 @@ fun SettingsScreen(
     }
     // TV only: the addon whose settings page is shown as a QR code.
     var addonConfigureTarget by remember { mutableStateOf<com.arflix.tv.data.model.Addon?>(null) }
+    var showCommunityAddons by remember { mutableStateOf(false) }
+    LaunchedEffect(showCommunityAddons) {
+        if (showCommunityAddons) viewModel.loadCommunityAddons()
+    }
 
     // Input modal states
     var showCustomAddonInput by remember { mutableStateOf(false) }
@@ -756,7 +761,7 @@ fun SettingsScreen(
             "stream_integrations" -> uiState.streamProviderItems.size
             "home_server" -> uiState.homeServerConnections.size + 3
             "catalogs" -> uiState.catalogs.size + 2 // Add + Import + Built-in collections toggle + catalogs
-            "stremio" -> stremioAddons.size + 1 // rows + refresh + add button
+            "stremio" -> stremioAddons.size + 2 // rows + refresh + community + add button
             "plugins" -> pluginsMaxIndex
             "accounts" -> 16 // Includes About & Credits.
             else -> 0
@@ -983,6 +988,7 @@ fun SettingsScreen(
 
     val hasBlockingModal =
         showCustomAddonInput ||
+        showCommunityAddons ||
         showIptvInput ||
         showStalkerInput ||
         showStalkerRename ||
@@ -1730,6 +1736,9 @@ fun SettingsScreen(
                                                 contentFocusIndex == stremioAddons.size -> {
                                                     viewModel.refreshAddons()
                                                 }
+                                                contentFocusIndex == stremioAddons.size + 1 -> {
+                                                    showCommunityAddons = true
+                                                }
                                                 else -> {
                                                     showCustomAddonInput = true
                                                 }
@@ -1896,6 +1905,7 @@ fun SettingsScreen(
                     showPlexHomeServerInput = true
                 },
                 onAddCustomAddonClick = { showCustomAddonInput = true },
+                onBrowseCommunityAddonsClick = { showCommunityAddons = true },
                 openCustomUserAgentDialog = { showCustomUserAgentDialog = true },
                 onNavigateToTelegram = onNavigateToTelegramSettings,
                 onDisconnectCloud = { showCloudDisconnectConfirm = true },
@@ -2420,6 +2430,7 @@ fun SettingsScreen(
                             onDeleteAddon = { viewModel.removeAddon(it) },
                             onConfigureAddon = { addonConfigureTarget = it },
                             onAddCustomAddon = { showCustomAddonInput = true },
+                            onBrowseCommunityAddons = { showCommunityAddons = true },
                             onRefreshAddons = { viewModel.refreshAddons() }
                         )
                         "plugins" -> {
@@ -2858,11 +2869,41 @@ fun SettingsScreen(
             )
         }
 
+        if (showCommunityAddons) {
+            CommunityAddonsBrowser(
+                addons = uiState.communityAddons,
+                installedAddons = stremioAddons,
+                isLoading = uiState.isCommunityAddonsLoading,
+                failed = uiState.communityAddonsFailed,
+                busyUrls = uiState.communityAddonBusyUrls,
+                onRetry = { viewModel.loadCommunityAddons(forceRefresh = true) },
+                onInstall = viewModel::installCommunityAddon,
+                onUninstall = viewModel::uninstallCommunityAddon,
+                onOpenUrl = { openExternalUrl(context, it) },
+                onDismiss = { showCommunityAddons = false },
+                // The browser is its own window, so the screen's toast would be hidden behind it.
+                overlay = {
+                    uiState.toastMessage?.let { message ->
+                        Toast(
+                            message = message.localizedText(),
+                            type = when (uiState.toastType) {
+                                ToastType.SUCCESS -> ComponentToastType.SUCCESS
+                                ToastType.ERROR -> ComponentToastType.ERROR
+                                ToastType.INFO -> ComponentToastType.INFO
+                            },
+                            isVisible = true,
+                            onDismiss = { viewModel.dismissToast() }
+                        )
+                    }
+                }
+            )
+        }
+
         val configureTarget = addonConfigureTarget
         val configureTargetUrl = configureTarget?.settingsPageUrl
         if (configureTarget != null && configureTargetUrl != null) {
             AddonConfigureQrDialog(
-                addon = configureTarget,
+                addonName = configureTarget.name,
                 url = configureTargetUrl,
                 onDismiss = { addonConfigureTarget = null }
             )
@@ -5022,6 +5063,7 @@ private fun MobileSettingsLayout(
     onConnectHomeServerClick: () -> Unit,
     onConnectPlexHomeServerClick: () -> Unit,
     onAddCustomAddonClick: () -> Unit,
+    onBrowseCommunityAddonsClick: () -> Unit,
     openCustomUserAgentDialog: () -> Unit = {},
     onNavigateToTelegram: () -> Unit = {},
     onDisconnectCloud: () -> Unit = {},
@@ -5280,6 +5322,7 @@ private fun MobileSettingsLayout(
                     onConnectHomeServerClick = onConnectHomeServerClick,
                     onConnectPlexHomeServerClick = onConnectPlexHomeServerClick,
                     onAddCustomAddonClick = onAddCustomAddonClick,
+                    onBrowseCommunityAddonsClick = onBrowseCommunityAddonsClick,
                     openCustomUserAgentDialog = openCustomUserAgentDialog,
                     onConnectTrakt = { viewModel.startTraktAuth() },
                     onCancelTrakt = { viewModel.cancelTraktAuth() },
@@ -5534,6 +5577,7 @@ private fun MobileSettingsSubPage(
     onConnectHomeServerClick: () -> Unit,
     onConnectPlexHomeServerClick: () -> Unit,
     onAddCustomAddonClick: () -> Unit,
+    onBrowseCommunityAddonsClick: () -> Unit,
     openCustomUserAgentDialog: () -> Unit = {},
     // Tracking integrations
     onConnectTrakt: () -> Unit = {},
@@ -6021,6 +6065,7 @@ private fun MobileSettingsSubPage(
                     onToggleAddon = { viewModel.toggleAddon(it) },
                     onDeleteAddon = { viewModel.removeAddon(it) },
                     onAddCustomAddon = onAddCustomAddonClick,
+                    onBrowseCommunityAddons = onBrowseCommunityAddonsClick,
                     onRefreshAddons = { viewModel.refreshAddons() }
                 )
             }
@@ -10067,6 +10112,7 @@ private fun StremioAddonsSettings(
     onDeleteAddon: (String) -> Unit = {},
     onConfigureAddon: (com.arflix.tv.data.model.Addon) -> Unit = {},
     onAddCustomAddon: () -> Unit = {},
+    onBrowseCommunityAddons: () -> Unit = {},
     onRefreshAddons: () -> Unit = {}
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -10091,6 +10137,14 @@ private fun StremioAddonsSettings(
                     onClick = {
                         if (!isRefreshingAddons) onRefreshAddons()
                     }
+                )
+                MobileSettingsRow(
+                    icon = Icons.Default.Explore,
+                    title = stringResource(R.string.settings_community_addons),
+                    subtitle = stringResource(R.string.settings_community_addons_desc),
+                    value = "",
+                    isFocused = false,
+                    onClick = onBrowseCommunityAddons
                 )
                 MobileSettingsRow(
                     icon = Icons.Default.Add,
@@ -10209,9 +10263,25 @@ private fun StremioAddonsSettings(
                 modifier = Modifier
                     .settingsFocusSlot(addons.size + 1)
                     .fillMaxWidth()
-                    .clickable(onClick = onAddCustomAddon)
+                    .clickable(onClick = onBrowseCommunityAddons)
                     .background(if (focusedIndex == addons.size + 1) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                     .border(width = if (focusedIndex == addons.size + 1) 2.dp else 0.dp, color = if (focusedIndex == addons.size + 1) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Default.Explore, contentDescription = null, tint = Pink, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(stringResource(R.string.settings_community_addons), style = ArflixTypography.button, color = Pink)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .settingsFocusSlot(addons.size + 2)
+                    .fillMaxWidth()
+                    .clickable(onClick = onAddCustomAddon)
+                    .background(if (focusedIndex == addons.size + 2) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .border(width = if (focusedIndex == addons.size + 2) 2.dp else 0.dp, color = if (focusedIndex == addons.size + 2) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
