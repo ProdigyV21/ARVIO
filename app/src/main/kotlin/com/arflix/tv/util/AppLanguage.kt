@@ -90,6 +90,8 @@ fun tr(text: String): String {
     if (text.isBlank()) return text
     @StringRes val resId: Int? = when (text.trim()) {
         "Homeserver" -> R.string.library_homeserver_tab
+        "IPTV" -> R.string.library_iptv_tab
+        "Your IPTV provider returned no titles for this category." -> R.string.library_iptv_empty
         "Calendar" -> R.string.library_calendar
         "All watchlists" -> R.string.calendar_all_watchlists
         "ARVIO watchlist" -> R.string.calendar_arvio_watchlist

@@ -549,7 +549,6 @@ fun LiveTvScreen(
     onNavigateToHome: () -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
     onNavigateToWatchlist: () -> Unit = {},
-    onNavigateToVod: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onNavigateToIptvSettings: (() -> Unit)? = null,
     onNavigateToDetails: (com.arflix.tv.data.model.MediaType, Int) -> Unit = { _, _ -> },
@@ -3874,7 +3873,6 @@ fun LiveTvScreen(
                                                 SidebarItem.HOME -> onNavigateToHome()
                                                 SidebarItem.WATCHLIST -> onNavigateToWatchlist()
                                                 SidebarItem.TV -> Unit
-                                                SidebarItem.VOD -> onNavigateToVod()
                                                 SidebarItem.SETTINGS -> onNavigateToSettings()
                                                 null -> Unit
                                             }

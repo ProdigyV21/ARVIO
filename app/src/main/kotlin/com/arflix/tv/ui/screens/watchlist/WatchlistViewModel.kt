@@ -107,6 +107,19 @@ sealed interface WatchlistSourceItem {
         }
     }
 
+    /**
+     * One category of the IPTV provider's VOD catalogue, listed in the Library's
+     * IPTV tab the same way a home server's libraries are.
+     */
+    data class IptvCategory(
+        val categoryId: String,
+        override val title: String,
+        override val subtitle: String? = null
+    ) : WatchlistSourceItem {
+        override val id: String = "iptv_$categoryId"
+        override val displayLabel: String = title
+    }
+
     data class TrackerList(
         val provider: TrackerLibraryProvider,
         val listKey: String,
@@ -847,6 +860,9 @@ class WatchlistViewModel @Inject constructor(
                     }
                 }
             }
+            // The IPTV tab reads the provider catalogue through its own view
+            // model; this one never holds its items.
+            is WatchlistSourceItem.IptvCategory -> Unit
         }
     }
 

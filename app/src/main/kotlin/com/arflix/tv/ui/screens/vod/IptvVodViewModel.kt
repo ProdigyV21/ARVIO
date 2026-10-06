@@ -2,6 +2,7 @@ package com.arflix.tv.ui.screens.vod
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.IptvRepository.IptvVodBrowseCategory
@@ -18,6 +19,14 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
 
+/**
+ * The IPTV VOD catalogue behind the Library's IPTV tab.
+ *
+ * The provider's own movie and series lists, in the provider's own categories,
+ * read through [IptvRepository]'s existing Xtream caches. Browsing lives in
+ * Library next to the home servers; the TV screen stays live-only.
+ */
+
 /** Virtual categories shown above the provider's own categories. */
 internal const val VOD_CATEGORY_ALL = "__all__"
 internal const val VOD_CATEGORY_RECENT = "__recent__"
@@ -25,7 +34,9 @@ internal const val VOD_CATEGORY_RECENT = "__recent__"
 data class IptvVodUiState(
     val isSeries: Boolean = false,
     val isLoading: Boolean = true,
-    val hasSource: Boolean = true,
+    // Only true once a playlist is known to serve VOD, so the tab cannot flash
+    // in and out while that is being decided.
+    val hasSource: Boolean = false,
     val error: String? = null,
     val categories: List<IptvVodBrowseCategory> = emptyList(),
     val categoryCounts: Map<String, Int> = emptyMap(),
@@ -54,13 +65,26 @@ class IptvVodViewModel @Inject constructor(
     val events: SharedFlow<IptvVodEvent> = _events.asSharedFlow()
 
     private var allItems: List<IptvVodBrowseItem> = emptyList()
+    private var started = false
 
     init {
-        load()
+        // Only the cheap question up front: whether a playlist can serve VOD at
+        // all, which is what decides if the Library shows the tab. Reading the
+        // provider's catalogue waits for someone to open it.
+        viewModelScope.launch {
+            val hasSource = runCatching { iptvRepository.hasVodBrowseSource() }.getOrDefault(false)
+            _uiState.value = _uiState.value.copy(hasSource = hasSource, isLoading = false)
+        }
     }
 
+    /**
+     * Chooses which of the provider's two catalogues to show. The Library calls
+     * it when the IPTV tab opens, so the first call is also what reads the
+     * catalogue; returning to an already-loaded tab keeps what is on screen.
+     */
     fun selectTab(series: Boolean) {
-        if (_uiState.value.isSeries == series && !_uiState.value.isLoading) return
+        if (!_uiState.value.hasSource) return
+        if (started && _uiState.value.isSeries == series && !_uiState.value.isLoading) return
         _uiState.value = _uiState.value.copy(
             isSeries = series,
             selectedCategoryId = VOD_CATEGORY_ALL,
@@ -86,6 +110,7 @@ class IptvVodViewModel @Inject constructor(
     }
 
     private fun load() {
+        started = true
         val series = _uiState.value.isSeries
         _uiState.value = _uiState.value.copy(isLoading = true, error = null, items = emptyList())
         viewModelScope.launch {
@@ -148,10 +173,8 @@ class IptvVodViewModel @Inject constructor(
             when {
                 matchId != null -> _events.tryEmit(IptvVodEvent.OpenDetails(mediaType, matchId))
                 !item.isSeries && item.streamUrl != null -> _events.tryEmit(
-                    // Negative synthetic id: never collides with TMDB, and the player
-                    // skips history/scrobbling for ids <= 0.
                     IptvVodEvent.PlayDirect(
-                        mediaId = -(item.key.hashCode() and 0x7fffffff).coerceAtLeast(1),
+                        mediaId = item.syntheticMediaId(),
                         streamUrl = item.streamUrl,
                         title = item.name
                     )
@@ -193,3 +216,22 @@ internal fun cleanIptvTitle(raw: String): String =
         .replace(TRAILING_YEAR, "")
         .replace(MULTI_SPACE, " ")
         .trim(' ', '-', '|', ':', '.')
+
+/**
+ * A stable negative id for an item with no TMDB match. It never collides with a
+ * TMDB id, and the player skips history and scrobbling for ids <= 0.
+ */
+internal fun IptvVodBrowseItem.syntheticMediaId(): Int =
+    -((key.hashCode() and 0x7fffffff).coerceAtLeast(1))
+
+/** Renders an IPTV title in the Library's normal grid, as a [MediaItem]. */
+internal fun IptvVodBrowseItem.toMediaItem(): MediaItem = MediaItem(
+    id = tmdbId?.takeIf { it > 0 } ?: syntheticMediaId(),
+    // The provider's name carries its own prefixes and quality tags; the grid
+    // shows the cleaned title and the raw name stays the matching input.
+    title = cleanIptvTitle(name).ifBlank { name },
+    year = year?.toString().orEmpty(),
+    rating = rating.orEmpty(),
+    mediaType = if (isSeries) MediaType.TV else MediaType.MOVIE,
+    image = posterUrl.orEmpty()
+)
