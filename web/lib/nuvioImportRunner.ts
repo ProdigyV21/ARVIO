@@ -1,10 +1,10 @@
-import { installAddon, normalizeAddons } from "./addons";
+import { installAddon, normalizeAddon, normalizeAddons } from "./addons";
 import type { AuthClient } from "./auth";
 import { defaultCatalogs } from "./catalogs";
 import { pullCloudPayload, saveCloudAddons, saveCloudProfiles, saveCloudSettings } from "./cloud";
 import { mergeImportedCollections, parseCustomCollections } from "./customCollections";
 import {
-  applyHomeCatalogSettings, mergeAddonUrls, newProfileFrom,
+  addonsToInstall, applyHomeCatalogSettings, newProfileFrom,
   type MigrationChoice, type NuvioSnapshot, type ProfileImportSummary
 } from "./nuvioMigration";
 import { profileColors } from "./profiles";
@@ -16,6 +16,13 @@ import type { AppSettings, InstalledAddon, Profile } from "./types";
  * Everything goes through the cloud payload, which is what the free Android and
  * TV apps sync from — so a user who never pays for the web interface still ends
  * up with their addons, collections and profiles on their devices.
+ *
+ * The import owns exactly one field: the profile's catalog list. Everything
+ * else in the account — theme, AI subtitle settings, IPTV playlists — is read
+ * first and handed straight back as the baseline, so `saveCloudSettings` can
+ * see that this session changed nothing there and leaves those fields alone.
+ * A profile whose current state cannot be read is therefore not importable:
+ * writing without that baseline would assert defaults over real data.
  */
 export async function applyNuvioImport(options: {
   auth: AuthClient;
@@ -55,21 +62,42 @@ export async function applyNuvioImport(options: {
     if (!target) continue;
     const summary: ProfileImportSummary = {
       profileName: profile.name, created: target.created, addons: 0, addonsFailed: 0,
-      plugins: profile.plugins.length, collections: 0, catalogSettings: false
+      addonsDisabled: 0, plugins: profile.plugins.length, collections: 0, catalogSettings: false
     };
 
     onProgress?.(`${profile.name}: reading what is already there`);
-    const existing = target.created ? null : await pullCloudPayload(auth, target.id).catch(() => null);
-    const currentAddons = normalizeAddons(existing?.addons ?? []);
-    const currentCatalogs = existing?.settings?.catalogs?.length ? existing.settings.catalogs : defaultCatalogs;
+    // A read failure is not an empty profile. Stop here and write nothing: the
+    // alternative is asserting default settings over an account we cannot see.
+    // A newly created profile is read too — the account-wide settings behind it
+    // (theme, AI key, IPTV) are shared and must survive the same way.
+    let existing;
+    try {
+      existing = await pullCloudPayload(auth, target.id);
+    } catch (failure) {
+      const message = (failure as { message?: unknown } | null)?.message;
+      summary.failed = typeof message === "string" && message ? message : "Could not read this profile from your account";
+      summaries.push(summary);
+      continue;
+    }
+    const currentAddons = normalizeAddons(existing.addons ?? []);
+    // `base` is the account exactly as it stands. It is both what the write is
+    // built from and the baseline it is compared against, which is what keeps
+    // every field except `catalogs` out of the write.
+    const base: AppSettings = { ...baseSettings, ...(existing.settings ?? {}) };
+    if (!Array.isArray(base.catalogs)) base.catalogs = [];
+    const currentCatalogs = base.catalogs.length ? base.catalogs : defaultCatalogs;
 
     // Addons are stored as resolved manifests, so each new URL is fetched once.
     const resolved: InstalledAddon[] = [];
-    for (const url of mergeAddonUrls(currentAddons.map(addon => addon.manifestUrl ?? addon.id), profile.addons)) {
-      onProgress?.(`${profile.name}: installing ${url}`);
+    for (const addon of addonsToInstall(currentAddons.map(entry => entry.manifestUrl ?? entry.id), profile.addons)) {
+      onProgress?.(`${profile.name}: installing ${addon.url}`);
       try {
-        resolved.push(await installAddon(url));
+        const installed = await installAddon(addon.url);
+        // An addon switched off in Nuvio arrives switched off, rather than
+        // turning itself back on in the middle of someone's home screen.
+        resolved.push(addon.enabled ? installed : normalizeAddon({ ...installed, enabled: false })!);
         summary.addons += 1;
+        if (!addon.enabled) summary.addonsDisabled += 1;
       } catch {
         // An addon whose server is down must not abort the rest of the import.
         summary.addonsFailed += 1;
@@ -92,9 +120,9 @@ export async function applyNuvioImport(options: {
     summary.catalogSettings = orderedCatalogs !== nextCatalogs;
 
     onProgress?.(`${profile.name}: saving to your ARVIO account`);
-    const settings: AppSettings = { ...baseSettings, ...(existing?.settings ?? {}), catalogs: orderedCatalogs };
+    const settings: AppSettings = { ...base, catalogs: orderedCatalogs };
     if (resolved.length) await saveCloudAddons(auth, nextAddons, target.id, { changes: undefined });
-    await saveCloudSettings(auth, settings, nextAddons, target.id, profiles, null);
+    await saveCloudSettings(auth, settings, nextAddons, target.id, profiles, base);
     summaries.push(summary);
   }
   return { summaries, profiles };

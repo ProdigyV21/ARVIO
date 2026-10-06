@@ -12,7 +12,7 @@ vm.runInNewContext(code, sandbox);
 const {
   normalizeBackendUrl, parseDiscovery, discoverNuvioBackend, signInToNuvio, fetchNuvioSnapshot,
   buildSnapshot, mapAddonRows, hexToArgb, avatarIdToArvio, defaultChoices, newProfileFrom,
-  summarizePlan, mergeAddonUrls, applyHomeCatalogSettings
+  summarizePlan, addonsToInstall, applyHomeCatalogSettings, profileIdsFromRows, reconcileChoices
 } = sandbox.exports;
 
 const jsonResponse = (body, ok = true, status = 200) => ({ ok, status, json: async () => body });
@@ -187,12 +187,15 @@ test('matches profiles by name and creates the missing ones', () => {
   assert.equal(summarizePlan(snapshot, [{ nuvioProfileId: 2, target: { kind: 'create' } }]).length, 1);
 });
 
-test('only adds addons that are not installed yet', () => {
-  const added = mergeAddonUrls(
+test('only adds addons that are not installed yet, keeping their Nuvio state', () => {
+  const added = addonsToInstall(
     ['https://a.example/manifest.json'],
-    [{ url: 'https://A.example/manifest.json' }, { url: 'https://b.example/manifest.json' }, { url: 'https://b.example/manifest.json' }]
+    [{ url: 'https://A.example/manifest.json', enabled: true },
+     { url: 'https://b.example/manifest.json', enabled: false },
+     { url: 'https://b.example/manifest.json', enabled: true }]
   );
-  same(added, ['https://b.example/manifest.json']);
+  // Whole entries, not URLs: the import needs the enabled flag to carry over.
+  same(added, [{ url: 'https://b.example/manifest.json', enabled: false }]);
 });
 
 test('applies Nuvio row order and hidden rows onto ARVIO catalogs', () => {
@@ -204,4 +207,87 @@ test('applies Nuvio row order and hidden rows onto ARVIO catalogs', () => {
   assert.equal(result.find(c => c.id === 'b').enabled, false);
   // Nothing recognisable means the user's existing order is left alone.
   same(applyHomeCatalogSettings(catalogs, { unrelated: true }), catalogs);
+});
+
+// ── Regression: a failed read is not an empty account (PR #774 review, 4) ──
+
+test('a profile table that fails to load is reported, not treated as empty', async () => {
+  const discovery = { backendUrl: 'https://api.example.com', publishableKey: 'pk' };
+  const snapshot = await fetchNuvioSnapshot(discovery, { accessToken: 't', userId: 'u', email: 'u@e.c' }, async (url) => {
+    if (url.includes('/profiles')) return jsonResponse({ message: 'permission denied' }, false, 403);
+    if (url.includes('/addons')) return jsonResponse([
+      { profile_id: 1, url: 'https://a.example/manifest.json' },
+      { profile_id: 3, url: 'https://c.example/manifest.json' }
+    ]);
+    return jsonResponse([]);
+  });
+  // Profiles 1 and 3 both have content, so both must be offered — building only
+  // profile 1 used to drop everything that belonged to the others.
+  same(snapshot.profiles.map(p => p.profileId), [1, 3]);
+  assert.match(snapshot.warnings.join(' '), /profile list could not be read/);
+
+  // A plugins table that errors is called out rather than passing for "no plugins".
+  const partial = await fetchNuvioSnapshot(discovery, { accessToken: 't', userId: 'u', email: 'u@e.c' }, async (url) => {
+    if (url.includes('/profiles')) return jsonResponse([{ profile_id: 1, name: 'Main' }]);
+    if (url.includes('/plugins')) return jsonResponse({ message: 'nope' }, false, 500);
+    return jsonResponse([]);
+  });
+  assert.match(partial.warnings.join(' '), /plugins/);
+  // A table that answered with nothing is simply empty and says nothing.
+  assert.equal(partial.warnings.some(entry => entry.includes('addons')), false);
+});
+
+test('recovers every profile the sync RPCs answer for when the table is hidden', async () => {
+  const discovery = { backendUrl: 'https://api.example.com', publishableKey: 'pk' };
+  const snapshot = await fetchNuvioSnapshot(discovery, { accessToken: 't', userId: 'u', email: 'u@e.c' }, async (url, init) => {
+    if (url.includes('sync_pull_collections')) {
+      const profileId = JSON.parse(init.body).p_profile_id;
+      // Only profiles 2 and 4 exist on this account.
+      return profileId === 2 || profileId === 4
+        ? jsonResponse([{ collections_json: [{ title: `Set ${profileId}`, folders: [] }] }])
+        : jsonResponse([]);
+    }
+    return jsonResponse([]);
+  });
+  same(snapshot.profiles.map(p => p.profileId), [2, 4]);
+  assert.equal(snapshot.profiles[0].collectionsJson.length, 1);
+  assert.equal(snapshot.profiles[1].collectionsJson.length, 1);
+});
+
+test('profile ids are recovered from any table that carries them', () => {
+  same(profileIdsFromRows([{ profile_id: 3 }], [{ profile_index: 1 }], [{ profile_id: 'nonsense' }, { profile_id: 3 }]), [1, 3]);
+  same(profileIdsFromRows([]), []);
+});
+
+// ── Regression: choices recalculated after a late sign-in (PR #774 review, 3) ──
+
+test('matches are recalculated once ARVIO profiles arrive, keeping manual picks', () => {
+  const snapshot = {
+    email: 'u@e.c', warnings: [],
+    profiles: [
+      { profileId: 1, name: 'Main', addons: [], plugins: [], collectionsJson: null, homeCatalogSettings: null },
+      { profileId: 2, name: 'Kids', addons: [], plugins: [], collectionsJson: null, homeCatalogSettings: null }
+    ]
+  };
+  // Nuvio is connected before the ARVIO sign-in, so nothing can be matched yet.
+  const first = defaultChoices(snapshot, []);
+  same(first.map(choice => choice.target.kind), ['create', 'create']);
+
+  // Signing in afterwards must not leave both profiles set to "create".
+  const profiles = [{ id: 'p1', name: 'Main' }, { id: 'p2', name: 'Kids' }];
+  const after = reconcileChoices(snapshot, profiles, first);
+  same(after.map(choice => choice.target), [{ kind: 'existing', profileId: 'p1' }, { kind: 'existing', profileId: 'p2' }]);
+
+  // A target the user picked by hand survives the next recalculation, and the
+  // profile they claimed is not handed to someone else by name matching.
+  const edited = after.map(choice => choice.nuvioProfileId === 2 ? { ...choice, userSet: true, target: { kind: 'skip' } } : choice);
+  const again = reconcileChoices(snapshot, profiles, edited);
+  same(again[1].target, { kind: 'skip' });
+  same(again[0].target, { kind: 'existing', profileId: 'p1' });
+
+  const claimed = reconcileChoices(snapshot, profiles,
+    [{ nuvioProfileId: 1, userSet: true, target: { kind: 'existing', profileId: 'p2' } }, { nuvioProfileId: 2, target: { kind: 'create' } }]);
+  same(claimed[0].target, { kind: 'existing', profileId: 'p2' });
+  // 'Kids' is taken by the manual choice above, so it cannot be matched again.
+  same(claimed[1].target, { kind: 'create' });
 });

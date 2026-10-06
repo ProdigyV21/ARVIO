@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRightLeft, Check, Download, Loader2, LogIn, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, Check, Download, Loader2, LogIn, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { authClient } from "@/lib/store";
 import { installAddon, normalizeAddons } from "@/lib/addons";
 import { pullCloudPayload, pullCloudProfiles, saveCloudAddons } from "@/lib/cloud";
 import { applyNuvioImport } from "@/lib/nuvioImportRunner";
 import {
-  defaultChoices, discoverNuvioBackend, fetchNuvioSnapshot, signInToNuvio, summarizePlan, OFFICIAL_NUVIO_URL,
+  defaultChoices, discoverNuvioBackend, fetchNuvioSnapshot, reconcileChoices, signInToNuvio, summarizePlan, OFFICIAL_NUVIO_URL,
   type MigrationChoice, type NuvioSnapshot, type ProfileImportSummary
 } from "@/lib/nuvioMigration";
 import { defaultSettings } from "@/lib/store";
@@ -154,9 +154,18 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
     setResults(null);
   });
 
+  // The Nuvio step runs before the ARVIO sign-in, so the first plan is drawn up
+  // against an empty profile list and proposes creating everything. Redo it the
+  // moment real profiles arrive — without touching a choice already made by hand.
+  useEffect(() => {
+    if (!snapshot) return;
+    setChoices(current => reconcileChoices(snapshot, profiles, current));
+  }, [snapshot, profiles]);
+
   const setTarget = (nuvioProfileId: number, value: string) => {
     setChoices(current => current.map(choice => choice.nuvioProfileId !== nuvioProfileId ? choice : {
       ...choice,
+      userSet: true,
       target: value === "__skip" ? { kind: "skip" } : value === "__create" ? { kind: "create" } : { kind: "existing", profileId: value }
     }));
   };
@@ -224,16 +233,21 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
 
         {snapshot && !results && <>
           <p>Found {snapshot.profiles.length} profiles in {snapshot.email}.</p>
+          {snapshot.warnings.map(warning => <p key={warning} className="setup__warning" role="status">
+            <AlertTriangle size={14} aria-hidden="true" /> {warning}
+          </p>)}
           <ul className="setup__list">
             {snapshot.profiles.map(profile => {
               const choice = choices.find(entry => entry.nuvioProfileId === profile.profileId);
               const value = choice?.target.kind === "existing" ? choice.target.profileId
                 : choice?.target.kind === "skip" ? "__skip" : "__create";
               const collections = Array.isArray(profile.collectionsJson) ? profile.collectionsJson.length : 0;
+              const disabled = profile.addons.filter(addon => !addon.enabled).length;
               return <li key={profile.profileId}>
                 <span>
                   <strong>{profile.name}</strong>
                   <em>{profile.addons.length} addons · {collections} collections
+                    {disabled > 0 && ` · ${disabled} switched off in Nuvio`}
                     {profile.plugins.length > 0 && ` · ${profile.plugins.length} plugins stay in Nuvio`}</em>
                 </span>
                 <select value={value} onChange={event => setTarget(profile.profileId, event.target.value)}
@@ -260,9 +274,15 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
           <p><Check size={18} aria-hidden="true" /> Import finished</p>
           <ul className="setup__list">
             {results.map(result => <li key={result.profileName}>
-              <span><strong>{result.profileName}</strong>
-                <em>{result.addons} addons · {result.collections} collections{result.created ? " · new profile" : ""}
-                  {result.addonsFailed > 0 && ` · ${result.addonsFailed} could not be reached`}</em></span>
+              {result.failed
+                // Nothing was written for this profile, so say so plainly rather
+                // than letting a zero count read as "there was nothing to bring".
+                ? <span><strong>{result.profileName}</strong>
+                    <em className="setup__error">Not imported — {result.failed}. Nothing was changed on this profile.</em></span>
+                : <span><strong>{result.profileName}</strong>
+                    <em>{result.addons} addons · {result.collections} collections{result.created ? " · new profile" : ""}
+                      {result.addonsDisabled > 0 && ` · ${result.addonsDisabled} left switched off`}
+                      {result.addonsFailed > 0 && ` · ${result.addonsFailed} could not be reached`}</em></span>}
             </li>)}
           </ul>
           <p className="setup__muted">Open ARVIO on your TV or phone and sign in with this account to see them.</p>

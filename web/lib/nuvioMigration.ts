@@ -54,6 +54,8 @@ export interface NuvioPlugin extends NuvioAddon {
 export interface NuvioSnapshot {
   email: string;
   profiles: NuvioProfileData[];
+  /** Tables that could not be read, so the UI can say what is missing rather than implying nothing was there. */
+  warnings: string[];
 }
 
 const trimSlash = (value: string) => value.trim().replace(/\/+$/, "");
@@ -134,25 +136,41 @@ export async function signInToNuvio(
   };
 }
 
-async function selectRows(
+/**
+ * A table read. `ok: false` means the request itself did not succeed, which is
+ * not the same thing as a table that answered with nothing — conflating the two
+ * is how an import ends up deciding an account is empty when it is unreachable.
+ */
+export interface TableRead {
+  table: string;
+  ok: boolean;
+  rows: Record<string, unknown>[];
+}
+
+const objectRows = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value) ? value.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object") : [];
+
+export async function selectRows(
   discovery: NuvioDiscovery,
   session: NuvioSession,
   table: string,
   query: string,
   fetcher: Fetcher
-): Promise<Record<string, unknown>[]> {
+): Promise<TableRead> {
   const response = await fetcher(`${discovery.backendUrl}/rest/v1/${table}?${query}`, {
     headers: {
       apikey: discovery.publishableKey,
       authorization: `Bearer ${session.accessToken}`,
       accept: "application/json"
     }
-  });
+  }).catch(() => null);
   // A table a deployment does not have (or does not expose) must not fail the
-  // whole import — the user still gets everything else.
-  if (!response.ok) return [];
-  const rows: unknown = await response.json().catch(() => []);
-  return Array.isArray(rows) ? rows.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object") : [];
+  // whole import — the user still gets everything else, and the failure is
+  // reported instead of passing for an empty table.
+  if (!response?.ok) return { table, ok: false, rows: [] };
+  const rows: unknown = await response.json().catch(() => null);
+  if (rows === null) return { table, ok: false, rows: [] };
+  return { table, ok: true, rows: objectRows(rows) };
 }
 
 /**
@@ -223,7 +241,8 @@ export function buildSnapshot(
   addonRows: Record<string, unknown>[],
   pluginRows: Record<string, unknown>[],
   collectionRows: Record<string, unknown>[],
-  catalogSettingRows: Record<string, unknown>[]
+  catalogSettingRows: Record<string, unknown>[],
+  warnings: string[] = []
 ): NuvioSnapshot {
   const byProfile = <T extends Record<string, unknown>>(rows: T[], profileId: number) =>
     rows.filter(row => int(row.profile_id, 1) === profileId);
@@ -245,7 +264,27 @@ export function buildSnapshot(
       };
     })
     .sort((a, b) => a.profileId - b.profileId);
-  return { email, profiles };
+  return { email, profiles, warnings };
+}
+
+/** Nuvio's profile ids are 1-6; a gap-free scan is what the fallback probes. */
+const PROBE_PROFILE_IDS = [1, 2, 3, 4, 5, 6];
+
+/**
+ * Recovers the profile ids present in an account when the `profiles` table
+ * itself is unavailable. Every other table carries `profile_id`, so a profile
+ * is known to exist as soon as any of its rows comes back — building only
+ * profile 1 silently dropped everything that belonged to the others.
+ */
+export function profileIdsFromRows(...rowSets: Record<string, unknown>[][]): number[] {
+  const ids = new Set<number>();
+  for (const rows of rowSets) {
+    for (const row of rows) {
+      const id = int(row.profile_id, int(row.profile_index, 0));
+      if (id >= 1) ids.add(id);
+    }
+  }
+  return [...ids].sort((a, b) => a - b);
 }
 
 export async function fetchNuvioSnapshot(
@@ -261,19 +300,40 @@ export async function fetchNuvioSnapshot(
     selectRows(discovery, session, "home_catalog_settings", "select=*", fetcher)
   ]);
 
-  // Nuvio accounts always have profile 1; a direct read of `profiles` that comes
-  // back empty means the table is not exposed, not that the account is empty.
-  const profileIds = profiles.length
-    ? profiles.map(row => int(row.profile_id, int(row.profile_index, 1)))
-    : [1, 2, 3, 4, 5, 6];
-  const effectiveProfiles = profiles.length ? profiles : [{ profile_id: 1, name: "Profile 1" }];
-  const effectiveCollections = collections.length ? collections
-    : await callSyncRpc(discovery, session, "sync_pull_collections", profileIds, fetcher);
-  const effectiveCatalogSettings = catalogSettings.length ? catalogSettings
-    : await callSyncRpc(discovery, session, "sync_pull_home_catalog_settings", profileIds, fetcher);
+  const warnings: string[] = [];
+  // A failed read is reported; a read that succeeded with no rows is simply an
+  // empty table and says nothing is there to bring over.
+  for (const read of [addons, plugins]) {
+    if (!read.ok) warnings.push(`Nuvio did not return your ${read.table} — none were imported`);
+  }
+
+  // The RPCs only answer one profile at a time, so they are probed across
+  // Nuvio's whole 1-6 range whenever the table read did not produce rows.
+  const knownIds = profiles.ok && profiles.rows.length
+    ? profileIdsFromRows(profiles.rows)
+    : profileIdsFromRows(addons.rows, plugins.rows, collections.rows, catalogSettings.rows);
+  const probeIds = profiles.ok && profiles.rows.length ? knownIds : PROBE_PROFILE_IDS;
+
+  const effectiveCollections = collections.ok && collections.rows.length ? collections.rows
+    : await callSyncRpc(discovery, session, "sync_pull_collections", probeIds, fetcher);
+  const effectiveCatalogSettings = catalogSettings.ok && catalogSettings.rows.length ? catalogSettings.rows
+    : await callSyncRpc(discovery, session, "sync_pull_home_catalog_settings", probeIds, fetcher);
+
+  let effectiveProfiles = profiles.rows;
+  if (!profiles.ok || !profiles.rows.length) {
+    if (!profiles.ok) warnings.push("Nuvio's profile list could not be read, so profiles were recovered from their content");
+    // Every id any table answered for is a profile that exists. Falling back to
+    // profile 1 alone used to drop the rest of the account on the floor.
+    const recovered = profileIdsFromRows(
+      addons.rows, plugins.rows, effectiveCollections, effectiveCatalogSettings
+    );
+    const ids = (recovered.length ? recovered : knownIds.length ? knownIds : [1]);
+    effectiveProfiles = ids.map(id => ({ profile_id: id, name: `Profile ${id}` }));
+  }
 
   const snapshot = buildSnapshot(
-    session.email, effectiveProfiles, addons, plugins, effectiveCollections, effectiveCatalogSettings
+    session.email, effectiveProfiles, addons.rows, plugins.rows,
+    effectiveCollections, effectiveCatalogSettings, warnings
   );
   if (!snapshot.profiles.length) throw new Error("That Nuvio account has no profiles to import");
   return snapshot;
@@ -304,6 +364,8 @@ export type ProfileTarget =
 export interface MigrationChoice {
   nuvioProfileId: number;
   target: ProfileTarget;
+  /** Set once the user picks a target by hand, so a later recalculation leaves it alone. */
+  userSet?: boolean;
 }
 
 const normalizedName = (value: string) => value.trim().toLocaleLowerCase("en");
@@ -321,6 +383,27 @@ export function defaultChoices(snapshot: NuvioSnapshot, existing: Pick<Profile, 
     if (match) taken.add(match.id);
     return { nuvioProfileId: profile.profileId, target: match ? { kind: "existing", profileId: match.id } : { kind: "create" } };
   });
+}
+
+/**
+ * Recomputes the default plan against a profile list that arrived later — the
+ * Nuvio step runs before the ARVIO sign-in, so the first pass necessarily saw
+ * no profiles and proposed creating all of them. A choice the user already
+ * changed by hand is kept exactly as they set it.
+ */
+export function reconcileChoices(
+  snapshot: NuvioSnapshot,
+  existing: Pick<Profile, "id" | "name">[],
+  previous: MigrationChoice[]
+): MigrationChoice[] {
+  const kept = new Map(previous.filter(choice => choice.userSet).map(choice => [choice.nuvioProfileId, choice]));
+  // Names the user has already claimed by hand must not be matched again.
+  const claimed = new Set(
+    [...kept.values()].flatMap(choice => choice.target.kind === "existing" ? [choice.target.profileId] : [])
+  );
+  const available = existing.filter(profile => !claimed.has(profile.id));
+  const recomputed = defaultChoices(snapshot, available);
+  return recomputed.map(choice => kept.get(choice.nuvioProfileId) ?? choice);
 }
 
 export function newProfileFrom(profile: NuvioProfileData, id: string, fallbackColor: number): Profile {
@@ -343,9 +426,13 @@ export interface ProfileImportSummary {
   created: boolean;
   addons: number;
   addonsFailed: number;
+  /** Installed but left switched off, because they were switched off in Nuvio. */
+  addonsDisabled: number;
   plugins: number;
   collections: number;
   catalogSettings: boolean;
+  /** Why nothing was written for this profile. Set only when the import stopped. */
+  failed?: string;
 }
 
 /** Counts what a plan would bring over, for the confirmation step. */
@@ -359,6 +446,7 @@ export function summarizePlan(snapshot: NuvioSnapshot, choices: MigrationChoice[
       created: choice.target.kind === "create",
       addons: profile.addons.length,
       addonsFailed: 0,
+      addonsDisabled: profile.addons.filter(addon => !addon.enabled).length,
       plugins: profile.plugins.length,
       collections,
       catalogSettings: Boolean(profile.homeCatalogSettings)
@@ -366,15 +454,19 @@ export function summarizePlan(snapshot: NuvioSnapshot, choices: MigrationChoice[
   });
 }
 
-/** Keeps existing addons, appends the Nuvio ones, newest URL wins. */
-export function mergeAddonUrls(existing: string[], incoming: NuvioAddon[]): string[] {
+/**
+ * The Nuvio addons that are not on the profile yet. Whole entries rather than
+ * URLs, so the import can carry each one's `enabled` state across instead of
+ * switching on an addon the user had deliberately switched off.
+ */
+export function addonsToInstall(existing: string[], incoming: NuvioAddon[]): NuvioAddon[] {
   const seen = new Set(existing.map(url => url.trim().toLowerCase()));
-  const added: string[] = [];
+  const added: NuvioAddon[] = [];
   for (const addon of incoming) {
     const key = addon.url.trim().toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    added.push(addon.url);
+    added.push(addon);
   }
   return added;
 }
