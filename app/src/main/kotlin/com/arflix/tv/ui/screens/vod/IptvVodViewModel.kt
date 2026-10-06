@@ -37,6 +37,9 @@ data class IptvVodUiState(
     // Only true once a playlist is known to serve VOD, so the tab cannot flash
     // in and out while that is being decided.
     val hasSource: Boolean = false,
+    /** False until the catalogue has been read once, so an empty grid is not
+     *  mistaken for "this category has nothing" before the first load runs. */
+    val hasLoaded: Boolean = false,
     val error: String? = null,
     val categories: List<IptvVodBrowseCategory> = emptyList(),
     val categoryCounts: Map<String, Int> = emptyMap(),
@@ -127,6 +130,7 @@ class IptvVodViewModel @Inject constructor(
                 val counts = catalog.items.groupingBy { it.categoryId.orEmpty() }.eachCount()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    hasLoaded = true,
                     hasSource = true,
                     // Hide empty provider categories; they only add noise to the list.
                     categories = catalog.categories.filter { (counts[it.id] ?: 0) > 0 },
@@ -135,7 +139,7 @@ class IptvVodViewModel @Inject constructor(
                 applyFilter()
             }.onFailure { e ->
                 allItems = emptyList()
-                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message ?: "Load failed")
+                _uiState.value = _uiState.value.copy(isLoading = false, hasLoaded = true, error = e.message ?: "Load failed")
             }
         }
     }

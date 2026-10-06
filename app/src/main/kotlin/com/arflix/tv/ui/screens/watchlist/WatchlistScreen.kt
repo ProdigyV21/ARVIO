@@ -154,7 +154,9 @@ fun WatchlistScreen(
             if (serverMode) filtered else sortLibraryItems(filtered, sort)
         }
     }
-    val loading = when { iptvMode -> vod.isLoading; serverMode -> servers.isLoading; else -> state.isLoading }
+    // Until the first read finishes the tab is loading, not empty — the read
+    // starts from an effect, so the first frame would otherwise say "no titles".
+    val loading = when { iptvMode -> vod.isLoading || !vod.hasLoaded; serverMode -> servers.isLoading; else -> state.isLoading }
     val error = when { iptvMode -> vod.error; serverMode -> servers.error; else -> state.error }
     val sourceKey = if (collections) "collections" else "$section:$selectedId:$query:$sort:$mediaFilter"
     val viewports = rememberSaveable(saver = mapSaver(
@@ -364,6 +366,13 @@ fun WatchlistScreen(
         }
         state.toastMessage?.let { message ->
             Toast(message = message, isVisible = true, onDismiss = viewModel::dismissToast)
+        }
+        if (vod.resolvingKey != null) {
+            // An untagged title costs a TMDB lookup before anything opens, so the
+            // tap is acknowledged instead of the screen sitting there unchanged.
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = resolveAccentColor(Color.White))
+            }
         }
         vod.message?.let { title ->
             // The provider listed it, but nothing on TMDB matched and it has no
