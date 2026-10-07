@@ -1349,6 +1349,7 @@
     <string name="update_msg_ready">The latest ARVIO update has been downloaded and is ready to install.</string>
     <string name="update_msg_installer_hint">The Android package installer should appear. If it does not, you can try pressing Install again.</string>
     <string name="stream_tab_all_sources">All sources</string>
+    <string name="stream_recently_played">Recently played</string>
     <string name="stream_title_select_source">Select Source</string>
     <string name="stream_no_streaming_addons">No Streaming Addons</string>
     <string name="stream_no_sources_found">No sources found</string>

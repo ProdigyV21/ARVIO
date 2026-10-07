@@ -15,6 +15,8 @@ import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.AddonType
 import com.arflix.tv.data.model.AnimeStructuringStyle
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.RecentPlayedSource
+import com.arflix.tv.data.model.findRecentSourceMatch
 import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.data.model.IptvVodSourceIds
@@ -25,6 +27,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlaybackTelemetryRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.RecentPlayedSourceRepository
 import com.arflix.tv.data.repository.SkipInterval
 import com.arflix.tv.data.repository.SkipIntroRepository
 import com.arflix.tv.data.repository.StreamRepository
@@ -160,6 +163,8 @@ data class PlayerUiState(
     val selectedStream: StreamSource? = null,
     val selectedStreamUrl: String? = null,
     val streamSelectionNonce: Int = 0,
+    // This title's recently played source, pinned at the top of the source menu.
+    val recentSource: RecentPlayedSource? = null,
     val selectedSubtitle: Subtitle? = null,
     val subtitleSelectionNonce: Int = 0,
     // "Preload Subtitles" mode: preferred-language addon subs downloaded to local files before
@@ -297,7 +302,8 @@ class PlayerViewModel @Inject constructor(
     private val skipIntroRepository: SkipIntroRepository,
     private val playbackTelemetryRepository: PlaybackTelemetryRepository,
     private val pluginManager: PluginManager,
-    private val streamIntegrationRepository: StreamIntegrationRepository
+    private val streamIntegrationRepository: StreamIntegrationRepository,
+    private val recentPlayedSourceRepository: RecentPlayedSourceRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -350,6 +356,7 @@ class PlayerViewModel @Inject constructor(
     // A late-arriving embedded preferred-language track overrides auto selections but never this.
     private var userPickedSubtitle: Boolean = false
     private var playbackSessionStartTime: Long = 0L
+    private val recentSourcePlayTracker = RecentSourcePlayTracker()
 
     private fun isCurrentAnime(): Boolean =
         currentMediaType == MediaType.TV &&
@@ -772,8 +779,10 @@ class PlayerViewModel @Inject constructor(
             streamLoadPhase = if (providedStreamUrl.isNullOrBlank()) null else PlayerMessage.Res(R.string.player_phase_preparing_stream),
             sourceSearchActive = false,
             error = null,
-            isSetupError = false
+            isSetupError = false,
+            recentSource = null
         )
+        loadRecentSource(mediaType, mediaId, seasonNumber, episodeNumber)
         lastTopPrewarmKey = ""
         skipIntervalsJob?.cancel()
         currentImdbId = providedImdbId
@@ -7672,6 +7681,49 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    private fun loadRecentSource(mediaType: MediaType, mediaId: Int, season: Int?, episode: Int?) {
+        recentSourcePlayTracker.reset()
+        viewModelScope.launch {
+            val recent = recentPlayedSourceRepository.get(mediaType, mediaId)
+                ?.takeIf { it.appliesTo(mediaType, mediaId, season, episode) }
+                ?: return@launch
+            val stillCurrent = currentMediaType == mediaType && currentMediaId == mediaId &&
+                currentSeason == season && currentEpisode == episode
+            // A source that crossed the threshold in this session is newer than the stored one.
+            if (stillCurrent && _uiState.value.recentSource == null) {
+                _uiState.value = _uiState.value.copy(recentSource = recent)
+            }
+        }
+    }
+
+    /** Records the selected source as this title's recently played one once it has really played. */
+    private fun noteRecentSourcePlayback(positionMs: Long, isPlaying: Boolean) {
+        if (currentIsLiveStreamPlayback || currentMediaId <= 0) return
+        val state = _uiState.value
+        val stream = state.selectedStream ?: return
+        val reached = recentSourcePlayTracker.onProgress(
+            selectionId = state.streamSelectionNonce.toLong(),
+            positionMs = positionMs,
+            isPlaying = isPlaying,
+            nowMs = android.os.SystemClock.elapsedRealtime()
+        )
+        if (!reached) return
+        fun recordOf(source: StreamSource) = RecentPlayedSource.of(
+            mediaType = currentMediaType,
+            mediaId = currentMediaId,
+            season = currentSeason,
+            episode = currentEpisode,
+            stream = source,
+            playedAtMs = System.currentTimeMillis()
+        )
+        // Record the addon's own entry, not the copy resolved for playback (Stalker and HubCloud
+        // links are exchanged for one-off URLs): later source lists are matched against it.
+        val listed = findRecentSourceMatch(state.streams, recordOf(stream)) ?: stream
+        val record = recordOf(listed)
+        _uiState.value = _uiState.value.copy(recentSource = record)
+        recentPlayedSourceRepository.save(profileManager.getProfileIdSync(), record)
+    }
+
     fun saveProgress(
         position: Long,
         duration: Long,
@@ -7680,6 +7732,7 @@ class PlayerViewModel @Inject constructor(
         playbackState: Int
     ): Job? {
         if (duration <= 0) return null
+        noteRecentSourcePlayback(position, isPlaying)
 
         // A completion transaction must not be cancelled/restarted by the ended polling tick
         // or the player's disposal save. It can finish after the UI's short navigation wait.

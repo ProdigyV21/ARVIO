@@ -110,7 +110,8 @@ class DetailsWatchlistToggleTest {
             watchlistRepository = watchlist,
             cloudSyncRepository = cloud,
             launcherContinueWatchingRepository = mockk(relaxed = true),
-            streamIntegrationRepository = integrations
+            streamIntegrationRepository = integrations,
+            recentPlayedSourceRepository = mockk(relaxed = true)
         )
         store.put("details", model)
         model.loadDetails(MediaType.MOVIE, movie.id)
