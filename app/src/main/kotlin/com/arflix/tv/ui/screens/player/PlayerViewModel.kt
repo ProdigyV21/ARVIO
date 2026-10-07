@@ -63,6 +63,7 @@ import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -359,10 +360,12 @@ class PlayerViewModel @Inject constructor(
     private var playbackSessionStartTime: Long = 0L
     private val recentSourcePlayTracker = RecentSourcePlayTracker()
     private var recentSourceLoad: Deferred<RecentPlayedSource?>? = null
-    // Autoplay picks the title's recently played source over its own ranking, and holds its
-    // quick picks while that source's addon may still answer (see the source collection).
-    private var autoplayRecentSource: RecentPlayedSource? = null
-    private var holdAutoplayForRecentSource = false
+    // Autoplay picks the title's recently played source over its own ranking (see the gate).
+    private val recentSourceGate = RecentSourceAutoplayGate()
+    // The source whose URL the player has loaded. selectStream() names its pick in selectedStream
+    // at once, but the old video keeps playing until the new URL is resolved and applied.
+    private var preparedStream: StreamSource? = null
+    private var recentSourceClock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
 
     private fun isCurrentAnime(): Boolean =
         currentMediaType == MediaType.TV &&
@@ -803,6 +806,8 @@ class PlayerViewModel @Inject constructor(
 
         mediaLoadJob?.cancel()
         mediaLoadJob = viewModelScope.launch {
+            // Before any lookup starts: Home Server / IPTV background results can autoplay too.
+            armRecentSourceGate(recentSourceLoad?.await())
             // Autoplay should always use the current highest-ranked source list.
             // Explicit source navigation still passes preferred fields or a URL below.
             val preferredAudioLanguage = resolvePreferredAudioLanguage()
@@ -1009,6 +1014,7 @@ class PlayerViewModel @Inject constructor(
                     selectedStreamUrl = resolvedProvidedUrl,
                     savedPosition = resumeData.positionMs
                 )
+                preparedStream = resolvedProvidedStream
                 prefetchSubtitleIndex(onlyForAutoScan = true)
                 audioSyncOnStream()
                 // NOTE: these background children share the load job — an uncaught exception in
@@ -1501,12 +1507,6 @@ class PlayerViewModel @Inject constructor(
                 val HOME_SERVER_AUTOPLAY_WAIT_MS = 850L
                 val AUTOPLAY_MAX_WINDOW_MS = 1_750L
                 val AUTOPLAY_QUALITY_WINDOW_MS = 180L
-                // A title with a recently played source autoplays it. Its addon may answer after
-                // the quick picks below would fire, so they hold until it arrives, the search
-                // finishes, or this much time passes.
-                val RECENT_SOURCE_AUTOPLAY_WAIT_MS = 6_000L
-                val recentForAutoplay = recentSourceLoad?.await()
-                var recentWaitJob: Job? = null
                 val collectionStartMs = System.currentTimeMillis()
                 var autoplaySelected = false
                 var autoplayDeferredJob: Job? = null
@@ -1642,28 +1642,13 @@ class PlayerViewModel @Inject constructor(
                             stream.behaviorHints.notWebReady != true &&
                             !stream.url.isNullOrBlank()
                     }
-                    // Arrived but filtered out by the autoplay quality settings ends the hold too.
-                    val recentArrived = findRecentSourceMatch(mergedStreams, recentForAutoplay) != null
-                    val recentAutoplayStream = findRecentSourceMatch(autoplayStreams, recentForAutoplay)
-                    holdAutoplayForRecentSource = recentForAutoplay != null && !recentArrived &&
-                        !progressive.isFinal && elapsedMs < RECENT_SOURCE_AUTOPLAY_WAIT_MS
-                    if (holdAutoplayForRecentSource && recentWaitJob == null) {
-                        recentWaitJob = launch {
-                            delay(RECENT_SOURCE_AUTOPLAY_WAIT_MS - elapsedMs)
-                            holdAutoplayForRecentSource = false
-                            if (!autoplaySelected && canStartAutoplay() &&
-                                eligiblePlayerAutoplayStreams(lastMergedStreams, autoPlayMinimumQuality, autoPlayLimits).isNotEmpty()
-                            ) {
-                                autoplaySelected = true
-                                autoplayDeferredJob?.cancel()
-                                autoplayDeferredJob = null
-                                playbackDiag("autoplayRecentWaitExpired streams=${lastMergedStreams.size}")
-                                autoplaySelectBest(lastMergedStreams, preferredLanguage)
-                            }
-                        }
-                    }
+                    // While the gate holds, only the recent source may start (see RecentSourceAutoplayGate).
+                    recentSourceGate.onStreams(mergedStreams)
+                    if (progressive.isFinal && !supplementalSourcesStillLoading) recentSourceGate.release()
+                    val holdForRecentSource = recentSourceGate.isHolding(recentSourceClock())
+                    val recentAutoplayStream = recentSourceGate.recentCandidate(autoplayStreams)
                     if (!autoplaySelected && autoplayStreams.isNotEmpty() && autoplayDeferredJob == null &&
-                        !holdAutoplayForRecentSource && canStartAutoplay()
+                        !holdForRecentSource && canStartAutoplay()
                     ) {
                         autoplayDeferredJob = launch {
                             delay(AUTOPLAY_QUALITY_WINDOW_MS)
@@ -1699,7 +1684,7 @@ class PlayerViewModel @Inject constructor(
                     val hasRequestedPreferredStream = hasRequestedPreferredStream(autoplayStreams)
                     val shouldSelectNow = !autoplaySelected && autoplayStreams.isNotEmpty() && canStartAutoplay() && homeServerReadyForAutoplay && (
                         recentAutoplayStream != null || (
-                            !holdAutoplayForRecentSource && (
+                            !holdForRecentSource && (
                                 cacheHit ||
                                     progressive.isFinal ||
                                     hasCachedReadyStream ||
@@ -1714,7 +1699,6 @@ class PlayerViewModel @Inject constructor(
                         autoplaySelected = true
                         autoplayDeferredJob?.cancel()
                         autoplayDeferredJob = null
-                        recentWaitJob?.cancel()
                         Log.i(
                             TAG,
                             "Autoplay selecting streams=${mergedStreams.size} completed=$completed/$total final=${progressive.isFinal} cached=$hasCachedReadyStream preferred=$hasRequestedPreferredStream elapsedMs=$elapsedMs top=${autoplayTopStream?.quality}/${autoplayTopStream?.size}"
@@ -1727,9 +1711,11 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
 
-                // The search is over: nothing left to hold for.
-                holdAutoplayForRecentSource = false
-                recentWaitJob?.cancel()
+                // The addon search is over. Home Server / IPTV may still bring the recent source;
+                // if they don't, the gate's own timer picks once it runs out.
+                if (homeServerAppendJob?.isActive != true && vodAppendJob?.isActive != true) {
+                    recentSourceGate.release()
+                }
                 if (!autoplaySelected && lastMergedStreams.isNotEmpty()) {
                     if (hasHomeServerConnections &&
                         lastMergedStreams.none { it.addonId == HomeServerRepository.ADDON_ID }
@@ -2723,10 +2709,11 @@ class PlayerViewModel @Inject constructor(
             eligiblePlayerAutoplayStreams(streams, autoPlayMinimumQuality, autoPlayLimits), preferredLanguage
         )
         if (healthyStreams.isEmpty()) return
-        // The source this title was last really watched from beats the ranking. Until its addon
-        // has answered (or the hold ends), late supplemental results must not pick for it.
-        val recentCandidate = findRecentSourceMatch(healthyStreams, autoplayRecentSource)
-        if (recentCandidate == null && holdAutoplayForRecentSource) return
+        // Every autoplay entry point lands here. The source this title was last really watched
+        // from beats the ranking, and while the gate holds nothing else may start.
+        recentSourceGate.onStreams(streams)
+        val recentCandidate = recentSourceGate.recentCandidate(healthyStreams)
+        if (recentCandidate == null && recentSourceGate.isHolding(recentSourceClock())) return
         val hasExplicitPreferred =
             !currentPreferredBingeGroup.isNullOrBlank() ||
                 !currentPreferredAddonId.isNullOrBlank() ||
@@ -3248,6 +3235,7 @@ class PlayerViewModel @Inject constructor(
                 error = null,
                 isSetupError = false
             )
+            preparedStream = resolvedStream
             prefetchSubtitleIndex(onlyForAutoScan = true)
             audioSyncOnStream()
 
@@ -7730,15 +7718,14 @@ class PlayerViewModel @Inject constructor(
 
     private fun loadRecentSource(mediaType: MediaType, mediaId: Int, season: Int?, episode: Int?) {
         recentSourcePlayTracker.reset()
-        autoplayRecentSource = null
-        holdAutoplayForRecentSource = false
+        recentSourceGate.disarm()
+        preparedStream = null
         recentSourceLoad = viewModelScope.async {
             val recent = recentPlayedSourceRepository.get(mediaType, mediaId)
                 ?.takeIf { it.appliesTo(mediaType, mediaId, season, episode) }
             val stillCurrent = currentMediaType == mediaType && currentMediaId == mediaId &&
                 currentSeason == season && currentEpisode == episode
             if (recent == null || !stillCurrent) return@async null
-            autoplayRecentSource = recent
             // A source that crossed the threshold in this session is newer than the stored one.
             if (_uiState.value.recentSource == null) {
                 _uiState.value = _uiState.value.copy(recentSource = recent)
@@ -7747,16 +7734,35 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** Records the selected source as this title's recently played one once it has really played. */
+    /** Arms [recentSourceGate] for this load. If it runs out with nothing started, autoplay picks from what was found. */
+    private fun CoroutineScope.armRecentSourceGate(recent: RecentPlayedSource?) {
+        recentSourceGate.arm(recent, recentSourceClock())
+        if (recent == null) return
+        launch {
+            delay(recentSourceGate.remainingMs(recentSourceClock()))
+            recentSourceGate.release()
+            if (canStartAutoplay()) {
+                val streams = _uiState.value.streams
+                playbackDiag("autoplayRecentWaitExpired streams=${streams.size}")
+                autoplaySelectBest(streams, _uiState.value.preferredAudioLanguage.ifBlank { "en" })
+            }
+        }
+    }
+
+    /** Records the playing source as this title's recently played one once it has really played. */
     private fun noteRecentSourcePlayback(positionMs: Long, isPlaying: Boolean) {
         if (currentIsLiveStreamPlayback || currentMediaId <= 0) return
         val state = _uiState.value
-        val stream = state.selectedStream ?: return
+        // Credit the source the player has loaded, not selectedStream: during a switch that already
+        // names the replacement while the old video keeps playing. Nothing counts until the
+        // replacement is applied (its new nonce restarts the count) or the switch fails.
+        val stream = preparedStream ?: return
+        val replacementResolving = streamSelectionJob?.isActive == true
         val reached = recentSourcePlayTracker.onProgress(
             selectionId = state.streamSelectionNonce.toLong(),
             positionMs = positionMs,
-            isPlaying = isPlaying,
-            nowMs = android.os.SystemClock.elapsedRealtime()
+            isPlaying = isPlaying && !replacementResolving,
+            nowMs = recentSourceClock()
         )
         if (!reached) return
         fun recordOf(source: StreamSource) = RecentPlayedSource.of(
