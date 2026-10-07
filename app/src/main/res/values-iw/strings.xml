@@ -295,4 +295,7 @@
     <string name="addon_failed_add">הוספת התוסף נכשלה</string>
     <string name="catalog_tmdb_title">קטלוג TMDB</string>
     <string name="catalog_url_tmdb_hint">השתמש בכתובת של דף TMDB מסוג list, collection, company, network, person, keyword או genre</string>
+    <string name="vod_not_matched">לא ניתן לפתוח את \"%1$s\"</string>
+    <string name="library_iptv_tab">IPTV</string>
+    <string name="library_iptv_empty">ספק ה-IPTV לא החזיר כותרים בקטגוריה זו.</string>
 </resources>

@@ -1883,5 +1883,8 @@
     <string name="settings_simkl_lists_connect">Connect SIMKL</string>
     <string name="settings_simkl_lists_connected">SIMKL connected</string>
     <string name="settings_simkl_open">Open SIMKL</string>
+    <string name="vod_not_matched">Could not open \"%1$s\"</string>
+    <string name="library_iptv_tab">IPTV</string>
+    <string name="library_iptv_empty">Your IPTV provider returned no titles for this category.</string>
 </resources>
 

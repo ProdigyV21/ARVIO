@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,12 +52,17 @@ import com.arflix.tv.data.model.*
 import com.arflix.tv.data.repository.*
 import com.arflix.tv.ui.components.*
 import com.arflix.tv.ui.skin.resolveAccentColor
+import com.arflix.tv.ui.screens.vod.IptvVodEvent
+import com.arflix.tv.ui.screens.vod.IptvVodViewModel
+import com.arflix.tv.ui.screens.vod.VOD_CATEGORY_ALL
+import com.arflix.tv.ui.screens.vod.VOD_CATEGORY_RECENT
+import com.arflix.tv.ui.screens.vod.toMediaItem
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.tr
 import com.arflix.tv.ui.screens.watchlist.calendar.*
 import java.time.LocalDate
 
-internal enum class LibrarySection(val label: String) { WATCHLISTS("Watchlists"), LISTS("My lists"), SERVERS("Homeserver"), CALENDAR("Calendar") }
+internal enum class LibrarySection(val label: String) { WATCHLISTS("Watchlists"), LISTS("My lists"), SERVERS("Homeserver"), IPTV("IPTV"), CALENDAR("Calendar") }
 internal fun libraryColumns(width: Int, poster: Boolean, collections: Boolean = false): Int =
     if (collections) (width / 270).coerceIn(1, 3) else if (poster) (width / 115).coerceIn(2, 8) else (width / 180).coerceIn(2, 4)
 internal fun WatchlistSourceItem.isPersonalCollection(): Boolean = this is WatchlistSourceItem.Catalog ||
@@ -66,7 +72,8 @@ internal fun librarySources(sources: List<WatchlistSourceItem>, section: Library
         LibrarySection.WATCHLISTS -> it is WatchlistSourceItem.MyWatchlist || (it is WatchlistSourceItem.TrackerList && !it.isPersonalCollection())
         LibrarySection.LISTS -> it.isPersonalCollection()
         LibrarySection.SERVERS -> it is WatchlistSourceItem.HomeServer
-        LibrarySection.CALENDAR -> false
+        // Both build their own source list rather than filtering the saved ones.
+        LibrarySection.IPTV, LibrarySection.CALENDAR -> false
     } }
 
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -75,6 +82,8 @@ fun WatchlistScreen(
     viewModel: WatchlistViewModel = hiltViewModel(),
     currentProfile: Profile? = null,
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
+    /** An IPTV movie with no TMDB match plays straight from the provider. */
+    onPlayIptvVod: (mediaId: Int, streamUrl: String, title: String) -> Unit = { _, _, _ -> },
     onNavigateToHome: () -> Unit = {}, onNavigateToSearch: () -> Unit = {},
     onNavigateToTv: () -> Unit = {}, onNavigateToSettings: (String?) -> Unit = {},
     onSwitchProfile: () -> Unit = {}, onBack: () -> Unit = {},
@@ -83,10 +92,12 @@ fun WatchlistScreen(
     onCalendarChangeMonth: (Long) -> Unit = {},
     onCalendarSelectSource: (String) -> Unit = {},
     onCalendarRefresh: () -> Unit = {},
-    calendarViewModel: ReleaseCalendarViewModel? = null
+    calendarViewModel: ReleaseCalendarViewModel? = null,
+    vodViewModel: IptvVodViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val servers by viewModel.libraryState.collectAsStateWithLifecycle()
+    val vod by vodViewModel.uiState.collectAsStateWithLifecycle()
     val logos by viewModel.logoUrls.collectAsStateWithLifecycle()
     val touch = LocalDeviceType.current.isTouchDevice()
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -94,6 +105,11 @@ fun WatchlistScreen(
     val scrollScope = rememberCoroutineScope()
     var section by rememberSaveable { mutableStateOf(LibrarySection.WATCHLISTS) }
     val calendarMode = section == LibrarySection.CALENDAR
+    val iptvMode = section == LibrarySection.IPTV
+    // The tab only exists once a playlist can actually serve a VOD catalogue.
+    val sections = remember(vod.hasSource) {
+        LibrarySection.entries.filter { it != LibrarySection.IPTV || vod.hasSource }
+    }
     val calendarTab = remember { FocusRequester() }
     var openedList by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -108,21 +124,40 @@ fun WatchlistScreen(
     var initialFocusPlaced by remember { mutableStateOf(false) }
     val filterButton = remember { FocusRequester() }
     val topFocus = remember { FocusRequester() }
-    val scopeSources = remember(state.sources, servers.libraries, section) { if(section == LibrarySection.SERVERS) servers.libraries.map { WatchlistSourceItem.HomeServer(it) } else librarySources(state.sources, section) }
+    val scopeSources = remember(state.sources, servers.libraries, section, vod.categories) { when (section) {
+        LibrarySection.SERVERS -> servers.libraries.map { WatchlistSourceItem.HomeServer(it) }
+        // "All" and "Recently added" sit above the provider's own categories.
+        LibrarySection.IPTV -> listOf(
+            WatchlistSourceItem.IptvCategory(VOD_CATEGORY_ALL, "All"),
+            WatchlistSourceItem.IptvCategory(VOD_CATEGORY_RECENT, "Recently added")
+        ) + vod.categories.map { WatchlistSourceItem.IptvCategory(it.id, it.name) }
+        else -> librarySources(state.sources, section)
+    } }
     val collections = section == LibrarySection.LISTS && openedList == null
     val serverMode = section == LibrarySection.SERVERS
-    val selectedId = if (serverMode) "server_${servers.selectedSourceRef}" else state.selectedSourceId
+    val selectedId = when {
+        iptvMode -> "iptv_${vod.selectedCategoryId}"
+        serverMode -> "server_${servers.selectedSourceRef}"
+        else -> state.selectedSourceId
+    }
     val savedItems = remember(state.movies, state.series, state.selectedSourceId) {
         val combined = state.movies + state.series
         if(state.selectedSourceId == WatchlistSourceItem.MyWatchlist.id) combined.sortedByDescending { it.addedAt } else combined
     }
-    val rawItems = if (serverMode) servers.items else savedItems
-    val items = remember(rawItems, query, sort, mediaFilter, serverMode) {
-        val filtered = rawItems.filter { (mediaFilter == null || it.mediaType == mediaFilter) && (serverMode || it.title.contains(query, true)) }
-        if (serverMode) filtered else sortLibraryItems(filtered, sort)
+    // The IPTV catalogue is already filtered by category and query in its own
+    // view model, so the grid shows it as it comes.
+    val vodItems = remember(vod.items) { vod.items.map { it.toMediaItem() } }
+    val rawItems = when { iptvMode -> vodItems; serverMode -> servers.items; else -> savedItems }
+    val items = remember(rawItems, query, sort, mediaFilter, serverMode, iptvMode) {
+        if (iptvMode) rawItems else {
+            val filtered = rawItems.filter { (mediaFilter == null || it.mediaType == mediaFilter) && (serverMode || it.title.contains(query, true)) }
+            if (serverMode) filtered else sortLibraryItems(filtered, sort)
+        }
     }
-    val loading = if (serverMode) servers.isLoading else state.isLoading
-    val error = if (serverMode) servers.error else state.error
+    // Until the first read finishes the tab is loading, not empty — the read
+    // starts from an effect, so the first frame would otherwise say "no titles".
+    val loading = when { iptvMode -> vod.isLoading || !vod.hasLoaded; serverMode -> servers.isLoading; else -> state.isLoading }
+    val error = when { iptvMode -> vod.error; serverMode -> servers.error; else -> state.error }
     val sourceKey = if (collections) "collections" else "$section:$selectedId:$query:$sort:$mediaFilter"
     val viewports = rememberSaveable(saver = mapSaver(
         save = { states: MutableMap<String, LazyGridState> -> states.mapValues { (_, grid) -> arrayListOf(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset) } },
@@ -130,14 +165,21 @@ fun WatchlistScreen(
     )) { mutableMapOf<String, LazyGridState>() }
     val grid = remember(sourceKey) { viewports.getOrPut(sourceKey) { LazyGridState() } }
     fun selectSource(source: WatchlistSourceItem) {
-        if (source is WatchlistSourceItem.HomeServer) {
-            viewModel.selectLibraryProvider(source.candidate.serverKind)
-            viewModel.selectLibrary(source.candidate.sourceRef)
-        } else viewModel.selectSource(source.id)
+        when (source) {
+            is WatchlistSourceItem.HomeServer -> {
+                viewModel.selectLibraryProvider(source.candidate.serverKind)
+                viewModel.selectLibrary(source.candidate.sourceRef)
+            }
+            is WatchlistSourceItem.IptvCategory -> vodViewModel.selectCategory(source.categoryId)
+            else -> viewModel.selectSource(source.id)
+        }
         sourcesOpen = false
     }
     fun selectSection(next: LibrarySection) {
-        section = next; openedList = null; query = ""; mediaFilter = null
+        section = next; openedList = null; query = ""
+        // In the IPTV tab the type is not a filter over one list but a choice of
+        // which of the provider's two catalogues to read, so it starts on movies.
+        mediaFilter = if (next == LibrarySection.IPTV) MediaType.MOVIE else null
         if (next == LibrarySection.WATCHLISTS) viewModel.selectSource(WatchlistSourceItem.MyWatchlist.id)
         if (next == LibrarySection.SERVERS && servers.selectedSourceRef == null) {
             servers.libraries.firstOrNull()?.let { viewModel.selectLibraryProvider(it.serverKind); viewModel.selectLibrary(it.sourceRef) }
@@ -159,17 +201,30 @@ fun WatchlistScreen(
         }
     }
     LaunchedEffect(serverMode, sort) { if (serverMode) viewModel.setLibrarySort(sort) }
+    // A playlist removed while the tab is open takes the tab with it.
+    LaunchedEffect(vod.hasSource) { if (!vod.hasSource && section == LibrarySection.IPTV) selectSection(LibrarySection.WATCHLISTS) }
+    LaunchedEffect(iptvMode, query) { if (iptvMode) vodViewModel.setQuery(query) }
+    LaunchedEffect(iptvMode, mediaFilter) { if (iptvMode) vodViewModel.selectTab(mediaFilter == MediaType.TV) }
+    LaunchedEffect(vodViewModel) {
+        vodViewModel.events.collect { event ->
+            when (event) {
+                is IptvVodEvent.OpenDetails -> onNavigateToDetails(event.mediaType, event.tmdbId)
+                is IptvVodEvent.PlayDirect -> onPlayIptvVod(event.mediaId, event.streamUrl, event.title)
+            }
+        }
+    }
     val loadingMore = if(serverMode) servers.isLoadingMore else state.isLoadingMore
-    val hasMore = if(serverMode) servers.hasMore else state.hasMore
+    // The provider hands over its whole catalogue at once; there is no next page.
+    val hasMore = !iptvMode && (if(serverMode) servers.hasMore else state.hasMore)
     LaunchedEffect(grid, sourceKey, items.size, rawItems.size, error, loading, loadingMore, hasMore) {
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }.collect { last ->
-            if (!calendarMode && !collections && error == null && !loading && !loadingMore && hasMore && (items.isEmpty() || last >= items.size - 16)) {
+            if (!calendarMode && !iptvMode && !collections && error == null && !loading && !loadingMore && hasMore && (items.isEmpty() || last >= items.size - 16)) {
                 if (serverMode) viewModel.loadMoreLibrary() else viewModel.loadMoreActiveSource()
             }
         }
     }
     LaunchedEffect(grid, sourceKey, items, poster) {
-        if (!calendarMode && !poster && !collections) snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
+        if (!calendarMode && !iptvMode && !poster && !collections) snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
             val first = grid.firstVisibleItemIndex
             viewModel.prefetchLogos(items.subList(first.coerceAtMost(items.size), (last + 17).coerceAtMost(items.size)))
         }
@@ -211,7 +266,7 @@ fun WatchlistScreen(
             Row(Modifier.fillMaxWidth().testTag("library-section-tabs").then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
                 .padding(bottom = if(compact) 10.dp else if(calendarMode) 0.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
-                LibrarySection.entries.forEachIndexed { index, entry ->
+                sections.forEachIndexed { index, entry ->
                     OledControl(tr(entry.label), selected = section == entry, calendarTabStyle = calendarMode,
                         modifier = (if(index == 0) Modifier.focusRequester(firstTab).onGloballyPositioned {
                             if(!touch && !initialFocusPlaced) { initialFocusPlaced = true; firstTab.requestFocus() }
@@ -271,22 +326,29 @@ fun WatchlistScreen(
                         CircularProgressIndicator(Modifier.align(Alignment.Center), color = resolveAccentColor(Color.White))
                     } else if (items.isEmpty()) {
                         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            OledMessage(if(error != null) tr("Library unavailable") else tr("No titles found"), error ?: tr("Choose a source or add titles to your watchlist."))
-                            if(error != null) OledControl(tr("Retry"), onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
+                            OledMessage(
+                                if(error != null) tr("Library unavailable") else tr("No titles found"),
+                                error ?: if(iptvMode) tr("Your IPTV provider returned no titles for this category.")
+                                else tr("Choose a source or add titles to your watchlist.")
+                            )
+                            if(error != null) OledControl(tr("Retry"), onClick = { when { iptvMode -> vodViewModel.refresh(); serverMode -> viewModel.refreshLibrary(); else -> viewModel.refresh() } })
                         }
                     } else LazyVerticalGrid(GridCells.Fixed(columns), state = grid, modifier = Modifier.fillMaxSize().testTag("library-grid"),
                         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalBottomBarInset.current)) {
                         itemsIndexed(items, key = { index, item -> watchlistItemKey(item, index) }) { index, item ->
                             val reveal = remember { BringIntoViewRequester() }
-                            LaunchedEffect(watchlistLogoKey(item), poster) { if(!poster) viewModel.ensureLogo(item) }
+                            LaunchedEffect(watchlistLogoKey(item), poster) { if(!poster && !iptvMode) viewModel.ensureLogo(item) }
                             Box(Modifier.bringIntoViewRequester(reveal).padding(6.dp).testTag("library-card-frame-$index")) {
                             MediaCard(item, width = width - 12.dp, isLandscape = !poster, logoImageUrl = logos[watchlistLogoKey(item)],
                                 focusedScale = 1.025f, titleMaxLines = 1, showTitle = true,
                                 modifier = Modifier.testTag("library-card-$index"),
                                 onFocused = { viewModel.saveFocusState(0, index); if(!touch) scrollScope.launch { reveal.bringIntoView() } },
-                                onClick = { onNavigateToDetails(item.mediaType, item.id) },
-                                onLongClick = if(state.selectedSourceId == WatchlistSourceItem.MyWatchlist.id && !serverMode) ({ viewModel.removeFromWatchlist(item) }) else null)
+                                onClick = {
+                                    if (iptvMode) vod.items.getOrNull(index)?.let(vodViewModel::open)
+                                    else onNavigateToDetails(item.mediaType, item.id)
+                                },
+                                onLongClick = if(state.selectedSourceId == WatchlistSourceItem.MyWatchlist.id && !serverMode && !iptvMode) ({ viewModel.removeFromWatchlist(item) }) else null)
                             }
                         }
                         if (if(serverMode) servers.isLoadingMore else state.isLoadingMore) item("loading-more", span = { GridItemSpan(maxLineSpan) }) {
@@ -295,7 +357,7 @@ fun WatchlistScreen(
                             }
                         }
                         if(error != null) item("retry-page", span = { GridItemSpan(maxLineSpan) }) {
-                            OledControl(tr("Could not update this source. Retry"), onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
+                            OledControl(tr("Could not update this source. Retry"), onClick = { when { iptvMode -> vodViewModel.refresh(); serverMode -> viewModel.refreshLibrary(); else -> viewModel.refresh() } })
                         }
                     }
                 }
@@ -305,23 +367,41 @@ fun WatchlistScreen(
         state.toastMessage?.let { message ->
             Toast(message = message, isVisible = true, onDismiss = viewModel::dismissToast)
         }
+        if (vod.resolvingKey != null) {
+            // An untagged title costs a TMDB lookup before anything opens, so the
+            // tap is acknowledged instead of the screen sitting there unchanged.
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = resolveAccentColor(Color.White))
+            }
+        }
+        vod.message?.let { title ->
+            // The provider listed it, but nothing on TMDB matched and it has no
+            // direct stream, so say which title rather than failing silently.
+            Toast(message = stringResource(R.string.vod_not_matched, title), isVisible = true, onDismiss = vodViewModel::dismissMessage)
+        }
     }
     if(sourcesOpen) OledDrawer(tr("Sources"), { sourcesOpen = false }) {
         OledSources(scopeSources, selectedId, Modifier.fillMaxWidth().heightIn(max = 500.dp), ::selectSource, onNavigateToSettings)
     }
     if(filters) OledDrawer(tr("Filters"), { filters = false; if(!touch) filterButton.requestFocus() }) {
-        Text(tr("Sort"), color = Color.LightGray, modifier = Modifier.padding(vertical = 12.dp))
-        listOf("Recently added" to HomeServerLibrarySort.RECENTLY_ADDED, "Title A-Z" to HomeServerLibrarySort.TITLE,
-            "Highest rated" to HomeServerLibrarySort.RATING, "Newest release" to HomeServerLibrarySort.RELEASE_DATE_NEWEST,
-            "Oldest release" to HomeServerLibrarySort.RELEASE_DATE_OLDEST).forEach { (label, value) ->
-            OledControl(tr(label), selected = sort == value, modifier = Modifier.fillMaxWidth(), onClick = { sort = value })
+        if(!iptvMode) {
+            Text(tr("Sort"), color = Color.LightGray, modifier = Modifier.padding(vertical = 12.dp))
+            listOf("Recently added" to HomeServerLibrarySort.RECENTLY_ADDED, "Title A-Z" to HomeServerLibrarySort.TITLE,
+                "Highest rated" to HomeServerLibrarySort.RATING, "Newest release" to HomeServerLibrarySort.RELEASE_DATE_NEWEST,
+                "Oldest release" to HomeServerLibrarySort.RELEASE_DATE_OLDEST).forEach { (label, value) ->
+                OledControl(tr(label), selected = sort == value, modifier = Modifier.fillMaxWidth(), onClick = { sort = value })
+            }
         }
         if(!collections) {
             Text(tr("Type"), color = Color.LightGray, modifier = Modifier.padding(vertical = 12.dp))
-            listOf("All" to null, "Movies" to MediaType.MOVIE, "Series" to MediaType.TV).forEach { (label, value) ->
+            // The provider keeps movies and series in separate catalogues, so the
+            // IPTV tab picks one instead of offering a combined list.
+            val types = if(iptvMode) listOf("Movies" to MediaType.MOVIE, "Series" to MediaType.TV)
+                else listOf("All" to null, "Movies" to MediaType.MOVIE, "Series" to MediaType.TV)
+            types.forEach { (label, value) ->
                 OledControl(tr(label), selected = mediaFilter == value, modifier = Modifier.fillMaxWidth(), onClick = { mediaFilter = value })
             }
-            OledControl(tr("Refresh"), onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
+            OledControl(tr("Refresh"), onClick = { when { iptvMode -> vodViewModel.refresh(); serverMode -> viewModel.refreshLibrary(); else -> viewModel.refresh() } })
         }
     }
     TextInputModal(search, tr("Search library"), initialValue = query,

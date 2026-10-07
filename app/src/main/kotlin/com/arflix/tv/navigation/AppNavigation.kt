@@ -33,6 +33,7 @@ import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
+import com.arflix.tv.data.model.IptvVodSourceIds
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
 
@@ -283,6 +284,18 @@ fun AppNavigation(
                 currentProfile = currentProfile,
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                },
+                // An IPTV movie TMDB does not know: play the provider's copy.
+                onPlayIptvVod = { mediaId, streamUrl, title ->
+                    navController.navigate(
+                        Screen.Player.createRoute(
+                            mediaType = MediaType.MOVIE,
+                            mediaId = mediaId,
+                            streamUrl = streamUrl,
+                            preferredAddonId = IptvVodSourceIds.XTREAM,
+                            preferredSourceName = title
+                        )
+                    )
                 },
                 onNavigateToHome = { navigateHome() },
                 onNavigateToSearch = { navigateTopLevel(Screen.Search.route) },
