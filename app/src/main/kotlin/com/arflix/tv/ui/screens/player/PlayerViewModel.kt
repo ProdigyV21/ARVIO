@@ -3991,12 +3991,16 @@ class PlayerViewModel @Inject constructor(
      * listens to the AI hearing for a short window, then scores each candidate by how often its
      * on-screen cue matches what was spoken at that moment (see [SubtitleSyncMatcher]).
      */
-    fun findBestSubtitleMatch(onNoMatch: ((Double?) -> Unit)? = null, useCache: Boolean = true) {
+    fun findBestSubtitleMatch(
+        onNoMatch: ((Double?) -> Unit)? = null,
+        useCache: Boolean = true,
+        scanLang: String? = null,
+    ) {
         if (_uiState.value.isFindingBestMatch) return
         val previousSubtitle = _uiState.value.selectedSubtitle
         findMatchJob?.cancel()
         findMatchJob = viewModelScope.launch {
-            val targetLang = targetSubtitleLangCode.ifBlank { normalizeLanguage(getDefaultSubtitle()) }
+            val targetLang = scanLang ?: targetSubtitleLangCode.ifBlank { normalizeLanguage(getDefaultSubtitle()) }
             val targetLangName = languageCodeToName(targetLang)
             // Include the best (rejected) score so a fast verdict is visibly a real scan result.
             val noMatch = onNoMatch ?: { score ->
@@ -5731,11 +5735,12 @@ class PlayerViewModel @Inject constructor(
                 // Verdicts are recorded against the family representative that was checked, which
                 // is `decided` — `winner` may be a family member served in its place.
                 val winnerVerdict = aiVerdicts["${decided.sub.provider}|${decided.sub.id}"]
+                val isSecondaryRun = scanLang != null
                 if (retimedCopy != null) {
                     // The cache stores a subtitle and one offset; a cue-by-cue retime is neither,
                     // and replaying it would need the whole scan anyway. Scan again next time.
                     Log.i("SubMatch", "not remembering \"${winner.sub.label}\": re-timed cue by cue")
-                } else if (mayRememberMatch(aiIsArbiter, winnerVerdict)) {
+                } else if (!isSecondaryRun && mayRememberMatch(aiIsArbiter, winnerVerdict)) {
                     rememberMatchAfterDwell(winner.sub, winner.offsetMs)
                 } else {
                     Log.i(
@@ -5836,6 +5841,26 @@ class PlayerViewModel @Inject constructor(
                         "audio sync: skipped — the model found none of the ${candidates.size} subtitles to be this episode's dialogue"
                     )
                 }
+                // Secondary preferred language fallback: before falling back to audio sync,
+                // try scanning candidate subtitles in the secondary preferred language if defined.
+                val secondaryLang = runCatching {
+                    val prefs = context.settingsDataStore.data.first()
+                    prefs[secondarySubtitleKey()]?.trim().orEmpty()
+                        .let { if (isSubtitleDisabledPreference(it)) null else normalizeLanguage(it) }
+                }.getOrNull()
+                val canTrySecondary = scanLang == null && !secondaryLang.isNullOrBlank() && secondaryLang != targetLang
+                if (canTrySecondary) {
+                    val hasSecondaryCandidates = _uiState.value.subtitles.any {
+                        !it.isEmbedded && !it.isBitmap && it.url.isNotBlank() && normalizeLanguage(it.lang) == secondaryLang
+                    }
+                    if (hasSecondaryCandidates) {
+                        Log.i("SubMatch", "primary language ($targetLang) unverified; attempting secondary language ($secondaryLang)")
+                        matchStep("4· primary language unverified — trying secondary ($secondaryLang)…")
+                        findBestSubtitleMatch(onNoMatch = onNoMatch, useCache = false, scanLang = secondaryLang)
+                        return@launch
+                    }
+                }
+
                 val hearing = !wrongEpisode && hearingPick != null && startHearingFallback(hearingPick, anchor) {
                     noMatch(best?.score)
                     selectLastResort()
@@ -6268,7 +6293,12 @@ class PlayerViewModel @Inject constructor(
             currentMediaType == MediaType.MOVIE -> "movie" to imdb
             else -> "series" to "$imdb:${currentSeason ?: 1}:${currentEpisode ?: 1}"
         }
-        sync.arm(references, type, videoId)
+        val secondaryLang = runCatching {
+            val prefs = context.settingsDataStore.data.first()
+            prefs[secondarySubtitleKey()]?.trim().orEmpty()
+                .let { if (isSubtitleDisabledPreference(it)) null else normalizeLanguage(it) }
+        }.getOrNull()
+        sync.arm(references, type, videoId, secondaryLang)
     }
 
     /**

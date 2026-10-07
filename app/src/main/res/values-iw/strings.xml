@@ -295,4 +295,7 @@
     <string name="addon_failed_add">הוספת התוסף נכשלה</string>
     <string name="catalog_tmdb_title">קטלוג TMDB</string>
     <string name="catalog_url_tmdb_hint">השתמש בכתובת של דף TMDB מסוג list, collection, company, network, person, keyword או genre</string>
+    <string name="settings_autosync_bubble_toast">הודעות בועת זכוכית</string>
+    <string name="settings_autosync_bubble_toast_description">הצגת התקדמות ותוצאות AutoSync בבועת זכוכית מעוצבת בתחתית הנגן במקום הודעות רגילות</string>
+    <string name="autosync_bubble_label">AutoSync</string>
 </resources>

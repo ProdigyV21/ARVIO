@@ -3902,6 +3902,11 @@ fun PlayerScreen(
             }
         }
 
+        // AutoSync Glass Bubble Notifications
+        com.arflix.tv.ui.screens.player.audiosync.bubble.AutoSyncBubbleToastHost(
+            controlsVisible = isOverlayVisible
+        )
+
         // ARVIO Mobile Player Overlay (Phone & Tablet Touch Devices)
         if (isTouchDevice && !isInPipMode) {
             ArvioMobilePlayer(

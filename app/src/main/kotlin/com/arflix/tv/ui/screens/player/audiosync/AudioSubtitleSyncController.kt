@@ -750,10 +750,18 @@ internal class AudioSubtitleSyncController(
         )
     }
 
-    private fun englishCandidates(): List<ReferenceCandidate> =
-        (candidates.filter { isEnglish(it.language) } + fallbackCandidates).distinctBy { it.url }
-
     @Volatile
+    var secondaryPreferredLanguage: String? = null
+
+    private fun englishCandidates(): List<ReferenceCandidate> =
+        (candidates.filter { isEnglish(it.language) || isSecondary(it.language) } + fallbackCandidates).distinctBy { it.url }
+
+    private fun isSecondary(language: String?): Boolean {
+        val target = secondaryPreferredLanguage?.trim()?.lowercase() ?: return false
+        if (target.isBlank() || target == "off" || target == "none") return false
+        val value = language?.trim()?.lowercase() ?: return false
+        return value == target || value.startsWith("$target-") || value.startsWith("${target}_")
+    }
     private var contentKey: String? = null
 
     /** English subtitles from the public OpenSubtitles service, independent of addon language settings. */

@@ -133,18 +133,20 @@ internal class ArvioAudioSync(
         references: List<AudioSubtitleSyncController.ReferenceCandidate>,
         contentType: String?,
         videoId: String?,
+        secondaryLanguage: String? = null,
     ) {
         stop()
         if (!AudioSyncSettings.fallbackEnabled.value) return
         controller.enabled = true
         controller.listensBeforeSession = true
+        controller.secondaryPreferredLanguage = secondaryLanguage
         val key = "$contentType|$videoId"
         if (key != contentKey && !contentType.isNullOrBlank() && !videoId.isNullOrBlank()) {
             contentKey = key
             controller.setContent(contentType, videoId)
         }
         controller.setReferenceSubtitles(references)
-        SyncLog.i("armed: ${references.size} addon subtitles, content=$contentType/$videoId")
+        SyncLog.i("armed: ${references.size} addon subtitles, secondary=$secondaryLanguage, content=$contentType/$videoId")
     }
 
     /** Whether a takeover can happen at all. */
@@ -391,7 +393,15 @@ internal class ArvioAudioSync(
             is AudioSyncStatus.Adjusted ->
                 appContext.getString(R.string.player_audio_sync_adjusted, formatOffset(status.offsetMs))
         }
-        mainHandler.post { Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show() }
+        val kind = when (status) {
+            AudioSyncStatus.Listening, is AudioSyncStatus.ModelDownloading ->
+                com.arflix.tv.ui.screens.player.audiosync.bubble.AutoSyncBubbleKind.Working
+            AudioSyncStatus.Withdrawn ->
+                com.arflix.tv.ui.screens.player.audiosync.bubble.AutoSyncBubbleKind.Failure
+            else ->
+                com.arflix.tv.ui.screens.player.audiosync.bubble.AutoSyncBubbleKind.Success
+        }
+        com.arflix.tv.ui.screens.player.audiosync.bubble.showAutoSyncMessage(appContext, kind, message)
     }
 
     /**

@@ -1883,5 +1883,8 @@
     <string name="settings_simkl_lists_connect">Connect SIMKL</string>
     <string name="settings_simkl_lists_connected">SIMKL connected</string>
     <string name="settings_simkl_open">Open SIMKL</string>
+    <string name="settings_autosync_bubble_toast">Bubble notifications</string>
+    <string name="settings_autosync_bubble_toast_description">Show AutoSync progress and results in a small animated frosted bubble at the bottom of the player instead of plain toasts</string>
+    <string name="autosync_bubble_label">AutoSync</string>
 </resources>
 
