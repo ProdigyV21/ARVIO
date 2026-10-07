@@ -63,6 +63,7 @@ import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -357,6 +358,11 @@ class PlayerViewModel @Inject constructor(
     private var userPickedSubtitle: Boolean = false
     private var playbackSessionStartTime: Long = 0L
     private val recentSourcePlayTracker = RecentSourcePlayTracker()
+    private var recentSourceLoad: Deferred<RecentPlayedSource?>? = null
+    // Autoplay picks the title's recently played source over its own ranking, and holds its
+    // quick picks while that source's addon may still answer (see the source collection).
+    private var autoplayRecentSource: RecentPlayedSource? = null
+    private var holdAutoplayForRecentSource = false
 
     private fun isCurrentAnime(): Boolean =
         currentMediaType == MediaType.TV &&
@@ -1495,6 +1501,12 @@ class PlayerViewModel @Inject constructor(
                 val HOME_SERVER_AUTOPLAY_WAIT_MS = 850L
                 val AUTOPLAY_MAX_WINDOW_MS = 1_750L
                 val AUTOPLAY_QUALITY_WINDOW_MS = 180L
+                // A title with a recently played source autoplays it. Its addon may answer after
+                // the quick picks below would fire, so they hold until it arrives, the search
+                // finishes, or this much time passes.
+                val RECENT_SOURCE_AUTOPLAY_WAIT_MS = 6_000L
+                val recentForAutoplay = recentSourceLoad?.await()
+                var recentWaitJob: Job? = null
                 val collectionStartMs = System.currentTimeMillis()
                 var autoplaySelected = false
                 var autoplayDeferredJob: Job? = null
@@ -1630,7 +1642,29 @@ class PlayerViewModel @Inject constructor(
                             stream.behaviorHints.notWebReady != true &&
                             !stream.url.isNullOrBlank()
                     }
-                    if (!autoplaySelected && autoplayStreams.isNotEmpty() && autoplayDeferredJob == null && canStartAutoplay()) {
+                    // Arrived but filtered out by the autoplay quality settings ends the hold too.
+                    val recentArrived = findRecentSourceMatch(mergedStreams, recentForAutoplay) != null
+                    val recentAutoplayStream = findRecentSourceMatch(autoplayStreams, recentForAutoplay)
+                    holdAutoplayForRecentSource = recentForAutoplay != null && !recentArrived &&
+                        !progressive.isFinal && elapsedMs < RECENT_SOURCE_AUTOPLAY_WAIT_MS
+                    if (holdAutoplayForRecentSource && recentWaitJob == null) {
+                        recentWaitJob = launch {
+                            delay(RECENT_SOURCE_AUTOPLAY_WAIT_MS - elapsedMs)
+                            holdAutoplayForRecentSource = false
+                            if (!autoplaySelected && canStartAutoplay() &&
+                                eligiblePlayerAutoplayStreams(lastMergedStreams, autoPlayMinimumQuality, autoPlayLimits).isNotEmpty()
+                            ) {
+                                autoplaySelected = true
+                                autoplayDeferredJob?.cancel()
+                                autoplayDeferredJob = null
+                                playbackDiag("autoplayRecentWaitExpired streams=${lastMergedStreams.size}")
+                                autoplaySelectBest(lastMergedStreams, preferredLanguage)
+                            }
+                        }
+                    }
+                    if (!autoplaySelected && autoplayStreams.isNotEmpty() && autoplayDeferredJob == null &&
+                        !holdAutoplayForRecentSource && canStartAutoplay()
+                    ) {
                         autoplayDeferredJob = launch {
                             delay(AUTOPLAY_QUALITY_WINDOW_MS)
                             if (!autoplaySelected) {
@@ -1664,18 +1698,23 @@ class PlayerViewModel @Inject constructor(
                     val autoplayTopStream = pickAutoplayTopStream(autoplayStreams, preferredLanguage)
                     val hasRequestedPreferredStream = hasRequestedPreferredStream(autoplayStreams)
                     val shouldSelectNow = !autoplaySelected && autoplayStreams.isNotEmpty() && canStartAutoplay() && homeServerReadyForAutoplay && (
-                        cacheHit ||
-                            progressive.isFinal ||
-                            hasCachedReadyStream ||
-                            hasRequestedPreferredStream ||
-                            isExcellentAutoplayCandidate(autoplayTopStream) ||
-                            elapsedMs >= AUTOPLAY_MAX_WINDOW_MS
+                        recentAutoplayStream != null || (
+                            !holdAutoplayForRecentSource && (
+                                cacheHit ||
+                                    progressive.isFinal ||
+                                    hasCachedReadyStream ||
+                                    hasRequestedPreferredStream ||
+                                    isExcellentAutoplayCandidate(autoplayTopStream) ||
+                                    elapsedMs >= AUTOPLAY_MAX_WINDOW_MS
+                                )
+                            )
                         )
 
                     if (shouldSelectNow) {
                         autoplaySelected = true
                         autoplayDeferredJob?.cancel()
                         autoplayDeferredJob = null
+                        recentWaitJob?.cancel()
                         Log.i(
                             TAG,
                             "Autoplay selecting streams=${mergedStreams.size} completed=$completed/$total final=${progressive.isFinal} cached=$hasCachedReadyStream preferred=$hasRequestedPreferredStream elapsedMs=$elapsedMs top=${autoplayTopStream?.quality}/${autoplayTopStream?.size}"
@@ -1688,6 +1727,9 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
 
+                // The search is over: nothing left to hold for.
+                holdAutoplayForRecentSource = false
+                recentWaitJob?.cancel()
                 if (!autoplaySelected && lastMergedStreams.isNotEmpty()) {
                     if (hasHomeServerConnections &&
                         lastMergedStreams.none { it.addonId == HomeServerRepository.ADDON_ID }
@@ -2681,6 +2723,10 @@ class PlayerViewModel @Inject constructor(
             eligiblePlayerAutoplayStreams(streams, autoPlayMinimumQuality, autoPlayLimits), preferredLanguage
         )
         if (healthyStreams.isEmpty()) return
+        // The source this title was last really watched from beats the ranking. Until its addon
+        // has answered (or the hold ends), late supplemental results must not pick for it.
+        val recentCandidate = findRecentSourceMatch(healthyStreams, autoplayRecentSource)
+        if (recentCandidate == null && holdAutoplayForRecentSource) return
         val hasExplicitPreferred =
             !currentPreferredBingeGroup.isNullOrBlank() ||
                 !currentPreferredAddonId.isNullOrBlank() ||
@@ -2703,7 +2749,7 @@ class PlayerViewModel @Inject constructor(
         }
 
         val stabilitySelected = pickAutoplayTopStream(healthyStreams, preferredLanguage)
-        val selected = if (hasExplicitPreferred) {
+        val selected = recentCandidate ?: if (hasExplicitPreferred) {
             preferredFromBingeGroup ?: preferredNavigationCandidate ?: stabilitySelected ?: healthyStreams.first()
         } else {
             stabilitySelected ?: healthyStreams.first()
@@ -2711,6 +2757,7 @@ class PlayerViewModel @Inject constructor(
         playbackDiag(
             "autoplaySelected selected=${streamDiag(selected)} " +
                 "preferredNavigation=${streamDiag(preferredNavigationCandidate)} " +
+                "usedRecent=${recentCandidate != null} " +
                 "usedPreferred=${hasExplicitPreferred && (selected === preferredFromBingeGroup || selected === preferredNavigationCandidate)}"
         )
         selectStream(selected)
@@ -7683,16 +7730,20 @@ class PlayerViewModel @Inject constructor(
 
     private fun loadRecentSource(mediaType: MediaType, mediaId: Int, season: Int?, episode: Int?) {
         recentSourcePlayTracker.reset()
-        viewModelScope.launch {
+        autoplayRecentSource = null
+        holdAutoplayForRecentSource = false
+        recentSourceLoad = viewModelScope.async {
             val recent = recentPlayedSourceRepository.get(mediaType, mediaId)
                 ?.takeIf { it.appliesTo(mediaType, mediaId, season, episode) }
-                ?: return@launch
             val stillCurrent = currentMediaType == mediaType && currentMediaId == mediaId &&
                 currentSeason == season && currentEpisode == episode
+            if (recent == null || !stillCurrent) return@async null
+            autoplayRecentSource = recent
             // A source that crossed the threshold in this session is newer than the stored one.
-            if (stillCurrent && _uiState.value.recentSource == null) {
+            if (_uiState.value.recentSource == null) {
                 _uiState.value = _uiState.value.copy(recentSource = recent)
             }
+            recent
         }
     }
 
