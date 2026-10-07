@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_calendar">לוח שנה</string>
+    <string name="calendar_all_watchlists">כל רשימות הצפייה</string>
+    <string name="calendar_arvio_watchlist">רשימת הצפייה של ARVIO</string>
+    <string name="calendar_today">היום</string>
+    <string name="calendar_local_time">זמן מקומי</string>
+    <string name="calendar_time_tba">שעה טרם נקבעה</string>
+    <string name="calendar_next_month">החודש הבא</string>
+    <string name="calendar_previous_month">החודש הקודם</string>
+    <string name="calendar_release">שחרור</string>
+    <string name="calendar_releases">שחרורים</string>
+    <string name="calendar_more">עוד</string>
+    <string name="calendar_navigate_days">ניווט בין ימים</string>
+    <string name="calendar_open_day">פתיחת יום</string>
+    <string name="calendar_partial">חלק מהמקורות אינם זמינים</string>
+    <string name="calendar_loading">מאתר שחרורים…</string>
+    <string name="calendar_unavailable">לוח השנה אינו זמין</string>
+    <string name="calendar_empty_watchlist">רשימת הצפייה שלך, בלוח השנה</string>
+    <string name="calendar_empty_day">אין שחרורים ביום זה</string>
+    <string name="calendar_add_watchlist">הוסף סרטים וסדרות לרשימת הצפייה שלך ב-ARVIO. אין צורך בחשבון מעקב.</string>
+    <string name="calendar_choose_day">בחר יום או רשימת צפייה אחרת כדי לחקור שחרורים קרובים.</string>
+    <string name="calendar_cinema">קולנוע</string>
+    <string name="calendar_digital">דיגיטלי</string>
+    <string name="calendar_physical">מדיה פיזית</string>
+    <string name="calendar_next_release">השחרור הבא</string>
+    <string name="calendar_partial_details">חלק מפרטי השחרור אינם זמינים</string>
+    <string name="calendar_refresh">רענון לוח השנה</string>
+</resources>
