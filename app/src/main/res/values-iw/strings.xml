@@ -295,4 +295,10 @@
     <string name="addon_failed_add">הוספת התוסף נכשלה</string>
     <string name="catalog_tmdb_title">קטלוג TMDB</string>
     <string name="catalog_url_tmdb_hint">השתמש בכתובת של דף TMDB מסוג list, collection, company, network, person, keyword או genre</string>
+
+    <!-- Top Bar Style -->
+    <string name="settings_top_bar_style">סגנון תפריט עליון</string>
+    <string name="settings_top_bar_style_desc">בחירה בין תפריט עליון רגיל לקפסולת זכוכית מרחפת</string>
+    <string name="settings_top_bar_standard">רגיל</string>
+    <string name="settings_top_bar_pill">קפסולה מרחפת</string>
 </resources>

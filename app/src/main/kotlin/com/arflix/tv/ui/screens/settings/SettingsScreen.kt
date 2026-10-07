@@ -328,7 +328,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
         "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27)
-        "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
+        "appearance" -> listOf(17, 49, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
         else -> emptyList()
@@ -1439,6 +1439,7 @@ fun SettingsScreen(
                                                 15 -> viewModel.cycleFrameRateMatchingMode()
                                                 16 -> showQualityFiltersModal = true
                                                 17 -> viewModel.toggleCardLayoutMode()
+                                                49 -> viewModel.toggleTopBarStyle()
                                                 18 -> openUiModeWarningDialog()
                                                 19 -> viewModel.setSkipProfileSelection(!uiState.skipProfileSelection)
                                                 20 -> viewModel.setOledBlackBackground(!uiState.oledBlackBackground)
@@ -2047,6 +2048,7 @@ fun SettingsScreen(
                             defaultAudioLanguage = uiState.defaultAudioLanguage,
                             dnsProvider = uiState.dnsProvider,
                             cardLayoutMode = uiState.cardLayoutMode,
+                            topBarStyle = uiState.topBarStyle,
                             frameRateMatchingMode = uiState.frameRateMatchingMode,
                             autoPlayNext = uiState.autoPlayNext,
                             autoPlaySingleSource = uiState.autoPlaySingleSource,
@@ -2071,6 +2073,7 @@ fun SettingsScreen(
                             onSecondarySubtitleClick = openSecondarySubtitlePicker,
                             onAudioLanguageClick = openAudioLanguagePicker,
                             onCardLayoutToggle = { viewModel.toggleCardLayoutMode() },
+                            onTopBarStyleToggle = { viewModel.toggleTopBarStyle() },
                             onFrameRateMatchingClick = { viewModel.cycleFrameRateMatchingMode() },
                             onDnsProviderClick = openDnsProviderPicker,
                             onAutoPlayToggle = { viewModel.setAutoPlayNext(it) },
@@ -5988,6 +5991,14 @@ private fun MobileSettingsSubPage(
                         onClick = { viewModel.toggleCardLayoutMode() }
                     )
                     MobileSettingsRow(
+                        icon = Icons.Default.Tune,
+                        title = stringResource(R.string.settings_top_bar_style),
+                        subtitle = stringResource(R.string.settings_top_bar_style_desc),
+                        value = if (uiState.topBarStyle == "Pill") stringResource(R.string.settings_top_bar_pill) else stringResource(R.string.settings_top_bar_standard),
+                        isFocused = false,
+                        onClick = { viewModel.toggleTopBarStyle() }
+                    )
+                    MobileSettingsRow(
                         icon = Icons.Default.Palette,
                         title = stringResource(R.string.oled_black_background),
                         subtitle = stringResource(R.string.oled_black_background_desc),
@@ -7122,6 +7133,7 @@ private fun TvGeneralSettingsRows(
     contentLanguage: String = "en-US",
     dnsProvider: String,
     cardLayoutMode: String,
+    topBarStyle: String = "Standard",
     frameRateMatchingMode: String,
     autoPlayNext: Boolean,
     autoPlaySingleSource: Boolean,
@@ -7149,6 +7161,7 @@ private fun TvGeneralSettingsRows(
     onSecondarySubtitleClick: () -> Unit = {},
     onAudioLanguageClick: () -> Unit,
     onCardLayoutToggle: () -> Unit,
+    onTopBarStyleToggle: () -> Unit = {},
     onFrameRateMatchingClick: () -> Unit,
     onDnsProviderClick: () -> Unit,
     onAutoPlayToggle: (Boolean) -> Unit,
@@ -7274,6 +7287,15 @@ private fun TvGeneralSettingsRows(
                 15 -> SettingsRow(Icons.Default.Movie, stringResource(R.string.frame_rate), stringResource(R.string.frame_rate_desc), frameRateMatchingMode, focusedIndex == localIndex, onFrameRateMatchingClick, Modifier.settingsFocusSlot(localIndex))
                 16 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.quality_filters), stringResource(R.string.quality_filters_desc), qualityFilterValue, focusedIndex == localIndex, onQualityFiltersClick, Modifier.settingsFocusSlot(localIndex))
                 17 -> SettingsRow(Icons.Default.Widgets, stringResource(R.string.card_layout), stringResource(R.string.card_layout_desc), cardLayoutMode, focusedIndex == localIndex, onCardLayoutToggle, Modifier.settingsFocusSlot(localIndex))
+                49 -> SettingsRow(
+                    icon = Icons.Default.Tune,
+                    title = stringResource(R.string.settings_top_bar_style),
+                    subtitle = stringResource(R.string.settings_top_bar_style_desc),
+                    value = if (topBarStyle == "Pill") stringResource(R.string.settings_top_bar_pill) else stringResource(R.string.settings_top_bar_standard),
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onTopBarStyleToggle,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
                 18 -> SettingsRow(
                     icon = Icons.Default.Settings,
                     title = stringResource(R.string.ui_mode),

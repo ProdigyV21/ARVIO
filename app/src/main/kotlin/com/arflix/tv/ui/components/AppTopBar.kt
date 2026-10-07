@@ -89,6 +89,22 @@ fun topBarFocusedItem(focusedIndex: Int, hasProfile: Boolean): SidebarItem? {
     return NAV_ITEMS.getOrNull(itemIndex)
 }
 
+@Composable
+fun rememberTopBarStyle(defaultStyle: String = "Standard"): String {
+    val context = LocalContext.current
+    var resolvedStyle by remember(defaultStyle) { mutableStateOf(defaultStyle) }
+    LaunchedEffect(context, defaultStyle) {
+        runCatching {
+            val prefs = context.settingsDataStore.data.first()
+            val saved = prefs.asMap().entries
+                .firstOrNull { (key, _) -> key.name.endsWith("top_bar_style") }
+                ?.value as? String
+            resolvedStyle = saved ?: defaultStyle
+        }
+    }
+    return resolvedStyle
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AppTopBar(
@@ -100,8 +116,24 @@ fun AppTopBar(
     clockFormat: String = "24h",
     syncStatus: com.arflix.tv.data.repository.CloudSyncStatus = com.arflix.tv.data.repository.CloudSyncStatus.NOT_SIGNED_IN,
     hasUpdateBadge: Boolean = false,
+    topBarStyle: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val currentStyle = topBarStyle ?: rememberTopBarStyle()
+    if (currentStyle.equals("Pill", ignoreCase = true)) {
+        TopPillNavigationBar(
+            selectedItem = selectedItem,
+            isFocused = isFocused,
+            focusedIndex = focusedIndex,
+            profile = profile,
+            profileCount = profileCount,
+            clockFormat = clockFormat,
+            hasUpdateBadge = hasUpdateBadge,
+            modifier = modifier
+        )
+        return
+    }
+
     val showProfile = profile != null
     val hasProfile = showProfile
     val currentTime = rememberTopBarTime(clockFormat)
@@ -269,7 +301,7 @@ private fun TopBarNavChip(
  * of the top bar per the mockup. Receives focus/selection state for D-pad nav.
  */
 @Composable
-private fun TopBarSettingsGear(
+internal fun TopBarSettingsGear(
     isFocused: Boolean,
     isSelected: Boolean,
     hasBadge: Boolean = false
@@ -339,7 +371,7 @@ private fun TopBarSettingsGear(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TopBarProfileAvatar(
+internal fun TopBarProfileAvatar(
     profile: Profile,
     isFocused: Boolean
 ) {
@@ -383,7 +415,7 @@ private fun TopBarProfileAvatar(
 }
 
 @Composable
-private fun rememberTopBarTime(clockFormat: String): String {
+internal fun rememberTopBarTime(clockFormat: String): String {
     val context = LocalContext.current
     var resolvedFormat by remember(clockFormat) { mutableStateOf(clockFormat) }
     var currentTime by remember(resolvedFormat) { mutableStateOf(topBarCurrentTime(resolvedFormat)) }
