@@ -66,7 +66,9 @@ class ReleaseCalendarRepositoryTest {
         coEvery { simklAuth.isConnected() } returns false
         coEvery { mdb.getWatchlist() } returns RemoteWatchlistResult(false, null, 0)
         coEvery { media.getLogoUrl(any<MediaType>(), any()) } returns null
-        coEvery { cache.readValue<Any>(any(), any()) } returns null
+        coEvery { cache.readMetadata<Any>(any(), any()) } returns null
+        coEvery { cache.readTitle(any()) } returns null
+        coEvery { cache.writeTitle(any(), any()) } just Runs
         coEvery { cache.writeValue(any(), any()) } just Runs
         coEvery { cache.clearMetadata() } just Runs
         repository = ReleaseCalendarRepository(tmdb, traktApi, own, trakt, simklAuth, simkl, mdb, media, profiles, cache)
@@ -187,8 +189,8 @@ class ReleaseCalendarRepositoryTest {
         coEvery { tmdb.getTvDetails(any(), any(), any(), any()) } answers {
             TmdbTvDetails(firstArg(), "Show", seasons = (0..2).map { TmdbTvSeason(seasonNumber = it) })
         }
-        coEvery { cache.readValue<TmdbSeasonDetails>(match { it.startsWith("season:") && it.contains(":0:") }, any()) } returns
-            TmdbSeasonDetails(seasonNumber = 0, episodes = listOf(TmdbEpisode(seasonNumber = 0, airDate = "2026-10-04")))
+        coEvery { cache.readMetadata<TmdbSeasonDetails>(match { it.startsWith("season:") && it.contains(":0:") }, any()) } returns
+            CalendarMetadataRecord(TmdbSeasonDetails(seasonNumber = 0, episodes = listOf(TmdbEpisode(seasonNumber = 0, airDate = "2026-10-04"))), System.currentTimeMillis())
         coEvery { tmdb.getTvSeasons(any(), any(), any(), any()) } coAnswers {
             assertEquals("season/2,season/1", thirdArg<String>())
             inFlight++
@@ -444,8 +446,8 @@ class ReleaseCalendarRepositoryTest {
     }
 
     @Test fun `public metadata restored from disk needs no network after repository recreation`() = runTest {
-        coEvery { cache.readValue<TmdbMovieDetails>("movie:1:en-US", any()) } returns
-            TmdbMovieDetails(1, "Saved movie", releaseDate = "2026-10-04")
+        coEvery { cache.readMetadata<TmdbMovieDetails>("movie:1:en-US", any()) } returns
+            CalendarMetadataRecord(TmdbMovieDetails(1, "Saved movie", releaseDate = "2026-10-04"), System.currentTimeMillis())
         val result = repository.loadMonth(repository.loadWatchlists("fixture-profile"), month, ZoneId.of("UTC"), "US")
         assertEquals("Saved movie", result.entries.single().media.title)
         coVerify(exactly = 0) { tmdb.getMovieDetails(any(), any(), any(), any()) }

@@ -71,12 +71,20 @@ in an Android vector; PNG artwork retains its original colors and aspect ratio.
 
 ## Loading and isolation
 
-Metadata requests use bounded concurrency and expiring caches. Android keeps public
-metadata for 30 minutes in memory/on disk and restores a private month preview for
+Metadata requests use bounded concurrency and expiring caches. Android keeps active,
+future and unknown public metadata for 30 minutes in memory/on disk; older movie,
+completed show and fully historical season metadata can be reused for 24 hours.
+Upcoming regional releases or undated episodes retain the short refresh interval.
+Android restores a private month preview for
 up to 24 hours, scoped to profile, connection identity, local watchlist membership,
 language, region, month and timezone. Encoding, parsing and file access run off the
-UI thread. The production Library route preloads the current month before the
-Calendar tab opens. The web client also restores scoped month snapshots before
+UI thread. Home starts warming the selected Calendar month after six seconds with
+no remote/touch input, only while resumed. Input, leaving Home or backgrounding
+cancels idle work. Opening Library promotes an in-flight load rather than restarting
+it; incomplete cancelled work resumes on entry. The activity-scoped ViewModel
+shares results between Home and Library, while private state remains profile-scoped.
+The production Library route also starts loading before the Calendar tab opens.
+The web client restores scoped month snapshots before
 refreshing. Successfully removed source memberships are reconciled into the saved
 preview even when an unrelated service fails; retained fallback data keeps its
 original expiry. New, uncached remote data still requires a network response.
@@ -99,9 +107,22 @@ overlapping seasons remain included. Missing or malformed appended blocks retry
 independently through the ordinary season endpoint. Batch decoding runs off the UI
 thread; the same five-request global limit and two-season-request limit still apply.
 Current shows and recent movie releases are prioritized without excluding other
-titles. Older movies have a bounded title queue so later-arriving tracker shows do
+titles. Completed per-title month projections, including verified empty results,
+survive process recreation. Adding one watchlist title only computes that title;
+saved results acquire current source memberships and cannot restore removed titles.
+Projection keys include profile, media identity, month, language, region, timezone
+and optional Trakt identity. Expiry never exceeds the freshness of the metadata
+used to compute the result. Errors are not saved as successful empty schedules;
+missing optional artwork receives a short recovery interval. Explicit Retry clears
+metadata and projections but retains private full-month previews for outage fallback.
+After idle warming, adjacent months reuse already fetched metadata without issuing
+extra HTTP requests. Normal month entry still fills every missing title/season.
+Caches are bounded in memory and on disk (4,096 files / 48 MiB maximum).
+Progress parsing/mapping runs off Main; UI updates are coalesced at 100 ms while
+the first available release and final complete result remain immediate.
+Older movies have a bounded title queue so later-arriving tracker shows do
 not wait behind hundreds of pending requests. Confirmed HTTP 404 responses are
-remembered for one minute to avoid repeated failed reads on date/month changes;
+remembered for fifteen minutes to avoid repeated failed reads on date/month changes;
 explicit Retry clears this negative cache. Other network errors are not hidden by it.
 Changing month, profile or language cancels/replaces the old request. Private
 watchlists are scoped to the current account/profile; public metadata may be cached.

@@ -28,6 +28,9 @@ internal data class CalendarMonthPreview(
     val refreshedAt: Long = System.currentTimeMillis()
 )
 
+internal data class CalendarMetadataRecord<T>(val value: T, val writtenAt: Long)
+internal data class CalendarTitleProjection(val entries: List<CalendarRelease>, val expiresAt: Long)
+
 /** Disposable, app-private cache; never backed up or used as an authoritative watchlist. */
 @Singleton
 class ReleaseCalendarCache internal constructor(
@@ -42,8 +45,18 @@ class ReleaseCalendarCache internal constructor(
 
     // A wrapper permits both object responses and primitive/list metadata without reflection.
     internal suspend fun <T> readValue(key: String, type: Type): T? = withContext(Dispatchers.IO) {
-        read("metadata:$key", METADATA_TTL)?.let {
-            try { gson.fromJson<T>(it.get("value"), type) } catch (_: Exception) { null }
+        read("metadata:$key", CALENDAR_ACTIVE_TTL)?.let {
+            try { gson.fromJson<T>(it.json.get("value"), type) } catch (_: Exception) { null }
+        }
+    }
+
+    internal suspend fun <T : Any> readMetadata(key: String, type: Type): CalendarMetadataRecord<T>? = withContext(Dispatchers.IO) {
+        read("metadata:$key", CALENDAR_HISTORY_TTL)?.let {
+            try {
+                val value = gson.fromJson<T>(it.json.get("value"), type) ?: return@let null
+                CalendarMetadataRecord(value, it.writtenAt)
+            }
+            catch (_: Exception) { null }
         }
     }
 
@@ -52,11 +65,29 @@ class ReleaseCalendarCache internal constructor(
     }
 
     internal suspend fun readMonth(key: String): CalendarMonthPreview? = withContext(Dispatchers.IO) {
-      read("month:$key", MONTH_TTL)?.let { json ->
+        read("month:$key", MONTH_TTL)?.let { decodePreview(it.json) }
+    }
+
+    internal suspend fun readTitle(key: String): CalendarTitleProjection? = withContext(Dispatchers.IO) {
+        read("projection:$key", CALENDAR_HISTORY_TTL)?.let { stored ->
+            try {
+                val expiry = stored.json.get("expiresAt")?.asLong ?: return@let null
+                if (now() >= expiry) return@let null
+                decodePreview(stored.json)?.let { CalendarTitleProjection(it.entries, expiry) }
+            } catch (_: Exception) { null }
+        }
+    }
+
+    internal suspend fun writeTitle(key: String, projection: CalendarTitleProjection): Unit = withContext(Dispatchers.IO) {
+        write("projection:$key", encodePreview(CalendarMonthPreview(projection.entries, emptyMap(), now())).apply {
+            addProperty("expiresAt", projection.expiresAt)
+        })
+    }
+
+    private fun decodePreview(json: JsonObject): CalendarMonthPreview? =
         try {
             val refreshedAt = json.get("refreshedAt").asLong
-            if (now() - refreshedAt !in 0 until MONTH_TTL) return@let null
-            CalendarMonthPreview(json.getAsJsonArray("entries").map { element ->
+            if (now() - refreshedAt !in 0 until MONTH_TTL) null else CalendarMonthPreview(json.getAsJsonArray("entries").map { element ->
                 val item = element.asJsonObject
                 CalendarRelease(
                     id = item.get("id").asString,
@@ -73,11 +104,12 @@ class ReleaseCalendarCache internal constructor(
                 )
             }, json.getAsJsonObject("counts").entrySet().associate { it.key to it.value.asInt }, refreshedAt)
         } catch (_: Exception) { null }
-      }
-    }
 
     internal suspend fun writeMonth(key: String, preview: CalendarMonthPreview): Unit = withContext(Dispatchers.IO) {
-      write("month:$key", JsonObject().apply {
+        write("month:$key", encodePreview(preview))
+    }
+
+    private fun encodePreview(preview: CalendarMonthPreview) = JsonObject().apply {
         addProperty("refreshedAt", preview.refreshedAt)
         add("counts", JsonObject().apply { preview.sourceCounts.forEach { (id, count) -> addProperty(id, count) } })
         add("entries", JsonArray().apply { preview.entries.forEach { entry ->
@@ -95,22 +127,23 @@ class ReleaseCalendarCache internal constructor(
                 entry.region?.let { addProperty("region", it) }
             })
         } })
-      })
-    }
+      }
 
     internal suspend fun clearMetadata(): Unit = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            directory.listFiles()?.filter { it.name.startsWith("metadata-") }?.forEach { it.delete() }
+            directory.listFiles()?.filter { it.name.startsWith("metadata-") || it.name.startsWith("projection-") }?.forEach { it.delete() }
         }
     }
 
-    private suspend fun read(key: String, ttl: Long): JsonObject? = withContext(Dispatchers.IO) {
+    private data class Stored(val json: JsonObject, val writtenAt: Long)
+
+    private suspend fun read(key: String, ttl: Long): Stored? = withContext(Dispatchers.IO) {
         fileMutex.withLock {
             try {
                 val file = file(key)
                 val age = now() - file.lastModified()
                 if (!file.isFile || age !in 0 until ttl) return@withLock null
-                JsonParser.parseString(file.readText()).asJsonObject
+                Stored(JsonParser.parseString(file.readText()).asJsonObject, file.lastModified())
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) { null }
         }
@@ -129,8 +162,12 @@ class ReleaseCalendarCache internal constructor(
                 target.setLastModified(now())
                 if (++writesSinceTrim >= 32) {
                     writesSinceTrim = 0
+                    var bytes = 0L
                     directory.listFiles()?.filter { it.extension == "json" }?.sortedByDescending { it.lastModified() }
-                        ?.drop(768)?.forEach { it.delete() }
+                        ?.forEachIndexed { index, file ->
+                            bytes += file.length()
+                            if (index >= 4096 || bytes > 48 * 1024 * 1024L) file.delete()
+                        }
                 }
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) { /* Cache failures must never fail a calendar load. */ }
@@ -140,7 +177,6 @@ class ReleaseCalendarCache internal constructor(
     private fun file(key: String) = File(directory, "${key.substringBefore(':')}-${calendarCacheDigest(key)}.json")
 
     private companion object {
-        const val METADATA_TTL = 30 * 60_000L
         const val MONTH_TTL = 24 * 60 * 60_000L
     }
 }

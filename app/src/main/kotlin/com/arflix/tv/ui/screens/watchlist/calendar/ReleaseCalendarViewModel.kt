@@ -27,6 +27,7 @@ import java.time.ZoneId
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +37,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class ReleaseCalendarUiState(
     val month: YearMonth = YearMonth.now(),
@@ -79,12 +83,16 @@ class ReleaseCalendarViewModel @Inject constructor(
     private var contentLanguage = "en-US"
     private var privateCacheIdentity = ""
     private var previewSourceCounts = emptyMap<String, Int>()
+    private val readyIdentity = MutableStateFlow("")
+    private var foreground = false
+    private var backgroundLoad = false
 
     init {
         viewModelScope.launch {
             profileManager.activeProfileId.distinctUntilChanged().collectLatest { profileId ->
                 activeProfileId = profileId
                 privateCacheIdentity = ""
+                readyIdentity.value = ""
                 sourceSnapshot = null
                 sourceLoadedAt = 0L
                 loadJob?.cancel()
@@ -110,10 +118,14 @@ class ReleaseCalendarViewModel @Inject constructor(
                 }.distinctUntilChanged().collectLatest { (items, connectionsKey, languageTag) ->
                     contentLanguage = languageTag
                     privateCacheIdentity = calendarCacheDigest("$profileId|$connectionsKey|$items|$languageTag")
+                    readyIdentity.value = privateCacheIdentity
+                    loadJob?.cancel()
+                    requestId++
                     sourceSnapshot = null
                     previewSourceCounts = emptyMap()
                     _uiState.update { it.copy(entries = emptyList(), warnings = emptyList(), region = ContentRating.regionOf(languageTag)) }
-                    reload(forceSources = true)
+                    _uiState.update { it.copy(isLoading = true) }
+                    if (foreground) reload(forceSources = true)
                 }
             }
         }
@@ -151,12 +163,53 @@ class ReleaseCalendarViewModel @Inject constructor(
 
     /** Safe to call on tab entry and ON_RESUME; fresh/in-flight results are reused. */
     fun onVisible() {
+        foreground = true
+        backgroundLoad = false
         val timezone = ZoneId.systemDefault()
         val timezoneChanged = timezone != _uiState.value.timezone
         if (timezoneChanged) _uiState.update { it.copy(timezone = timezone, entries = emptyList()) }
         if (!timezoneChanged && loadJob?.isActive == true) return
-        if (timezoneChanged || sourceSnapshot == null || System.currentTimeMillis() - sourceLoadedAt >= 2 * 60_000L) {
+        if (timezoneChanged || _uiState.value.isLoading || sourceSnapshot == null || System.currentTimeMillis() - sourceLoadedAt >= 2 * 60_000L) {
             reload()
+        }
+    }
+
+    fun onHidden() {
+        foreground = false
+        loadJob?.takeIf { it.isActive }?.cancel()
+    }
+
+    /** Called only after Home is idle; cancellation never cancels a promoted foreground load. */
+    suspend fun preloadIdle() {
+        val identity = withTimeoutOrNull(5_000) { readyIdentity.first { it.isNotBlank() } } ?: return
+        if (foreground) return
+        if (loadJob?.isActive != true && (_uiState.value.isLoading || sourceSnapshot == null ||
+            System.currentTimeMillis() - sourceLoadedAt >= 2 * 60_000L)) reload(background = true)
+        val job = loadJob
+        try {
+            job?.join()
+            if (identity != privateCacheIdentity || foreground || _uiState.value.isLoading) return
+            val snapshot = sourceSnapshot ?: return
+            val state = _uiState.value
+            val language = contentLanguage
+            for (offset in listOf(-1L, 1L)) {
+                val month = state.month.plusMonths(offset)
+                val key = "$identity|$month|${state.timezone.id}|${state.region}"
+                if (cache.readMonth(key) != null) continue
+                // Adjacent months use only metadata already fetched for this month.
+                // Missing metadata is filled normally when the user actually opens that month.
+                val result = withContext(Dispatchers.Default) {
+                    repository.loadMonth(snapshot, month, state.timezone, state.region, language, cacheOnly = true)
+                }
+                if (identity != privateCacheIdentity || foreground) return
+                if (result.entries.isNotEmpty()) cache.writeMonth(key, CalendarMonthPreview(result.entries,
+                    state.sources.associate { it.id to countForSource(it.id) }))
+            }
+        } finally {
+            if (loadJob === job && backgroundLoad && job?.isActive == true) {
+                requestId++
+                job.cancel()
+            }
         }
     }
 
@@ -167,6 +220,7 @@ class ReleaseCalendarViewModel @Inject constructor(
     }
 
     private fun updateSources(snapshot: CalendarWatchlists, complete: Boolean) {
+        if (sourceSnapshot === snapshot && (!complete || sourceLoadedAt != 0L)) return
         sourceSnapshot = snapshot
         // A partial source result must never be reused as a complete private snapshot.
         if (!complete) sourceLoadedAt = 0L
@@ -180,11 +234,12 @@ class ReleaseCalendarViewModel @Inject constructor(
         }
     }
 
-    private fun reload(forceSources: Boolean = false, forceRefresh: Boolean = false) {
+    private fun reload(forceSources: Boolean = false, forceRefresh: Boolean = false, background: Boolean = false) {
         val profileId = activeProfileId ?: return
         if (privateCacheIdentity.isBlank()) return
         val sequence = ++requestId
         loadJob?.cancel()
+        backgroundLoad = background
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
@@ -194,6 +249,15 @@ class ReleaseCalendarViewModel @Inject constructor(
                 val preview = if (!forceRefresh) cache.readMonth(cacheKey) else null
                 var lastPreviewWrite = 0L
                 var latestProgress: CalendarLoadProgress? = null
+                var lastUiPublish = 0L
+                fun publishEntries(progress: CalendarLoadProgress) {
+                    val now = System.currentTimeMillis()
+                    if (lastUiPublish == 0L || now - lastUiPublish >= 100L ||
+                        (_uiState.value.entries.isEmpty() && progress.month.entries.isNotEmpty())) {
+                        lastUiPublish = now
+                        _uiState.update { it.copy(entries = mergeCalendarPreview(preview?.entries.orEmpty(), progress), warnings = progress.month.warnings) }
+                    }
+                }
                 if (sequence != requestId || profileManager.getProfileIdSync() != profileId) return@launch
                 if (preview != null) {
                     previewSourceCounts = preview.sourceCounts
@@ -209,21 +273,24 @@ class ReleaseCalendarViewModel @Inject constructor(
                 }
                 val result = if (snapshot != null) {
                     updateSources(snapshot, complete = true)
-                    repository.loadMonth(snapshot, current.month, current.timezone, current.region, language) { partial ->
+                    withContext(Dispatchers.Default) { repository.loadMonth(snapshot, current.month, current.timezone, current.region, language) { partial ->
+                      withContext(Dispatchers.Main.immediate) {
                         if (sequence == requestId && profileManager.getProfileIdSync() == profileId) {
                             // Cached source snapshots need the same failure/removal reconciliation
                             // as fresh providers, including when changing back to an earlier month.
                             val progress = CalendarLoadProgress(snapshot, partial, true, partial.completedTitles)
                             latestProgress = progress
-                            _uiState.update { it.copy(entries = mergeCalendarPreview(preview?.entries.orEmpty(), progress), warnings = partial.warnings) }
+                            publishEntries(progress)
                         }
-                    }.also { completed -> latestProgress = CalendarLoadProgress(snapshot, completed, true, completed.completedTitles) }
+                      }
+                    } }.also { completed -> latestProgress = CalendarLoadProgress(snapshot, completed, true, completed.completedTitles) }
                 } else {
-                    repository.loadCalendar(profileId, current.month, current.timezone, current.region, language, forceRefresh) { progress ->
+                    withContext(Dispatchers.Default) { repository.loadCalendar(profileId, current.month, current.timezone, current.region, language, forceRefresh) { progress ->
+                      withContext(Dispatchers.Main.immediate) {
                         if (sequence == requestId && profileManager.getProfileIdSync() == profileId) {
                             latestProgress = progress
                             updateSources(progress.watchlists, progress.watchlistsComplete)
-                            _uiState.update { it.copy(entries = mergeCalendarPreview(preview?.entries.orEmpty(), progress), warnings = progress.month.warnings) }
+                            publishEntries(progress)
                             // The first usable dates also survive leaving the app while a slower
                             // provider is still busy. Never replace a full preview with a partial one.
                             val now = System.currentTimeMillis()
@@ -233,7 +300,8 @@ class ReleaseCalendarViewModel @Inject constructor(
                                     _uiState.value.sources.associate { it.id to countForSource(it.id) }))
                             }
                         }
-                    }
+                      }
+                    } }
                 }
                 if (sequence != requestId || profileManager.getProfileIdSync() != profileId) return@launch
                 val finalEntries = latestProgress?.let { mergeCalendarPreview(preview?.entries.orEmpty(), it) } ?: result.entries
