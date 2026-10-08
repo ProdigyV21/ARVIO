@@ -1,6 +1,7 @@
 package com.arflix.tv.data.api
 
 import com.google.gson.annotations.SerializedName
+import com.google.gson.JsonObject
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -10,6 +11,14 @@ import retrofit2.http.QueryMap
  * TMDB API interface
  */
 interface TmdbApi {
+
+    @GET("tv/{tv_id}")
+    suspend fun getTvSeasons(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String,
+        @Query("append_to_response") appendToResponse: String,
+        @Query("language") language: String? = null
+    ): JsonObject
 
     @GET("trending/movie/day")
     suspend fun getTrendingMovies(

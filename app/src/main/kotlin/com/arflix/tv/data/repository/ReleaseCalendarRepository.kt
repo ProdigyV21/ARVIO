@@ -14,6 +14,7 @@ import com.arflix.tv.data.model.ReleaseCalendarSource
 import com.arflix.tv.data.repository.simkl.SimklAuthManager
 import com.arflix.tv.data.repository.simkl.SimklSyncService
 import com.arflix.tv.util.Constants
+import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.IOException
 import java.time.YearMonth
@@ -21,6 +22,7 @@ import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -33,6 +35,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 
 internal data class CalendarWatchlists(
     val profileId: String,
@@ -93,6 +97,7 @@ class ReleaseCalendarRepository @Inject constructor(
     private val diskCache: ReleaseCalendarCache
 ) {
     private val permits = Semaphore(5)
+    private val backgroundTitlePermits = Semaphore(5)
     // Old seasons must not fill every metadata slot before a newly arrived title
     // can publish its next episode. Season reads still count toward the total five.
     private val seasonPermits = Semaphore(2)
@@ -101,8 +106,11 @@ class ReleaseCalendarRepository @Inject constructor(
     private val artworkPermits = Semaphore(2)
     private data class Cached(val value: Any, val at: Long)
     private val metadataCache = linkedMapOf<String, Cached>()
+    private val missingMetadata = linkedMapOf<String, Long>()
     // Bounded striped locks coalesce identical requests, including a restarted/adjacent month load.
     private val metadataLocks = Array(3) { Array(64) { Mutex() } }
+    private val seasonBatchLocks = Array(64) { Mutex() }
+    private val gson = Gson()
 
     internal suspend fun loadWatchlists(
         profileId: String,
@@ -190,12 +198,12 @@ class ReleaseCalendarRepository @Inject constructor(
             progressMutex.withLock {
                 ensureProfile(profileId)
                 watchlists = snapshot
-                mergeCalendarWatchlists(snapshot.items).forEach { title ->
+                prioritizeTitles(mergeCalendarWatchlists(snapshot.items), month).forEach { title ->
                     val key = title.media.mediaType to title.media.id
                     val isNew = key !in titles
                     titles[key] = title
                     if (isNew) jobs += launch {
-                        val result = titleReleases(title, month, timezone, region, language) { result ->
+                        val result = prioritizedTitleReleases(title, month, timezone, region, language) { result ->
                             progressMutex.withLock {
                                 results[key] = result
                                 publish()
@@ -238,14 +246,23 @@ class ReleaseCalendarRepository @Inject constructor(
                 onProgress(combineResults(partial.values, watchlists.warnings))
             }
         }
-        val results = mergeCalendarWatchlists(watchlists.items).map { title -> async {
-            val result = titleReleases(title, month, timezone, region, language) { publish(title, it) }
+        val results = prioritizeTitles(mergeCalendarWatchlists(watchlists.items), month).map { title -> async {
+            val result = prioritizedTitleReleases(title, month, timezone, region, language) { publish(title, it) }
             result.copy(completedTitles = if (result.warnings.isEmpty()) setOf(title.media.mediaType to title.media.id) else emptySet())
                 .also { publish(title, it) }
         } }.awaitAll()
         ensureProfile(watchlists.profileId)
         combineResults(results, watchlists.warnings)
     }
+
+    private suspend fun prioritizedTitleReleases(
+        title: CalendarWatchlistTitle, month: YearMonth, timezone: ZoneId, region: String, language: String,
+        onProgress: suspend (CalendarMonthResult) -> Unit
+    ): CalendarMonthResult = if (titlePriority(title, month) == 2) {
+        // Do not queue hundreds of old movies ahead of an active show arriving
+        // from another provider. All five network slots can still be used.
+        backgroundTitlePermits.withPermit { titleReleases(title, month, timezone, region, language, onProgress) }
+    } else titleReleases(title, month, timezone, region, language, onProgress)
 
     private suspend fun titleReleases(
         title: CalendarWatchlistTitle,
@@ -338,25 +355,13 @@ class ReleaseCalendarRepository @Inject constructor(
         }
         // TV details can already contain the next release; render it while seasons fill in.
         publishDates()
-        seasons.map { season -> async {
-            val (episodes, failed) = try {
-                val data = cached<TmdbSeasonDetails>("season:${title.media.id}:${season.seasonNumber}:$language", seasonPermits) {
-                    permits.withPermit {
-                        tmdbApi.getTvSeason(title.media.id, season.seasonNumber, Constants.TMDB_API_KEY, language = language)
-                    }
-                }
-                data.episodes to false
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                emptyList<TmdbEpisode>() to true
-            }
+        readSeasons(title.media.id, seasons.map { it.seasonNumber }, language) { data ->
             episodeMutex.withLock {
-                episodes.forEach { knownEpisodes[it.seasonNumber to it.episodeNumber] = it }
-                incompleteSeasons = incompleteSeasons || failed
+                data?.episodes.orEmpty().forEach { knownEpisodes[it.seasonNumber to it.episodeNumber] = it }
+                incompleteSeasons = incompleteSeasons || data == null
                 publishDates()
             }
-        } }.awaitAll()
+        }
         val episodes = knownEpisodes.values.toList()
         val relevantSeasons = episodes.filter { calendarDate(it.airDate)?.let { date -> date >= first && date <= last } == true }
             .map { it.seasonNumber }.distinct()
@@ -365,6 +370,72 @@ class ReleaseCalendarRepository @Inject constructor(
             calendarEpisodeReleases(title, episodes, timed, month, timezone),
             warnings()
         )
+    }
+
+    /** Append up to twenty seasons per HTTP request, without excluding old seasons or specials. */
+    private suspend fun readSeasons(
+        tvId: Int,
+        seasons: List<Int>,
+        language: String,
+        onSeason: suspend (TmdbSeasonDetails?) -> Unit
+    ) {
+        val lock = seasonBatchLocks[("$tvId:$language".hashCode() and Int.MAX_VALUE) % seasonBatchLocks.size]
+        lock.withLock {
+            val missing = mutableListOf<Int>()
+            for (season in seasons) {
+                val saved = cachedValue<TmdbSeasonDetails>("season:$tvId:$season:$language")
+                if (saved != null) onSeason(saved) else missing += season
+            }
+            for (batch in missing.chunked(20)) {
+                val appended = if (batch.size > 1) try {
+                    val response = seasonPermits.withPermit {
+                        permits.withPermit {
+                            withTimeoutOrNull(20_000) {
+                                tmdbApi.getTvSeasons(tvId, Constants.TMDB_API_KEY,
+                                    batch.joinToString(",") { "season/$it" }, language)
+                            } ?: throw IOException("Season batch timed out")
+                        }
+                    }
+                    withContext(Dispatchers.Default) {
+                        batch.mapNotNull { season ->
+                            runCatching {
+                                val value = response.get("season/$season")?.takeIf { it.isJsonObject }?.asJsonObject
+                                if (value?.get("episodes")?.isJsonArray != true || value.get("season_number")?.asInt != season) null
+                                else season to gson.fromJson(value, TmdbSeasonDetails::class.java)
+                            }.getOrNull()
+                        }.toMap()
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    emptyMap()
+                } else emptyMap()
+                for ((season, data) in appended) {
+                    val key = "season:$tvId:$season:$language"
+                    rememberMetadata(key, data)
+                    onSeason(data)
+                    diskCache.writeValue(key, data)
+                }
+                // A missing/malformed appended block falls back independently; other
+                // seasons remain usable and the next month reuses their normal cache keys.
+                coroutineScope {
+                    batch.filter { it !in appended }.map { season -> async {
+                        val data = try {
+                            cached<TmdbSeasonDetails>("season:$tvId:$season:$language", seasonPermits) {
+                                permits.withPermit {
+                                    tmdbApi.getTvSeason(tvId, season, Constants.TMDB_API_KEY, language = language)
+                                }
+                            }
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            null
+                        }
+                        onSeason(data)
+                    } }.awaitAll()
+                }
+            }
+        }
     }
 
     private suspend fun authoritativeTimes(media: MediaItem, seasons: List<Int>): List<TraktCalendarEpisode> = coroutineScope {
@@ -406,13 +477,42 @@ class ReleaseCalendarRepository @Inject constructor(
         backdrop = normalizeWatchlistArtworkUrl(backdrop, true) ?: media.backdrop
     )
 
+    private fun prioritizeTitles(titles: List<CalendarWatchlistTitle>, month: YearMonth): List<CalendarWatchlistTitle> =
+        titles.sortedBy { titlePriority(it, month) }
+
+    private fun titlePriority(title: CalendarWatchlistTitle, month: YearMonth): Int {
+        val media = title.media
+        val release = calendarDate(media.releaseDate)
+        return when {
+            media.mediaType == MediaType.TV && media.status !in setOf("Ended", "Canceled") -> 0
+            release != null && release >= month.atDay(1).minusMonths(2) && release <= month.atEndOfMonth() -> 0
+            media.mediaType == MediaType.TV -> 1
+            else -> 2
+        }
+    }
+
     private fun ensureProfile(profileId: String) {
         if (profileManager.getProfileIdSync() != profileId) throw CancellationException("Calendar profile changed")
     }
 
     internal suspend fun invalidateMetadata() {
-        synchronized(metadataCache) { metadataCache.clear() }
+        synchronized(metadataCache) { metadataCache.clear(); missingMetadata.clear() }
         diskCache.clearMetadata()
+    }
+
+    private fun rememberMetadata(key: String, value: Any) {
+        synchronized(metadataCache) {
+            metadataCache[key] = Cached(value, System.currentTimeMillis())
+            while (metadataCache.size > 512) metadataCache.remove(metadataCache.keys.first())
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend inline fun <reified T : Any> cachedValue(key: String): T? {
+        synchronized(metadataCache) {
+            metadataCache[key]?.takeIf { System.currentTimeMillis() - it.at < 30 * 60_000L }?.let { return it.value as T }
+        }
+        return diskCache.readValue<T>(key, object : TypeToken<T>() {}.type)?.also { rememberMetadata(key, it) }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -431,12 +531,24 @@ class ReleaseCalendarRepository @Inject constructor(
             }
             val disk = diskCache.readValue<T>(key, object : TypeToken<T>() {}.type)
             val value = disk ?: requestPermits.withPermit {
-                withTimeoutOrNull(20_000) { block() } ?: throw IOException("Metadata request timed out")
+                synchronized(metadataCache) {
+                    if (missingMetadata[key]?.let { System.currentTimeMillis() - it < 60_000L } == true) {
+                        throw IOException("Metadata not found")
+                    }
+                }
+                try {
+                    withTimeoutOrNull(20_000) { block() } ?: throw IOException("Metadata request timed out")
+                } catch (error: HttpException) {
+                    // A confirmed 404 should not trigger another network request on
+                    // every date/month/tab change. Explicit Retry clears this cache.
+                    if (error.code() == 404) synchronized(metadataCache) {
+                        missingMetadata[key] = System.currentTimeMillis()
+                        while (missingMetadata.size > 512) missingMetadata.remove(missingMetadata.keys.first())
+                    }
+                    throw error
+                }
             }
-            synchronized(metadataCache) {
-                metadataCache[key] = Cached(value, System.currentTimeMillis())
-                while (metadataCache.size > 512) metadataCache.remove(metadataCache.keys.first())
-            }
+            rememberMetadata(key, value)
             if (disk == null) diskCache.writeValue(key, value)
             value
         }

@@ -24,7 +24,6 @@ import com.arflix.tv.data.model.CalendarRelease
 import com.arflix.tv.data.model.CalendarReleaseKind
 import com.arflix.tv.data.model.ReleaseCalendarSource
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
-import com.arflix.tv.ui.components.AppTopBarHeight
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarUiState
 import com.arflix.tv.ui.theme.ArvioTvTheme
@@ -133,13 +132,19 @@ class LibraryCalendarDeviceTest {
         show(selectCalendar = false)
         val tags = listOf("app-topbar", "topbar-profile") + SidebarItem.entries.map { "topbar-item-${it.name}" }
         val normalBounds = tags.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() }
+        val normalTabs = compose.onNodeWithTag("library-section-tabs").getUnclippedBoundsInRoot()
+        val normalCalendarTab = compose.onNodeWithText("Calendar").getUnclippedBoundsInRoot()
+        val normalTabHeight = normalCalendarTab.bottom - normalCalendarTab.top
         compose.onNodeWithText("Calendar").performClick()
         compose.waitForIdle()
         assertEquals("Switching Library tabs must not resize or move the shared topbar", normalBounds,
             tags.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })
         compose.onNodeWithTag("app-topbar").assertHeightIsEqualTo(AppTopBarContentTopInset)
-        compose.onNodeWithTag("library-section-tabs").assertTopPositionInRootIsEqualTo(AppTopBarHeight - 10.dp)
+        compose.onNodeWithTag("library-section-tabs").assertTopPositionInRootIsEqualTo(AppTopBarContentTopInset)
         val tabs = compose.onNodeWithTag("library-section-tabs").getUnclippedBoundsInRoot()
+        assertEquals("Calendar uses the same tab position and height as the other Library pages", normalTabs, tabs)
+        val calendarTab = compose.onNodeWithText("Calendar").getUnclippedBoundsInRoot()
+        assertEquals(normalTabHeight, calendarTab.bottom - calendarTab.top)
         tags.drop(1).forEach { tag ->
             assertTrue("Calendar content must not overlap a topbar control",
                 compose.onNodeWithTag(tag).getUnclippedBoundsInRoot().bottom <= tabs.top)
@@ -191,7 +196,7 @@ class LibraryCalendarDeviceTest {
         compose.runOnIdle { assertEquals(MediaType.TV to 100088, opened) }
     }
 
-    @Test fun sixWeekMonthKeepsReleaseCountsVisibleAndFocusCrossesMonthEdges() {
+    @Test fun sixWeekMonthKeepsReleaseCountsVisibleAndFocusStaysWithinMonth() {
         val selected = referenceDate.plusMonths(1)
         show(selectedDate = selected, configure = ::novemberFixture)
         compose.onAllNodes(hasAnyAncestor(hasTestTag("calendar-month-grid")) and hasClickAction()).assertCountEquals(42)
@@ -207,12 +212,31 @@ class LibraryCalendarDeviceTest {
 
         val first = LocalDate.of(2026, 11, 1)
         focusDay(first)
-        key(Key.DirectionLeft)
-        assertDate(first.minusDays(1))
-        compose.onNodeWithTag("calendar-day-2026-10-31").assertIsFocused()
-        key(Key.DirectionRight)
+        repeat(4) { key(Key.DirectionLeft) }
         assertDate(first)
         compose.onNodeWithTag("calendar-day-$first").assertIsFocused()
+        key(Key.DirectionUp)
+        compose.onNodeWithTag("calendar-previous-month").assertIsFocused()
+        key(Key.DirectionDown)
+        compose.onNodeWithTag("calendar-day-$first").assertIsFocused()
+        focusDay(first.withDayOfMonth(30))
+        repeat(4) { key(Key.DirectionRight) }
+        assertDate(first.withDayOfMonth(30))
+        compose.onNodeWithText("November 2026").assertIsDisplayed()
+    }
+
+    @Test fun nativeRemoteRepeatsCannotJumpMonthsOrActivateReleases() {
+        show(selectedDate = LocalDate.of(2026, 10, 1))
+        focusDay(LocalDate.of(2026, 10, 1))
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        repeat(35) { instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
+        compose.waitForIdle()
+        assertDate(LocalDate.of(2026, 10, 31))
+        repeat(35) { instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_LEFT) }
+        compose.waitForIdle()
+        assertDate(LocalDate.of(2026, 10, 1))
+        compose.onNodeWithTag("calendar-day-2026-10-01").assertIsFocused()
+        compose.runOnIdle { assertEquals(null, opened) }
     }
 
     @Test fun emptyDayRemoteShortcutUsesTheSelectedSourceAndReturnsToItsDay() {

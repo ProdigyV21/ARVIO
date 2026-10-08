@@ -15,6 +15,8 @@ import com.arflix.tv.data.repository.simkl.SimklAuthManager
 import com.arflix.tv.data.repository.simkl.SimklSyncService
 import com.arflix.tv.data.repository.sync.RemoteWatchlistResult
 import com.arflix.tv.util.Constants
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import io.mockk.*
 import java.io.IOException
 import java.time.YearMonth
@@ -35,6 +37,9 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReleaseCalendarRepositoryTest {
@@ -133,6 +138,74 @@ class ReleaseCalendarRepositoryTest {
         assertEquals(setOf(0, 1, 2), result.entries.map { it.seasonNumber }.toSet())
     }
 
+    @Test fun `twenty five seasons including specials need only two batch requests with identical releases`() = runTest {
+        val show = MediaItem(5, "Long running show", mediaType = MediaType.TV)
+        coEvery { tmdb.getTvDetails(5, any(), any(), any()) } returns TmdbTvDetails(5, "Long running show",
+            seasons = (0..24).map { TmdbTvSeason(seasonNumber = it, airDate = "2020-01-01") })
+        val batches = mutableListOf<List<Int>>()
+        coEvery { tmdb.getTvSeasons(5, any(), any(), "en-US") } answers {
+            val seasons = thirdArg<String>().split(',').map { it.substringAfter('/').toInt() }
+            batches += seasons
+            JsonObject().apply {
+                seasons.forEach { season -> add("season/$season", Gson().toJsonTree(TmdbSeasonDetails(seasonNumber = season,
+                    episodes = listOf(TmdbEpisode(seasonNumber = season, episodeNumber = 1, airDate = "2026-10-04"))))) }
+            }
+        }
+        val lists = CalendarWatchlists("fixture-profile", mapOf(ReleaseCalendarSource.ARVIO to listOf(show)))
+        val result = repository.loadMonth(lists, month, ZoneId.of("UTC"), "US")
+        assertEquals((0..24).toSet(), result.entries.map { it.seasonNumber }.toSet())
+        assertEquals(listOf(20, 5), batches.map { it.size })
+        assertTrue(result.warnings.isEmpty())
+        repository.loadMonth(lists, month.plusMonths(1), ZoneId.of("UTC"), "US")
+        coVerify(exactly = 2) { tmdb.getTvSeasons(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { tmdb.getTvSeason(any(), any(), any(), any()) }
+        coVerify(exactly = 25) { cache.writeValue(match { it.startsWith("season:") }, any()) }
+    }
+
+    @Test fun `partial season batch retries only missing blocks and preserves all dates`() = runTest {
+        val show = MediaItem(5, "Show", mediaType = MediaType.TV)
+        coEvery { tmdb.getTvDetails(5, any(), any(), any()) } returns TmdbTvDetails(5, "Show",
+            seasons = (0..2).map { TmdbTvSeason(seasonNumber = it) })
+        fun season(number: Int) = TmdbSeasonDetails(seasonNumber = number,
+            episodes = listOf(TmdbEpisode(seasonNumber = number, airDate = "2026-10-04")))
+        coEvery { tmdb.getTvSeasons(5, any(), any(), any()) } returns JsonObject().apply {
+            add("season/2", Gson().toJsonTree(season(2)))
+            addProperty("season/1", "invalid")
+        }
+        coEvery { tmdb.getTvSeason(5, any(), any(), any()) } answers { season(secondArg()) }
+        val result = repository.loadMonth(CalendarWatchlists("fixture-profile", mapOf(ReleaseCalendarSource.ARVIO to listOf(show))),
+            month, ZoneId.of("UTC"), "US")
+        assertEquals(setOf(0, 1, 2), result.entries.map { it.seasonNumber }.toSet())
+        coVerify(exactly = 1) { tmdb.getTvSeason(5, 0, any(), any()) }
+        coVerify(exactly = 1) { tmdb.getTvSeason(5, 1, any(), any()) }
+        coVerify(exactly = 0) { tmdb.getTvSeason(5, 2, any(), any()) }
+    }
+
+    @Test fun `batched seasons reuse individual disk cache and respect the five request limit`() = runTest {
+        var inFlight = 0
+        var peak = 0
+        coEvery { tmdb.getTvDetails(any(), any(), any(), any()) } answers {
+            TmdbTvDetails(firstArg(), "Show", seasons = (0..2).map { TmdbTvSeason(seasonNumber = it) })
+        }
+        coEvery { cache.readValue<TmdbSeasonDetails>(match { it.startsWith("season:") && it.contains(":0:") }, any()) } returns
+            TmdbSeasonDetails(seasonNumber = 0, episodes = listOf(TmdbEpisode(seasonNumber = 0, airDate = "2026-10-04")))
+        coEvery { tmdb.getTvSeasons(any(), any(), any(), any()) } coAnswers {
+            assertEquals("season/2,season/1", thirdArg<String>())
+            inFlight++
+            peak = maxOf(peak, inFlight)
+            delay(10)
+            inFlight--
+            JsonObject().apply { (1..2).forEach { add("season/$it", Gson().toJsonTree(TmdbSeasonDetails(seasonNumber = it))) } }
+        }
+        val lists = CalendarWatchlists("fixture-profile", mapOf(ReleaseCalendarSource.ARVIO to
+            (1..12).map { MediaItem(it, "Show $it", mediaType = MediaType.TV) }))
+        val result = repository.loadMonth(lists, month, ZoneId.of("UTC"), "US")
+        assertEquals(12, result.entries.size)
+        assertTrue(peak <= 2)
+        coVerify(exactly = 12) { tmdb.getTvSeasons(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { tmdb.getTvSeason(any(), any(), any(), any()) }
+    }
+
     @Test fun `large watchlist uses at most five parallel metadata requests and reuses cache`() = runTest {
         var inFlight = 0
         var peak = 0
@@ -150,6 +223,58 @@ class ReleaseCalendarRepositoryTest {
         assertEquals(5, peak)
         repository.loadMonth(lists, month.plusMonths(1), ZoneId.of("UTC"), "US")
         coVerify(exactly = 18) { tmdb.getMovieDetails(any(), any(), any(), any()) }
+    }
+
+    @Test fun `current show releases are prioritized ahead of a large old movie backlog`() = runTest {
+        val show = MediaItem(500, "Current show", mediaType = MediaType.TV)
+        coEvery { tmdb.getTvDetails(500, any(), any(), any()) } returns TmdbTvDetails(500, "Current show",
+            nextEpisodeToAir = TmdbEpisode(airDate = "2026-10-04"))
+        coEvery { tmdb.getMovieDetails(any(), any(), any(), any()) } coAnswers {
+            delay(1_000)
+            TmdbMovieDetails(firstArg(), "Old movie", releaseDate = "2000-01-01")
+        }
+        val updates = mutableListOf<Pair<Long, CalendarMonthResult>>()
+        val lists = CalendarWatchlists("fixture-profile", mapOf(ReleaseCalendarSource.ARVIO to
+            (1..100).map { MediaItem(it, "Old movie") } + show))
+        val request = async { repository.loadMonth(lists, month, ZoneId.of("UTC"), "US") { updates += currentTime to it } }
+        runCurrent()
+        assertTrue(updates.any { (time, result) -> time == 0L && result.entries.any { it.media.id == 500 } })
+        assertFalse(request.isCompleted)
+        request.cancelAndJoin()
+    }
+
+    @Test fun `confirmed missing metadata does not refetch until explicit refresh`() = runTest {
+        coEvery { tmdb.getMovieDetails(1, any(), any(), any()) } throws
+            HttpException(Response.error<TmdbMovieDetails>(404, "{}".toResponseBody()))
+        val lists = repository.loadWatchlists("fixture-profile")
+        repeat(2) {
+            assertEquals(1, repository.loadMonth(lists, month, ZoneId.of("UTC"), "US").warnings.size)
+        }
+        coVerify(exactly = 1) { tmdb.getMovieDetails(1, any(), any(), any()) }
+        repository.invalidateMetadata()
+        repository.loadMonth(lists, month, ZoneId.of("UTC"), "US")
+        coVerify(exactly = 2) { tmdb.getMovieDetails(1, any(), any(), any()) }
+    }
+
+    @Test fun `later provider show is not queued behind hundreds of old movies`() = runTest {
+        coEvery { own.getLocalWatchlistItems() } returns (1..100).map { MediaItem(it, "Old movie") }
+        every { trakt.isAuthenticated } returns flowOf(true)
+        coEvery { trakt.getWatchlistSyncResultWithAuthState() } coAnswers {
+            delay(1)
+            true to TraktRepository.WatchlistSyncResult(listOf(MediaItem(500, "Current show", mediaType = MediaType.TV)), 1)
+        }
+        coEvery { tmdb.getMovieDetails(any(), any(), any(), any()) } coAnswers {
+            delay(1_000)
+            TmdbMovieDetails(firstArg(), "Old movie", releaseDate = "2000-01-01")
+        }
+        coEvery { tmdb.getTvDetails(500, any(), any(), any()) } returns TmdbTvDetails(500, "Current show",
+            nextEpisodeToAir = TmdbEpisode(airDate = "2026-10-04"))
+        val updates = mutableListOf<Pair<Long, CalendarLoadProgress>>()
+        val request = async { repository.loadCalendar("fixture-profile", month, ZoneId.of("UTC"), "US") { updates += currentTime to it } }
+        advanceTimeBy(1_001)
+        runCurrent()
+        assertTrue(updates.any { (time, progress) -> time <= 1_000L && progress.month.entries.any { it.media.id == 500 } })
+        request.cancelAndJoin()
     }
 
     @Test fun `localized metadata cache cannot leak the previous language`() = runTest {

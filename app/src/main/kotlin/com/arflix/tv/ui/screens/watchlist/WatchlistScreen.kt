@@ -201,18 +201,15 @@ fun WatchlistScreen(
                     AppTopBar(SidebarItem.WATCHLIST, topFocused, topIndex, profile = currentProfile)
                 }
             }
-        Column(Modifier.fillMaxSize().padding(top = when {
-            touch -> 0.dp
-            calendarMode -> AppTopBarHeight - 10.dp
-            else -> AppTopBarContentTopInset
-        })
+        Column(Modifier.fillMaxSize().padding(top = if (touch) 0.dp else AppTopBarContentTopInset)
             .padding(horizontal = if (compact) 16.dp else 26.dp)) {
             if (touch) Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth().testTag("library-section-tabs").then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
-                .padding(bottom = if(compact) 10.dp else if(calendarMode) 0.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,
+                .heightIn(min = 48.dp)
+                .padding(bottom = if(compact) 10.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
                 LibrarySection.entries.forEachIndexed { index, entry ->
-                    OledControl(tr(entry.label), selected = section == entry, calendarTabStyle = calendarMode,
+                    OledControl(tr(entry.label), selected = section == entry,
                         modifier = (if(index == 0) Modifier.focusRequester(firstTab).onGloballyPositioned {
                             if(!touch && !initialFocusPlaced) { initialFocusPlaced = true; firstTab.requestFocus() }
                         } else if (entry == LibrarySection.CALENDAR) Modifier.focusRequester(calendarTab) else Modifier), compact = compact,
@@ -329,18 +326,18 @@ fun WatchlistScreen(
 }
 
 @Composable
-internal fun OledControl(label: String, modifier: Modifier = Modifier, selected: Boolean = false, compact: Boolean = false, icon: ImageVector? = null, maxLines: Int = 1, calendarTabStyle: Boolean = false, onClick: () -> Unit) {
+internal fun OledControl(label: String, modifier: Modifier = Modifier, selected: Boolean = false, compact: Boolean = false, icon: ImageVector? = null, maxLines: Int = 1, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val accent = resolveAccentColor(Color.White)
-    val foreground = if(calendarTabStyle && selected && !focused) Color.Black else if(focused) { if(accent.luminance() > .4f) Color.Black else Color.White } else Color.White
-    val background by animateColorAsState(if(focused) accent else if(selected && calendarTabStyle) Color.White else if(selected) Color(0xFF242426) else Color.Transparent, tween(120), label = "library-control")
-    Box(modifier.onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(if (calendarTabStyle) 24.dp else 7.dp))
+    val foreground = if(focused) { if(accent.luminance() > .4f) Color.Black else Color.White } else Color.White
+    val background by animateColorAsState(if(focused) accent else if(selected) Color(0xFF242426) else Color.Transparent, tween(120), label = "library-control")
+    Box(modifier.onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(7.dp))
         .background(background)
-        .clickable(onClick = onClick).padding(horizontal = if(compact) 8.dp else if(calendarTabStyle) 14.dp else 12.dp, vertical = if(calendarTabStyle && !compact) 5.dp else 11.dp), contentAlignment = Alignment.CenterStart) {
+        .clickable(onClick = onClick).padding(horizontal = if(compact) 8.dp else 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
         if(label == "⌕") Icon(Icons.Outlined.Search, contentDescription = tr("Search library"), tint = foreground, modifier = Modifier.size(20.dp))
         else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         if(icon != null) Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(20.dp))
-        Text(label, color = foreground, fontSize = if(calendarTabStyle && !compact) 12.sp else if(compact) 13.sp else 14.sp, fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
+        Text(label, color = foreground, fontSize = if(compact) 13.sp else 14.sp, fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = maxLines, overflow = TextOverflow.Ellipsis)
         }
     }
