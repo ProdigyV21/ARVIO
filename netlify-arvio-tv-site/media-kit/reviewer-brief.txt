@@ -1,0 +1,35 @@
+ARVIO — independent reviewer brief
+Updated: 8 October 2026
+
+Website: https://arvio.tv/
+Screenshots and downloadable kit: https://arvio.tv/media-kit/
+Android release: https://github.com/ProdigyV21/ARVIO/releases/latest
+Google Play: https://play.google.com/store/apps/details?id=com.arvio.tv
+Source: https://github.com/ProdigyV21/ARVIO
+Contact: arvio.app@gmail.com
+
+What it is
+An independent media hub for Android TV, Google TV and Android mobile, with a browser companion. Connect your own Jellyfin, Plex or Emby server; add supported sources and organize discovery rows. ARVIO is not affiliated with those projects. No movies, channels, streaming accounts or third-party subscriptions are included.
+
+Pricing
+The Android app is free. The browser version can be self-hosted for free. Optional managed browser hosting is $2.99/month. Hosting is not an Android feature unlock and cannot guarantee that a source will work. Check the current Premium page for trial and membership terms: https://arvio.tv/premium/
+
+A short demonstration you can record yourself
+1. Install the official Android release on a supported device. Show Home navigation with a remote; do not use an included screenshot as proof of a test on your device.
+2. In Settings > Home Server, connect a test account on your own Jellyfin server. Open Library > Homeserver, browse a library and test one film or episode you may legally play. Check audio, subtitles and resume.
+3. If you run Plex or Emby as well, add a separately named connection. Explain that this is one interface for separate libraries, not a guaranteed merged/deduplicated database.
+4. Open https://arvio.tv/collection-studio/#examples in a browser. Preview a starter, choose Make your own copy and rename a folder. Copy JSON and use ARVIO's collection importer. The Studio link itself is not an import URL.
+5. Explain discovery versus playback: a collection lists metadata; the viewer supplies authorized sources. Browser codecs and networking differ from Android. Describe anything that fails on your tested setup.
+
+Choose the part relevant to your audience; all five steps are not required for a short clip. This is a recording outline, not an existing video or a guarantee that setup takes a particular number of seconds.
+
+Useful setup pages
+Jellyfin: https://arvio.tv/jellyfin-android-tv/
+Plex / Emby / Jellyfin: https://arvio.tv/plex-emby-jellyfin/
+Stremio-compatible manifests: https://arvio.tv/stremio-addons-android-tv/
+Fire TV compatibility: https://arvio.tv/fire-tv-media-player/
+Free self-hosting: https://arvio.tv/self-host-arvio-web/
+Browser playback checks: https://arvio.tv/browser-playback-guide/
+
+Safety and editorial notes
+Use your own test library. Hide passwords, configured addon URLs, server addresses, private lists and account details from recordings. Studio starters use only authored TMDB discovery queries; results are dynamic and not age-filtered. No paid placement, affiliate commission or required positive coverage is offered by this brief. Ask for permission before using anyone else's footage or artwork outside the context of the app screenshots.

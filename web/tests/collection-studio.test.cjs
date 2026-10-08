@@ -12,6 +12,21 @@ const { parseCustomCollections, mergeImportedCollections } = load('lib/customCol
 const fragmentFor = value => `#studio=${Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')}`;
 const clone = value => JSON.parse(JSON.stringify(value));
 
+test('all published starter files import and merge through the actual app parser without collisions', async () => {
+  const { STARTERS } = await import(pathToFileURL(path.join(studioPath, 'starters.mjs')).href);
+  let imported = [];
+  for (const starter of STARTERS) {
+    const json = fs.readFileSync(path.join(studioPath, 'examples', `${starter.id}.json`), 'utf8');
+    const parsed = await parseCustomCollections(json);
+    assert.equal(parsed[0].title, starter.draft.title);
+    assert.equal(parsed.length, starter.draft.folders.length + 1);
+    assert.ok(parsed.slice(1).every(item => item.collectionSources.length === 1 && item.collectionSources[0].kind === 'TMDB_DISCOVER'));
+    imported = mergeImportedCollections(imported, parsed);
+  }
+  assert.equal(imported.filter(item => item.kind === 'COLLECTION_RAIL').length, STARTERS.length);
+  assert.equal(new Set(imported.map(item => item.id)).size, imported.length);
+});
+
 test('default JSON imports through the actual app parser as one Home row and three single-source folders', async () => {
   const core = await corePromise;
   const json = core.serializeCollections(core.createDefaultDraft());

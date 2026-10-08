@@ -32,7 +32,7 @@
   {
     "@context":"https://schema.org",
     "@graph":[
-      {"@type":"TechArticle","headline":"Plex, Emby and Jellyfin in one Android TV app.","description":"Connect Plex, Emby and Jellyfin in one Android TV app. Set up separate servers in ARVIO, browse their libraries and understand Android versus web sign-in.","dateModified":"2026-10-05","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/plex-emby-jellyfin/","image":"https://arvio.tv/assets/screenshots-v2/tv/04-homeserver.webp"},
+      {"@type":"TechArticle","headline":"Plex, Emby and Jellyfin in one Android TV app.","description":"Connect Plex, Emby and Jellyfin in one Android TV app. Set up separate servers in ARVIO, browse their libraries and understand Android versus web sign-in.","dateModified":"2026-10-08","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/plex-emby-jellyfin/","image":"https://arvio.tv/assets/screenshots-v2/tv/04-homeserver.webp"},
       {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Plex, Emby and Jellyfin","item":"https://arvio.tv/plex-emby-jellyfin/"}]},
       {"@type":"FAQPage","mainEntity":[
         {"@type":"Question","name":"Can I connect Plex, Emby and Jellyfin at the same time?","acceptedAnswer":{"@type":"Answer","text":"Yes. ARVIO supports multiple saved home-server connections. Add each server separately and choose its library in the Library screen. Each server keeps its own files, accounts, permissions and library organization."}},
@@ -57,11 +57,23 @@
     <h1>Plex, Emby and Jellyfin in one Android TV app.</h1>
     <p class="lead">Use ARVIO to access your Plex, Emby and Jellyfin libraries without changing server software or moving your files. Save each connection, give it a recognizable name and browse its libraries from the same Android TV, Google TV or Android mobile app.</p>
     <div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get the free Android app</a><a class="button secondary" href="#setup">Connect your servers</a></div>
-    <p class="guide-updated">Updated 5 October 2026 · By the ARVIO project</p>
-    <nav class="guide-jump" aria-label="On this page"><a href="#setup">Android setup</a><a href="#libraries">Library navigation</a><a href="#web">Web differences</a><a href="#help">Troubleshooting</a></nav>
+    <p class="guide-updated">Updated 8 October 2026 · By the ARVIO project</p>
+    <nav class="guide-jump" aria-label="On this page"><a href="#first-session">First session</a><a href="#setup">Android setup</a><a href="#libraries">Library navigation</a><a href="#web">Web differences</a><a href="#help">Troubleshooting</a></nav>
   </div></section>
 
   <section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/04-homeserver.webp" alt="ARVIO Homeserver library on Android TV showing a named Jellyfin server, Movies and Shows, and a Connect server option" width="1920" height="1080" loading="lazy" decoding="async"><figcaption>Existing ARVIO Android TV screenshot showing a Jellyfin connection. Other servers are added separately; the example titles are not included with ARVIO.</figcaption></figure></div></section>
+
+  <section class="section" id="first-session"><div class="shell guide-reading">
+    <p class="eyebrow">A practical first session</p><h2>Try two servers before moving your routine.</h2>
+    <p>You do not need to move files, rebuild libraries or stop using your existing clients. Install ARVIO beside them and check the workflow with media you are authorized to access.</p>
+    <ol class="setup-list">
+      <li><h3>Name each connection clearly</h3><p>Use names such as “Living room Jellyfin” and “Plex library.” Add one server first, open a known title, then add the second. Your server password belongs in the app's connection form, never a shareable collection.</p></li>
+      <li><h3>Check which library you are browsing</h3><p>Open Library → Homeserver and select the server and library. The same movie on two servers stays in separate libraries; ARVIO does not promise a merged, automatically deduplicated library.</p></li>
+      <li><h3>Test the details that matter to you</h3><p>Play a movie and an episode; check sound, subtitles and returned media versions. Leave and reopen the title to check resume. Do not infer full two-way server sync from one successful playback.</p></li>
+      <li><h3>Add discovery separately</h3><p>A <a href="/collection-studio/#examples">Home collection</a> can organize TMDB discovery or public lists. It does not create a server library or guarantee a playable source for every result. Configure <a href="/trakt-simkl-sync/">Trakt or Simkl</a> only if you want that additional tracking connection.</p></li>
+    </ol>
+    <p>The Android app is free. Browser use has <a href="/arvio-web/">separate setup and playback limits</a>, with a choice of <a href="/self-host-arvio-web/">free self-hosting</a> or <a href="/premium/" data-premium-placement="servers-browser">optional managed hosting</a>.</p>
+  </div></section>
 
   <section class="section" id="setup"><div class="shell guide-reading">
     <p class="eyebrow">Android TV, Google TV and Android mobile</p><h2>How to connect each media server.</h2>

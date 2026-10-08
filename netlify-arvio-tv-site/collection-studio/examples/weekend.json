@@ -1,0 +1,62 @@
+[
+  {
+    "id": "studio-row",
+    "title": "Weekend discoveries",
+    "folders": [
+      {
+        "id": "cinema",
+        "title": "Cinema night",
+        "description": "Highly rated movies with at least 1,000 votes.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "MOVIE",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 1000,
+              "voteAverageGte": 7
+            }
+          }
+        ]
+      },
+      {
+        "id": "episodes",
+        "title": "One more episode",
+        "description": "Popular shows with at least 100 votes.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "TV",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "voteCountGte": 100
+            }
+          }
+        ]
+      },
+      {
+        "id": "scifi",
+        "title": "Beyond the ordinary",
+        "description": "Science fiction rated 6+ with at least 100 votes.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "MOVIE",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "withGenres": "878",
+              "voteCountGte": 100,
+              "voteAverageGte": 6
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

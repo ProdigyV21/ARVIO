@@ -56,7 +56,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/jellyfin-android-tv/</loc>
-    <lastmod>2026-10-05</lastmod>
+    <lastmod>2026-10-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -74,7 +74,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/plex-emby-jellyfin/</loc>
-    <lastmod>2026-10-05</lastmod>
+    <lastmod>2026-10-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -200,9 +200,9 @@
   </url>
   <url><loc>https://arvio.tv/premium/</loc></url>
   <url><loc>https://arvio.tv/media-kit/</loc></url>
-  <url><loc>https://arvio.tv/stremio-addons-android-tv/</loc><lastmod>2026-10-05</lastmod><changefreq>monthly</changefreq></url>
-  <url><loc>https://arvio.tv/collections-catalogs/</loc><lastmod>2026-10-02</lastmod><changefreq>monthly</changefreq></url>
-  <url><loc>https://arvio.tv/collection-studio/</loc><lastmod>2026-10-02</lastmod><changefreq>monthly</changefreq></url>
+  <url><loc>https://arvio.tv/stremio-addons-android-tv/</loc><lastmod>2026-10-08</lastmod><changefreq>monthly</changefreq></url>
+  <url><loc>https://arvio.tv/collections-catalogs/</loc><lastmod>2026-10-08</lastmod><changefreq>monthly</changefreq></url>
+  <url><loc>https://arvio.tv/collection-studio/</loc><lastmod>2026-10-08</lastmod><changefreq>monthly</changefreq></url>
   <url><loc>https://arvio.tv/self-host-arvio-web/</loc><lastmod>2026-09-30</lastmod><changefreq>monthly</changefreq></url>
   <url><loc>https://arvio.tv/browser-playback-guide/</loc><lastmod>2026-09-30</lastmod><changefreq>monthly</changefreq></url>
 </urlset>
