@@ -56,7 +56,7 @@ class ReleaseCalendarPreloadDeviceTest {
             val finish = CompletableDeferred<Unit>()
             coEvery { repository.loadCalendar(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
                 started.complete(Unit)
-                lastArg<suspend (CalendarLoadProgress) -> Unit>()(progress())
+                arg<suspend (CalendarLoadProgress) -> Unit>(6)(progress())
                 finish.await()
                 progress().month
             }
@@ -78,7 +78,7 @@ class ReleaseCalendarPreloadDeviceTest {
             val started = CompletableDeferred<Unit>()
             val cancelled = CompletableDeferred<Unit>()
             coEvery { repository.loadCalendar(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
-                lastArg<suspend (CalendarLoadProgress) -> Unit>()(progress().copy(month = CalendarMonthResult(emptyList(), emptyList())))
+                arg<suspend (CalendarLoadProgress) -> Unit>(6)(progress().copy(month = CalendarMonthResult(emptyList(), emptyList())))
                 started.complete(Unit)
                 try { awaitCancellation() } finally { cancelled.complete(Unit) }
             }

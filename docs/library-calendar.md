@@ -220,3 +220,24 @@ The subsequent tab-spacing refinement passed the same ten physical-TV scenarios
 (two portrait-phone scenarios skipped). Checks now switch between all four Library
 sections and require a gap of at most 12 dp below visible topbar controls, with no
 overlap when those controls are focused. Topbar bounds and touch spacing are unchanged.
+
+### Incremental loading validation on 8 October 2026
+
+- All 58 Calendar unit tests passed, including persistent per-title results,
+  incremental additions/removals, source reconciliation, metadata/projection expiry,
+  process recreation, locale/timezone/profile isolation and cache-only adjacent months.
+- The ten physical-TV Calendar UI scenarios passed again (two portrait-only checks
+  skipped). Both additional ViewModel lifecycle tests passed: no eager network load,
+  foreground promotion surviving idle cancellation, and resuming an incomplete
+  cancelled load even after provider reads completed. An initial fixture callback
+  incorrectly selected the coroutine continuation; the corrected tests were rerun.
+- The same real account retained all 45 releases from 459 titles. First cached release:
+  90 ms; complete cached result: 1.040 seconds versus the earlier 2.130 seconds.
+  Full cold scan: 31.969 seconds, first release 4.156 seconds and last new release
+  23.554 seconds. Network conditions and new cache writes affect cold timing;
+  first-ever network loading is not instant. These measure repository delivery,
+  not complete artwork rendering.
+- One provider warning and 28 metadata warnings remained; the two sampled movies
+  again returned HTTP 404. Partial results and explicit Retry remain available.
+- Evidence: `artifacts/calendar-incremental-*.log` and
+  `artifacts/calendar-preload-tv-tests-fixed.log`. No private account data is committed.
