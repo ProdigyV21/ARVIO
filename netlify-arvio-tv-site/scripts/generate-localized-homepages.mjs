@@ -30,6 +30,7 @@ const locales = {
 };
 
 const copy = [
+  ["Web App", "Web App", "App web"],
   ["Media kit", "Kit de imprensa", "Kit de prensa"],
   ["Guides", "Guias", "Guías"],
   ["ARVIO 2.0.", "ARVIO 2.0.", "ARVIO 2.0."],

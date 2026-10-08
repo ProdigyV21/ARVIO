@@ -83,7 +83,8 @@ class DetailsStreamCompletionTest {
                     watchlistRepository = mockk(relaxed = true),
                     cloudSyncRepository = mockk(relaxed = true),
                     launcherContinueWatchingRepository = mockk(relaxed = true),
-                    streamIntegrationRepository = integrations
+                    streamIntegrationRepository = integrations,
+                    recentPlayedSourceRepository = mockk(relaxed = true)
                 )
                 val store = ViewModelStore().apply { put("details", model) }
                 try {

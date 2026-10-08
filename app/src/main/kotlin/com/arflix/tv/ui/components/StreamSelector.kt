@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
@@ -104,6 +105,8 @@ import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.data.model.IptvVodSourceIds
+import com.arflix.tv.data.model.RecentPlayedSource
+import com.arflix.tv.data.model.findRecentSourceMatch
 import com.arflix.tv.data.model.isDirectStreamUrl
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
@@ -231,6 +234,7 @@ fun StreamSelector(
     isVisible: Boolean,
     streams: List<StreamSource>,
     selectedStream: StreamSource?,
+    recentSource: RecentPlayedSource? = null,
     isLoading: Boolean = false,
     title: String = "",
     subtitle: String = "",
@@ -397,6 +401,12 @@ fun StreamSelector(
         sourceAddonTabKeys(addonTabs)
     }
 
+    // The source this title was last really watched from leads the list whatever the sort
+    // says, so picking up where you left off is the first row.
+    val recentStream = remember(streams, recentSource) {
+        findRecentSourceMatch(streams, recentSource)
+    }
+
     val unknownSourceLabel = stringResource(R.string.stream_unknown_source)
     val presentations = remember(streams, unknownSourceLabel) {
         streams.map { presentSource(it, unknownSourceLabel) }
@@ -421,12 +431,12 @@ fun StreamSelector(
     // aggregator addons (AIOStreams): they sort server-side per the user's own web config, so
     // their streams keep arrival order (same exemption as PlayerViewModel.keepsOwnStreamOrder;
     // re-sorting here silently overrode the user's configured order in the source menu).
-    val orderedPresentations = remember(presentations, addonOrder) {
+    val orderedPresentations = remember(presentations, addonOrder, recentStream) {
         val qualityOrder = compareByDescending<IndexedValue<SourcePresentation>> { it.value.resolutionScore }
             .thenByDescending { it.value.releaseScore }
             .thenByDescending { it.value.sizeBytes }
             .thenBy { it.value.title.lowercase() }
-        presentations.withIndex()
+        val sorted = presentations.withIndex()
             .sortedWith(
                 compareBy<IndexedValue<SourcePresentation>> {
                     addonOrder[sourceTabId(it.value.stream)] ?: Int.MAX_VALUE
@@ -439,6 +449,12 @@ fun StreamSelector(
                 }
             )
             .map { it.value }
+        val recentIndex = sorted.indexOfFirst { it.stream === recentStream }
+        if (recentIndex > 0) {
+            listOf(sorted[recentIndex]) + sorted.filterIndexed { index, _ -> index != recentIndex }
+        } else {
+            sorted
+        }
     }
 
     // Filter streams by selected tab
@@ -659,6 +675,7 @@ fun StreamSelector(
                     streams = streams,
                     flatPresentations = flatPresentations,
                     selectedStream = selectedStream,
+                    recentStream = recentStream,
                     sourceFilters = sourceFilters.map { it.label },
                     selectedFilterIndex = selectedFilterIndex,
                     focusedFilterIndex = focusedFilterIndex,
@@ -869,6 +886,7 @@ fun StreamSelector(
                                 MobileStreamCard(
                                     presentation = presentation,
                                     isSelected = isSelectedSource(presentation.stream, selectedStream),
+                                    isRecent = presentation.stream === recentStream,
                                     onClick = { onSelect(presentation.stream) }
                                 )
                             }
@@ -889,6 +907,7 @@ private fun OledSourceSelectorTv(
     streams: List<StreamSource>,
     flatPresentations: List<SourcePresentation>,
     selectedStream: StreamSource?,
+    recentStream: StreamSource?,
     sourceFilters: List<String>,
     selectedFilterIndex: Int,
     focusedFilterIndex: Int,
@@ -1055,6 +1074,7 @@ private fun OledSourceSelectorTv(
                                     presentation = presentation,
                                     isFocused = streamsFocused && index == focusedIndex,
                                     isSelected = isSelectedSource(presentation.stream, selectedStream),
+                                    isRecent = presentation.stream === recentStream,
                                     onClick = { onSelect(presentation.stream) }
                                 )
                             }
@@ -2114,6 +2134,7 @@ private fun OledSourceRow(
     presentation: SourcePresentation,
     isFocused: Boolean,
     isSelected: Boolean,
+    isRecent: Boolean,
     onClick: () -> Unit
 ) {
     Column(
@@ -2158,6 +2179,10 @@ private fun OledSourceRow(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(0.58f)) {
+                if (isRecent) {
+                    RecentlyPlayedChip()
+                    Spacer(modifier = Modifier.height(5.dp))
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Full filename, wrapped — an ellipsized release name hides exactly the
                     // parts that differentiate sources (edition, audio, group).
@@ -2202,6 +2227,31 @@ private fun OledSourceRow(
                 )
             }
         }
+    }
+}
+
+/** Inverted (white) so it reads at a glance against the monochrome rows. */
+@Composable
+private fun RecentlyPlayedChip() {
+    Row(
+        modifier = Modifier
+            .background(Color.White, RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.History,
+            contentDescription = null,
+            tint = Color.Black,
+            modifier = Modifier.size(12.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = stringResource(R.string.stream_recently_played),
+            style = ArflixTypography.caption.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+            color = Color.Black,
+            maxLines = 1
+        )
     }
 }
 
@@ -2396,6 +2446,7 @@ private fun OledTextBadge(
 private fun MobileStreamCard(
     presentation: SourcePresentation,
     isSelected: Boolean,
+    isRecent: Boolean,
     onClick: () -> Unit
 ) {
     Row(
@@ -2410,6 +2461,10 @@ private fun MobileStreamCard(
         verticalAlignment = Alignment.Top
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            if (isRecent) {
+                RecentlyPlayedChip()
+                Spacer(modifier = Modifier.height(6.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

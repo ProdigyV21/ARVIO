@@ -4745,6 +4745,7 @@ fun PlayerScreen(
                 isVisible = showSourceMenu,
                 streams = uiState.streams,
                 selectedStream = uiState.selectedStream,
+                recentSource = uiState.recentSource,
                 isLoading = uiState.isLoadingStreams,
                 hasStreamingAddons = !uiState.isSetupError,
                 addonOrderedIds = uiState.addonOrderedIds,

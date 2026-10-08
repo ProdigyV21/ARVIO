@@ -62,6 +62,7 @@
     <string name="empty_watchlist">רשימת הצפייה ריקה</string>
     <string name="add_later">הוסף סרטים וסדרות לצפייה מאוחר יותר</string>
     <string name="sources_available">מקורות זמינים</string>
+    <string name="stream_recently_played">נוגן לאחרונה</string>
     <string name="ends_at">מסתיים ב</string>
     <!-- Settings titles -->
     <string name="content_language">שפת תוכן</string>

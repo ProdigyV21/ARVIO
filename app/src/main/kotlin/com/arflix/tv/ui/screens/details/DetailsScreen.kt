@@ -992,6 +992,7 @@ fun DetailsScreen(
             isVisible = showStreamSelector,
             streams = selectorStreams,
             selectedStream = null,
+            recentSource = uiState.recentSource,
             isLoading = uiState.isLoadingStreams,
             hasStreamingAddons = uiState.hasStreamingAddons,
             addonOrderedIds = uiState.addonOrderedIds,

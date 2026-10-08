@@ -15,6 +15,7 @@ import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.RecentPlayedSource
 import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.data.model.SportsAddonCapabilities
@@ -31,6 +32,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.MdbExternalRating
 import com.arflix.tv.data.repository.MdbListRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.RecentPlayedSourceRepository
 import com.arflix.tv.data.model.StreamIntegrationType
 import com.arflix.tv.data.repository.StreamIntegrationRepository
 import com.arflix.tv.data.repository.StreamRepository
@@ -97,6 +99,8 @@ data class DetailsUiState(
     // Streams
     val streams: List<StreamSource> = emptyList(),
     val streamsEpisodeIdentity: EpisodeIdentity? = null,
+    // The source the loaded streams' title/episode was last really watched from.
+    val recentSource: RecentPlayedSource? = null,
     val subtitles: List<Subtitle> = emptyList(),
     val isLoadingStreams: Boolean = false,
     val streamSearchStartTime: Long = 0L,
@@ -251,7 +255,8 @@ class DetailsViewModel @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
     private val cloudSyncRepository: CloudSyncRepository,
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
-    private val streamIntegrationRepository: StreamIntegrationRepository
+    private val streamIntegrationRepository: StreamIntegrationRepository,
+    private val recentPlayedSourceRepository: RecentPlayedSourceRepository
 ) : ViewModel() {
 
     companion object {
@@ -2051,6 +2056,7 @@ class DetailsViewModel @Inject constructor(
             totalAddons = 0,
             streams = emptyList(),
             streamsEpisodeIdentity = identity,
+            recentSource = null,
             subtitles = emptyList(),
             streamSearchStartTime = System.currentTimeMillis(),
             pluginScrapersLoading = false,
@@ -2059,6 +2065,17 @@ class DetailsViewModel @Inject constructor(
         telegramSearchRequest = null
         val requestMediaType = currentMediaType
         val requestMediaId = currentMediaId
+
+        viewModelScope.launch {
+            val recent = recentPlayedSourceRepository.get(requestMediaType, requestMediaId)
+                ?.takeIf {
+                    it.appliesTo(requestMediaType, requestMediaId, identity?.tmdbSeason, identity?.tmdbEpisode)
+                }
+                ?: return@launch
+            if (requestId == loadStreamsRequestId) {
+                _uiState.value = _uiState.value.copy(recentSource = recent)
+            }
+        }
 
         // Register the job before it can synchronously finish or launch providers.
         loadStreamsJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
