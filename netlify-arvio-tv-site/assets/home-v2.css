@@ -35,6 +35,10 @@
 /* Premium is a primary destination; the free APK remains a separate choice. */
 .nav .nav-premium-link{color:var(--mint)}
 .nav .nav-premium{flex-shrink:0}
+.nav-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}.nav-actions .button{white-space:nowrap}.nav-actions .button:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+@media(max-width:900px){.nav nav{display:none}}
+@media(max-width:520px){.nav{padding-inline:12px;gap:8px}.nav-actions{gap:8px}.nav .nav-actions .button{padding:10px;gap:8px;min-height:42px;font-size:11px}.nav-actions .button span{font-size:16px}}
+@media(max-width:360px){.nav .brand img{width:76px}.nav-actions .button span{display:none}}
 .hero-v2 .hero-copy>.preview-button{display:inline-flex;padding:0;margin:17px 24px 0 0;min-height:44px;font-size:12px;vertical-align:middle}
 .hero-v2 .hero-copy>.hero-community-link{vertical-align:middle;margin-top:17px}
 .hero-v2 .hero-copy>.hero-premium-note{font-size:12px;line-height:1.7;color:#b5cdc0;max-width:370px;margin:14px 0 0}
