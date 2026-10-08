@@ -1,15 +1,15 @@
 // English guides and tools with no translated counterpart yet. Keep their real language
 // explicit in localized directories rather than adding inaccurate hreflang.
 export const standaloneGuideRoutes = [
-  { route: "/stremio-addons-android-tv/", updated: "2026-10-05", labels: {
+  { route: "/stremio-addons-android-tv/", updated: "2026-10-08", labels: {
     pt: ["Configuração de addons · Em inglês", "Addons compatíveis com Stremio no ARVIO", "Instale uma URL de manifesto, configure pelo celular e confira os limites de compatibilidade na Android TV."],
     es: ["Configuración de addons · En inglés", "Addons compatibles con Stremio en ARVIO", "Instala una URL de manifiesto, configura desde el móvil y consulta los límites de compatibilidad en Android TV."]
   } },
-  { route: "/collections-catalogs/", updated: "2026-10-02", labels: {
+  { route: "/collections-catalogs/", updated: "2026-10-08", labels: {
     pt: ["Personalização · Em inglês", "Criar coleções e adicionar catálogos", "Modelos JSON, hospedagem gratuita e importação por URL para personalizar a página inicial."],
     es: ["Personalización · En inglés", "Crear colecciones y añadir catálogos", "Plantillas JSON, alojamiento gratuito e importación por URL para personalizar el inicio."]
   } },
-  { route: "/collection-studio/", updated: "2026-10-02", labels: {
+  { route: "/collection-studio/", updated: "2026-10-08", labels: {
     pt: ["Criador de coleções · Em inglês", "Collection Studio", "Crie uma linha inicial com até oito pastas, copie o JSON para o ARVIO e compartilhe uma prévia pública."],
     es: ["Creador de colecciones · En inglés", "Collection Studio", "Crea una fila de inicio con hasta ocho carpetas, copia el JSON para ARVIO y comparte una vista previa pública."]
   } },

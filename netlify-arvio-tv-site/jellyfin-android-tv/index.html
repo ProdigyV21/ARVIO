@@ -32,7 +32,7 @@
   {
     "@context": "https://schema.org",
     "@graph": [
-      {"@type":"TechArticle","headline":"A Jellyfin client for Android TV and Google TV.","description":"Use ARVIO as a free Jellyfin client on Android TV and Google TV. Connect with a password or Quick Connect, browse libraries and troubleshoot playback.","dateModified":"2026-10-05","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/jellyfin-android-tv/","image":"https://arvio.tv/assets/screenshots-v2/tv/04-homeserver.webp"},
+      {"@type":"TechArticle","headline":"A Jellyfin client for Android TV and Google TV.","description":"Use ARVIO as a free Jellyfin client on Android TV and Google TV. Connect with a password or Quick Connect, browse libraries and troubleshoot playback.","dateModified":"2026-10-08","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/jellyfin-android-tv/","image":"https://arvio.tv/assets/screenshots-v2/tv/04-homeserver.webp"},
       {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Jellyfin on Android TV","item":"https://arvio.tv/jellyfin-android-tv/"}]},
       {"@type":"FAQPage","mainEntity":[
         {"@type":"Question","name":"Is ARVIO a free alternative to the Jellyfin Android TV app?","acceptedAnswer":{"@type":"Answer","text":"Yes. ARVIO is a free, open-source Android client that can connect to a Jellyfin server, alongside other supported sources. It is an independent project, not the official Jellyfin app. You still need your own server access and media; Premium hosting is not required for the Android app."}},
@@ -57,11 +57,23 @@
     <h1>A Jellyfin client for Android TV and Google TV.</h1>
     <p class="lead">Looking for an alternative way to use Jellyfin on your TV? ARVIO connects to your existing server, lets you browse its movie and series libraries, and offers one interface for Jellyfin alongside Plex, Emby and compatible addons. Your server still holds your files and controls access.</p>
     <div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get the free Android app</a><a class="button secondary" href="#setup">Connect Jellyfin</a></div>
-    <p class="guide-updated">Updated 5 October 2026 · By the ARVIO project</p>
-    <nav class="guide-jump" aria-label="On this page"><a href="#features">What it offers</a><a href="#setup">TV setup</a><a href="#quick-connect">Quick Connect</a><a href="#help">Troubleshooting</a></nav>
+    <p class="guide-updated">Updated 8 October 2026 · By the ARVIO project</p>
+    <nav class="guide-jump" aria-label="On this page"><a href="#choose">Is it right for you?</a><a href="#features">What it offers</a><a href="#setup">TV setup</a><a href="#quick-connect">Quick Connect</a><a href="#help">Troubleshooting</a></nav>
   </div></section>
 
   <section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/04-homeserver.webp" alt="ARVIO Android TV Library with a Jellyfin server, Movies and Shows libraries, search and filters" width="1920" height="1080" loading="lazy" decoding="async"><figcaption>ARVIO's Homeserver view on Android TV. This existing app screenshot shows an example library; no titles or server access are included.</figcaption></figure></div></section>
+
+  <section class="section" id="choose"><div class="shell guide-reading">
+    <p class="eyebrow">Choose a client, keep your server</p><h2>ARVIO or the official Jellyfin Android TV app?</h2>
+    <p>ARVIO is an independent alternative client, not a replacement Jellyfin server. The useful difference is access to several kinds of source from one app, rather than a promise of better playback on every TV.</p>
+    <div class="decision-list">
+      <article><h3>Only need your Jellyfin library?</h3><p>The <a href="https://jellyfin.org/downloads/clients/">official Jellyfin clients</a> are a sensible starting point. Keep a working client installed while testing another one.</p></article>
+      <article><h3>Use Jellyfin alongside Plex, Emby or addons?</h3><p>Try ARVIO's <a href="/plex-emby-jellyfin/">multi-server workflow</a>. Connections remain separate; it does not merge databases or deduplicate the same film across servers.</p></article>
+      <article><h3>Want custom discovery rows?</h3><p>Try a <a href="/collection-studio/#examples">ready-to-use Home collection</a> with TMDB discovery. A discovery result is metadata, not proof that your Jellyfin server contains that title.</p></article>
+      <article><h3>Need Trakt or Simkl tracking?</h3><p>Read the <a href="/trakt-simkl-sync/">watch-tracking setup and sync limits</a>. An ARVIO tracking connection is not a Jellyfin server plugin, and does not guarantee full two-way watched-state sync.</p></article>
+    </div>
+    <p><strong>Before switching:</strong> test one movie and one episode from your own library, including the audio track and subtitles you normally use. Check resume behavior in both clients. The Android app is free; buying hosted Web access is not required for this test.</p>
+  </div></section>
 
   <section class="section" id="features"><div class="shell">
     <div class="section-head"><p class="eyebrow">An alternative client, not a new server</p><h2>When ARVIO fits a Jellyfin setup.</h2><p>Try ARVIO if you want to browse a Jellyfin library in the same Android app as other media sources. There is no need to migrate the library or replace your Jellyfin installation.</p></div>
@@ -105,6 +117,7 @@
   </div></section>
 
   <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>Build on your Jellyfin setup.</h2></div><div class="related-grid"><a class="related-link" href="/plex-emby-jellyfin/"><small>Multiple servers</small><strong>Plex, Emby and Jellyfin in one app</strong><span>Separate connections, library navigation and platform-specific login.</span></a><a class="related-link" href="/fire-tv-media-player/"><small>Fire TV</small><strong>Install ARVIO on compatible Fire TV devices</strong><span>APK setup and the Fire OS versus Vega OS distinction.</span></a><a class="related-link" href="/arvio-web/"><small>Browser</small><strong>ARVIO Web setup and limitations</strong><span>Optional managed hosting or free self-hosting.</span></a></div></div></section>
+  <section class="section compact"><div class="shell guide-reading"><h2>Need access from a laptop or iPad too?</h2><p><a href="/arvio-web/">ARVIO Web</a> is a browser companion with different networking and codec limits. <a href="/self-host-arvio-web/">Self-host it for free</a>, or choose <a href="/premium/" data-premium-placement="jellyfin-browser">$2.99/month managed hosting</a> if you want us to run it. Hosting does not include a Jellyfin server or media.</p><p>Use the <a href="/browser-playback-guide/">browser playback checklist</a> before subscribing.</p></div></section>
   <section class="cta-band"><div class="shell cta-inner"><div><h2>Try ARVIO with your Jellyfin library.</h2><p>The Android app is free and open source. Bring your own server and media.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
 </main>
 <footer class="site-footer"><div class="shell"><p>Open-source media management for Android TV, Google TV and Android mobile.</p><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav><p>© 2026 ARVIO · ARVIO is not affiliated with Jellyfin. No media or server subscription is included.</p></div></footer>

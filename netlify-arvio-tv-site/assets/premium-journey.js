@@ -11,13 +11,36 @@
   const clean = value => /^[a-z0-9._-]{1,80}$/i.test(value || '') ? value.toLowerCase() : '';
   let referrer = '';
   try { referrer = clean(new URL(document.referrer).hostname); } catch {}
+  const organicReferrer = /^(?:www\.)?google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(referrer) ||
+    ['www.bing.com', 'bing.com', 'duckduckgo.com', 'www.duckduckgo.com'].includes(referrer);
   const campaign = {
     source: clean(here.searchParams.get('utm_source')) || referrer || 'direct',
-    medium: clean(here.searchParams.get('utm_medium')) || (referrer ? 'referral' : 'direct'),
+    medium: clean(here.searchParams.get('utm_medium')) || (organicReferrer ? 'organic' : referrer ? 'referral' : 'direct'),
     campaign: clean(here.searchParams.get('utm_campaign')) || 'premium',
     content: clean(here.searchParams.get('utm_content')) || '',
   };
-  const page = /\/premium\/?$/.test(here.pathname) ? 'premium' : 'home';
+  // Bounded editorial route labels only, never arbitrary paths, queries or hashes.
+  // Studio intentionally keeps its network-free CSP and is not instrumented.
+  const guides = {
+    '/guides/': 'guides', '/android-tv-media-hub/': 'android',
+    '/jellyfin-android-tv/': 'jellyfin', '/plex-emby-jellyfin/': 'servers',
+    '/stremio-addons-android-tv/': 'addons', '/debrid-usenet-android-tv/': 'debrid',
+    '/trakt-simkl-sync/': 'tracking', '/live-tv-epg/': 'live',
+    '/ai-subtitles-android-tv/': 'subtitles', '/fire-tv-media-player/': 'firetv',
+    '/arvio-web/': 'browser', '/collections-catalogs/': 'collections',
+    '/self-host-arvio-web/': 'selfhost', '/browser-playback-guide/': 'playback',
+    '/pt-br/guias/': 'guides', '/es/guias/': 'guides',
+    '/pt-br/jellyfin-android-tv/': 'jellyfin', '/es/jellyfin-android-tv/': 'jellyfin',
+    '/pt-br/plex-emby-jellyfin/': 'servers', '/es/plex-emby-jellyfin/': 'servers',
+    '/pt-br/central-midia-android-tv/': 'android', '/es/centro-multimedia-android-tv/': 'android',
+    '/pt-br/arvio-web/': 'browser', '/es/arvio-web/': 'browser',
+    '/pt-br/arvio-fire-tv/': 'firetv', '/es/arvio-fire-tv/': 'firetv',
+    '/pt-br/debrid-usenet-android-tv/': 'debrid', '/es/debrid-usenet-android-tv/': 'debrid',
+    '/pt-br/sincronizacao-trakt-simkl/': 'tracking', '/es/sincronizacion-trakt-simkl/': 'tracking',
+    '/pt-br/tv-ao-vivo-epg/': 'live', '/es/tv-en-vivo-epg/': 'live',
+    '/pt-br/legendas-ia-android-tv/': 'subtitles', '/es/subtitulos-ia-android-tv/': 'subtitles',
+  };
+  const page = /\/premium\/?$/.test(here.pathname) ? 'premium' : guides[here.pathname] || 'home';
   const sent = new Set();
   function record(eventName, placement) {
     if (sent.has(eventName)) return;
@@ -73,4 +96,5 @@
   document.addEventListener('click', clicked, { capture: true });
   document.addEventListener('auxclick', clicked, { capture: true });
   if (page === 'premium') record('premium_page_view');
+  else if (guides[here.pathname]) record('guide_page_view');
 })();

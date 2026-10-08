@@ -2,6 +2,7 @@ import { LIMITS, PRESETS, THEMES, createDefaultDraft, validateDraft, serializeCo
 
 const byId = id => document.getElementById(id);
 const fields = ['row-title', 'folder-title', 'folder-description', 'source-kind', 'preset', 'source-url', 'folder-theme'];
+const pageAnchors = new Set(['#studio', '#how-to-use', '#examples']);
 let draft = createDefaultDraft();
 let selected = 0;
 let nextFolderId = 4;
@@ -163,7 +164,7 @@ function removeFragment() {
 
 function loadFromLocation() {
   const fragment = location.hash;
-  if (fragment && !['#studio', '#how-to-use'].includes(fragment)) {
+  if (fragment && !pageAnchors.has(fragment)) {
     try {
       draft = decodeShare(fragment);
       selected = 0;
@@ -295,6 +296,6 @@ byId('start-new').addEventListener('click', () => {
 });
 window.addEventListener('hashchange', () => {
   // Normal page anchors must not turn an editor or shared preview into a new mode.
-  if (!['#studio', '#how-to-use'].includes(location.hash)) loadFromLocation();
+  if (!pageAnchors.has(location.hash)) loadFromLocation();
 });
 loadFromLocation();

@@ -51,7 +51,7 @@ test('content hrefs remain clean before activation, even with an incoming campai
   const result = run({ url: `https://arvio.tv/arvio-web/?arvio_journey=${id}&utm_source=reddit&utm_campaign=guides`,
     destinations: ['/guides/', '/premium/?lang=nl#plans', 'https://web.arvio.tv/?intent=trial'] });
   assert.deepEqual(result.links.map(link => link.getAttribute('href')), ['/guides/', '/premium/?lang=nl#plans', 'https://web.arvio.tv/?intent=trial']);
-  assert.equal(result.events.length, 0);
+  assert.deepEqual(result.events.map(event => event.event_name), ['guide_page_view']);
   result.flushTimers();
   assert.equal(result.links[0].getAttribute('href'), '/guides/');
 });
@@ -160,3 +160,39 @@ test('unavailable analytics does not delay attributed native navigation', async 
 });
 
 module.exports = { run, id };
+
+test('guide landings record only bounded labels and carry the journey into Premium', () => {
+  for (const [route, page] of [['/jellyfin-android-tv/', 'jellyfin'], ['/plex-emby-jellyfin/', 'servers'], ['/stremio-addons-android-tv/', 'addons'], ['/pt-br/jellyfin-android-tv/', 'jellyfin']]) {
+    const result = run({ url: `https://arvio.tv${route}?utm_source=google&utm_campaign=discovery#private-fragment`, destinations: ['/premium/'] });
+    assert.equal(result.events[0].event_name, 'guide_page_view');
+    assert.equal(result.events[0].metadata.page, page);
+    assert.equal(result.events[0].metadata.source, 'google');
+    assert.equal(JSON.stringify(result.events).includes('private-fragment'), false);
+    assert.equal(new URL(result.activate(0)).searchParams.get('arvio_journey'), id);
+    result.flushTimers();
+    assert.equal(result.links[0].getAttribute('href'), '/premium/');
+  }
+});
+test('unknown paths and Studio previews do not generate guide landing events', () => {
+  for (const route of ['/private-account/', '/collection-studio/#studio=private']) {
+    const result = run({ url: 'https://arvio.tv' + route, destinations: [] });
+    assert.equal(result.events.length, 0);
+  }
+});
+test('guide measurement respects privacy opt-outs without changing links', () => {
+  for (const navigator of [{ doNotTrack: '1' }, { globalPrivacyControl: true }]) {
+    const result = run({ url: 'https://arvio.tv/jellyfin-android-tv/', navigator, destinations: ['/premium/'] });
+    assert.equal(result.events.length, 0);
+    assert.equal(result.activate(0), 'https://arvio.tv/premium/');
+  }
+});
+test('search referrers are organic but cannot override explicit campaign medium', () => {
+  const organic = run({ url: 'https://arvio.tv/jellyfin-android-tv/', referrer: 'https://www.google.nl/search?q=private-search' });
+  assert.equal(organic.events[0].metadata.medium, 'organic');
+  assert.equal(organic.events[0].metadata.source, 'www.google.nl');
+  assert.equal(JSON.stringify(organic.events).includes('private-search'), false);
+  const paid = run({ url: 'https://arvio.tv/jellyfin-android-tv/?utm_medium=cpc', referrer: 'https://www.google.com/' });
+  assert.equal(paid.events[0].metadata.medium, 'cpc');
+  const fake = run({ url: 'https://arvio.tv/jellyfin-android-tv/', referrer: 'https://www.google.com.evil.invalid/' });
+  assert.equal(fake.events[0].metadata.medium, 'referral');
+});

@@ -9,6 +9,28 @@ const funnel = require('../netlify/functions/_premium-funnel');
 
 const journeyId = 'a1101111-2222-4333-8444-555566667777';
 const journeyKey = measurement.journeyKey(journeyId);
+
+test('guide funnel reports use bounded landing labels and never treat a click as a subscription', () => {
+  const landing = { journeyKey, eventName: 'guide_page_view', firstAt: '2026-10-08T10:00:00Z', metadata: { page: 'jellyfin', source: 'google' } };
+  const click = { ...landing, eventName: 'membership_clicked', firstAt: '2026-10-08T10:01:00Z', metadata: { page: 'premium', source: 'google' } };
+  const report = measurement.summarizeMeasurements([], [click, landing]);
+  assert.equal(report.journeys.guidePageViews, 1);
+  assert.equal(report.journeys.byLandingPage.jellyfin.membershipClicks, 1);
+  assert.equal(report.journeys.bySource.google.confirmedNewMemberships, 0);
+  assert.equal(report.journeys.byLandingPage.premium, undefined);
+  assert.deepEqual(measurement.marketingMetadata({ page: '/private/path?email=user@example.test' }), {});
+});
+
+test('guide events retain existing deduplication and write ceilings', async () => {
+  const store = memoryStore();
+  const now = new Date('2026-10-08T12:00:00Z');
+  const event = { headers: { 'x-nf-client-connection-ip': '192.0.2.10' } };
+  const body = { event_name: 'guide_page_view', journey_id: journeyId, metadata: { page: 'jellyfin', source: 'google' } };
+  assert.equal((await measurement.recordJourneyEvent(store, event, body, now)).status, 200);
+  const writes = store.writes();
+  assert.equal((await measurement.recordJourneyEvent(store, event, body, now)).status, 200);
+  assert.equal(store.writes(), writes);
+});
 function memoryStore() {
   const data = new Map(); let writes = 0;
   return { data, writes: () => writes,

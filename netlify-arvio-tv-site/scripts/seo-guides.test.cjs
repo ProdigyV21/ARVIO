@@ -9,10 +9,10 @@ const routes = [
   { route: '/android-tv-media-hub/', pt: '/pt-br/central-midia-android-tv/', es: '/es/centro-multimedia-android-tv/', updated: '2026-10-04' },
   { route: '/arvio-web/', pt: '/pt-br/arvio-web/', es: '/es/arvio-web/', updated: '2026-10-04' },
   { route: '/fire-tv-media-player/', pt: '/pt-br/arvio-fire-tv/', es: '/es/arvio-fire-tv/', updated: '2026-10-04' },
-  { route: '/jellyfin-android-tv/', pt: '/pt-br/jellyfin-android-tv/', es: '/es/jellyfin-android-tv/', updated: '2026-10-05' },
-  { route: '/plex-emby-jellyfin/', pt: '/pt-br/plex-emby-jellyfin/', es: '/es/plex-emby-jellyfin/', updated: '2026-10-05' },
+  { route: '/jellyfin-android-tv/', pt: '/pt-br/jellyfin-android-tv/', es: '/es/jellyfin-android-tv/', updated: '2026-10-08' },
+  { route: '/plex-emby-jellyfin/', pt: '/pt-br/plex-emby-jellyfin/', es: '/es/plex-emby-jellyfin/', updated: '2026-10-08' },
   { route: '/debrid-usenet-android-tv/', pt: '/pt-br/debrid-usenet-android-tv/', es: '/es/debrid-usenet-android-tv/', updated: '2026-10-05' },
-  { route: '/stremio-addons-android-tv/', updated: '2026-10-05' },
+  { route: '/stremio-addons-android-tv/', updated: '2026-10-08' },
   { route: '/live-tv-epg/', pt: '/pt-br/tv-ao-vivo-epg/', es: '/es/tv-en-vivo-epg/', updated: '2026-10-05' },
   { route: '/trakt-simkl-sync/', pt: '/pt-br/sincronizacao-trakt-simkl/', es: '/es/sincronizacion-trakt-simkl/', updated: '2026-10-05' },
   { route: '/ai-subtitles-android-tv/', pt: '/pt-br/legendas-ia-android-tv/', es: '/es/subtitulos-ia-android-tv/', updated: '2026-10-05' }
