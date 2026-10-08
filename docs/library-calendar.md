@@ -186,8 +186,8 @@ sizes, along with TypeScript. Evidence is in `artifacts/calendar-posters-oct5`.
 - The optimized sideload release APK was installed as a signed update with the
   existing certificate and retained profiles/settings. A release-app check
   confirmed both month boundaries after 35 presses in each direction, consistent
-  tabs, populated real-account artwork and opening a Calendar title. TV audio
-  remained muted. The full cold scan is improved but is not instant.
+  tabs, populated real-account artwork and opening a Calendar title. No playback
+  was started during Calendar checks. The full cold scan is not instant.
 - Evidence is saved locally in `artifacts/calendar-tv-*.log` and
   `artifacts/calendar-*-release*.png`. This change was tested on Android; the web
   Calendar implementation was not modified or revalidated in this pass.
