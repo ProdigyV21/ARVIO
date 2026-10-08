@@ -89,4 +89,39 @@ class ReleaseCalendarCacheTest {
         time += 60 * 60_000L
         assertNull(ReleaseCalendarCache(directory) { time }.readMonth("month"))
     }
+
+    @Test fun `metadata keeps original write time across process recreation and historical read window`() = runBlocking {
+        var time = System.currentTimeMillis()
+        val directory = temporary.newFolder()
+        val cache = ReleaseCalendarCache(directory) { time }
+        val season = TmdbSeasonDetails(episodes = listOf(TmdbEpisode(airDate = "2020-01-01")))
+        cache.writeValue("season", season)
+        val writtenAt = time
+        time += 2 * 60 * 60_000L
+        assertEquals(CalendarMetadataRecord(season, writtenAt),
+            ReleaseCalendarCache(directory) { time }.readMetadata<TmdbSeasonDetails>("season", TmdbSeasonDetails::class.java))
+        time += 22 * 60 * 60_000L
+        assertNull(cache.readMetadata<TmdbSeasonDetails>("season", TmdbSeasonDetails::class.java))
+    }
+
+    @Test fun `title projections round trip exactly expire and retry clears them but not full previews`() = runBlocking {
+        var time = System.currentTimeMillis()
+        val directory = temporary.newFolder()
+        val cache = ReleaseCalendarCache(directory) { time }
+        val entry = CalendarRelease("episode", MediaItem(1, "Show", mediaType = MediaType.TV),
+            LocalDate.of(2026, 10, 4), Instant.parse("2026-10-04T18:00:00Z"), CalendarReleaseKind.EPISODE,
+            0, 1, "Special", setOf("trakt"), "https://art.example/logo.png")
+        val projection = CalendarTitleProjection(listOf(entry), time + 60_000L)
+        cache.writeTitle("private-title-key", projection)
+        assertEquals(projection, ReleaseCalendarCache(directory) { time }.readTitle("private-title-key"))
+        assertNull(cache.readTitle("other-profile-key"))
+        time += 60_000L
+        assertNull(cache.readTitle("private-title-key"))
+        cache.writeTitle("private-title-key", CalendarTitleProjection(emptyList(), time + 60_000L))
+        assertTrue(cache.readTitle("private-title-key")!!.entries.isEmpty())
+        cache.writeMonth("month", CalendarMonthPreview(listOf(entry), emptyMap(), time))
+        cache.clearMetadata()
+        assertNull(cache.readTitle("private-title-key"))
+        assertNotNull(cache.readMonth("month"))
+    }
 }

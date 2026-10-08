@@ -26,6 +26,10 @@ The month starts on Monday. Previous/next month controls work across year
 boundaries and keep the selected day where possible. On TV, left/right
 moves one day, up/down moves a week, and OK enters the selected day's release strip.
 OK on a release opens its details. Up returns from that strip to the selected day.
+Remote day navigation stays inside the displayed month; adjacent-month cells are
+not remote focus targets. Use the month controls to change months. Up from the
+first week enters those controls, and Down returns to the selected date, rather
+than relying on geometric focus search across spillover days.
 
 Phone layouts retain the month artwork and expose the larger selected-day cards
 below it. Short landscape windows scroll vertically instead of clipping the month
@@ -43,7 +47,14 @@ toolbar only contains month navigation, the watchlist filter and connected-servi
 branding; it has no Today button, timezone caption, refresh button or navigation
 instruction footer. Retry remains available when a source fails. Phone date cells prioritize artwork
 and release counts; complete titles and times remain in the selected-day strip.
-On TV the Calendar content starts 26 dp closer to the unchanged shared topbar.
+Calendar uses the same Library tab typography, shape, padding and vertical position
+as Watchlists, My lists and Homeserver. The tab row has a stable minimum height,
+including when other sections expose additional controls. Normal TV windows keep
+the month toolbar and release strip in view while navigating dates; only compact
+or genuinely short windows scroll the entire month surface.
+The TV Library tabs start at 74 dp, just below the visible topbar controls, rather
+than reserving the full 98 dp gradient area as empty space. This tighter spacing
+is shared by all four Library sections; topbar bounds and touch spacing stay unchanged.
 Dates with multiple releases show up to three portrait posters and a `+N` count
 for further releases, both focused and unfocused. Single-release cells retain
 their title and time. The wide web layout follows the same poster-strip design.
@@ -60,12 +71,20 @@ in an Android vector; PNG artwork retains its original colors and aspect ratio.
 
 ## Loading and isolation
 
-Metadata requests use bounded concurrency and expiring caches. Android keeps public
-metadata for 30 minutes in memory/on disk and restores a private month preview for
+Metadata requests use bounded concurrency and expiring caches. Android keeps active,
+future and unknown public metadata for 30 minutes in memory/on disk; older movie,
+completed show and fully historical season metadata can be reused for 24 hours.
+Upcoming regional releases or undated episodes retain the short refresh interval.
+Android restores a private month preview for
 up to 24 hours, scoped to profile, connection identity, local watchlist membership,
 language, region, month and timezone. Encoding, parsing and file access run off the
-UI thread. The production Library route preloads the current month before the
-Calendar tab opens. The web client also restores scoped month snapshots before
+UI thread. Home starts warming the selected Calendar month after six seconds with
+no remote/touch input, only while resumed. Input, leaving Home or backgrounding
+cancels idle work. Opening Library promotes an in-flight load rather than restarting
+it; incomplete cancelled work resumes on entry. The activity-scoped ViewModel
+shares results between Home and Library, while private state remains profile-scoped.
+The production Library route also starts loading before the Calendar tab opens.
+The web client restores scoped month snapshots before
 refreshing. Successfully removed source memberships are reconciled into the saved
 preview even when an unrelated service fails; retained fallback data keeps its
 original expiry. New, uncached remote data still requires a network response.
@@ -82,6 +101,29 @@ Historical season requests have their own bounded slots and start with recent
 seasons, allowing newly arriving titles to publish dates without waiting for a
 complete season walk. Metadata for an identical request is coalesced; no titles or
 potentially relevant seasons are silently omitted.
+Android batches up to 20 missing seasons per TMDB request using
+`append_to_response`, preserving the normal per-season cache keys. Specials and
+overlapping seasons remain included. Missing or malformed appended blocks retry
+independently through the ordinary season endpoint. Batch decoding runs off the UI
+thread; the same five-request global limit and two-season-request limit still apply.
+Current shows and recent movie releases are prioritized without excluding other
+titles. Completed per-title month projections, including verified empty results,
+survive process recreation. Adding one watchlist title only computes that title;
+saved results acquire current source memberships and cannot restore removed titles.
+Projection keys include profile, media identity, month, language, region, timezone
+and optional Trakt identity. Expiry never exceeds the freshness of the metadata
+used to compute the result. Errors are not saved as successful empty schedules;
+missing optional artwork receives a short recovery interval. Explicit Retry clears
+metadata and projections but retains private full-month previews for outage fallback.
+After idle warming, adjacent months reuse already fetched metadata without issuing
+extra HTTP requests. Normal month entry still fills every missing title/season.
+Caches are bounded in memory and on disk (4,096 files / 48 MiB maximum).
+Progress parsing/mapping runs off Main; UI updates are coalesced at 100 ms while
+the first available release and final complete result remain immediate.
+Older movies have a bounded title queue so later-arriving tracker shows do
+not wait behind hundreds of pending requests. Confirmed HTTP 404 responses are
+remembered for fifteen minutes to avoid repeated failed reads on date/month changes;
+explicit Retry clears this negative cache. Other network errors are not hidden by it.
 Changing month, profile or language cancels/replaces the old request. Private
 watchlists are scoped to the current account/profile; public metadata may be cached.
 Android refreshes stale lists on tab entry/resume and reacts to cloud watchlist and
@@ -146,3 +188,56 @@ shared-topbar emulator scenarios. Assertions check unchanged topbar bounds, no
 overlap with the closer Calendar tabs, three posters within five-/six-week cells,
 and correct overflow. Web browser checks passed at all five existing viewport
 sizes, along with TypeScript. Evidence is in `artifacts/calendar-posters-oct5`.
+
+### Validation on 8 October 2026
+
+- Android: all 42 Calendar repository, mapping and persistent-cache unit tests
+  passed. Regressions cover season batching, malformed/missing batch blocks,
+  specials, unchanged release results, late-arriving shows and confirmed 404s.
+- Physical TV: ten Calendar UI scenarios passed on an Android 14 TV at
+  1920 x 1080. The two phone-only scenarios were skipped on this landscape device.
+  Checks cover identical Library tab bounds, month boundaries, repeated native
+  remote keys, toolbar/grid transitions, filtering and opening release details.
+- The configured account benchmark checked 459 watchlist titles and found 45
+  releases. Cold first release: 3.276 seconds; last newly discovered release:
+  21.673 seconds; complete cold scan: 26.291 seconds. Cached first release:
+  0.199 seconds; complete cached scan: 2.130 seconds, with the identical release
+  ID set. These are repository delivery times, not complete image-render times.
+- The account still produced one provider warning and 28 metadata warnings.
+  Two sampled unavailable movie records returned confirmed HTTP 404 responses;
+  the remaining warnings were not individually diagnosed. Partial results and
+  Retry remain visible rather than silently discarding unavailable records.
+- The optimized sideload release APK was installed as a signed update with the
+  existing certificate and retained profiles/settings. A release-app check
+  confirmed both month boundaries after 35 presses in each direction, consistent
+  tabs, populated real-account artwork and opening a Calendar title. No playback
+  was started during Calendar checks. The full cold scan is not instant.
+- Evidence is saved locally in `artifacts/calendar-tv-*.log` and
+  `artifacts/calendar-*-release*.png`. This change was tested on Android; the web
+  Calendar implementation was not modified or revalidated in this pass.
+
+The subsequent tab-spacing refinement passed the same ten physical-TV scenarios
+(two portrait-phone scenarios skipped). Checks now switch between all four Library
+sections and require a gap of at most 12 dp below visible topbar controls, with no
+overlap when those controls are focused. Topbar bounds and touch spacing are unchanged.
+
+### Incremental loading validation on 8 October 2026
+
+- All 58 Calendar unit tests passed, including persistent per-title results,
+  incremental additions/removals, source reconciliation, metadata/projection expiry,
+  process recreation, locale/timezone/profile isolation and cache-only adjacent months.
+- The ten physical-TV Calendar UI scenarios passed again (two portrait-only checks
+  skipped). Both additional ViewModel lifecycle tests passed: no eager network load,
+  foreground promotion surviving idle cancellation, and resuming an incomplete
+  cancelled load even after provider reads completed. An initial fixture callback
+  incorrectly selected the coroutine continuation; the corrected tests were rerun.
+- The same real account retained all 45 releases from 459 titles. First cached release:
+  90 ms; complete cached result: 1.040 seconds versus the earlier 2.130 seconds.
+  Full cold scan: 31.969 seconds, first release 4.156 seconds and last new release
+  23.554 seconds. Network conditions and new cache writes affect cold timing;
+  first-ever network loading is not instant. These measure repository delivery,
+  not complete artwork rendering.
+- One provider warning and 28 metadata warnings remained; the two sampled movies
+  again returned HTTP 404. Partial results and explicit Retry remain available.
+- Evidence: `artifacts/calendar-incremental-*.log` and
+  `artifacts/calendar-preload-tv-tests-fixed.log`. No private account data is committed.

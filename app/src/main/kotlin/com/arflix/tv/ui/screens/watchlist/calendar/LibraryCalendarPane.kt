@@ -97,7 +97,6 @@ fun LibraryCalendarPane(
     val monthButton = remember { FocusRequester() }
     val emptyAction = remember { FocusRequester() }
     val retryAction = remember { FocusRequester() }
-    var pendingFocus by remember { mutableStateOf<LocalDate?>(if (!touch) state.selectedDate else null) }
     var showSources by remember { mutableStateOf(false) }
     val releasesByDate = remember(state.entries, state.selectedSourceId) { state.releasesByDate }
     val selectedReleases = releasesByDate[state.selectedDate].orEmpty()
@@ -120,16 +119,12 @@ fun LibraryCalendarPane(
         }
     }
 
-    LaunchedEffect(state.month, state.selectedDate, pendingFocus) {
-        pendingFocus?.let { date ->
-            requesters[date]?.let { requester ->
-                requester.requestFocus()
-                pendingFocus = null
-            }
-        }
-    }
+    LaunchedEffect(Unit) { if (!touch) requesters[state.selectedDate]?.requestFocus() }
     fun selectAndFocus(date: LocalDate) {
-        pendingFocus = date
+        // Keep remote movement on this month's stable nodes. A spillover cell
+        // must not replace the grid while a repeated key is still being handled.
+        if (YearMonth.from(date) != state.month) return
+        if (!touch) requesters[date]?.requestFocus()
         onSelectDate(date)
     }
     val retryModifier = Modifier.testTag("calendar-retry").focusRequester(retryAction)
@@ -141,11 +136,12 @@ fun LibraryCalendarPane(
     BoxWithConstraints(modifier.fillMaxSize().testTag("library-calendar")) {
         val compact = maxWidth < 600.dp
         val compactToolbar = maxWidth < 800.dp
-        val scrollable = compact || maxHeight < 400.dp
+        val scrollable = compact || maxHeight < 320.dp
         val scroll = rememberScrollState()
         Column(Modifier.fillMaxSize().then(if (scrollable) Modifier.verticalScroll(scroll) else Modifier)) {
             CalendarToolbar(state, locale, compactToolbar, monthButton, onChangeMonth,
-                onSources = { showSources = true }, onExitUp = onExitUp)
+                onSources = { showSources = true }, onExitUp = onExitUp,
+                onEnterGrid = { requesters[state.selectedDate]?.requestFocus() })
             if (compact && hasProblem) {
                 CalendarButton(tr("Some release details unavailable") + " · " + tr("Retry"),
                     retryModifier.padding(vertical = 5.dp), onClick = onRefresh)
@@ -159,12 +155,13 @@ fun LibraryCalendarPane(
             }
             Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height((dates.size / 7 * if (compact) 67 else 52).dp) else Modifier.weight(1f))
                 .testTag("calendar-month-grid"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                dates.chunked(7).forEachIndexed { rowIndex, week ->
+                dates.chunked(7).forEach { week ->
                     Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp)) {
                         week.forEach { date ->
                             CalendarDay(date, state.month, releasesByDate[date].orEmpty(), date == state.selectedDate,
                                 state.timezone, locale, compact, date == today,
                                 modifier = Modifier.weight(1f).fillMaxHeight().focusRequester(requesters.getValue(date))
+                                    .focusProperties { canFocus = YearMonth.from(date) == state.month }
                                     .onPreviewKeyEvent { event ->
                                         val key = event.key.mirrorHorizontalForRtl(isRtl)
                                         if (key == Key.Enter || key == Key.DirectionCenter || key == Key.NumPadEnter) {
@@ -176,11 +173,12 @@ fun LibraryCalendarPane(
                                             Key.DirectionLeft -> { selectAndFocus(date.minusDays(1)); true }
                                             Key.DirectionRight -> { selectAndFocus(date.plusDays(1)); true }
                                             Key.DirectionUp -> {
-                                                if (rowIndex == 0) monthButton.requestFocus() else selectAndFocus(date.minusWeeks(1))
+                                                val target = date.minusWeeks(1)
+                                                if (YearMonth.from(target) != state.month) monthButton.requestFocus() else selectAndFocus(target)
                                                 true
                                             }
                                             Key.DirectionDown -> {
-                                                if (rowIndex == dates.size / 7 - 1) {
+                                                if (YearMonth.from(date.plusWeeks(1)) != state.month) {
                                                     openDay()
                                                 } else selectAndFocus(date.plusWeeks(1))
                                                 true
@@ -188,7 +186,7 @@ fun LibraryCalendarPane(
                                             else -> false
                                         }
                                     },
-                                onFocused = { if (!touch && date != state.selectedDate) onSelectDate(date) },
+                                onFocused = { if (!touch && YearMonth.from(date) == state.month && date != state.selectedDate) onSelectDate(date) },
                                 onClick = { onSelectDate(date) })
                         }
                     }
@@ -264,9 +262,11 @@ fun LibraryCalendarPane(
 
 @Composable
 private fun CalendarToolbar(state: ReleaseCalendarUiState, locale: Locale, compact: Boolean, monthButton: FocusRequester,
-    onMonth: (Long) -> Unit, onSources: () -> Unit, onExitUp: () -> Unit) {
+    onMonth: (Long) -> Unit, onSources: () -> Unit, onExitUp: () -> Unit, onEnterGrid: () -> Unit) {
     val touch = LocalDeviceType.current.isTouchDevice()
-    Column {
+    Column(Modifier.onPreviewKeyEvent {
+        if (!touch && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) { onEnterGrid(); true } else false
+    }) {
         Row(Modifier.fillMaxWidth().height(if (compact || touch) 44.dp else 24.dp)
             .onPreviewKeyEvent { if (!touch && it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) { onExitUp(); true } else false }, verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 10.dp)) {
