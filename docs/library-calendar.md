@@ -52,6 +52,9 @@ as Watchlists, My lists and Homeserver. The tab row has a stable minimum height,
 including when other sections expose additional controls. Normal TV windows keep
 the month toolbar and release strip in view while navigating dates; only compact
 or genuinely short windows scroll the entire month surface.
+The TV Library tabs start at 74 dp, just below the visible topbar controls, rather
+than reserving the full 98 dp gradient area as empty space. This tighter spacing
+is shared by all four Library sections; topbar bounds and touch spacing stay unchanged.
 Dates with multiple releases show up to three portrait posters and a `+N` count
 for further releases, both focused and unfocused. Single-release cells retain
 their title and time. The wide web layout follows the same poster-strip design.
@@ -191,3 +194,8 @@ sizes, along with TypeScript. Evidence is in `artifacts/calendar-posters-oct5`.
 - Evidence is saved locally in `artifacts/calendar-tv-*.log` and
   `artifacts/calendar-*-release*.png`. This change was tested on Android; the web
   Calendar implementation was not modified or revalidated in this pass.
+
+The subsequent tab-spacing refinement passed the same ten physical-TV scenarios
+(two portrait-phone scenarios skipped). Checks now switch between all four Library
+sections and require a gap of at most 12 dp below visible topbar controls, with no
+overlap when those controls are focused. Topbar bounds and touch spacing are unchanged.

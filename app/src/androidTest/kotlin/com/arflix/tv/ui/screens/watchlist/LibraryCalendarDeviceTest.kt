@@ -135,13 +135,21 @@ class LibraryCalendarDeviceTest {
         val normalTabs = compose.onNodeWithTag("library-section-tabs").getUnclippedBoundsInRoot()
         val normalCalendarTab = compose.onNodeWithText("Calendar").getUnclippedBoundsInRoot()
         val normalTabHeight = normalCalendarTab.bottom - normalCalendarTab.top
+        LibrarySection.entries.forEach { section ->
+            compose.onNodeWithText(section.label).performClick()
+            compose.waitForIdle()
+            assertEquals("All Library sections keep the same compact tab spacing", normalTabs,
+                compose.onNodeWithTag("library-section-tabs").getUnclippedBoundsInRoot())
+        }
         compose.onNodeWithText("Calendar").performClick()
         compose.waitForIdle()
         assertEquals("Switching Library tabs must not resize or move the shared topbar", normalBounds,
             tags.map { compose.onNodeWithTag(it).getUnclippedBoundsInRoot() })
         compose.onNodeWithTag("app-topbar").assertHeightIsEqualTo(AppTopBarContentTopInset)
-        compose.onNodeWithTag("library-section-tabs").assertTopPositionInRootIsEqualTo(AppTopBarContentTopInset)
+        compose.onNodeWithTag("library-section-tabs").assertTopPositionInRootIsEqualTo(LibraryTabsTopInset)
         val tabs = compose.onNodeWithTag("library-section-tabs").getUnclippedBoundsInRoot()
+        val controlsBottom = tags.drop(1).maxOf { compose.onNodeWithTag(it).getUnclippedBoundsInRoot().bottom }
+        assertTrue("Library tabs sit just below the visible topbar controls", tabs.top - controlsBottom <= 12.dp)
         assertEquals("Calendar uses the same tab position and height as the other Library pages", normalTabs, tabs)
         val calendarTab = compose.onNodeWithText("Calendar").getUnclippedBoundsInRoot()
         assertEquals(normalTabHeight, calendarTab.bottom - calendarTab.top)
