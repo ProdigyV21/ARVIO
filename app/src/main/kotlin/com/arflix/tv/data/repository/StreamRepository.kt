@@ -1563,7 +1563,7 @@ class StreamRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val trimmed = query.trim()
             if (trimmed.isEmpty()) return@withContext emptyList()
-            val encoded = URLEncoder.encode(trimmed, "UTF-8").replace("+", "%20")
+            val encoded = encodePathSegment(trimmed)
             val targets = installedAddons.first()
                 .filter { it.isInstalled && it.isEnabled && it.runtimeKind == RuntimeKind.STREMIO && !it.url.isNullOrBlank() }
                 .flatMap { addon ->
@@ -1589,7 +1589,7 @@ class StreamRepository @Inject constructor(
                                 try {
                                     val (baseUrl, queryParams) = getAddonBaseUrl(addon.url.orEmpty())
                                     val query = queryParams?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
-                                    val url = "$baseUrl/catalog/${catalog.type}/${catalog.id}/search=$encoded.json$query"
+                                    val url = "$baseUrl/catalog/${encodePathSegment(catalog.type)}/${encodePathSegment(catalog.id)}/search=$encoded.json$query"
                                     val response = streamApi.getAddonCatalog(url)
                                     val metas = response.metas ?: response.items ?: emptyList()
                                     if (metas.isEmpty()) null

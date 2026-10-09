@@ -11,6 +11,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.arflix.tv.data.repository.RecentSearchRepository
 import com.arflix.tv.di.RepositoryAccessEntryPoint
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
@@ -37,7 +38,8 @@ class SearchLiveDeviceTest {
         lateinit var model: SearchViewModel
         var openedId: Int? = null
         compose.runOnUiThread {
-            model = SearchViewModel(repository, access.traktRepository())
+            model = SearchViewModel(repository, access.traktRepository(),
+                RecentSearchRepository(instrumentation.targetContext, access.profileManager()))
             compose.activity.viewModelStore.put("live-search", model)
         }
         compose.setContent {

@@ -108,4 +108,20 @@ class NativeAddonTypeStreamTest {
 
         coVerify(exactly = 1) { api.getAddonMeta("https://ch.test/meta/Live%20Docs/chx_doc_1.json") }
     }
+
+    @Test fun searchUrlsEncodeTheCatalogTypeAndIdLikeCatalogUrls() = runBlocking {
+        val api = mockk<StreamApi>()
+        val base = strictAddon("Live Docs")
+        val addon = base.copy(manifest = base.manifest!!.copy(catalogs = listOf(
+            AddonCatalog("Live Docs", "docs/new", extra = listOf(AddonCatalogExtra("search"))))))
+        val repository = repository(api, addon)
+        coEvery { api.getAddonCatalog(any()) } returns
+            StremioCatalogResponse(metas = listOf(StremioMetaPreview(id = "chx_doc_1", name = "Doc")))
+
+        assertEquals(1, repository.searchNativeAddonCatalogs("deep sea").size)
+
+        coVerify(exactly = 1) {
+            api.getAddonCatalog("https://ch.test/catalog/Live%20Docs/docs%2Fnew/search=deep%20sea.json")
+        }
+    }
 }

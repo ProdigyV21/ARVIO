@@ -114,7 +114,7 @@ class DiscoverGridTest {
         coEvery { repository.getLogoUrl(any<MediaType>(), any()) } returns null
         coEvery { repository.discoverMovies(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns emptyList()
         coEvery { repository.discoverTv(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns emptyList()
-        model = SearchViewModel(repository, trakt)
+        model = SearchViewModel(repository, trakt, mockk(relaxed = true))
         store.put("search", model)
     }
 

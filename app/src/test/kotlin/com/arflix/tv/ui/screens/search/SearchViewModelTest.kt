@@ -33,7 +33,7 @@ class SearchViewModelTest {
     @Before fun setUp() {
         Dispatchers.setMain(Dispatchers.Unconfined)
         coEvery { repository.getLogoUrl(any<MediaType>(), any()) } returns null
-        model = SearchViewModel(repository, trakt)
+        model = SearchViewModel(repository, trakt, mockk(relaxed = true))
         store.put("search", model)
     }
 
