@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ArrowRightLeft, Check, Download, Loader2, LogIn, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, Check, Download, Loader2, LogIn, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { authClient } from "@/lib/store";
 import { installAddon, normalizeAddons } from "@/lib/addons";
 import { pullCloudPayload, pullCloudProfiles, saveCloudAddons } from "@/lib/cloud";
@@ -56,6 +56,8 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [accountReady, setAccountReady] = useState(false);
+  const [accountLoading, setAccountLoading] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [addons, setAddons] = useState<InstalledAddon[]>([]);
   const [addonUrl, setAddonUrl] = useState("");
@@ -70,13 +72,20 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
   const [progress, setProgress] = useState("");
 
   const loadAccount = useCallback(async (preferredProfileId?: string | null) => {
-    const cloud = await pullCloudProfiles(authClient);
-    setProfiles(cloud.profiles);
-    const nextId = preferredProfileId ?? cloud.activeProfileId ?? cloud.profiles[0]?.id ?? null;
-    setProfileId(nextId);
-    if (nextId) {
-      const payload = await pullCloudPayload(authClient, nextId).catch(() => null);
-      setAddons(normalizeAddons(payload?.addons ?? []));
+    setAccountReady(false);
+    setAccountLoading(true);
+    try {
+      const cloud = await pullCloudProfiles(authClient);
+      setProfiles(cloud.profiles);
+      const nextId = preferredProfileId ?? cloud.activeProfileId ?? cloud.profiles[0]?.id ?? null;
+      setProfileId(nextId);
+      if (nextId) {
+        const payload = await pullCloudPayload(authClient, nextId).catch(() => null);
+        setAddons(normalizeAddons(payload?.addons ?? []));
+      }
+      setAccountReady(true);
+    } finally {
+      setAccountLoading(false);
     }
   }, []);
 
@@ -172,6 +181,7 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
 
   const runImport = () => run(async () => {
     if (!snapshot) return;
+    if (!accountReady) throw new Error("Load your ARVIO account successfully before importing");
     const outcome = await applyNuvioImport({
       auth: authClient, profiles, snapshot, choices,
       baseSettings: defaultSettings, onProgress: setProgress
@@ -231,11 +241,21 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
           </button>
         </>}
 
-        {snapshot && !results && <>
-          <p>Found {snapshot.profiles.length} profiles in {snapshot.email}.</p>
+        {snapshot && snapshot.warnings.length > 0 && <>
           {snapshot.warnings.map(warning => <p key={warning} className="setup__warning" role="status">
             <AlertTriangle size={14} aria-hidden="true" /> {warning}
           </p>)}
+          <button type="button" className="setup__ghost" disabled={busy} onClick={() => {
+            setSnapshot(null);
+            setResults(null);
+            setChoices([]);
+          }}>
+            <RefreshCw size={18} aria-hidden="true" /> Reconnect to Nuvio
+          </button>
+        </>}
+
+        {snapshot && !results && <>
+          <p>Found {snapshot.profiles.length} profiles in {snapshot.email}.</p>
           <ul className="setup__list">
             {snapshot.profiles.map(profile => {
               const choice = choices.find(entry => entry.nuvioProfileId === profile.profileId);
@@ -260,7 +280,7 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
             })}
           </ul>
           <div className="setup__row">
-            <button type="button" className="setup__primary" disabled={busy || !signedIn || !planned.length} onClick={runImport}>
+            <button type="button" className="setup__primary" disabled={busy || !signedIn || !accountReady || !planned.length} onClick={runImport}>
               <ArrowRightLeft size={18} aria-hidden="true" /> Copy {planned.length} profiles into ARVIO
             </button>
             <button type="button" className="setup__ghost" onClick={downloadSnapshot}>
@@ -271,7 +291,7 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
         </>}
 
         {results && <div className="setup__results">
-          <p><Check size={18} aria-hidden="true" /> Import finished</p>
+          <p><Check size={18} aria-hidden="true" /> {snapshot?.warnings.length || results.some(result => result.failed || result.addonsFailed) ? "Import finished with warnings" : "Import finished"}</p>
           <ul className="setup__list">
             {results.map(result => <li key={result.profileName}>
               {result.failed
@@ -304,11 +324,15 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
       {signedIn && <>
         <section className="setup__card">
           <h2>Profile</h2>
-          {profiles.length === 0 && <p className="setup__muted">This account has no profiles yet. Importing from Nuvio will create them.</p>}
+          {!accountReady && <p className="setup__muted">{accountLoading ? "Loading your ARVIO account..." : "Your ARVIO account could not be loaded. Retry before importing."}</p>}
+          {!accountReady && <button type="button" className="setup__ghost" disabled={busy || accountLoading} onClick={() => run(() => loadAccount())}>
+            <RefreshCw size={18} aria-hidden="true" /> Retry loading account
+          </button>}
+          {accountReady && profiles.length === 0 && <p className="setup__muted">This account has no profiles yet. Importing from Nuvio will create them.</p>}
           <div className="setup__profiles">
             {profiles.map(profile => <button key={profile.id} type="button"
               className={`setup__profile ${profile.id === profileId ? "is-active" : ""}`}
-              onClick={() => selectProfile(profile.id)}>{profile.name}</button>)}
+              disabled={busy || !accountReady} onClick={() => selectProfile(profile.id)}>{profile.name}</button>)}
           </div>
         </section>
 
@@ -318,7 +342,7 @@ function SetupTools({ language, onLanguageChange, showLanguagePicker }: {
           <div className="setup__row">
             <input value={addonUrl} onChange={event => setAddonUrl(event.target.value)}
               placeholder="https://example.com/manifest.json" spellCheck={false} />
-            <button type="button" className="setup__primary" disabled={busy || !addonUrl.trim() || !profileId} onClick={addAddon}>
+            <button type="button" className="setup__primary" disabled={busy || !accountReady || !addonUrl.trim() || !profileId} onClick={addAddon}>
               <Plus size={18} aria-hidden="true" /> Install
             </button>
           </div>

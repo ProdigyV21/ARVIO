@@ -27,7 +27,7 @@ const snapshot = {
   ]
 };
 
-function setup({ existingProfiles = [], existingAddons = [], pull } = {}) {
+function setup({ existingProfiles = [{ id: 'p1', name: 'Main' }, { id: 'p2', name: 'Kids' }], existingAddons = [], pull } = {}) {
   const calls = { addons: [], settings: [], profiles: [], installed: [], saved: [] };
   const runner = load('lib/nuvioImportRunner.ts', {
     './addons': {
@@ -42,11 +42,17 @@ function setup({ existingProfiles = [], existingAddons = [], pull } = {}) {
     './auth': {},
     './catalogs': { defaultCatalogs: [{ id: 'trending', enabled: true }] },
     './cloud': {
+      invalidateRawPayloadCache: () => {},
+      pullCloudProfiles: async () => ({ profiles: existingProfiles, activeProfileId: existingProfiles[0]?.id ?? null }),
       pullCloudPayload: pull ?? (async () => ({ addons: existingAddons, settings: { catalogs: [{ id: 'trending', enabled: true }] } })),
       saveCloudAddons: async (_auth, addons, profileId) => calls.addons.push({ profileId, count: addons.length, addons }),
-      saveCloudProfiles: async (_auth, profiles) => calls.profiles.push(profiles.map(p => p.name)),
+      addCloudProfiles: async (_auth, additions) => {
+        existingProfiles = [...existingProfiles, ...additions];
+        calls.profiles.push(existingProfiles.map(p => p.name));
+        return existingProfiles;
+      },
       saveCloudSettings: async (_auth, settings, _addons, profileId, _profiles, baseline) =>
-        calls.settings.push({ profileId, catalogs: settings.catalogs.length, settings, baseline })
+        calls.settings.push({ profileId, catalogs: settings.catalogs.length, settings, baseline, profiles: _profiles })
     },
     './customCollections': load('lib/customCollections.ts'),
     './nuvioMigration': load('lib/nuvioMigration.ts'),
@@ -60,7 +66,7 @@ const auth = { session: { userId: 'u1', email: 'me@arvio.example' } };
 const baseSettings = { catalogs: [] };
 
 test('creates the missing profiles and writes each one to the account', async () => {
-  const { runner, calls } = setup({ existingProfiles: [] });
+  const { runner, calls } = setup({ existingProfiles: [{ id: 'p1', name: 'Main' }] });
   const result = await runner.applyNuvioImport({
     auth, profiles: [{ id: 'p1', name: 'Main' }], snapshot,
     choices: [
@@ -168,6 +174,8 @@ test('the write is limited to catalogs and carries the account as its baseline',
   same(writtenRest, JSON.parse(JSON.stringify(baselineRest)));
   same(write.baseline.catalogs, cloudSettings.catalogs);
   assert.ok(write.settings.catalogs.length > cloudSettings.catalogs.length);
+  same(write.profiles, []);
+  same(calls.profiles, []);
 });
 
 test('an addon switched off in Nuvio arrives switched off', async () => {

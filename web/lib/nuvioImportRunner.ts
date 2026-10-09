@@ -1,7 +1,7 @@
 import { installAddon, normalizeAddon, normalizeAddons } from "./addons";
 import type { AuthClient } from "./auth";
 import { defaultCatalogs } from "./catalogs";
-import { pullCloudPayload, saveCloudAddons, saveCloudProfiles, saveCloudSettings } from "./cloud";
+import { addCloudProfiles, invalidateRawPayloadCache, pullCloudPayload, pullCloudProfiles, saveCloudAddons, saveCloudSettings } from "./cloud";
 import { mergeImportedCollections, parseCustomCollections } from "./customCollections";
 import {
   addonsToInstall, applyHomeCatalogSettings, newProfileFrom,
@@ -35,7 +35,10 @@ export async function applyNuvioImport(options: {
   const { auth, snapshot, choices, baseSettings, onProgress } = options;
   if (!auth.session) throw new Error("Sign in to your ARVIO account first");
 
-  let profiles = [...options.profiles];
+  if (!choices.some(choice => choice.target.kind !== "skip")) return { summaries: [], profiles: options.profiles };
+  invalidateRawPayloadCache();
+  let profiles = [...(await pullCloudProfiles(auth)).profiles];
+  const additions: Profile[] = [];
   const targets = new Map<number, { id: string; created: boolean }>();
 
   // Profiles first: a Nuvio profile with no ARVIO counterpart is created, so a
@@ -44,17 +47,23 @@ export async function applyNuvioImport(options: {
     const choice = choices.find(entry => entry.nuvioProfileId === profile.profileId);
     if (!choice || choice.target.kind === "skip") continue;
     if (choice.target.kind === "existing") {
-      targets.set(profile.profileId, { id: choice.target.profileId, created: false });
+      const profileId = choice.target.profileId;
+      if (!profiles.some(entry => entry.id === profileId)) {
+        throw new Error("An ARVIO profile is no longer available. Reload your account and choose again.");
+      }
+      targets.set(profile.profileId, { id: profileId, created: false });
       continue;
     }
     onProgress?.(`Creating profile ${profile.name}`);
     const id = globalThis.crypto?.randomUUID?.() ?? `p_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     const color = profileColors[profiles.length % profileColors.length];
-    profiles = [...profiles, newProfileFrom(profile, id, color)];
+    const created = newProfileFrom(profile, id, color);
+    profiles = [...profiles, created];
+    additions.push(created);
     targets.set(profile.profileId, { id, created: true });
   }
   if (!targets.size) return { summaries: [], profiles };
-  await saveCloudProfiles(auth, profiles, profiles[0]?.id ?? null);
+  if (additions.length) profiles = await addCloudProfiles(auth, additions);
 
   const summaries: ProfileImportSummary[] = [];
   for (const profile of snapshot.profiles) {
@@ -72,6 +81,7 @@ export async function applyNuvioImport(options: {
     // (theme, AI key, IPTV) are shared and must survive the same way.
     let existing;
     try {
+      invalidateRawPayloadCache();
       existing = await pullCloudPayload(auth, target.id);
     } catch (failure) {
       const message = (failure as { message?: unknown } | null)?.message;
@@ -122,7 +132,9 @@ export async function applyNuvioImport(options: {
     onProgress?.(`${profile.name}: saving to your ARVIO account`);
     const settings: AppSettings = { ...base, catalogs: orderedCatalogs };
     if (resolved.length) await saveCloudAddons(auth, nextAddons, target.id, { changes: undefined });
-    await saveCloudSettings(auth, settings, nextAddons, target.id, profiles, base);
+    // Profile creation has its own additive write; settings must not reassert
+    // the list if another device creates or edits a profile during the import.
+    await saveCloudSettings(auth, settings, nextAddons, target.id, [], base);
     summaries.push(summary);
   }
   return { summaries, profiles };

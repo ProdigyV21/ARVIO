@@ -169,7 +169,7 @@ export async function selectRows(
   // reported instead of passing for an empty table.
   if (!response?.ok) return { table, ok: false, rows: [] };
   const rows: unknown = await response.json().catch(() => null);
-  if (rows === null) return { table, ok: false, rows: [] };
+  if (!Array.isArray(rows)) return { table, ok: false, rows: [] };
   return { table, ok: true, rows: objectRows(rows) };
 }
 
@@ -184,8 +184,9 @@ async function callSyncRpc(
   name: string,
   profileIds: number[],
   fetcher: Fetcher
-): Promise<Record<string, unknown>[]> {
+): Promise<{ rows: Record<string, unknown>[]; failedProfileIds: number[] }> {
   const rows: Record<string, unknown>[] = [];
+  const failedProfileIds: number[] = [];
   for (const profileId of profileIds) {
     const response = await fetcher(`${discovery.backendUrl}/rest/v1/rpc/${name}`, {
       method: "POST",
@@ -197,8 +198,15 @@ async function callSyncRpc(
       },
       body: JSON.stringify({ p_profile_id: profileId })
     }).catch(() => null);
-    if (!response?.ok) continue;
-    const payload: unknown = await response.json().catch(() => null);
+    if (!response?.ok) {
+      failedProfileIds.push(profileId);
+      continue;
+    }
+    const payload: unknown = await response.json().catch(() => undefined);
+    if (payload === undefined || (payload !== null && typeof payload !== "object")) {
+      failedProfileIds.push(profileId);
+      continue;
+    }
     const list = Array.isArray(payload) ? payload : payload ? [payload] : [];
     for (const row of list) {
       if (row && typeof row === "object") {
@@ -206,7 +214,7 @@ async function callSyncRpc(
       }
     }
   }
-  return rows;
+  return { rows, failedProfileIds };
 }
 
 const text = (value: unknown): string => typeof value === "string" ? value.trim() : "";
@@ -314,10 +322,16 @@ export async function fetchNuvioSnapshot(
     : profileIdsFromRows(addons.rows, plugins.rows, collections.rows, catalogSettings.rows);
   const probeIds = profiles.ok && profiles.rows.length ? knownIds : PROBE_PROFILE_IDS;
 
-  const effectiveCollections = collections.ok && collections.rows.length ? collections.rows
-    : await callSyncRpc(discovery, session, "sync_pull_collections", probeIds, fetcher);
-  const effectiveCatalogSettings = catalogSettings.ok && catalogSettings.rows.length ? catalogSettings.rows
-    : await callSyncRpc(discovery, session, "sync_pull_home_catalog_settings", probeIds, fetcher);
+  const readWithFallback = async (read: TableRead, rpc: string) => {
+    if (read.ok && read.rows.length) return read.rows;
+    const result = await callSyncRpc(discovery, session, rpc, probeIds, fetcher);
+    if (result.failedProfileIds.length) {
+      warnings.push(`Nuvio did not return ${read.table} for profiles ${result.failedProfileIds.join(", ")} - this part of their setup could not be imported. Reconnect to Nuvio to retry reading this data.`);
+    }
+    return result.rows;
+  };
+  const effectiveCollections = await readWithFallback(collections, "sync_pull_collections");
+  const effectiveCatalogSettings = await readWithFallback(catalogSettings, "sync_pull_home_catalog_settings");
 
   let effectiveProfiles = profiles.rows;
   if (!profiles.ok || !profiles.rows.length) {

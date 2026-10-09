@@ -291,3 +291,42 @@ test('matches are recalculated once ARVIO profiles arrive, keeping manual picks'
   // 'Kids' is taken by the manual choice above, so it cannot be matched again.
   same(claimed[1].target, { kind: 'create' });
 });
+
+test('failed collections and home settings reads are reported, not treated as empty', async () => {
+  const discovery = { backendUrl: 'https://api.example.com', publishableKey: 'pk' };
+  const snapshot = await fetchNuvioSnapshot(discovery, { accessToken: 't', userId: 'u', email: 'u@e.c' }, async (url) => {
+    if (url.includes('/profiles')) return jsonResponse([{ profile_id: 1, name: 'Main' }]);
+    if (url.includes('/collections') || url.includes('/home_catalog_settings') || url.includes('/rpc/')) {
+      return jsonResponse({ message: 'unreachable' }, false, 503);
+    }
+    return jsonResponse([]);
+  });
+  assert.match(snapshot.warnings.join(' '), /collections for profiles 1/);
+  assert.match(snapshot.warnings.join(' '), /home_catalog_settings for profiles 1/);
+});
+
+test('a successful empty fallback is empty without a warning', async () => {
+  const discovery = { backendUrl: 'https://api.example.com', publishableKey: 'pk' };
+  const snapshot = await fetchNuvioSnapshot(discovery, { accessToken: 't', userId: 'u', email: 'u@e.c' }, async (url) => {
+    if (url.includes('/profiles')) return jsonResponse([{ profile_id: 1, name: 'Main' }]);
+    if (url.includes('/collections') || url.includes('/home_catalog_settings')) return jsonResponse({}, false, 404);
+    return jsonResponse([]);
+  });
+  same(snapshot.warnings, []);
+});
+
+test('a partial fallback retains successful profiles and identifies the failed profile', async () => {
+  const discovery = { backendUrl: 'https://api.example.com', publishableKey: 'pk' };
+  const snapshot = await fetchNuvioSnapshot(discovery, { accessToken: 't', userId: 'u', email: 'u@e.c' }, async (url, init) => {
+    if (url.includes('/profiles')) return jsonResponse([{ profile_id: 1, name: 'Main' }, { profile_id: 2, name: 'Kids' }]);
+    if (url.includes('sync_pull_collections')) {
+      return JSON.parse(init.body).p_profile_id === 1
+        ? jsonResponse([{ collections_json: [{ title: 'Studios', folders: [] }] }])
+        : { ok: true, json: async () => { throw new Error('bad JSON'); } };
+    }
+    return jsonResponse([]);
+  });
+  assert.equal(snapshot.profiles[0].collectionsJson.length, 1);
+  assert.match(snapshot.warnings.join(' '), /collections for profiles 2/);
+  assert.equal(snapshot.warnings.some(warning => warning.includes('home_catalog_settings')), false);
+});
