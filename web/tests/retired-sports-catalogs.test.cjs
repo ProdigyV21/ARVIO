@@ -1,14 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const ts = require('typescript');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const code = ts.transpileModule(fs.readFileSync(require.resolve('../lib/catalogs.ts'), 'utf8'), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-}).outputText;
-const sandbox = { exports: {} };
-vm.runInNewContext(code, sandbox);
-const { mergeCatalogs, defaultCatalogs } = sandbox.exports;
+const { load } = require('./load.cjs');
+const { mergeCatalogs, defaultCatalogs } = load('lib/catalogs.ts');
 
 test('retired Android sports defaults cannot return through cloud sync', () => {
   const rows = mergeCatalogs([

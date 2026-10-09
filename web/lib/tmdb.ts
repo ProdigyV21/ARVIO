@@ -456,7 +456,8 @@ export async function loadCollectionSource(
   }
   if (kind === "TMDB_COLLECTION" && source.tmdbCollectionId) {
     const response = await tmdb<{ parts?: TmdbItem[] }>(`collection/${source.tmdbCollectionId}`, { language });
-    return (response.parts ?? []).map((item) => mapTmdbItem({ ...item, media_type: item.media_type ?? "movie" }, "movie"));
+    return (response.parts ?? []).sort((a, b) => (a.release_date ?? "").localeCompare(b.release_date ?? ""))
+      .map((item) => mapTmdbItem({ ...item, media_type: item.media_type ?? "movie" }, "movie"));
   }
   if (kind === "TMDB_PERSON" && source.tmdbPersonId) {
     const response = await tmdb<TmdbCombinedCredits>(`person/${source.tmdbPersonId}/combined_credits`, { language });

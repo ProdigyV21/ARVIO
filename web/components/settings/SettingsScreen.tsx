@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { Component, CSSProperties, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { defaultCatalogs, mergeCatalogs, updateHiddenCatalogIds } from "@/lib/catalogs";
+import { defaultCatalogs, isDefaultCollection, mergeCatalogs, setDefaultCollectionsEnabled, updateHiddenCatalogIds } from "@/lib/catalogs";
 import { parseCustomCollections, mergeImportedCollections } from "@/lib/customCollections";
 import { loadSimklCustomList, parseSimklListUrl, searchSimklCustomLists, type SimklCustomList } from "@/lib/simklLists";
 import { textRequest, proxiedUrl } from "@/lib/http";
@@ -2278,12 +2278,12 @@ function CatalogsSection() {
     };
   }, [settings.catalogs, settings.hiddenHomeServerCatalogIds, settings.homeServers]);
 
-  const updateCatalogs = (next: CatalogConfig[]) => {
+  const updateCatalogs = (next: CatalogConfig[], hiddenIds = settings.hiddenCatalogIds) => {
     const homeServer = next.filter((catalog) => catalog.sourceType === "home-server");
     const standard = next.filter((catalog) => catalog.sourceType !== "home-server");
     updateSettings({
       catalogs: next,
-      hiddenCatalogIds: updateHiddenCatalogIds(standard, settings.hiddenCatalogIds),
+      hiddenCatalogIds: updateHiddenCatalogIds(standard, hiddenIds),
       hiddenAddonCatalogIds: updateHiddenCatalogIds(standard.filter(catalog => catalog.sourceType === "addon"), settings.hiddenAddonCatalogIds),
       hiddenHomeServerCatalogIds: updateHiddenCatalogIds(homeServer, settings.hiddenHomeServerCatalogIds),
     });
@@ -2339,10 +2339,12 @@ function CatalogsSection() {
             finally { setImportingCollections(false); }
           }}><Download size={18} />{translateUi(importingCollections ? "Importing..." : "Import collections")}</button>
       </div>
-      {catalogs.some(c => !c.collectionRailKey && String(c.kind).toUpperCase() === "COLLECTION_RAIL") && <label className="inline-form">
-        <input type="checkbox" checked={catalogs.some(c => !c.collectionRailKey && String(c.kind).toUpperCase() === "COLLECTION_RAIL" && c.enabled)}
-          onChange={e => updateCatalogs(catalogs.map(c => !c.collectionRailKey && ["COLLECTION_RAIL", "COLLECTION"].includes(String(c.kind).toUpperCase())
-            ? { ...c, enabled: e.target.checked } : c))} />
+      {catalogs.some(c => isDefaultCollection(c) && c.kind === "COLLECTION_RAIL") && <label className="inline-form">
+        <input type="checkbox" checked={catalogs.some(c => isDefaultCollection(c) && c.kind === "COLLECTION_RAIL" && c.enabled)}
+          onChange={e => {
+            const next = setDefaultCollectionsEnabled(catalogs, settings.hiddenCatalogIds, e.target.checked);
+            updateCatalogs(next.catalogs, next.hiddenIds);
+          }} />
         {translateUi("Default")} {translateUi("Collection")}
       </label>}
       {Array.from(new Map(catalogs.filter(c => c.packId?.startsWith("usercol_")).map(c => [c.packId!, c.packName || c.name])).entries()).map(([id, name]) =>

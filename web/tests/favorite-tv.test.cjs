@@ -41,5 +41,6 @@ test('the Favorite TV catalog stays in the saved list so Home keeps its position
   const saved = [{ id: 'trending_movies', name: 'Trending', sourceType: 'mdblist', sourceUrl: 'https://mdblist.com/lists/x', enabled: true },
     { id: 'favorite_tv', name: 'Favorite TV', sourceType: 'preinstalled', mediaType: 'tv', enabled: true, isPreinstalled: true }];
   assert.deepEqual(plain(mergeCatalogs(saved).map(c => c.id)), ['trending_movies', 'favorite_tv']);
-  assert.equal(defaultCatalogs[0].id, 'favorite_tv');
+  assert.equal(defaultCatalogs.find(c => c.id === 'favorite_tv').sourceType, 'preinstalled');
+  assert.ok(defaultCatalogs.findIndex(c => c.id === 'favorite_tv') > defaultCatalogs.findIndex(c => c.id === 'collection_rail_decade'));
 });
