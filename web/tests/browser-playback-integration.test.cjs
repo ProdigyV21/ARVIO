@@ -1017,6 +1017,20 @@ test('Dolby Vision conversion keeps the manually selected file and propagates fa
   assert.equal(requested, provider);
 });
 
+test('an audio file is never sent to the missing-video recovery', () => {
+  let monitored = false;
+  const effect = extracted('components/player/PlayerOverlay.tsx', (node, source) =>
+    ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
+      && ts.isArrowFunction(node.arguments[0]) && node.arguments[0].getText(source).includes('monitorVideoFrames(')
+      ? node.arguments[0] : undefined, {
+    booted: true, liveTv: false, videoRef: { current: {} }, stream: { ...file(), url: 'https://cdn.test/episode.mp3' },
+    isAudioOnlySource: (url) => url.endsWith('.mp3'),
+    monitorVideoFrames: () => { monitored = true; return () => {}; }
+  });
+  assert.equal(effect(), undefined);
+  assert.equal(monitored, false);
+});
+
 for (const converted of [false, true]) test(`missing video ${converted ? 'after conversion stops with an error' : 'requests conversion of the same file'}`, () => {
   const stream = { ...file(), transcoded: converted };
   const video = { pause: () => { paused = true; } };
@@ -1028,7 +1042,7 @@ for (const converted of [false, true]) test(`missing video ${converted ? 'after 
     ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
       && ts.isArrowFunction(node.arguments[0]) && node.arguments[0].getText(source).includes('monitorVideoFrames(')
       ? node.arguments[0] : undefined, {
-    booted: true, liveTv: false, videoRef: { current: video }, stream,
+    booted: true, liveTv: false, videoRef: { current: video }, stream, isAudioOnlySource: () => false,
     monitorVideoFrames: (_, callback) => { missing = callback; return () => {}; },
     canProviderTranscode: () => true,
     recordBrowserPlaybackFailure: (...args) => failures.push(args),

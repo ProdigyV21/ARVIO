@@ -731,7 +731,9 @@ class PlayerViewModel @Inject constructor(
         currentPreferredAddonId = preferredAddonId?.trim()?.takeIf { it.isNotBlank() }
         currentPreferredSourceName = preferredSourceName?.trim()?.takeIf { it.isNotBlank() }
         currentPreferredBingeGroup = preferredBingeGroup?.trim()?.takeIf { it.isNotBlank() }
-        currentIsLiveStreamPlayback = isLiveStreamPlayback
+        // An addon's live channel opens like a movie but plays live: no progress, scrobbles or
+        // Continue Watching entry.
+        currentIsLiveStreamPlayback = isLiveStreamPlayback || mediaRepository.isAddonNativeLiveChannel(mediaId)
         autoPlayMinimumQuality = 0
         autoPlayLimits = com.arflix.tv.data.model.AutoplayLimits()
         playbackSessionStartTime = System.currentTimeMillis()

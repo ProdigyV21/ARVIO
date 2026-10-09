@@ -1,6 +1,7 @@
 package com.arflix.tv.data.api
 
 import com.google.gson.JsonElement
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 import retrofit2.http.GET
 import retrofit2.http.Url
@@ -201,7 +202,7 @@ data class StremioMetaPreview(
     val background: String? = null,
     val logo: String? = null,
     val description: String? = null,
-    val genres: List<String>? = null,
+    @JsonAdapter(LenientStringListAdapter::class) val genres: List<String>? = null,
     val released: String? = null,
     val releaseInfo: String? = null,
     val year: String? = null,

@@ -900,6 +900,8 @@ class HomeViewModel @Inject constructor(
                 id = item.id,
                 streamAddonId = item.streamAddonId,
                 title = item.title,
+                // Also drops live channels saved before they were played as live.
+                isLiveStream = mediaRepository.isAddonNativeLiveChannel(item.id),
                 addons = installedAddons,
                 isAddonNative = !item.addonNativeId.isNullOrBlank()
             )
@@ -3056,28 +3058,16 @@ class HomeViewModel @Inject constructor(
 
                     // Resolve in savedCatalogs order — this is the user's configured
                     // catalog ordering from Settings > Catalogs.
-                    // Addon-provided service-branded catalogs (Netflix, Disney+,
-                    // Hulu etc. rows contributed by aio-metadata / org.kris /
-                    // local scraper addons) are suppressed here - we already surface
-                    // those services via the collection-tile Services row, so
-                    // having a second identically-named catalog row below it
-                    // was duplicative per user feedback. Preinstalled catalogs
-                    // (Trending, Just Added, Top 10, etc.) are never skipped.
-                    val serviceTitleBlocklist = setOf(
-                        "netflix", "prime video", "prime", "apple tv+", "apple tv plus",
-                        "apple tv", "disney+", "disney plus", "paramount+", "paramount plus",
-                        "hbo max", "max", "hulu", "shudder", "jiohotstar", "sonyliv",
-                        "sky", "crunchyroll", "peacock"
-                    )
+                    // Addon catalogs named after a service (Netflix, Disney+ from
+                    // AIOMetadata) are shown like any other row, as in other Stremio
+                    // clients: the user enabled them in their addon, and a duplicate of
+                    // the built-in Services row can be removed in Settings > Catalogs.
                     val resolved = savedCatalogs.mapNotNull { cfg ->
                         if (isCollectionRailConfig(cfg) || isCollectionTileConfig(cfg)) {
                             return@mapNotNull null
                         }
                         val cat = allById[cfg.id]
                         if (cat == null || cat.items.isEmpty()) return@mapNotNull null
-                        if (cfg.sourceType == CatalogSourceType.ADDON &&
-                            cat.title.trim().lowercase(Locale.US) in serviceTitleBlocklist
-                        ) return@mapNotNull null
                         cat.withTop10CapIfNeeded()
                     }.toMutableList()
                     resolved

@@ -50,6 +50,30 @@ class AddonNativeCatalogTest {
         assertEquals("provider", restarted.card(MediaType.TV, card.id)?.addonNativeAddonId)
     }
 
+    @Test fun customAddonTypeIsUsedForMetaAndSurvivesRestore() = runBlocking {
+        val streams = mockk<StreamRepository>(relaxed = true)
+        coEvery { streams.getAddonMeta(any(), any(), any()) } returns null
+        val catalog = AddonNativeCatalog(context(), streams)
+        val card = catalog.register("provider", StremioMetaPreview(id = "provider:pod", name = "Pod"),
+            MediaType.TV, addonType = "Podcasts")!!
+        catalog.restore(card)
+        catalog.details(MediaType.TV, card.id)
+        io.mockk.coVerify { streams.getAddonMeta("provider", "Podcasts", "provider:pod") }
+    }
+
+    @Test fun onlyTvTypedItemsAreLiveChannels() {
+        val catalog = AddonNativeCatalog(context(), mockk(relaxed = true))
+        val live = catalog.register("provider", StremioMetaPreview(id = "provider:ch1", name = "Ch"),
+            MediaType.MOVIE, addonType = "tv")!!
+        val show = catalog.register("provider", StremioMetaPreview(id = "provider:show", name = "Show"), MediaType.TV)!!
+        val pod = catalog.register("provider", StremioMetaPreview(id = "provider:pod", name = "Pod"),
+            MediaType.TV, addonType = "Podcasts")!!
+        assertTrue(catalog.isLiveChannel(live.id))
+        assertFalse(catalog.isLiveChannel(show.id))
+        assertFalse(catalog.isLiveChannel(pod.id))
+        assertFalse(catalog.isLiveChannel(12345))
+    }
+
     @Test fun connectedTrackersDoNotHideLocalNativePlaybackOrUpNext() {
         val native = ContinueWatchingItem(id = -123, title = "Native", mediaType = MediaType.TV,
             progress = 20, resumePositionSeconds = 300, addonNativeId = "provider:show",

@@ -52,15 +52,25 @@ internal class AddonNativeCatalog(
 
     @Volatile private var registryDirty = false
 
-    /** Builds (and remembers) the card for a catalog entry; call [flush] after a batch. */
-    fun register(addonId: String, preview: StremioMetaPreview, mediaType: MediaType): MediaItem? {
+    /**
+     * Builds (and remembers) the card for a catalog entry; call [flush] after a batch.
+     * [addonType] is the addon's own type for the item ("Podcasts", "tv"), which its /meta
+     * is requested with; without one, the type follows [mediaType].
+     */
+    fun register(
+        addonId: String,
+        preview: StremioMetaPreview,
+        mediaType: MediaType,
+        addonType: String? = null
+    ): MediaItem? {
         val metaId = preview.id?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val title = preview.name?.trim()?.takeIf { it.isNotBlank() } ?: return null
         val id = stableId(addonId, metaId)
         val entry = Entry(
             addonId = addonId,
             metaId = metaId,
-            type = if (mediaType == MediaType.TV) "series" else "movie",
+            type = addonType?.trim()?.takeIf { it.isNotBlank() }
+                ?: if (mediaType == MediaType.TV) "series" else "movie",
             title = title,
             poster = preview.poster,
             background = preview.background,
@@ -80,6 +90,9 @@ internal class AddonNativeCatalog(
 
     fun isNative(mediaId: Int): Boolean = mediaId < 0 && entry(mediaId) != null
 
+    /** A live channel (Stremio's "tv" type): it plays live, so it has no progress to resume. */
+    fun isLiveChannel(mediaId: Int): Boolean = entry(mediaId)?.type.equals("tv", ignoreCase = true)
+
     /** The catalog card, without touching the network (for catalog rows). */
     fun card(mediaType: MediaType, mediaId: Int): MediaItem? = entry(mediaId)?.toMediaItem(mediaId, mediaType)
 
@@ -92,8 +105,9 @@ internal class AddonNativeCatalog(
         val metaId = item.addonNativeId?.takeIf { it.isNotBlank() } ?: return
         if (item.id != stableId(addonId, metaId)) return
         ensureRegistryLoaded()
-        val restored = Entry(addonId, metaId, if (item.mediaType == MediaType.TV) "series" else "movie",
-            item.title, item.image, item.backdrop, item.overview)
+        // The card doesn't carry the addon's own type; keep one the catalog already recorded.
+        val type = registry[item.id]?.type ?: if (item.mediaType == MediaType.TV) "series" else "movie"
+        val restored = Entry(addonId, metaId, type, item.title, item.image, item.backdrop, item.overview)
         if (registry.put(item.id, restored) != restored) registryDirty = true
     }
 

@@ -121,3 +121,75 @@ test('native episodes request streams from the owning addon by the video id', as
   assert.equal(calls.some(url => url.includes('opensubtitles')), false);
   assert.deepEqual(plain(await addons.getStreamsProgressive([owner], card, 9, 9)), []);
 });
+
+// A broadcaster addon with addon-defined types and no movie type (live channels are "tv").
+const broadcasterAddon = {
+  id: 'example.channels', name: 'Channels', version: '1.0.0', manifestUrl: 'https://ch.example.test/manifest.json',
+  types: ['series', 'tv', 'Podcasts'], idPrefixes: ['chx_', 'tt'],
+  catalogs: [{ type: 'Podcasts', id: 'pods', name: 'Pods' }, { type: 'tv', id: 'live', name: 'Live' }],
+  resources: ['catalog', 'meta', 'stream']
+};
+// A metadata addon re-listing the broadcaster's catalog under its own type spelling.
+const metadataAddon = {
+  id: 'aio-metadata_0123456789ab', name: 'Meta', version: '1.0.0', manifestUrl: 'https://meta.example.test/u/manifest.json',
+  manifest: { id: 'aio-metadata' }, types: ['movie', 'series'], idPrefixes: ['tmdb:', 'tt'],
+  catalogs: [{ type: 'VOD Example', id: 'relisted.kids', name: 'Kids' }], resources: ['catalog', 'meta']
+};
+
+function catalogApi(respond) {
+  const calls = [];
+  const http = { proxiedUrl: url => url, apiProxiedUrl: url => url, jsonRequest: async url => { calls.push(url); return respond(url) ?? {}; } };
+  const api = load('lib/tmdb.ts', {
+    './config': { config: {} }, './storage': storage(), './http': http,
+    './metadata/anizip': {}, './metadata/dispatcher': {}, './mediaImages': { tmdbImageUrl: () => '' }
+  }, { window: { location: { origin: 'https://web.invalid' } } });
+  return { api, calls };
+}
+
+test('a re-listed catalog item belongs to the installed addon that serves its meta', async () => {
+  const { addons } = fixture();
+  const meta = addons.normalizeAddon(metadataAddon);
+  const owner = addons.normalizeAddon(broadcasterAddon);
+  const { api, calls } = catalogApi(url => url.includes('/catalog/') ? { metas: [{ id: 'chx_kids_1', type: 'series', name: 'Kids show' }] } : null);
+  // The collection names the addon by manifest id and lower-cases the type.
+  const items = await api.loadCollectionSource({ kind: 'ADDON_CATALOG', mediaType: 'tv', addonId: 'aio-metadata',
+    addonCatalogType: 'vod example', addonCatalogId: 'relisted.kids' }, 'he', [meta, owner]);
+  assert.equal(items.length, 1);
+  assert.ok(items[0].id < 0);
+  assert.equal(items[0].addonNativeAddonId, 'example.channels');
+  assert.deepEqual(plain(calls), ['https://meta.example.test/u/catalog/VOD%20Example/relisted.kids.json']);
+});
+
+test('the named collection addon is asked for a catalog its manifest does not list', async () => {
+  const { addons } = fixture();
+  const { api, calls } = catalogApi(() => ({ metas: [] }));
+  await api.loadCollectionSource({ kind: 'ADDON_CATALOG', mediaType: 'movie', addonId: 'aio-metadata',
+    addonCatalogType: 'movie', addonCatalogId: 'streaming.nfx' }, 'he', [addons.normalizeAddon(metadataAddon)]);
+  assert.deepEqual(plain(calls), ['https://meta.example.test/u/catalog/movie/streaming.nfx.json']);
+});
+
+test('podcasts keep their own type and live channels play by the "tv" type', async () => {
+  const calls = [];
+  const http = { proxiedUrl: url => url, jsonRequest: async url => {
+    calls.push(url);
+    if (url.includes('/meta/Podcasts/')) return { meta: { id: 'chx_pod_1', name: 'Pod', videos: [{ id: 'chx_pod_1:1:1', season: 1, episode: 1 }] } };
+    if (url.includes('/stream/')) return { streams: [{ name: 'Live', url: 'https://ch.example.test/live.m3u8' }] };
+    return {};
+  } };
+  const store = storage();
+  const native = load('lib/addonNative.ts', { './http': http, './storage': store });
+  const addons = load('lib/addons.ts', {
+    './http': http, './addonNative': native, './config': { hasResolverConfig: () => false },
+    './resolver': { getResolverStreamsProgressive: async () => [] }, './storage': store,
+    './streamCompatibility': { isBrowserPlayableStream: () => true, isIosPlayableStream: () => true },
+    './addonStreamInfo': { isInformationalAddonStream: () => false }
+  });
+  const owner = addons.normalizeAddon(broadcasterAddon);
+  const pod = native.registerNativeItem(owner, { id: 'chx_pod_1', name: 'Pod' }, 'tv', 'Podcasts');
+  assert.equal((await native.getNativeSeasonEpisodes(pod.id, 1)).length, 1);
+  assert.ok(calls.some(url => url.endsWith('/meta/Podcasts/chx_pod_1.json')));
+  const live = native.registerNativeItem(owner, { id: 'chx_live_1', name: 'Live' }, 'movie', 'tv');
+  assert.equal(live.mediaType, 'movie');
+  assert.equal((await addons.getStreamsProgressive([owner], live)).length, 1);
+  assert.ok(calls.some(url => url.endsWith('/stream/tv/chx_live_1.json')), 'a live channel is asked for as "tv"');
+});

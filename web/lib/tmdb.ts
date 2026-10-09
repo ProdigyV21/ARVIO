@@ -1,4 +1,4 @@
-import { addonServesOwnMeta, getNativeDetails, getNativeSeasonEpisodes, isAddonNative, registerNativeItem } from "./addonNative";
+import { addonServesOwnMeta, findAddonServingOwnMeta, getNativeDetails, getNativeSeasonEpisodes, isAddonNative, registerNativeItem } from "./addonNative";
 import { config } from "./config";
 import { apiProxiedUrl, jsonRequest, proxiedUrl } from "./http";
 import { fetchAniZipMappingByTmdbId } from "./metadata/anizip";
@@ -527,8 +527,7 @@ export async function loadCollectionSource(
     }, language).then((items) => items.map((item) => mapTmdbItem(item, mediaType === "tv" ? "tv" : "movie")));
   }
   if (kind === "ADDON_CATALOG") {
-    const installed = addons.find(a => a.enabled !== false && a.id === source.addonId) ??
-      addons.find(a => a.enabled !== false && a.catalogs?.some(c => c.id === source.addonCatalogId && c.type === source.addonCatalogType));
+    const installed = findCollectionAddon(addons, source);
     if (!installed) throw new Error("The add-on for this collection is not installed or enabled.");
     return loadAddonCatalog({
       id: `collection-addon-${source.addonId}-${source.addonCatalogId}`,
@@ -552,6 +551,22 @@ export async function loadCollectionSource(
     return rows.flatMap((r) => r.items);
   }
   return [];
+}
+
+/**
+ * The installed addon a collection's addon source loads from. Collections name the addon by
+ * its manifest id ("aio-metadata"); Android-installed entries carry a per-URL suffix. Like
+ * Nuvio, the named addon is asked even for a catalog its manifest doesn't list (AIOMetadata
+ * serves its streaming catalogs that way).
+ */
+function findCollectionAddon(addons: InstalledAddon[], source: CollectionSourceConfig) {
+  const enabled = addons.filter(a => a.enabled !== false);
+  const wanted = String(source.addonId ?? "").trim();
+  const isNamed = (a: InstalledAddon) => Boolean(wanted) &&
+    (a.id === wanted || (a as { manifest?: { id?: string } }).manifest?.id === wanted);
+  const declares = (a: InstalledAddon) => (a.catalogs ?? []).some(c => c.id === source.addonCatalogId &&
+    String(c.type).toLowerCase() === String(source.addonCatalogType ?? "").toLowerCase());
+  return enabled.find(a => isNamed(a) && declares(a)) ?? enabled.find(declares) ?? enabled.find(isNamed);
 }
 
 function sourceMediaType(source: CollectionSourceConfig): MediaType | "all" {
@@ -673,24 +688,39 @@ async function loadAddonCatalog(catalog: CatalogConfig, addons: InstalledAddon[]
     candidate.manifestUrl === catalog.sourceUrl
   );
   const manifestUrl = addon?.manifestUrl || catalog.sourceUrl;
-  const catalogType = catalog.addonCatalogType || (catalog.mediaType === "tv" ? "series" : catalog.mediaType === "movie" ? "movie" : "movie");
+  const requestedType = catalog.addonCatalogType || (catalog.mediaType === "tv" ? "series" : catalog.mediaType === "movie" ? "movie" : "movie");
   const catalogId = catalog.addonCatalogId || catalog.sourceRef || catalog.id;
+  // Addons route by the manifest's exact spelling ("Live Docs"); collections may lower-case it.
+  const catalogType = (addon?.catalogs ?? []).find(c => c.id === catalogId &&
+    String(c.type).toLowerCase() === requestedType.toLowerCase())?.type || requestedType;
   if (!manifestUrl || !catalogId) return [];
   const base = manifestUrl.replace(/\/manifest\.json$/, "").replace(/\/+$/, "");
   const extra = catalog.addonGenre ? `/genre=${encodeURIComponent(catalog.addonGenre)}` : "";
   const url = proxiedUrl(`${base}/catalog/${encodeURIComponent(catalogType)}/${encodeURIComponent(catalogId)}${extra}.json`);
   const payload = await jsonRequest<{ metas?: StremioMeta[] }>(url);
   const metas = payload.metas ?? [];
-  const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon).catch(() => null)));
+  const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon, addons, catalogType).catch(() => null)));
   return hydrated.filter((item): item is MediaItem => Boolean(item));
 }
 
-async function hydrateAddonMeta(meta: StremioMeta, preferred: CatalogConfig["mediaType"], language: string, addon?: InstalledAddon): Promise<MediaItem | null> {
+async function hydrateAddonMeta(
+  meta: StremioMeta,
+  preferred: CatalogConfig["mediaType"],
+  language: string,
+  addon?: InstalledAddon,
+  addons: InstalledAddon[] = [],
+  catalogType = ""
+): Promise<MediaItem | null> {
   const tmdbId = numberValue(meta.tmdb_id);
   const mediaType: MediaType = String(meta.type ?? preferred ?? "").toLowerCase().includes("series") || preferred === "tv" ? "tv" : "movie";
-  // Items the addon describes itself open from its own /meta instead of a TMDB guess.
-  if (addon && !tmdbId && !meta.imdb_id && meta.id && addonServesOwnMeta(addon, mediaType === "tv" ? "series" : "movie", meta.id)) {
-    const native = registerNativeItem(addon, meta, mediaType);
+  // Items the addon describes itself open from its own /meta instead of a TMDB guess. A
+  // metadata addon (AIOMetadata) may re-list another addon's catalog; that addon owns the ids.
+  if (!tmdbId && !meta.imdb_id && meta.id) {
+    const addonType = String(meta.type ?? "").trim() || catalogType || (mediaType === "tv" ? "series" : "movie");
+    const owner = addon && addonServesOwnMeta(addon, addonType, meta.id)
+      ? addon
+      : findAddonServingOwnMeta(addons, addonType, meta.id, addon?.id);
+    const native = owner ? registerNativeItem(owner, meta, nativeMediaType(addonType), addonType) : null;
     if (native) return native;
   }
   if (tmdbId) {
@@ -715,6 +745,16 @@ async function hydrateAddonMeta(meta: StremioMeta, preferred: CatalogConfig["med
     rating: "",
     duration: ""
   };
+}
+
+/**
+ * How a native item is shown. Stremio's "tv" type is a live channel: one stream, no episodes,
+ * so it opens like a movie and plays straight away. Other addon-defined types (podcasts,
+ * debrid libraries) are containers of videos, which the series page shows.
+ */
+function nativeMediaType(addonType: string): MediaType {
+  const type = addonType.trim().toLowerCase();
+  return type === "tv" || type === "movie" || type === "film" ? "movie" : "tv";
 }
 
 function stableStringId(value: string) {

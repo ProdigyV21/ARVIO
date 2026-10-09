@@ -10,8 +10,9 @@ internal fun buildCatalogRequestUrls(
     queryBase: String?,
     genre: String? = null
 ): List<String> {
-    val type = URLEncoder.encode(catalogType, "UTF-8")
-    val id = URLEncoder.encode(catalogId, "UTF-8")
+    // Path segments: URLEncoder's "+" for a space ("Live Docs") would reach the addon as a plus.
+    val type = URLEncoder.encode(catalogType, "UTF-8").replace("+", "%20")
+    val id = URLEncoder.encode(catalogId, "UTF-8").replace("+", "%20")
     val base = "$baseUrl/catalog/$type/$id"
     val query = queryBase?.takeIf { it.isNotBlank() }
     val configSuffix = query?.let { "?$it" }.orEmpty()

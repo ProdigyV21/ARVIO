@@ -170,6 +170,19 @@ export function isStalled(opts: {
 }
 
 /** Detect audio advancing without video, including streams with known dimensions. */
+/**
+ * True for an audio file (a podcast episode's .mp3): it never presents video frames, so the
+ * frame watchdog would report a playing episode as an undecodable video.
+ */
+export function isAudioOnlySource(url: string | undefined | null) {
+  if (!url) return false;
+  try {
+    return /\.(mp3|m4a|aac|oga|ogg|opus|wav|flac)$/i.test(new URL(url, "http://local").pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function monitorVideoFrames(video: HTMLVideoElement, onMissing: () => void): () => void {
   let stopped = false;
   let frame: number | undefined;

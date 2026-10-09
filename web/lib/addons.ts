@@ -264,8 +264,8 @@ export async function getStreamsProgressive(
   const native = await nativeStreamTarget(item, season, episode);
   if (native) {
     if (!native.ids.length) return [];
-    const owners = addons.filter((addon) => addonServesOwnMeta(addon, native.type, native.metaId));
-    return getBrowserStreamsProgressive(owners, item, season, episode, onUpdate, native.ids);
+    const owners = addons.filter((addon) => addonServesOwnMeta(addon, native.requestType, native.metaId));
+    return getBrowserStreamsProgressive(owners, item, season, episode, onUpdate, native.ids, native.requestType);
   }
   if (hasResolverConfig()) {
     const browserPromise = getBrowserStreamsProgressive(addons, item, season, episode, update)
@@ -294,7 +294,9 @@ async function getBrowserStreamsProgressive(
   season?: number,
   episode?: number,
   onUpdate?: (streams: StreamSource[], batch: StreamSource[]) => void,
-  nativeIds?: string[]
+  nativeIds?: string[],
+  // A native item's own type ("tv", "Podcasts"); strict addons route /stream by it.
+  nativeType?: string
 ) {
   const type = item.mediaType === "tv" ? "series" : "movie";
   const ids = nativeIds ?? streamIds(item, season, episode);
@@ -322,7 +324,7 @@ async function getBrowserStreamsProgressive(
     .catch(() => [] as SubtitleTrack[]);
 
   await Promise.all(enabled.map(async (addon) => {
-    const batch = await queryAddonStreams(addon, type, ids);
+    const batch = await queryAddonStreams(addon, type, ids, nativeType);
     if (!batch.length) return;
     const withSubtitles = batch.map((stream) => attachSubtitles(stream, sharedSubtitles));
     aggregate = sortStreams(dedupeStreams([...aggregate, ...withSubtitles])
@@ -334,12 +336,12 @@ async function getBrowserStreamsProgressive(
   return aggregate;
 }
 
-async function queryAddonStreams(addon: InstalledAddon, type: "movie" | "series", ids: string[]) {
+async function queryAddonStreams(addon: InstalledAddon, type: "movie" | "series", ids: string[], preferredType?: string) {
   const { base, query } = addonBaseUrl(manifestUrlFor(addon));
   for (const id of ids) {
     if (!addonSupportsId(addon, id)) continue;
-    for (const requestType of streamRequestTypes(addon, type)) {
-      const url = `${base}/stream/${requestType}/${encodeURIComponent(id)}.json${query ? `?${query}` : ""}`;
+    for (const requestType of streamRequestTypes(addon, type, preferredType)) {
+      const url = `${base}/stream/${encodeURIComponent(requestType)}/${encodeURIComponent(id)}.json${query ? `?${query}` : ""}`;
       try {
         const payload = await addonJsonRequest<{ streams?: RawStream[] }>(url);
         const streams = (payload.streams ?? []).map((stream) => normalizeStream(stream, addon))
@@ -431,9 +433,11 @@ function streamIds(item: MediaItem, season?: number, episode?: number) {
   return Array.from(new Set(ids));
 }
 
-function streamRequestTypes(addon: InstalledAddon, requestedType: "movie" | "series") {
+function streamRequestTypes(addon: InstalledAddon, requestedType: "movie" | "series", preferredType?: string) {
   const aliases = requestedType === "series" ? ["series", "tv", "show"] : ["movie", "film"];
-  return aliases.filter((type) => addonSupportsType(addon, type));
+  // A native item is asked for by its own type first: a live channel ("tv") is shown as a
+  // movie, but its addon may declare no movie type at all.
+  return [...new Set([...(preferredType ? [preferredType] : []), ...aliases.filter((type) => addonSupportsType(addon, type))])];
 }
 
 function addonSupportsType(addon: InstalledAddon, requestedType: string) {

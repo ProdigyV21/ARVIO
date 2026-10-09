@@ -119,3 +119,12 @@ test('failure diagnostics are fixed categories even when exception text contains
   assert.equal(playbackFailureKind({ message: 'No compatible decoder' }), 'format');
   assert.equal(playbackFailureKind(), 'unknown');
 });
+
+test('audio files are not judged by the video-frame watchdog', () => {
+  const { isAudioOnlySource } = load('lib/playerRecovery.ts');
+  assert.equal(isAudioOnlySource('https://traffic.omny.fm/d/clips/a/b/audio.mp3'), true);
+  assert.equal(isAudioOnlySource('https://cdn.example/ep.M4A?token=1'), true);
+  assert.equal(isAudioOnlySource('https://cdn.example/master.m3u8'), false);
+  assert.equal(isAudioOnlySource('https://cdn.example/movie.mkv'), false);
+  assert.equal(isAudioOnlySource(undefined), false);
+});

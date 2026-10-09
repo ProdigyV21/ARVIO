@@ -14,7 +14,9 @@ import type { EpisodeInfo, InstalledAddon, MediaItem, MediaType } from "./types"
  * watch-history entry written by either app points at the same show.
  */
 
-type Entry = { addonId: string; manifestUrl: string; metaId: string; type: "movie" | "series"; title: string; poster?: string };
+// `type` is how the item is shown; `addonType` is the addon's own type ("Podcasts", "tv") that
+// its /meta and /stream answer to, when it differs.
+type Entry = { addonId: string; manifestUrl: string; metaId: string; type: "movie" | "series"; addonType?: string; title: string; poster?: string };
 
 export type AddonMetaPreview = { id?: string; name?: string; title?: string; poster?: string; background?: string; description?: string };
 
@@ -79,10 +81,13 @@ function persistSoon() {
  * True when [addon] serves its own metadata for [contentId]: its manifest offers a `meta`
  * resource whose id prefixes cover that id.
  */
-export function addonServesOwnMeta(addon: InstalledAddon, type: "movie" | "series", contentId: string) {
+export function addonServesOwnMeta(addon: InstalledAddon, type: string, contentId: string) {
   const id = contentId.trim().toLowerCase();
   if (!id || addon.enabled === false || NON_NATIVE_ID_FAMILIES.some((family) => id.startsWith(family))) return false;
-  const aliases = type === "movie" ? ["movie", "film"] : ["series", "tv", "show"];
+  const lower = type.trim().toLowerCase();
+  const aliases = lower === "movie" || lower === "film" ? ["movie", "film"]
+    : lower === "series" || lower === "tv" || lower === "show" ? ["series", "tv", "show"]
+    : [lower];
   return (addon.resources ?? []).some((resource) => {
     const name = typeof resource === "string" ? resource : resource.name;
     if (name?.toLowerCase() !== "meta") return false;
@@ -92,6 +97,15 @@ export function addonServesOwnMeta(addon: InstalledAddon, type: "movie" | "serie
     const prefixes = (typeof resource === "string" ? undefined : resource.idPrefixes) ?? addon.idPrefixes ?? [];
     return prefixes.some((prefix) => prefix.trim() && id.startsWith(prefix.trim().toLowerCase()));
   });
+}
+
+/**
+ * The addon in [addons] (other than [excludeAddonId]) that serves its own metadata for
+ * [contentId]. Metadata addons such as AIOMetadata re-list another addon's catalog (a channel
+ * addon's own ids) without serving its metadata or streams; the owner does.
+ */
+export function findAddonServingOwnMeta(addons: InstalledAddon[], type: string, contentId: string, excludeAddonId?: string) {
+  return addons.find((addon) => addon.id !== excludeAddonId && addonServesOwnMeta(addon, type, contentId)) ?? null;
 }
 
 function cardFor(id: number, entry: Entry): MediaItem {
@@ -111,7 +125,7 @@ function cardFor(id: number, entry: Entry): MediaItem {
 }
 
 /** Builds (and remembers) the card for a catalog entry, or null when it has no id or title. */
-export function registerNativeItem(addon: InstalledAddon, meta: AddonMetaPreview, mediaType: MediaType): MediaItem | null {
+export function registerNativeItem(addon: InstalledAddon, meta: AddonMetaPreview, mediaType: MediaType, addonType?: string): MediaItem | null {
   const metaId = meta.id?.trim();
   const title = (meta.name ?? meta.title)?.trim();
   if (!metaId || !title) return null;
@@ -121,6 +135,7 @@ export function registerNativeItem(addon: InstalledAddon, meta: AddonMetaPreview
     manifestUrl: addon.manifestUrl,
     metaId,
     type: mediaType === "tv" ? "series" : "movie",
+    ...(addonType && addonType !== (mediaType === "tv" ? "series" : "movie") ? { addonType } : {}),
     title,
     ...(meta.poster ? { poster: meta.poster } : {})
   };
@@ -144,7 +159,7 @@ function manifestBase(manifestUrl: string) {
 
 async function fetchMeta(entry: Entry) {
   const { base, query } = manifestBase(entry.manifestUrl);
-  const url = `${base}/meta/${entry.type}/${encodeURIComponent(entry.metaId)}.json${query ? `?${query}` : ""}`;
+  const url = `${base}/meta/${encodeURIComponent(entry.addonType || entry.type)}/${encodeURIComponent(entry.metaId)}.json${query ? `?${query}` : ""}`;
   const payload = await jsonRequest<{ meta?: AddonMeta }>(url)
     .catch(() => jsonRequest<{ meta?: AddonMeta }>(proxiedUrl(url)));
   return payload?.meta ?? null;
@@ -219,7 +234,8 @@ export async function getNativeSeasonEpisodes(id: number, season: number): Promi
 export async function nativeStreamTarget(item: MediaItem, season?: number, episode?: number) {
   const entry = entries().get(item.id);
   if (!entry) return null;
-  const target = { metaId: entry.metaId, type: entry.type };
+  // requestType: what the owning addon's /stream answers to ("tv" for a live channel).
+  const target = { metaId: entry.metaId, type: entry.type, requestType: entry.addonType || entry.type };
   if (entry.type === "movie") return { ...target, ids: [entry.metaId] };
   if (!season || !episode) return { ...target, ids: [] as string[] };
   const meta = await loadMeta(item.id, entry);

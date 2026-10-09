@@ -43,6 +43,7 @@ import {
   bufferedAhead,
   bufferedEndAt,
   classifyMediaError,
+  isAudioOnlySource,
   monitorPlaybackStall,
   monitorVideoFrames,
   playbackFailureKind,
@@ -521,7 +522,7 @@ function VideoPlayer({
   // Recover only when the decoder delivers no video frames. Pixel brightness
   // cannot distinguish unsupported video from a legitimate dark scene.
   useEffect(() => {
-    if (!booted || liveTv) return undefined;
+    if (!booted || liveTv || isAudioOnlySource(stream.url)) return undefined;
     const video = videoRef.current;
     if (!video) return undefined;
     return monitorVideoFrames(video, () => {
