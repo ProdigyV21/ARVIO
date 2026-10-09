@@ -1,5 +1,7 @@
 import type { AuthClient } from "./auth";
 import { mergeAddonChanges, recordAddonChanges, type AddonChanges } from "./addonChanges";
+import { mergeWatchlistChanges, mergeWatchlistItems, watchlistChangesStorageKey, watchlistKey, type CloudWatchlistItem as AndroidWatchlistItem, type WatchlistChanges } from "./watchlistChanges";
+import { loadStored, saveStored } from "./storage";
 import { config, hasNetlifyBackendUrl } from "./config";
 import { parseHomeServerConnectionJson, serializeHomeServerConnectionJson } from "./homeserver";
 import { jsonRequest } from "./http";
@@ -43,16 +45,6 @@ interface AndroidContinueWatchingItem {
   streamAddonId?: string | null;
   streamTitle?: string | null;
   updatedAtMs?: number;
-}
-
-interface AndroidWatchlistItem {
-  addedAt?: number;
-  backdropPath?: string | null;
-  mediaType?: string;
-  posterPath?: string | null;
-  sourceOrder?: number;
-  title?: string | null;
-  tmdbId?: number | null;
 }
 
 interface AndroidIptvProfileState {
@@ -425,6 +417,7 @@ function androidProfileSettings(settings: AppSettings) {
     trailerInCards: settings.trailerInCards,
     clockFormat: settings.clockFormat,
     showBudget: settings.showBudget,
+    iptvFavoritesOnHome: settings.iptvFavoritesOnHome,
     showLoadingStats: settings.showLoadingStats,
     spoilerBlurEnabled: settings.spoilerBlur,
     volumeBoostDb: Math.max(0, Math.min(15, Number(settings.volumeBoostDb) || 0)),
@@ -463,6 +456,7 @@ function settingsFromAndroidProfile(value: unknown): Partial<AppSettings> {
   if ("trailerInCards" in state) partial.trailerInCards = Boolean(state.trailerInCards);
   if ("clockFormat" in state) partial.clockFormat = String(state.clockFormat) === "12h" ? "12h" : "24h";
   if ("showBudget" in state) partial.showBudget = Boolean(state.showBudget);
+  if ("iptvFavoritesOnHome" in state) partial.iptvFavoritesOnHome = state.iptvFavoritesOnHome !== false;
   if ("showLoadingStats" in state) partial.showLoadingStats = Boolean(state.showLoadingStats);
   if ("spoilerBlurEnabled" in state) partial.spoilerBlur = Boolean(state.spoilerBlurEnabled);
   if ("volumeBoostDb" in state) partial.volumeBoostDb = Math.max(0, Math.min(15, Number(state.volumeBoostDb) || 0));
@@ -744,14 +738,26 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   const iptvSettings = iptvFromAndroid(scopedValue(root, "iptvByProfile", profileId), root);
   const profileCatalogs = scopedValue<AppSettings["catalogs"]>(root, "catalogsByProfile", profileId);
   const hiddenCatalogIds = scopedValue<string[]>(root, "hiddenPreinstalledByProfile", profileId);
+  const hiddenAddonCatalogIds = scopedValue<string[]>(root, "hiddenAddonByProfile", profileId);
   const hiddenHomeServerCatalogIds = scopedValue<string[]>(root, "hiddenHomeServerByProfile", profileId);
   const profileAddons = scopedValue<InstalledAddon[]>(root, "addonsByProfile", profileId);
   const legacySettings = objectRecord<unknown>(root.settings) as Partial<AppSettings>;
   delete legacySettings.customTmdbApiKey;
   delete legacySettings.customTvdbApiKey;
   delete legacySettings.customTvdbUserPin;
-  const legacyCatalogs = arrayValue(root.catalogs) as AppSettings["catalogs"];
-  const legacyHiddenCatalogIds = arrayValue<string>(root.hiddenPreinstalledCatalogs);
+  const legacyCatalogs = parseNestedJson(root.catalogs);
+  const hasProfileCatalogs = Array.isArray(profileCatalogs);
+  const effectiveHiddenCatalogs = hiddenCatalogIds ?? (hasProfileCatalogs ? [] : root.hiddenPreinstalledCatalogs ?? legacySettings.hiddenCatalogIds);
+  const effectiveHiddenAddons = hiddenAddonCatalogIds ?? (hasProfileCatalogs ? [] : legacySettings.hiddenAddonCatalogIds);
+  const effectiveHiddenHomeServers = hiddenHomeServerCatalogIds ?? (hasProfileCatalogs ? [] : legacySettings.hiddenHomeServerCatalogIds);
+  // Profile-scoped lists are authoritative, including []. Do not inherit stale
+  // visibility flags from the last profile that wrote the legacy settings blob.
+  const catalogSettings: Partial<AppSettings> = {
+    ...(hasProfileCatalogs ? { catalogs: profileCatalogs } : Array.isArray(legacyCatalogs) ? { catalogs: legacyCatalogs } : {}),
+    ...(effectiveHiddenCatalogs !== undefined ? { hiddenCatalogIds: arrayValue<string>(effectiveHiddenCatalogs) } : {}),
+    ...(effectiveHiddenAddons !== undefined ? { hiddenAddonCatalogIds: arrayValue<string>(effectiveHiddenAddons) } : {}),
+    ...(effectiveHiddenHomeServers !== undefined ? { hiddenHomeServerCatalogIds: arrayValue<string>(effectiveHiddenHomeServers) } : {})
+  };
   // Canonical, timestamp-managed GLOBAL settings live at the top level of the payload (written by
   // Android with per-field timestamps), NOT in the legacy `root.settings` blob. Map them so an
   // Android change (accent color, AI subtitles, etc.) is actually visible on web.
@@ -780,9 +786,7 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
       ...profileSettings,
       ...globalSettings,
       ...iptvSettings,
-      ...(Array.isArray(profileCatalogs) ? { catalogs: profileCatalogs } : legacyCatalogs.length ? { catalogs: legacyCatalogs } : {}),
-      ...(hiddenCatalogIds !== undefined ? { hiddenCatalogIds: arrayValue<string>(hiddenCatalogIds) } : legacyHiddenCatalogIds.length ? { hiddenCatalogIds: legacyHiddenCatalogIds } : {}),
-      ...(hiddenHomeServerCatalogIds !== undefined ? { hiddenHomeServerCatalogIds: arrayValue<string>(hiddenHomeServerCatalogIds) } : {})
+      ...catalogSettings
     },
     updatedAt: typeof root.updatedAt === "number" ? root.updatedAt : 0
   };
@@ -962,13 +966,14 @@ export async function saveCloudSettings(
     const catalogFields = [
       ["catalogs", "catalogsByProfile"],
       ["hiddenCatalogIds", "hiddenPreinstalledByProfile"],
+      ["hiddenAddonCatalogIds", "hiddenAddonByProfile"],
       ["hiddenHomeServerCatalogIds", "hiddenHomeServerByProfile"]
     ] as const;
-    const catalogValues = {} as Pick<AppSettings, "catalogs" | "hiddenCatalogIds" | "hiddenHomeServerCatalogIds">;
+    const catalogValues = {} as Pick<AppSettings, "catalogs" | "hiddenCatalogIds" | "hiddenAddonCatalogIds" | "hiddenHomeServerCatalogIds">;
     for (const [setting, field] of catalogFields) {
       const changed = !baseline || !sameFieldValue(settings[setting], baseline[setting]);
       const existing = scopedValue<unknown[]>(root, field, profileId);
-      let value = changed ? settings[setting] : (existing ?? settings[setting]);
+      let value = (changed ? settings[setting] : (existing ?? settings[setting])) ?? [];
       if (changed && baseline && existing) {
         value = setting === "catalogs"
           ? mergeCatalogEdits(existing as AppSettings["catalogs"], settings.catalogs, baseline.catalogs)
@@ -1240,9 +1245,9 @@ export async function saveCloudTrackingSelection(
     );
     const incomingSimklAccessToken = selection.simklToken?.access_token;
     const previousSimklAccessToken = previousSelection.simklAccessToken;
-    const writeSimklCredential = changedDomains.has("simkl") || Boolean(
+    const writeSimklCredential = !selection.simklToken?.refresh_token && !incomingSimklAccessToken?.startsWith("simkl_at_") && (changedDomains.has("simkl") || Boolean(
       incomingSimklAccessToken && incomingSimklAccessToken !== previousSimklAccessToken
-    );
+    ));
     const defaultMode: TrackingReadMode = selection.provider === "TRAKT"
         ? "trakt"
         : selection.provider === "SIMKL"
@@ -1338,11 +1343,16 @@ export async function saveCloudTrackingSelection(
 }
 
 export async function pullCloudWatchlist(auth: AuthClient, profileId?: string | null): Promise<MediaItem[]> {
+  const userId = auth.session?.userId;
   const root = await pullRawPayload(auth);
+  if (auth.session?.userId !== userId) return [];
   const byProfile = objectRecord<unknown>(root.watchlistByProfile);
-  const items = profileId
-    ? arrayValue<AndroidWatchlistItem>(byProfile[profileId])
-    : Object.values(byProfile).flatMap((value) => arrayValue<AndroidWatchlistItem>(value));
+  const changesByProfile = objectRecord<unknown>(root.watchlistChangesByProfile);
+  const profiles = profileId ? [profileId] : [...new Set([...Object.keys(byProfile), ...Object.keys(changesByProfile)])];
+  const items = profiles.flatMap((id) => {
+    const changes = rememberWatchlistChanges(auth, id, changesByProfile[id]);
+    return mergeWatchlistItems(changes, byProfile[id]);
+  });
   return items
     .map((item): MediaItem | null => {
       const id = Number(item.tmdbId ?? 0);
@@ -1352,6 +1362,7 @@ export async function pullCloudWatchlist(auth: AuthClient, profileId?: string | 
         id,
         title: item.title ?? "Untitled",
         mediaType,
+        activityAt: item.addedAt,
         subtitle: mediaType === "tv" ? "TV Series" : "Movie",
         image: tmdbImageUrl(config.imageBase, item.posterPath),
         backdrop: tmdbImageUrl(config.backdropBase, item.backdropPath) || null
@@ -1360,24 +1371,41 @@ export async function pullCloudWatchlist(auth: AuthClient, profileId?: string | 
     .filter((item): item is MediaItem => Boolean(item));
 }
 
+function rememberWatchlistChanges(auth: AuthClient, profileId: string, incoming: unknown): WatchlistChanges {
+  if (!auth.session) return mergeWatchlistChanges(incoming);
+  const key = watchlistChangesStorageKey(auth.session.userId, profileId);
+  const changes = mergeWatchlistChanges(loadStored<WatchlistChanges>(key, {}), incoming);
+  saveStored(key, changes);
+  return changes;
+}
+
 export async function saveCloudWatchlist(
   auth: AuthClient,
   items: MediaItem[],
-  profileId?: string | null
+  profileId?: string | null,
+  options: { changes?: WatchlistChanges } = {}
 ) {
   if (!profileId) return;
   await mutateCloudPayload(auth, (root) => {
     const byProfile = objectRecord<unknown>(root.watchlistByProfile);
-    byProfile[profileId] = items.map((item, index): AndroidWatchlistItem => ({
+    const changesByProfile = objectRecord<unknown>(root.watchlistChangesByProfile);
+    // Membership changes come only from explicit actions. An incomplete local
+    // list cannot delete remote additions or revive a retained removal record.
+    const changes = rememberWatchlistChanges(auth, profileId,
+      mergeWatchlistChanges(changesByProfile[profileId], options.changes));
+    const incoming = items.map((item, index): AndroidWatchlistItem => ({
       tmdbId: item.id,
       mediaType: item.mediaType,
       title: item.title,
       posterPath: item.image || null,
       backdropPath: item.backdrop || null,
-      addedAt: item.activityAt ?? Date.now(),
+      addedAt: item.activityAt ?? changes[watchlistKey(item.mediaType, item.id) ?? '']?.updatedAt ?? 0,
       sourceOrder: index
     }));
+    byProfile[profileId] = mergeWatchlistItems(changes, incoming, byProfile[profileId]);
+    changesByProfile[profileId] = changes;
     root.watchlistByProfile = byProfile;
+    root.watchlistChangesByProfile = changesByProfile;
   });
 }
 

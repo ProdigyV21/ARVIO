@@ -48,6 +48,12 @@ class SimklIntegrationTest {
         scrobbler = SimklScrobbler(simklApi, authManager)
         scrobbler.elapsedRealtimeMs = { 0L }
         tmdbApi = mockk(relaxed = true)
+        coEvery { tmdbApi.getTvSeason(200, 1, any(), any()) } returns com.arflix.tv.data.api.TmdbSeasonDetails(
+            seasonNumber = 1, episodes = (1..3).map { com.arflix.tv.data.api.TmdbEpisode(episodeNumber = it, seasonNumber = 1, airDate = "2025-01-01") })
+        coEvery { tmdbApi.getTvSeason(200, 2, any(), any()) } returns com.arflix.tv.data.api.TmdbSeasonDetails(
+            seasonNumber = 2, episodes = listOf(com.arflix.tv.data.api.TmdbEpisode(episodeNumber = 4, seasonNumber = 2, name = "The Return", airDate = "2025-01-01")))
+        for (id in listOf(440, 777)) coEvery { tmdbApi.getTvSeason(id, 1, any(), any()) } returns com.arflix.tv.data.api.TmdbSeasonDetails(
+            seasonNumber = 1, episodes = listOf(com.arflix.tv.data.api.TmdbEpisode(episodeNumber = 2, seasonNumber = 1, airDate = "2025-01-01")))
         syncService = SimklSyncService(simklApi, authManager, tmdbApi, syncProviderStore, context = null)
     }
 

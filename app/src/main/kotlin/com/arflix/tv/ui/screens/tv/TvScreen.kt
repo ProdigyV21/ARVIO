@@ -603,10 +603,11 @@ fun TvScreen(
     val iptvHlsFactory = remember(iptvDataSourceFactory) {
         HlsMediaSource.Factory(iptvDataSourceFactory)
             .setAllowChunklessPreparation(true)
+            .setExtractorFactory(com.arflix.tv.ui.screens.tv.live.iptvHlsExtractorFactory())
     }
     // Default factory handles all formats (MPEG-TS, HLS, DASH, progressive, etc.)
     val iptvDefaultFactory = remember(iptvDataSourceFactory) {
-        DefaultMediaSourceFactory(context)
+        DefaultMediaSourceFactory(context, com.arflix.tv.ui.screens.tv.live.iptvExtractorsFactory())
             .setDataSourceFactory(iptvDataSourceFactory)
     }
 

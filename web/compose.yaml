@@ -2,12 +2,6 @@ services:
   arvio:
     build:
       context: .
-      args:
-        TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
-        SIMKL_CLIENT_ID: ${SIMKL_CLIENT_ID:-}
-        NEXT_PUBLIC_TELEGRAM_API_ID: ${NEXT_PUBLIC_TELEGRAM_API_ID:-}
-        NEXT_PUBLIC_TELEGRAM_API_HASH: ${NEXT_PUBLIC_TELEGRAM_API_HASH:-}
-        NEXT_PUBLIC_ARVIO_RESOLVER_URL: ${NEXT_PUBLIC_ARVIO_RESOLVER_URL:-}
     ports:
       - "${ARVIO_BIND_ADDRESS:-127.0.0.1}:${ARVIO_PORT:-3000}:3000"
     env_file:

@@ -5,6 +5,19 @@ const { includeIptvContinueWatching: merge } = load('lib/continueWatching.ts');
 const remote = { id: 10, title: 'Tracker show', mediaType: 'tv', seasonNumber: 2, episodeNumber: 3, activityAt: 100 };
 const vod = { id: 20, title: 'IPTV movie', mediaType: 'movie', progress: 15, resumePositionSeconds: 900, durationSeconds: 6000, streamAddonId: 'iptv_xtream_vod', activityAt: 200 };
 
+test('bulk-completed tracker history prunes cached episodes without per-episode history', () => {
+  const { completionTimes, pruneCompletedResume } = load('lib/continueWatching.ts');
+  const completions = completionTimes([], [{ status: 'completed', show: { ids: { tmdb: 10 } }, last_watched_at: '2026-09-01T12:00:00Z', seasons: [] }]);
+  assert.equal(pruneCompletedResume([remote], completions).length, 0);
+  assert.equal(pruneCompletedResume([{ ...remote, badge: 'Up Next', activityAt: Date.parse('2026-09-02T12:00:00Z') }], completions).length, 0);
+});
+
+test('a verified later rewatch survives bulk-completed tracker history', () => {
+  const { completionTimes, pruneCompletedResume } = load('lib/continueWatching.ts');
+  const completions = completionTimes([], [{ status: 'completed', show: { ids: { tmdb: 10 } }, last_watched_at: '2026-09-01T12:00:00Z' }]);
+  assert.equal(pruneCompletedResume([{ ...remote, activityAt: Date.parse('2026-09-02T12:00:00Z') }], completions).length, 1);
+});
+
 test('IPTV VOD survives fast paint being replaced by refreshed tracker results', () => {
   const fast = [vod, remote];
   const fresh = merge([remote], [vod]);

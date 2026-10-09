@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { UpdateWatcher } from "@/components/shell/UpdateWatcher";
 import "./globals.css";
 import "./premium.css";
 import "./tv-guide.css";
 import "./source-setup.css";
+import "./calendar.css";
 
 export const metadata: Metadata = {
   title: "ARVIO",
@@ -53,6 +55,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        {process.env.NEXT_PUBLIC_UNRAID_DISTRIBUTION === "true" && (
+          <link rel="license" href="/distribution-sources/index.html" />
+        )}
+        {process.env.NEXT_PUBLIC_SELF_HOSTED === "true" && (
+          <Script id="arvio-selfhost-config" src="/api/selfhost-config" strategy="beforeInteractive" />
+        )}
         {/* iOS reads these raw links most reliably when adding to the home
             screen. `precomposed` is the legacy fallback older iOS honors; both
             carry the version bust. */}

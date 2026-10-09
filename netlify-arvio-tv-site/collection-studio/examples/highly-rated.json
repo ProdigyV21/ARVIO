@@ -1,0 +1,44 @@
+[
+  {
+    "id": "studio-row",
+    "title": "Highly rated picks",
+    "folders": [
+      {
+        "id": "movies",
+        "title": "Highly rated movies",
+        "description": "Rating 7+ and at least 1,000 votes, sorted by rating.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "MOVIE",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 1000,
+              "voteAverageGte": 7
+            }
+          }
+        ]
+      },
+      {
+        "id": "shows",
+        "title": "Highly rated shows",
+        "description": "Rating 7+ and at least 500 votes, sorted by rating.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "TV",
+            "sortBy": "vote_average.desc",
+            "filters": {
+              "voteCountGte": 500,
+              "voteAverageGte": 7
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

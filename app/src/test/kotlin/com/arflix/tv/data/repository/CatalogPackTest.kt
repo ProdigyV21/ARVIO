@@ -45,7 +45,7 @@ class CatalogPackTest {
             }
         """.trimIndent()
 
-        coEvery { repository["fetchUrl"](any<String>()) } returns duplicateManifestJson
+        coEvery { repository["fetchUrl"](any<String>(), any<Boolean>()) } returns duplicateManifestJson
 
         val result = repository.fetchCatalogPackManifest("https://example.com/pack.json")
         assertTrue(result.isFailure)
@@ -138,7 +138,7 @@ class CatalogPackTest {
         val result = repository.addCatalogPack("https://example.com/pack.json", manifest)
         assertTrue(result.isSuccess)
 
-        coVerify(exactly = 0) { repository["fetchUrl"](any<String>()) }
+        coVerify(exactly = 0) { repository["fetchUrl"](any<String>(), any<Boolean>()) }
     }
 
     @Test
@@ -158,7 +158,7 @@ class CatalogPackTest {
               "catalogs": [{"name": "C1", "url": "https://example.com/c1"}]
             }
         """.trimIndent()
-        coEvery { repository["fetchUrl"](any<String>()) } returns missingIdJson
+        coEvery { repository["fetchUrl"](any<String>(), any<Boolean>()) } returns missingIdJson
         val res1 = repository.fetchCatalogPackManifest("https://example.com/pack.json")
         assertTrue(res1.isFailure)
 
@@ -170,7 +170,7 @@ class CatalogPackTest {
               "catalogs": []
             }
         """.trimIndent()
-        coEvery { repository["fetchUrl"](any<String>()) } returns emptyCatalogsJson
+        coEvery { repository["fetchUrl"](any<String>(), any<Boolean>()) } returns emptyCatalogsJson
         val res2 = repository.fetchCatalogPackManifest("https://example.com/pack.json")
         assertTrue(res2.isFailure)
     }

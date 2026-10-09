@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -145,10 +146,18 @@ fun MiniPlayerRow(
     onVideoBoundsPositioned: ((Rect) -> Unit)? = null,
     modifier: Modifier = Modifier,
     focusedProgrammeProvider: (() -> Pair<EnrichedChannel, IptvProgram>?)? = null,
+    focusedChannelProvider: (() -> Pair<EnrichedChannel, IptvNowNext?>?)? = null,
 ) {
     val drawerTranslation = LocalLiveDrawerTranslation.current
     // Read rapidly changing programme focus here, not in the surrounding guide.
     val displayedProgramme = focusedProgrammeProvider?.invoke() ?: focusedProgramme
+    // Browsing a channel without EPG still has useful metadata. Keep preview
+    // selection separate from the channel attached to the video player.
+    val focusedChannel = focusedChannelProvider?.invoke()
+    val infoChannel = displayedProgramme?.first ?: focusedChannel?.first ?: channel
+    val infoNowNext = if (focusedChannel != null) focusedChannel.second else nowNext
+    val infoVariantCount = if (infoChannel?.id == channel?.id) variantCount else 1
+    val onInfoVariants = onOpenVariants.takeIf { infoChannel?.id == channel?.id }
     val drawerDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) 1f else -1f
     if (landscapeCompact) {
         val spec = landscapePhoneMiniPlayerSpec()
@@ -169,13 +178,13 @@ fun MiniPlayerRow(
             )
             InfoColumn(
                 focusedProgramme = displayedProgramme,
-                channel = channel,
+                channel = infoChannel,
                 clockTickMillis = clockTickMillis,
-                nowNext = nowNext,
+                nowNext = infoNowNext,
                 isFavorite = channel?.id?.let { it in favoriteSet } == true,
                 onFavoriteToggle = onFavoriteToggle,
-                variantCount = variantCount,
-                onOpenVariants = onOpenVariants,
+                variantCount = infoVariantCount,
+                onOpenVariants = onInfoVariants,
                 landscapeCompact = true,
                 modifier = Modifier
                     .weight(1f)
@@ -200,13 +209,13 @@ fun MiniPlayerRow(
             )
             InfoColumn(
                 focusedProgramme = displayedProgramme,
-                channel = channel,
+                channel = infoChannel,
                 clockTickMillis = clockTickMillis,
-                nowNext = nowNext,
+                nowNext = infoNowNext,
                 isFavorite = channel?.id?.let { it in favoriteSet } == true,
                 onFavoriteToggle = onFavoriteToggle,
-                variantCount = variantCount,
-                onOpenVariants = onOpenVariants,
+                variantCount = infoVariantCount,
+                onOpenVariants = onInfoVariants,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -218,9 +227,12 @@ fun MiniPlayerRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            GuideProgrammeSummary(displayedProgramme?.first ?: channel,
-                displayedProgramme?.second ?: nowNext?.now,
-                Modifier.weight(1f).height(LiveDims.MiniPlayerHeight))
+            val programme = displayedProgramme?.second ?: infoNowNext?.now
+            GuideProgrammeSummary(infoChannel, programme,
+                Modifier.weight(1f).then(
+                    if (programme?.title.isNullOrBlank()) Modifier.heightIn(min = LiveDims.MiniPlayerHeight)
+                    else Modifier.height(LiveDims.MiniPlayerHeight)
+                ))
             VideoCard(
                 exoPlayer = exoPlayer,
                 channel = channel,
@@ -252,14 +264,21 @@ private fun GuideProgrammeSummary(
                 color = LiveColors.FgDim, fontSize = 11.sp, lineHeight = 13.sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
-        Text(programme?.title ?: channel?.name ?: stringResource(R.string.live_empty_no_programme),
+        Text(liveProgrammeTitle(programme?.title, channel?.name, stringResource(R.string.live_empty_no_programme)),
             color = LiveColors.Fg, fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+            maxLines = if (programme?.title.isNullOrBlank()) Int.MAX_VALUE else 2,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("live-programme-title"))
         Text(listOfNotNull(programme?.let(::formatTimeWindow),
             channel?.genre?.name?.let(::formatGenreName), remainingLabel(programme).takeIf(String::isNotBlank)).joinToString("  ·  "),
             color = LiveColors.FgDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(programme?.description.orEmpty(), color = LiveColors.Fg, fontSize = 12.sp, lineHeight = 16.sp,
-            maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        // A wrapping channel fallback needs only its content height. A weighted
+        // description here would expand the preview and consume the guide below.
+        val description = programme?.description.orEmpty()
+        if (!programme?.title.isNullOrBlank() || description.isNotBlank()) {
+            Text(description, color = LiveColors.Fg, fontSize = 12.sp, lineHeight = 16.sp,
+                maxLines = 3, overflow = TextOverflow.Ellipsis,
+                modifier = if (programme?.title.isNullOrBlank()) Modifier else Modifier.weight(1f))
+        }
     }
 }
 
@@ -459,7 +478,10 @@ private fun InfoColumn(
             val (focusedChannel, programme) = focusedProgramme
             Text(focusedChannel.source.name, style = LiveType.SectionTag.copy(color = LiveColors.FgDim))
             Text("${formatClock(programme.startUtcMillis)} - ${formatClock(programme.endUtcMillis)}", style = LiveType.TimeMono.copy(color = LiveColors.FgDim))
-            Text(programme.title, style = LiveType.CellTitle.copy(color = LiveColors.Fg), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(liveProgrammeTitle(programme.title, focusedChannel.name, stringResource(R.string.live_empty_no_programme)),
+                style = LiveType.CellTitle.copy(color = LiveColors.Fg),
+                maxLines = if (programme.title.isBlank()) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("live-programme-title"))
             programme.description?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = LiveType.BodySynopsis.copy(color = LiveColors.FgDim), maxLines = if (landscapeCompact) 1 else 3, overflow = TextOverflow.Ellipsis)
             }
@@ -607,10 +629,11 @@ private fun NowCard(
             }
         }
         Text(
-            text = now?.title ?: channel?.name ?: stringResource(R.string.live_empty_no_programme),
+            text = liveProgrammeTitle(now?.title, channel?.name, stringResource(R.string.live_empty_no_programme)),
             style = LiveType.ProgramTitle.copy(color = LiveColors.Fg),
-            maxLines = if (landscapeCompact) 1 else 2,
+            maxLines = if (now?.title.isNullOrBlank()) Int.MAX_VALUE else if (landscapeCompact) 1 else 2,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("live-programme-title"),
         )
         val description = now?.description
         if (landscapeSpec?.showDescription != false && !description.isNullOrBlank()) {

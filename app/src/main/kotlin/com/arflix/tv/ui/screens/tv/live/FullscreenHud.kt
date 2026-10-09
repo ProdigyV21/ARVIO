@@ -402,15 +402,13 @@ fun FullscreenHud(
                     ) {
                         // Program Title
                         Text(
-                            text = now?.title
-                                ?: channel?.name
-                                ?: stringResource(R.string.live_empty_no_programme),
+                            text = liveProgrammeTitle(now?.title, channel?.name, stringResource(R.string.live_empty_no_programme)),
                             style = LiveType.ProgramTitle.copy(
                                 color = Color.White,
                                 fontSize = if (touchControls) 20.sp else 24.sp,
                                 fontWeight = FontWeight.Bold,
                             ),
-                            maxLines = 1,
+                            maxLines = if (now?.title.isNullOrBlank()) Int.MAX_VALUE else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
 

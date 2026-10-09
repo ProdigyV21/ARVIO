@@ -10,8 +10,9 @@ export function collectionFolders(rail: CatalogConfig, catalogs: CatalogConfig[]
 }
 
 export function collectionHomeCatalogs(catalogs: CatalogConfig[]) {
-  const groups = new Set(catalogs.filter(c => String(c.kind).toUpperCase() === 'COLLECTION_RAIL').map(collectionGroupKey));
-  return catalogs.filter(c => c.enabled !== false && !(String(c.kind).toUpperCase() === 'COLLECTION' && groups.has(collectionGroupKey(c)) && collectionGroupKey(c)));
+  // Collection folders only belong inside their rail. Hiding/removing that rail
+  // must not promote its folders into standalone movie rows on Home.
+  return catalogs.filter(c => c.enabled !== false && String(c.kind).toUpperCase() !== 'COLLECTION');
 }
 
 export function collectionSourceSupports(source: CollectionSourceConfig, type: MediaType) {

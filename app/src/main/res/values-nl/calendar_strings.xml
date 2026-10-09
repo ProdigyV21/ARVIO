@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_calendar">Kalender</string>
+    <string name="calendar_all_watchlists">Alle kijklijsten</string>
+    <string name="calendar_arvio_watchlist">ARVIO-kijklijst</string>
+    <string name="calendar_today">Vandaag</string>
+    <string name="calendar_local_time">Lokale tijd</string>
+    <string name="calendar_time_tba">Tijd nog onbekend</string>
+    <string name="calendar_next_month">Volgende maand</string>
+    <string name="calendar_previous_month">Vorige maand</string>
+    <string name="calendar_release">release</string>
+    <string name="calendar_releases">releases</string>
+    <string name="calendar_more">meer</string>
+    <string name="calendar_navigate_days">Door dagen bladeren</string>
+    <string name="calendar_open_day">Dag openen</string>
+    <string name="calendar_partial">Sommige bronnen niet beschikbaar</string>
+    <string name="calendar_loading">Je releases worden opgehaald…</string>
+    <string name="calendar_unavailable">Kalender niet beschikbaar</string>
+    <string name="calendar_empty_watchlist">Je kijklijst in de kalender</string>
+    <string name="calendar_empty_day">Geen releases op deze dag</string>
+    <string name="calendar_add_watchlist">Voeg films en series toe aan je ARVIO-kijklijst. Een trackingaccount is niet nodig.</string>
+    <string name="calendar_choose_day">Kies een andere dag of kijklijst om aankomende releases te bekijken.</string>
+    <string name="calendar_cinema">Bioscoop</string>
+    <string name="calendar_digital">Digitaal</string>
+    <string name="calendar_physical">Fysiek</string>
+    <string name="calendar_next_release">Volgende release</string>
+    <string name="calendar_partial_details">Sommige releasedetails niet beschikbaar</string>
+    <string name="calendar_refresh">Kalender vernieuwen</string>
+</resources>

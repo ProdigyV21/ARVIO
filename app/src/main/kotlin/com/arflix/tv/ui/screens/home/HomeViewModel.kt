@@ -99,7 +99,7 @@ data class HomeUiState(
     val heroTrailerKey: String? = null,
     val trailerAutoPlay: Boolean = true,
     val trailerSoundEnabled: Boolean = false,
-    val trailerDelaySeconds: Int = 2,
+    val trailerDelaySeconds: Int = 1,
     val trailerInCards: Boolean = true,
     // Home hero metadata visibility toggles (issue #72)
     val showBudget: Boolean = true,
@@ -395,8 +395,12 @@ class HomeViewModel @Inject constructor(
         var nextOffset: Int = loadedCount
     )
 
-    // IPTV favorite channels — maps MediaItem.id (Int hash) to channel data
-    private val iptvChannelMap = mutableMapOf<Int, com.arflix.tv.data.model.IptvChannel>()
+    // IPTV favorite channels — maps MediaItem.id (Int hash) to channel data. Written from IO
+    // (row builds, [resolveIptvChannels]) and read from composition.
+    private val iptvChannelMap = java.util.concurrent.ConcurrentHashMap<Int, com.arflix.tv.data.model.IptvChannel>()
+    // Bumped when [resolveIptvChannels] adds channels, so the hero re-reads its stream URL.
+    private val _iptvChannelsVersion = MutableStateFlow(0)
+    val iptvChannelsVersion: StateFlow<Int> = _iptvChannelsVersion.asStateFlow()
     private val _sportsHomeRows = MutableStateFlow<List<Category>>(emptyList())
     val sportsHomeRows: StateFlow<List<Category>> = combine(
         _sportsHomeRows,
@@ -560,7 +564,7 @@ class HomeViewModel @Inject constructor(
     private fun isActionableMediaItem(item: MediaItem): Boolean {
         // Non-actionable items are expected during filtering: invalid IDs cannot be opened,
         // placeholders are synthetic UI entries, and collection tiles use their own handling.
-        return item.id > 0 && !item.isPlaceholder && !isCollectionItem(item) && !isSportsHomeItem(item)
+        return item.hasOpenableId && !item.isPlaceholder && !isCollectionItem(item) && !isSportsHomeItem(item)
     }
 
     private fun continueWatchingKey(mediaType: MediaType, id: Int): String {
@@ -896,7 +900,10 @@ class HomeViewModel @Inject constructor(
                 id = item.id,
                 streamAddonId = item.streamAddonId,
                 title = item.title,
-                addons = installedAddons
+                // Also drops live channels saved before they were played as live.
+                isLiveStream = mediaRepository.isAddonNativeLiveChannel(item.id),
+                addons = installedAddons,
+                isAddonNative = !item.addonNativeId.isNullOrBlank()
             )
         }
         if (nonLiveItems.isEmpty()) return emptyList()
@@ -904,6 +911,7 @@ class HomeViewModel @Inject constructor(
         val seasonEpisodesCache = HashMap<Pair<Int, Int>, List<com.arflix.tv.data.model.Episode>?>()
 
         return nonLiveItems.mapNotNull { item ->
+            if (!item.addonNativeId.isNullOrBlank()) mediaRepository.cacheItem(item.toMediaItem())
             if (item.mediaType != MediaType.TV) {
 
                 return@mapNotNull item
@@ -926,6 +934,7 @@ class HomeViewModel @Inject constructor(
             }
 
             val cacheKey = item.id to season
+            if (!item.addonNativeId.isNullOrBlank()) return@mapNotNull item
             val seasonEpisodes = if (seasonEpisodesCache.containsKey(cacheKey)) {
                 seasonEpisodesCache[cacheKey]
             } else {
@@ -975,6 +984,40 @@ class HomeViewModel @Inject constructor(
 
     /** Get the stream URL for an IPTV MediaItem. */
     fun getIptvStreamUrl(itemId: Int): String? = iptvChannelMap[itemId]?.streamUrl
+
+    /**
+     * Looks up the channels behind IPTV cards this view model didn't build itself. Rows
+     * preloaded at startup carry the cards but not their channels, and the full home load
+     * only rebuilds the Favorite TV row after every other row (tens of seconds on a cold
+     * start), so until then a focused channel card had no stream URL and no preview.
+     */
+    fun resolveIptvChannels(items: List<MediaItem>) {
+        val pending = items
+            .filter { isIptvItem(it) && !iptvChannelMap.containsKey(it.id) }
+            .mapNotNull { item -> getIptvChannelId(item)?.let { it to item.id } }
+            .toMap()
+        if (pending.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val found = runCatching {
+                val snapshot = iptvRepository.getMemoryCachedSnapshot()
+                    ?: iptvRepository.getCachedSnapshotOrNull()
+                val byId = snapshot?.channels.orEmpty()
+                    .filter { it.id in pending }
+                    .associateByTo(HashMap()) { it.id }
+                val missing = pending.keys - byId.keys
+                if (missing.isNotEmpty()) {
+                    iptvRepository.pagedChannelsByIds(missing).forEach { byId[it.id] = it }
+                }
+                byId.values
+            }.getOrDefault(emptyList())
+            var added = false
+            found.forEach { channel ->
+                val itemId = pending[channel.id] ?: return@forEach
+                if (iptvChannelMap.putIfAbsent(itemId, channel) == null) added = true
+            }
+            if (added) _iptvChannelsVersion.update { it + 1 }
+        }
+    }
 
     private fun iptvChannelToMediaItem(
         channel: com.arflix.tv.data.model.IptvChannel,
@@ -1434,6 +1477,10 @@ class HomeViewModel @Inject constructor(
     // Debounce job for hero updates (Phase 6.1)
     private var heroUpdateJob: Job? = null
     private var heroDetailsJob: Job? = null
+    private var heroTrailerJob: Job? = null
+    private var heroTrailerRequestKey: String? = null
+    private data class CachedHomeTrailer(val key: String?, val cachedAt: Long = SystemClock.elapsedRealtime())
+    private val heroTrailerCache = android.util.LruCache<String, CachedHomeTrailer>(64)
     private var prefetchJob: Job? = null
     private var preloadCategoryPriorityJob: Job? = null
     private val preloadCategoryJobs = ConcurrentHashMap<Int, Job>()
@@ -1913,6 +1960,11 @@ class HomeViewModel @Inject constructor(
                         smoothScrolling = preferences.smoothScrolling
                     )
 
+                    if (!preferences.trailerAutoPlay) {
+                        heroTrailerJob?.cancel()
+                        heroTrailerRequestKey = null
+                        _uiState.value = _uiState.value.copy(heroTrailerKey = null)
+                    }
                     if (langChanged) {
                         invalidateContentLanguageCaches()
                         loadHomeData()
@@ -2342,6 +2394,7 @@ class HomeViewModel @Inject constructor(
         categories.forEach { cat -> cat.items.forEach { mediaRepository.cacheItem(it) } }
         heroItem?.let { mediaRepository.cacheItem(it) }
         putCachedLogos(logoCache)
+        resolveIptvChannels(categories.flatMap { it.items })
 
         // Filter out any existing continue_watching from preloaded data
         val filteredCategories = categories.filter { it.id != "continue_watching" }.toMutableList()
@@ -2537,9 +2590,9 @@ class HomeViewModel @Inject constructor(
                         "cw_phase" to "instant"
                     )
                 )
-                emptyList()
+                null
             }
-            if (instant.isNotEmpty() && continueWatchingUpdates.revision == localUpdateRevision) {
+            if (instant != null && continueWatchingUpdates.revision == localUpdateRevision) {
                 publishContinueWatching(instant)
             }
 
@@ -2558,16 +2611,14 @@ class HomeViewModel @Inject constructor(
                         "cw_phase" to "fresh"
                     )
                 )
-                emptyList()
+                null
             }
             if (
-                fresh.isNotEmpty() &&
+                fresh != null &&
                 fresh != instant &&
                 continueWatchingUpdates.revision == localUpdateRevision
             ) {
                 publishContinueWatching(fresh)
-            } else if (cached.isEmpty() && instant.isEmpty() && fresh.isEmpty()) {
-                publishContinueWatching(emptyList())
             }
             val traktConnected = try {
             traktRepository.hasTrakt()
@@ -2576,7 +2627,7 @@ class HomeViewModel @Inject constructor(
         } catch (e: Exception) {
             false
         }
-            if (traktConnected && cached.isEmpty() && instant.isEmpty() && fresh.isEmpty()) {
+            if (traktConnected && cached.isEmpty() && instant?.isEmpty() == true && fresh?.isEmpty() == true) {
                 AppLogger.breadcrumb(
                     tag = "ContinueWatching",
                     message = "trakt_connected_empty_all_paths",
@@ -3007,28 +3058,16 @@ class HomeViewModel @Inject constructor(
 
                     // Resolve in savedCatalogs order — this is the user's configured
                     // catalog ordering from Settings > Catalogs.
-                    // Addon-provided service-branded catalogs (Netflix, Disney+,
-                    // Hulu etc. rows contributed by aio-metadata / org.kris /
-                    // local scraper addons) are suppressed here - we already surface
-                    // those services via the collection-tile Services row, so
-                    // having a second identically-named catalog row below it
-                    // was duplicative per user feedback. Preinstalled catalogs
-                    // (Trending, Just Added, Top 10, etc.) are never skipped.
-                    val serviceTitleBlocklist = setOf(
-                        "netflix", "prime video", "prime", "apple tv+", "apple tv plus",
-                        "apple tv", "disney+", "disney plus", "paramount+", "paramount plus",
-                        "hbo max", "max", "hulu", "shudder", "jiohotstar", "sonyliv",
-                        "sky", "crunchyroll", "peacock"
-                    )
+                    // Addon catalogs named after a service (Netflix, Disney+ from
+                    // AIOMetadata) are shown like any other row, as in other Stremio
+                    // clients: the user enabled them in their addon, and a duplicate of
+                    // the built-in Services row can be removed in Settings > Catalogs.
                     val resolved = savedCatalogs.mapNotNull { cfg ->
                         if (isCollectionRailConfig(cfg) || isCollectionTileConfig(cfg)) {
                             return@mapNotNull null
                         }
                         val cat = allById[cfg.id]
                         if (cat == null || cat.items.isEmpty()) return@mapNotNull null
-                        if (cfg.sourceType == CatalogSourceType.ADDON &&
-                            cat.title.trim().lowercase(Locale.US) in serviceTitleBlocklist
-                        ) return@mapNotNull null
                         cat.withTop10CapIfNeeded()
                     }.toMutableList()
                     resolved
@@ -3325,7 +3364,14 @@ class HomeViewModel @Inject constructor(
                     delay(if (isLowRamDevice) 2_200L else 1_200L)
                     if (requestId != loadHomeRequestId) return@cw
                     val localUpdateRevision = continueWatchingUpdates.revision
-                    val freshContinueWatching = resolveContinueWatchingItemsStable(forceFresh = true)
+                    val freshContinueWatching = try {
+                        resolveContinueWatchingItemsStable(forceFresh = true)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (error: Exception) {
+                        AppLogger.e("HomeVM", "Background Continue Watching refresh failed", error)
+                        return@cw
+                    }
                     if (requestId != loadHomeRequestId) return@cw
                     if (continueWatchingUpdates.revision != localUpdateRevision) return@cw
 
@@ -3350,6 +3396,8 @@ class HomeViewModel @Inject constructor(
                             updated.add(0, continueWatchingCategory)
                         }
                         _uiState.value = _uiState.value.copy(categories = updated)
+                    } else {
+                        publishContinueWatching(emptyList())
                     }
                 }
               } catch (e: Exception) {
@@ -4342,10 +4390,9 @@ class HomeViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(categories = latestCategories)
                     refreshWatchedBadges()
                 } else {
-                    if (force) {
-                        // A forced refresh follows a user-visible state change (playback or a
-                        // watched action). Its empty result is authoritative; retaining the old
-                        // row here is what caused completed shows to hover indefinitely.
+                    if (force || remoteSyncManager.isRemoteConnected(TrackingFeature.CONTINUE_WATCHING)) {
+                        // A successful connected tracker read is authoritative, including empty.
+                        // Failed reads throw above and preserve the last good row instead.
                         publishContinueWatching(emptyList())
                         return@launch
                     }
@@ -4489,7 +4536,7 @@ class HomeViewModel @Inject constructor(
                             "force_fresh" to forceFresh.toString()
                         )
                     )
-                    emptyList()
+                    throw error
                 }
             } else {
                 try {
@@ -4504,13 +4551,13 @@ class HomeViewModel @Inject constructor(
                             "cw_phase" to "remote_cached_miss"
                         )
                     )
-                    emptyList()
+                    throw error
                 }
             }
             val historyItems = loadContinueWatchingFromHistoryStable()
             val localItems = loadSavedContinueWatchingSnapshot()
             mergeTraktAndRecentLocalContinueWatching(
-                traktItems = remoteItems.ifEmpty { historyItems },
+                traktItems = remoteItems,
                 localItems = localItems,
                 historyItems = historyItems
             )
@@ -4833,6 +4880,10 @@ class HomeViewModel @Inject constructor(
             return
         }
 
+        if (!currentHero.isSameHomeHero(item)) {
+            heroTrailerJob?.cancel()
+            heroTrailerRequestKey = null
+        }
         // Save previous hero for crossfade animation, clear trailer for new hero
         _uiState.value = currentState.copy(
             previousHeroItem = currentState.heroItem,
@@ -4840,9 +4891,43 @@ class HomeViewModel @Inject constructor(
             heroItem = heroItem,
             heroLogoUrl = logoUrl,
             heroOverviewOverride = cachedDetails?.overview?.ifBlank { heroItem.overview },
-            heroTrailerKey = null,
+            heroTrailerKey = if (currentHero.isSameHomeHero(item)) currentState.heroTrailerKey else null,
             isHeroTransitioning = true
         )
+    }
+
+    private fun requestHeroTrailer(item: MediaItem) {
+        val state = _uiState.value
+        if (!state.trailerAutoPlay || !state.heroItem.isSameHomeHero(item) ||
+            !isActionableMediaItem(item) || isIptvItem(item) || isCollectionItem(item)
+        ) return
+        if (state.heroTrailerKey != null) return
+        val language = mediaRepository.contentLanguage
+        val requestKey = "$language:${item.mediaType}:${item.id}"
+        heroTrailerCache.get(requestKey)?.let { cached ->
+            // A transient metadata failure must not disable this title's preview
+            // for the rest of the app session. Successful keys stay in the LRU.
+            if (cached.key != null || SystemClock.elapsedRealtime() - cached.cachedAt < 60_000L) {
+                _uiState.value = _uiState.value.copy(heroTrailerKey = cached.key)
+                return
+            }
+        }
+        if (heroTrailerRequestKey == requestKey && heroTrailerJob?.isActive == true) return
+        heroTrailerJob?.cancel()
+        heroTrailerRequestKey = requestKey
+        heroTrailerJob = viewModelScope.launch {
+            delay(220L)
+            val trailerKey = withContext(networkDispatcher) {
+                mediaRepository.getTrailerKey(item.mediaType, item.id)
+            }
+            heroTrailerCache.put(requestKey, CachedHomeTrailer(trailerKey))
+            val current = _uiState.value
+            if (current.trailerAutoPlay && current.heroItem.isSameHomeHero(item) &&
+                mediaRepository.contentLanguage == language && heroTrailerRequestKey == requestKey
+            ) {
+                _uiState.value = current.copy(heroTrailerKey = trailerKey)
+            }
+        }
     }
 
     private fun hydrateHeroDetailsIfNeeded(item: MediaItem) {
@@ -4851,22 +4936,7 @@ class HomeViewModel @Inject constructor(
             return
         }
 
-        // Fetch trailer for new hero item; skip if already loaded for this item (prevents restart mid-play)
-        if (_uiState.value.trailerAutoPlay &&
-            !(_uiState.value.heroItem?.id == item.id && _uiState.value.heroTrailerKey != null)
-        ) {
-            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
-            viewModelScope.launch(networkDispatcher) {
-                try {
-                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
-                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
-                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
-                    }
-                        } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
-            }
-        }
+        requestHeroTrailer(item)
 
         val normalizedOverview = item.overview.trim()
         val looksTruncated = normalizedOverview.endsWith("...") || normalizedOverview.length < 120
@@ -4898,22 +4968,7 @@ class HomeViewModel @Inject constructor(
     private fun scheduleHeroDetailsFetch(item: MediaItem, fastScrolling: Boolean) {
         heroDetailsJob?.cancel()
 
-        // Fetch trailer for new hero item; skip if already loaded for this item (prevents restart mid-play)
-        if (_uiState.value.trailerAutoPlay &&
-            !(_uiState.value.heroItem?.id == item.id && _uiState.value.heroTrailerKey != null)
-        ) {
-            _uiState.value = _uiState.value.copy(heroTrailerKey = null)
-            viewModelScope.launch(networkDispatcher) {
-                try {
-                    val trailerKey = mediaRepository.getTrailerKey(item.mediaType, item.id)
-                    if (trailerKey != null && _uiState.value.heroItem?.id == item.id) {
-                        _uiState.value = _uiState.value.copy(heroTrailerKey = trailerKey)
-                    }
-                        } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
-            }
-        }
+        requestHeroTrailer(item)
 
         heroDetailsJob = viewModelScope.launch(networkDispatcher) {
             val detailsKey = heroDetailsKey(item)

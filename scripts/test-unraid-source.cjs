@@ -1,0 +1,10 @@
+const assert = require('node:assert/strict');
+const { allowed, tarFiles } = require('./prepare-unraid-source.cjs');
+for (const file of ['web/src/app/page.tsx', 'web/package-lock.json', 'web/.env.example', 'web/.env.selfhost.example', 'LICENSE', 'scripts/check-unraid-container.cjs']) assert.equal(allowed(file), true, file);
+for (const file of ['web/.env.local', 'web/.env.production', 'web/private.key', 'web/node_modules/a/index.js', 'web/.next/server.js', 'web/distribution-artifacts/old.tar.gz', '.planning/private.json', 'web/../secrets.properties', 'web\\.env']) assert.equal(allowed(file), false, file);
+const header = Buffer.alloc(512);
+header.write('arvio-source/web/../secret'); header.write('00000000001', 124); header.write('0', 156);
+assert.throws(() => tarFiles(Buffer.concat([header, Buffer.alloc(1024)])), /Unexpected archive file/);
+header.fill(0); header.write('arvio-source/web/source.ts'); header.write('00000000001', 124); header.write('2', 156);
+assert.throws(() => tarFiles(Buffer.concat([header, Buffer.alloc(1024)])), /Unsupported source archive entry/);
+console.log('Exact-source scope and archive traversal/symlink rejection checks passed.');

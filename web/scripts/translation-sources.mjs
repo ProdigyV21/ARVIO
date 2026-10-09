@@ -27,6 +27,9 @@ export function requiredPhrases() {
       const source=ts.createSourceFile(file,fs.readFileSync(path.join(root,directory,file),'utf8'),ts.ScriptTarget.Latest,true,file.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);
       function visit(node) {
         if (ts.isCallExpression(node) && node.expression.getText(source)==='translateUi' && ts.isStringLiteral(node.arguments[0])) keys.add(node.arguments[0].text.trim());
+        if (file === 'calendar.ts' && ts.isVariableDeclaration(node) && node.name.getText(source) === 'CALENDAR_KIND_LABELS' && node.initializer && ts.isObjectLiteralExpression(node.initializer)) {
+          for (const property of node.initializer.properties) if (ts.isPropertyAssignment(property) && ts.isStringLiteral(property.initializer)) keys.add(property.initializer.text);
+        }
         if (ts.isPropertyAssignment(node) && ['label','hint','emptyMessage', ...(file.endsWith('TrackerLibrary.tsx') ? ['name'] : [])].includes(node.name.getText(source)) && ts.isStringLiteral(node.initializer)) keys.add(node.initializer.text.trim());
         if (directory==='components' && ts.isArrayLiteralExpression(node) && node.elements.length===2 && node.elements.every(ts.isStringLiteral)) {
           const label=node.elements[1].text;

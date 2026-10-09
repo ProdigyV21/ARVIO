@@ -12,6 +12,20 @@ import org.junit.Test
 
 class CatalogRepositoryLegacyCompatibilityTest {
     @Test
+    fun `SIMKL restores from enum reference or valid URL across native and browser payloads`() {
+        val repository = CatalogRepository(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
+        val parse = CatalogRepository::class.java.getDeclaredMethod("parseCatalogsJson", String::class.java).apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val restored = parse.invoke(repository, """[
+            {"id":"enum","title":"My list","sourceType":"simkl","sourceUrl":"https://simkl.com/5/list/14462"},
+            {"id":"ref","title":"My list","sourceType":"UNKNOWN","sourceRef":"simkl_list:14462"},
+            {"id":"url","title":"My list","sourceType":"TRAKT","sourceUrl":"https://simkl.com/5/list/14462/slug"}
+        ]""") as List<CatalogConfig>
+        assertEquals(3, restored.size)
+        assertEquals(listOf(CatalogSourceType.SIMKL, CatalogSourceType.SIMKL, CatalogSourceType.SIMKL), restored.map { it.sourceType })
+    }
+
+    @Test
     fun `TMDB restores from enum reference or URL without losing titles or order`() {
         val repository = CatalogRepository(
             context = mockk<Context>(relaxed = true),

@@ -44,6 +44,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
@@ -55,6 +56,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -70,7 +73,13 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.streamDataStore: DataStore<Preferences> by preferencesDataStore(name = "stream_prefs")
+internal val Context.streamDataStore: DataStore<Preferences> by preferencesDataStore(name = "stream_prefs")
+
+/**
+ * Addon id families that are never treated as native addon items: TMDB lookups resolve
+ * IMDb/TMDB ids, and ARVIO maps the anime families through its own anime pipeline.
+ */
+internal val NON_NATIVE_META_ID_FAMILIES = listOf("tt", "tmdb:", "imdb:", "kitsu:", "mal:", "anilist:", "anidb:", "tvdb:")
 
 /**
  * Callback for streaming results as they arrive -
@@ -364,6 +373,8 @@ class StreamRepository @Inject constructor(
     )
     private val streamResultCache = mutableMapOf<String, CachedStreamResult>()
     private val resolvedStreamCache = ConcurrentHashMap<String, CachedResolvedStream>()
+    private data class CachedAddonMeta(val meta: StremioMetaPreview, val createdAtMs: Long)
+    private val addonMetaCache = ConcurrentHashMap<String, CachedAddonMeta>()
     // Cache getStreamAddons() result per content type, invalidated when addon list changes.
     // Avoids re-iterating all addon manifests on every stream resolution call.
     private val streamAddonsCache = mutableMapOf<String, List<Addon>>()
@@ -374,7 +385,8 @@ class StreamRepository @Inject constructor(
                 addon = addon,
                 imdbId = request.imdbId,
                 title = request.title,
-                year = request.year
+                year = request.year,
+                nativeType = request.nativeType
             )
         },
         episodeResolver = { addon, request ->
@@ -389,7 +401,8 @@ class StreamRepository @Inject constructor(
                 originalLanguage = request.originalLanguage,
                 title = request.title,
                 animeQueryOverride = request.animeQueryOverride,
-                airDate = request.airDate
+                airDate = request.airDate,
+                nativeType = request.nativeType
             )
         }
     )
@@ -718,11 +731,10 @@ class StreamRepository @Inject constructor(
     }
 
     suspend fun toggleAddon(addonId: String) {
-        val addons = installedAddons.first().toMutableList()
-        val index = addons.indexOfFirst { it.id == addonId }
-        if (index >= 0) {
-            addons[index] = addons[index].copy(isEnabled = !addons[index].isEnabled)
-            saveAddons(addons)
+        updateAddons { current ->
+            current.map { addon ->
+                if (addon.id == addonId) addon.copy(isEnabled = !addon.isEnabled) else addon
+            }
         }
     }
 
@@ -843,11 +855,7 @@ class StreamRepository @Inject constructor(
     suspend fun addCustomAddon(url: String, customName: String? = null): Result<Addon> = withContext(Dispatchers.IO) {
         try {
             val newAddon = hydrateCustomAddon(url, customName)
-            val addons = installedAddons.first().toMutableList()
-            // Remove existing addon with same ID if present
-            addons.removeAll { it.id == newAddon.id }
-            addons.add(newAddon)
-            saveAddons(addons, addedIds = setOf(newAddon.id))
+            installPreparedAddon(newAddon)
 
             Result.success(newAddon)
         } catch (e: Exception) {
@@ -875,12 +883,14 @@ class StreamRepository @Inject constructor(
      */
     suspend fun installPreparedAddon(addon: Addon, replaceAddonIds: Set<String> = emptySet()) =
         withContext(Dispatchers.IO) {
-            val addons = installedAddons.first().toMutableList()
-            val replacedIndex = addons.indexOfFirst { it.id in replaceAddonIds }
-            addons.removeAll { it.id == addon.id || it.id in replaceAddonIds }
-            // A replacement keeps the old addon's place in the list.
-            if (replacedIndex in 0..addons.size) addons.add(replacedIndex, addon) else addons.add(addon)
-            saveAddons(addons, addedIds = setOf(addon.id), removedIds = replaceAddonIds - addon.id)
+            updateAddons(addedIds = setOf(addon.id), removedIds = replaceAddonIds - addon.id) { current ->
+                val addons = current.toMutableList()
+                val replacedIndex = addons.indexOfFirst { it.id in replaceAddonIds }
+                addons.removeAll { it.id == addon.id || it.id in replaceAddonIds }
+                // A replacement keeps the old addon's place in the list.
+                if (replacedIndex in 0..addons.size) addons.add(replacedIndex, addon) else addons.add(addon)
+                addons
+            }
         }
 
     /**
@@ -924,7 +934,14 @@ class StreamRepository @Inject constructor(
             }
         }
 
-        saveAddons(updatedAddons)
+        val originalsById = currentAddons.associateBy { it.id }
+        val refreshedById = updatedAddons.associateBy { it.id }
+        updateAddons { latest ->
+            // A slow refresh must not undo an install, removal or toggle made while fetching.
+            latest.map { addon ->
+                if (addon == originalsById[addon.id]) refreshedById[addon.id] ?: addon else addon
+            }
+        }
 
         synchronized(streamResultCache) { streamResultCache.clear() }
         resolvedStreamCache.clear()
@@ -962,10 +979,7 @@ class StreamRepository @Inject constructor(
             manifest = candidate.manifest,
             transportUrl = candidate.transportUrl
         )
-        val addons = installedAddons.first().toMutableList()
-        addons.removeAll { it.id == addonId }
-        addons.add(newAddon)
-        saveAddons(addons, addedIds = setOf(newAddon.id))
+        installPreparedAddon(newAddon)
         return newAddon
     }
 
@@ -1014,8 +1028,7 @@ class StreamRepository @Inject constructor(
             .toSet()
         if (removableIds.isEmpty()) return@withContext false
 
-        val retained = current.filterNot { it.id in removableIds }
-        saveAddons(retained, removedIds = removableIds)
+        updateAddons(removedIds = removableIds) { latest -> latest.filterNot { it.id in removableIds } }
         true
     }
 
@@ -1039,8 +1052,16 @@ class StreamRepository @Inject constructor(
             }
         }
 
-        return addons.firstOrNull { it.id == preferred && matches(it) }?.id
+        // Collections name the addon by its manifest id ("aio-metadata"); installed ids carry a
+        // per-URL suffix (see buildAddonInstanceId).
+        fun isPreferred(addon: Addon): Boolean =
+            preferred != null && (addon.id == preferred || addon.manifest?.id == preferred)
+
+        return addons.firstOrNull { isPreferred(it) && matches(it) }?.id
             ?: addons.firstOrNull { matches(it) }?.id
+            // Like Nuvio, ask the named addon anyway: AIOMetadata serves catalogs (its
+            // streaming services) that a user's manifest doesn't list.
+            ?: addons.firstOrNull { isPreferred(it) }?.id
     }
 
     private fun buildAddonInstanceId(manifestId: String, url: String): String {
@@ -1112,9 +1133,7 @@ class StreamRepository @Inject constructor(
 
     suspend fun removeAddon(addonId: String) {
         if (addonId == "opensubtitles") return
-        val current = installedAddons.first()
-        val addons = current.filter { it.id != addonId }
-        saveAddons(addons, removedIds = setOf(addonId))
+        updateAddons(removedIds = setOf(addonId)) { current -> current.filter { it.id != addonId } }
     }
 
     @Deprecated(
@@ -1130,15 +1149,19 @@ class StreamRepository @Inject constructor(
     suspend fun moveAddonDown(addonId: String): Boolean = moveAddon(addonId, 1)
 
     private suspend fun moveAddon(addonId: String, direction: Int): Boolean {
-        val currentAddons = installedAddons.first().toMutableList()
-        val currentIndex = currentAddons.indexOfFirst { it.id == addonId }
-        if (currentIndex == -1) return false
-        val newIndex = currentIndex + direction
-        if (newIndex !in currentAddons.indices) return false
-        val item = currentAddons.removeAt(currentIndex)
-        currentAddons.add(newIndex, item)
-        saveAddons(currentAddons)
-        return true
+        var moved = false
+        updateAddons { current ->
+            val addons = current.toMutableList()
+            val currentIndex = addons.indexOfFirst { it.id == addonId }
+            val newIndex = currentIndex + direction
+            if (currentIndex >= 0 && newIndex in addons.indices) {
+                val item = addons.removeAt(currentIndex)
+                addons.add(newIndex, item)
+                moved = true
+            }
+            addons
+        }
+        return moved
     }
 
     suspend fun replaceAddonsFromCloud(addons: List<Addon>) {
@@ -1221,12 +1244,22 @@ class StreamRepository @Inject constructor(
     }
 
     private suspend fun saveAddons(addons: List<Addon>, stampChange: Boolean = true,
-        removedIds: Set<String> = emptySet(), addedIds: Set<String> = emptySet()) {
+        removedIds: Set<String> = emptySet(), addedIds: Set<String> = emptySet()) =
+        updateAddons(stampChange, removedIds, addedIds) { addons }
+
+    private suspend fun updateAddons(
+        stampChange: Boolean = true,
+        removedIds: Set<String> = emptySet(),
+        addedIds: Set<String> = emptySet(),
+        transform: (List<Addon>) -> List<Addon>
+    ) {
         // Save locally to the shared account-level addon list. Mirror to the
         // active profile key so older builds/cloud payloads can still recover it.
         context.streamDataStore.edit { prefs ->
+            val previous = addonCloudState(prefs)
+            val addons = transform(previous.addons)
+            if (stampChange && addons == previous.addons && addedIds.isEmpty() && removedIds.isEmpty()) return@edit
             if (stampChange) {
-                val previous = addonCloudState(prefs)
                 val timestamp = maxOf(System.currentTimeMillis(), previous.updatedAt + 1)
                 val changes = recordAddonChanges(previous.changes, addedIds, removedIds, timestamp)
                 prefs[addonChangesKey] = gson.toJson(changes)
@@ -1459,8 +1492,24 @@ class StreamRepository @Inject constructor(
         val (baseUrl, queryParams) = getAddonBaseUrl(addonUrl)
 
         val queryBase = queryParams?.takeIf { it.isNotBlank() }
-        val typeCandidates = catalogTypeAliases(catalogType)
+        // Only fall back to alias types the addon declares for this catalog: some addons answer
+        // any /catalog/tv/ request with their live channel list, which would fill an empty
+        // series page with unrelated channels.
+        val declaredSpellings = addon.manifest?.catalogs.orEmpty()
+            .filter { it.id == catalogId }
+            .mapNotNull { (it.type as String?)?.trim() }
+        val declaredTypes = declaredSpellings.map { it.lowercase(Locale.US) }.toSet()
+        // Addons route by the exact spelling ("Live Docs"); collections may lower-case it.
+        val requestType = declaredSpellings.firstOrNull { it.equals(catalogType.trim(), ignoreCase = true) }
+            ?: catalogType
+        val typeCandidates = catalogTypeAliases(requestType).filter { candidate ->
+            declaredTypes.isEmpty() || candidate.equals(catalogType, ignoreCase = true) ||
+                candidate.lowercase(Locale.US) in declaredTypes
+        }
         var firstSuccessful: StremioCatalogResponse? = null
+        // A rate-limited addon fails every request for a while; more requests only extend it.
+        // Failing (not returning empty) keeps callers from caching the page as empty.
+        if (AddonRateLimitTracker.isCoolingDown(addonId)) throw java.io.IOException("Addon is rate limited")
 
         for (typeCandidate in typeCandidates) {
             val urls = buildCatalogRequestUrls(
@@ -1476,6 +1525,10 @@ class StreamRepository @Inject constructor(
                     streamApi.getAddonCatalog(url)
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e
+                    if (AddonRateLimitTracker.isRateLimitError(e)) {
+                        AddonRateLimitTracker.recordRateLimit(addonId)
+                        throw java.io.IOException("Addon is rate limited", e)
+                    }
                     continue
                 }
                 if (firstSuccessful == null) {
@@ -1491,6 +1544,68 @@ class StreamRepository @Inject constructor(
         firstSuccessful ?: throw java.io.IOException("Catalogue request failed")
     }
 
+    /** One page of results from an addon catalog that supports the `search` extra. */
+    data class AddonSearchPage(
+        val addonId: String,
+        val catalogType: String,
+        val catalogId: String,
+        val metas: List<StremioMetaPreview>
+    )
+
+    /**
+     * Searches the catalogs of addons that serve their own metadata (see [addonServesOwnMeta])
+     * and declare a `search` extra. Global search otherwise only asks TMDB, so titles such an
+     * addon carries and TMDB doesn't (a broadcaster's shows) could never be found. Other
+     * addons are left out: their titles are TMDB titles already, and asking every catalog
+     * on each keystroke would slow search down.
+     */
+    suspend fun searchNativeAddonCatalogs(query: String, timeoutMs: Long = 6_000L): List<AddonSearchPage> =
+        withContext(Dispatchers.IO) {
+            val trimmed = query.trim()
+            if (trimmed.isEmpty()) return@withContext emptyList()
+            val encoded = URLEncoder.encode(trimmed, "UTF-8").replace("+", "%20")
+            val targets = installedAddons.first()
+                .filter { it.isInstalled && it.isEnabled && it.runtimeKind == RuntimeKind.STREMIO && !it.url.isNullOrBlank() }
+                .flatMap { addon ->
+                    val manifest = addon.manifest ?: return@flatMap emptyList()
+                    val ownsMeta = manifest.resources.any { resource ->
+                        resource.name.equals("meta", ignoreCase = true) &&
+                            (resource.idPrefixes ?: manifest.idPrefixes).orEmpty().any { prefix ->
+                                prefix.isNotBlank() && NON_NATIVE_META_ID_FAMILIES.none { prefix.startsWith(it, ignoreCase = true) }
+                            }
+                    }
+                    if (!ownsMeta) return@flatMap emptyList()
+                    manifest.catalogs
+                        .filter { catalog -> catalog.extra.orEmpty().any { it.name.equals("search", ignoreCase = true) } }
+                        .map { catalog -> addon to catalog }
+                }
+            if (targets.isEmpty()) return@withContext emptyList()
+            val slots = Semaphore(4)
+            coroutineScope {
+                targets.map { (addon, catalog) ->
+                    async {
+                        withTimeoutOrNull(timeoutMs) {
+                            slots.withPermit {
+                                try {
+                                    val (baseUrl, queryParams) = getAddonBaseUrl(addon.url.orEmpty())
+                                    val query = queryParams?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
+                                    val url = "$baseUrl/catalog/${catalog.type}/${catalog.id}/search=$encoded.json$query"
+                                    val response = streamApi.getAddonCatalog(url)
+                                    val metas = response.metas ?: response.items ?: emptyList()
+                                    if (metas.isEmpty()) null
+                                    else AddonSearchPage(addon.id, catalog.type, catalog.id, metas)
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    throw e
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+            }
+        }
+
     suspend fun getAddonMeta(
         addonId: String,
         mediaType: String,
@@ -1499,23 +1614,71 @@ class StreamRepository @Inject constructor(
         val addon = installedAddons.first().firstOrNull { it.id == addonId }
             ?: return@withContext null
         val addonUrl = addon.url ?: return@withContext null
+        val cacheKey = "$addonId|$addonUrl|$mediaType|$mediaId"
+        addonMetaCache[cacheKey]?.takeIf { System.currentTimeMillis() - it.createdAtMs < 30 * 60_000L }
+            ?.let { return@withContext it.meta }
+        if (AddonRateLimitTracker.isCoolingDown(addonId)) return@withContext null
         val (baseUrl, queryParams) = getAddonBaseUrl(addonUrl)
 
         val typeCandidates = catalogTypeAliases(mediaType)
-        val encodedId = URLEncoder.encode(mediaId, "UTF-8")
+        val encodedId = encodePathSegment(mediaId)
         for (typeCandidate in typeCandidates) {
-            val encodedType = URLEncoder.encode(typeCandidate, "UTF-8")
+            val encodedType = encodePathSegment(typeCandidate)
             val query = queryParams?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
             val url = "$baseUrl/meta/$encodedType/$encodedId.json$query"
             val meta = try {
                 streamApi.getAddonMeta(url).meta
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                if (AddonRateLimitTracker.isRateLimitError(e)) {
+                    AddonRateLimitTracker.recordRateLimit(addonId)
+                    return@withContext null
+                }
                 null
             }
-            if (meta != null) return@withContext meta
+            if (meta != null) {
+                if (addonMetaCache.size >= 256) addonMetaCache.clear()
+                addonMetaCache[cacheKey] = CachedAddonMeta(meta, System.currentTimeMillis())
+                return@withContext meta
+            }
         }
         null
+    }
+
+    /** [addonServesOwnMeta] for one installed addon; see AddonMetaOwnership.kt. */
+    suspend fun addonServesOwnMeta(addonId: String, type: String, contentId: String): Boolean {
+        val addon = installedAddons.first().firstOrNull { it.id == addonId } ?: return false
+        return addonServesOwnMeta(addon, type, contentId)
+    }
+
+    /**
+     * The types [addonId] declares under which it serves its own metadata for [contentId]. Used
+     * for watch-history entries saved before the item's own type was recorded with them.
+     */
+    suspend fun ownMetaTypes(addonId: String, contentId: String): List<String> {
+        val addon = installedAddons.first().firstOrNull { it.id == addonId } ?: return emptyList()
+        val manifest = addon.manifest
+        // Gson leaves absent manifest fields null despite the Kotlin types.
+        val declared: List<String?> = manifest?.types.orEmpty() + manifest?.catalogs.orEmpty().map { it.type }
+        return declared.mapNotNull { it?.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .filter { addonServesOwnMeta(addon, it, contentId) }
+    }
+
+    /**
+     * Types a native episode's show may live under at [addon]: "series" first, then the
+     * addon's own non-movie types ("Podcasts", "other"), which strict addons route /meta and
+     * /stream by.
+     */
+    private fun nativeContainerTypes(addon: Addon): List<String> {
+        val manifest = addon.manifest
+        // Gson leaves absent manifest fields null despite the Kotlin types.
+        val declared: List<String?> = manifest?.types.orEmpty() + manifest?.catalogs.orEmpty().map { it.type }
+        return (listOf("series") + declared)
+            .mapNotNull { it?.trim() }
+            .filter { it.isNotBlank() && !it.equals("movie", ignoreCase = true) }
+            .distinctBy { it.lowercase(Locale.US) }
     }
 
     private fun catalogTypeAliases(rawType: String): List<String> {
@@ -1623,18 +1786,6 @@ class StreamRepository @Inject constructor(
         }
     }
 
-    private fun supportsResourceType(resourceTypes: List<String>?, requestedType: String): Boolean {
-        if (resourceTypes.isNullOrEmpty()) return true
-        val normalized = resourceTypes.map { it.trim().lowercase(Locale.US) }
-        val aliases = when (requestedType) {
-            "series", "tv", "show" -> setOf("series", "tv", "show")
-            "anime" -> setOf("anime", "series", "tv", "show")
-            "movie", "film" -> setOf("movie", "film")
-            else -> setOf(requestedType)
-        }
-        return normalized.any { it in aliases }
-    }
-
     private fun idMatchesAnyPrefix(id: String, prefixes: List<String>?): Boolean {
         if (prefixes.isNullOrEmpty()) return true
         return prefixes.any { prefix ->
@@ -1702,10 +1853,12 @@ class StreamRepository @Inject constructor(
         tmdbId: Int?,
         isAnime: Boolean,
         genreIds: List<Int>,
-        originalLanguage: String?
+        originalLanguage: String?,
+        // A native item's own type ("Podcasts"): an addon declaring only that type still qualifies.
+        nativeType: String? = null
     ): List<Addon> {
         val seriesAddons = buildEpisodeAddonLookupIds(imdbId, tmdbId)
-            .flatMap { id -> getStreamAddons(addons, "series", id) }
+            .flatMap { id -> getStreamAddons(addons, nativeType ?: "series", id) }
             .distinctBy { it.id }
         val hasNativeAnimeAddon = addons.any(::shouldPreferNativeAnimeIds)
         val shouldIncludeAnimeAddons = isAnime ||
@@ -1898,7 +2051,9 @@ class StreamRepository @Inject constructor(
         addon: Addon,
         imdbId: String,
         title: String = "",
-        year: Int? = null
+        year: Int? = null,
+        // A native item's own type ("tv" for a live channel): its addon may declare no movie type.
+        nativeType: String? = null
     ): List<StreamSource> {
         val startedAt = System.currentTimeMillis()
         val addonTimeoutMs = when {
@@ -1923,10 +2078,15 @@ class StreamRepository @Inject constructor(
                     return@withTimeout streams
                 }
                 val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
-                val url = if (queryParams != null) {
-                    "$baseUrl/stream/movie/$imdbId.json?$queryParams"
+                val path = if (nativeType != null) {
+                    "${encodePathSegment(nativeType)}/${encodePathSegment(imdbId)}"
                 } else {
-                    "$baseUrl/stream/movie/$imdbId.json"
+                    "movie/$imdbId"
+                }
+                val url = if (queryParams != null) {
+                    "$baseUrl/stream/$path.json?$queryParams"
+                } else {
+                    "$baseUrl/stream/$path.json"
                 }
                 Log.d(
                     TAG,
@@ -1994,7 +2154,8 @@ class StreamRepository @Inject constructor(
         originalLanguage: String? = null,
         title: String = "",
         animeQueryOverride: String? = null,
-        airDate: String? = null
+        airDate: String? = null,
+        nativeType: String? = null
     ): List<StreamSource> {
         val startedAt = System.currentTimeMillis()
         val nativeAnimeAddonHint = shouldPreferNativeAnimeIds(addon)
@@ -2055,7 +2216,22 @@ class StreamRepository @Inject constructor(
                     animeQueryOverride ?: resolveAnimeQuery(animeLookupTimeoutMs)
                 } else null
 
-                val seriesId = "$imdbId:$season:$episode"
+                val nativeTypes = (listOfNotNull(nativeType) + nativeContainerTypes(addon))
+                    .distinctBy { it.lowercase(Locale.US) }
+                    .filter { addonServesOwnMeta(addon, it, imdbId) }
+                val isNative = nativeTypes.isNotEmpty()
+                // The type the addon answered /meta with; strict addons route /stream by it too.
+                var nativeType: String? = null
+                val seriesId = if (isNative) {
+                    val meta = withTimeoutOrNull(5_000L) {
+                        nativeTypes.firstNotNullOfOrNull { type ->
+                            getAddonMeta(addon.id, type, imdbId)?.also { nativeType = type }
+                        }
+                    }
+                    nativeEpisodeStreamId(meta, season, episode) ?: return@withTimeout emptyList()
+                } else {
+                    "$imdbId:$season:$episode"
+                }
                 val supportsKitsu = addonSupportsIdFamily(addon, "kitsu") ||
                     addon.url.contains("torrentio") ||
                     addon.url.contains("aiostreams") ||
@@ -2065,10 +2241,12 @@ class StreamRepository @Inject constructor(
                 val useKitsuFallback = resolveAsAnime && supportsKitsu && animeQuery != null && animeQuery != seriesId
                 val preferNativeAnimeIds = useKitsuFallback && nativeAnimeAddon
                 fun streamUrl(type: String, contentId: String): String {
+                    val encodedId = if (isNative) encodePathSegment(contentId) else contentId
+                    val encodedType = encodePathSegment(type)
                     return if (queryParams != null) {
-                        "$baseUrl/stream/$type/$contentId.json?$queryParams"
+                        "$baseUrl/stream/$encodedType/$encodedId.json?$queryParams"
                     } else {
-                        "$baseUrl/stream/$type/$contentId.json"
+                        "$baseUrl/stream/$encodedType/$encodedId.json"
                     }
                 }
 
@@ -2077,6 +2255,7 @@ class StreamRepository @Inject constructor(
                 // episodes like TMDB S4E29 to Kitsu E7 and surface the wrong debrid files.
                 fun streamRequestTypes(contentId: String, preferAnimePath: Boolean): List<String> {
                     val types = mutableListOf<String>()
+                    nativeType?.let { types += it }
                     if (preferAnimePath && addonSupportsStreamRequest(addon, "anime", contentId)) {
                         types += "anime"
                     }
@@ -2343,12 +2522,13 @@ class StreamRepository @Inject constructor(
         imdbId: String,
         title: String = "",
         year: Int? = null,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        nativeType: String? = null
     ): StreamResult = withContext(Dispatchers.IO) {
         ensureAddonHealthLoaded()
         val subtitles = mutableListOf<Subtitle>()
         val allAddons = installedAddonsForSourceResolution()
-        val streamAddons = getStreamAddons(allAddons, "movie", imdbId)
+        val streamAddons = getStreamAddons(allAddons, nativeType ?: "movie", imdbId)
         val cacheKey = streamCacheKey(
             profileId = profileManager.getProfileIdSync(),
             type = "movie",
@@ -2376,7 +2556,7 @@ class StreamRepository @Inject constructor(
         }
 
         val prioritizedAddons = prioritizeStreamingAddons(streamAddons)
-        val movieRequest = MovieRuntimeRequest(imdbId = imdbId, title = title, year = year)
+        val movieRequest = MovieRuntimeRequest(imdbId = imdbId, title = title, year = year, nativeType = nativeType)
         val streams = addonRuntimeAggregator.resolveMovieStreams(
             stremioAddons = prioritizedAddons,
             request = movieRequest
@@ -2408,14 +2588,15 @@ class StreamRepository @Inject constructor(
         title: String = "",
         year: Int? = null,
         forceRefresh: Boolean = false,
-        sequential: Boolean = false
+        sequential: Boolean = false,
+        nativeType: String? = null
     ): Flow<ProgressiveStreamResult> = callbackFlow {
         // Retained so cancelling the collector (back-nav, superseded prefetch)
         // also stops the scrape instead of leaking it in repositoryScope.
         val workerJob = repositoryScope.launch {
             ensureAddonHealthLoaded()
             val allAddons = installedAddonsForSourceResolution()
-            val streamAddons = getStreamAddons(allAddons, "movie", imdbId)
+            val streamAddons = getStreamAddons(allAddons, nativeType ?: "movie", imdbId)
             val profileId = profileManager.getProfileIdSync()
             val baseCacheKey = streamCacheKey(
                 profileId = profileId,
@@ -2561,7 +2742,7 @@ class StreamRepository @Inject constructor(
                 for (addon in prioritizedAddons) {
                     val addonStreams = try {
                         withTimeoutOrNull(3_500L) {
-                            fetchMovieStreamsFromAddon(addon, imdbId)
+                            fetchMovieStreamsFromAddon(addon, imdbId, nativeType = nativeType)
                         } ?: emptyList()
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e
@@ -2624,7 +2805,7 @@ class StreamRepository @Inject constructor(
                 prioritizedAddons.forEach { addon ->
                     launch {
                         val addonStreams = try {
-                            fetchMovieStreamsFromAddon(addon, imdbId)
+                            fetchMovieStreamsFromAddon(addon, imdbId, nativeType = nativeType)
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -2714,12 +2895,13 @@ class StreamRepository @Inject constructor(
         originalLanguage: String? = null,
         animeQueryOverride: String? = null,
         airDate: String? = null,
-        timeoutMs: Long = 3_500L
+        timeoutMs: Long = 3_500L,
+        nativeType: String? = null
     ): List<StreamSource> = withContext(Dispatchers.IO) {
         withTimeoutOrNull(timeoutMs) {
             try {
                 if (mediaType == MediaType.MOVIE) {
-                    fetchMovieStreamsFromAddon(addon = addon, imdbId = imdbId, title = title, year = year)
+                    fetchMovieStreamsFromAddon(addon = addon, imdbId = imdbId, title = title, year = year, nativeType = nativeType)
                 } else {
                     fetchEpisodeStreamsFromAddon(
                         addon = addon,
@@ -2732,7 +2914,8 @@ class StreamRepository @Inject constructor(
                         originalLanguage = originalLanguage,
                         title = title,
                         animeQueryOverride = animeQueryOverride,
-                        airDate = airDate
+                        airDate = airDate,
+                        nativeType = nativeType
                     )
                 }
             } catch (e: Exception) {
@@ -3019,8 +3202,12 @@ class StreamRepository @Inject constructor(
         title: String = "",
         forceRefresh: Boolean = false,
         animeQueryOverride: String? = null,
-        airDate: String? = null
+        airDate: String? = null,
+        // A native addon item's own type ("Podcasts"), for addon selection and /meta, /stream.
+        nativeType: String? = null
     ): StreamResult = withContext(Dispatchers.IO) {
+        // Native addon items carry a negative stand-in id, which no addon knows as TMDB.
+        val tmdbId = tmdbId?.takeIf { it > 0 }
         ensureAddonHealthLoaded()
         val subtitles = mutableListOf<Subtitle>()
         val allAddons = installedAddonsForSourceResolution()
@@ -3031,7 +3218,8 @@ class StreamRepository @Inject constructor(
             tmdbId = tmdbId,
             isAnime = isAnime,
             genreIds = genreIds,
-            originalLanguage = originalLanguage
+            originalLanguage = originalLanguage,
+            nativeType = nativeType
         )
         val cacheKey = streamCacheKey(
             profileId = profileManager.getProfileIdSync(),
@@ -3066,7 +3254,8 @@ class StreamRepository @Inject constructor(
             originalLanguage = originalLanguage,
             title = title,
             airDate = airDate,
-            animeQueryOverride = animeQueryOverride
+            animeQueryOverride = animeQueryOverride,
+            nativeType = nativeType
         )
         val streams = addonRuntimeAggregator.resolveEpisodeStreams(
             stremioAddons = prioritizedAddons,
@@ -3096,8 +3285,12 @@ class StreamRepository @Inject constructor(
         forceRefresh: Boolean = false,
         animeQueryOverride: String? = null,
         airDate: String? = null,
-        sequential: Boolean = false
+        sequential: Boolean = false,
+        // A native addon item's own type ("Podcasts"), for addon selection and /meta, /stream.
+        nativeType: String? = null
     ): Flow<ProgressiveStreamResult> = callbackFlow {
+        // Native addon items carry a negative stand-in id, which no addon knows as TMDB.
+        val tmdbId = tmdbId?.takeIf { it > 0 }
         // Retained so cancelling the collector (back-nav, superseded prefetch)
         // also stops the scrape instead of leaking it in repositoryScope.
         val workerJob = repositoryScope.launch {
@@ -3110,7 +3303,8 @@ class StreamRepository @Inject constructor(
                 tmdbId = tmdbId,
                 isAnime = isAnime,
                 genreIds = genreIds,
-                originalLanguage = originalLanguage
+                originalLanguage = originalLanguage,
+                nativeType = nativeType
             )
             val baseCacheKey = streamCacheKey(
                 profileId = profileManager.getProfileIdSync(),
@@ -3246,7 +3440,8 @@ class StreamRepository @Inject constructor(
                                 originalLanguage = originalLanguage,
                                 title = title,
                                 animeQueryOverride = animeQueryOverride,
-                                airDate = airDate
+                                airDate = airDate,
+                                nativeType = nativeType
                             )
                         } ?: emptyList()
                     } catch (e: Exception) {
@@ -3328,7 +3523,8 @@ class StreamRepository @Inject constructor(
                                 originalLanguage = originalLanguage,
                                 title = title,
                                 animeQueryOverride = animeQueryOverride,
-                                airDate = airDate
+                                airDate = airDate,
+                                nativeType = nativeType
                             )
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e

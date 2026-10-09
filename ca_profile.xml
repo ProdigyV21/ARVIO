@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Profile>Official ARVIO self-hosting templates. ARVIO Web is a browser media hub for your own supported media services, sources and API credentials. The independent web client does not require an ARVIO subscription, include media content or provide ARVIO Cloud synchronization. Installation help and support are available in the public project repository.</Profile>
+  <Icon>https://raw.githubusercontent.com/ProdigyV21/ARVIO/main/web/public/arvio-icon-512.png</Icon>
+  <WebPage>https://github.com/ProdigyV21/ARVIO-Unraid</WebPage>
+  <Forum>https://github.com/ProdigyV21/ARVIO/issues</Forum>
+</CommunityApplications>

@@ -1,0 +1,45 @@
+[
+  {
+    "id": "studio-row",
+    "title": "Animation and sci-fi",
+    "folders": [
+      {
+        "id": "animation",
+        "title": "Animated movies",
+        "description": "Animated movies with at least 100 votes. Not age-filtered.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "MOVIE",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "withGenres": "16",
+              "voteCountGte": 100
+            }
+          }
+        ]
+      },
+      {
+        "id": "scifi",
+        "title": "Science fiction",
+        "description": "Science fiction rated 6+ with at least 100 votes.",
+        "tileShape": "LANDSCAPE",
+        "sources": [
+          {
+            "provider": "tmdb",
+            "tmdbSourceType": "DISCOVER",
+            "mediaType": "MOVIE",
+            "sortBy": "popularity.desc",
+            "filters": {
+              "withGenres": "878",
+              "voteCountGte": 100,
+              "voteAverageGte": 6
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

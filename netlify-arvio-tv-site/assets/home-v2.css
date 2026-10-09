@@ -35,6 +35,10 @@
 /* Premium is a primary destination; the free APK remains a separate choice. */
 .nav .nav-premium-link{color:var(--mint)}
 .nav .nav-premium{flex-shrink:0}
+.nav-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}.nav-actions .button{white-space:nowrap}.nav-actions .button:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+@media(max-width:900px){.nav nav{display:none}}
+@media(max-width:520px){.nav{padding-inline:12px;gap:8px}.nav-actions{gap:8px}.nav .nav-actions .button{padding:10px;gap:8px;min-height:42px;font-size:11px}.nav-actions .button span{font-size:16px}}
+@media(max-width:360px){.nav .brand img{width:76px}.nav-actions .button span{display:none}}
 .hero-v2 .hero-copy>.preview-button{display:inline-flex;padding:0;margin:17px 24px 0 0;min-height:44px;font-size:12px;vertical-align:middle}
 .hero-v2 .hero-copy>.hero-community-link{vertical-align:middle;margin-top:17px}
 .hero-v2 .hero-copy>.hero-premium-note{font-size:12px;line-height:1.7;color:#b5cdc0;max-width:370px;margin:14px 0 0}
@@ -46,3 +50,10 @@
 #premium .text-link{font-size:12px;gap:8px}
 @media(max-width:850px){.hero-v2 .hero-copy>.hero-premium-note{margin:14px auto 0;max-width:420px}#premium{padding-top:25px}}
 @media(max-width:520px){.nav .nav-premium{font-size:11px;padding:10px 14px;min-height:42px}.hero-v2 .hero-copy>.preview-button{font-size:11px;margin-right:18px}.hero-v2 .hero-copy>.hero-premium-note{font-size:11px}.hero-v2 .hero-note{font-size:10px;flex-wrap:wrap}.hero-v2 .actions{gap:10px}.hero-v2 .actions .button{font-size:11px;padding-inline:15px}#premium .actions{align-items:flex-start;flex-direction:column}}
+
+/* Subscribe directly, with recurring terms visible before leaving ARVIO. */
+.hero-v2 .hero-copy>.hero-membership-terms{font-size:11px;line-height:1.7;color:#98afa2;margin:5px 0 0;max-width:400px}
+.hero-premium-details{display:inline-flex;gap:10px;align-items:center;min-height:44px;font-size:12px;color:var(--mint);text-decoration:underline;text-underline-offset:4px;margin-top:2px}
+#premium .premium-copy>.membership-terms{font-size:12px;color:#acbfb2;line-height:1.7;margin:14px 0 0}
+@media(max-width:850px){.hero-v2 .hero-copy>.hero-membership-terms{margin:5px auto 0}.hero-premium-details{justify-content:center}}
+@media(max-width:520px){.hero-v2 .actions .button{max-width:100%;white-space:normal;text-align:center;justify-content:center;line-height:1.5;min-height:48px}#premium .button{max-width:100%;white-space:normal;line-height:1.5;text-align:center;justify-content:center}}

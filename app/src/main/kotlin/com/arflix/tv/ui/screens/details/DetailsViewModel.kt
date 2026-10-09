@@ -15,6 +15,7 @@ import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.RecentPlayedSource
 import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.data.model.SportsAddonCapabilities
@@ -31,6 +32,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.MdbExternalRating
 import com.arflix.tv.data.repository.MdbListRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.RecentPlayedSourceRepository
 import com.arflix.tv.data.model.StreamIntegrationType
 import com.arflix.tv.data.repository.StreamIntegrationRepository
 import com.arflix.tv.data.repository.StreamRepository
@@ -97,6 +99,8 @@ data class DetailsUiState(
     // Streams
     val streams: List<StreamSource> = emptyList(),
     val streamsEpisodeIdentity: EpisodeIdentity? = null,
+    // The source the loaded streams' title/episode was last really watched from.
+    val recentSource: RecentPlayedSource? = null,
     val subtitles: List<Subtitle> = emptyList(),
     val isLoadingStreams: Boolean = false,
     val streamSearchStartTime: Long = 0L,
@@ -251,7 +255,8 @@ class DetailsViewModel @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
     private val cloudSyncRepository: CloudSyncRepository,
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
-    private val streamIntegrationRepository: StreamIntegrationRepository
+    private val streamIntegrationRepository: StreamIntegrationRepository,
+    private val recentPlayedSourceRepository: RecentPlayedSourceRepository
 ) : ViewModel() {
 
     companion object {
@@ -640,7 +645,9 @@ class DetailsViewModel @Inject constructor(
                 } else null
 
                 availableAnimeStructure = structure
-                val activeStructure = if (animeStructuringStyle == AnimeStructuringStyle.BROADCAST) structure else null
+                // Alternate broadcast seasons omit TMDB specials. An explicit season-zero
+                // destination must keep canonical episodes rather than becoming season one.
+                val activeStructure = if (animeStructuringStyle == AnimeStructuringStyle.BROADCAST && seasonToLoad != 0) structure else null
                 animeSeasonStructure = activeStructure
 
                 // Resolve TV show seasonal episodes directly without intermediate layout flash
@@ -1882,7 +1889,8 @@ class DetailsViewModel @Inject constructor(
                     streamRepository.resolveMovieStreamsProgressive(
                         imdbId = imdbId,
                         title = _uiState.value.item?.title.orEmpty(),
-                        year = _uiState.value.item?.year?.toIntOrNull()
+                        year = _uiState.value.item?.year?.toIntOrNull(),
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         prewarmVisibleStreams(
                             sortPlayableStreamsFirst(
@@ -1916,7 +1924,8 @@ class DetailsViewModel @Inject constructor(
                         genreIds = _uiState.value.item?.genreIds ?: emptyList(),
                         originalLanguage = _uiState.value.item?.originalLanguage,
                         title = _uiState.value.item?.title ?: "",
-                        airDate = prefetchAirDate
+                        airDate = prefetchAirDate,
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         prewarmVisibleStreams(
                             sortPlayableStreamsFirst(
@@ -2049,6 +2058,7 @@ class DetailsViewModel @Inject constructor(
             totalAddons = 0,
             streams = emptyList(),
             streamsEpisodeIdentity = identity,
+            recentSource = null,
             subtitles = emptyList(),
             streamSearchStartTime = System.currentTimeMillis(),
             pluginScrapersLoading = false,
@@ -2057,6 +2067,17 @@ class DetailsViewModel @Inject constructor(
         telegramSearchRequest = null
         val requestMediaType = currentMediaType
         val requestMediaId = currentMediaId
+
+        viewModelScope.launch {
+            val recent = recentPlayedSourceRepository.get(requestMediaType, requestMediaId)
+                ?.takeIf {
+                    it.appliesTo(requestMediaType, requestMediaId, identity?.tmdbSeason, identity?.tmdbEpisode)
+                }
+                ?: return@launch
+            if (requestId == loadStreamsRequestId) {
+                _uiState.value = _uiState.value.copy(recentSource = recent)
+            }
+        }
 
         // Register the job before it can synchronously finish or launch providers.
         loadStreamsJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
@@ -2292,7 +2313,8 @@ class DetailsViewModel @Inject constructor(
                     streamRepository.resolveMovieStreamsProgressive(
                         imdbId = effectiveStreamId,
                         title = item?.title.orEmpty(),
-                        year = item?.year?.toIntOrNull()
+                        year = item?.year?.toIntOrNull(),
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         if (!isCurrentRequest()) return@collect
                         val existingVod = _uiState.value.streams.filter(::isSupplementalStream)
@@ -2361,7 +2383,8 @@ class DetailsViewModel @Inject constructor(
                         originalLanguage = originalLanguage,
                         title = item?.title ?: "",
                         animeQueryOverride = animeQueryOverride,
-                        airDate = episodeAirDate
+                        airDate = episodeAirDate,
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         if (!isCurrentRequest()) return@collect
                         val existingVod = _uiState.value.streams.filter(::isSupplementalStream)
@@ -3191,6 +3214,8 @@ class DetailsViewModel @Inject constructor(
     private data class ExternalIds(val imdbId: String?, val tvdbId: Int?)
 
     private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): ExternalIds {
+        // A native addon item's own id stands in for the IMDb id: streams are requested by it.
+        if (mediaId < 0) return ExternalIds(mediaRepository.getCachedImdbId(mediaType, mediaId), null)
         return try {
             val ids = when (mediaType) {
                 MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY)

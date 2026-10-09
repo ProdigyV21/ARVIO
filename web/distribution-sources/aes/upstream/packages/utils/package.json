@@ -1,0 +1,19 @@
+{
+  "name": "@cryptography/utils",
+  "description": "Shared internal utils for external packages",
+  "version": "1.0.0",
+  "author": "Konstantin Darutkin <kdarutkin@gmail.com>",
+  "dependencies": {},
+  "devDependencies": {},
+  "license": "MIT",
+  "main": "dist/cjs/utils.min.js",
+  "module": "dist/es/utils.js",
+  "types": "dist/typings/index.d.ts",
+  "scripts": {
+    "build": "rm -rf dist/* && rollup -c"
+  },
+  "files": [
+    "dist/*",
+    "package.json"
+  ]
+}

@@ -76,6 +76,7 @@ function harness(options = {}) {
     cwCacheKeyFor: (profile) => `cw:${profile}`, watchlistCacheKeyFor: (profile) => `watchlist:${profile}`,
     readCachedList: (key) => cache.get(key) ?? [], saveCachedList: (key, items) => cache.set(key, items), removeStored: (key) => cache.delete(key),
     loadLocalAddons: () => [], normalizeAddons: (items) => items, saveLocalAddons: noop,
+    flushWatchlistOutbox: async () => {}, applyPendingWatchlist: (_auth, _profile, items) => items,
     flushAddonOutbox: async () => {}, hasPendingAddons: () => false, pendingAddonSnapshot: () => undefined,
     flushSettingsOutbox: async () => {}, hasPendingSettings: () => false,
     mergeCatalogs: (items) => items, syncClient: () => client,

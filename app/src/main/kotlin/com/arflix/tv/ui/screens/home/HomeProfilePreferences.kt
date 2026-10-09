@@ -31,7 +31,7 @@ internal fun readHomeProfilePreferences(
         trailerAutoPlay = preferences[booleanPreferencesKey("${prefix}trailer_auto_play")] ?: true,
         trailerSoundEnabled = preferences[booleanPreferencesKey("${prefix}trailer_sound_enabled")] ?: false,
         trailerDelaySeconds = preferences[stringPreferencesKey("${prefix}trailer_delay_seconds")]
-            ?.toIntOrNull() ?: 2,
+            ?.toIntOrNull() ?: 1,
         trailerInCards = preferences[booleanPreferencesKey("${prefix}trailer_in_cards")] ?: true,
         showBudget = preferences[booleanPreferencesKey("${prefix}show_budget_on_home")] ?: true,
         iptvFavoritesOnHome = preferences[

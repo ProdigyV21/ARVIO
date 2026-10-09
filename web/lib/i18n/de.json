@@ -6,5 +6,6 @@
   "Dropped": "Abgebrochen",
   "Channel categories": "Kanal-Kategorien",
   "Silo: use the Jellyfin-compatible address. Optional profile: username#ProfileName. Protected profile: password#PIN.": "Silo: Verwende die Jellyfin-kompatible Adresse. Optionales Profil: username#ProfileName. Geschütztes Profil: password#PIN.",
-  "None of your enabled addons provide playback sources.": "Keines deiner aktivierten Add-ons stellt Wiedergabequellen bereit."
+  "None of your enabled addons provide playback sources.": "Keines deiner aktivierten Add-ons stellt Wiedergabequellen bereit.",
+  "Add movies and series to this watchlist to see their releases here.": "Füge Filme und Serien zu dieser Merkliste hinzu, um ihre Veröffentlichungstermine hier zu sehen."
 }

@@ -140,7 +140,6 @@ fun NextEpisodeOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(overlayFocusRequester)
-                .focusable()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (event.key) {
@@ -166,7 +165,8 @@ fun NextEpisodeOverlay(
                             else -> false
                         }
                     } else false
-                },
+                }
+                .focusable(),
             contentAlignment = Alignment.BottomEnd
         ) {
             // Card positioned at bottom right

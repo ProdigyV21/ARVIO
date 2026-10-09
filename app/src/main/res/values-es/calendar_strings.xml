@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_calendar">Calendario</string>
+    <string name="calendar_all_watchlists">Todas las listas</string>
+    <string name="calendar_arvio_watchlist">Lista de ARVIO</string>
+    <string name="calendar_today">Hoy</string>
+    <string name="calendar_local_time">Hora local</string>
+    <string name="calendar_time_tba">Hora por confirmar</string>
+    <string name="calendar_next_month">Mes siguiente</string>
+    <string name="calendar_previous_month">Mes anterior</string>
+    <string name="calendar_release">estreno</string>
+    <string name="calendar_releases">estrenos</string>
+    <string name="calendar_more">más</string>
+    <string name="calendar_navigate_days">Cambiar de día</string>
+    <string name="calendar_open_day">Abrir día</string>
+    <string name="calendar_partial">Algunas fuentes no están disponibles</string>
+    <string name="calendar_loading">Buscando tus estrenos…</string>
+    <string name="calendar_unavailable">Calendario no disponible</string>
+    <string name="calendar_empty_watchlist">Tu lista en el calendario</string>
+    <string name="calendar_empty_day">No hay estrenos este día</string>
+    <string name="calendar_add_watchlist">Añade películas y series a tu lista de ARVIO. No necesitas una cuenta de seguimiento.</string>
+    <string name="calendar_choose_day">Elige otro día o lista para explorar los próximos estrenos.</string>
+    <string name="calendar_cinema">Cine</string>
+    <string name="calendar_digital">Digital</string>
+    <string name="calendar_physical">Físico</string>
+    <string name="calendar_next_release">Próximo estreno</string>
+    <string name="calendar_partial_details">Algunos detalles de los estrenos no están disponibles</string>
+    <string name="calendar_refresh">Actualizar calendario</string>
+</resources>

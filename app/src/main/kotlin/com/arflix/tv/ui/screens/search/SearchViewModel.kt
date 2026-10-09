@@ -6,6 +6,7 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.repository.MediaRepository
+import com.arflix.tv.data.repository.MediaSearchResults
 import com.arflix.tv.data.repository.PersonMediaSearchResult
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.util.ContentRating
@@ -17,6 +18,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -812,8 +814,19 @@ class SearchViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = it.results.isEmpty(), error = null, isAiSearch = false) }
             try {
+                val nativeResults = if (cachedSuggestionQuery != query || cachedPeopleQuery != query) {
+                    async(Dispatchers.IO) { mediaRepository.searchNativeAddonItems(query) }
+                } else null
                 if (cachedSuggestionQuery != query || cachedPeopleQuery != query) {
-                    val response = withContext(Dispatchers.IO) { mediaRepository.searchWithPeople(query) }
+                    val response = try {
+                        withContext(Dispatchers.IO) { mediaRepository.searchWithPeople(query) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        val native = nativeResults?.await().orEmpty()
+                        if (native.isEmpty()) throw e
+                        MediaSearchResults(native, emptyList())
+                    }
                     val sorted = withContext(Dispatchers.Default) { rankSearchResults(query, response.items) }
                     cachedSuggestionQuery = query
                     cachedSuggestionResults = sorted
@@ -835,6 +848,18 @@ class SearchViewModel @Inject constructor(
                 val slots = Semaphore(3)
                 val top = (sorted + peopleRows.flatMap { it.items }).distinctBy { it.mediaType to it.id }.take(12)
                 coroutineScope {
+                    launch {
+                        val native = nativeResults?.await().orEmpty()
+                        if (native.isEmpty()) return@launch
+                        coroutineContext.ensureActive()
+                        val merged = rankSearchResults(query,
+                            (cachedSuggestionResults + native).distinctBy { it.mediaType to it.id })
+                        cachedSuggestionResults = merged
+                        val markedMerged = markWatched(merged, watchedMatcher())
+                        _uiState.update { it.copy(isLoading = false, results = markedMerged,
+                            movieResults = markedMerged.filter { item -> item.mediaType == MediaType.MOVIE },
+                            tvResults = markedMerged.filter { item -> item.mediaType == MediaType.TV }) }
+                    }
                     launch {
                         for (person in peopleNeedingCredits) {
                             val credits = try {

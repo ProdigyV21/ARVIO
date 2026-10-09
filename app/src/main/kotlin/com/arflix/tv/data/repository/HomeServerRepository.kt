@@ -1271,7 +1271,7 @@ class HomeServerRepository @Inject constructor(
                 if (message != null) error(context.getString(message))
             }
             if (!response.isSuccessful) {
-                error(context.getString(R.string.homeserver_signin_failed_code, response.code))
+                throw HomeServerRequestException(response.code, context.getString(R.string.homeserver_signin_failed_code, response.code))
             }
             return JsonParser().parse(body).asJsonObjectOrNull() ?: JsonObject()
         }
@@ -2316,13 +2316,21 @@ class HomeServerRepository @Inject constructor(
                     ),
                     JsonObject(),
                     connection
-                ).mediaSources()
+                ).let { info ->
+                    when {
+                        info.string("ErrorCode").isNotBlank() -> emptyList()
+                        info.get("MediaSources")?.isJsonArray == true ->
+                            info.mediaSources().map { it.copy(playSessionId = info.string("PlaySessionId")) }
+                        else -> null // Legacy servers without PlaybackInfo can use catalogue metadata.
+                    }
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                emptyList()
+                if (e is HomeServerRequestException && e.statusCode in listOf(401, 403)) emptyList() else null
             }
-            (playbackInfoSources + item.mediaSources)
-                .distinctBy { it.identityKey() }
+            // PlaybackInfo is authoritative: catalogue entries can describe stale or
+            // disallowed versions and must not override a negotiated playback decision.
+            (playbackInfoSources ?: item.mediaSources).distinctBy { it.identityKey() }
         }
         return sources
             .flatMap { mediaSource ->
@@ -2382,7 +2390,7 @@ class HomeServerRepository @Inject constructor(
                 cached = true,
                 filename = name.ifBlank { item.name },
                 videoSize = sizeBytes.takeIf { it > 0L },
-                proxyHeaders = ProxyHeaders(request = playbackHeaders(connection))
+                proxyHeaders = ProxyHeaders(request = headersForPlayback(connection, url))
             )
         )
     }
@@ -2443,19 +2451,18 @@ class HomeServerRepository @Inject constructor(
             }
             return null
         }
-        path.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }?.let { return it }
-        transcodingUrl.takeIf { it.isNotBlank() }?.let { raw ->
-            val absolute = absoluteUrl(connection.serverUrl, raw)
-            val parsed = absolute.toHttpUrlOrNull() ?: return absolute
-            return parsed.newBuilder()
-                .apply {
-                    setQueryParameter("ApiKey", connection.accessToken)
-                    if (parsed.queryParameter("api_key").isNullOrBlank()) {
-                        addQueryParameter("api_key", connection.accessToken)
-                    }
-                }
-                .build()
-                .toString()
+        // Path is a storage location, not the negotiated playback route. Silo can
+        // advertise both direct and HLS URLs even when transcoding is restricted.
+        // Preserve its direct/remux choice (including Static=false and route keys).
+        if (directStreamUrl.isNotBlank() && (supportsDirectPlay != false || supportsDirectStream != false)) {
+            return negotiatedPlaybackUrl(connection, directStreamUrl)
+        }
+        if (supportsDirectPlay != true && transcodingUrl.isNotBlank() && supportsTranscoding != false) {
+            return negotiatedPlaybackUrl(connection, transcodingUrl)
+        }
+        if (supportsDirectPlay == false && supportsDirectStream != true) return null
+        if (supportsDirectPlay == null) {
+            path.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }?.let { return it }
         }
 
         val extension = streamExtension()
@@ -2464,14 +2471,60 @@ class HomeServerRepository @Inject constructor(
             connection.serverUrl,
             streamPath,
             mapOf(
-                "Static" to "true",
+                "Static" to (supportsDirectPlay != false).toString(),
                 "MediaSourceId" to id,
+                "PlaySessionId" to playSessionId,
                 "DeviceId" to deviceId(),
                 "ApiKey" to connection.accessToken,
                 "api_key" to connection.accessToken,
                 "Tag" to eTag.takeIf { it.isNotBlank() }
             )
         )
+    }
+
+    private fun HomeServerMediaSource.negotiatedPlaybackUrl(connection: HomeServerConnection, raw: String): String? {
+        val base = connection.serverUrl.toHttpUrlOrNull() ?: return null
+        val basePath = base.encodedPath.trimEnd('/') + "/"
+        val parsed = when {
+            raw.startsWith("http://", true) || raw.startsWith("https://", true) || raw.startsWith("//") -> base.resolve(raw)
+            raw.startsWith(basePath) -> base.resolve(raw)
+            else -> base.newBuilder().encodedPath(basePath).build().resolve(raw.trimStart('/'))
+        } ?: return null
+        // External signed delivery URLs keep their own credentials. Never append
+        // the user's home-server token to a different origin.
+        if (!sameOrigin(base, parsed)) return parsed.toString()
+        return parsed.newBuilder().apply {
+            fun setParam(name: String, value: String, onlyIfMissing: Boolean = false) {
+                if (value.isBlank()) return
+                val matching = parsed.queryParameterNames.filter { it.equals(name, ignoreCase = true) }
+                if (onlyIfMissing && matching.any { !parsed.queryParameter(it).isNullOrBlank() }) return
+                matching.forEach(::removeAllQueryParameters)
+                addQueryParameter(name, value)
+            }
+            setParam("ApiKey", connection.accessToken)
+            setParam("api_key", connection.accessToken)
+            setParam("PlaySessionId", playSessionId, onlyIfMissing = true)
+            setParam("MediaSourceId", id, onlyIfMissing = true)
+            setParam("DeviceId", deviceId(), onlyIfMissing = true)
+        }.build().toString()
+    }
+
+    private fun sameOrigin(first: okhttp3.HttpUrl, second: okhttp3.HttpUrl): Boolean =
+        first.scheme == second.scheme && first.host == second.host && first.port == second.port
+
+    private fun HomeServerMediaSource.headersForPlayback(connection: HomeServerConnection, url: String): Map<String, String> {
+        val base = connection.serverUrl.toHttpUrlOrNull()
+        val target = url.toHttpUrlOrNull()
+        val headers = if (base != null && target != null && sameOrigin(base, target)) {
+            playbackHeaders(connection).toMutableMap()
+        } else {
+            mutableMapOf("User-Agent" to "ARVIO/${BuildConfig.VERSION_NAME}")
+        }
+        requiredHttpHeaders.forEach { (name, value) ->
+            headers.keys.filter { it.equals(name, true) }.forEach(headers::remove)
+            headers[name] = value
+        }
+        return headers
     }
 
     private fun plexUrlWithToken(connection: HomeServerConnection, rawUrl: String): String {
@@ -2754,6 +2807,13 @@ class HomeServerRepository @Inject constructor(
             eTag = string("ETag").ifBlank { string("Etag") },
             sizeBytes = long("Size") ?: long("RunTimeTicks")?.let { 0L } ?: 0L,
             transcodingUrl = string("TranscodingUrl"),
+            directStreamUrl = string("DirectStreamUrl"),
+            supportsDirectPlay = boolean("SupportsDirectPlay"),
+            supportsDirectStream = boolean("SupportsDirectStream"),
+            supportsTranscoding = boolean("SupportsTranscoding"),
+            requiredHttpHeaders = obj("RequiredHttpHeaders")?.entrySet()?.mapNotNull { (key, value) ->
+                value.asStringOrNull()?.let { key to it }
+            }?.toMap().orEmpty(),
             videoWidth = videoStream?.int("Width") ?: 0,
             previewDurationMs = (long("RunTimeTicks") ?: 0L) / 10_000L,
             videoHeight = videoStream?.int("Height") ?: 0
@@ -2899,6 +2959,12 @@ class HomeServerRepository @Inject constructor(
         val transcodingUrl: String,
         val videoWidth: Int,
         val videoHeight: Int,
+        val directStreamUrl: String = "",
+        val playSessionId: String = "",
+        val supportsDirectPlay: Boolean? = null,
+        val supportsDirectStream: Boolean? = null,
+        val supportsTranscoding: Boolean? = null,
+        val requiredHttpHeaders: Map<String, String> = emptyMap(),
         val variantKey: String = "",
         val videoCodec: String = "",
         val videoProfile: String = "",

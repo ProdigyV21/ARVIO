@@ -3,15 +3,17 @@ import { resolveStalkerChannel } from "./stalker";
 import { browserAutoplayCandidates } from "./browserAutoplay";
 import { recordBrowserPlaybackFailure } from "./streamCompatibility";
 import { queueAddons, hasPendingAddons, flushAddonOutbox, pendingAddonSnapshot } from "./addonOutbox";
+import { applyPendingWatchlist, prepareWatchlistChange, queueWatchlistChange, flushWatchlistOutbox } from "./watchlistOutbox";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageProvider } from "./i18n";
 import { shouldRefreshAutomatically } from "./automaticRefresh";
 import { getStreams, getStreamsProgressive, installAddon as installAddonManifest, loadLocalAddons, normalizeAddons, saveLocalAddons } from "./addons";
+import { isAddonNative } from "./addonNative";
 import { AuthClient, SESSION_KEY, decodeJwtPayload } from "./auth";
-import { config, getAuthPortalUrl } from "./config";
+import { config, getAuthPortalUrl, isDisabledTelegramSource, TELEGRAM_DISABLED_MESSAGE } from "./config";
 import { defaultCatalogs, mergeCatalogs } from "./catalogs";
-import { getContinueWatching, isLiveStreamOrSportsItem, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudProfiles, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, removeContinueWatchingProgress, saveCloudAddons, saveCloudProfiles, saveCloudSettings, saveCloudTrackingSelection, saveCloudWatchlist, saveWatchedState } from "./cloud";
+import { getContinueWatching, isLiveStreamOrSportsItem, pullCloudContinueWatchingDismissals, pullCloudPayload, pullCloudProfiles, pullCloudTrackingSelection, pullCloudWatchedKeys, pullCloudWatchlist, removeContinueWatchingProgress, saveCloudAddons, saveCloudProfiles, saveCloudSettings, saveCloudTrackingSelection, saveWatchedState } from "./cloud";
 import { completionTimes, includeIptvContinueWatching, isUnwatchedContinueWatching, mergePartialContinueWatching, mergeTrackerContinueWatching, pruneCompletedResume, traktProgressActivityKey } from "./continueWatching";
 import { createEpisodeValidator, episodeAvailabilityKey } from "./episodeAvailability";
 import { HttpError } from "./http";
@@ -23,13 +25,15 @@ import { playbackPlan } from "./streamCompatibility";
 import { prepareBrowserStream } from "./prepareBrowserStream";
 import { reportHomeServerPlayback } from "./homeServerPlayback";
 import { loadHomeServerRows } from "./homeserver";
-import { buildXtreamCatchupUrl, iptvPlaylistSignature, loadIptvChannelIdentities, loadIptvGuideForChannels, loadIptvSnapshot, loadPlaylists, savePlaylists } from "./iptv";
+import { accessibleChannels, buildXtreamCatchupUrl, iptvPlaylistSignature, loadIptvChannelIdentities, loadIptvGuideForChannels, loadIptvSnapshot, loadPlaylists, savePlaylists } from "./iptv";
+import { cachedFavoriteChannels, favoriteCopyIsStale, resolveFavoriteChannels, saveFavoriteChannels } from "./favoriteTv";
 import { isCurrentIptvSnapshot, recordTvPlayback } from "./iptvSession";
 import { dedupeMedia, historyToItem, hydrateTraktItems, traktItemToMedia, traktPlaybackToMedia, traktUpNextToMedia } from "./mappers";
 import { loadStored, purgeLegacyStorage, removeStored, saveStored } from "./storage";
 import { getDetails, getSeasonEpisodes, loadCatalog, searchMedia, resolveTmdbId, tmdb } from "./tmdb";
 import { verifyProfilePin } from "./profilePin";
 import { hydratedProfileId } from "./profiles";
+import { partnerLoginRedirect } from "./partnerLinks";
 import { flushSettingsOutbox, hasPendingSettings, queueSettings, settingsWithPendingEdits } from "./settingsOutbox";
 import type { MetadataProviderId, ProviderPriorityConfig } from "./metadata/types";
 import { TraktClient, type TraktDeviceCode } from "./trakt";
@@ -219,6 +223,7 @@ export const defaultSettings: AppSettings = {
   oledBlack: false,
   clockFormat: "24h",
   showBudget: true,
+  iptvFavoritesOnHome: true,
   smoothScrolling: true,
   spoilerBlur: false,
   accentColor: "arctic",
@@ -230,6 +235,7 @@ export const defaultSettings: AppSettings = {
   cardDensity: "comfortable",
   catalogs: defaultCatalogs,
   hiddenCatalogIds: [],
+  hiddenAddonCatalogIds: [],
   hiddenHomeServerCatalogIds: [],
   disabledAddonIds: [],
   homeServers: [],
@@ -469,8 +475,8 @@ async function hydrateContinueWatchingItems(items: MediaItem[]) {
 // tracker progress (which may use a different episode ordering).
 function nextLocalEpisode(item: MediaItem): MediaItem | null {
   const { seasonNumber, episodeNumber } = item;
-  if (!seasonNumber || !episodeNumber) return item;
-  const seasons = (item.seasons ?? []).filter((season) => season.seasonNumber > 0);
+  if (seasonNumber == null || episodeNumber == null) return item;
+  const seasons = (item.seasons ?? []).filter((season) => season.seasonNumber >= 0);
   const current = seasons.find((season) => season.seasonNumber === seasonNumber);
   if (!current?.episodeCount || episodeNumber <= current.episodeCount) return item;
   const next = seasons.filter((season) => season.seasonNumber > seasonNumber && (season.episodeCount ?? 0) > 0)
@@ -484,6 +490,7 @@ function sameSettings(a: AppSettings, b: AppSettings) {
 
 export interface AppStore {
   view: AppView;
+  partnerLinkReady: boolean;
   cloudLoginRequired: boolean;
   profiles: Profile[];
   activeProfile: Profile | null;
@@ -539,8 +546,10 @@ export interface AppStore {
   setToast: (value: string | null) => void;
 
   refreshData: (profileIdOverride?: string | null) => Promise<void>;
-  refreshIptv: () => Promise<void>;
+  refreshIptv: (options?: { quiet?: boolean }) => Promise<void>;
   loadIptvGuide: (channels: IptvChannel[]) => Promise<void>;
+  /** The Home "Favorite TV" row's channels, in the user's favorite order. */
+  favoriteTvChannels: IptvChannel[];
   openDetails: (item: MediaItem) => Promise<void>;
   closeDetails: () => void;
   playStream: (stream: StreamSource, options?: { forceTranscode?: boolean; forceRemux?: boolean; forceBrowser?: boolean }) => void;
@@ -616,7 +625,7 @@ export function AppProvider({
   // and only appeared after a navigation round-trip remounted the screen.
   const initialProfileId = loadStored<string | null>(ACTIVE_PROFILE_KEY, null);
   const initialCw = readCachedList(cwCacheKeyFor(initialProfileId));
-  const initialWatchlist = readCachedList(watchlistCacheKeyFor(initialProfileId));
+  const initialWatchlist = applyPendingWatchlist(authClient, initialProfileId, readCachedList(watchlistCacheKeyFor(initialProfileId)));
   const [categories, setCategories] = useState<Category[]>(
     initialCw.length ? [{ id: "continue_watching", title: "Continue Watching", items: initialCw }] : []
   );
@@ -624,6 +633,7 @@ export function AppProvider({
   const [homeServerRows, setHomeServerRows] = useState<Category[]>([]);
   const [continueWatching, setContinueWatching] = useState<MediaItem[]>(initialCw);
   const [watchlist, setWatchlist] = useState<MediaItem[]>(initialWatchlist);
+  const watchlistMutationRef = useRef(new Map<string, number>());
   // Where the on-screen CW list came from, so later paints know whether they may
   // replace it: cache seed < fast paint (playback-only) < fresh enriched list.
   const cwSourceRef = useRef<"none" | "seed" | "fast" | "fresh">(initialCw.length ? "seed" : "none");
@@ -656,7 +666,7 @@ export function AppProvider({
       ...defaultSettings,
       ...stored,
       iptvPlaylists: loadPlaylists(),
-      catalogs: mergeCatalogs(stored.catalogs, stored.hiddenCatalogIds)
+      catalogs: mergeCatalogs(stored.catalogs, stored.hiddenCatalogIds, stored.hiddenAddonCatalogIds)
     };
   });
   const [auth, setAuth] = useState(() => authClient.session);
@@ -739,13 +749,13 @@ export function AppProvider({
   }, [settings]);
 
   useEffect(() => {
-    const effectiveCatalogs = mergeCatalogs(settings.catalogs, settings.hiddenCatalogIds);
+    const effectiveCatalogs = mergeCatalogs(settings.catalogs, settings.hiddenCatalogIds, settings.hiddenAddonCatalogIds);
     setCatalogConfigs(effectiveCatalogs.filter((catalog) => catalog.enabled && catalog.sourceType !== "home-server"));
-  }, [settings.catalogs, settings.hiddenCatalogIds]);
+  }, [settings.catalogs, settings.hiddenCatalogIds, settings.hiddenAddonCatalogIds]);
 
   useEffect(() => {
     let cancelled = false;
-    const effectiveCatalogs = mergeCatalogs(settings.catalogs, settings.hiddenCatalogIds);
+    const effectiveCatalogs = mergeCatalogs(settings.catalogs, settings.hiddenCatalogIds, settings.hiddenAddonCatalogIds);
     void loadHomeServerRows(
       settings.homeServers,
       settings.hiddenHomeServerCatalogIds,
@@ -758,7 +768,7 @@ export function AppProvider({
     return () => {
       cancelled = true;
     };
-  }, [settings.catalogs, settings.hiddenCatalogIds, settings.hiddenHomeServerCatalogIds, settings.homeServers]);
+  }, [settings.catalogs, settings.hiddenCatalogIds, settings.hiddenAddonCatalogIds, settings.hiddenHomeServerCatalogIds, settings.homeServers]);
 
   const deviceCodeRef = useRef(deviceCode);
   useEffect(() => {
@@ -774,9 +784,10 @@ export function AppProvider({
   // service worker so a connected user's sources resolve and play after a
   // reload — the browser equivalent of Android re-opening its TDLib database.
   useEffect(() => {
+    if (!config.telegramEnabled) return;
     void (async () => {
       try {
-        const tg = await import("./telegram");
+        const tg = await import("@/lib/telegram");
         await tg.restoreSession();
         // Only pre-warm the streaming service worker for users who are actually
         // connected — no need to register a worker for accounts that never link
@@ -864,7 +875,7 @@ export function AppProvider({
         }
         // Same instant-paint for the watchlist grid — without this it sits blank
         // until ~15 Trakt calls round-trip.
-        const cachedWatchlist = readCachedList(watchlistCacheKey);
+        const cachedWatchlist = applyPendingWatchlist(authClient, profileId, readCachedList(watchlistCacheKey));
         if (cachedWatchlist.length) {
           setWatchlist((current) => current.length ? current : cachedWatchlist);
         }
@@ -873,6 +884,7 @@ export function AppProvider({
       }
       try {
       await flushAddonOutbox(authClient).catch(() => undefined);
+      await flushWatchlistOutbox(authClient).catch(() => undefined);
       const localAddons = loadLocalAddons();
       await flushSettingsOutbox(authClient).catch(() => setSettingsSyncState("error"));
       const cloud = authClient.session && !hasPendingSettings(authClient, profileId) ? await pullCloudPayload(authClient, profileId).catch(() => null) : null;
@@ -901,7 +913,7 @@ export function AppProvider({
             }
           } else {
             traktClient.setToken(cloudTracking.traktToken);
-            simklClient.setToken(cloudTracking.simklToken);
+            if (!simklClient.token?.refresh_token) simklClient.setToken(cloudTracking.simklToken);
             mdblistClient.setKey(cloudTracking.mdbListApiKey);
             if (cloudTracking.mdbListAccessToken) {
               mdblistClient.setToken({
@@ -930,7 +942,8 @@ export function AppProvider({
           ...defaultSettings,
           ...currentSettings,
           ...cloud.settings,
-          catalogs: mergeCatalogs(cloud.settings?.catalogs ?? currentSettings.catalogs, cloud.settings?.hiddenCatalogIds ?? currentSettings.hiddenCatalogIds),
+          catalogs: mergeCatalogs(cloud.settings?.catalogs ?? currentSettings.catalogs, cloud.settings?.hiddenCatalogIds ?? currentSettings.hiddenCatalogIds,
+            cloud.settings?.hiddenAddonCatalogIds ?? currentSettings.hiddenAddonCatalogIds),
           iptvPlaylists: cloud.settings?.iptvPlaylists ?? currentSettings.iptvPlaylists,
           favoriteChannelIds: cloud.settings?.favoriteChannelIds ?? currentSettings.favoriteChannelIds,
           iptvTvSession: cloud.settings?.iptvTvSession ?? currentSettings.iptvTvSession,
@@ -979,7 +992,7 @@ export function AppProvider({
         void saveCloudAddons(authClient, source, profileId).catch(() => undefined);
       }
 
-      const effectiveCatalogs = mergeCatalogs(effectiveSettings.catalogs, effectiveSettings.hiddenCatalogIds);
+      const effectiveCatalogs = mergeCatalogs(effectiveSettings.catalogs, effectiveSettings.hiddenCatalogIds, effectiveSettings.hiddenAddonCatalogIds);
       setCatalogConfigs(effectiveCatalogs.filter((catalog) => catalog.enabled && catalog.sourceType !== "home-server"));
 
       const client = syncClient();
@@ -1027,14 +1040,15 @@ export function AppProvider({
         : cwOnlyTrakt ? cwShowsRead
         : traktClient.watched("shows").catch(() => failedRead("cw-watched"));
       const watchlistReady = ["trakt", "simkl", "mdblist"].some((provider) => readsFrom("watchlist", provider as "trakt" | "simkl" | "mdblist"));
+      const cloudWatchedRead = authClient.session ? pullCloudWatchedKeys(authClient, profileId).catch(() => new Set<string>()) : Promise.resolve(new Set<string>());
       const [historyRows, traktRows, playbackRows, watchedMoviesRows, watchedShowsRows, cloudWatchlistRows, cloudWatchedKeys, cloudDismissals, hiddenShowIds, cwMovies, cwShows] = await Promise.all([
         authClient.session ? getContinueWatching(authClient, profileId, addonState).catch(() => []) : Promise.resolve([]),
         traktReady ? client.watchlist().catch(() => failedRead("watchlist")) : Promise.resolve([]),
-        traktReady ? client.playback().catch(() => failedRead("playback")) : Promise.resolve([]),
+        traktReady ? cloudWatchedRead.then(keys => client.playback(keys)).catch(() => failedRead("playback")) : Promise.resolve([]),
         watchedMoviesRead,
         watchedShowsRead,
         authClient.session ? pullCloudWatchlist(authClient, profileId).catch(() => []) : Promise.resolve([]),
-        authClient.session ? pullCloudWatchedKeys(authClient, profileId).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
+        cloudWatchedRead,
         authClient.session ? pullCloudContinueWatchingDismissals(authClient, profileId).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
         // Only Trakt has a hidden-from-progress concept; MDBList reads return an
         // empty set so the filters below are no-ops for it.
@@ -1083,10 +1097,11 @@ export function AppProvider({
         ? dedupeMedia(traktRows.map(traktItemToMedia))
         : cloudWatchlistRows;
       if (fastWatchlistSource.length) {
-        void hydrateTraktItems(fastWatchlistSource).then((hydrated) => {
-          if (hydrated.length && isCurrent()) {
-            setWatchlist((current) => current.length ? current : hydrated);
-            saveCachedList(watchlistCacheKey, hydrated, 60);
+        void hydrateTraktItems(applyPendingWatchlist(authClient, profileId, fastWatchlistSource)).then((hydrated) => {
+          const visibleWatchlist = applyPendingWatchlist(authClient, profileId, hydrated);
+          if (visibleWatchlist.length && isCurrent()) {
+            setWatchlist((current) => current.length ? current : visibleWatchlist);
+            saveCachedList(watchlistCacheKey, visibleWatchlist, 60);
           }
         }).catch(() => undefined);
       }
@@ -1195,10 +1210,14 @@ export function AppProvider({
       const watchlistSource = watchlistReady && !readFailures.has("watchlist")
         ? dedupeMedia(traktRows.map(traktItemToMedia))
         : cloudWatchlistRows;
-      const hydratedWatchlist = await hydrateTraktItems(watchlistSource);
+      const hydratedWatchlist = applyPendingWatchlist(authClient, profileId,
+        await hydrateTraktItems(applyPendingWatchlist(authClient, profileId, watchlistSource)));
       if (!readFailures.has("watchlist") && isCurrent()) {
         setWatchlist(hydratedWatchlist);
         saveCachedList(watchlistCacheKey, hydratedWatchlist, 60);
+      } else if (isCurrent()) {
+        setWatchlist(current => applyPendingWatchlist(authClient, profileId, current));
+        saveCachedList(watchlistCacheKey, applyPendingWatchlist(authClient, profileId, readCachedList(watchlistCacheKey)), 60);
       }
       } catch (error) {
         if (isCurrent()) {
@@ -1216,7 +1235,9 @@ export function AppProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProfileId]);
 
-  const refreshIptv = useCallback(async () => {
+  // `quiet` is the Home background load for the Favorite TV row: no status text, no
+  // error toast — Live TV reports playlist problems when the user opens it.
+  const refreshIptv = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
     const currentSettings = settingsRef.current;
     const profileId = activeProfileIdRef.current;
     const account = authClient.session?.userId;
@@ -1225,7 +1246,7 @@ export function AppProvider({
     if (iptvRefresh.current?.key === key) return iptvRefresh.current.promise;
     const isCurrent = () => activeProfileIdRef.current === profileId && authClient.session?.userId === account && iptvPlaylistSignature(settingsRef.current.iptvPlaylists) + (settingsRef.current.iptvStalkerUrl ? JSON.stringify([settingsRef.current.iptvStalkerUrl, settingsRef.current.iptvStalkerMac]) : "") === signature;
     const run = (async () => {
-    setBusy("Loading TV");
+    if (!quiet) setBusy("Loading TV");
     try {
       const loadedIptv = await loadIptvSnapshot(
         currentSettings.iptvPlaylists,
@@ -1239,9 +1260,9 @@ export function AppProvider({
       // on re-entry instead of rebuilding ~139k channels every visit.
       if (isCurrent()) setIptvSnapshot({ ...loadedIptv, signature, scopeKey: `${account ?? "local"}:${profileId ?? "local"}` });
     } catch (error) {
-      if (isCurrent()) setToast(error instanceof Error ? error.message : "Failed to load Live TV");
+      if (isCurrent() && !quiet) setToast(error instanceof Error ? error.message : "Failed to load Live TV");
     } finally {
-      if (isCurrent()) setBusy("");
+      if (isCurrent() && !quiet) setBusy("");
     }
     })();
     iptvRefresh.current = { key, promise: run };
@@ -1262,6 +1283,39 @@ export function AppProvider({
     });
     return () => { cancelled = true; };
   }, [iptvSnapshot.allChannels, iptvSnapshot.channels, iptvSnapshot.signature, iptvSnapshot.identitiesLoaded, settings.iptvPlaylists, settings.iptvStalkerUrl, settings.iptvStalkerMac, settings.customUserAgent, activeProfileId]);
+
+  // Home "Favorite TV" row (see favoriteTv.ts): from the loaded playlist when Live TV
+  // has one, otherwise from the copy the last loaded playlist left behind.
+  const iptvScopeKey = `${auth?.userId ?? "local"}:${activeProfileId ?? "local"}`;
+  const iptvSourceSignature = iptvPlaylistSignature(settings.iptvPlaylists) + (settings.iptvStalkerUrl ? JSON.stringify([settings.iptvStalkerUrl, settings.iptvStalkerMac]) : "");
+  const currentIptvChannels = isCurrentIptvSnapshot(iptvSnapshot, iptvScopeKey, iptvSourceSignature) ? iptvSnapshot.allChannels ?? iptvSnapshot.channels : null;
+  const favoriteTvChannels = useMemo(() => {
+    const favorites = settings.favoriteChannelIds ?? [];
+    if (!settings.iptvFavoritesOnHome || !favorites.length) return [];
+    const source = currentIptvChannels?.length ? currentIptvChannels : cachedFavoriteChannels(iptvScopeKey, iptvSourceSignature)?.channels ?? [];
+    return resolveFavoriteChannels(favorites, accessibleChannels(source, [...(settings.hiddenGroupIds ?? []), ...(settings.lockedIptvGroupIds ?? [])]));
+  }, [currentIptvChannels, iptvScopeKey, iptvSourceSignature, settings.favoriteChannelIds, settings.iptvFavoritesOnHome, settings.hiddenGroupIds, settings.lockedIptvGroupIds]);
+  useEffect(() => {
+    // An empty (cold or failed) playlist says nothing about the favorites: keep the copy.
+    if (!currentIptvChannels?.length) return;
+    const favorites = settings.favoriteChannelIds ?? [];
+    saveFavoriteChannels(iptvScopeKey, iptvSourceSignature, favorites, resolveFavoriteChannels(favorites, currentIptvChannels));
+  }, [currentIptvChannels, iptvScopeKey, iptvSourceSignature, settings.favoriteChannelIds]);
+  // Without a usable copy, load the playlist once in the background so the row can appear.
+  const favoriteTvLoadKey = useRef("");
+  useEffect(() => {
+    const favorites = settings.favoriteChannelIds ?? [];
+    if (view !== "app" || section !== "home" || !settings.iptvFavoritesOnHome || !favorites.length || currentIptvChannels?.length) return;
+    if (!settings.iptvPlaylists.some((playlist) => playlist.enabled && playlist.m3uUrl.trim()) && !settings.iptvStalkerUrl) return;
+    const key = `${iptvScopeKey}:${iptvSourceSignature}`;
+    if (favoriteTvLoadKey.current === key || !favoriteCopyIsStale(cachedFavoriteChannels(iptvScopeKey, iptvSourceSignature), favorites)) return;
+    // Home's own rows go first.
+    const timer = setTimeout(() => {
+      favoriteTvLoadKey.current = key;
+      void refreshIptv({ quiet: true });
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [view, section, currentIptvChannels, iptvScopeKey, iptvSourceSignature, refreshIptv, settings.favoriteChannelIds, settings.iptvFavoritesOnHome, settings.iptvPlaylists, settings.iptvStalkerUrl]);
 
   const loadIptvGuide = useCallback(async (channels: IptvChannel[]) => {
     if (!channels.length) return;
@@ -1447,6 +1501,7 @@ export function AppProvider({
   useEffect(() => {
     const retry = () => {
       if (hasPendingAddons(authClient)) void flushAddonOutbox(authClient).catch(() => undefined);
+      void flushWatchlistOutbox(authClient).catch(() => undefined);
       if (!hasPendingSettings(authClient)) return;
       setSettingsSyncState("pending");
       void flushSettingsOutbox(authClient).then(() => setSettingsSyncState(hasPendingSettings(authClient) ? "pending" : "saved")).catch(() => setSettingsSyncState("error"));
@@ -1580,7 +1635,7 @@ export function AppProvider({
       try {
         const { findMovieVodSources, findEpisodeVodSource } = await import("./xtreamVod");
         const ua = settingsRef.current.customUserAgent;
-        const sources = season && episode
+        const sources = season != null && episode != null
           ? await findEpisodeVodSource(playlists, item, season, episode, ua)
           : await findMovieVodSources(playlists, item, ua);
         if (!sources.length || sourceGeneration.current !== generation) return [];
@@ -1613,7 +1668,7 @@ export function AppProvider({
           imdbId: item.imdbId ?? undefined,
           tmdbId: item.tmdbId ?? (item.id > 0 && !item.isHomeServer ? item.id : undefined)
         };
-        const sources = season && episode
+        const sources = season != null && episode != null
           ? await resolveHomeServerEpisodeSources(servers, target, season, episode)
           : await resolveHomeServerMovieSources(servers, target);
         if (!sources.length || sourceGeneration.current !== generation) return [];
@@ -1634,11 +1689,12 @@ export function AppProvider({
   // any matching video files as sources — parity with the Android app, which
   // surfaces Telegram media in the same source list as addons.
   const appendTelegramSources = useCallback((item: MediaItem, season?: number, episode?: number) => {
+    if (!config.telegramEnabled) return Promise.resolve([] as StreamSource[]);
     const generation = sourceGeneration.current;
     if (item.isHomeServer) return Promise.resolve([] as StreamSource[]);
     return (async () => {
       try {
-        const { resolveTelegramSources, isConnected } = await import("./telegram");
+        const { resolveTelegramSources, isConnected } = await import("@/lib/telegram");
         if (!isConnected()) return [];
         const sources = await resolveTelegramSources(item, season, episode, {
           language: settingsRef.current.language
@@ -1674,7 +1730,8 @@ export function AppProvider({
     setBusy("Opening details");
     setStreams([]);
     const priorityConfig = getPriorityConfig(settingsRef.current);
-    const resolvedId = item.id > 0 ? item.id : await resolveTmdbId(item).catch(() => null);
+    // Native addon items keep their own (negative) id; their details come from the addon.
+    const resolvedId = item.id > 0 || isAddonNative(item) ? item.id : await resolveTmdbId(item).catch(() => null);
     if (sourceGeneration.current !== generation) return;
     if (!resolvedId && !item.isHomeServer) { setBusy(""); setToast("Metadata could not be matched for this title."); return; }
     const detailsTarget = item.isHomeServer && item.tmdbId ? { ...item, id: item.tmdbId } : { ...item, id: resolvedId ?? item.id };
@@ -1705,7 +1762,7 @@ export function AppProvider({
       const found = await getStreamsProgressive(addonsRef.current, withResumeEpisode, undefined, undefined, publish).catch(() => []);
       publish(found);
       await supplemental;
-    } else if (withResumeEpisode.seasonNumber && withResumeEpisode.episodeNumber) {
+    } else if (withResumeEpisode.seasonNumber != null && withResumeEpisode.episodeNumber != null) {
       setSelectedEpisode({ season: withResumeEpisode.seasonNumber, episode: withResumeEpisode.episodeNumber });
       setBusy("Finding sources");
       const supplemental = Promise.allSettled([appendVodSources(withResumeEpisode, withResumeEpisode.seasonNumber, withResumeEpisode.episodeNumber), appendHomeServerSources(withResumeEpisode, withResumeEpisode.seasonNumber, withResumeEpisode.episodeNumber), appendTelegramSources(withResumeEpisode, withResumeEpisode.seasonNumber, withResumeEpisode.episodeNumber)]);
@@ -1749,6 +1806,10 @@ export function AppProvider({
   }, []);
 
   const playStream = useCallback((stream: StreamSource, options: { forceTranscode?: boolean; forceRemux?: boolean; forceBrowser?: boolean } = {}) => {
+    if (isDisabledTelegramSource(stream)) {
+      setToast(TELEGRAM_DISABLED_MESSAGE);
+      return;
+    }
     playbackPreparation.current?.abort();
     stopOwnedPlayback();
     if (!stream.autoSelect) setActiveStream(null);
@@ -1874,7 +1935,7 @@ export function AppProvider({
     const isCurrent = () => sourceGeneration.current === generation && playbackGeneration.current === playback;
     try {
       const next = nextLocalEpisode({ ...selected, timeRemainingLabel: "Up next", seasonNumber: selectedEpisode.season, episodeNumber: selectedEpisode.episode + 1 });
-      if (!next?.seasonNumber || !next.episodeNumber) { setToast("You have reached the last available episode."); return false; }
+      if (next?.seasonNumber == null || next.episodeNumber == null) { setToast("You have reached the last available episode."); return false; }
       const episodes = await getSeasonEpisodes(selected.tmdbId ?? selected.id, next.seasonNumber);
       if (!isCurrent()) return false;
       const episode = episodes.find((item) => item.episodeNumber === next.episodeNumber);
@@ -1936,6 +1997,10 @@ export function AppProvider({
   // user's own connection with no browser restrictions, at zero server cost.
   // Returns true when the handoff fired (so the caller skips the browser player).
   const openLiveExternally = useCallback((stream: StreamSource, title: string): boolean => {
+    if (isDisabledTelegramSource(stream)) {
+      setToast(TELEGRAM_DISABLED_MESSAGE);
+      return false;
+    }
     const player = settingsRef.current.defaultPlayer;
     if (player !== "vlc" && player !== "infuse") return false;
     setToast(
@@ -2452,7 +2517,7 @@ export function AppProvider({
       cwSourceRef.current = seededCw.length ? "seed" : "none";
       setContinueWatching(seededCw);
       setCategories(seededCw.length ? [{ id: "continue_watching", title: "Continue Watching", items: seededCw }] : []);
-      setWatchlist(readCachedList(watchlistCacheKeyFor(profile.id)));
+      setWatchlist(applyPendingWatchlist(authClient, profile.id, readCachedList(watchlistCacheKeyFor(profile.id))));
       setWatchedKeys(new Set());
     }
     setView("app");
@@ -2482,7 +2547,7 @@ export function AppProvider({
   const goToLogin = useCallback(() => {
     if (config.selfHosted) { setView("profiles"); return; }
     if (typeof window !== "undefined") {
-      const redirectUri = window.location.origin + "/";
+      const redirectUri = partnerLoginRedirect(window.location.origin, window.location.search);
       const portalUrl = getAuthPortalUrl();
       window.location.href = `${portalUrl}?redirect_uri=${encodeURIComponent(redirectUri)}`;
     }
@@ -2500,12 +2565,19 @@ export function AppProvider({
   }, []);
 
   const toggleWatchlist = useCallback(async (item: MediaItem) => {
+    const userId = authClient.session?.userId;
     const inWatchlist = watchlist.some((entry) => entry.mediaType === item.mediaType && entry.id === item.id);
     if (activeSyncProvider() === "none") {
       setToast("Connect Trakt, Simkl, or MDBList in Settings to use Watchlist.");
       return;
     }
+    const mutationKey = JSON.stringify([userId, activeProfileId, item.mediaType, item.id]);
+    const mutationId = (watchlistMutationRef.current.get(mutationKey) ?? 0) + 1;
+    watchlistMutationRef.current.set(mutationKey, mutationId);
+    const isCurrentAction = () => authClient.session?.userId === userId &&
+      activeProfileIdRef.current === activeProfileId && watchlistMutationRef.current.get(mutationKey) === mutationId;
     const slim = slimCacheItem(item);
+    const cloudChange = prepareWatchlistChange(authClient, slim, inWatchlist, activeProfileId);
     const cacheKey = watchlistCacheKeyFor(activeProfileId);
     const nextWatchlist = inWatchlist
       ? watchlist.filter((entry) => !(entry.mediaType === item.mediaType && entry.id === item.id))
@@ -2521,15 +2593,19 @@ export function AppProvider({
       };
       if (inWatchlist) {
         await syncClient().removeFromWatchlist(ref);
-        setToast("Removed from watchlist.");
+        if (isCurrentAction()) setToast("Removed from watchlist.");
       } else {
         await syncClient().addToWatchlist(ref);
-        setToast("Added to watchlist.");
+        if (isCurrentAction()) setToast("Added to watchlist.");
       }
-      if (authClient.session) {
-        await saveCloudWatchlist(authClient, nextWatchlist, activeProfileId).catch(() => undefined);
+      if (userId && authClient.session?.userId === userId) {
+        queueWatchlistChange(authClient, slim, inWatchlist, activeProfileId, cloudChange);
+        await flushWatchlistOutbox(authClient).catch(() => {
+          if (isCurrentAction()) setToast('Watchlist updated. Cloud sync will retry when you reconnect.');
+        });
       }
     } catch (err) {
+      if (!isCurrentAction()) return;
       setWatchlist((prev) => {
         const next = inWatchlist ? [slim, ...prev] : prev.filter((entry) => !(entry.mediaType === item.mediaType && entry.id === item.id));
         saveCachedList(cacheKey, next, 60);
@@ -2612,6 +2688,7 @@ export function AppProvider({
 
   const value = useMemo<AppStore>(() => ({
     view,
+    partnerLinkReady: view === "app" && Boolean(activeProfile) && (!auth || cloudProfilesHydrated),
     cloudLoginRequired,
     profiles,
     activeProfile,
@@ -2670,6 +2747,7 @@ export function AppProvider({
     refreshData,
     refreshIptv,
     loadIptvGuide,
+    favoriteTvChannels,
     openDetails,
     closeDetails,
     playStream,
@@ -2701,12 +2779,12 @@ export function AppProvider({
     openContextMenu,
     closeContextMenu
   }), [
-    view, cloudLoginRequired, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
+    view, cloudProfilesHydrated, cloudLoginRequired, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
     selectProfile, createProfile, updateProfileAction, deleteProfileAction, switchProfile, goToLogin, backToProfiles,
     section, categories, catalogConfigs, loadCatalogRow, homeServerRows, continueWatching, watchlist, isWatched, hero, heroPreview, selected, streams, selectedEpisode, loadEpisodeStreams, advanceEpisode, activeStream, activeChannel,
     addons, addonsReady, iptvSnapshot, query, results, searchState, settingsSyncState, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, busy, toast,
     updateSettings, refreshData, openDetails, closeDetails, playStream, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer,
-    refreshIptv, loadIptvGuide,
+    refreshIptv, loadIptvGuide, favoriteTvChannels,
     installAddon, removeAddon, setAddonsState, signIn, signOut, beginTrakt, pollTrakt, disconnectTrakt,
     connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences,
     loadTraktLists, loadTraktListItems, loadTrackerLibrary,

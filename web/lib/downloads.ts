@@ -1,5 +1,6 @@
 "use client";
 import { loadStored, saveStored } from './storage';
+import { assertTelegramSourceAvailable } from './config';
 type FileHandle = {createWritable(options?:{keepExistingData?:boolean}):Promise<{write(data:Uint8Array):Promise<void>;seek(n:number):Promise<void>;truncate(n:number):Promise<void>;close():Promise<void>}>;getFile():Promise<File>;requestPermission(options:{mode:string}):Promise<string>};
 export type DownloadEntry={id:string;scope:string;title:string;url:string;status:'downloading'|'paused'|'complete'|'failed'|'cancelled'|'handoff';received:number;total:number;error?:string;updatedAt:number};
 const KEY='arvio.web.downloads.v1';const listeners=new Set<()=>void>();const running=new Map<string,AbortController>();let revision=0;
@@ -14,7 +15,7 @@ export async function chooseDownloadFile(title:string,extension:'mp4'|'mkv'='mkv
  if(!picker)return null;
  return picker({suggestedName:title.replace(/[<>:"/\\|?*]/g,'_')+'.'+extension});
 }
-export async function startManagedDownload(title:string,url:string,scope:string,handle:FileHandle){const entry:DownloadEntry={id:crypto.randomUUID(),scope,title,url,status:'paused',received:0,total:0,updatedAt:Date.now()};await fileHandle(entry.id,handle);save(entry);void resumeDownload(entry.id);}
+export async function startManagedDownload(title:string,url:string,scope:string,handle:FileHandle){assertTelegramSourceAvailable({url});const entry:DownloadEntry={id:crypto.randomUUID(),scope,title,url,status:'paused',received:0,total:0,updatedAt:Date.now()};await fileHandle(entry.id,handle);save(entry);void resumeDownload(entry.id);}
 export function recordDownloadHandoff(title:string,scope:string){save({id:crypto.randomUUID(),scope,title,url:'',status:'handoff',received:0,total:0,updatedAt:Date.now()});}
 export function pauseDownload(id:string){running.get(id)?.abort();}
 export function cancelDownload(id:string){running.get(id)?.abort();const entry=downloadEntries().find(e=>e.id===id);if(entry)save({...entry,status:'cancelled',updatedAt:Date.now()});}
@@ -23,6 +24,7 @@ export async function resumeDownload(id:string){
  const entry=downloadEntries().find(e=>e.id===id);if(!entry||entry.status==='handoff')return;
  const controller=new AbortController();running.set(id,controller);let writer:Awaited<ReturnType<FileHandle['createWritable']>>|undefined;
  try{
+  assertTelegramSourceAvailable(entry);
   const handle=await fileHandle(id);if(!handle)throw new Error('Choose this source again to select a download file.');
   if(await handle.requestPermission({mode:'readwrite'})!=='granted')throw new Error('File permission is required to resume this download.');
   entry.received=Math.min(entry.received,(await handle.getFile()).size);

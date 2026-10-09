@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="partner_link_loading">Titeldetails openen…</string>
+    <string name="partner_link_failed">Deze titel kon niet worden gevonden of geladen. Probeer opnieuw of open een andere link.</string>
     <string name="home">Start</string>
     <string name="search">Zoeken</string>
     <string name="watchlist">Kijklijst</string>

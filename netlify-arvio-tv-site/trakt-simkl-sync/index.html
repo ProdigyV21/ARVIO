@@ -1,58 +1,149 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trakt and Simkl Sync on TV, iPad, Windows and Mac - ARVIO</title>
-  <meta name="description" content="Connect Trakt and Simkl for watchlists, progress, history and scrobbling in ARVIO across Android TV, iPhone, iPad, Windows and Mac.">
-  <link rel="canonical" href="https://arvio.tv/trakt-simkl-sync/">
-  <!-- hreflang:start -->
-  <link rel="alternate" hreflang="en" href="https://arvio.tv/trakt-simkl-sync/">
-  <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/sincronizacao-trakt-simkl/">
-  <link rel="alternate" hreflang="es" href="https://arvio.tv/es/sincronizacion-trakt-simkl/">
-  <link rel="alternate" hreflang="x-default" href="https://arvio.tv/trakt-simkl-sync/">
-  <!-- hreflang:end --><link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
-  <meta property="og:type" content="website"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="Trakt and Simkl Sync across TV, iPad, Windows and Mac"><meta property="og:description" content="Bring tracking lists, history and progress into one connected Android and browser experience."><meta property="og:url" content="https://arvio.tv/trakt-simkl-sync/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Trakt and Simkl Sync across supported devices"><meta name="twitter:description" content="Control which tracker powers watchlists, history, progress and scrobbling in ARVIO."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
-  <script type="application/ld+json">
-  {"@context":"https://schema.org","@graph":[
-    {"@type":"SoftwareApplication","name":"ARVIO","applicationCategory":"MultimediaApplication","operatingSystem":"Android TV, Google TV, Android","url":"https://arvio.tv/trakt-simkl-sync/","downloadUrl":"https://play.google.com/store/apps/details?id=com.arvio.tv","codeRepository":"https://github.com/ProdigyV21/ARVIO","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"An open-source Android media hub with user-authorized Trakt and Simkl tracking integrations."},
-    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Trakt and Simkl sync","item":"https://arvio.tv/trakt-simkl-sync/"}]},
-    {"@type":"FAQPage","mainEntity":[
-      {"@type":"Question","name":"Can Trakt and Simkl be connected at the same time?","acceptedAnswer":{"@type":"Answer","text":"Yes. ARVIO can keep both accounts connected and lets the user select which service is active for supported lists, progress and tracking behavior."}},
-      {"@type":"Question","name":"Does ARVIO import a Simkl watchlist and continue-watching list?","acceptedAnswer":{"@type":"Answer","text":"ARVIO can load supported Simkl list and progress data into its Library and home experience after the account is authorized and synchronized."}},
-      {"@type":"Question","name":"Does playback mark items watched in both services?","acceptedAnswer":{"@type":"Answer","text":"When both trackers are enabled for sync, ARVIO can send supported playback progress and watched updates to each connected account. Network and service API availability still apply."}}
-    ]}
-  ]}
-  </script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trakt &amp; Simkl on Android TV: Watchlists &amp; Scrobbling | ARVIO</title>
+<meta name="description" content="Connect Trakt and Simkl to ARVIO on Android TV and the web. Choose watchlist, continue-watching and history sources, enable scrobbling and fix sync problems.">
+<link rel="canonical" href="https://arvio.tv/trakt-simkl-sync/">
+<!-- hreflang:start -->
+<link rel="alternate" hreflang="en" href="https://arvio.tv/trakt-simkl-sync/">
+<link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/sincronizacao-trakt-simkl/">
+<link rel="alternate" hreflang="es" href="https://arvio.tv/es/sincronizacion-trakt-simkl/">
+<link rel="alternate" hreflang="x-default" href="https://arvio.tv/trakt-simkl-sync/">
+<!-- hreflang:end -->
+<link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
+<meta property="og:type" content="article"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="Trakt &amp; Simkl on Android TV: Watchlists &amp; Scrobbling | ARVIO"><meta property="og:description" content="Connect Trakt and Simkl to ARVIO on Android TV and the web. Choose watchlist, continue-watching and history sources, enable scrobbling and fix sync problems."><meta property="og:url" content="https://arvio.tv/trakt-simkl-sync/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Trakt &amp; Simkl on Android TV: Watchlists &amp; Scrobbling | ARVIO"><meta name="twitter:description" content="Connect Trakt and Simkl to ARVIO on Android TV and the web. Choose watchlist, continue-watching and history sources, enable scrobbling and fix sync problems."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "Trakt and Simkl on Android TV: watchlists, progress and scrobbling.",
+      "description": "Connect Trakt and Simkl to ARVIO on Android TV and the web. Choose watchlist, continue-watching and history sources, enable scrobbling and fix sync problems.",
+      "inLanguage": "en",
+      "url": "https://arvio.tv/trakt-simkl-sync/",
+      "dateModified": "2026-10-05",
+      "author": {
+        "@type": "Organization",
+        "name": "ARVIO",
+        "url": "https://arvio.tv/"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "ARVIO",
+          "item": "https://arvio.tv/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Guides",
+          "item": "https://arvio.tv/guides/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Trakt and Simkl",
+          "item": "https://arvio.tv/trakt-simkl-sync/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Can Trakt and Simkl be connected at the same time?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Connect both accounts, then choose the sources for watchlists, Continue Watching and watched history. Playback-update controls for Trakt and Simkl are independent of those read-source choices."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is my Trakt or Simkl watchlist missing?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Check the authorized tracker account, active ARVIO profile and Watchlist source. Confirm that the title exists in that service's watchlist rather than only its history or in-progress list, then reload the view after synchronization."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is Continue Watching different from my watchlist?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A watchlist records what you intend to watch; Continue Watching uses supported progress or next-episode data. Check Continue Watching source separately from Watchlist source."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is playback not updating Trakt or Simkl?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Confirm that the account remains connected and its Update while watching control is enabled. Check network and service availability, play a known supported title and inspect that same account on the tracker website. Reauthorize if the connection has expired."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does connecting both trackers migrate my entire history?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. ARVIO can read supported tracking data and send supported playback updates, but connecting two accounts is not a complete historical migration or a guarantee of identical databases."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need Trakt or Simkl to play media in ARVIO?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. These are optional tracking integrations, not media providers. Playback requires a separate authorized source whether or not a tracker is connected."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
-<body>
-  <a class="skip-link" href="#content">Skip to content</a>
-  <header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
-  <main id="content">
-    <section class="hero"><img class="hero-media" src="/assets/screenshots-v2/tv/01-home.webp" alt="ARVIO home screen with rows of media and continue watching"><div class="hero-shade" aria-hidden="true"></div><div class="hero-content"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Trakt and Simkl sync</span></nav><p class="eyebrow">Tracking integrations</p><h1>Keep Trakt and Simkl connected across devices.</h1><p class="hero-copy">Load supported lists, continue-watching progress and history into the free Android app or optional ARVIO Web on iPhone, iPad, Windows, Mac, Apple TV and compatible browsers.</p><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Install ARVIO</a><a class="button secondary" href="/arvio-web/">Explore browser access</a></div></div></section>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Trakt and Simkl</span></nav>
+<p class="eyebrow">Free Android app · Optional integrations</p><h1>Trakt and Simkl on Android TV: watchlists, progress and scrobbling.</h1><p class="lead">Bring your Trakt or Simkl watchlist, watched history and available playback progress into ARVIO. Connect one service or both, choose which supplies each view, and control whether playback updates are sent back. ARVIO works with your tracking accounts; it does not replace them or provide the media in your lists.</p>
+<div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get the free Android app</a><a class="button secondary" href="#setup">Setup instructions</a></div>
+<p class="guide-updated">Updated 5 October 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#setup">Connect accounts</a><a href="#routing">Choose sources</a><a href="#scrobbling">Scrobbling</a><a href="#devices">Across devices</a><a href="#help">Fix sync issues</a></nav></div></section>
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/01-home.webp" alt="ARVIO Android TV home screen with a Continue Watching row and media discovery rows" width="1920" height="1080" loading="lazy" decoding="async"><figcaption>ARVIO's Android TV home screen. This example shows the interface, not a guarantee that every tracker returns the same lists or progress.</figcaption></figure></div></section>
 
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Flexible by profile</p><h2>One account, the other, or both.</h2><p>Trakt and Simkl serve overlapping but different audiences. ARVIO keeps the connections independent and gives each profile control over the active tracking source.</p></div><div class="feature-list">
-      <article class="feature-item"><h3>Continue watching</h3><p>Use supported progress data to resume titles from the home screen without reopening the tracker website.</p></article>
-      <article class="feature-item"><h3>Watchlists and custom lists</h3><p>Browse supported Trakt and Simkl lists from the Library page alongside connected home-server libraries.</p></article>
-      <article class="feature-item"><h3>Watched history</h3><p>Pull watched state into ARVIO so completed movies and episodes are represented consistently.</p></article>
-      <article class="feature-item"><h3>Playback scrobbling</h3><p>Send supported start, pause, progress and completion updates while you watch through ARVIO.</p></article>
-      <article class="feature-item"><h3>Tracker preferences</h3><p>Select which connected service supplies supported watchlist and continue-watching data rather than forcing a single global provider.</p></article>
-      <article class="feature-item"><h3>Cross-device state</h3><p>Tracker data comes from the connected account, while ARVIO cloud sync carries supported profile preferences between Android TV, mobile and ARVIO Web on Apple and desktop devices.</p></article>
-    </div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Connection flow</p><h2>Authorize, choose, synchronize.</h2></div><div class="steps"><article class="step"><h3>Connect a tracker</h3><p>Open Tracking Integrations in settings and authorize Trakt or Simkl using the service's secure flow.</p></article><article class="step"><h3>Choose its role</h3><p>Select the tracker used for supported watchlists, continue watching and history behavior on that profile.</p></article><article class="step"><h3>Refresh the Library</h3><p>ARVIO retrieves available lists and progress, then updates them as playback changes.</p></article></div></div></section>
-
-    <section class="section compact"><div class="shell"><div class="note"><h2>Sync is not media access</h2><p>Trakt and Simkl store tracking metadata; they do not provide the playable file. A title in a watchlist or continue-watching row still requires a separate authorized server, provider, file or compatible integration for playback.</p></div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions</p><h2>Trakt and Simkl FAQ</h2></div><div class="faq-list">
-      <details><summary>Can Trakt and Simkl be connected at the same time?</summary><p>Yes. ARVIO can keep both accounts connected and lets you select which service is active for supported lists, progress and tracking behavior.</p></details>
-      <details><summary>Does ARVIO import a Simkl watchlist and continue-watching list?</summary><p>ARVIO can load supported Simkl list and progress data into its Library and home experience after the account is authorized and synchronized.</p></details>
-      <details><summary>Does playback mark items watched in both services?</summary><p>When both trackers are enabled for sync, ARVIO can send supported playback progress and watched updates to each connected account. Network and service API availability still apply.</p></details>
-    </div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>Put tracking in context.</h2></div><div class="related-grid"><a class="related-link" href="/plex-emby-jellyfin/"><small>Libraries</small><strong>Plex, Emby and Jellyfin</strong><span>Bring playable home-server media into Library.</span></a><a class="related-link" href="/android-tv-media-hub/"><small>Overview</small><strong>Android TV media hub</strong><span>See profiles, playback and connected services.</span></a><a class="related-link" href="/arvio-web/"><small>Browser</small><strong>ARVIO Web</strong><span>Access a connected ARVIO setup outside Android.</span></a></div></div></section>
-    <section class="cta-band"><div class="shell cta-inner"><div><h2>Your viewing state, where you need it.</h2><p>Connect Trakt, Simkl or both in the free Android app.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
-  </main>
-  <footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO is not affiliated with Trakt or Simkl.</span></div></div></footer>
+<section class="section" id="setup"><div class="shell guide-reading"><p class="eyebrow">Step by step</p><h2>How to connect Trakt or Simkl in ARVIO.</h2><ol class="setup-list">
+<li><h3>Choose the ARVIO profile you actually use</h3><p>Open that profile before connecting accounts or changing tracking preferences. Have access to the tracker account containing the lists and history you want.</p></li>
+<li><h3>Open account settings for your platform</h3><p>On Android, use Settings → Tracking Integrations. In ARVIO Web, use Settings → Accounts. Select Trakt or Simkl and start its authorization flow.</p></li>
+<li><h3>Approve the device link with the correct account</h3><p>Follow the displayed verification link and code on your phone or computer. Check which tracker account is signed in before approving. In the browser, choose Start device link and, after approval, I approved it to finish connecting.</p></li>
+<li><h3>Choose the tracker's role</h3><p>Set Watchlist source, Continue Watching source and Watched history source separately. Connecting both accounts does not mean every view automatically uses both.</p></li>
+<li><h3>Check a known title and a short playback session</h3><p>Open Library or the home screen and find a title already in your tracker account. To send playback updates, enable Update Trakt while watching or Update Simkl while watching and verify the result in that service.</p></li></ol><p>Start with one tracker if you want a simpler setup. Add the other when you know which lists or history you want from it.</p></div></section>
+<section class="section" id="routing"><div class="shell"><div class="section-head"><p class="eyebrow">Reading and updating are separate</p><h2>Choose sources for watchlists, Continue Watching and history.</h2><p>A watchlist records titles you intend to watch. Continue Watching uses available progress or next-episode data. Watched history supplies completed-title state. Changing one setting does not automatically change the others.</p></div><div class="feature-list">
+<article class="feature-item"><h3>Watchlist source</h3><p>Choose the connected service that supplies your watchlist. Check this first if the list differs from the one you expected on the tracker website.</p></article>
+<article class="feature-item"><h3>Continue Watching source</h3><p>Choose where progress and Up Next are loaded from. Both-service modes can combine supported data, but providers do not necessarily return identical progress or title coverage.</p></article>
+<article class="feature-item"><h3>Watched history source</h3><p>Choose the service used for watched badges. A completed title, an in-progress title and a watchlist entry represent different kinds of state.</p></article>
+<article class="feature-item"><h3>Update each tracker independently</h3><p>Enable Update Trakt while watching, Update Simkl while watching, or both for connected accounts. You can read your watchlist from one service while sending supported playback updates to both.</p></article></div></div></section>
+<section class="section compact" id="scrobbling"><div class="shell guide-reading"><div class="note"><h2>What playback scrobbling does.</h2><div><p>Scrobbling sends supported progress and watched updates while you watch through ARVIO. It requires a valid connection, enabled tracking and available service APIs. It is not a promise of instant, identical two-way synchronization across every player.</p><p>Connecting both trackers is not a full historical migration. To move an existing Trakt history into Simkl, follow <a href="https://support.simkl.org/knowledgebase/articles/735624-how-can-i-import-my-watch-history-to-simkl-from-tr">Simkl's import instructions</a> and check the import limitations separately.</p></div></div></div></section>
+<section class="section" id="devices"><div class="shell guide-reading"><p class="eyebrow">Know which service stores what</p><h2>Trakt and Simkl across Android TV, mobile and browsers.</h2><p>The free Android app supports Android TV, Google TV and Android mobile. ARVIO Web provides another way to use trackers in compatible browsers. Check the intended tracker account, active ARVIO profile and source settings on each device.</p><p>Trackers carry their own supported watchlist and watched data between clients. This is separate from ARVIO Cloud's supported profile preferences. Free self-hosted ARVIO Web keeps its own profiles and settings in that browser; trackers do not synchronize IPTV settings, addons or the complete app state. Clearing browser site data removes local data.</p><p>See the <a href="/arvio-web/">browser and self-hosting guide</a>. A listed title still needs an authorized playback source, such as your <a href="/plex-emby-jellyfin/">Plex, Emby or Jellyfin server</a> or a <a href="/stremio-addons-android-tv/">compatible addon</a>.</p></div></section>
+<section class="section" id="help"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions and troubleshooting</p><h2>Trakt and Simkl FAQ.</h2></div><div class="faq-list"><details><summary>Can Trakt and Simkl be connected at the same time?</summary><p>Yes. Connect both accounts, then choose the sources for watchlists, Continue Watching and watched history. Playback-update controls for Trakt and Simkl are independent of those read-source choices.</p></details>
+<details><summary>Why is my Trakt or Simkl watchlist missing?</summary><p>Check the authorized tracker account, active ARVIO profile and Watchlist source. Confirm that the title exists in that service's watchlist rather than only its history or in-progress list, then reload the view after synchronization.</p></details>
+<details><summary>Why is Continue Watching different from my watchlist?</summary><p>A watchlist records what you intend to watch; Continue Watching uses supported progress or next-episode data. Check Continue Watching source separately from Watchlist source.</p></details>
+<details><summary>Why is playback not updating Trakt or Simkl?</summary><p>Confirm that the account remains connected and its Update while watching control is enabled. Check network and service availability, play a known supported title and inspect that same account on the tracker website. Reauthorize if the connection has expired.</p></details>
+<details><summary>Does connecting both trackers migrate my entire history?</summary><p>No. ARVIO can read supported tracking data and send supported playback updates, but connecting two accounts is not a complete historical migration or a guarantee of identical databases.</p></details>
+<details><summary>Do I need Trakt or Simkl to play media in ARVIO?</summary><p>No. These are optional tracking integrations, not media providers. Playback requires a separate authorized source whether or not a tracker is connected.</p></details></div></div></section>
+<section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>More ways to use ARVIO.</h2></div><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><strong>Android TV setup</strong><span>Install ARVIO and choose your integrations.</span></a><a class="related-link" href="/plex-emby-jellyfin/"><strong>Connect home servers</strong><span>Use tracking alongside your own libraries.</span></a><a class="related-link" href="/arvio-web/"><strong>ARVIO in a browser</strong><span>Compare hosted and self-hosted access.</span></a></div></div></section>
+<section class="cta-band"><div class="shell cta-inner"><div><h2>Start with the free Android app.</h2><p>Connect only sources and accounts you are authorized to use.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO provides software, not media subscriptions.</span></div></div></footer>
 </body>
 </html>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_calendar">Calendar</string>
+    <string name="calendar_all_watchlists">All watchlists</string>
+    <string name="calendar_arvio_watchlist">ARVIO watchlist</string>
+    <string name="calendar_today">Today</string>
+    <string name="calendar_local_time">Local time</string>
+    <string name="calendar_time_tba">Time TBA</string>
+    <string name="calendar_next_month">Next month</string>
+    <string name="calendar_previous_month">Previous month</string>
+    <string name="calendar_release">release</string>
+    <string name="calendar_releases">releases</string>
+    <string name="calendar_more">more</string>
+    <string name="calendar_navigate_days">Navigate days</string>
+    <string name="calendar_open_day">Open day</string>
+    <string name="calendar_partial">Some sources unavailable</string>
+    <string name="calendar_loading">Finding your releases…</string>
+    <string name="calendar_unavailable">Calendar unavailable</string>
+    <string name="calendar_empty_watchlist">Your watchlist, on the calendar</string>
+    <string name="calendar_empty_day">No releases on this day</string>
+    <string name="calendar_add_watchlist">Add movies and shows to your ARVIO watchlist. No tracking account needed.</string>
+    <string name="calendar_choose_day">Choose another day or watchlist to explore upcoming releases.</string>
+    <string name="calendar_cinema">Cinema</string>
+    <string name="calendar_digital">Digital</string>
+    <string name="calendar_physical">Physical</string>
+    <string name="calendar_next_release">Next release</string>
+    <string name="calendar_partial_details">Some release details unavailable</string>
+    <string name="calendar_refresh">Refresh calendar</string>
+</resources>

@@ -27,7 +27,7 @@ export interface SyncClient {
   readonly isConnected: boolean;
   readonly currentProfileId?: string | null;
   watchlist(): Promise<unknown[]>;
-  playback(): Promise<unknown[]>;
+  playback(localWatchedKeys?: Set<string>): Promise<unknown[]>;
   watched(type: "movies" | "shows", feature?: "watched" | "continueWatching"): Promise<unknown[]>;
   addToWatchlist(item: SyncMediaRef): Promise<void>;
   removeFromWatchlist(item: SyncMediaRef): Promise<void>;
@@ -134,6 +134,7 @@ async function writeAll(operation: (client: SyncClient) => Promise<void>, profil
 export async function syncSeasonWatched(
   item: SyncMediaRef, season: number, episodes: number[], watched: boolean
 ): Promise<void> {
+  if (item.tmdbId <= 0) return;
   await writeAll(async client => {
     if (client === simklClient) {
       await simklClient.markSeasonWatched(item, season, watched);
@@ -151,17 +152,18 @@ class TrackingRouter implements SyncClient {
   constructor(private readonly profileId?: string | null) {}
   get isConnected() { return readClients("watchlist").length > 0 || readClients("continueWatching").length > 0 || readClients("watched").length > 0 || writeClients().length > 0; }
   watchlist() { return readAll("watchlist", (client) => client.watchlist()); }
-  async playback() {
-    return readAll("continueWatching", (client) => client.playback());
+  async playback(localWatchedKeys?: Set<string>) {
+    return readAll("continueWatching", (client) => client.playback(localWatchedKeys));
   }
   async watched(type: "movies" | "shows", feature: "watched" | "continueWatching" = "watched") {
     return readAll(feature, (client) => client.watched(type));
   }
-  addToWatchlist(item: SyncMediaRef) { return writeAll((client) => client.addToWatchlist(item)); }
-  removeFromWatchlist(item: SyncMediaRef) { return writeAll((client) => client.removeFromWatchlist(item)); }
-  addToHistory(item: SyncMediaRef) { return writeAll((client) => client.addToHistory(item)); }
-  removeFromHistory(item: SyncMediaRef) { return writeAll((client) => client.removeFromHistory(item)); }
-  dismissFromContinueWatching(item: SyncMediaRef) { return writeAll((client) => client.dismissFromContinueWatching(item)); }
+  // Ids below 1 (native addon items) have no tracker identity.
+  addToWatchlist(item: SyncMediaRef) { return item.tmdbId > 0 ? writeAll((client) => client.addToWatchlist(item)) : Promise.resolve(); }
+  removeFromWatchlist(item: SyncMediaRef) { return item.tmdbId > 0 ? writeAll((client) => client.removeFromWatchlist(item)) : Promise.resolve(); }
+  addToHistory(item: SyncMediaRef) { return item.tmdbId > 0 ? writeAll((client) => client.addToHistory(item)) : Promise.resolve(); }
+  removeFromHistory(item: SyncMediaRef) { return item.tmdbId > 0 ? writeAll((client) => client.removeFromHistory(item)) : Promise.resolve(); }
+  dismissFromContinueWatching(item: SyncMediaRef) { return item.tmdbId > 0 ? writeAll((client) => client.dismissFromContinueWatching(item)) : Promise.resolve(); }
   scrobble(action: "start" | "pause" | "stop", item: SyncMediaRef & { progress: number }) {
     if (!Number.isSafeInteger(item.tmdbId) || item.tmdbId <= 0) return Promise.resolve();
     if (item.mediaType === "tv" && (!Number.isInteger(item.season) || item.season! < 0 ||

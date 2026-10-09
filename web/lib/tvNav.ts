@@ -171,7 +171,7 @@ function moveFocus(direction: Direction): boolean {
 
 function focusElement(el: HTMLElement) {
   el.focus({ preventScroll: true });
-  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: isTvBrowser() ? "auto" : "smooth" });
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: isTvBrowser() || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
 
 function synthesizeEscape() {

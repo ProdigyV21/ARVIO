@@ -48,7 +48,7 @@ class ApiProxyInterceptor : Interceptor {
                 // A Simkl client id is public and official builds can call the API
                 // directly. Contributor builds without one fall back to ARVIO's
                 // credential-injecting proxy instead of shipping a broken login.
-                if (Constants.SIMKL_CLIENT_ID.isBlank()) {
+                if (Constants.SIMKL_CLIENT_ID.isBlank() && originalRequest.header("Authorization")?.startsWith("Bearer simkl_at_") != true) {
                     val proxyRequest = rewriteForSimklProxy(originalRequest) ?: originalRequest
                     chain.proceed(proxyRequest)
                 } else {

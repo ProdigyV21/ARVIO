@@ -115,7 +115,8 @@ class LauncherContinueWatchingRepository @Inject constructor(
                 id = item.id,
                 streamAddonId = item.streamAddonId,
                 title = item.title,
-                addons = installedAddons
+                addons = installedAddons,
+                isAddonNative = !item.addonNativeId.isNullOrBlank()
             )
         }
 
@@ -132,11 +133,14 @@ class LauncherContinueWatchingRepository @Inject constructor(
                 id = item.id,
                 streamAddonId = item.streamAddonId,
                 title = item.title,
-                addons = installedAddons
+                addons = installedAddons,
+                isAddonNative = !item.addonNativeId.isNullOrBlank()
             )
         }
         val selectedItems = traktRepository.filterDismissedContinueWatchingItems(mergedItems)
             .take(Constants.MAX_CONTINUE_WATCHING)
+        selectedItems.filter { !it.addonNativeId.isNullOrBlank() }
+            .forEach { mediaRepository.cacheItem(it.toMediaItem()) }
 
        // Limit of 4 simultaneous calls to avoid saturating the network
         val semaphore = Semaphore(4)

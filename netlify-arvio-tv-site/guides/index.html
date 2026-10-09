@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ARVIO Guides - Android TV, Home Servers, Tracking and Live TV</title>
-  <meta name="description" content="Set up the free ARVIO Android app, self-host ARVIO Web with Docker or Node.js, connect home servers and live TV, and check browser playback.">
+  <title>Android TV Setup Guides: Jellyfin, Addons &amp; IPTV | ARVIO</title>
+  <meta name="description" content="Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.">
   <link rel="canonical" href="https://arvio.tv/guides/">
   <!-- hreflang:start -->
   <link rel="alternate" hreflang="en" href="https://arvio.tv/guides/">
@@ -16,13 +16,13 @@
   <link rel="stylesheet" href="/guides/guide.css">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="ARVIO">
-  <meta property="og:title" content="ARVIO Guides">
-  <meta property="og:description" content="Learn how ARVIO organizes authorized home servers, tracking, live TV and playback across Android TV, iPad, iPhone, Windows and Mac.">
+  <meta property="og:title" content="Android TV Setup Guides: Jellyfin, Addons &amp; IPTV | ARVIO">
+  <meta property="og:description" content="Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.">
   <meta property="og:url" content="https://arvio.tv/guides/">
   <meta property="og:image" content="https://arvio.tv/assets/arvio-social.webp">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="ARVIO Guides">
-  <meta name="twitter:description" content="Practical setup and feature guides for the free, open-source ARVIO Android app.">
+  <meta name="twitter:title" content="Android TV Setup Guides: Jellyfin, Addons &amp; IPTV | ARVIO">
+  <meta name="twitter:description" content="Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.">
   <meta name="twitter:image" content="https://arvio.tv/assets/arvio-social.webp">
   <script type="application/ld+json">
   {
@@ -30,7 +30,7 @@
     "@type": "CollectionPage",
     "name": "ARVIO Guides",
     "url": "https://arvio.tv/guides/",
-    "description": "Guides for using ARVIO with Android TV, home media servers, tracking services and user-authorized live TV.",
+    "description": "Set up Jellyfin, Plex, Emby, compatible Stremio addons, debrid sources and IPTV in ARVIO. Find Android TV instructions, browser limits and free self-hosting guides.",
     "isPartOf": {"@type": "WebSite", "name": "ARVIO", "url": "https://arvio.tv/"}
   }
   </script>
@@ -66,7 +66,7 @@
           <a href="/">ARVIO</a><span aria-hidden="true">/</span><span>Guides</span>
         </nav>
         <p class="eyebrow">Product guides</p>
-        <h1>Build your own connected media setup.</h1>
+        <h1>Android TV setup guides for your media services.</h1>
         <p class="lead">Start with the free Android app, run ARVIO Web on your own server, or choose managed browser hosting. These guides help you connect your own sources and get a working setup on the device you use.</p>
         <nav class="guide-jump" aria-label="Choose your setup"><a href="/android-tv-media-hub/">Install the free app</a><a href="/self-host-arvio-web/">Self-host the webapp</a><a href="/arvio-web/">Try managed hosting</a></nav>
       </div>
@@ -90,50 +90,60 @@
             <h2>Create collections and add catalogs</h2>
             <p>Start with a JSON template, host it free on GitHub, import it by URL, or add a Trakt or MDBList catalog. Direct file uploads are not yet supported.</p>
           </a>
+          <a class="guide-card" href="/collection-studio/">
+            <small>Build and share</small>
+            <h2>Collection Studio</h2>
+            <p>Try three ready-to-use discovery collections, customize up to eight folders, export JSON and share a preview. Free, with no account required.</p>
+          </a>
           <a class="guide-card" href="/android-tv-media-hub/">
             <small>Start here</small>
-            <h2>Media hub across devices</h2>
-            <p>Profiles, home servers, tracking, live TV, subtitles and playback across Android and optional browser access.</p>
+            <h2>Android TV: install ARVIO and add sources</h2>
+            <p>Official APK and Google Play downloads, addon manifest setup, home servers and help when a title has no playable source.</p>
           </a>
           <a class="guide-card" href="/jellyfin-android-tv/">
             <small>Home servers</small>
-            <h2>Jellyfin across TV and browser</h2>
-            <p>Browse Jellyfin libraries on Android TV, iPad, Windows, Mac and other supported devices without replacing your server.</p>
+            <h2>Jellyfin client for Android TV</h2>
+            <p>Try an alternative Jellyfin interface, connect your server, browse libraries and check playback and browser limitations.</p>
           </a>
           <a class="guide-card" href="/plex-emby-jellyfin/">
             <small>Home servers</small>
-            <h2>Plex, Emby and Jellyfin together</h2>
-            <p>Understand how ARVIO organizes several authorized home servers in one library experience.</p>
+            <h2>Plex, Emby and Jellyfin in one app</h2>
+            <p>Connect multiple servers, choose libraries and understand the different Android and browser sign-in options.</p>
           </a>
           <a class="guide-card" href="/debrid-usenet-android-tv/">
             <small>Sources and playback</small>
-            <h2>Debrid and Usenet sources</h2>
-            <p>Keep quality, file size and provider metadata visible across compatible Android and browser playback.</p>
+            <h2>Debrid playback on Android TV</h2>
+            <p>Understand the player, addon and provider roles, connect resolved sources and troubleshoot missing or unplayable results.</p>
+          </a>
+          <a class="guide-card" href="/stremio-addons-android-tv/">
+            <small>Addon setup</small>
+            <h2>Stremio-compatible addons in ARVIO</h2>
+            <p>Install a manifest URL, configure from your phone, refresh addons on TV and check what compatibility does and does not include.</p>
           </a>
           <a class="guide-card" href="/trakt-simkl-sync/">
             <small>Tracking</small>
-            <h2>Trakt and Simkl sync</h2>
-            <p>Connect watchlists, progress, history and scrobbling across TV, mobile and browser devices.</p>
+            <h2>Trakt and Simkl on Android TV</h2>
+            <p>Connect accounts, choose watchlist and Continue Watching sources, enable playback scrobbling and troubleshoot sync.</p>
           </a>
           <a class="guide-card" href="/live-tv-epg/">
             <small>Live TV</small>
-            <h2>Live TV and EPG</h2>
-            <p>Use your authorized playlist or provider with a TV guide, favorites, catch-up metadata and remote navigation.</p>
+            <h2>IPTV player: M3U, Xtream and EPG</h2>
+            <p>Set up your authorized M3U playlist, Xtream account or Stalker portal on Android, add XMLTV and check browser compatibility.</p>
           </a>
           <a class="guide-card" href="/ai-subtitles-android-tv/">
             <small>Accessibility</small>
-            <h2>AI subtitles on Android TV</h2>
-            <p>Generate or translate subtitles with your own supported AI account and keep playback controls TV-friendly.</p>
+            <h2>AI subtitle translation on Android TV</h2>
+            <p>Translate existing text subtitles with your own Groq or Gemini key, choose your language and troubleshoot source or API issues.</p>
           </a>
           <a class="guide-card" href="/fire-tv-media-player/">
             <small>Devices</small>
             <h2>ARVIO on Fire TV</h2>
-            <p>What to expect when sideloading the Android build on compatible Fire TV hardware.</p>
+            <p>Check Fire OS versus Vega OS compatibility, install the official APK and troubleshoot sideloading or playback.</p>
           </a>
           <a class="guide-card" href="/arvio-web/">
             <small>Choose your hosting</small>
-            <h2>ARVIO Web: free or managed</h2>
-            <p>Understand free self-hosting, optional Premium hosting, profile storage and browser compatibility before you choose.</p>
+            <h2>ARVIO on iPhone, iPad, Windows and Mac</h2>
+            <p>Open the browser app, compare hosted login with free self-hosting, and check sync, source access and playback limits.</p>
           </a>
         </div>
       </div>

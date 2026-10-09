@@ -6,10 +6,11 @@ const {
   isExistingSnapshotRicher,
   applyAddonWipeGuard,
   resolveIdentity,
-  loadSnapshotFromBlobs,
+  loadSnapshotForUpdate,
   saveSnapshotToBlobs,
   appendSnapshotEvent
 } = require("./_backend");
+const { preserveWatchlistChanges } = require("./_watchlist-sync");
 
 const TRACKING_V2_FIELDS = [
   "provider",
@@ -146,7 +147,7 @@ function preserveIptvFields(existingSnapshot, incomingPayload) {
   return { ...incomingPayload, iptvByProfile: profiles, fieldUpdatedAt: timestamps };
 }
 
-exports._test = { preserveTrackingRouting, preserveTraktTokens, preserveIptvFields };
+exports._test = { preserveTrackingRouting, preserveTraktTokens, preserveIptvFields, preserveWatchlistChanges };
 
 exports.handler = async (event) => {
   const cors = options(event);
@@ -163,54 +164,63 @@ exports.handler = async (event) => {
       return json(400, { accepted: false, reason: "missing_payload" });
     }
 
-    const existing = await loadSnapshotFromBlobs(event, identity);
-    // Server-side addon wipe guard: refuse pushes that catastrophically shrink
-    // the addon list (recurring client bug); existing addons are merged back.
     const parsedPayload = typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
-    const { payload: addonGuardedPayload, guarded } = applyAddonWipeGuard(existing, parsedPayload);
-    const guardedPayload = preserveIptvFields(existing, preserveTraktTokens(
-      existing,
-      preserveTrackingRouting(existing, addonGuardedPayload)
-    ));
-    if (guarded) {
-      console.warn("account-sync-push: addon wipe guard engaged", {
-        user: identity.supabaseUserId,
-        incomingRootAddons: Array.isArray(parsedPayload.addons) ? parsedPayload.addons.length : null,
-        preservedRootAddons: Array.isArray(guardedPayload.addons) ? guardedPayload.addons.length : null
-      });
-    }
-    const incoming = payloadMetrics(guardedPayload);
-    if (isExistingSnapshotRicher(existing, incoming)) {
+    // Re-read and re-merge after a competing write. Without the ETag condition,
+    // two devices could both read the old snapshot and the later stale upload
+    // would discard the first device's removal events.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const { snapshot: existing, etag } = await loadSnapshotForUpdate(event, identity);
+      // Server-side addon wipe guard: refuse pushes that catastrophically shrink
+      // the addon list (recurring client bug); existing addons are merged back.
+      const { payload: addonGuardedPayload, guarded } = applyAddonWipeGuard(existing, parsedPayload);
+      const guardedPayload = preserveWatchlistChanges(existing,
+        preserveIptvFields(existing, preserveTraktTokens(
+          existing,
+          preserveTrackingRouting(existing, addonGuardedPayload)
+        ))
+      );
+      if (guarded) {
+        console.warn("account-sync-push: addon wipe guard engaged", {
+          user: identity.supabaseUserId,
+          incomingRootAddons: Array.isArray(parsedPayload.addons) ? parsedPayload.addons.length : null,
+          preservedRootAddons: Array.isArray(guardedPayload.addons) ? guardedPayload.addons.length : null
+        });
+      }
+      const incoming = payloadMetrics(guardedPayload);
+      if (isExistingSnapshotRicher(existing, incoming)) {
+        return json(200, {
+          accepted: false,
+          reason: "existing_snapshot_is_richer",
+          existing,
+          incoming: {
+            restoreRank: incoming.restoreRank,
+            profileCount: incoming.profileCount,
+            scopedCoverage: incoming.scopedCoverage
+          }
+        });
+      }
+
+      const saved = await saveSnapshotToBlobs(event, identity, {
+        payload: incoming.payload,
+        payloadVersion: incoming.payloadVersion,
+        restoreRank: incoming.restoreRank,
+        profileCount: incoming.profileCount,
+        scopedCoverage: incoming.scopedCoverage,
+        payloadUpdatedAt: incoming.payloadUpdatedAt,
+        source: "netlify"
+      }, { etag });
+      if (!saved) continue;
+      await appendSnapshotEvent(event, identity, saved);
+
       return json(200, {
-        accepted: false,
-        reason: "existing_snapshot_is_richer",
-        existing,
-        incoming: {
-          restoreRank: incoming.restoreRank,
-          profileCount: incoming.profileCount,
-          scopedCoverage: incoming.scopedCoverage
-        }
+        accepted: true,
+        addonGuard: guarded,
+        restoreRank: incoming.restoreRank,
+        profileCount: incoming.profileCount,
+        scopedCoverage: incoming.scopedCoverage
       });
     }
-
-    const saved = await saveSnapshotToBlobs(event, identity, {
-      payload: incoming.payload,
-      payloadVersion: incoming.payloadVersion,
-      restoreRank: incoming.restoreRank,
-      profileCount: incoming.profileCount,
-      scopedCoverage: incoming.scopedCoverage,
-      payloadUpdatedAt: incoming.payloadUpdatedAt,
-      source: "netlify"
-    });
-    await appendSnapshotEvent(event, identity, saved);
-
-    return json(200, {
-      accepted: true,
-      addonGuard: guarded,
-      restoreRank: incoming.restoreRank,
-      profileCount: incoming.profileCount,
-      scopedCoverage: incoming.scopedCoverage
-    });
+    return json(409, { accepted: false, reason: "snapshot_write_conflict" });
   } catch (error) {
     console.error("account-sync-push failed", error);
     return json(error?.statusCode || 500, {

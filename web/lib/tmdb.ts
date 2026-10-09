@@ -1,3 +1,4 @@
+import { addonServesOwnMeta, findAddonServingOwnMeta, getNativeDetails, getNativeSeasonEpisodes, isAddonNative, registerNativeItem } from "./addonNative";
 import { config } from "./config";
 import { apiProxiedUrl, jsonRequest, proxiedUrl } from "./http";
 import { fetchAniZipMappingByTmdbId } from "./metadata/anizip";
@@ -258,20 +259,8 @@ export async function loadCatalog(
     };
   }
 
-  if (catalog.sourceType === "preinstalled" && catalog.id === "favorite_tv") {
-    const response = await tmdb<TmdbList>("discover/tv", {
-      language,
-      sort_by: "vote_average.desc",
-      "vote_count.gte": 500
-    });
-    return {
-      id: catalog.id,
-      title: catalog.name,
-      items: response.results.map((x) => mapTmdbItem(x, "tv")),
-      sourceLabel: "TMDB",
-      layout: catalog.layout ?? "landscape"
-    };
-  }
+  // Favorite TV is the profile's IPTV favorites; Home renders it from the channel list.
+  if (catalog.sourceType === "preinstalled" && catalog.id === "favorite_tv") return null;
 
   if (catalog.sourceType === "trakt" && catalog.sourceUrl) {
     const refs = await loadTraktPublicList(catalog.sourceUrl) as Array<{ type: MediaType; id: number }>;
@@ -284,6 +273,23 @@ export async function loadCatalog(
       sourceUrl: catalog.sourceUrl,
       layout: catalog.layout ?? "landscape"
     };
+  }
+
+  if (catalog.sourceType === "simkl" && catalog.sourceUrl) {
+    const { loadSimklCustomList } = await import("./simklLists");
+    const list = await loadSimklCustomList(catalog.sourceUrl);
+    const refs: Array<{ type: MediaType; id: number }> = [];
+    for (let start = 0; start < list.items.length && refs.length < 60; start += 6) {
+      const batch = await Promise.all(list.items.slice(start, start + 6).map(async item => {
+        const type: MediaType = item.type === "movie" || item.type === "movies" || item.anime_type === "movie" ? "movie" : "tv";
+        const id = await resolveTmdbId({ mediaType: type, tmdbId: Number(item.ids?.tmdb) || null,
+          imdbId: item.ids?.imdb, title: item.title, year: item.year }).catch(() => null);
+        return id ? { type, id } : null;
+      }));
+      refs.push(...batch.filter((ref): ref is { type: MediaType; id: number } => ref !== null));
+    }
+    return { id: catalog.id, title: catalog.name, items: await hydrateRefs(refs, language),
+      sourceLabel: "SIMKL", sourceUrl: catalog.sourceUrl, layout: catalog.layout ?? "landscape" };
   }
 
   if (catalog.sourceType === "addon") {
@@ -450,7 +456,8 @@ export async function loadCollectionSource(
   }
   if (kind === "TMDB_COLLECTION" && source.tmdbCollectionId) {
     const response = await tmdb<{ parts?: TmdbItem[] }>(`collection/${source.tmdbCollectionId}`, { language });
-    return (response.parts ?? []).map((item) => mapTmdbItem({ ...item, media_type: item.media_type ?? "movie" }, "movie"));
+    return (response.parts ?? []).sort((a, b) => (a.release_date ?? "").localeCompare(b.release_date ?? ""))
+      .map((item) => mapTmdbItem({ ...item, media_type: item.media_type ?? "movie" }, "movie"));
   }
   if (kind === "TMDB_PERSON" && source.tmdbPersonId) {
     const response = await tmdb<TmdbCombinedCredits>(`person/${source.tmdbPersonId}/combined_credits`, { language });
@@ -521,8 +528,7 @@ export async function loadCollectionSource(
     }, language).then((items) => items.map((item) => mapTmdbItem(item, mediaType === "tv" ? "tv" : "movie")));
   }
   if (kind === "ADDON_CATALOG") {
-    const installed = addons.find(a => a.enabled !== false && a.id === source.addonId) ??
-      addons.find(a => a.enabled !== false && a.catalogs?.some(c => c.id === source.addonCatalogId && c.type === source.addonCatalogType));
+    const installed = findCollectionAddon(addons, source);
     if (!installed) throw new Error("The add-on for this collection is not installed or enabled.");
     return loadAddonCatalog({
       id: `collection-addon-${source.addonId}-${source.addonCatalogId}`,
@@ -546,6 +552,22 @@ export async function loadCollectionSource(
     return rows.flatMap((r) => r.items);
   }
   return [];
+}
+
+/**
+ * The installed addon a collection's addon source loads from. Collections name the addon by
+ * its manifest id ("aio-metadata"); Android-installed entries carry a per-URL suffix. Like
+ * Nuvio, the named addon is asked even for a catalog its manifest doesn't list (AIOMetadata
+ * serves its streaming catalogs that way).
+ */
+function findCollectionAddon(addons: InstalledAddon[], source: CollectionSourceConfig) {
+  const enabled = addons.filter(a => a.enabled !== false);
+  const wanted = String(source.addonId ?? "").trim();
+  const isNamed = (a: InstalledAddon) => Boolean(wanted) &&
+    (a.id === wanted || (a as { manifest?: { id?: string } }).manifest?.id === wanted);
+  const declares = (a: InstalledAddon) => (a.catalogs ?? []).some(c => c.id === source.addonCatalogId &&
+    String(c.type).toLowerCase() === String(source.addonCatalogType ?? "").toLowerCase());
+  return enabled.find(a => isNamed(a) && declares(a)) ?? enabled.find(declares) ?? enabled.find(isNamed);
 }
 
 function sourceMediaType(source: CollectionSourceConfig): MediaType | "all" {
@@ -667,21 +689,41 @@ async function loadAddonCatalog(catalog: CatalogConfig, addons: InstalledAddon[]
     candidate.manifestUrl === catalog.sourceUrl
   );
   const manifestUrl = addon?.manifestUrl || catalog.sourceUrl;
-  const catalogType = catalog.addonCatalogType || (catalog.mediaType === "tv" ? "series" : catalog.mediaType === "movie" ? "movie" : "movie");
+  const requestedType = catalog.addonCatalogType || (catalog.mediaType === "tv" ? "series" : catalog.mediaType === "movie" ? "movie" : "movie");
   const catalogId = catalog.addonCatalogId || catalog.sourceRef || catalog.id;
+  // Addons route by the manifest's exact spelling ("Live Docs"); collections may lower-case it.
+  const catalogType = (addon?.catalogs ?? []).find(c => c.id === catalogId &&
+    String(c.type).toLowerCase() === requestedType.toLowerCase())?.type || requestedType;
   if (!manifestUrl || !catalogId) return [];
   const base = manifestUrl.replace(/\/manifest\.json$/, "").replace(/\/+$/, "");
   const extra = catalog.addonGenre ? `/genre=${encodeURIComponent(catalog.addonGenre)}` : "";
   const url = proxiedUrl(`${base}/catalog/${encodeURIComponent(catalogType)}/${encodeURIComponent(catalogId)}${extra}.json`);
   const payload = await jsonRequest<{ metas?: StremioMeta[] }>(url);
   const metas = payload.metas ?? [];
-  const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language).catch(() => null)));
+  const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon, addons, catalogType).catch(() => null)));
   return hydrated.filter((item): item is MediaItem => Boolean(item));
 }
 
-async function hydrateAddonMeta(meta: StremioMeta, preferred: CatalogConfig["mediaType"], language: string): Promise<MediaItem | null> {
+async function hydrateAddonMeta(
+  meta: StremioMeta,
+  preferred: CatalogConfig["mediaType"],
+  language: string,
+  addon?: InstalledAddon,
+  addons: InstalledAddon[] = [],
+  catalogType = ""
+): Promise<MediaItem | null> {
   const tmdbId = numberValue(meta.tmdb_id);
   const mediaType: MediaType = String(meta.type ?? preferred ?? "").toLowerCase().includes("series") || preferred === "tv" ? "tv" : "movie";
+  // Items the addon describes itself open from its own /meta instead of a TMDB guess. A
+  // metadata addon (AIOMetadata) may re-list another addon's catalog; that addon owns the ids.
+  if (!tmdbId && !meta.imdb_id && meta.id) {
+    const addonType = String(meta.type ?? "").trim() || catalogType || (mediaType === "tv" ? "series" : "movie");
+    const owner = addon && addonServesOwnMeta(addon, addonType, meta.id)
+      ? addon
+      : findAddonServingOwnMeta(addons, addonType, meta.id, addon?.id);
+    const native = owner ? registerNativeItem(owner, meta, nativeMediaType(addonType), addonType) : null;
+    if (native) return native;
+  }
   if (tmdbId) {
     const detailed = await getBasicItem(mediaType, tmdbId, language).catch(() => null);
     if (detailed) return detailed;
@@ -704,6 +746,16 @@ async function hydrateAddonMeta(meta: StremioMeta, preferred: CatalogConfig["med
     rating: "",
     duration: ""
   };
+}
+
+/**
+ * How a native item is shown. Stremio's "tv" type is a live channel: one stream, no episodes,
+ * so it opens like a movie and plays straight away. Other addon-defined types (podcasts,
+ * debrid libraries) are containers of videos, which the series page shows.
+ */
+function nativeMediaType(addonType: string): MediaType {
+  const type = addonType.trim().toLowerCase();
+  return type === "tv" || type === "movie" || type === "film" ? "movie" : "tv";
 }
 
 function stableStringId(value: string) {
@@ -907,6 +959,8 @@ function persistLogoCache() {
 
 /** Title-treatment (clearlogo) URL for a movie/show — mirrors MediaRepository.getImages logo pick. */
 export async function getLogoUrl(item: { mediaType: MediaType; id: number }): Promise<string | null> {
+  // Ids below 1 are never TMDB titles (native addon items, unmatched entries).
+  if (item.id <= 0) return null;
   const key = `${item.mediaType}:${item.id}`;
   restoreLogoCache();
   if (logoCache.has(key)) return logoCache.get(key) ?? null;
@@ -981,6 +1035,7 @@ function persistCardMetaCache() {
 }
 
 export async function getCardMeta(item: { mediaType: MediaType; id: number }): Promise<{ runtime: number; image: string; backdrop: string | null; imdbId: string | null }> {
+  if (item.id <= 0) return { runtime: 0, image: "", backdrop: null, imdbId: null };
   const key = `${item.mediaType}:${item.id}`;
   restoreCardMetaCache();
   const cached = cardMetaCache.get(key);
@@ -1014,6 +1069,7 @@ export async function getCardMeta(item: { mediaType: MediaType; id: number }): P
 }
 
 export async function getCardProviders(item: { mediaType: MediaType; id: number }): Promise<string[]> {
+  if (item.id <= 0) return [];
   const key = `${item.mediaType}:${item.id}`;
   restoreProviderCache();
   const cached = providerCache.get(key);
@@ -1093,6 +1149,7 @@ export async function getSeasonEpisodes(
   priorityConfig?: ProviderPriorityConfig,
   metadataContext?: SeasonMetadataContext
 ): Promise<EpisodeInfo[]> {
+  if (isAddonNative({ id: tvId })) return getNativeSeasonEpisodes(tvId, seasonNumber).catch(() => []);
   const metadataType: MetadataMediaType = metadataContext?.isAnime ? "anime" : "tv";
   const externalConfig = providersBeforeTmdb(metadataType, priorityConfig);
   const lookup: MetadataLookupIds = {
@@ -1201,6 +1258,7 @@ function writeSeasonEpisodesCache(key: string, episodes: EpisodeInfo[]) {
 }
 
 export async function getReviews(item: { mediaType: MediaType; id: number }): Promise<ReviewInfo[]> {
+  if (item.id <= 0) return [];
   try {
     const response = await tmdb<{ results?: Array<{ id: string; author?: string; content?: string; created_at?: string; author_details?: { rating?: number | null; avatar_path?: string | null } }> }>(
       `${item.mediaType}/${item.id}/reviews`
@@ -1345,6 +1403,7 @@ const basicItemCache = new Map<string, MediaItem | null>();
 
 /** Lightweight details fetch (no append_to_response) with an in-memory cache — used to hydrate catalog rows. */
 export async function getCollectionPreview(item: MediaItem, language: string): Promise<MediaItem> {
+  if (isAddonNative(item)) return (await getNativeDetails(item)) ?? item;
   const details = await tmdb<TmdbItem>(`${item.mediaType}/${item.id}`, { language, append_to_response: "external_ids" });
   return { ...item, ...mapTmdbItem(details, item.mediaType), budget: details.budget,
     imdbId: details.external_ids?.imdb_id ?? item.imdbId, genres: details.genres?.map(genre => genre.name) };
@@ -1429,6 +1488,7 @@ export async function getTitlesForSearch(
 }
 
 export async function getDetails(item: MediaItem, priorityConfig?: ProviderPriorityConfig) {
+  if (isAddonNative(item)) return (await getNativeDetails(item).catch(() => null)) ?? item;
   try {
     const details = await fetchDetailsPayload(item, priorityConfig?.customTmdbApiKey);
     const mapped = mapTmdbItem({ ...details, media_type: item.mediaType }, item.mediaType);
@@ -1499,7 +1559,7 @@ export async function getDetails(item: MediaItem, priorityConfig?: ProviderPrior
         image: person.profile_path ? `${config.imageBase}${person.profile_path}` : ""
       })),
       seasons: item.mediaType === "tv" ? (details.seasons ?? [])
-        .filter((season) => (season.season_number ?? 0) > 0)
+        .filter((season) => season.season_number != null && season.season_number >= 0)
         .map((season) => ({
           id: season.id,
           seasonNumber: season.season_number ?? 0,

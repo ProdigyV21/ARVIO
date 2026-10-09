@@ -1,3 +1,5 @@
+import { browserSelfhostRuntimeConfig } from "../selfhostRuntimeConfig";
+
 export function sanitizeTelegramApiId(val?: string | number | null): number {
   if (val === undefined || val === null) return 0;
   const str = String(val).trim();
@@ -21,9 +23,20 @@ export function isTelegramCredentialsConfigured(apiId: number, apiHash: string):
   return apiId > 0 && Boolean(apiHash);
 }
 
-export const TELEGRAM_API_ID = sanitizeTelegramApiId(process.env.NEXT_PUBLIC_TELEGRAM_API_ID);
-export const TELEGRAM_API_HASH = sanitizeTelegramApiHash(process.env.NEXT_PUBLIC_TELEGRAM_API_HASH);
-export const isTelegramConfigured = isTelegramCredentialsConfigured(TELEGRAM_API_ID, TELEGRAM_API_HASH);
+export function getTelegramCredentials(): { apiId: number; apiHash: string } {
+  // Read at use-time: evaluating this module before the runtime script arrives
+  // must not permanently disable an otherwise configured independent install.
+  const runtime = browserSelfhostRuntimeConfig();
+  return {
+    apiId: sanitizeTelegramApiId(runtime?.telegramApiId ?? process.env.NEXT_PUBLIC_TELEGRAM_API_ID),
+    apiHash: sanitizeTelegramApiHash(runtime?.telegramApiHash ?? process.env.NEXT_PUBLIC_TELEGRAM_API_HASH)
+  };
+}
+
+export function isTelegramConfigured(): boolean {
+  const { apiId, apiHash } = getTelegramCredentials();
+  return isTelegramCredentialsConfigured(apiId, apiHash);
+}
 
 // localStorage key holding the GramJS StringSession (the authorization key). This
 // is the browser equivalent of Android's on-device TDLib database — losing it

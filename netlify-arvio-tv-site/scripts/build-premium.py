@@ -23,6 +23,7 @@ keys = {
     'home': 'Home', 'library': 'Library', 'server': 'Homeserver', 'tv': 'Live TV', 'sports': 'Sports',
 }
 hosting = json.loads((site / 'scripts/premium-hosting.json').read_text(encoding='utf-8'))
+membership_terms = json.loads((site / 'scripts/premium-membership-terms.json').read_text(encoding='utf-8'))
 manifest = json.loads((root / 'web/lib/i18n/manifest.json').read_text())
 languages = json.loads((root / 'web/lib/i18n/languages.json').read_text(encoding='utf-8'))
 languages.append({'code': 'en-GB', 'label': 'English (UK)'})
@@ -90,7 +91,7 @@ trial_copy = {
 feature_copy = {
     'en': {
         'hosting': 'Live TV. Your favourite sources. Your ARVIO, in a browser. We handle the hosting — you enjoy the setup you already love.',
-        'coffee': 'A cup of coffee a month. A big difference for an independent developer. Your membership helps pay for hosting and continued development.',
+        'coffee': 'Buy the developer a monthly coffee. Get ARVIO Web hosted 24/7 in return — no server to set up or maintain. Your support keeps ARVIO growing.',
         'tv': 'Live TV in your browser',
         'tvBody': 'Bring your own IPTV service. Browse the programme guide and play supported channels right in ARVIO Web.',
         'download': 'Your sources. Ready to download.',
@@ -99,12 +100,12 @@ feature_copy = {
         'serverBody': 'Bring your Jellyfin, Plex, Emby or Silo library into the same familiar interface.',
         'sportsBody': 'Explore sports events and find sources from your connected services.',
         'free': 'Android & TV stay free. Self-hosting stays free.',
-        'join': 'Support ARVIO · Get Premium',
+        'join': 'Get Premium on Ko-fi',
     },
     'nl': {
         'intro': 'Neem je ARVIO mee naar Windows, Mac, iPhone, iPad en smart-tv-browsers. Je profielen, bibliotheken, add-ons en kijkvoortgang blijven verbonden via ARVIO Cloud.',
         'hosting': 'Live-tv. Jouw favoriete bronnen. Jouw ARVIO, in de browser. Wij regelen de hosting — jij geniet van je vertrouwde setup.',
-        'coffee': 'Een kop koffie per maand. Een groot verschil voor een onafhankelijke ontwikkelaar. Met je lidmaatschap help je de hosting en verdere ontwikkeling te betalen.',
+        'coffee': 'Trakteer de ontwikkelaar elke maand op een kop koffie. Krijg er 24/7 gehost ARVIO Web voor terug — zonder zelf een server te beheren. Jouw steun laat ARVIO groeien.',
         'tv': 'Live-tv in je browser',
         'tvBody': 'Koppel je eigen IPTV-dienst. Bekijk de tv-gids en speel ondersteunde zenders rechtstreeks af in ARVIO Web.',
         'download': 'Jouw bronnen. Klaar om te downloaden.',
@@ -113,7 +114,7 @@ feature_copy = {
         'serverBody': 'Breng je Jellyfin-, Plex-, Emby- of Silo-bibliotheek samen in dezelfde vertrouwde interface.',
         'sportsBody': 'Ontdek sportevenementen en vind bronnen via je gekoppelde diensten.',
         'free': 'Android en tv blijven gratis. Zelf hosten ook.',
-        'join': 'Steun ARVIO · Kies Premium',
+        'join': 'Neem Premium via Ko-fi',
         'play': 'Afspelen in je browser of openen in VLC',
         'sync': 'Je profielen, bibliotheken en kijkvoortgang blijven verbonden',
     },
@@ -143,6 +144,8 @@ for entry in languages:
     assert '{' not in translations['trial'] and '}' not in translations['trial'], code
     translations['hosting'] = hosting.get(locale, hosting.get(base))
     assert translations['hosting'], code
+    translations['membershipTerms'] = membership_terms.get(locale, membership_terms.get(base))
+    assert translations['membershipTerms'], ('Missing membership terms', code)
     translations.update({
         'coffee': translations['hosting'],
         'tvBody': translations['play'],

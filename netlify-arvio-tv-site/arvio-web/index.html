@@ -1,26 +1,181 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ARVIO Web: Browser Setup, Free Self-Hosting &amp; Premium</title>
-  <meta name="description" content="Use ARVIO in your browser with free self-hosting or optional Premium hosting. Follow setup steps, connect your sources and check playback compatibility.">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARVIO Web for iPhone, iPad, Windows &amp; Mac | Setup</title>
+  <meta name="description" content="Use ARVIO on iPhone, iPad, Windows or Mac in your browser. Open the hosted web app or self-host free; compare login, sync and playback limits.">
   <link rel="canonical" href="https://arvio.tv/arvio-web/">
   <!-- hreflang:start -->
   <link rel="alternate" hreflang="en" href="https://arvio.tv/arvio-web/">
   <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/arvio-web/">
   <link rel="alternate" hreflang="es" href="https://arvio.tv/es/arvio-web/">
   <link rel="alternate" hreflang="x-default" href="https://arvio.tv/arvio-web/">
-  <!-- hreflang:end --><link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
-  <meta property="og:type" content="website"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="ARVIO Web: Browser Setup, Free Self-Hosting &amp; Premium"><meta property="og:description" content="Use ARVIO in your browser with free self-hosting or optional Premium hosting. Follow setup steps, connect your sources and check playback compatibility."><meta property="og:url" content="https://arvio.tv/arvio-web/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/web/01-home.webp">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="ARVIO Web: Browser Setup, Free Self-Hosting &amp; Premium"><meta name="twitter:description" content="Use ARVIO in your browser with free self-hosting or optional Premium hosting. Follow setup steps, connect your sources and check playback compatibility."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/web/01-home.webp">
-  
-
-<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "ARVIO in your browser. Your choice of hosting.", "description": "Use ARVIO in your browser with free self-hosting or optional Premium hosting. Follow setup steps, connect your sources and check playback compatibility.", "dateModified": "2026-09-28", "author": {"@type": "Organization", "name": "ARVIO"}, "url": "https://arvio.tv/arvio-web/"}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is ARVIO Web only available with Premium?", "acceptedAnswer": {"@type": "Answer", "text": "No. You can self-host the open-source webapp without a subscription using your own API credentials. Premium is the optional ARVIO-hosted service."}}, {"@type": "Question", "name": "Does self-hosting include ARVIO Cloud sync?", "acceptedAnswer": {"@type": "Answer", "text": "No. Self-hosted profiles and settings live in the browser. Trakt or Simkl can sync their own supported data, but not your entire ARVIO setup. Clearing site data removes local profiles."}}, {"@type": "Question", "name": "Will everything play on iPhone or iPad?", "acceptedAnswer": {"@type": "Answer", "text": "No. Playback depends on the codecs, container, provider and browser support. Test your sources on your actual device during the trial. Desktop success does not guarantee iPad playback."}}, {"@type": "Question", "name": "What does Premium pay for?", "acceptedAnswer": {"@type": "Answer", "text": "Managed webapp hosting and continued ARVIO development. It does not include movies, channels, provider subscriptions or a promise that every source will play."}}]}]}</script>
-<script defer src="/assets/premium-journey.js?v=2"></script></head>
-<body><a class="skip-link" href="#content">Skip to content</a><header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="134" height="34"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/premium/">Premium</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Free APK</a></nav></div></header><main id="content">
-<section class="guide-intro"><div class="shell"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span>/</span><a href="/guides/">Guides</a></nav><p class="eyebrow">Free self-hosting · Optional Premium</p><h1>ARVIO in your browser. Your choice of hosting.</h1><p class="lead">Use your libraries and supported sources on a desktop or mobile browser. Self-host for free, or let Premium handle the hosting and support ongoing development.</p><div class="actions"><a class="button" href="https://web.arvio.tv/?intent=trial">Try hosted ARVIO Web</a><a class="button secondary" href="#setup">Read the setup guide</a></div><p class="guide-updated">Updated 28 September 2026 · By the ARVIO project</p><nav class="guide-jump" aria-label="On this page"><a href="#setup">Setup</a><a href="#hosting">Free &amp; Premium</a><a href="#help">Troubleshooting</a></nav></div></section>
-<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/web/01-home.webp" alt="ARVIO in your browser. Your choice of hosting. ARVIO interface" width="1920" height="1080" fetchpriority="high"><figcaption>Existing ARVIO 2.0 screenshot. Libraries and services shown are examples, not included content.</figcaption></figure></div></section>
-<section class="section" id="setup"><div class="shell guide-reading"><p class="eyebrow">Step by step</p><h2>Get your first source working.</h2><ol class="setup-list"><li><h3>Choose your hosting</h3><p>For managed hosting, open ARVIO Web and sign in to ARVIO Cloud. The one-time three-day trial lets you check your setup without payment details. For self-hosting, follow the official instructions below using your own API credentials.</p></li><li><h3>Use the intended profile</h3><p>On the hosted service, use the same Cloud account and intended profile as your existing ARVIO setup. In self-hosted mode, profiles and settings stay in that browser; local storage is not ARVIO Cloud sync.</p></li><li><h3>Connect a source you can test</h3><p>In Settings, connect a supported home server, addon or IPTV playlist. Start with a known accessible item. ARVIO does not include a movie library, channels or third-party subscriptions.</p></li><li><h3>Test on your actual device</h3><p>MP4 with H.264 video and AAC audio is a useful starting point. HEVC, remux files, lossless audio and live streams can behave differently across browsers. Try your actual sources before subscribing.</p></li><li><h3>Choose how to continue</h3><p>Maintain your own installation for free, or join Premium for managed hosting. The free Android APK remains available either way. External player handoff and permitted downloads depend on your source and device.</p></li></ol></div></section><section class="section compact" id="hosting"><div class="shell"><div class="note"><h2>Free software. Optional hosting.</h2><p>The Android APK is free. Self-host ARVIO Web for free with your own API credentials, or choose Premium at $2.99/month for managed hosting that supports development.</p><div class="actions"><a class="button" href="/premium/">Explore Premium hosting</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">Free self-hosting instructions</a></div><p>Self-hosted settings live in your browser. The official README explains setup, updates, network access and what does and does not sync.</p></div></div></section>
-<section class="section" id="help"><div class="shell"><p class="eyebrow">Useful answers</p><h2>Before you get stuck.</h2><div class="faq-list"><details><summary>Is ARVIO Web only available with Premium?</summary><p>No. You can self-host the open-source webapp without a subscription using your own API credentials. Premium is the optional ARVIO-hosted service.</p></details><details><summary>Does self-hosting include ARVIO Cloud sync?</summary><p>No. Self-hosted profiles and settings live in the browser. Trakt or Simkl can sync their own supported data, but not your entire ARVIO setup. Clearing site data removes local profiles.</p></details><details><summary>Will everything play on iPhone or iPad?</summary><p>No. Playback depends on the codecs, container, provider and browser support. Test your sources on your actual device during the trial. Desktop success does not guarantee iPad playback.</p></details><details><summary>What does Premium pay for?</summary><p>Managed webapp hosting and continued ARVIO development. It does not include movies, channels, provider subscriptions or a promise that every source will play.</p></details></div><p>Still need help? <a href="https://discord.gg/UavuEYMfQ4">Ask in the ARVIO Discord</a> with your app version, device and error. Keep passwords and provider URLs private.</p></div></section>
-<section class="section"><div class="shell"><h2>Keep building your setup.</h2><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><strong>Set up ARVIO on Android TV.</strong><span>Free Android &amp; TV app</span></a><a class="related-link" href="/plex-emby-jellyfin/"><strong>Your servers. One familiar library.</strong><span>Jellyfin · Plex · Emby</span></a><a class="related-link" href="/live-tv-epg/"><strong>Your live TV, with a guide that makes sense.</strong><span>Your playlist · Your channels</span></a></div></div></section></main><footer class="site-footer"><div class="shell"><p>Free, open-source software. Optional hosting that supports its future.</p><nav class="footer-links" aria-label="Footer"><a href="/guides/">Guides</a><a href="/media-kit/">Media kit</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a href="/privacy">Privacy</a></nav><p>ARVIO includes no movies, channels or third-party subscriptions.</p></div></footer></body>
+  <!-- hreflang:end -->
+  <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+  <link rel="stylesheet" href="/guides/guide.css">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="ARVIO">
+  <meta property="og:title" content="ARVIO Web for iPhone, iPad, Windows &amp; Mac | Setup">
+  <meta property="og:description" content="Use ARVIO on iPhone, iPad, Windows or Mac in your browser. Open the hosted web app or self-host free; compare login, sync and playback limits.">
+  <meta property="og:url" content="https://arvio.tv/arvio-web/">
+  <meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/web/01-home.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ARVIO Web for iPhone, iPad, Windows &amp; Mac | Setup">
+  <meta name="twitter:description" content="Use ARVIO on iPhone, iPad, Windows or Mac in your browser. Open the hosted web app or self-host free; compare login, sync and playback limits.">
+  <meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/web/01-home.webp">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "ARVIO on iPhone, iPad, Windows and Mac.",
+        "description": "Use ARVIO on iPhone, iPad, Windows or Mac in your browser. Open the hosted web app or self-host free; compare login, sync and playback limits.",
+        "dateModified": "2026-10-04",
+        "author": {
+          "@type": "Organization",
+          "name": "ARVIO"
+        },
+        "url": "https://arvio.tv/arvio-web/"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "ARVIO",
+            "item": "https://arvio.tv/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Guides",
+            "item": "https://arvio.tv/guides/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "ARVIO on iPhone, iPad, Windows and Mac.",
+            "item": "https://arvio.tv/arvio-web/"
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is ARVIO available on iPhone and iPad?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "This guide covers ARVIO Web in the browser on iPhone and iPad. An Android APK cannot be installed on iOS. Use the hosted web app or your own self-hosted installation, and test the formats and sources you use on that device."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I use ARVIO on Windows or Mac?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Open web.arvio.tv in a current browser for the hosted app, or open your self-hosted ARVIO address. This browser route does not require a Windows EXE, Mac DMG or Android emulator."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do I need Premium to use ARVIO Web?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Premium is required to continue using the optional ARVIO-hosted service after its one-time trial. You can self-host the open-source web app without an ARVIO subscription using your own hosting and API credentials. The Android app is also free."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why am I seeing a dashboard instead of the player?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The addon-management dashboard at arvio.tv/web/ is separate from the browser playback app at web.arvio.tv. Open the browser app for ARVIO Web playback and its hosted sign-in."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why does my library load but a video fail to play?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Library access and video playback are separate checks. The media URL must be reachable, and its container, video, audio and subtitles must work with the device and browser. Follow the browser playback checklist and compare with a known compatible file."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does self-hosting sync all my Android settings?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Self-hosted profiles, settings and history live in the current browser and do not use ARVIO Cloud. Connected Trakt or Simkl accounts can sync their own supported data, not your full ARVIO setup. Clearing site data removes browser-local data."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <script defer src="/assets/premium-journey.js?v=2"></script>
+</head>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="134" height="34"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/premium/">Premium</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Free APK</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell">
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>ARVIO Web</span></nav>
+<p class="eyebrow">Browser access · No Android APK required</p><h1>ARVIO on iPhone, iPad, Windows and Mac.</h1>
+<p class="lead">Open ARVIO Web in your browser to use your libraries and supported sources. You do not need to install an Android APK on your phone or computer. Choose the ARVIO-hosted service, or run the open-source web app yourself.</p>
+<div class="actions"><a class="button" href="https://web.arvio.tv/?intent=trial">Open ARVIO Web</a><a class="button secondary" href="/self-host-arvio-web/">Self-host for free</a></div>
+<p class="guide-updated">Updated 4 October 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#devices">Your device</a><a href="#hosting">Hosting &amp; login</a><a href="#setup">Setup</a><a href="#playback">Playback</a><a href="#help">Troubleshooting</a></nav>
+</div></section>
+<section class="section compact" id="devices"><div class="shell guide-reading">
+<h2>Use the browser version on your device</h2>
+<div class="feature-list">
+<article class="feature-item"><h3>iPhone and iPad</h3><p>Open <a href="https://web.arvio.tv/">web.arvio.tv</a> in your browser and sign in for the hosted service. This is browser access, not an iOS APK or a native App Store installation. Test your own sources on the actual iPhone or iPad: a video working on a PC does not guarantee that it will play on iOS.</p></article>
+<article class="feature-item"><h3>Windows, Mac and Linux</h3><p>Open the same web address in a current desktop browser. There is no Windows EXE or Mac DMG to install for this browser route. You can use the hosted service or open your own self-hosted address.</p></article>
+</div><p>On Android TV or Google TV, start with the <a href="/android-tv-media-hub/">free Android app</a>. TV browser support varies by model; do not assume a smart TV or Apple TV offers the same browser experience as a computer.</p>
+</div></section>
+<section class="section" id="hosting"><div class="shell guide-reading">
+<p class="eyebrow">Two ways to run ARVIO Web</p><h2>Hosted login or free self-hosting?</h2>
+<div class="guide-table-wrap" role="region" aria-label="ARVIO Web hosting comparison" tabindex="0"><table class="guide-table"><thead><tr><th scope="col">What to expect</th><th scope="col">ARVIO-hosted</th><th scope="col">Self-hosted</th></tr></thead><tbody>
+<tr><th scope="row">Where to open it</th><td><a href="https://web.arvio.tv/">web.arvio.tv</a></td><td>Your own server address</td></tr>
+<tr><th scope="row">Sign-in</th><td>Your ARVIO Cloud account and intended profile</td><td>Create or choose a local profile; no ARVIO login or trial</td></tr>
+<tr><th scope="row">Cost</th><td>One-time three-day trial, then optional <a href="/premium/">Premium hosting</a> at $2.99/month</td><td>No ARVIO subscription; you provide hosting and your own API credentials</td></tr>
+<tr><th scope="row">Settings and sync</th><td>Supported ARVIO Cloud features for your account and profile</td><td>Profiles, settings and history stay in that browser; no ARVIO Cloud sync</td></tr>
+<tr><th scope="row">Updates</th><td>Managed by ARVIO</td><td>You update your installation</td></tr>
+<tr><th scope="row">Media and playback</th><td colspan="2">Bring your own authorized sources. Browser and format limits apply in both versions; neither includes movies, channels or third-party subscriptions.</td></tr>
+</tbody></table></div>
+<p>Self-hosted Trakt or Simkl connections can sync their own supported data. They do not sync your entire ARVIO configuration. Clearing browser site data removes local profiles and settings.</p>
+</div></section>
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/web/01-home.webp" alt="ARVIO Web home screen showing media library rows in a desktop browser interface" width="1920" height="1080" loading="lazy"><figcaption>ARVIO Web interface. Example libraries are shown; media is not included.</figcaption></figure></div></section>
+<section class="section" id="setup"><div class="shell guide-reading">
+<p class="eyebrow">First session</p><h2>Set up ARVIO Web</h2>
+<ol class="setup-list">
+<li><h3>Open the correct app</h3><p>For hosted browser playback, open <a href="https://web.arvio.tv/?intent=trial">ARVIO Web</a> and sign in to ARVIO Cloud. The one-time three-day trial does not require payment details. If you prefer running it yourself, follow the <a href="/self-host-arvio-web/">Docker or Node.js setup guide</a> and open your own installation.</p></li>
+<li><h3>Choose the intended profile</h3><p>On the hosted service, use the same account and profile as your existing ARVIO setup. Self-hosted profiles are local to the current browser, so you configure that installation separately.</p></li>
+<li><h3>Connect one source</h3><p>For a media server, open <strong>Settings → Home Server</strong>, choose the server type and enter its full server address and credentials. Use <strong>Test</strong> before <strong>Add</strong>. The web form uses a Plex token for Plex; it is different from Android's code sign-in. For an addon, use the manifest URL field and <strong>Install</strong> in the Addons panel. Configure your own live TV playlist in Settings if needed.</p></li>
+<li><h3>Test a known item</h3><p>For server libraries, open <strong>Library → Homeserver</strong> and choose the server and library. Try a title you know your account can play, then test audio and subtitles. A visible poster or a successful server login alone does not confirm playback.</p></li>
+</ol><p>Looking for the addon-management dashboard? <a href="/web/">Open the ARVIO Dashboard</a>. It is separate from the browser playback app linked above.</p>
+</div></section>
+<section class="section compact" id="playback"><div class="shell guide-reading">
+<h2>Check playback before choosing hosting</h2>
+<p>MP4 with H.264 video and AAC audio is a useful first test. HEVC, remux files, lossless audio, subtitles and live streams can behave differently across browsers and devices. Self-hosting does not add a transcoding service or make every file browser-playable.</p>
+<p>A home server also needs to be reachable through the full connection path. Hosted ARVIO Web's server requests cannot reach a private LAN address such as <code>192.168.x.x</code> just because your browser is on that network. A trusted self-hosted setup has different networking options; HTTPS, cross-origin rules and browser restrictions still matter. Do not disable server authentication or expose it publicly just to work around an error.</p>
+<div class="actions"><a class="button" href="/browser-playback-guide/">Follow the playback checklist</a><a class="button secondary" href="/self-host-arvio-web/#network">Read self-hosting network guidance</a></div>
+</div></section>
+<section class="section" id="help"><div class="shell guide-reading"><p class="eyebrow">Common questions</p><h2>Setup and troubleshooting</h2><div class="faq-list">
+<details><summary>Is ARVIO available on iPhone and iPad?</summary><p>This guide covers ARVIO Web in the browser on iPhone and iPad. An Android APK cannot be installed on iOS. Use the hosted web app or your own self-hosted installation, and test the formats and sources you use on that device.</p></details>
+<details><summary>How do I use ARVIO on Windows or Mac?</summary><p>Open web.arvio.tv in a current browser for the hosted app, or open your self-hosted ARVIO address. This browser route does not require a Windows EXE, Mac DMG or Android emulator.</p></details>
+<details><summary>Do I need Premium to use ARVIO Web?</summary><p>Premium is required to continue using the optional ARVIO-hosted service after its one-time trial. You can self-host the open-source web app without an ARVIO subscription using your own hosting and API credentials. The Android app is also free.</p></details>
+<details><summary>Why am I seeing a dashboard instead of the player?</summary><p>The addon-management dashboard at arvio.tv/web/ is separate from the browser playback app at web.arvio.tv. Open the browser app for ARVIO Web playback and its hosted sign-in.</p></details>
+<details><summary>Why does my library load but a video fail to play?</summary><p>Library access and video playback are separate checks. The media URL must be reachable, and its container, video, audio and subtitles must work with the device and browser. Follow the browser playback checklist and compare with a known compatible file.</p></details>
+<details><summary>Does self-hosting sync all my Android settings?</summary><p>No. Self-hosted profiles, settings and history live in the current browser and do not use ARVIO Cloud. Connected Trakt or Simkl accounts can sync their own supported data, not your full ARVIO setup. Clearing site data removes browser-local data.</p></details>
+</div><p>Still stuck? <a href="https://discord.gg/UavuEYMfQ4">Ask in the ARVIO Discord</a> with your device, app or browser version and the error message. Do not share passwords, access tokens or private provider URLs.</p></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><p>Free, open-source software. Optional hosting that supports its future.</p><nav class="footer-links" aria-label="Footer"><a href="/guides/">Guides</a><a href="/media-kit/">Media kit</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a href="/privacy">Privacy</a></nav><p>ARVIO includes no movies, channels or third-party subscriptions.</p></div></footer>
+</body>
 </html>

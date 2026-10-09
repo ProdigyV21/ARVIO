@@ -73,7 +73,7 @@ export function StabilizationFixture({ testLiveUrl, useSourceUrls = false }: { t
   const app = {
     view: "app", section: page === "onboarding" ? "home" : page, addonsReady: true, closeDetails: noop,
     settings, setSettings, updateSettings: (patch: object) => setSettings((old) => ({ ...old, ...patch })),
-    iptvSnapshot: visibleSnapshot, loadIptvGuide, refreshIptv: async () => {}, busy: "", auth: null, activeProfile: { id: "fixture", name: "Test profile" },
+    iptvSnapshot: visibleSnapshot, loadIptvGuide, refreshIptv: async () => {}, favoriteTvChannels: [], busy: "", auth: null, activeProfile: { id: "fixture", name: "Test profile" },
     profiles: [], addons: showOnboarding ? sportsAddons.map(addon => ({ ...addon, resources: ["catalog"] })) : sportsAddons, watchlist: media, continueWatching: media.slice(0, 4), traktConnected: true, simklConnected: true, mdblistConnected: false,
     openDetails: (item: MediaItem) => setToast(`Selected: ${item.title}`), openContextMenu: noop, isWatched: () => false,
     loadTrackerLibrary, loadTraktLists, loadTraktListItems: async () => media,

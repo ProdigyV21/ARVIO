@@ -1,60 +1,110 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Debrid and Usenet on TV, iPad, Windows and Mac - ARVIO</title>
-  <meta name="description" content="Use compatible debrid and Usenet sources in ARVIO across Android TV, iPhone, iPad, Windows and Mac, with quality, file size and source metadata.">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debrid Player for Android TV: Addon Setup | ARVIO</title>
+  <meta name="description" content="Use addon-provided debrid and Usenet sources in ARVIO on Android TV. Learn what you need, how to install a configured addon and fix missing streams.">
   <link rel="canonical" href="https://arvio.tv/debrid-usenet-android-tv/">
   <!-- hreflang:start -->
   <link rel="alternate" hreflang="en" href="https://arvio.tv/debrid-usenet-android-tv/">
   <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/debrid-usenet-android-tv/">
   <link rel="alternate" hreflang="es" href="https://arvio.tv/es/debrid-usenet-android-tv/">
   <link rel="alternate" hreflang="x-default" href="https://arvio.tv/debrid-usenet-android-tv/">
-  <!-- hreflang:end --><link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
-  <meta property="og:type" content="website"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="Debrid and Usenet across TV, iPad, Windows and Mac"><meta property="og:description" content="Organize compatible user-authorized sources in ARVIO's Android app or optional browser companion."><meta property="og:url" content="https://arvio.tv/debrid-usenet-android-tv/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/02-details.webp">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Debrid and Usenet across supported devices"><meta name="twitter:description" content="Quality, file size, addon attribution and resolved playback for compatible sources in ARVIO."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/02-details.webp">
+  <!-- hreflang:end -->
+  <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+  <link rel="stylesheet" href="/guides/guide.css">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="ARVIO">
+  <meta property="og:title" content="Debrid Player for Android TV: Addon Setup | ARVIO">
+  <meta property="og:description" content="Use addon-provided debrid and Usenet sources in ARVIO on Android TV. Learn what you need, how to install a configured addon and fix missing streams.">
+  <meta property="og:url" content="https://arvio.tv/debrid-usenet-android-tv/">
+  <meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/02-details.webp">
+  <meta property="og:image:width" content="1920">
+  <meta property="og:image:height" content="1080">
+  <meta property="og:image:alt" content="ARVIO TV title details interface with seasons and episodes">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Debrid Player for Android TV: Addon Setup | ARVIO">
+  <meta name="twitter:description" content="Use addon-provided debrid and Usenet sources in ARVIO on Android TV. Learn what you need, how to install a configured addon and fix missing streams.">
+  <meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/02-details.webp">
+  <meta name="twitter:image:alt" content="ARVIO TV title details interface with seasons and episodes">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@graph":[
-    {"@type":"SoftwareApplication","name":"ARVIO","applicationCategory":"MultimediaApplication","operatingSystem":"Android TV, Google TV, Android","url":"https://arvio.tv/debrid-usenet-android-tv/","downloadUrl":"https://play.google.com/store/apps/details?id=com.arvio.tv","codeRepository":"https://github.com/ProdigyV21/ARVIO","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"An open-source Android media-management app that can display and play compatible HTTP sources returned by user-configured debrid and Usenet integrations."},
-    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Debrid and Usenet sources","item":"https://arvio.tv/debrid-usenet-android-tv/"}]},
+    {"@type":"TechArticle","headline":"Use debrid and Usenet sources on Android TV.","description":"Use addon-provided debrid and Usenet sources in ARVIO on Android TV. Learn what you need, how to install a configured addon and fix missing streams.","dateModified":"2026-10-05","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/debrid-usenet-android-tv/","image":"https://arvio.tv/assets/screenshots-v2/tv/02-details.webp"},
+    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Debrid and Usenet on Android TV","item":"https://arvio.tv/debrid-usenet-android-tv/"}]},
     {"@type":"FAQPage","mainEntity":[
-      {"@type":"Question","name":"Does ARVIO include a debrid or Usenet account?","acceptedAnswer":{"@type":"Answer","text":"No. ARVIO does not include, sell or share provider accounts. Users must separately configure a compatible addon or service they are authorized to use."}},
-      {"@type":"Question","name":"Does ARVIO play torrent or magnet links directly?","acceptedAnswer":{"@type":"Answer","text":"No. Raw P2P torrent and magnet playback is not supported. A compatible integration must return a resolved HTTP media source that the device can access."}},
-      {"@type":"Question","name":"What source information can ARVIO show?","acceptedAnswer":{"@type":"Answer","text":"When an addon supplies the metadata, ARVIO can show quality, file size, filename, language, addon attribution, provider labels and other source details before playback."}}
+      {"@type":"Question","name":"Does ARVIO include a debrid or Usenet subscription?","acceptedAnswer":{"@type":"Answer","text":"No. The Android app is free, but third-party accounts and any required subscriptions are separate. ARVIO does not supply movies, source indexes, provider credentials or access rights."}},
+      {"@type":"Question","name":"Can ARVIO play torrent or magnet links directly?","acceptedAnswer":{"@type":"Answer","text":"No. Direct P2P torrent, magnet and infoHash-only playback is not supported. The addon or service must provide a media source that resolves to an accessible HTTP or HTTPS URL."}},
+      {"@type":"Question","name":"Is ARVIO a debrid cloud manager or Usenet downloader?","acceptedAnswer":{"@type":"Answer","text":"No. This setup uses ARVIO as a player for compatible addon-provided sources. It is not a native interface for managing a debrid cloud library, downloading NZB files or browsing a Usenet indexer."}},
+      {"@type":"Question","name":"Will every debrid provider and addon work?","acceptedAnswer":{"@type":"Answer","text":"Compatibility depends on the configured addon, its returned URL, the provider account and the media format. A provider name in a source label does not prove compatibility. Test an authorized source on your device before relying on a particular combination."}},
+      {"@type":"Question","name":"Can I use these sources on an iPhone, iPad or computer?","acceptedAnswer":{"@type":"Answer","text":"ARVIO Web can install compatible addon manifests in a supported browser. Browser codecs, network access and provider restrictions differ from Android playback. Managed hosting is optional; self-hosting is also available. A working Android source is not a guarantee of browser playback."}}
     ]}
   ]}
   </script>
+  <script defer src="/assets/premium-journey.js?v=2"></script>
 </head>
-<body>
-  <a class="skip-link" href="#content">Skip to content</a>
-  <header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
-  <main id="content">
-    <section class="hero"><img class="hero-media" src="/assets/screenshots-v2/tv/02-details.webp" alt="ARVIO title details interface on a television"><div class="hero-shade" aria-hidden="true"></div><div class="hero-content"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Debrid and Usenet</span></nav><p class="eyebrow">Compatible personal integrations</p><h1>Debrid and Usenet sources, clearly organized.</h1><p class="hero-copy">Use compatible addon-provided sources in the free Android app or optional ARVIO Web on iPhone, iPad, Windows, Mac and supported Apple TV browsers. ARVIO preserves source details and plays resolved HTTP media.</p><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Install ARVIO</a><a class="button secondary" href="/arvio-web/">Explore browser access</a></div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Transparent source selection</p><h2>See what an addon returned before you play it.</h2><p>Compatible addons can expose more than a URL. ARVIO keeps useful source metadata visible so users can make an informed choice instead of selecting an unexplained result.</p></div><div class="feature-list">
-      <article class="feature-item"><h3>Quality and resolution</h3><p>Recognize reported 4K, 1080p, 720p and other quality information through consistent source badges.</p></article>
-      <article class="feature-item"><h3>File size and filename</h3><p>Compare the reported size and read the full filename when the addon supplies those values.</p></article>
-      <article class="feature-item"><h3>Addon and provider attribution</h3><p>Keep addon-specific labels such as a debrid, Usenet, vault, index or host name visible instead of reducing every result to a generic source.</p></article>
-      <article class="feature-item"><h3>Language and technical details</h3><p>Show available language, release, codec and source metadata without duplicating the same badges and labels.</p></article>
-      <article class="feature-item"><h3>Useful sorting</h3><p>Keep addon order meaningful, then compare reported size and quality so preferred integrations and higher-quality results remain easy to find.</p></article>
-      <article class="feature-item"><h3>Android and browser playback</h3><p>Use native Android playback or optional browser playback, transcoding and VLC or Infuse handoff where supported by the service, format and device.</p></article>
-    </div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">How the connection works</p><h2>The addon resolves; ARVIO presents and plays.</h2></div><div class="steps"><article class="step"><h3>Bring a compatible integration</h3><p>Configure an addon or service separately using an account and content access you are authorized to use.</p></article><article class="step"><h3>Receive resolved sources</h3><p>The integration returns compatible source metadata and a playable HTTP URL. ARVIO does not search Usenet or debrid infrastructure by itself.</p></article><article class="step"><h3>Select or autoplay</h3><p>Choose a specific result from the source page or let autoplay use the best ready candidate under the active preferences.</p></article></div></div></section>
-
-    <section class="screen-band"><div class="shell"><figure class="screen-frame"><img src="/assets/a9f9dd6c-4a0c-4ff5-b6d8-4cb8890875f6.webp" alt="ARVIO full-screen player interface"><figcaption class="screen-caption"><span>Resolved media plays through ARVIO's native Android player</span><span>Source and device compatibility still apply</span></figcaption></figure></div></section>
-
-    <section class="section compact"><div class="shell"><div class="note"><h2>No account, addon or media is included</h2><p>ARVIO does not provide debrid or Usenet subscriptions, source indexes, provider credentials, files or streams. It does not support direct P2P torrent or magnet playback. Users are responsible for choosing lawful services and accessing only content they are authorized to use.</p></div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions</p><h2>Debrid and Usenet FAQ</h2></div><div class="faq-list">
-      <details><summary>Does ARVIO include a debrid or Usenet account?</summary><p>No. ARVIO does not include, sell or share provider accounts. You must separately configure a compatible addon or service you are authorized to use.</p></details>
-      <details><summary>Does ARVIO play torrent or magnet links directly?</summary><p>No. Raw P2P torrent and magnet playback is not supported. A compatible integration must return a resolved HTTP media source that the device can access.</p></details>
-      <details><summary>What source information can ARVIO show?</summary><p>When an addon supplies the metadata, ARVIO can show quality, file size, filename, language, addon attribution, provider labels and other source details before playback.</p></details>
-    </div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>Use sources in the wider ARVIO setup.</h2></div><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><small>Overview</small><strong>Android TV media hub</strong><span>Profiles, libraries, services and playback in one interface.</span></a><a class="related-link" href="/trakt-simkl-sync/"><small>Tracking</small><strong>Trakt and Simkl sync</strong><span>Keep lists and progress separate from playable sources.</span></a><a class="related-link" href="/ai-subtitles-android-tv/"><small>Playback</small><strong>AI subtitles on Android TV</strong><span>Subtitle search, styling and optional AI tools.</span></a></div></div></section>
-    <section class="cta-band"><div class="shell cta-inner"><div><h2>Your integrations, with the details intact.</h2><p>ARVIO is free and open source on Android.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
-  </main>
-  <footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO provides software, not media.</span></div></div></footer>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/premium/">Premium</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Free APK</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell">
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Debrid and Usenet on Android TV</span></nav>
+<p class="eyebrow">Android TV · Google TV · Your sources</p>
+<h1>Use debrid and Usenet sources on Android TV.</h1>
+<p class="lead">ARVIO can play compatible debrid and Usenet sources returned by a configured addon. Use its TV interface to browse titles, compare source details and select a playable result. You bring the addon, provider account and permission to access the media.</p>
+<div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO for Android TV</a><a class="button secondary" href="/stremio-addons-android-tv/">Read the addon setup guide</a></div>
+<p class="guide-updated">Updated 5 October 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#requirements">What you need</a><a href="#setup">Setup</a><a href="#sources">Source details</a><a href="#troubleshooting">Troubleshooting</a><a href="#faq">FAQ</a></nav>
+</div></section>
+<section class="section compact" id="requirements"><div class="shell guide-reading">
+<h2>A player, an addon and a provider do different jobs</h2>
+<div class="feature-list">
+<article class="feature-item"><h3>ARVIO is the player</h3><p>The free Android app provides the TV interface and playback controls. Install it on Android TV or Google TV from an official download. For Fire TV, first check the <a href="/fire-tv-media-player/">Fire OS compatibility guide</a>.</p></article>
+<article class="feature-item"><h3>The addon supplies sources</h3><p>A compatible addon connects the title you select to source results. Some addons only supply catalogs or subtitles. A catalog of posters alone does not provide playable video.</p></article>
+<article class="feature-item"><h3>The provider supplies access</h3><p>Configure the required account with the addon separately. Debrid and Usenet are different services; the relevant integration must return a source that resolves to accessible HTTP or HTTPS media.</p></article>
+<article class="feature-item"><h3>Your device handles the format</h3><p>The TV, audio setup and connection still determine which files play well. A 4K badge is source metadata, not a guarantee that every TV can decode its video or audio.</p></article>
+</div><p>This is an addon-based playback setup, not a native debrid cloud manager or an NZB downloader. No debrid or Usenet subscription is bundled with ARVIO.</p>
+</div></section>
+<section class="section" id="setup"><div class="shell guide-reading">
+<h2>Set up a debrid or Usenet addon in ARVIO</h2>
+<ol class="setup-list">
+<li><h3>Configure a compatible addon</h3><p>Use an addon from a service you trust and are authorized to use. Complete its own configuration, including the provider account if required, then copy the configured manifest URL. It often ends in <code>/manifest.json</code>. Keep URLs containing account tokens private.</p></li>
+<li><h3>Install the manifest on your TV</h3><p>Open <strong>Settings → Addons → Add Addon</strong>, paste the configured URL and review the addon before installing it. If another configuration is already installed, choose <strong>Replace installed</strong> or <strong>Keep both</strong> deliberately.</p></li>
+<li><h3>Finish any required setup</h3><p>An addon marked <strong>Setup required</strong> needs configuration before it can supply results. If using the phone QR flow, tap <strong>Install in ARVIO</strong> on the phone after configuring, then <strong>Refresh Addons</strong> on the TV. Cross-device restoration requires a valid ARVIO Cloud session with the same account and intended profile. Without cloud sync, paste the configured manifest directly on the TV.</p></li>
+<li><h3>Test a source you can access</h3><p>Open a title supplied by your setup and inspect its sources. Select a result your provider makes available and your device can play. Test one working configuration before adding more. See the <a href="/stremio-addons-android-tv/">full addon guide</a> for catalog, stream and subtitle differences.</p></li>
+</ol>
+</div></section>
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/02-details.webp" alt="ARVIO TV title details interface with a description, seasons and episode cards" width="1920" height="1080" loading="lazy"><figcaption>ARVIO's title details interface. This is an interface example, not a demonstration of a particular debrid provider; the pictured content is not included.</figcaption></figure></div></section>
+<section class="section" id="sources"><div class="shell guide-reading">
+<h2>Compare source details before starting playback</h2>
+<p>When supplied by the addon, ARVIO can display quality, file size, filename, language and addon or provider attribution. These details help distinguish multiple results for the same title. Missing metadata does not establish that a source is broken, and a provider label alone does not confirm that your account can access it.</p>
+<p>Choose a source suited to your connection and hardware. If one version fails, try a different compatible result from your authorized provider. For captions and language preferences, see <a href="/ai-subtitles-android-tv/">subtitles on Android TV</a>.</p>
+</div></section>
+<section class="section" id="troubleshooting"><div class="shell guide-reading">
+<h2>Why are my addon sources missing or not playing?</h2>
+<div class="guide-table-wrap" tabindex="0" role="region" aria-label="Addon playback troubleshooting"><table class="guide-table"><thead><tr><th scope="col">What you see</th><th scope="col">What to check</th></tr></thead><tbody>
+<tr><th scope="row">Posters, but no sources</th><td>Confirm that at least one enabled addon supplies streams, not just catalogs. Check its configuration, provider availability and whether it offers that title.</td></tr>
+<tr><th scope="row">Setup required</th><td>Complete the addon's configuration and install the resulting manifest. Simply refreshing an unconfigured URL does not add your provider credentials.</td></tr>
+<tr><th scope="row">Old configuration on the TV</th><td>Use the same Cloud account and intended profile for the phone-to-TV flow, then choose Refresh Addons. Alternatively install the updated manifest directly on the TV.</td></tr>
+<tr><th scope="row">A listed result fails</th><td>Check the provider account, any reported service error and whether the result resolves to playable media rather than a login page. Request sources again if a link has expired; try another authorized result.</td></tr>
+<tr><th scope="row">Magnet or torrent-only result</th><td>ARVIO does not play raw P2P sources. The integration must return a usable HTTP or HTTPS media source.</td></tr>
+<tr><th scope="row">Video or audio is unsupported</th><td>Choose a format supported by the device and sound system. Installing an addon does not give a TV new hardware codec support.</td></tr>
+</tbody></table></div>
+<p>If you need help, share the addon name, device model and error in <a href="https://discord.gg/UavuEYMfQ4">ARVIO's Discord</a>. Remove account tokens, private manifest URLs and provider credentials from screenshots or logs.</p>
+</div></section>
+<section class="section" id="faq"><div class="shell guide-reading"><h2>Debrid and Usenet FAQ</h2><div class="faq-list">
+<details><summary>Does ARVIO include a debrid or Usenet subscription?</summary><p>No. The Android app is free, but third-party accounts and any required subscriptions are separate. ARVIO does not supply movies, source indexes, provider credentials or access rights.</p></details>
+<details><summary>Can ARVIO play torrent or magnet links directly?</summary><p>No. Direct P2P torrent, magnet and infoHash-only playback is not supported. The addon or service must provide a media source that resolves to an accessible HTTP or HTTPS URL.</p></details>
+<details><summary>Is ARVIO a debrid cloud manager or Usenet downloader?</summary><p>No. This setup uses ARVIO as a player for compatible addon-provided sources. It is not a native interface for managing a debrid cloud library, downloading NZB files or browsing a Usenet indexer.</p></details>
+<details><summary>Will every debrid provider and addon work?</summary><p>Compatibility depends on the configured addon, its returned URL, the provider account and the media format. A provider name in a source label does not prove compatibility. Test an authorized source on your device before relying on a particular combination.</p></details>
+<details><summary>Can I use these sources on an iPhone, iPad or computer?</summary><p>ARVIO Web can install compatible addon manifests in a supported browser. Browser codecs, network access and provider restrictions differ from Android playback. Managed hosting is optional; self-hosting is also available. A working Android source is not a guarantee of browser playback.</p></details>
+</div><p>Read the <a href="/arvio-web/">ARVIO Web guide</a> for browser installation and playback limitations.</p></div></section>
+<section class="section"><div class="shell"><div class="section-head"><h2>Build the rest of your TV setup</h2></div><div class="related-grid">
+<a class="related-link" href="/stremio-addons-android-tv/"><small>Addons</small><strong>Stremio-compatible addon setup</strong><span>Manifest URLs, catalog versus stream addons and configuration.</span></a>
+<a class="related-link" href="/android-tv-media-hub/"><small>Start here</small><strong>Install ARVIO on Android TV</strong><span>Official downloads and first-source setup.</span></a>
+<a class="related-link" href="/plex-emby-jellyfin/"><small>Your library</small><strong>Plex, Emby and Jellyfin</strong><span>Connect your own media server as another source.</span></a>
+</div></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><p>Free, open-source software. Optional hosting that supports its future.</p><nav class="footer-links" aria-label="Footer"><a href="/guides/">Guides</a><a href="/media-kit/">Media kit</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a href="/privacy">Privacy</a></nav><p>ARVIO includes no movies, channels or third-party subscriptions. Use only services and media you are authorized to access.</p></div></footer>
 </body>
 </html>

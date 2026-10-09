@@ -2020,26 +2020,43 @@ async function getJSONOrNull(store, key) {
 }
 
 async function loadSnapshotFromBlobs(event, identity) {
-  const stores = snapshotStores(event);
-  const keys = snapshotKeys(identity);
-  const accountSnapshot = await getJSONOrNull(stores.account, keys.supabase) ||
-    await getJSONOrNull(stores.account, keys.email);
-  if (accountSnapshot) return { ...accountSnapshot, source: accountSnapshot.source || "netlify" };
-
-  const legacySnapshot = await getJSONOrNull(stores.legacy, keys.supabase) ||
-    await getJSONOrNull(stores.legacy, keys.email);
-  if (!legacySnapshot) return null;
-
-  const claimed = {
-    ...legacySnapshot,
-    source: "supabase_import_claimed",
-    claimedAt: new Date().toISOString()
-  };
-  await saveSnapshotToBlobs(event, identity, claimed);
-  return claimed;
+  const { snapshot, etag } = await loadSnapshotForUpdate(event, identity);
+  if (!snapshot) return null;
+  if (etag) return { ...snapshot, source: snapshot.source || "netlify" };
+  // Import only if no push created the canonical blob while we read fallback
+  // storage. A losing claim must use the newly saved snapshot, not overwrite it.
+  const saved = await saveSnapshotToBlobs(event, identity, snapshot, { etag: null });
+  return saved || (await loadSnapshotForUpdate(event, identity)).snapshot;
 }
 
-async function saveSnapshotToBlobs(event, identity, snapshot) {
+// Read the canonical blob and its version together. Fallback snapshots are only
+// candidates here: claiming them without a condition could overwrite a push
+// that created the canonical blob while this request was reading the fallback.
+async function loadSnapshotForUpdate(event, identity) {
+  const stores = snapshotStores(event);
+  const keys = snapshotKeys(identity);
+  let current;
+  try {
+    current = await stores.account.getWithMetadata(keys.supabase, { type: "json", consistency: "strong" });
+  } catch (error) {
+    if (String(error?.message || "").includes("uncachedEdgeURL")) {
+      current = await stores.account.getWithMetadata(keys.supabase, { type: "json" });
+    } else if (error?.status !== 404 && error?.name !== "BlobNotFoundError") {
+      throw error;
+    }
+  }
+  if (current) return { snapshot: current.data, etag: current.etag };
+  const byEmail = await getJSONOrNull(stores.account, keys.email);
+  if (byEmail) return { snapshot: byEmail, etag: null };
+  const legacy = await getJSONOrNull(stores.legacy, keys.supabase) ||
+    await getJSONOrNull(stores.legacy, keys.email);
+  return {
+    snapshot: legacy ? { ...legacy, source: "supabase_import_claimed" } : null,
+    etag: null
+  };
+}
+
+async function saveSnapshotToBlobs(event, identity, snapshot, condition) {
   const stores = snapshotStores(event);
   const keys = snapshotKeys(identity);
   const normalized = {
@@ -2059,7 +2076,11 @@ async function saveSnapshotToBlobs(event, identity, snapshot) {
     profileCount: String(normalized.profileCount ?? ""),
     updatedAt: normalized.updatedAt
   };
-  await stores.account.setJSON(keys.supabase, normalized, { metadata });
+  const write = await stores.account.setJSON(keys.supabase, normalized, {
+    metadata,
+    ...(condition ? (condition.etag ? { onlyIfMatch: condition.etag } : { onlyIfNew: true }) : {})
+  });
+  if (condition && !write.modified) return null;
   await stores.account.setJSON(keys.email, normalized, { metadata });
   return normalized;
 }
@@ -2757,6 +2778,7 @@ module.exports = {
   snapshotStores,
   snapshotKeys,
   loadSnapshotFromBlobs,
+  loadSnapshotForUpdate,
   saveSnapshotToBlobs,
   appendSnapshotEvent,
   listBlobKeys,

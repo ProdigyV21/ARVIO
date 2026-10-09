@@ -1,0 +1,1504 @@
+[
+  {
+    "id": "trending_movies",
+    "title": "Trending in Movies",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/trending-movies",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/trending-movies",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Trending in Movies",
+    "enabled": true,
+    "mediaType": "movie"
+  },
+  {
+    "id": "trending_tv",
+    "title": "Trending in Shows",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/trakt-s-trending-shows",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/trakt-s-trending-shows",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Trending in Shows",
+    "enabled": true,
+    "mediaType": "tv"
+  },
+  {
+    "id": "trending_anime",
+    "title": "Trending in Anime",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/trending-anime-shows",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/trending-anime-shows",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Trending in Anime",
+    "enabled": true,
+    "mediaType": "tv"
+  },
+  {
+    "id": "collection_rail_featured",
+    "title": "Featured",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION_RAIL",
+    "collectionGroup": "FEATURED",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Featured",
+    "enabled": true
+  },
+  {
+    "id": "collection_rail_service",
+    "title": "Services",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION_RAIL",
+    "collectionGroup": "SERVICE",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Services",
+    "enabled": true
+  },
+  {
+    "id": "collection_rail_genre",
+    "title": "Genres",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION_RAIL",
+    "collectionGroup": "GENRE",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Genres",
+    "enabled": true
+  },
+  {
+    "id": "collection_rail_franchise",
+    "title": "Franchises",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION_RAIL",
+    "collectionGroup": "FRANCHISE",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Franchises",
+    "enabled": true
+  },
+  {
+    "id": "collection_rail_decade",
+    "title": "Decades",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION_RAIL",
+    "collectionGroup": "DECADE",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Decades",
+    "enabled": true
+  },
+  {
+    "id": "collection_featured_audience_favourites",
+    "title": "Audience favourites",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FEATURED",
+    "collectionDescription": "Highly rated films with at least 1,000 audience votes.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "vote_count.gte": "1000"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Audience favourites",
+    "enabled": true
+  },
+  {
+    "id": "collection_featured_acclaimed_series",
+    "title": "Acclaimed series",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FEATURED",
+    "collectionDescription": "Standout television, ranked by viewers with at least 500 votes.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "series",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "vote_count.gte": "500"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Acclaimed series",
+    "enabled": true
+  },
+  {
+    "id": "collection_featured_under_two_hours",
+    "title": "Under two hours",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FEATURED",
+    "collectionDescription": "Well-rated films for an evening, all between 60 and 120 minutes.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/jK65srQczOKTpW62wPxwwKztGgE.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/jK65srQczOKTpW62wPxwwKztGgE.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/jK65srQczOKTpW62wPxwwKztGgE.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "popularity.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "with_runtime.gte": "60",
+          "with_runtime.lte": "120",
+          "vote_average.gte": "7",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Under two hours",
+    "enabled": true
+  },
+  {
+    "id": "collection_featured_japanese_animation",
+    "title": "Japanese animation",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FEATURED",
+    "collectionDescription": "Animated films and series from Japan, from intimate stories to imaginative adventures.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/mMtUybQ6hL24FXo0F3Z4j2KG7kZ.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/mMtUybQ6hL24FXo0F3Z4j2KG7kZ.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/mMtUybQ6hL24FXo0F3Z4j2KG7kZ.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "popularity.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "with_genres": "16",
+          "with_original_language": "ja"
+        }
+      },
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "series",
+        "sortBy": "popularity.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "with_genres": "16",
+          "with_original_language": "ja"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Japanese animation",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_netflix",
+    "title": "Netflix",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Netflix in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/rK1KljqmbvO9HQa1PBFLILWah72.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/rK1KljqmbvO9HQa1PBFLILWah72.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 8,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 8,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Netflix",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_disneyplus",
+    "title": "Disney+",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Disney+ in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/5eZ872CghnHFLB1j8grszbrx0dx.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/5eZ872CghnHFLB1j8grszbrx0dx.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 337,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 337,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Disney+",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_apple_tvplus",
+    "title": "Apple TV+",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Apple TV+ in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/9icYBfYFcwgCbky5VdGUIKJ4C5i.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/9icYBfYFcwgCbky5VdGUIKJ4C5i.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 350,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 350,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Apple TV+",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_prime_video",
+    "title": "Prime Video",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Prime Video in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/gMZdpavHmxFNnLpMHwVxfqeux2g.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/gMZdpavHmxFNnLpMHwVxfqeux2g.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 9,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 9,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Prime Video",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_hbo_max",
+    "title": "HBO Max",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through HBO Max in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/skypuy7SXuugIQeYg0IglmzoKaS.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/skypuy7SXuugIQeYg0IglmzoKaS.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 1899,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 1899,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "HBO Max",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_hulu",
+    "title": "Hulu",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Hulu in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/44uAnmSqvA4yBOdbPWN8YgQHjWm.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/44uAnmSqvA4yBOdbPWN8YgQHjWm.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 15,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 15,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Hulu",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_paramountplus",
+    "title": "Paramount+",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Paramount+ in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/4N4BMd0Mm0kHAmF7RZgL5lW3cwc.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/4N4BMd0Mm0kHAmF7RZgL5lW3cwc.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 2303,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 2303,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 2616,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 2616,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Paramount+",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_peacock",
+    "title": "Peacock",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Peacock in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/a1UIdq5BrkcAxnxcUhFsNbXnxeu.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/a1UIdq5BrkcAxnxcUhFsNbXnxeu.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 386,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 386,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Peacock",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_starz",
+    "title": "Starz",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Starz in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/h25xjouKmiSmFiiqw0aDXbxGZo7.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/h25xjouKmiSmFiiqw0aDXbxGZo7.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 43,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 43,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Starz",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_shudder",
+    "title": "Shudder",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Shudder in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/58O6yqUFM6qoOiBNAddJs7xNKc.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/58O6yqUFM6qoOiBNAddJs7xNKc.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 99,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 99,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Shudder",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_mgmplus",
+    "title": "MGM+",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through MGM+ in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/q63Uzpu7JAs566vA2G23Lk7LcID.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/q63Uzpu7JAs566vA2G23Lk7LcID.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 34,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 34,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "MGM+",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_discoveryplus",
+    "title": "Discovery+",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Discovery+ in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/tHseJEgZaUdVlLtBpOGmKPfzbQ8.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/tHseJEgZaUdVlLtBpOGmKPfzbQ8.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 520,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 520,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Discovery+",
+    "enabled": true
+  },
+  {
+    "id": "collection_service_crunchyroll",
+    "title": "Crunchyroll",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "SERVICE",
+    "collectionDescription": "Movies and series available through Crunchyroll in the US catalog. Availability varies by region.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/uFL3c4Cq8M6WoLymlC5Y8bmGytV.png",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/uFL3c4Cq8M6WoLymlC5Y8bmGytV.png",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "movie",
+        "tmdbWatchProviderId": 283,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_WATCH_PROVIDER",
+        "mediaType": "series",
+        "tmdbWatchProviderId": 283,
+        "watchRegion": "US",
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Crunchyroll",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_action",
+    "title": "Action",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "High stakes, daring escapes and larger-than-life adventures.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/gqrnQA6Xppdl8vIb2eJc58VC1tW.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/gqrnQA6Xppdl8vIb2eJc58VC1tW.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/gqrnQA6Xppdl8vIb2eJc58VC1tW.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 28,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 10759,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Action",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_adventure",
+    "title": "Adventure",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Journeys to unfamiliar places and stories of discovery.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/uRNgkJSkNBFbbn9fPsEjDIy8Sh3.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/uRNgkJSkNBFbbn9fPsEjDIy8Sh3.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/uRNgkJSkNBFbbn9fPsEjDIy8Sh3.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 12,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 10759,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Adventure",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_comedy",
+    "title": "Comedy",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Sharp comedies, familiar favourites and stories with a lighter touch.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/jK65srQczOKTpW62wPxwwKztGgE.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/jK65srQczOKTpW62wPxwwKztGgE.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/jK65srQczOKTpW62wPxwwKztGgE.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 35,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 35,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Comedy",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_crime",
+    "title": "Crime",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Investigations, criminal empires and lives on the wrong side of the law.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 80,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 80,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Crime",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_documentary",
+    "title": "Documentary",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Real stories and remarkable people, places and ideas.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/z2uuQasY4gQJ8VDAFki746JWeQJ.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/z2uuQasY4gQJ8VDAFki746JWeQJ.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/z2uuQasY4gQJ8VDAFki746JWeQJ.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 99,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 99,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Documentary",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_family",
+    "title": "Family",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Films and series to discover together.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/eCynaAOgYYiw5yN5lBwz3IxqvaW.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/eCynaAOgYYiw5yN5lBwz3IxqvaW.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/eCynaAOgYYiw5yN5lBwz3IxqvaW.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 10751,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 10751,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Family",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_fantasy",
+    "title": "Fantasy",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Mythical worlds, extraordinary powers and imagined possibilities.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 14,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 10765,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Fantasy",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_horror",
+    "title": "Horror",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Unsettling mysteries, supernatural stories and cinematic nightmares.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 27,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Horror",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_science_fiction",
+    "title": "Science Fiction",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "New worlds, speculative futures and journeys beyond our own.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 878,
+        "sortBy": "popularity.desc"
+      },
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "series",
+        "tmdbGenreId": 10765,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Science Fiction",
+    "enabled": true
+  },
+  {
+    "id": "collection_genre_thriller",
+    "title": "Thriller",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "GENRE",
+    "collectionDescription": "Tense stories built on uncertainty, intrigue and suspense.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_GENRE",
+        "mediaType": "movie",
+        "tmdbGenreId": 53,
+        "sortBy": "popularity.desc"
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Thriller",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_star_wars",
+    "title": "Star Wars",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The Skywalker films, in release order.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/iY2ujEY2m68OTTlPFTiHub9joHS.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/iY2ujEY2m68OTTlPFTiHub9joHS.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/iY2ujEY2m68OTTlPFTiHub9joHS.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 10
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Star Wars",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_lord_of_the_rings",
+    "title": "Lord of the Rings",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The journey through Middle-earth, in release order.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/bccR2CGTWVVSZAG0yqmy3DIvhTX.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/bccR2CGTWVVSZAG0yqmy3DIvhTX.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/bccR2CGTWVVSZAG0yqmy3DIvhTX.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 119
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Lord of the Rings",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_harry_potter",
+    "title": "Harry Potter",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The Harry Potter films, from the first year to the final battle.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/4gV0rKUjB1nLUdZB4zIltLvNZZr.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/4gV0rKUjB1nLUdZB4zIltLvNZZr.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/4gV0rKUjB1nLUdZB4zIltLvNZZr.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 1241
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Harry Potter",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_the_matrix",
+    "title": "The Matrix",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "Return to the Matrix, with the films arranged by release.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/bRm2DEgUiYciDw3myHuYFInD7la.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/bRm2DEgUiYciDw3myHuYFInD7la.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/bRm2DEgUiYciDw3myHuYFInD7la.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 2344
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "The Matrix",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_pirates_of_the_caribbean",
+    "title": "Pirates of the Caribbean",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The adventures of Captain Jack Sparrow and the pirates of the Caribbean.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/wxgD3fB5lQ2sGJLog0rvXW049Pf.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/wxgD3fB5lQ2sGJLog0rvXW049Pf.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/wxgD3fB5lQ2sGJLog0rvXW049Pf.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 295
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Pirates of the Caribbean",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_hunger_games",
+    "title": "Hunger Games",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The films of Panem, including its prequels, in release order.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/Ipp7cegtub4t0mu7xaKLQkYoGc.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/Ipp7cegtub4t0mu7xaKLQkYoGc.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/Ipp7cegtub4t0mu7xaKLQkYoGc.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 131635
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Hunger Games",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_fast_and_furious",
+    "title": "Fast & Furious",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The main Fast & Furious films, from street racing to globe-spanning action.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/z5A5W3WYJc3UVEWljSGwdjDgQ0j.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/z5A5W3WYJc3UVEWljSGwdjDgQ0j.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/z5A5W3WYJc3UVEWljSGwdjDgQ0j.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 9485
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Fast & Furious",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_jurassic_park",
+    "title": "Jurassic Park",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "Jurassic Park and Jurassic World, in release order.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/njFixYzIxX8jsn6KMSEtAzi4avi.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/njFixYzIxX8jsn6KMSEtAzi4avi.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/njFixYzIxX8jsn6KMSEtAzi4avi.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 328
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Jurassic Park",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_terminator",
+    "title": "Terminator",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "The Terminator films and their changing futures, in release order.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/sCnBEw2Yu6foEjs4Xb4eMddYHRo.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/sCnBEw2Yu6foEjs4Xb4eMddYHRo.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/sCnBEw2Yu6foEjs4Xb4eMddYHRo.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 528
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "Terminator",
+    "enabled": true
+  },
+  {
+    "id": "collection_franchise_the_dark_knight",
+    "title": "The Dark Knight",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "FRANCHISE",
+    "collectionDescription": "Christopher Nolan's three-film Batman story.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/xyhrCEdB4XRkelfVsqXeUZ6rLHi.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/xyhrCEdB4XRkelfVsqXeUZ6rLHi.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/xyhrCEdB4XRkelfVsqXeUZ6rLHi.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_COLLECTION",
+        "mediaType": "movie",
+        "tmdbCollectionId": 263
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "The Dark Knight",
+    "enabled": true
+  },
+  {
+    "id": "collection_decade_1970s",
+    "title": "1970s",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "DECADE",
+    "collectionDescription": "Explore the films of 1970 to 1979, ranked by audience rating.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "primary_release_date.gte": "1970-01-01",
+          "primary_release_date.lte": "1979-12-31",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "1970s",
+    "enabled": true
+  },
+  {
+    "id": "collection_decade_1980s",
+    "title": "1980s",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "DECADE",
+    "collectionDescription": "Explore the films of 1980 to 1989, ranked by audience rating.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/AmR3JG1VQVxU8TfAvljUhfSFUOx.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "primary_release_date.gte": "1980-01-01",
+          "primary_release_date.lte": "1989-12-31",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "1980s",
+    "enabled": true
+  },
+  {
+    "id": "collection_decade_1990s",
+    "title": "1990s",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "DECADE",
+    "collectionDescription": "Explore the films of 1990 to 1999, ranked by audience rating.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/eCynaAOgYYiw5yN5lBwz3IxqvaW.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/eCynaAOgYYiw5yN5lBwz3IxqvaW.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/eCynaAOgYYiw5yN5lBwz3IxqvaW.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "primary_release_date.gte": "1990-01-01",
+          "primary_release_date.lte": "1999-12-31",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "1990s",
+    "enabled": true
+  },
+  {
+    "id": "collection_decade_2000s",
+    "title": "2000s",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "DECADE",
+    "collectionDescription": "Explore the films of 2000 to 2009, ranked by audience rating.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/uRNgkJSkNBFbbn9fPsEjDIy8Sh3.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/uRNgkJSkNBFbbn9fPsEjDIy8Sh3.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/uRNgkJSkNBFbbn9fPsEjDIy8Sh3.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "primary_release_date.gte": "2000-01-01",
+          "primary_release_date.lte": "2009-12-31",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "2000s",
+    "enabled": true
+  },
+  {
+    "id": "collection_decade_2010s",
+    "title": "2010s",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "DECADE",
+    "collectionDescription": "Explore the films of 2010 to 2019, ranked by audience rating.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/8sNiAPPYU14PUepFNeSNGUTiHW.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "primary_release_date.gte": "2010-01-01",
+          "primary_release_date.lte": "2019-12-31",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "2010s",
+    "enabled": true
+  },
+  {
+    "id": "collection_decade_2020s",
+    "title": "2020s",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "COLLECTION",
+    "collectionGroup": "DECADE",
+    "collectionDescription": "Explore the films of 2020 to 2029, ranked by audience rating.",
+    "collectionCoverImageUrl": "https://image.tmdb.org/t/p/w780/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    "collectionFocusGifUrl": "https://image.tmdb.org/t/p/w780/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    "collectionHeroImageUrl": "https://image.tmdb.org/t/p/w1280/zRKQW58MBEY078AxkHxEJzUskCl.jpg",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [
+      {
+        "kind": "TMDB_DISCOVER",
+        "mediaType": "movie",
+        "sortBy": "vote_average.desc",
+        "discoverParams": {
+          "include_adult": "false",
+          "primary_release_date.gte": "2020-01-01",
+          "primary_release_date.lte": "2029-12-31",
+          "vote_count.gte": "300"
+        }
+      }
+    ],
+    "requiredAddonUrls": [],
+    "name": "2020s",
+    "enabled": true
+  },
+  {
+    "id": "favorite_tv",
+    "title": "Favorite TV",
+    "sourceType": "preinstalled",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Favorite TV",
+    "enabled": true,
+    "mediaType": "tv"
+  },
+  {
+    "id": "top10_movies_today",
+    "title": "Top 10 Movies Today",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/top-10-movies-of-the-day",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/top-10-movies-of-the-day",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Top 10 Movies Today",
+    "enabled": true,
+    "mediaType": "movie"
+  },
+  {
+    "id": "top10_shows_today",
+    "title": "Top 10 Shows Today",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/top-10-shows-of-the-day",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/top-10-shows-of-the-day",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Top 10 Shows Today",
+    "enabled": true,
+    "mediaType": "tv"
+  },
+  {
+    "id": "just_added",
+    "title": "Just Added",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/latest-movies-digital-release",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/latest-movies-digital-release",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Just Added",
+    "enabled": true,
+    "mediaType": "movie"
+  },
+  {
+    "id": "top_movies_week",
+    "title": "Top Movies This Week",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week",
+    "sourceRef": "mdblist:https://mdblist.com/lists/linaspurinis/top-watched-movies-of-the-week",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Top Movies This Week",
+    "enabled": true,
+    "mediaType": "movie"
+  },
+  {
+    "id": "new_kdramas",
+    "title": "New in K-Dramas",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/latest-kdrama-shows",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/latest-kdrama-shows",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "New in K-Dramas",
+    "enabled": true,
+    "mediaType": "tv"
+  },
+  {
+    "id": "coming_soon",
+    "title": "Coming Soon",
+    "sourceType": "mdblist",
+    "sourceUrl": "https://mdblist.com/lists/snoak/upcoming-movies",
+    "sourceRef": "mdblist:https://mdblist.com/lists/snoak/upcoming-movies",
+    "isPreinstalled": true,
+    "kind": "STANDARD",
+    "collectionTileShape": "LANDSCAPE",
+    "collectionHideTitle": false,
+    "collectionSources": [],
+    "requiredAddonUrls": [],
+    "name": "Coming Soon",
+    "enabled": true,
+    "mediaType": "movie"
+  }
+]

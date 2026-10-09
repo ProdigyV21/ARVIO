@@ -76,8 +76,9 @@ class WatchlistRepository @Inject constructor(
     private val gson = Gson()
 
     // Profile-scoped DataStore key
-    private fun watchlistKey() = profileManager.profileStringKey("local_watchlist_v1")
     private fun watchlistKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "local_watchlist_v1")
+    private fun changesKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "local_watchlist_changes_v1")
+    private val mutationMutex = Mutex()
 
     // In-memory cache for quick lookups
     private val keyCache = mutableSetOf<String>()
@@ -86,6 +87,7 @@ class WatchlistRepository @Inject constructor(
     val watchlistItems: StateFlow<List<MediaItem>> = _watchlistItems.asStateFlow()
 
     private var cacheLoaded = false
+    @Volatile private var cacheProfileId: String? = null
     private val cacheMutex = Mutex()
 
     // Limit parallel TMDB requests
@@ -98,56 +100,55 @@ class WatchlistRepository @Inject constructor(
     /**
      * Get cached watchlist items instantly
      */
-    fun getCachedItems(): List<MediaItem> = itemsCache.toList()
+    fun getCachedItems(): List<MediaItem> =
+        if (cacheProfileId == profileManager.getProfileIdSync()) _watchlistItems.value else emptyList()
 
     /**
      * Load locally stored watchlist items without waiting for TMDB enrichment.
      * This is the fast path for screens: posters/details can be refined later,
      * but the page should never block on network work just to show saved items.
      */
-    suspend fun getLocalWatchlistItems(): List<MediaItem> = withContext(Dispatchers.IO) {
-        if (itemsCache.isNotEmpty()) {
-            return@withContext itemsCache.toList()
-        }
-
-        val rawItems = loadWatchlistRaw()
-        val instantItems = rawItems.map { it.toBasicMediaItem() }
-        cacheMutex.withLock {
-            itemsCache.clear()
-            itemsCache.addAll(instantItems)
-            keyCache.clear()
-            instantItems.forEach { item ->
-                keyCache.add(cacheKey(item.mediaType, item.id))
+    suspend fun getLocalWatchlistItems(): List<MediaItem> {
+        val profileId = profileManager.getProfileIdSync()
+        return withContext(Dispatchers.IO) {
+            mutationMutex.withLock {
+                publishState(profileId, exportSyncStateForProfile(profileId))
             }
-            _watchlistItems.value = instantItems
-            cacheLoaded = true
         }
-        instantItems
     }
 
     /**
      * Check if an item is in watchlist
      */
     suspend fun isInWatchlist(mediaType: MediaType, tmdbId: Int): Boolean {
-        if (!cacheLoaded) {
-            loadKeyCacheQuick()
+        val profileId = profileManager.getProfileIdSync()
+        if (!cacheLoaded || cacheProfileId != profileId) {
+            loadKeyCacheQuick(profileId)
         }
-        return keyCache.contains(cacheKey(mediaType, tmdbId))
+        return cacheMutex.withLock {
+            cacheProfileId == profileId && profileManager.getProfileIdSync() == profileId &&
+                keyCache.contains(cacheKey(mediaType, tmdbId))
+        }
     }
 
     /**
      * Quick cache load - just loads keys for fast lookup
      */
-    private suspend fun loadKeyCacheQuick() {
+    private suspend fun loadKeyCacheQuick(profileId: String) {
         try {
-            val items = loadWatchlistRaw()
-            cacheMutex.withLock {
-                keyCache.clear()
-                items.forEach { item ->
-                    val type = if (item.mediaType == "tv") MediaType.TV else MediaType.MOVIE
-                    keyCache.add(cacheKey(type, item.tmdbId))
+            mutationMutex.withLock {
+                val state = exportSyncStateForProfile(profileId)
+                cacheMutex.withLock cache@ {
+                    if (profileManager.getProfileIdSync() != profileId) return@cache
+                    if (cacheProfileId != profileId) {
+                        itemsCache.clear()
+                        _watchlistItems.value = emptyList()
+                    }
+                    keyCache.clear()
+                    state.items.forEach { keyCache.add(watchlistItemKey(it)) }
+                    cacheProfileId = profileId
+                    cacheLoaded = true
                 }
-                cacheLoaded = true
             }
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
@@ -166,39 +167,18 @@ class WatchlistRepository @Inject constructor(
      * Add item to watchlist
      */
     suspend fun addToWatchlist(mediaType: MediaType, tmdbId: Int, mediaItem: MediaItem? = null) {
-        val key = cacheKey(mediaType, tmdbId)
+        val profileId = profileManager.getProfileIdSync()
+        mutationMutex.withLock {
+            val localItem = LocalWatchlistItem(
+                tmdbId = tmdbId,
+                mediaType = if (mediaType == MediaType.TV) "tv" else "movie",
+                title = mediaItem?.title ?: "",
+                posterPath = mediaItem?.image,
+                backdropPath = mediaItem?.backdrop,
+                addedAt = System.currentTimeMillis()
+            )
 
-        // Create local item
-        val localItem = LocalWatchlistItem(
-            tmdbId = tmdbId,
-            mediaType = if (mediaType == MediaType.TV) "tv" else "movie",
-            title = mediaItem?.title ?: "",
-            posterPath = mediaItem?.image,
-            backdropPath = mediaItem?.backdrop,
-            addedAt = System.currentTimeMillis()
-        )
-
-        // Load existing items
-        val existingItems = loadWatchlistRaw().toMutableList()
-
-        // Remove if already exists (will re-add at front)
-        existingItems.removeAll { it.tmdbId == tmdbId && it.mediaType == localItem.mediaType }
-
-        // Add to front (most recent)
-        existingItems.add(0, localItem)
-
-        // Save to DataStore
-        saveWatchlist(existingItems)
-
-        // Update in-memory cache
-        cacheMutex.withLock {
-            keyCache.add(key)
-            itemsCache.removeAll { it.id == tmdbId && it.mediaType == mediaType }
-            if (mediaItem != null) {
-                itemsCache.add(0, mediaItem)
-                _watchlistItems.value = itemsCache.toList()
-            }
-            cacheLoaded = true
+            mutateMembership(profileId, localItem, removed = false)
         }
     }
 
@@ -206,115 +186,119 @@ class WatchlistRepository @Inject constructor(
      * Remove item from watchlist
      */
     suspend fun removeFromWatchlist(mediaType: MediaType, tmdbId: Int) {
-        val key = cacheKey(mediaType, tmdbId)
-        val typeStr = if (mediaType == MediaType.TV) "tv" else "movie"
-
-        // Load existing items
-        val existingItems = loadWatchlistRaw().toMutableList()
-
-        // Remove the item
-        existingItems.removeAll { it.tmdbId == tmdbId && it.mediaType == typeStr }
-
-        // Save to DataStore
-        saveWatchlist(existingItems)
-
-        // Update in-memory cache
-        cacheMutex.withLock {
-            keyCache.remove(key)
-            itemsCache.removeAll { it.id == tmdbId && it.mediaType == mediaType }
-            _watchlistItems.value = itemsCache.toList()
+        val profileId = profileManager.getProfileIdSync()
+        mutationMutex.withLock {
+            val typeStr = if (mediaType == MediaType.TV) "tv" else "movie"
+            mutateMembership(profileId, LocalWatchlistItem(tmdbId, typeStr, ""), removed = true)
         }
+    }
+
+    private suspend fun mutateMembership(profileId: String, item: LocalWatchlistItem, removed: Boolean) {
+        val key = watchlistItemKey(item)
+        var state = WatchlistSyncState()
+        context.traktDataStore.edit { prefs ->
+            val current = readSyncState(prefs, profileId)
+            val change = nextWatchlistChange(current.changes[key], removed, System.currentTimeMillis())
+            val items = current.items.filterNot { watchlistItemKey(it) == key } + if (removed) emptyList() else listOf(item)
+            state = mergeWatchlistStates(WatchlistSyncState(items, current.changes + (key to change)), WatchlistSyncState())
+            prefs[watchlistKeyFor(profileId)] = gson.toJson(state.items)
+            prefs[changesKeyFor(profileId)] = gson.toJson(state.changes)
+        }
+        // A user edit during a remote restore must still schedule its own upload.
+        invalidationBus.markUserDirty(CloudSyncScope.WATCHLIST, profileId, "watchlist membership")
+        publishState(profileId, state)
+    }
+
+    private suspend fun publishState(
+        profileId: String,
+        state: WatchlistSyncState,
+        enrichedItems: List<MediaItem> = emptyList()
+    ): List<MediaItem> = cacheMutex.withLock {
+        if (profileManager.getProfileIdSync() != profileId) return@withLock emptyList()
+        val cached = if (cacheProfileId == profileId) itemsCache.toList() else emptyList()
+        val enriched = (cached + enrichedItems).associateBy { cacheKey(it.mediaType, it.id) }
+        val visible = state.items.map { raw ->
+            val metadata = enriched[watchlistItemKey(raw)]
+            metadata?.copy(
+                title = raw.title.ifBlank { metadata.title },
+                image = normalizeWatchlistArtworkUrl(raw.posterPath, isBackdrop = false) ?: metadata.image,
+                backdrop = normalizeWatchlistArtworkUrl(raw.backdropPath, isBackdrop = true) ?: metadata.backdrop,
+                addedAt = raw.addedAt,
+                sourceOrder = raw.sourceOrder
+            ) ?: raw.toBasicMediaItem()
+        }
+        itemsCache.clear()
+        itemsCache.addAll(visible)
+        keyCache.clear()
+        state.items.forEach { keyCache.add(watchlistItemKey(it)) }
+        _watchlistItems.value = visible
+        cacheProfileId = profileId
+        cacheLoaded = true
+        visible
     }
 
     /**
      * Get all watchlist items enriched with TMDB data
      */
-    suspend fun getWatchlistItems(): List<MediaItem> = withContext(Dispatchers.IO) {
-        // Return cached items if available
-        if (itemsCache.isNotEmpty()) {
-            return@withContext itemsCache.toList()
-        }
+    suspend fun getWatchlistItems(): List<MediaItem> = getWatchlistItemsForProfile(profileManager.getProfileIdSync())
 
-        // Load and enrich items
-        val rawItems = loadWatchlistRaw()
-        if (rawItems.isEmpty()) {
-            cacheMutex.withLock {
-                itemsCache.clear()
-                keyCache.clear()
-                _watchlistItems.value = emptyList()
-                cacheLoaded = true
-            }
-            return@withContext emptyList()
-        }
-
-        val instantItems = rawItems.map { it.toBasicMediaItem() }
-        cacheMutex.withLock {
-            itemsCache.clear()
-            itemsCache.addAll(instantItems)
-            keyCache.clear()
-            instantItems.forEach { item ->
-                keyCache.add(cacheKey(item.mediaType, item.id))
-            }
-            _watchlistItems.value = instantItems
-            cacheLoaded = true
-        }
-
-        // Enrich items with TMDB data in parallel
-        val enrichedItems = coroutineScope {
-            rawItems.map { item ->
-                async {
-                    tmdbSemaphore.withPermit {
-                        enrichWatchlistItem(item)
-                    }
+    private suspend fun getWatchlistItemsForProfile(profileId: String): List<MediaItem> {
+        return withContext(Dispatchers.IO) {
+            val rawItems = mutationMutex.withLock {
+                if (profileManager.getProfileIdSync() != profileId) return@withContext emptyList()
+                val cached = cacheMutex.withLock {
+                    if (cacheProfileId == profileId && itemsCache.isNotEmpty()) itemsCache.toList() else null
                 }
-            }.awaitAll().filterNotNull()
-        }
-
-        val currentRawItems = persistEnrichedArtwork(enrichedItems)
-        val enrichedByKey = enrichedItems.associateBy { cacheKey(it.mediaType, it.id) }
-        val currentItems = currentRawItems.map { raw ->
-            val type = if (raw.mediaType == "tv") MediaType.TV else MediaType.MOVIE
-            enrichedByKey[cacheKey(type, raw.tmdbId)]?.copy(
-                addedAt = raw.addedAt,
-                sourceOrder = raw.sourceOrder
-            ) ?: raw.toBasicMediaItem()
-        }
-
-        // Update cache
-        cacheMutex.withLock {
-            itemsCache.clear()
-            itemsCache.addAll(currentItems)
-            keyCache.clear()
-            currentItems.forEach { item ->
-                keyCache.add(cacheKey(item.mediaType, item.id))
+                if (cached != null) return@withContext cached
+                val state = exportSyncStateForProfile(profileId)
+                publishState(profileId, state)
+                state.items
             }
-            _watchlistItems.value = currentItems
-            cacheLoaded = true
-        }
+            if (rawItems.isEmpty()) return@withContext emptyList()
 
-        currentItems
+            // Network requests do not hold the membership lock. Re-read persisted
+            // membership under that lock before applying their metadata or publishing.
+            val enrichedItems = coroutineScope {
+                rawItems.map { item ->
+                    async {
+                        tmdbSemaphore.withPermit { enrichWatchlistItem(item) }
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            mutationMutex.withLock {
+                persistEnrichedArtwork(profileId, enrichedItems)
+                publishState(profileId, exportSyncStateForProfile(profileId), enrichedItems)
+            }
+        }
     }
 
     /**
      * Force refresh watchlist items
      */
-    suspend fun refreshWatchlistItems(): List<MediaItem> = withContext(Dispatchers.IO) {
-        // Clear cache to force reload
-        cacheMutex.withLock {
-            itemsCache.clear()
+    suspend fun refreshWatchlistItems(): List<MediaItem> {
+        val profileId = profileManager.getProfileIdSync()
+        return withContext(Dispatchers.IO) {
+            mutationMutex.withLock {
+                if (profileManager.getProfileIdSync() != profileId) return@withContext emptyList()
+                cacheMutex.withLock { itemsCache.clear() }
+            }
+            getWatchlistItemsForProfile(profileId)
         }
-        getWatchlistItems()
     }
 
     /**
      * Reorder the local watchlist to match Trakt's newest-first list.
-     * Mirrors Trakt's newest-first order and drops stale local entries. Keeping
-     * local-only items here lets old bad title-search matches survive forever
-     * after Trakt has the correct IDs.
+     * Drops stale cache-only matches, while preserving explicit local membership
+     * changes that may have happened after the provider request started.
      */
-    suspend fun syncFromTraktOrder(traktItems: List<MediaItem>) = withContext(Dispatchers.IO) {
-        val existing = loadWatchlistRaw()
+    suspend fun syncFromTraktOrder(
+        traktItems: List<MediaItem>,
+        profileId: String = profileManager.getProfileIdSync()
+    ) = mutationMutex.withLock {
+        val existingState = exportSyncStateForProfile(profileId)
+        val existing = existingState.items
         val existingByKey = existing.associateBy { "${it.mediaType}:${it.tmdbId}" }
+        val changes = existingState.changes
 
         val ordered = mutableListOf<LocalWatchlistItem>()
 
@@ -323,6 +307,8 @@ class WatchlistRepository @Inject constructor(
         for ((index, item) in orderedTraktItems.withIndex()) {
             val typeStr = if (item.mediaType == MediaType.TV) "tv" else "movie"
             val key = "$typeStr:${item.id}"
+            // A provider refresh updates cached metadata, never invents a membership operation.
+            if (changes[key]?.removed == true) continue
             val local = existingByKey[key]
             val traktOrderAddedAt = item.addedAt.takeIf { it > 0L } ?: (System.currentTimeMillis() - index)
             ordered.add(
@@ -346,184 +332,91 @@ class WatchlistRepository @Inject constructor(
             )
         }
 
-        saveWatchlist(ordered)
-
-        // Invalidate enriched cache so the UI picks up the new order on next refresh.
-        cacheMutex.withLock {
-            itemsCache.clear()
-            keyCache.clear()
-            ordered.forEach { raw ->
-                val type = if (raw.mediaType == "tv") MediaType.TV else MediaType.MOVIE
-                keyCache.add(cacheKey(type, raw.tmdbId))
-            }
-            _watchlistItems.value = ordered.map { it.toBasicMediaItem() }
-            cacheLoaded = true
+        // The provider request may have started before a local add completed. Preserve explicit
+        // membership; absence in a refresh is not a user removal operation.
+        val orderedKeys = ordered.map(::watchlistItemKey).toSet()
+        ordered.addAll(existing.filter {
+            val key = watchlistItemKey(it)
+            key !in orderedKeys && changes[key]?.removed == false
+        })
+        val state = mergeWatchlistStates(WatchlistSyncState(ordered, changes), WatchlistSyncState())
+        context.traktDataStore.edit { prefs ->
+            prefs[watchlistKeyFor(profileId)] = gson.toJson(state.items)
+            prefs[changesKeyFor(profileId)] = gson.toJson(state.changes)
         }
+        invalidationBus.markDirty(CloudSyncScope.WATCHLIST, profileId, "sync watchlist order")
+        publishState(profileId, state)
+        Unit
     }
 
     /**
      * Clear all caches (call on profile switch)
      */
     fun clearWatchlistCache() {
+        cacheProfileId = null
         keyCache.clear()
         itemsCache.clear()
         _watchlistItems.value = emptyList()
         cacheLoaded = false
     }
 
-    suspend fun exportWatchlistForProfile(profileId: String): List<LocalWatchlistItem> {
+    suspend fun exportWatchlistForProfile(profileId: String): List<LocalWatchlistItem> =
+        exportSyncStateForProfile(profileId).items
+
+    suspend fun exportSyncStateForProfile(profileId: String): WatchlistSyncState {
         val safeProfileId = profileId.trim().ifBlank { "default" }
-        return try {
-            val prefs = context.traktDataStore.data.first()
-            val json = prefs[watchlistKeyFor(safeProfileId)] ?: return emptyList()
-            gson.fromJson<List<LocalWatchlistItem>>(json, WatchlistRepoTypeTokens.listType) ?: emptyList()
-        } catch (error: kotlinx.coroutines.CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            AppLogger.recordException(
-                throwable = error,
-                context = mapOf(
-                    "error_area" to "WatchlistRepository",
-                    "watchlist_phase" to "export_profile"
-                )
-            )
-            emptyList()
-        }
+        // Read both values from the same DataStore snapshot.
+        return readSyncState(context.traktDataStore.data.first(), safeProfileId)
     }
 
-    suspend fun importWatchlistForProfile(profileId: String, cloudItems: List<LocalWatchlistItem>) {
+    private fun readSyncState(
+        prefs: androidx.datastore.preferences.core.Preferences,
+        profileId: String
+    ): WatchlistSyncState {
+        val changesJson = prefs[changesKeyFor(profileId)]
+        val changes: Map<String, WatchlistChange> = if (changesJson.isNullOrBlank()) emptyMap() else
+            gson.fromJson(changesJson, WatchlistRepoTypeTokens.changesType) ?: emptyMap()
+        return mergeWatchlistStates(
+            WatchlistSyncState(parseWatchlistItems(prefs[watchlistKeyFor(profileId)]), changes),
+            WatchlistSyncState()
+        )
+    }
+
+    /** Returns true if this device still has membership operations absent from the cloud. */
+    suspend fun importWatchlistForProfile(
+        profileId: String,
+        cloudItems: List<LocalWatchlistItem>,
+        cloudChanges: Map<String, WatchlistChange> = emptyMap()
+    ): Boolean = mutationMutex.withLock {
         val safeProfileId = profileId.trim().ifBlank { "default" }
-
-        // Union merge local and cloud items to prevent offline additions from being wiped
-        val localJson = try {
-            context.traktDataStore.data.first()[watchlistKeyFor(safeProfileId)]
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppLogger.recordException(
-                throwable = e,
-                context = mapOf(
-                    "error_area" to "WatchlistRepository",
-                    "watchlist_phase" to "import_read_local",
-                    "profile_id" to safeProfileId
-                )
-            )
-            // Abort the import to prevent overwriting/wiping local-only entries when read fails
-            return
-        }
-
-        val localItems: List<LocalWatchlistItem> = if (localJson != null) {
-            try {
-                gson.fromJson<List<LocalWatchlistItem>>(localJson, WatchlistRepoTypeTokens.listType) ?: emptyList()
-            } catch (e: com.google.gson.JsonSyntaxException) {
-                emptyList()
-            }
-        } else {
-            emptyList()
-        }
-
-        val combinedMap = mutableMapOf<String, LocalWatchlistItem>()
-        cloudItems.forEach { item ->
-            combinedMap["${item.mediaType}:${item.tmdbId}"] = item
-        }
-        localItems.forEach { item ->
-            val key = "${item.mediaType}:${item.tmdbId}"
-            val existing = combinedMap[key]
-            if (existing == null || item.addedAt > existing.addedAt) {
-                combinedMap[key] = item
-            }
-        }
-
-        val mergedList = combinedMap.values.sortedWith(compareBy<LocalWatchlistItem> { it.sourceOrder }.thenByDescending { it.addedAt })
-        val json = try {
-            gson.toJson(mergedList)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppLogger.recordException(
-                throwable = e,
-                context = mapOf(
-                    "error_area" to "WatchlistRepository",
-                    "watchlist_phase" to "import_serialize",
-                    "profile_id" to safeProfileId
-                )
-            )
-            // Abort import to avoid writing an empty list on serialization failure
-            return
-        }
-
-        try {
-            context.traktDataStore.edit { prefs ->
-                prefs[watchlistKeyFor(safeProfileId)] = json
-            }
-            invalidationBus.markDirty(CloudSyncScope.WATCHLIST, safeProfileId, "import watchlist")
-            if (profileManager.getProfileIdSync() == safeProfileId) {
-                clearWatchlistCache()
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppLogger.recordException(
-                throwable = e,
-                context = mapOf(
-                    "error_area" to "WatchlistRepository",
-                    "watchlist_phase" to "import_write",
-                    "profile_id" to safeProfileId
-                )
-            )
-        }
-    }
-
-    /**
-     * Load raw watchlist items from DataStore
-     */
-    private suspend fun loadWatchlistRaw(): List<LocalWatchlistItem> {
-        return try {
-            val prefs = context.traktDataStore.data.first()
-            val json = prefs[watchlistKey()] ?: return emptyList()
-            (gson.fromJson<List<LocalWatchlistItem>>(json, WatchlistRepoTypeTokens.listType) ?: emptyList())
-                .sortedWith(compareBy<LocalWatchlistItem> { it.sourceOrder }.thenByDescending { it.addedAt })
-        } catch (error: kotlinx.coroutines.CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            AppLogger.recordException(
-                throwable = error,
-                context = mapOf(
-                    "error_area" to "WatchlistRepository",
-                    "watchlist_phase" to "load_raw"
-                )
-            )
-            emptyList()
-        }
-    }
-
-    /**
-     * Save watchlist items to DataStore
-     */
-    private suspend fun saveWatchlist(items: List<LocalWatchlistItem>) {
-        val json = gson.toJson(items)
+        val cloud = mergeWatchlistStates(WatchlistSyncState(cloudItems, cloudChanges), WatchlistSyncState())
+        var merged = cloud
         context.traktDataStore.edit { prefs ->
-            prefs[watchlistKey()] = json
+            // Reconcile at write time: a concurrent removal must never be replaced by an old read.
+            merged = mergeWatchlistStates(readSyncState(prefs, safeProfileId), cloud)
+            prefs[watchlistKeyFor(safeProfileId)] = gson.toJson(merged.items)
+            prefs[changesKeyFor(safeProfileId)] = gson.toJson(merged.changes)
         }
-        invalidationBus.markDirty(CloudSyncScope.WATCHLIST, profileManager.getProfileIdSync(), "save watchlist")
+        publishState(safeProfileId, merged)
+        merged.changes != cloud.changes ||
+            merged.items.any { local -> cloud.items.none { watchlistItemKey(it) == watchlistItemKey(local) } }
     }
 
     /**
      * Artwork is cache metadata, not a user watchlist change. Persist it locally so
      * cold starts have thumbnails without creating a cloud-sync write on every load.
      */
-    private suspend fun persistEnrichedArtwork(enrichedItems: List<MediaItem>): List<LocalWatchlistItem> {
-        if (enrichedItems.isEmpty()) return loadWatchlistRaw()
+    private suspend fun persistEnrichedArtwork(profileId: String, enrichedItems: List<MediaItem>) {
+        if (enrichedItems.isEmpty()) return
 
         val enrichedByKey = enrichedItems.associateBy { item ->
             val type = if (item.mediaType == MediaType.TV) "tv" else "movie"
             "$type:${item.id}"
         }
-        var storedItems = emptyList<LocalWatchlistItem>()
-        val key = watchlistKey()
+        val key = watchlistKeyFor(profileId)
 
         context.traktDataStore.edit { prefs ->
-            val currentItems = parseWatchlistItems(prefs[key])
+            val currentItems = readSyncState(prefs, profileId).items
             val updatedItems = currentItems.map { raw ->
                 val enriched = enrichedByKey["${raw.mediaType}:${raw.tmdbId}"]
                 if (enriched == null) {
@@ -544,12 +437,7 @@ class WatchlistRepository @Inject constructor(
             if (updatedItems != currentItems) {
                 prefs[key] = gson.toJson(updatedItems)
             }
-            storedItems = updatedItems
         }
-
-        return storedItems.sortedWith(
-            compareBy<LocalWatchlistItem> { it.sourceOrder }.thenByDescending { it.addedAt }
-        )
     }
 
     private fun parseWatchlistItems(json: String?): List<LocalWatchlistItem> {
@@ -656,5 +544,6 @@ class WatchlistRepository @Inject constructor(
 }
 
 private object WatchlistRepoTypeTokens {
+    val changesType = TypeToken.getParameterized(Map::class.java, String::class.java, WatchlistChange::class.java).type
     val listType = TypeToken.getParameterized(MutableList::class.java, LocalWatchlistItem::class.java).type
 }

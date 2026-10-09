@@ -94,9 +94,10 @@ async function probeInput(command: Extract<RemuxCommand, { type: "probe" }>) {
     const codec = await track.getCodecParameterString().catch(() => null) ?? track.codec ?? "unknown";
     const passthrough = command.audioCodecs.includes(codec);
     const browserPlayable = passthrough || await track.canDecode().catch(() => false);
+    const name = await track.getName().catch(() => null);
     audioTracks.push({ index, codec, passthrough, browserPlayable,
       language: track.languageCode ?? undefined, channels: track.numberOfChannels,
-      label: [track.languageCode?.toUpperCase(), codec.toUpperCase(), `${track.numberOfChannels}ch`, !passthrough && browserPlayable ? "converted" : ""].filter(Boolean).join(" / ") });
+      label: [track.languageCode?.toUpperCase(), name, codec.toUpperCase(), `${track.numberOfChannels}ch`, !passthrough && browserPlayable ? "converted" : ""].filter(Boolean).join(" / ") });
   }
   // Mp4OutputFormat writes HEVC as hvc1, even when the input reports hev1.
   // Advertise the output sample entry to MSE, not the source container label.

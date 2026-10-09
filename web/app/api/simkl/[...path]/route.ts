@@ -5,6 +5,8 @@ function envValue(value: string | undefined, fallback = "") {
 }
 
 const SIMKL_REQUEST_RULES = [
+  { path: /^\/oauth2\/(?:device|token|revoke)$/, methods: new Set(["POST"]) },
+  { path: /^\/lists\/(?:[1-9]\d*|user\/[1-9]\d*)$/, methods: new Set(["GET"]) },
   { path: /^\/oauth\/pin(?:\/[A-Za-z0-9-]+)?$/, methods: new Set(["GET"]) },
   { path: /^\/oauth\/token$/, methods: new Set(["POST"]) },
   { path: /^\/users\/settings$/, methods: new Set(["POST"]) },
@@ -28,7 +30,10 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     "https://auth.arvio.tv/.netlify/functions"
   ).replace(/\/+$/, "");
   const appAnonKey = envValue(process.env.NEXT_PUBLIC_ARVIO_APP_ANON_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "");
-  const simklClientId = process.env.NEXT_PUBLIC_SIMKL_CLIENT_ID || process.env.SIMKL_CLIENT_ID || "";
+  const isV2 = path[0] === "oauth2" || path[0] === "lists" || request.headers.get("x-user-token")?.startsWith("simkl_at_");
+  const simklClientId = isV2
+    ? process.env.NEXT_PUBLIC_SIMKL_V2_CLIENT_ID || process.env.SIMKL_V2_CLIENT_ID || (process.env.NEXT_PUBLIC_SELF_HOSTED === "true" ? "" : "ebde0a0712da059710ba65ba3efe1edb601c2e5ae8e23c048c8d6df58ed922c2")
+    : process.env.NEXT_PUBLIC_SIMKL_CLIENT_ID || process.env.SIMKL_CLIENT_ID || "";
   const simklSecret = process.env.SIMKL_CLIENT_SECRET ?? "";
   const input = new URL(request.url);
   const method = request.method;
@@ -42,7 +47,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
   let target: URL;
   let headers: HeadersInit;
 
-  const usesNetlifyProxy = process.env.NEXT_PUBLIC_SELF_HOSTED !== "true" && netlifyBackendUrl.startsWith("https://") && appAnonKey.length > 40;
+  const usesNetlifyProxy = !isV2 && process.env.NEXT_PUBLIC_SELF_HOSTED !== "true" && netlifyBackendUrl.startsWith("https://") && appAnonKey.length > 40;
 
   if (usesNetlifyProxy) {
     target = new URL(`${netlifyBackendUrl}/simkl-proxy`);
@@ -50,7 +55,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     target.searchParams.set("method", method);
     target.searchParams.set("client_id", simklClientId);
     target.searchParams.set("app-name", "arvio");
-    target.searchParams.set("app-version", "1.9.996");
+    target.searchParams.set("app-version", "2.0");
     input.searchParams.forEach((value, key) => {
       if (key !== "client_id" && key !== "client_secret" && key !== "app-name" && key !== "app-version") {
         target.searchParams.set(key, value);
@@ -59,7 +64,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     headers = {
       apikey: appAnonKey,
       Authorization: `Bearer ${appAnonKey}`,
-      "user-agent": request.headers.get("user-agent") || "ARVIO/1.9.996 (Web)"
+      "user-agent": request.headers.get("user-agent") || "ARVIO/2.0 (Web)"
     };
     const userToken = request.headers.get("x-user-token");
     if (userToken) headers["x-user-token" as keyof HeadersInit] = userToken;
@@ -73,12 +78,12 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
       target.searchParams.set("app-name", "arvio");
     }
     if (!target.searchParams.has("app-version")) {
-      target.searchParams.set("app-version", "1.9.996");
+      target.searchParams.set("app-version", "2.0");
     }
     headers = {
-      "content-type": "application/json",
+      "content-type": isV2 && normalizedPath.startsWith("/oauth2/") ? "application/x-www-form-urlencoded" : "application/json",
       "simkl-api-key": simklClientId,
-      "user-agent": request.headers.get("user-agent") || "ARVIO/1.9.996 (Web)"
+      "user-agent": request.headers.get("user-agent") || "ARVIO/2.0 (Web)"
     };
     const userToken = request.headers.get("x-user-token");
     if (userToken) headers.Authorization = `Bearer ${userToken}`;
@@ -86,7 +91,9 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     return NextResponse.json({ error: "Simkl proxy is not configured" }, { status: 500 });
   }
 
-  const parsedBody = body && normalizedPath === "/oauth/token" && simklSecret && !usesNetlifyProxy
+  const parsedBody = body && isV2 && normalizedPath.startsWith("/oauth2/")
+    ? (() => { const fields = new URLSearchParams(body); fields.set("client_id", simklClientId); return fields.toString(); })()
+    : body && normalizedPath === "/oauth/token" && simklSecret && !usesNetlifyProxy
     ? JSON.stringify({ ...JSON.parse(body), client_id: simklClientId, client_secret: simklSecret })
     : body;
 

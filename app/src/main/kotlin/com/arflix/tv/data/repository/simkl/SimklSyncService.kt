@@ -69,7 +69,7 @@ class SimklSyncService @Inject constructor(
         val playback: List<com.arflix.tv.data.api.SimklPlaybackItem>?
     )
 
-    private val clientId: String get() = Constants.SIMKL_CLIENT_ID
+    private val clientId: String get() = authManager.effectiveClientId
     private val gson = Gson()
 
     private val snapshotCacheFile: File?
@@ -91,10 +91,16 @@ class SimklSyncService @Inject constructor(
     private var snapshotAnime: SimklAllItemsResponse? = null
     private var snapshotPlayback: List<com.arflix.tv.data.api.SimklPlaybackItem>? = null
 
-    private val cachedWatchedMovies = mutableSetOf<Int>()
-    private val cachedWatchedEpisodes = mutableSetOf<String>()
+    private val cachedWatchedMovies = ConcurrentHashMap.newKeySet<Int>()
+    private val cachedWatchedEpisodes = ConcurrentHashMap.newKeySet<String>()
     private val cachedWatchlist = mutableMapOf<Pair<MediaType, Int>, MediaItem>()
-    private val cachedContinueWatching = mutableMapOf<Pair<MediaType, Int>, ContinueWatchingItem>()
+    private val cachedContinueWatching = ConcurrentHashMap<Pair<MediaType, Int>, ContinueWatchingItem>()
+    private val cachedUpNext = ConcurrentHashMap<Pair<MediaType, Int>, ContinueWatchingItem>()
+    private val completionTimes = mutableMapOf<String, Long>()
+    private val completedShows = mutableSetOf<Int>()
+    private val recentCompletions = ConcurrentHashMap<String, Long>()
+    private val episodeSeasons = ConcurrentHashMap<Pair<Int, Int>, Pair<Long, com.arflix.tv.data.api.TmdbSeasonDetails>>()
+    private val episodeLookups = Semaphore(4)
     private val cachedLibraryItems = mutableMapOf<String, LinkedHashMap<Pair<MediaType, Int>, MediaItem>>()
     private val resolvedExternalIds = ConcurrentHashMap<String, Int>()
 
@@ -180,7 +186,7 @@ class SimklSyncService @Inject constructor(
             return@withLock false
         }
         val tokenScope = MessageDigest.getInstance("SHA-256")
-            .digest(token.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+            .digest((if (token.startsWith("simkl_at_")) authManager.cacheIdentity(token) else token).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
         if (activeTokenScope != tokenScope) {
             clearCachedState(deletePersisted = activeTokenScope != null)
             activeTokenScope = tokenScope
@@ -216,7 +222,7 @@ class SimklSyncService @Inject constructor(
             return@withLock true
         }
         if (!force && now - lastSyncAttemptTime < FAILED_SYNC_BACKOFF_MS) {
-            return@withLock (hasInitialSnapshot && playbackComplete)
+            return@withLock (snapshotComplete && playbackComplete)
         }
         lastSyncAttemptTime = now
 
@@ -533,10 +539,14 @@ class SimklSyncService @Inject constructor(
         cachedWatchedEpisodes.clear()
         cachedWatchlist.clear()
         cachedContinueWatching.clear()
+        cachedUpNext.clear()
+        completionTimes.clear()
+        completedShows.clear()
         cachedLibraryItems.clear()
         processMoviesResponse(movies)
         processShowsResponse(shows)
         processShowsResponse(anime)
+        cachedUpNext.putAll(cachedContinueWatching)
         processPlayback(playback)
     }
 
@@ -558,6 +568,10 @@ class SimklSyncService @Inject constructor(
         snapshotAnime = null
         snapshotPlayback = null
         resolvedExternalIds.clear()
+        recentCompletions.clear()
+        cachedUpNext.clear()
+        completionTimes.clear()
+        completedShows.clear()
         cachedWatchedMovies.clear()
         cachedWatchedEpisodes.clear()
         cachedWatchlist.clear()
@@ -582,6 +596,7 @@ class SimklSyncService @Inject constructor(
             )
             if (status == "completed") {
                 cachedWatchedMovies.add(tmdbId)
+                completionTimes["movie:$tmdbId"] = parseTimestamp(movieItem.lastWatchedAt)
             }
             if (status == "plantowatch") {
                 cachedWatchlist[MediaType.MOVIE to tmdbId] = MediaItem(
@@ -601,6 +616,10 @@ class SimklSyncService @Inject constructor(
             val show = showItem.show ?: return@forEach
             val showTmdb = resolvedTmdbId(show.ids, MediaType.TV, show.title, show.year) ?: return@forEach
             val status = showItem.status
+            if (status == "completed") {
+                completedShows.add(showTmdb)
+                completionTimes["show:$showTmdb"] = parseTimestamp(showItem.lastWatchedAt)
+            }
             cacheLibraryItem(
                 status = status,
                 key = MediaType.TV to showTmdb,
@@ -625,9 +644,19 @@ class SimklSyncService @Inject constructor(
                     val effectiveSeason = episode.tvdb?.season ?: season.number
                     val effectiveEpisode = episode.tvdb?.episode ?: episode.number
                     cachedWatchedEpisodes.add(episodeKey(showTmdb, effectiveSeason, effectiveEpisode))
+                    completionTimes[episodeKey(showTmdb, effectiveSeason, effectiveEpisode)] = parseTimestamp(episode.watchedAt)
                 }
             }
-            val next = showItem.nextToWatchInfo ?: parseNextToWatch(showItem.nextToWatch)
+            // The pointer is authoritative. SIMKL may leave decoration behind when caught up.
+            val pointer = parseNextToWatch(showItem.nextToWatch)
+            val mappedSeasons = (showItem.mappedTvdbSeasons as? List<*>)
+                ?.mapNotNull { (it as? Number)?.toInt() }.orEmpty()
+            val next = pointer?.copy(
+                season = if (showItem.nextToWatch?.startsWith("S", ignoreCase = true) == true) pointer.season
+                    else showItem.nextToWatchInfo?.season ?: mappedSeasons.singleOrNull() ?: pointer.season,
+                title = showItem.nextToWatchInfo?.title,
+                date = showItem.nextToWatchInfo?.date
+            )
             if (next != null && status == "watching") {
                 val season = next.season ?: 1
                 val episode = next.episode ?: return@forEach
@@ -657,7 +686,7 @@ class SimklSyncService @Inject constructor(
         key: Pair<MediaType, Int>,
         item: MediaItem
     ) {
-        val normalized = status?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return
+        val normalized = status?.trim()?.lowercase()?.takeIf { it.isNotBlank() }?.let { if (it == "notinteresting") "dropped" else it } ?: return
         cachedLibraryItems.getOrPut(normalized) { linkedMapOf() }[key] = item
     }
 
@@ -676,6 +705,7 @@ class SimklSyncService @Inject constructor(
             if (movie != null) {
                 val tmdbId = resolvedTmdbId(movie.ids, MediaType.MOVIE, movie.title, movie.year) ?: return@forEach
                 val progress = row.progress.toInt().coerceIn(0, 100)
+                if (progress !in 1..94 || isCompletedPause("movie:$tmdbId", parseTimestamp(row.pausedAt), cachedWatchedMovies.contains(tmdbId))) return@forEach
                 val durationSeconds = movie.runtime?.times(60L) ?: 0L
                 cachedContinueWatching[MediaType.MOVIE to tmdbId] = ContinueWatchingItem(
                     id = tmdbId,
@@ -695,6 +725,11 @@ class SimklSyncService @Inject constructor(
             val season = row.episode?.season ?: return@forEach
             val episode = row.episode.number ?: return@forEach
             val progress = row.progress.toInt().coerceIn(0, 100)
+            val key = episodeKey(tmdbId, season, episode)
+            val completed = completedShows.contains(tmdbId) || cachedWatchedEpisodes.contains(key)
+            val completion = maxOf(completionTimes[key] ?: 0L, completionTimes["show:$tmdbId"] ?: 0L)
+            if (season < 0 || episode < 1 || progress !in 1..94 ||
+                isCompletedPause(key, parseTimestamp(row.pausedAt), completed, completion)) return@forEach
             val durationSeconds = show.runtime?.times(60L) ?: 0L
             cachedContinueWatching[MediaType.TV to tmdbId] = ContinueWatchingItem(
                 id = tmdbId,
@@ -917,10 +952,101 @@ class SimklSyncService @Inject constructor(
     }
 
     suspend fun getContinueWatching(forceRefresh: Boolean = false): List<ContinueWatchingItem> {
-        syncIfNeeded(forceRefresh)
-        return cachedContinueWatching.values
-            .filter { it.progress < 95 }
-            .sortedByDescending { it.updatedAtMs }
+        return getContinueWatching(forceRefresh, emptySet(), emptySet())
+    }
+
+    private fun isCompletedPause(key: String, pausedAt: Long, watched: Boolean, completion: Long = completionTimes[key] ?: 0L): Boolean {
+        val completedAt = maxOf(completion, recentCompletions[key] ?: 0L)
+        if (!watched && completedAt == 0L) return false
+        // 1970-01-01T00:00:01Z is SIMKL's unknown-history placeholder, not proof of a rewatch.
+        return completedAt <= 1000L || pausedAt <= completedAt
+    }
+
+    private data class ContinueWatchingSnapshot(
+        val scope: String?,
+        val items: List<ContinueWatchingItem>,
+        val upNext: Map<Pair<MediaType, Int>, ContinueWatchingItem>,
+        val watched: Set<String>
+    )
+
+    suspend fun getContinueWatching(
+        forceRefresh: Boolean,
+        localWatchedMovies: Set<Int>,
+        localWatchedEpisodes: Set<String>
+    ): List<ContinueWatchingItem> {
+        val synced = syncIfNeeded(forceRefresh)
+        val snapshot = syncMutex.withLock {
+            check(synced || cachedContinueWatching.isNotEmpty()) { "SIMKL Continue Watching is unavailable" }
+            recentCompletions.entries.removeIf { System.currentTimeMillis() - it.value > SNAPSHOT_TTL_MS }
+            val upNext = cachedUpNext.toMap()
+            val candidates = cachedContinueWatching.mapNotNull { (key, item) ->
+                val wholeCompletion = recentCompletions["show:${item.id}"].takeIf { item.mediaType == MediaType.TV }
+                if (wholeCompletion != null && (item.isUpNext || item.updatedAtMs <= wholeCompletion)) return@mapNotNull null
+                val watchedKey = if (item.mediaType == MediaType.MOVIE) "movie:${item.id}"
+                    else episodeKey(item.id, item.season ?: -1, item.episode ?: -1)
+                val localOnlyWatched = if (item.mediaType == MediaType.MOVIE)
+                    item.id in localWatchedMovies && item.id !in cachedWatchedMovies
+                    else watchedKey in localWatchedEpisodes && watchedKey !in cachedWatchedEpisodes
+                if (!item.isUpNext && (localOnlyWatched || isCompletedPause(watchedKey, item.updatedAtMs, false))) upNext[key]
+                    else item
+            }
+            ContinueWatchingSnapshot(activeTokenScope, candidates, upNext,
+                cachedWatchedEpisodes.toSet() + localWatchedEpisodes + recentCompletions.keys.filter { it.startsWith("show_tmdb:") })
+        }
+        val result = coroutineScope {
+            snapshot.items.map { item -> async {
+                if (item.mediaType != MediaType.TV) item else episodeLookups.withPermit {
+                    validateNextEpisode(item, snapshot.watched) ?: if (!item.isUpNext) {
+                        snapshot.upNext[item.mediaType to item.id]?.let { validateNextEpisode(it, snapshot.watched) }
+                    } else null
+                }
+            } }.mapNotNull { it.await() }
+        }.sortedByDescending { it.updatedAtMs }
+        check(synced || result.isNotEmpty()) { "SIMKL Continue Watching is unavailable" }
+        check(snapshot.scope == activeTokenScope) { "SIMKL profile changed" }
+        return result
+    }
+
+    private suspend fun seasonEpisodes(show: Int, season: Int): com.arflix.tv.data.api.TmdbSeasonDetails {
+        val key = show to season
+        val cached = episodeSeasons[key]
+        if (cached != null && System.currentTimeMillis() - cached.first < SNAPSHOT_TTL_MS) return cached.second
+        val data = try {
+            tmdbApi.getTvSeason(show, season, Constants.TMDB_API_KEY)
+        } catch (e: retrofit2.HttpException) {
+            if (e.code() != 404) throw e
+            com.arflix.tv.data.api.TmdbSeasonDetails(seasonNumber = season)
+        }
+        episodeSeasons[key] = System.currentTimeMillis() to data
+        return data
+    }
+
+    private suspend fun validateNextEpisode(item: ContinueWatchingItem, watched: Set<String>): ContinueWatchingItem? {
+        val season = item.season ?: return null
+        val number = item.episode ?: return null
+        val episodes = seasonEpisodes(item.id, season).episodes.sortedBy { it.episodeNumber }
+        // Never manufacture episode N+1 from totals or accept a pointer outside a real season.
+        if (episodes.none { it.episodeNumber == number }) return null
+        if (!item.isUpNext) return item
+        suspend fun firstUnwatched(seasonNumber: Int, rows: List<com.arflix.tv.data.api.TmdbEpisode>, start: Int): ContinueWatchingItem? {
+            val episode = rows.sortedBy { it.episodeNumber }.firstOrNull {
+                it.episodeNumber >= start && episodeKey(item.id, seasonNumber, it.episodeNumber) !in watched
+            } ?: return null
+            val airDate = episode.airDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() } ?: return null
+            if (airDate.isAfter(java.time.LocalDate.now())) return null
+            return item.copy(season = seasonNumber, episode = episode.episodeNumber,
+                episodeTitle = episode.name, durationSeconds = episode.runtime?.times(60L) ?: item.durationSeconds)
+        }
+        firstUnwatched(season, episodes, number)?.let { return it }
+        if (episodes.any { it.episodeNumber >= number && episodeKey(item.id, season, it.episodeNumber) !in watched }) return null
+        val seasons = tmdbApi.getTvDetails(item.id, Constants.TMDB_API_KEY).seasons
+            .map { it.seasonNumber }.filter { it > season }.sorted()
+        for (nextSeason in seasons) {
+            val rows = seasonEpisodes(item.id, nextSeason).episodes
+            firstUnwatched(nextSeason, rows, 1)?.let { return it }
+            if (rows.any { episodeKey(item.id, nextSeason, it.episodeNumber) !in watched }) return null
+        }
+        return null
     }
 
     suspend fun addToWatchlist(mediaType: MediaType, tmdbId: Int, isAnime: Boolean = false): Boolean {
@@ -1050,8 +1176,12 @@ class SimklSyncService @Inject constructor(
             if (res.isSuccessful) {
                 if (mediaType == MediaType.MOVIE) {
                     cachedWatchedMovies.add(tmdbId)
+                    recentCompletions["movie:$tmdbId"] = System.currentTimeMillis()
                 } else if (season != null && episode != null) {
                     cachedWatchedEpisodes.add(episodeKey(tmdbId, season, episode))
+                    recentCompletions[episodeKey(tmdbId, season, episode)] = System.currentTimeMillis()
+                } else {
+                    recentCompletions["show:$tmdbId"] = System.currentTimeMillis()
                 }
                 lastActivityCheckTime = 0L
                 true
@@ -1108,6 +1238,8 @@ class SimklSyncService @Inject constructor(
                 } else if (season != null && episode != null) {
                     cachedWatchedEpisodes.remove(episodeKey(tmdbId, season, episode))
                 }
+                recentCompletions.remove(if (mediaType == MediaType.MOVIE) "movie:$tmdbId" else episodeKey(tmdbId, season ?: -1, episode ?: -1))
+                if (mediaType == MediaType.TV) recentCompletions.remove("show:$tmdbId")
                 lastActivityCheckTime = 0L
                 true
             } else {
@@ -1155,9 +1287,15 @@ class SimklSyncService @Inject constructor(
             if (response.isSuccessful) {
                 episodes.forEach { episode ->
                     val key = episodeKey(showTmdbId, season, episode)
-                    if (watched) cachedWatchedEpisodes.add(key) else cachedWatchedEpisodes.remove(key)
+                    if (watched) {
+                        cachedWatchedEpisodes.add(key)
+                        recentCompletions[key] = System.currentTimeMillis()
+                    } else {
+                        cachedWatchedEpisodes.remove(key)
+                        recentCompletions.remove(key)
+                    }
                 }
-                cachedContinueWatching.remove(MediaType.TV to showTmdbId)
+                if (!watched) cachedContinueWatching.remove(MediaType.TV to showTmdbId)
                 lastActivityCheckTime = 0L
                 true
             } else {

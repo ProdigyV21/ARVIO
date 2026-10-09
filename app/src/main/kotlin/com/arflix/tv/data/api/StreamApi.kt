@@ -1,6 +1,7 @@
 package com.arflix.tv.data.api
 
 import com.google.gson.JsonElement
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 import retrofit2.http.GET
 import retrofit2.http.Url
@@ -21,6 +22,15 @@ interface StreamApi {
     suspend fun getAddonManifest(
         @Url url: String
     ): StremioManifestResponse
+
+    /**
+     * Fetch an `addon_catalog` resource: a list of addons, each with its full manifest.
+     * URL format: https://addon.example.com/addon_catalog/<type>/<id>.json
+     */
+    @GET
+    suspend fun getAddonCollection(
+        @Url url: String
+    ): StremioAddonCollectionResponse
 
     // ========== Generic Stremio Addon ==========
 
@@ -150,6 +160,29 @@ data class StremioAddonBehaviorHints(
     val configurationRequired: Boolean? = null
 )
 
+// ========== Stremio Addon Catalog Models ==========
+
+data class StremioAddonCollectionResponse(
+    val addons: List<StremioAddonDescriptor>? = null
+)
+
+/** One entry of an `addon_catalog` response. Every field is optional: entries are third-party. */
+data class StremioAddonDescriptor(
+    val transportUrl: String? = null,
+    val transportName: String? = null,
+    val manifest: StremioAddonDescriptorManifest? = null
+)
+
+data class StremioAddonDescriptorManifest(
+    val id: String? = null,
+    val name: String? = null,
+    val version: String? = null,
+    val description: String? = null,
+    val logo: String? = null,
+    val types: List<String?>? = null,
+    val behaviorHints: StremioAddonBehaviorHints? = null
+)
+
 // ========== Stremio Stream Models ==========
 
 data class StremioStreamResponse(
@@ -169,13 +202,29 @@ data class StremioMetaPreview(
     val background: String? = null,
     val logo: String? = null,
     val description: String? = null,
-    val genres: List<String>? = null,
+    @JsonAdapter(LenientStringListAdapter::class) val genres: List<String>? = null,
     val released: String? = null,
     val releaseInfo: String? = null,
     val year: String? = null,
     @SerializedName("imdb_id") val imdbId: String? = null,
     @SerializedName("tmdb_id") val tmdbId: String? = null,
-    @SerializedName("moviedb_id") val moviedbId: String? = null
+    @SerializedName("moviedb_id") val moviedbId: String? = null,
+    // Only the full /meta response carries these.
+    val videos: List<StremioMetaVideo>? = null,
+    val posterShape: String? = null
+)
+
+/** A series episode in an addon's /meta response. */
+data class StremioMetaVideo(
+    val id: String? = null,
+    val title: String? = null,
+    val name: String? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val released: String? = null,
+    val thumbnail: String? = null,
+    val overview: String? = null,
+    val description: String? = null
 )
 
 data class StremioMetaResponse(

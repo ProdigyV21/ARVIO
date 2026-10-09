@@ -67,7 +67,7 @@ export async function resolveTelegramSources(
   episode: number | undefined,
   opts: TelegramResolveOptions = {}
 ): Promise<StreamSource[]> {
-  if (!isTelegramConfigured || !isConnected()) return [];
+  if (!isTelegramConfigured() || !isConnected()) return [];
 
   const key = cacheKey(item, season, episode);
   const cached = cache.get(key);

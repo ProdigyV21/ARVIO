@@ -75,6 +75,10 @@ export function ProfileSelectionScreen() {
           {manageMode ? translateUi("Done") : translateUi("Manage Profiles")}
         </button>
 
+        {process.env.NEXT_PUBLIC_UNRAID_DISTRIBUTION === "true" && (
+          <p><a className="secondary text-button" href="/distribution-sources/index.html" target="_blank" rel="noopener noreferrer">Source code & licences</a></p>
+        )}
+
         {!auth && !config.selfHosted && (
           <button
             type="button"

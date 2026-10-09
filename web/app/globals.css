@@ -2483,6 +2483,15 @@ a.login-submit {
   background: rgba(255, 255, 255, 0.92);
 }
 
+/* Favorite TV row: channel logos sit whole on the card instead of filling it */
+.favorite-tv-poster img {
+  object-fit: contain;
+  padding: 12% 18%;
+}
+.favorite-tv-live {
+  letter-spacing: 0.06em;
+}
+
 /* Lazy rail skeletons (rows load as they scroll into view) */
 .rail-skeleton {
   min-height: clamp(220px, 28vh, 320px);
@@ -3405,7 +3414,7 @@ a.login-submit {
   z-index: 5;
   width: min(460px, calc(100vw - 84px));
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 20px;
+  border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(25, 30, 38, 0.95), rgba(5, 8, 12, 0.96)),
     rgba(0, 0, 0, 0.88);
@@ -3413,14 +3422,14 @@ a.login-submit {
   backdrop-filter: blur(22px);
   padding: 18px;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
   overflow: hidden;
 }
 
 .player-panel-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -3431,15 +3440,22 @@ a.login-submit {
 }
 
 .player-panel-list {
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* The scroll viewport must not compress rows below their buttons' height. */
+  grid-auto-rows: max-content;
   align-content: start;
   gap: 10px;
-  padding-right: 4px;
+  padding: 3px;
 }
 
 .player-panel-row {
+  min-width: 0;
   min-height: 74px;
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3447,11 +3463,35 @@ a.login-submit {
   background: rgba(255, 255, 255, 0.07);
   color: #fff;
   display: grid;
-  grid-template-columns: 34px 1fr;
+  grid-template-columns: 34px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   padding: 12px;
   text-align: left;
+}
+
+.player-panel-row > span,
+.player-source-content {
+  min-width: 0;
+}
+
+.player-panel-row.player-source-row {
+  border-radius: 8px;
+  align-items: start;
+  transform: none;
+}
+
+.player-source-row .player-row-icon {
+  margin-top: 2px;
+}
+
+.player-audio-list .player-panel-row {
+  border-radius: 8px;
+}
+
+.player-audio-list .player-panel-row strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .player-panel-row:hover,
@@ -3498,26 +3538,63 @@ a.login-submit {
   font-size: 11px;
 }
 
+.player-source-content strong,
+.player-source-content em {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.4;
+}
+
 .player-row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  margin-top: 9px;
+  margin-top: 12px;
+}
+
+.player-source-row .player-row-actions {
+  grid-column: 2;
+  margin-top: 0;
 }
 
 .player-row-actions button {
-  min-height: 30px;
+  min-height: 36px;
+  max-width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  padding: 0 9px;
+  padding: 7px 10px;
   font-size: 12px;
   font-weight: 760;
   cursor: pointer;
+}
+
+.player-row-actions button svg {
+  flex: 0 0 auto;
+}
+
+.player-row-actions .player-source-play {
+  background: #fff;
+  color: #101114;
+  border-color: #fff;
+}
+
+.player-row-actions .player-source-play:hover {
+  background: #e2e3e5;
+}
+
+.player-row-actions .player-source-copy {
+  width: 36px;
+  padding: 0;
 }
 
 .player-row-actions button:hover,
@@ -3525,6 +3602,52 @@ a.login-submit {
   outline: none;
   border-color: color-mix(in srgb, var(--accent, #fff) 58%, transparent);
   background: rgba(255, 255, 255, 0.16);
+}
+
+.player-row-actions button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.player-row-actions .player-source-play:focus-visible {
+  background: #fff;
+}
+
+@media (max-width: 680px), (pointer: coarse) {
+  .player-source-row .player-row-actions {
+    grid-column: 1 / -1;
+  }
+
+  .player-row-actions button {
+    min-height: 44px;
+  }
+
+  .player-row-actions .player-source-copy {
+    width: 44px;
+  }
+}
+
+@media (max-width: 380px) {
+  .player-source-row .player-row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-row-actions .player-source-copy {
+    width: auto;
+  }
+}
+
+@media (max-height: 500px) {
+  .player-overlay .player-side-panel {
+    top: max(8px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: auto;
+    width: min(460px, calc(100% - 24px));
+    max-height: none;
+    padding: 12px;
+  }
 }
 
 .player-panel-empty {
@@ -12334,22 +12457,29 @@ html { background: #000; }
   max-width: min(46vw, 420px);
   max-height: 30vh;
   object-fit: contain;
-  animation: player-boot-pulse 1.6s ease-in-out infinite;
+  animation: player-boot-pulse 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
   filter: drop-shadow(0 6px 24px rgba(0, 0, 0, 0.6));
 }
 
 .player-boot-title {
   position: relative;
+  margin: 0;
   font-size: clamp(26px, 4vw, 44px);
   font-weight: 800;
   text-align: center;
   padding: 0 24px;
-  animation: player-boot-pulse 1.6s ease-in-out infinite;
+  animation: player-boot-pulse 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform;
 }
 
+/* Match Android's PulsingLogo: two beats, then a rest. Transform-only keeps
+   the title crisp and runs independently of playback work on the main thread. */
 @keyframes player-boot-pulse {
-  0%, 100% { opacity: 0.5; transform: scale(0.985); }
-  50% { opacity: 1; transform: scale(1); }
+  0%, 41.3333%, 100% { transform: scale(1); }
+  10.6667% { transform: scale(1.08); }
+  18.6667% { transform: scale(1.02); }
+  28% { transform: scale(1.12); }
 }
 
 /* Details: episodes/sources sit tight under the hero action buttons. */

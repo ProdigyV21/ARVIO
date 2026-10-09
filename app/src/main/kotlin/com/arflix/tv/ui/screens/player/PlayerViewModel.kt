@@ -15,6 +15,8 @@ import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.AddonType
 import com.arflix.tv.data.model.AnimeStructuringStyle
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.model.RecentPlayedSource
+import com.arflix.tv.data.model.findRecentSourceMatch
 import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.data.model.IptvVodSourceIds
@@ -25,6 +27,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlaybackTelemetryRepository
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.RecentPlayedSourceRepository
 import com.arflix.tv.data.repository.SkipInterval
 import com.arflix.tv.data.repository.SkipIntroRepository
 import com.arflix.tv.data.repository.StreamRepository
@@ -60,6 +63,8 @@ import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -160,6 +165,8 @@ data class PlayerUiState(
     val selectedStream: StreamSource? = null,
     val selectedStreamUrl: String? = null,
     val streamSelectionNonce: Int = 0,
+    // This title's recently played source, pinned at the top of the source menu.
+    val recentSource: RecentPlayedSource? = null,
     val selectedSubtitle: Subtitle? = null,
     val subtitleSelectionNonce: Int = 0,
     // "Preload Subtitles" mode: preferred-language addon subs downloaded to local files before
@@ -297,7 +304,8 @@ class PlayerViewModel @Inject constructor(
     private val skipIntroRepository: SkipIntroRepository,
     private val playbackTelemetryRepository: PlaybackTelemetryRepository,
     private val pluginManager: PluginManager,
-    private val streamIntegrationRepository: StreamIntegrationRepository
+    private val streamIntegrationRepository: StreamIntegrationRepository,
+    private val recentPlayedSourceRepository: RecentPlayedSourceRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -350,6 +358,14 @@ class PlayerViewModel @Inject constructor(
     // A late-arriving embedded preferred-language track overrides auto selections but never this.
     private var userPickedSubtitle: Boolean = false
     private var playbackSessionStartTime: Long = 0L
+    private val recentSourcePlayTracker = RecentSourcePlayTracker()
+    private var recentSourceLoad: Deferred<RecentPlayedSource?>? = null
+    // Autoplay picks the title's recently played source over its own ranking (see the gate).
+    private val recentSourceGate = RecentSourceAutoplayGate()
+    // The source whose URL the player has loaded. selectStream() names its pick in selectedStream
+    // at once, but the old video keeps playing until the new URL is resolved and applied.
+    private var preparedStream: StreamSource? = null
+    private var recentSourceClock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
 
     private fun isCurrentAnime(): Boolean =
         currentMediaType == MediaType.TV &&
@@ -715,7 +731,9 @@ class PlayerViewModel @Inject constructor(
         currentPreferredAddonId = preferredAddonId?.trim()?.takeIf { it.isNotBlank() }
         currentPreferredSourceName = preferredSourceName?.trim()?.takeIf { it.isNotBlank() }
         currentPreferredBingeGroup = preferredBingeGroup?.trim()?.takeIf { it.isNotBlank() }
-        currentIsLiveStreamPlayback = isLiveStreamPlayback
+        // An addon's live channel opens like a movie but plays live: no progress, scrobbles or
+        // Continue Watching entry.
+        currentIsLiveStreamPlayback = isLiveStreamPlayback || mediaRepository.isAddonNativeLiveChannel(mediaId)
         autoPlayMinimumQuality = 0
         autoPlayLimits = com.arflix.tv.data.model.AutoplayLimits()
         playbackSessionStartTime = System.currentTimeMillis()
@@ -772,8 +790,10 @@ class PlayerViewModel @Inject constructor(
             streamLoadPhase = if (providedStreamUrl.isNullOrBlank()) null else PlayerMessage.Res(R.string.player_phase_preparing_stream),
             sourceSearchActive = false,
             error = null,
-            isSetupError = false
+            isSetupError = false,
+            recentSource = null
         )
+        loadRecentSource(mediaType, mediaId, seasonNumber, episodeNumber)
         lastTopPrewarmKey = ""
         skipIntervalsJob?.cancel()
         currentImdbId = providedImdbId
@@ -788,6 +808,8 @@ class PlayerViewModel @Inject constructor(
 
         mediaLoadJob?.cancel()
         mediaLoadJob = viewModelScope.launch {
+            // Before any lookup starts: Home Server / IPTV background results can autoplay too.
+            armRecentSourceGate(recentSourceLoad?.await())
             // Autoplay should always use the current highest-ranked source list.
             // Explicit source navigation still passes preferred fields or a URL below.
             val preferredAudioLanguage = resolvePreferredAudioLanguage()
@@ -994,6 +1016,7 @@ class PlayerViewModel @Inject constructor(
                     selectedStreamUrl = resolvedProvidedUrl,
                     savedPosition = resumeData.positionMs
                 )
+                preparedStream = resolvedProvidedStream
                 prefetchSubtitleIndex(onlyForAutoScan = true)
                 audioSyncOnStream()
                 // NOTE: these background children share the load job — an uncaught exception in
@@ -1312,7 +1335,8 @@ class PlayerViewModel @Inject constructor(
                                         originalLanguage = currentOriginalLanguage,
                                         animeQueryOverride = animeQueryOverride,
                                         airDate = currentAirDate,
-                                        timeoutMs = 3_500L
+                                        timeoutMs = 3_500L,
+                                        nativeType = mediaRepository.addonNativeType(mediaId)
                                     )
                                 } else emptyList()
                             }
@@ -1457,7 +1481,8 @@ class PlayerViewModel @Inject constructor(
                         imdbId = effectiveStreamId,
                         title = currentItemTitle,
                         year = null,
-                        forceRefresh = forceRefresh
+                        forceRefresh = forceRefresh,
+                        nativeType = mediaRepository.addonNativeType(mediaId)
                     )
                 } else {
                     streamRepository.resolveEpisodeStreamsProgressive(
@@ -1471,7 +1496,8 @@ class PlayerViewModel @Inject constructor(
                         title = currentItemTitle,
                         forceRefresh = forceRefresh,
                         animeQueryOverride = animeQueryOverride,
-                        airDate = currentAirDate
+                        airDate = currentAirDate,
+                        nativeType = mediaRepository.addonNativeType(mediaId)
                     )
                 }
 
@@ -1621,7 +1647,14 @@ class PlayerViewModel @Inject constructor(
                             stream.behaviorHints.notWebReady != true &&
                             !stream.url.isNullOrBlank()
                     }
-                    if (!autoplaySelected && autoplayStreams.isNotEmpty() && autoplayDeferredJob == null && canStartAutoplay()) {
+                    // While the gate holds, only the recent source may start (see RecentSourceAutoplayGate).
+                    recentSourceGate.onStreams(mergedStreams)
+                    if (progressive.isFinal && !supplementalSourcesStillLoading) recentSourceGate.release()
+                    val holdForRecentSource = recentSourceGate.isHolding(recentSourceClock())
+                    val recentAutoplayStream = recentSourceGate.recentCandidate(autoplayStreams)
+                    if (!autoplaySelected && autoplayStreams.isNotEmpty() && autoplayDeferredJob == null &&
+                        !holdForRecentSource && canStartAutoplay()
+                    ) {
                         autoplayDeferredJob = launch {
                             delay(AUTOPLAY_QUALITY_WINDOW_MS)
                             if (!autoplaySelected) {
@@ -1655,12 +1688,16 @@ class PlayerViewModel @Inject constructor(
                     val autoplayTopStream = pickAutoplayTopStream(autoplayStreams, preferredLanguage)
                     val hasRequestedPreferredStream = hasRequestedPreferredStream(autoplayStreams)
                     val shouldSelectNow = !autoplaySelected && autoplayStreams.isNotEmpty() && canStartAutoplay() && homeServerReadyForAutoplay && (
-                        cacheHit ||
-                            progressive.isFinal ||
-                            hasCachedReadyStream ||
-                            hasRequestedPreferredStream ||
-                            isExcellentAutoplayCandidate(autoplayTopStream) ||
-                            elapsedMs >= AUTOPLAY_MAX_WINDOW_MS
+                        recentAutoplayStream != null || (
+                            !holdForRecentSource && (
+                                cacheHit ||
+                                    progressive.isFinal ||
+                                    hasCachedReadyStream ||
+                                    hasRequestedPreferredStream ||
+                                    isExcellentAutoplayCandidate(autoplayTopStream) ||
+                                    elapsedMs >= AUTOPLAY_MAX_WINDOW_MS
+                                )
+                            )
                         )
 
                     if (shouldSelectNow) {
@@ -1679,6 +1716,11 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
 
+                // The addon search is over. Home Server / IPTV may still bring the recent source;
+                // if they don't, the gate's own timer picks once it runs out.
+                if (homeServerAppendJob?.isActive != true && vodAppendJob?.isActive != true) {
+                    recentSourceGate.release()
+                }
                 if (!autoplaySelected && lastMergedStreams.isNotEmpty()) {
                     if (hasHomeServerConnections &&
                         lastMergedStreams.none { it.addonId == HomeServerRepository.ADDON_ID }
@@ -1853,6 +1895,8 @@ class PlayerViewModel @Inject constructor(
     private data class ExternalIds(val imdbId: String?, val tvdbId: Int?)
 
     private suspend fun resolveExternalIds(mediaType: MediaType, mediaId: Int): ExternalIds {
+        // A native addon item's own id stands in for the IMDb id: streams are requested by it.
+        if (mediaId < 0) return ExternalIds(mediaRepository.getCachedImdbId(mediaType, mediaId), null)
         return try {
             val ids = when (mediaType) {
                 MediaType.MOVIE -> tmdbApi.getMovieExternalIds(mediaId, Constants.TMDB_API_KEY)
@@ -2670,6 +2714,11 @@ class PlayerViewModel @Inject constructor(
             eligiblePlayerAutoplayStreams(streams, autoPlayMinimumQuality, autoPlayLimits), preferredLanguage
         )
         if (healthyStreams.isEmpty()) return
+        // Every autoplay entry point lands here. The source this title was last really watched
+        // from beats the ranking, and while the gate holds nothing else may start.
+        recentSourceGate.onStreams(streams)
+        val recentCandidate = recentSourceGate.recentCandidate(healthyStreams)
+        if (recentCandidate == null && recentSourceGate.isHolding(recentSourceClock())) return
         val hasExplicitPreferred =
             !currentPreferredBingeGroup.isNullOrBlank() ||
                 !currentPreferredAddonId.isNullOrBlank() ||
@@ -2692,7 +2741,7 @@ class PlayerViewModel @Inject constructor(
         }
 
         val stabilitySelected = pickAutoplayTopStream(healthyStreams, preferredLanguage)
-        val selected = if (hasExplicitPreferred) {
+        val selected = recentCandidate ?: if (hasExplicitPreferred) {
             preferredFromBingeGroup ?: preferredNavigationCandidate ?: stabilitySelected ?: healthyStreams.first()
         } else {
             stabilitySelected ?: healthyStreams.first()
@@ -2700,6 +2749,7 @@ class PlayerViewModel @Inject constructor(
         playbackDiag(
             "autoplaySelected selected=${streamDiag(selected)} " +
                 "preferredNavigation=${streamDiag(preferredNavigationCandidate)} " +
+                "usedRecent=${recentCandidate != null} " +
                 "usedPreferred=${hasExplicitPreferred && (selected === preferredFromBingeGroup || selected === preferredNavigationCandidate)}"
         )
         selectStream(selected)
@@ -3190,6 +3240,7 @@ class PlayerViewModel @Inject constructor(
                 error = null,
                 isSetupError = false
             )
+            preparedStream = resolvedStream
             prefetchSubtitleIndex(onlyForAutoScan = true)
             audioSyncOnStream()
 
@@ -7665,7 +7716,75 @@ class PlayerViewModel @Inject constructor(
             isUpNext = true,
             episodeAirDate = next.airDate.orEmpty(),
             emitUpdate = aired,
+            addonNativeId = mediaRepository.getCachedItem(MediaType.TV, currentMediaId)?.addonNativeId,
+            addonNativeAddonId = mediaRepository.getCachedItem(MediaType.TV, currentMediaId)?.addonNativeAddonId,
+            addonNativeType = mediaRepository.addonNativeType(currentMediaId),
         )
+    }
+
+    private fun loadRecentSource(mediaType: MediaType, mediaId: Int, season: Int?, episode: Int?) {
+        recentSourcePlayTracker.reset()
+        recentSourceGate.disarm()
+        preparedStream = null
+        recentSourceLoad = viewModelScope.async {
+            val recent = recentPlayedSourceRepository.get(mediaType, mediaId)
+                ?.takeIf { it.appliesTo(mediaType, mediaId, season, episode) }
+            val stillCurrent = currentMediaType == mediaType && currentMediaId == mediaId &&
+                currentSeason == season && currentEpisode == episode
+            if (recent == null || !stillCurrent) return@async null
+            // A source that crossed the threshold in this session is newer than the stored one.
+            if (_uiState.value.recentSource == null) {
+                _uiState.value = _uiState.value.copy(recentSource = recent)
+            }
+            recent
+        }
+    }
+
+    /** Arms [recentSourceGate] for this load. If it runs out with nothing started, autoplay picks from what was found. */
+    private fun CoroutineScope.armRecentSourceGate(recent: RecentPlayedSource?) {
+        recentSourceGate.arm(recent, recentSourceClock())
+        if (recent == null) return
+        launch {
+            delay(recentSourceGate.remainingMs(recentSourceClock()))
+            recentSourceGate.release()
+            if (canStartAutoplay()) {
+                val streams = _uiState.value.streams
+                playbackDiag("autoplayRecentWaitExpired streams=${streams.size}")
+                autoplaySelectBest(streams, _uiState.value.preferredAudioLanguage.ifBlank { "en" })
+            }
+        }
+    }
+
+    /** Records the playing source as this title's recently played one once it has really played. */
+    private fun noteRecentSourcePlayback(positionMs: Long, isPlaying: Boolean) {
+        if (currentIsLiveStreamPlayback || currentMediaId <= 0) return
+        val state = _uiState.value
+        // Credit the source the player has loaded, not selectedStream: during a switch that already
+        // names the replacement while the old video keeps playing. Nothing counts until the
+        // replacement is applied (its new nonce restarts the count) or the switch fails.
+        val stream = preparedStream ?: return
+        val replacementResolving = streamSelectionJob?.isActive == true
+        val reached = recentSourcePlayTracker.onProgress(
+            selectionId = state.streamSelectionNonce.toLong(),
+            positionMs = positionMs,
+            isPlaying = isPlaying && !replacementResolving,
+            nowMs = recentSourceClock()
+        )
+        if (!reached) return
+        fun recordOf(source: StreamSource) = RecentPlayedSource.of(
+            mediaType = currentMediaType,
+            mediaId = currentMediaId,
+            season = currentSeason,
+            episode = currentEpisode,
+            stream = source,
+            playedAtMs = System.currentTimeMillis()
+        )
+        // Record the addon's own entry, not the copy resolved for playback (Stalker and HubCloud
+        // links are exchanged for one-off URLs): later source lists are matched against it.
+        val listed = findRecentSourceMatch(state.streams, recordOf(stream)) ?: stream
+        val record = recordOf(listed)
+        _uiState.value = _uiState.value.copy(recentSource = record)
+        recentPlayedSourceRepository.save(profileManager.getProfileIdSync(), record)
     }
 
     fun saveProgress(
@@ -7676,6 +7795,12 @@ class PlayerViewModel @Inject constructor(
         playbackState: Int
     ): Job? {
         if (duration <= 0) return null
+        noteRecentSourcePlayback(position, isPlaying)
+
+        // A completion transaction must not be cancelled/restarted by the ended polling tick
+        // or the player's disposal save. It can finish after the UI's short navigation wait.
+        if (progressSaveCompleting && progressSaveJob?.isActive == true) return progressSaveJob
+        val completing = playbackState == Player.STATE_ENDED || progressPercent >= Constants.WATCHED_THRESHOLD
 
         // On pause/stop, replace an in-flight periodic save. During normal playback,
         // debounce by returning the save that is already running.
@@ -7685,7 +7810,12 @@ class PlayerViewModel @Inject constructor(
             return progressSaveJob
         }
 
-        val job = viewModelScope.launch(Dispatchers.IO) {
+        progressSaveCompleting = completing
+        val completionProfileId = profileManager.getProfileIdSync()
+        val job = viewModelScope.launchPlaybackProgressSave(completing, stopWhen = {
+            // A surviving final save still belongs to the profile that watched this video.
+            profileManager.activeProfileId.first { it != completionProfileId }
+        }) {
             val currentTime = System.currentTimeMillis()
             val progressFraction = (progressPercent / 100f).coerceIn(0f, 1f)
             // Trackers store a percentage, never a position, so a resume time on
@@ -7704,7 +7834,8 @@ class PlayerViewModel @Inject constructor(
                 streamAddonId = streamAddonIdForCheck,
                 title = currentTitle,
                 isLiveStream = currentIsLiveStreamPlayback,
-                addons = currentInstalledAddons
+                addons = currentInstalledAddons,
+                isAddonNative = mediaRepository.isAddonNative(currentMediaId)
             )
 
             // Scrobble start/pause/updates with debounce
@@ -7834,7 +7965,10 @@ class PlayerViewModel @Inject constructor(
                         durationSeconds = durationSeconds,
                         streamKey = streamKey,
                         streamAddonId = streamAddonId,
-                        streamTitle = streamTitle
+                        streamTitle = streamTitle,
+                        addonNativeId = mediaRepository.getCachedItem(currentMediaType, currentMediaId)?.addonNativeId,
+                        addonNativeAddonId = mediaRepository.getCachedItem(currentMediaType, currentMediaId)?.addonNativeAddonId,
+                        addonNativeType = mediaRepository.addonNativeType(currentMediaId)
                     )
 
                     // Push local CW to cloud so other devices see mid-playback progress.
@@ -7937,6 +8071,7 @@ class PlayerViewModel @Inject constructor(
         job.invokeOnCompletion {
             if (progressSaveJob === job) {
                 progressSaveJob = null
+                progressSaveCompleting = false
             }
         }
         return job
@@ -7965,6 +8100,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     private var progressSaveJob: Job? = null
+    private var progressSaveCompleting = false
     private var mediaLoadJob: Job? = null
     private var subtitleRefreshJob: Job? = null
     private var vodAppendJob: Job? = null
@@ -8189,7 +8325,8 @@ class PlayerViewModel @Inject constructor(
                 streamRepository.resolveMovieStreams(
                     imdbId = imdbId,
                     title = currentItemTitle,
-                    year = null
+                    year = null,
+                    nativeType = mediaRepository.addonNativeType(mediaId)
                 )
             } else {
                 streamRepository.resolveEpisodeStreams(
@@ -8201,7 +8338,8 @@ class PlayerViewModel @Inject constructor(
                     genreIds = currentGenreIds,
                     originalLanguage = currentOriginalLanguage,
                     title = currentItemTitle,
-                    animeQueryOverride = currentAnimeQueryOverride
+                    animeQueryOverride = currentAnimeQueryOverride,
+                    nativeType = mediaRepository.addonNativeType(mediaId)
                 )
             }
 

@@ -211,13 +211,15 @@ async function prepareJellyfin(stream: StreamSource, server: HomeServerConfig, c
     let transport: StreamSource["transport"] = "file";
     if (direct && source.SupportsDirectPlay) {
       playMethod = "DirectPlay";
-      playbackUrl = mediaUrl(server, `Videos/${encodeURIComponent(context.itemId)}/stream.${media.container}`, auth.token);
-      playbackUrl.searchParams.set("Static", "true");
-      if (source.ETag) playbackUrl.searchParams.set("Tag", source.ETag);
+      playbackUrl = mediaUrl(server, source.DirectStreamUrl || `Videos/${encodeURIComponent(context.itemId)}/stream.${media.container}`, auth.token);
+      if (!source.DirectStreamUrl) {
+        playbackUrl.searchParams.set("Static", "true");
+        if (source.ETag) playbackUrl.searchParams.set("Tag", source.ETag);
+      }
     } else if (direct && source.SupportsDirectStream) {
       playMethod = "DirectStream";
       playbackUrl = mediaUrl(server, source.DirectStreamUrl || `Videos/${encodeURIComponent(context.itemId)}/stream.${media.container}`, auth.token);
-      if (!source.DirectStreamUrl) playbackUrl.searchParams.set("Static", "true");
+      if (!source.DirectStreamUrl) playbackUrl.searchParams.set("Static", "false");
       if (/\.m3u8$/i.test(playbackUrl.pathname)) {
         if (media.videoCodec !== "h264" || media.audioCodec !== "aac") throw new Error("The home server did not offer compatible direct-stream HLS codecs.");
         transport = "hls";

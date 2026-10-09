@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { hasNetlifyBackendConfig, hasSupabaseConfig, getAuthPortalUrl } from "@/lib/config";
 import { capturePremiumAttribution, TRIAL_INTENT_KEY } from "@/lib/premiumAnalytics";
 import { useApp } from "@/lib/store";
+import { partnerLoginRedirect } from "@/lib/partnerLinks";
 
 export function LoginScreen() {
   const translateUi = useTranslation();
@@ -16,7 +17,7 @@ export function LoginScreen() {
 
   const redirectToAuthPortal = () => {
     if (typeof window === "undefined") return;
-    const redirectUri = window.location.origin + "/";
+    const redirectUri = partnerLoginRedirect(window.location.origin, window.location.search);
     const portalUrl = getAuthPortalUrl();
     window.location.href = `${portalUrl}?redirect_uri=${encodeURIComponent(redirectUri)}`;
   };

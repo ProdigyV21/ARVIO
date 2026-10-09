@@ -2,43 +2,43 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://arvio.tv/</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://arvio.tv/pt-br/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://arvio.tv/es/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://arvio.tv/guides/</loc>
-    <lastmod>2026-09-30</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://arvio.tv/pt-br/guias/</loc>
-    <lastmod>2026-09-30</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://arvio.tv/es/guias/</loc>
-    <lastmod>2026-09-30</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://arvio.tv/android-tv-media-hub/</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -56,7 +56,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/jellyfin-android-tv/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -74,7 +74,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/plex-emby-jellyfin/</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -92,7 +92,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/debrid-usenet-android-tv/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -110,7 +110,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/trakt-simkl-sync/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -128,7 +128,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/live-tv-epg/</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -146,7 +146,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/ai-subtitles-android-tv/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -164,7 +164,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/fire-tv-media-player/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-10-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -182,7 +182,7 @@
   </url>
   <url>
     <loc>https://arvio.tv/arvio-web/</loc>
-    <lastmod>2026-09-28</lastmod>
+    <lastmod>2026-10-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -200,7 +200,9 @@
   </url>
   <url><loc>https://arvio.tv/premium/</loc></url>
   <url><loc>https://arvio.tv/media-kit/</loc></url>
-  <url><loc>https://arvio.tv/collections-catalogs/</loc><lastmod>2026-09-29</lastmod><changefreq>monthly</changefreq></url>
+  <url><loc>https://arvio.tv/stremio-addons-android-tv/</loc><lastmod>2026-10-08</lastmod><changefreq>monthly</changefreq></url>
+  <url><loc>https://arvio.tv/collections-catalogs/</loc><lastmod>2026-10-08</lastmod><changefreq>monthly</changefreq></url>
+  <url><loc>https://arvio.tv/collection-studio/</loc><lastmod>2026-10-08</lastmod><changefreq>monthly</changefreq></url>
   <url><loc>https://arvio.tv/self-host-arvio-web/</loc><lastmod>2026-09-30</lastmod><changefreq>monthly</changefreq></url>
   <url><loc>https://arvio.tv/browser-playback-guide/</loc><lastmod>2026-09-30</lastmod><changefreq>monthly</changefreq></url>
 </urlset>

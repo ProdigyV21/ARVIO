@@ -89,7 +89,7 @@ class HomeProfilePreferencesTest {
 
         assertThat(settings.trailerAutoPlay).isTrue()
         assertThat(settings.trailerSoundEnabled).isFalse()
-        assertThat(settings.trailerDelaySeconds).isEqualTo(2)
+        assertThat(settings.trailerDelaySeconds).isEqualTo(1)
         assertThat(settings.trailerInCards).isTrue()
         assertThat(settings.showBudget).isTrue()
         assertThat(settings.iptvFavoritesOnHome).isTrue()

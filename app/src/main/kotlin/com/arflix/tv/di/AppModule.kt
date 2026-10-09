@@ -24,7 +24,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    private val simklRateLimiter = com.arflix.tv.network.SimklRateLimitInterceptor()
+    private val simklRateLimiter = com.arflix.tv.network.sharedSimklRateLimiter
 
     @Provides
     @Singleton
@@ -118,9 +118,23 @@ object AppModule {
     @JvmStatic
     fun provideSimklApi(
         okHttpClient: OkHttpClient,
+        simklV2: com.arflix.tv.data.repository.simkl.SimklListsRepository,
         @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context
     ): com.arflix.tv.data.api.SimklApi {
         val simklClient = okHttpClient.newBuilder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val token = original.header("Authorization")?.removePrefix("Bearer ")
+                if (token?.startsWith("simkl_at_") != true) return@addInterceptor chain.proceed(original)
+                val profile = simklV2.profileId()
+                val connection = simklV2.connectionId()
+                val ownsToken = simklV2.ownsAccessToken(token)
+                val response = chain.proceed(original)
+                if (response.code != 401 || !ownsToken) return@addInterceptor response
+                response.close()
+                val refreshed = kotlinx.coroutines.runBlocking { simklV2.refreshRejectedToken(token, profile, connection) }
+                chain.proceed(original.newBuilder().header("Authorization", "Bearer $refreshed").build())
+            }
             .addInterceptor { chain ->
                 val original = chain.request()
 
@@ -129,8 +143,10 @@ object AppModule {
                 val rawVersion = com.arflix.tv.BuildConfig.VERSION_NAME
                 val cleanVersion = rawVersion.substringBefore("-")
 
-                if (Constants.SIMKL_CLIENT_ID.isNotBlank()) {
-                    urlBuilder.setQueryParameter("client_id", Constants.SIMKL_CLIENT_ID)
+                val clientId = if (original.header("Authorization")?.startsWith("Bearer simkl_at_") == true)
+                    Constants.SIMKL_V2_CLIENT_ID else Constants.SIMKL_CLIENT_ID
+                if (clientId.isNotBlank()) {
+                    urlBuilder.setQueryParameter("client_id", clientId)
                 }
                 urlBuilder.setQueryParameter("app-name", "arvio")
                 urlBuilder.setQueryParameter("app-version", cleanVersion)
@@ -139,8 +155,8 @@ object AppModule {
                     .url(urlBuilder.build())
                     .header("User-Agent", OkHttpProvider.getAppUserAgent(context))
 
-                if (Constants.SIMKL_CLIENT_ID.isNotBlank()) {
-                    requestBuilder.header("simkl-api-key", Constants.SIMKL_CLIENT_ID)
+                if (clientId.isNotBlank()) {
+                    requestBuilder.header("simkl-api-key", clientId)
                 }
 
                 if (original.method.equals("POST", ignoreCase = true) && original.header("Content-Type") == null) {

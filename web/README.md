@@ -44,8 +44,10 @@ docker compose --env-file .env.local ps
 
 Open **http://localhost:3000**. This builds the same webapp as the Node setup,
 runs as a non-root user, and binds only to loopback by default. Your TMDB key
-and OAuth secrets are runtime variables, not Docker build arguments.
-There is no prebuilt official Docker image required.
+and OAuth secrets are runtime variables, not Docker build arguments. Optional
+public tracker/Telegram application credentials and your resolver URL are read
+at runtime too: the image does not embed the maintainer's credentials. Source
+builds remain supported; a prebuilt image is not required.
 
 Update from the repository root:
 
@@ -106,6 +108,26 @@ npm test
 npx tsc --noEmit
 npm run build
 ```
+
+### Shared default catalogs
+
+`lib/defaultCatalogs.json` is exported from Android's `buildPreinstalledDefaults`:
+10 standard catalogs and 43 folders in Featured, Services, Genres, Franchises and
+Decades. `WebDefaultCatalogParityTest` checks titles, sources, artwork and ordering.
+After changing Android defaults, regenerate the snapshot from the repository root:
+
+```powershell
+$env:ARVIO_EXPORT_WEB_DEFAULTS = '1'
+./gradlew.bat :app:testSideloadDebugUnitTest --tests '*WebDefaultCatalogParityTest' --rerun-tasks
+Remove-Item Env:ARVIO_EXPORT_WEB_DEFAULTS
+```
+
+Fresh profiles get these defaults. The complete, recognizable old web default
+block migrates once, preserving hidden items and surrounding custom lists.
+Removed, reordered, renamed or replaced defaults are not reset automatically.
+The default-collections toggle syncs Android's disable marker and leaves imported
+collections alone. `node scripts/check-default-collections-ui.cjs` checks the real
+collection components on desktop, tablet and mobile in Edge with offline fixtures.
 
 Browser playback depends on the source, CORS, codecs, device and browser.
 Self-hosting does not automatically make every Dolby Vision, DRM or torrent

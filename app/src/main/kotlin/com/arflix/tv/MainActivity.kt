@@ -132,6 +132,13 @@ import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
 import com.arflix.tv.navigation.ProfileSessionGate
+import com.arflix.tv.navigation.PartnerOpenLinkParser
+import com.arflix.tv.navigation.PartnerOpenLinkResolver
+import com.arflix.tv.navigation.PartnerOpenLinkInbox
+import com.arflix.tv.navigation.PartnerOpenRequest
+import com.arflix.tv.navigation.PartnerOpenTarget
+import com.arflix.tv.navigation.PendingPartnerOpenLink
+import com.arflix.tv.navigation.partnerOpenNavigationOptions
 import com.arflix.tv.ui.screens.login.LoginScreen
 import com.arflix.tv.ui.startup.StartupViewModel
 import com.arflix.tv.ui.theme.ArflixTvTheme
@@ -142,6 +149,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.Lazy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
 import kotlin.math.PI
 import kotlin.math.cos
@@ -189,6 +197,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var mediaRepository: Lazy<MediaRepository>
 
+    @Inject
+    internal lateinit var partnerOpenLinkResolver: Lazy<PartnerOpenLinkResolver>
+
     // Prefetch IPTV early so the TV screen opens without a loading stall.
     // IptvRepository is @Singleton; touching it at activity start warms the
     // in-memory snapshot (and will trigger a disk-cache read + silent
@@ -201,6 +212,8 @@ class MainActivity : ComponentActivity() {
     private var pendingLauncherRequest by mutableStateOf<LauncherContinueWatchingRequest?>(null)
     private var pendingInstallPackUrl by mutableStateOf<String?>(null)
     private var pendingInstallAddonUrl by mutableStateOf<String?>(null)
+    private val partnerOpenLinks = PartnerOpenLinkInbox()
+    private val pendingPartnerOpenLink get() = partnerOpenLinks.pending
 
     // StartupViewModel for parallel loading during splash
     private val startupViewModel: StartupViewModel by viewModels()
@@ -241,6 +254,12 @@ class MainActivity : ComponentActivity() {
         pendingLauncherRequest = parseLauncherRequest(intent)
         pendingInstallPackUrl = parseInstallPackUrl(intent)
         pendingInstallAddonUrl = parseInstallAddonUrl(intent)
+        // A consumed link must not replay after rotation/process recreation from the old intent.
+        if (savedInstanceState?.getBoolean(PARTNER_LINK_STATE_SAVED) == true) {
+            partnerOpenLinks.restore(savedInstanceState.getString(PARTNER_LINK_URI), savedInstanceState.getString(PARTNER_LINK_TICKET))
+        } else {
+            partnerOpenLinks.replace(parsePartnerOpenLink(intent))
+        }
 
         val crashPrefs = getSharedPreferences("arvio_crash_store", Context.MODE_PRIVATE)
         if (crashPrefs.getBoolean("has_pending_crash_report", false)) {
@@ -260,7 +279,7 @@ class MainActivity : ComponentActivity() {
         // Initialize Discord RPC Manager
         com.arflix.tv.ui.screens.details.discord.DiscordRpcManager.init(this)
         intent?.data?.let { uri ->
-            android.util.Log.d("MainActivity", "Received intent data URI in onCreate: $uri")
+            android.util.Log.d("MainActivity", "Received intent data URI in onCreate")
             if (uri.scheme == "arvio" && uri.host == "discord" && uri.path == "/auth") {
                 android.util.Log.i("MainActivity", "Matching Discord auth redirect. Forwarding to DiscordRpcManager.")
                 com.arflix.tv.ui.screens.details.discord.DiscordRpcManager.onLoginDeepLink(uri)
@@ -401,6 +420,9 @@ class MainActivity : ComponentActivity() {
                         onConsumeInstallPackUrl = { pendingInstallPackUrl = null },
                         pendingInstallAddonUrl = pendingInstallAddonUrl,
                         onConsumeInstallAddonUrl = { pendingInstallAddonUrl = null },
+                        pendingPartnerOpenLink = pendingPartnerOpenLink,
+                        resolvePartnerOpenLink = { partnerOpenLinkResolver.get().resolve(it) },
+                        onConsumePartnerOpenLink = partnerOpenLinks::consume,
                         preloadedCategories = startupState.categories,
                         preloadedHeroItem = startupState.heroItem,
                         preloadedHeroLogoUrl = startupState.heroLogoUrl,
@@ -465,8 +487,19 @@ class MainActivity : ComponentActivity() {
         pendingLauncherRequest = parseLauncherRequest(intent)
         pendingInstallPackUrl = parseInstallPackUrl(intent)
         pendingInstallAddonUrl = parseInstallAddonUrl(intent)
+        val partnerLink = parsePartnerOpenLink(intent)
+        val isDiscordAuthCallback = intent.data?.let {
+            it.scheme == "arvio" && it.host == "discord" && it.path == "/auth"
+        } == true
+        if (partnerLink != null ||
+            (intent.action == android.content.Intent.ACTION_VIEW && !isDiscordAuthCallback) ||
+            intent.action == android.content.Intent.ACTION_MAIN) {
+            // Supersede an in-flight lookup immediately. Discord auth callbacks deliberately
+            // leave the title pending so authentication cannot discard the user's destination.
+            partnerOpenLinks.replace(partnerLink)
+        }
         intent.data?.let { uri ->
-            android.util.Log.d("MainActivity", "Received intent data URI in onNewIntent: $uri")
+            android.util.Log.d("MainActivity", "Received intent data URI in onNewIntent")
             if (uri.scheme == "arvio" && uri.host == "discord" && uri.path == "/auth") {
                 android.util.Log.i("MainActivity", "Matching Discord auth redirect. Forwarding to DiscordRpcManager.")
                 com.arflix.tv.ui.screens.details.discord.DiscordRpcManager.onLoginDeepLink(uri)
@@ -493,6 +526,22 @@ class MainActivity : ComponentActivity() {
         jankStats = null
         super.onDestroy()
     }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(PARTNER_LINK_STATE_SAVED, true)
+        outState.putString(PARTNER_LINK_URI, pendingPartnerOpenLink?.request?.canonicalUri())
+        outState.putString(PARTNER_LINK_TICKET, pendingPartnerOpenLink?.ticket)
+        super.onSaveInstanceState(outState)
+    }
+}
+
+private const val PARTNER_LINK_STATE_SAVED = "partner_link_state_saved"
+private const val PARTNER_LINK_URI = "partner_link_uri"
+private const val PARTNER_LINK_TICKET = "partner_link_ticket"
+
+private fun parsePartnerOpenLink(intent: android.content.Intent?): PartnerOpenRequest? {
+    if (intent?.action != android.content.Intent.ACTION_VIEW) return null
+    return PartnerOpenLinkParser.parse(intent.data?.toString())
 }
 
 private fun MainActivity.parseLauncherRequest(intent: android.content.Intent?): LauncherContinueWatchingRequest? {
@@ -642,6 +691,9 @@ fun ArflixApp(
     onConsumeInstallPackUrl: () -> Unit = {},
     pendingInstallAddonUrl: String? = null,
     onConsumeInstallAddonUrl: () -> Unit = {},
+    pendingPartnerOpenLink: PendingPartnerOpenLink? = null,
+    resolvePartnerOpenLink: suspend (PartnerOpenRequest) -> PartnerOpenTarget? = { null },
+    onConsumePartnerOpenLink: (PendingPartnerOpenLink) -> Boolean = { false },
     preloadedCategories: List<com.arflix.tv.data.model.Category> = emptyList(),
     preloadedHeroItem: com.arflix.tv.data.model.MediaItem? = null,
     preloadedHeroLogoUrl: String? = null,
@@ -695,6 +747,13 @@ fun ArflixApp(
     val isMobile = deviceType.isTouchDevice()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+    val partnerLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    val partnerLifecycleState by partnerLifecycle.currentStateFlow.collectAsState()
+    val canResolvePartnerLink = canOpenPendingLink && authState !is AuthState.Loading &&
+        currentRoute != null && currentRoute != Screen.Login.route && currentRoute != Screen.ProfileSelection.route &&
+        partnerLifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+    var partnerRetry by remember(pendingPartnerOpenLink?.ticket) { mutableStateOf(0) }
+    var partnerLinkFailed by remember(pendingPartnerOpenLink?.ticket) { mutableStateOf(false) }
     var iptvFullscreen by remember { mutableStateOf(false) }
     // A fullscreen overlay inside a screen (the trailer modal) is not a route,
     // so it cannot be read off the back stack. Without this the bottom bar keeps
@@ -1030,6 +1089,48 @@ fun ArflixApp(
             launchSingleTop = true
         }
         onConsumeInstallAddonUrl()
+    }
+
+    LaunchedEffect(activeProfile?.id, canResolvePartnerLink, pendingPartnerOpenLink?.ticket, partnerRetry) {
+        val link = pendingPartnerOpenLink ?: return@LaunchedEffect
+        if (!canResolvePartnerLink) return@LaunchedEffect
+        val profileId = activeProfile?.id ?: return@LaunchedEffect
+        partnerLinkFailed = false
+        val target = try {
+            kotlinx.coroutines.withTimeout(15_000L) { resolvePartnerOpenLink(link.request) }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // No URI, token or API-key-bearing network exception is logged.
+            null
+        }
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        // State can change before Compose cancels this effect. Recheck the profile session and
+        // atomically consume the ticket in the Activity before navigating to the title details.
+        if (!ProfileSessionGate.canOpenLink(activeProfile?.id, selectedSessionProfileId) ||
+            activeProfile?.id != profileId || authState is AuthState.Loading ||
+            navController.currentDestination?.route in listOf(Screen.Login.route, Screen.ProfileSelection.route) ||
+            !partnerLifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            return@LaunchedEffect
+        }
+        if (target == null) {
+            partnerLinkFailed = true
+        } else if (onConsumePartnerOpenLink(link)) {
+            navController.navigate(
+                Screen.Details.createRoute(target.mediaType, target.tmdbId, target.season, target.episode),
+                partnerOpenNavigationOptions()
+            )
+        }
+    }
+
+    if (pendingPartnerOpenLink != null && canResolvePartnerLink) {
+        com.arflix.tv.ui.components.PartnerOpenLinkDialog(
+            failed = partnerLinkFailed,
+            onRetry = { partnerLinkFailed = false; partnerRetry += 1 },
+            onCancel = { pendingPartnerOpenLink?.let { onConsumePartnerOpenLink(it) } }
+        )
     }
 }
 

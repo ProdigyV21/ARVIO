@@ -127,9 +127,11 @@ private data class TransientIndicator(
  * separate focus target; entering the WebView leaves its key handling intact.
  */
 @Composable
-private fun TrailerPlayerSurface(
+internal fun TrailerPlayerSurface(
     youtubeKey: String,
     modifier: Modifier = Modifier,
+    showControls: Boolean = true,
+    visible: Boolean = true,
     onViewReady: (YouTubePlayerView) -> Unit = {},
     onReady: (YouTubePlayer) -> Boolean = { true },
     onStateChange: (PlayerConstants.PlayerState) -> Unit = {},
@@ -144,21 +146,31 @@ private fun TrailerPlayerSurface(
     val onDurationCb by rememberUpdatedState(onDuration)
     val onErrorCb by rememberUpdatedState(onError)
     val onReleasedCb by rememberUpdatedState(onReleased)
+    val currentKey by rememberUpdatedState(youtubeKey)
     // Issue 3: persistent-instance primitive. The WebView is created once by the
     // factory below; video switches while it is alive go through cueVideo() in
     // `update` instead of tearing the renderer down and cold-starting a new one.
-    // (FeaturedMediaCard itself holds no player — static art only — so this
-    // modal surface is the single YouTube WebView site to protect.)
     var boundPlayer by remember { mutableStateOf<YouTubePlayer?>(null) }
     var loadedKey by remember { mutableStateOf<String?>(null) }
     // Remembers the init-time autoplay decision so a mid-modal key switch
     // starts the new playback lifecycle the same way (load vs cue).
     var autoplayOnReady by remember { mutableStateOf<Boolean?>(null) }
+    var rendererGone by remember { mutableStateOf(false) }
+    var disposed by remember { mutableStateOf(false) }
 
     AndroidView(
         factory = { ctx ->
             YouTubePlayerView(ctx).apply {
+                visibility = if (visible) View.VISIBLE else View.INVISIBLE
+                disposed = false
+                rendererGone = false
                 enableAutomaticInitialization = false
+                installTrailerWebViewRecovery(this) {
+                    rendererGone = true
+                    boundPlayer = null
+                    loadedKey = null
+                    if (!disposed) onErrorCb()
+                }
 
                 // Switches off the embedding library's own overlay UI, which
                 // would itself sit on top of the player.
@@ -169,7 +181,7 @@ private fun TrailerPlayerSurface(
                 onViewReady(this)
 
                 val iFrameOptions = IFramePlayerOptions.Builder(ctx)
-                    .controls(1)
+                    .controls(if (showControls) 1 else 0)
                     .rel(0)
                     .ivLoadPolicy(3)
                     .ccLoadPolicy(0)
@@ -179,14 +191,15 @@ private fun TrailerPlayerSurface(
                 initialize(
                     object : AbstractYouTubePlayerListener() {
                         override fun onReady(youTubePlayer: YouTubePlayer) {
+                            if (disposed || rendererGone) return
                             boundPlayer = youTubePlayer
-                            loadedKey = youtubeKey
+                            loadedKey = currentKey
                             val autoplay = onReadyCb(youTubePlayer)
                             autoplayOnReady = autoplay
                             if (autoplay) {
-                                youTubePlayer.loadVideo(youtubeKey, 0f)
+                                youTubePlayer.loadVideo(currentKey, 0f)
                             } else {
-                                youTubePlayer.cueVideo(youtubeKey, 0f)
+                                youTubePlayer.cueVideo(currentKey, 0f)
                             }
                         }
 
@@ -224,6 +237,7 @@ private fun TrailerPlayerSurface(
         },
         modifier = modifier,
         update = {
+            it.visibility = if (visible) View.VISIBLE else View.INVISIBLE
             // Key changed while the WebView is alive (e.g. trailer metadata
             // resolving mid-modal): start the new video the same way init
             // would — no WebView reinit, no iframe JS re-parse, no teardown race.
@@ -239,12 +253,13 @@ private fun TrailerPlayerSurface(
             }
         },
         onRelease = { playerView ->
+            disposed = true
             // Pause before release so the renderer is not torn down mid-decode;
             // narrows the async WebView-teardown window on rapid reopen.
             runCatching { boundPlayer?.pause() }
             boundPlayer = null
             loadedKey = null
-            playerView.release()
+            runCatching { playerView.release() }
             onReleasedCb()
         }
     )

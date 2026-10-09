@@ -998,7 +998,7 @@ function writeSitemap() {
   const entries = [];
   for (const [key, routes] of Object.entries(pageMap)) {
     for (const localeKey of ["en", "pt", "es"]) {
-      const updated = key === "guides" ? "2026-09-30" : existingDates.get(absolute(routes[localeKey])) || lastmod;
+      const updated = existingDates.get(absolute(routes[localeKey])) || (key === "guides" ? "2026-10-02" : lastmod);
       entries.push(`  <url>\n    <loc>${absolute(routes[localeKey])}</loc>\n    <lastmod>${updated}</lastmod>\n    <changefreq>${key === "home" ? "weekly" : "monthly"}</changefreq>\n    <priority>${localeKey === "en" ? priorities[key] : Math.max(Number(priorities[key]) - 0.1, 0.6).toFixed(1)}</priority>\n  </url>`);
     }
   }

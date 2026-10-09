@@ -124,6 +124,9 @@ class RemoteSyncManager @Inject constructor(
     }
 
     // ===== Scrobble (no-op when no remote is connected) =====
+    //
+    // Remotes identify titles by TMDB id; a native addon item's stand-in id is negative and
+    // means nothing to them, so those plays are never sent.
 
     suspend fun scrobbleStart(
         mediaType: MediaType,
@@ -133,6 +136,7 @@ class RemoteSyncManager @Inject constructor(
         episode: Int? = null,
         isAnime: Boolean = false
     ) {
+        if (tmdbId <= 0) return
         writeAll { it.scrobbleStart(mediaType, tmdbId, progress, season, episode, isAnime) }
     }
 
@@ -144,6 +148,7 @@ class RemoteSyncManager @Inject constructor(
         episode: Int? = null,
         isAnime: Boolean = false
     ) {
+        if (tmdbId <= 0) return
         writeAll { it.scrobblePause(mediaType, tmdbId, progress, season, episode, isAnime) }
     }
 
@@ -155,6 +160,7 @@ class RemoteSyncManager @Inject constructor(
         episode: Int? = null,
         isAnime: Boolean = false
     ) {
+        if (tmdbId <= 0) return
         writeAll { it.scrobbleProgress(mediaType, tmdbId, progress, season, episode, isAnime) }
     }
 
@@ -166,6 +172,7 @@ class RemoteSyncManager @Inject constructor(
         episode: Int? = null,
         isAnime: Boolean = false
     ) {
+        if (tmdbId <= 0) return
         writeAll { it.scrobbleStop(mediaType, tmdbId, progress, season, episode, isAnime) }
     }
 
@@ -195,14 +202,21 @@ class RemoteSyncManager @Inject constructor(
         connected(store.readProviders(TrackingFeature.CONTINUE_WATCHING)).map { provider ->
             async {
                 try {
-                    provider.getContinueWatching(forceRefresh)
+                    Result.success(provider.getContinueWatching(forceRefresh))
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
-                    emptyList()
+                } catch (error: Exception) {
+                    Result.failure<List<ContinueWatchingItem>>(error)
                 }
             }
-        }.awaitAll().flatten()
+        }.awaitAll().let { results ->
+            val items = results.flatMap { it.getOrDefault(emptyList()) }
+            if (items.isEmpty() && results.any { it.isFailure }) {
+                // An empty response from another provider cannot prove the failed one is empty.
+                throw results.first { it.isFailure }.exceptionOrNull()!!
+            }
+            items
+        }
             .groupBy { it.mediaType to it.id }
             .map { (_, matches) ->
                 matches.maxWithOrNull(

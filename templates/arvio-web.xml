@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>ARVIO-Web</Name>
+  <Repository>ghcr.io/prodigyv21/arvio-web:unraid-preview</Repository>
+  <Registry>https://github.com/ProdigyV21/ARVIO/pkgs/container/arvio-web</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <ExtraParams>--init --cap-drop=ALL --security-opt=no-new-privileges</ExtraParams>
+  <Beta>true</Beta>
+  <Icon>https://raw.githubusercontent.com/ProdigyV21/ARVIO/main/web/public/arvio-icon-512.png</Icon>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <Overview>Preview of the independent ARVIO browser media hub, with Plex, Jellyfin and Emby support. Telegram is not available in this Unraid preview. Connect your own supported media services and sources; no ARVIO subscription is required. Built-in movie and TV metadata requires your own TMDB API v3 key. Profiles, settings and history live in each browser, not in the container. This is a browser client, not a media server, transcoder or ARVIO Cloud sync service. No media or third-party subscriptions are included. Keep this installation private; internet access requires HTTPS and authentication protecting every route.</Overview>
+  <Project>https://github.com/ProdigyV21/ARVIO</Project>
+  <Support>https://github.com/ProdigyV21/ARVIO/issues</Support>
+  <ReadMe>https://github.com/ProdigyV21/ARVIO-Unraid/blob/main/README.md</ReadMe>
+  <TemplateURL>https://raw.githubusercontent.com/ProdigyV21/ARVIO-Unraid/main/templates/arvio-web.xml</TemplateURL>
+  <Category>MediaApp:Video</Category>
+  <License>Apache-2.0 (ARVIO source); third-party components retain their own licences</License>
+  <ExtraSearchTerms>arvio jellyfin plex emby media browser selfhosted</ExtraSearchTerms>
+  <Config Name="WebUI port" Target="3000" Default="8133" Mode="tcp" Description="HTTP port on your Unraid LAN. Do not forward this port to the internet; use HTTPS and an authenticated reverse proxy for remote access." Type="Port" Display="always" Required="true" Mask="false">8133</Config>
+  <Config Name="TMDB API v3 key" Target="TMDB_API_KEY" Default="" Mode="" Description="Your own TMDB API v3 key (32 hexadecimal characters), not the read-access bearer token. Required for built-in movie/show metadata. Kept server-side; never share this template with a saved key." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Allow private home-server proxy" Target="ALLOW_PRIVATE_PROXY" Default="false" Mode="" Description="Leave false unless this installation is private and authenticated. True allows server-side API requests to private Jellyfin/Plex/Emby addresses. Protect all API routes before enabling; never expose an unrestricted LAN proxy publicly." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Trakt application client ID" Target="TRAKT_CLIENT_ID" Default="" Mode="" Description="Optional: your own Trakt application's public client ID. Also set its server-only secret. Restart the container after changes." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Trakt application secret" Target="TRAKT_CLIENT_SECRET" Default="" Mode="" Description="Optional: your own Trakt application's secret; kept server-side. Do not enter a user access token or share filled templates." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="SIMKL AUTH V2 client ID" Target="SIMKL_V2_CLIENT_ID" Default="" Mode="" Description="Optional: your own SIMKL AUTH V2 public client ID for new device sign-ins and custom lists. Register a Mobile, desktop and browser app; no client secret is needed. Restart after changes." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SIMKL legacy V1 client ID" Target="SIMKL_CLIENT_ID" Default="" Mode="" Description="Optional: your legacy SIMKL V1 application's public client ID for existing V1 connections. New sign-ins use the separate AUTH V2 client ID. Restart after changes." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SIMKL legacy V1 application secret" Target="SIMKL_CLIENT_SECRET" Default="" Mode="" Description="Optional: your legacy SIMKL V1 application secret; kept server-side. AUTH V2 does not need it. Do not enter a user access token or share filled templates." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Independent resolver URL" Target="ARVIO_RESOLVER_URL" Default="" Mode="" Description="Advanced and optional: HTTPS URL of your own compatible resolver, without URL credentials, query or fragment. The URL is browser-visible. Does not grant access to ARVIO-hosted services." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

@@ -13,10 +13,8 @@ const locales = {
     locale: "pt_BR",
     canonical: "https://arvio.tv/pt-br/",
     guides: "/pt-br/guias/",
-    title: "ARVIO para Android TV - Central de mídia de código aberto",
-    description: "O ARVIO é uma central de mídia gratuita e de código aberto para Android TV e Google TV. Organize servidores autorizados, TV ao vivo, integrações pessoais, listas, legendas, Trakt e Simkl.",
-    ogTitle: "ARVIO para Android TV",
-    ogDescription: "Uma central de mídia gratuita e de código aberto para seus servidores, serviços e integrações pessoais autorizados, criada para Android TV.",
+    title: "ARVIO — Player gratuito para Android TV e APK",
+    description: "Player gratuito e de código aberto para Android TV com Jellyfin, Plex, Emby, IPTV e addons compatíveis. Baixe o APK e conecte suas próprias fontes, Trakt e Simkl.",
     playBadge: "https://play.google.com/intl/pt-BR/badges/static/images/badges/pt-br_badge_web_generic.png",
   },
   es: {
@@ -25,15 +23,14 @@ const locales = {
     locale: "es_ES",
     canonical: "https://arvio.tv/es/",
     guides: "/es/guias/",
-    title: "ARVIO para Android TV - Centro multimedia de código abierto",
-    description: "ARVIO es un centro multimedia gratuito y de código abierto para Android TV y Google TV. Organiza servidores autorizados, TV en vivo, integraciones personales, listas, subtítulos, Trakt y Simkl.",
-    ogTitle: "ARVIO para Android TV",
-    ogDescription: "Un centro multimedia gratuito y de código abierto para tus servidores, servicios e integraciones personales autorizados, creado para Android TV.",
+    title: "ARVIO — Reproductor gratis para Android TV y APK",
+    description: "Reproductor gratuito y de código abierto para Android TV con Jellyfin, Plex, Emby, IPTV y addons compatibles. Descarga el APK y conecta tus fuentes, Trakt y Simkl.",
     playBadge: "https://play.google.com/intl/es/badges/static/images/badges/es_badge_web_generic.png",
   },
 };
 
 const copy = [
+  ["Web App", "Web App", "App web"],
   ["Media kit", "Kit de imprensa", "Kit de prensa"],
   ["Guides", "Guias", "Guías"],
   ["ARVIO 2.0.", "ARVIO 2.0.", "ARVIO 2.0."],
@@ -403,14 +400,32 @@ function render(localeKey) {
   html = html.replace(/<meta name="description" content="[^"]+">/u, `<meta name="description" content="${locale.description}">`);
   html = html.replace('<link rel="canonical" href="https://arvio.tv/">', `<link rel="canonical" href="${locale.canonical}">`);
   html = html.replace('<meta property="og:site_name" content="ARVIO">', `<meta property="og:site_name" content="ARVIO">\n<meta property="og:locale" content="${locale.locale}">`);
-  html = html.replace('<meta property="og:title" content="ARVIO for Android TV">', `<meta property="og:title" content="${locale.ogTitle}">`);
-  html = html.replace(/<meta property="og:description" content="[^"]+">/u, `<meta property="og:description" content="${locale.ogDescription}">`);
+  html = html.replace(/<meta property="og:title" content="[^"]+">/u, `<meta property="og:title" content="${locale.title}">`);
+  html = html.replace(/<meta property="og:description" content="[^"]+">/u, `<meta property="og:description" content="${locale.description}">`);
   html = html.replace('<meta property="og:url" content="https://arvio.tv/">', `<meta property="og:url" content="${locale.canonical}">`);
-  html = html.replace('<meta name="twitter:title" content="ARVIO for Android TV">', `<meta name="twitter:title" content="${locale.ogTitle}">`);
-  html = html.replace(/<meta name="twitter:description" content="[^"]+">/u, `<meta name="twitter:description" content="${locale.ogDescription}">`);
-  html = html.replace('"description":"A free, open-source media management hub for organizing user-authorized home servers, live TV services, personal integrations, watchlists and playback settings on Android TV."', `"description":"${locale.ogDescription}","inLanguage":"${locale.lang}","url":"${locale.canonical}"`);
+  html = html.replace(/<meta name="twitter:title" content="[^"]+">/u, `<meta name="twitter:title" content="${locale.title}">`);
+  html = html.replace(/<meta name="twitter:description" content="[^"]+">/u, `<meta name="twitter:description" content="${locale.description}">`);
+  // Metadata translations must survive changes to the English SEO copy.
+  html = html.replace(/(<script type="application\/ld\+json">)([\s\S]*?)(<\/script>)/gu, (_, start, json, end) => {
+    const data = JSON.parse(json);
+    if (data["@type"] === "SoftwareApplication") {
+      data.description = locale.description;
+      data.inLanguage = locale.lang;
+      data.url = locale.canonical;
+    }
+    return start + JSON.stringify(data).replaceAll("<", "\\u003c") + end;
+  });
   html = html.replace('https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png', locale.playBadge);
   html = html.replaceAll('href="/guides/"', `href="${locale.guides}"`);
+  const serviceRoutes = {
+    "/jellyfin-android-tv/": { pt: "/pt-br/jellyfin-android-tv/", es: "/es/jellyfin-android-tv/" },
+    "/plex-emby-jellyfin/": { pt: "/pt-br/plex-emby-jellyfin/", es: "/es/plex-emby-jellyfin/" },
+    "/trakt-simkl-sync/": { pt: "/pt-br/sincronizacao-trakt-simkl/", es: "/es/sincronizacion-trakt-simkl/" },
+    "/live-tv-epg/": { pt: "/pt-br/tv-ao-vivo-epg/", es: "/es/tv-en-vivo-epg/" }
+  };
+  for (const [route, localized] of Object.entries(serviceRoutes)) {
+    html = html.replaceAll(`href="${route}"`, `href="${localized[localeKey]}"`);
+  }
   html = html.replaceAll('src="assets/', 'src="/assets/');
   html = html.replaceAll('url("assets/', 'url("/assets/');
   html = html.replaceAll('&quot;assets/', '&quot;/assets/');

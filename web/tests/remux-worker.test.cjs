@@ -41,6 +41,7 @@ function workerHarness(t, packets, fetch = async () => { throw new Error('Unexpe
   };
   const audio = {
     codec: 'aac', languageCode: 'eng', numberOfChannels: 2,
+    getName: async () => 'Main audio',
     getCodecParameterString: async () => 'mp4a.40.2', canDecode: async () => true,
     getDecoderConfig: async () => ({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2,
       description: new Uint8Array([0x11, 0x90]) })

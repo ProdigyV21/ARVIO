@@ -80,6 +80,7 @@ sealed interface WatchlistSourceItem {
         override val title: String = config.title
         override val subtitle: String? = when {
             config.sourceType == CatalogSourceType.TRAKT -> "Trakt"
+            config.sourceType == CatalogSourceType.SIMKL -> "SIMKL"
             config.sourceType == CatalogSourceType.MDBLIST -> "MDBList"
             config.sourceType == CatalogSourceType.TMDB -> "TMDB"
             config.sourceType == CatalogSourceType.ADDON -> config.addonName ?: "Addon"
@@ -1287,8 +1288,10 @@ class WatchlistViewModel @Inject constructor(
     private suspend fun syncTraktWatchlistSuspend(): Boolean {
         if (traktSyncInFlight) return true
         traktSyncInFlight = true
+        val requestedProfileId = profileManager.getProfileIdSync()
         return try {
             val syncResult = remoteSyncManager.getWatchlist()
+            if (profileManager.getProfileIdSync() != requestedProfileId) return false
             if (syncResult == null || !syncResult.connected) {
                 false
             } else {
@@ -1297,7 +1300,7 @@ class WatchlistViewModel @Inject constructor(
                 if (traktItems.isNotEmpty()) {
                     watchlistRepository.clearWatchlistCache()
                     val orderedTraktItems = traktItems.watchlistDisplayOrder()
-                    watchlistRepository.syncFromTraktOrder(orderedTraktItems)
+                    watchlistRepository.syncFromTraktOrder(orderedTraktItems, requestedProfileId)
                     val mergedItems = watchlistRepository.getLocalWatchlistItems().watchlistDisplayOrder().enrichWithPlaybackProgress()
                     sourceItemsCache[WatchlistSourceItem.MyWatchlist.id] = mergedItems
                     if (_uiState.value.selectedSourceId == WatchlistSourceItem.MyWatchlist.id) {

@@ -1,0 +1,117 @@
+{
+  "package": "@cryptography/aes",
+  "version": "0.1.1",
+  "sourceCommit": "10560e255f20aba057c67a874bdb763e2580ed50",
+  "nodeVersion": "v22.20.0",
+  "tools": {
+    "@types/node": "12.12.31",
+    "@rollup/plugin-node-resolve": "7.1.1",
+    "@rollup/plugin-typescript": "4.0.0",
+    "@rollup/pluginutils": "3.0.8",
+    "rollup": "2.2.0",
+    "rollup-plugin-terser": "5.3.0",
+    "terser": "4.6.7",
+    "tslib": "1.11.1",
+    "typescript": "3.8.3"
+  },
+  "files": [
+    {
+      "file": "dist/.DS_Store",
+      "originalSha256": "5b37ef2b33904848c99e9b4f67a5ea317e51f91ceac77fd98a322ce6b845d768",
+      "match": "missing"
+    },
+    {
+      "file": "dist/cjs/aes.js",
+      "originalSha256": "06f42e4ebcb48976c23e62b45346160ef00e26f2554ec0773c196c82af05f4a4",
+      "rebuiltSha256": "143f8a6db0a04569bc304f5b4f673b01f709cb43a910414a1fbec16deaffece0",
+      "normalizedSha256": "06f42e4ebcb48976c23e62b45346160ef00e26f2554ec0773c196c82af05f4a4",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/cjs/aes.min.js",
+      "originalSha256": "c83e875e7a76a7c8704481b9052bf37d2b66d10e3eb755dce8c93c3db975f534",
+      "rebuiltSha256": "c83e875e7a76a7c8704481b9052bf37d2b66d10e3eb755dce8c93c3db975f534",
+      "normalizedSha256": "c83e875e7a76a7c8704481b9052bf37d2b66d10e3eb755dce8c93c3db975f534",
+      "match": "byte-identical"
+    },
+    {
+      "file": "dist/es/aes.js",
+      "originalSha256": "c80c9731d0de026a1d4753260ffbef4039df2fe53e02c06f46fa9eeb0f54a270",
+      "rebuiltSha256": "f21b8d5f27e6631916af9bab7df4fe29c5c0d14760a532ba217856374f8b4098",
+      "normalizedSha256": "c80c9731d0de026a1d4753260ffbef4039df2fe53e02c06f46fa9eeb0f54a270",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/es/aes.min.js",
+      "originalSha256": "84293fa84ef688e0f7532ce56f3692f63f3216e10b16869cbe4590685a88e914",
+      "rebuiltSha256": "84293fa84ef688e0f7532ce56f3692f63f3216e10b16869cbe4590685a88e914",
+      "normalizedSha256": "84293fa84ef688e0f7532ce56f3692f63f3216e10b16869cbe4590685a88e914",
+      "match": "byte-identical"
+    },
+    {
+      "file": "dist/typings/aes.d.ts",
+      "originalSha256": "de4e80aad53e194600c76b3ab549144f99b897361a433235162f311611c7ce0b",
+      "rebuiltSha256": "df37a54f89a8fcd0ea69210ea3b3d837e612146b5729db1220c13c3fb37ec819",
+      "normalizedSha256": "de4e80aad53e194600c76b3ab549144f99b897361a433235162f311611c7ce0b",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/typings/index.d.ts",
+      "originalSha256": "b0aacf3e212218151f07473ff62f7eacd23f85857760135cf2eb2f1f8df2bf02",
+      "rebuiltSha256": "7df86ff3879c7e2f7bd7612c7a525279547ea768d6e3df0f893116770659dfe7",
+      "normalizedSha256": "b0aacf3e212218151f07473ff62f7eacd23f85857760135cf2eb2f1f8df2bf02",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/typings/index.js",
+      "originalSha256": "970c163c58045386f3aa38aacf5a71370c0eca6214a497e43f9774b16700c77f",
+      "rebuiltSha256": "3147e97976c57bfa2bf3f8fa3591b96858b5ada073d7cea0e442a8ce33d339f3",
+      "normalizedSha256": "970c163c58045386f3aa38aacf5a71370c0eca6214a497e43f9774b16700c77f",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/umd/aes.js",
+      "originalSha256": "26cd99193031da279f113cb0e0d23c614dba30417e25800041ddf142b83ac79e",
+      "rebuiltSha256": "1c27592e545558e020b4c272d1dfb6fcd7018683f06c5de15b1d1ac1805fc7fe",
+      "normalizedSha256": "26cd99193031da279f113cb0e0d23c614dba30417e25800041ddf142b83ac79e",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/umd/aes.min.js",
+      "originalSha256": "2a05fc4fc2dee337d5671b2e48e2fb0dca15175eb5e8d86943feb406b8ab2990",
+      "rebuiltSha256": "2a05fc4fc2dee337d5671b2e48e2fb0dca15175eb5e8d86943feb406b8ab2990",
+      "normalizedSha256": "2a05fc4fc2dee337d5671b2e48e2fb0dca15175eb5e8d86943feb406b8ab2990",
+      "match": "byte-identical"
+    },
+    {
+      "file": "dist/typings/modes/ctr.d.ts",
+      "originalSha256": "956166354c859a6794d882b606835725b67755435837a1665e74ab438102ba77",
+      "rebuiltSha256": "0fdba2b1e364214daa82f1518b51943b880ef2c1161d75d6d5ce7d89bfd13e44",
+      "normalizedSha256": "956166354c859a6794d882b606835725b67755435837a1665e74ab438102ba77",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/typings/modes/ige.d.ts",
+      "originalSha256": "9916e502f0e5074b4ff16bf95084316afee46345c2c9da6b5457cf5cf0a89916",
+      "rebuiltSha256": "122b23a26b862e9507b7eccb4caa115d42911f3841557094f76fb8fad828df5b",
+      "normalizedSha256": "9916e502f0e5074b4ff16bf95084316afee46345c2c9da6b5457cf5cf0a89916",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/typings/utils/precompute.d.ts",
+      "originalSha256": "1f9119798bbdac1abac91ca70d986ca1fb78ab37c2c426c4a798e88adb7d9964",
+      "rebuiltSha256": "d99b1155c9e9e5bf6cc9a2f61c5e06db691b3b256e0ac750855ab789e614fd35",
+      "normalizedSha256": "1f9119798bbdac1abac91ca70d986ca1fb78ab37c2c426c4a798e88adb7d9964",
+      "match": "line-ending-identical"
+    },
+    {
+      "file": "dist/typings/utils/words.d.ts",
+      "originalSha256": "3ddd15a1fdc1cf2e230763ce34dd40d99052577ebcbb21a73d0e839ba6450d79",
+      "rebuiltSha256": "bede8307c7de2b79d7f838ca0bad8d5504b6d5284bae3e9a8864f46609aefb74",
+      "normalizedSha256": "3ddd15a1fdc1cf2e230763ce34dd40d99052577ebcbb21a73d0e839ba6450d79",
+      "match": "line-ending-identical"
+    }
+  ],
+  "byteIdenticalMinifiedJavaScript": true,
+  "correspondingExecutableAndDeclarationFiles": true
+}

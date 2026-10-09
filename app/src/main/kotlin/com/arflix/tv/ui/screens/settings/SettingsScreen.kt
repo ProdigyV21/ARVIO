@@ -103,6 +103,7 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.CheckCircle
@@ -326,7 +327,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 16, 15, 40, 27)
+        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27)
         "appearance" -> listOf(17, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -667,6 +668,10 @@ fun SettingsScreen(
     }
     // TV only: the addon whose settings page is shown as a QR code.
     var addonConfigureTarget by remember { mutableStateOf<com.arflix.tv.data.model.Addon?>(null) }
+    var showCommunityAddons by remember { mutableStateOf(false) }
+    LaunchedEffect(showCommunityAddons) {
+        if (showCommunityAddons) viewModel.loadCommunityAddons()
+    }
 
     // Input modal states
     var showCustomAddonInput by remember { mutableStateOf(false) }
@@ -756,7 +761,7 @@ fun SettingsScreen(
             "stream_integrations" -> uiState.streamProviderItems.size
             "home_server" -> uiState.homeServerConnections.size + 3
             "catalogs" -> uiState.catalogs.size + 2 // Add + Import + Built-in collections toggle + catalogs
-            "stremio" -> stremioAddons.size + 1 // rows + refresh + add button
+            "stremio" -> stremioAddons.size + 2 // rows + refresh + community + add button
             "plugins" -> pluginsMaxIndex
             "accounts" -> 16 // Includes About & Credits.
             else -> 0
@@ -983,6 +988,7 @@ fun SettingsScreen(
 
     val hasBlockingModal =
         showCustomAddonInput ||
+        showCommunityAddons ||
         showIptvInput ||
         showStalkerInput ||
         showStalkerRename ||
@@ -1730,6 +1736,9 @@ fun SettingsScreen(
                                                 contentFocusIndex == stremioAddons.size -> {
                                                     viewModel.refreshAddons()
                                                 }
+                                                contentFocusIndex == stremioAddons.size + 1 -> {
+                                                    showCommunityAddons = true
+                                                }
                                                 else -> {
                                                     showCustomAddonInput = true
                                                 }
@@ -1896,6 +1905,7 @@ fun SettingsScreen(
                     showPlexHomeServerInput = true
                 },
                 onAddCustomAddonClick = { showCustomAddonInput = true },
+                onBrowseCommunityAddonsClick = { showCommunityAddons = true },
                 openCustomUserAgentDialog = { showCustomUserAgentDialog = true },
                 onNavigateToTelegram = onNavigateToTelegramSettings,
                 onDisconnectCloud = { showCloudDisconnectConfirm = true },
@@ -2420,6 +2430,7 @@ fun SettingsScreen(
                             onDeleteAddon = { viewModel.removeAddon(it) },
                             onConfigureAddon = { addonConfigureTarget = it },
                             onAddCustomAddon = { showCustomAddonInput = true },
+                            onBrowseCommunityAddons = { showCommunityAddons = true },
                             onRefreshAddons = { viewModel.refreshAddons() }
                         )
                         "plugins" -> {
@@ -2783,12 +2794,16 @@ fun SettingsScreen(
 
 
         if (showCatalogInput) {
+            LaunchedEffect(Unit) { viewModel.refreshSimklListsConnection() }
             CatalogDiscoveryModal(
                 query = uiState.catalogSearchQuery,
                 results = uiState.catalogSearchResults,
                 isSearching = uiState.isCatalogSearching,
                 error = uiState.catalogSearchError?.localizedText(),
                 manualUrl = catalogInputUrl,
+                simklConnected = uiState.isSimklV2Connected,
+                simklConnecting = uiState.isSimklAuthStarting || uiState.isSimklPolling,
+                onConnectSimkl = viewModel::startSimklAuth,
                 addedCatalogUrls = uiState.catalogs.mapNotNull { it.sourceUrl }.toSet(),
                 onQueryChange = viewModel::setCatalogSearchQuery,
                 onSearch = { viewModel.searchCatalogLists() },
@@ -2858,11 +2873,41 @@ fun SettingsScreen(
             )
         }
 
+        if (showCommunityAddons) {
+            CommunityAddonsBrowser(
+                addons = uiState.communityAddons,
+                installedAddons = stremioAddons,
+                isLoading = uiState.isCommunityAddonsLoading,
+                failed = uiState.communityAddonsFailed,
+                busyUrls = uiState.communityAddonBusyUrls,
+                onRetry = { viewModel.loadCommunityAddons(forceRefresh = true) },
+                onInstall = viewModel::installCommunityAddon,
+                onUninstall = viewModel::uninstallCommunityAddon,
+                onOpenUrl = { openExternalUrl(context, it) },
+                onDismiss = { showCommunityAddons = false },
+                // The browser is its own window, so the screen's toast would be hidden behind it.
+                overlay = {
+                    uiState.toastMessage?.let { message ->
+                        Toast(
+                            message = message.localizedText(),
+                            type = when (uiState.toastType) {
+                                ToastType.SUCCESS -> ComponentToastType.SUCCESS
+                                ToastType.ERROR -> ComponentToastType.ERROR
+                                ToastType.INFO -> ComponentToastType.INFO
+                            },
+                            isVisible = true,
+                            onDismiss = { viewModel.dismissToast() }
+                        )
+                    }
+                }
+            )
+        }
+
         val configureTarget = addonConfigureTarget
         val configureTargetUrl = configureTarget?.settingsPageUrl
         if (configureTarget != null && configureTargetUrl != null) {
             AddonConfigureQrDialog(
-                addon = configureTarget,
+                addonName = configureTarget.name,
                 url = configureTargetUrl,
                 onDismiss = { addonConfigureTarget = null }
             )
@@ -3149,13 +3194,16 @@ fun SettingsScreen(
 
         uiState.simklUserCode?.let { simklCode ->
             val verificationUrl = uiState.simklVerificationUrl ?: "https://simkl.com/pin"
+            val isV2 = verificationUrl.contains("user_code=")
             val isTouch = LocalDeviceType.current.isTouchDevice()
             val clipboardManager = LocalClipboardManager.current
             TraktActivationModal(
                 title = stringResource(R.string.settings_simkl_connect_title),
                 // Not the shared settings_activation_instruction_* lines: both promise the code
                 // travels with the link or QR, which SIMKL's PIN page does not support.
-                instruction = if (isTouch) {
+                instruction = if (isV2) {
+                    stringResource(R.string.settings_activation_visit_instruction, "simkl.com/pin")
+                } else if (isTouch) {
                     stringResource(R.string.settings_simkl_instruction_touch, verificationUrl)
                 } else {
                     stringResource(R.string.settings_activation_visit_instruction, verificationUrl)
@@ -3165,10 +3213,11 @@ fun SettingsScreen(
                 // SIMKL's PIN page (auth v1) ignores a code in the link, so unlike Trakt the
                 // phone button copies the code first and the user pastes it on the page.
                 onOpenUrl = {
-                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(simklCode))
+                    if (!isV2) clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(simklCode))
                     openExternalUrl(context, verificationUrl)
                 },
-                openUrlLabel = stringResource(R.string.settings_simkl_copy_and_open),
+                openUrlLabel = stringResource(if (isV2) R.string.settings_simkl_open else R.string.settings_simkl_copy_and_open),
+                qrData = verificationUrl,
                 showCopyCode = false,
                 expiresAtMillis = uiState.simklCodeExpiresAtMillis,
                 onDismiss = { viewModel.cancelSimklAuth() }
@@ -5022,6 +5071,7 @@ private fun MobileSettingsLayout(
     onConnectHomeServerClick: () -> Unit,
     onConnectPlexHomeServerClick: () -> Unit,
     onAddCustomAddonClick: () -> Unit,
+    onBrowseCommunityAddonsClick: () -> Unit,
     openCustomUserAgentDialog: () -> Unit = {},
     onNavigateToTelegram: () -> Unit = {},
     onDisconnectCloud: () -> Unit = {},
@@ -5280,6 +5330,7 @@ private fun MobileSettingsLayout(
                     onConnectHomeServerClick = onConnectHomeServerClick,
                     onConnectPlexHomeServerClick = onConnectPlexHomeServerClick,
                     onAddCustomAddonClick = onAddCustomAddonClick,
+                    onBrowseCommunityAddonsClick = onBrowseCommunityAddonsClick,
                     openCustomUserAgentDialog = openCustomUserAgentDialog,
                     onConnectTrakt = { viewModel.startTraktAuth() },
                     onCancelTrakt = { viewModel.cancelTraktAuth() },
@@ -5534,6 +5585,7 @@ private fun MobileSettingsSubPage(
     onConnectHomeServerClick: () -> Unit,
     onConnectPlexHomeServerClick: () -> Unit,
     onAddCustomAddonClick: () -> Unit,
+    onBrowseCommunityAddonsClick: () -> Unit,
     openCustomUserAgentDialog: () -> Unit = {},
     // Tracking integrations
     onConnectTrakt: () -> Unit = {},
@@ -6021,6 +6073,7 @@ private fun MobileSettingsSubPage(
                     onToggleAddon = { viewModel.toggleAddon(it) },
                     onDeleteAddon = { viewModel.removeAddon(it) },
                     onAddCustomAddon = onAddCustomAddonClick,
+                    onBrowseCommunityAddons = onBrowseCommunityAddonsClick,
                     onRefreshAddons = { viewModel.refreshAddons() }
                 )
             }
@@ -7006,8 +7059,8 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
         "playback" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.settings_help_next_autoplay), stringResource(R.string.settings_help_next_autoplay_desc))
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
-            in 5..7 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
-            11 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
+            in 5..8 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
+            12 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
@@ -8802,7 +8855,7 @@ private fun IptvSettings(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun CatalogDiscoveryModal(
+internal fun CatalogDiscoveryModal(
     query: String,
     results: List<CatalogDiscoveryResult>,
     isSearching: Boolean,
@@ -8814,19 +8867,20 @@ private fun CatalogDiscoveryModal(
     onAddResult: (CatalogDiscoveryResult) -> Unit,
     onManualUrlChange: (String) -> Unit,
     onManualAdd: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    simklConnected: Boolean = false,
+    simklConnecting: Boolean = false,
+    onConnectSimkl: () -> Unit = {}
 ) {
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
     var editingInput by remember { mutableStateOf<CatalogDiscoveryInputTarget?>(null) }
-    var optimisticAddedUrls by remember { mutableStateOf(emptySet<String>()) }
     val normalizedAddedCatalogUrls = remember(addedCatalogUrls) {
         addedCatalogUrls.map { normalizeCatalogDiscoveryUrl(it) }.toSet()
     }
     fun addResult(result: CatalogDiscoveryResult) {
         val normalizedUrl = normalizeCatalogDiscoveryUrl(result.sourceUrl)
-        if (normalizedUrl in normalizedAddedCatalogUrls || normalizedUrl in optimisticAddedUrls) return
-        optimisticAddedUrls = optimisticAddedUrls + normalizedUrl
+        if (normalizedUrl in normalizedAddedCatalogUrls) return
         onAddResult(result)
     }
     fun submitSearch() {
@@ -8864,6 +8918,16 @@ private fun CatalogDiscoveryModal(
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(if (isCompact) 12.dp else 18.dp))
                     .padding(if (isCompact) 10.dp else 18.dp)
             ) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.settings_simkl_lists_hint), style = ArflixTypography.caption,
+                        color = TextSecondary, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(12.dp))
+                    DiscoveryActionButton(
+                        label = stringResource(if (simklConnected) R.string.settings_simkl_lists_connected else R.string.settings_simkl_lists_connect),
+                        enabled = !simklConnecting,
+                        onClick = onConnectSimkl
+                    )
+                }
                 if (isCompact) {
                     Column(
                         modifier = Modifier
@@ -9055,8 +9119,7 @@ private fun CatalogDiscoveryModal(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 itemsIndexed(results, key = { _, item -> item.id }) { _, item ->
-                                    val isAdded = normalizeCatalogDiscoveryUrl(item.sourceUrl) in normalizedAddedCatalogUrls ||
-                                        normalizeCatalogDiscoveryUrl(item.sourceUrl) in optimisticAddedUrls
+                                    val isAdded = normalizeCatalogDiscoveryUrl(item.sourceUrl) in normalizedAddedCatalogUrls
                                     CatalogDiscoveryResultRow(
                                         result = item,
                                         isAdded = isAdded,
@@ -9643,6 +9706,7 @@ private fun normalizeCatalogDiscoveryUrl(url: String): String {
 private fun sourceLabel(sourceType: CatalogSourceType): String {
     return when (sourceType) {
         CatalogSourceType.TRAKT -> "Trakt"
+        CatalogSourceType.SIMKL -> "SIMKL"
         CatalogSourceType.MDBLIST -> "MDBList"
         CatalogSourceType.TMDB -> "TMDB"
         CatalogSourceType.PREINSTALLED -> stringResource(R.string.settings_source_builtin)
@@ -10067,6 +10131,7 @@ private fun StremioAddonsSettings(
     onDeleteAddon: (String) -> Unit = {},
     onConfigureAddon: (com.arflix.tv.data.model.Addon) -> Unit = {},
     onAddCustomAddon: () -> Unit = {},
+    onBrowseCommunityAddons: () -> Unit = {},
     onRefreshAddons: () -> Unit = {}
 ) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -10091,6 +10156,14 @@ private fun StremioAddonsSettings(
                     onClick = {
                         if (!isRefreshingAddons) onRefreshAddons()
                     }
+                )
+                MobileSettingsRow(
+                    icon = Icons.Default.Explore,
+                    title = stringResource(R.string.settings_community_addons),
+                    subtitle = stringResource(R.string.settings_community_addons_desc),
+                    value = "",
+                    isFocused = false,
+                    onClick = onBrowseCommunityAddons
                 )
                 MobileSettingsRow(
                     icon = Icons.Default.Add,
@@ -10209,9 +10282,25 @@ private fun StremioAddonsSettings(
                 modifier = Modifier
                     .settingsFocusSlot(addons.size + 1)
                     .fillMaxWidth()
-                    .clickable(onClick = onAddCustomAddon)
+                    .clickable(onClick = onBrowseCommunityAddons)
                     .background(if (focusedIndex == addons.size + 1) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
                     .border(width = if (focusedIndex == addons.size + 1) 2.dp else 0.dp, color = if (focusedIndex == addons.size + 1) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Default.Explore, contentDescription = null, tint = Pink, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(stringResource(R.string.settings_community_addons), style = ArflixTypography.button, color = Pink)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .settingsFocusSlot(addons.size + 2)
+                    .fillMaxWidth()
+                    .clickable(onClick = onAddCustomAddon)
+                    .background(if (focusedIndex == addons.size + 2) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .border(width = if (focusedIndex == addons.size + 2) 2.dp else 0.dp, color = if (focusedIndex == addons.size + 2) Pink else Color.Transparent, shape = RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center

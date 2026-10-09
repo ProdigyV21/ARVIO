@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "npm": {
+    "name": "@cryptography/aes",
+    "version": "0.1.1",
+    "declaredLicense": "GPL-3.0-or-later",
+    "tarball": "https://registry.npmjs.org/@cryptography/aes/-/aes-0.1.1.tgz",
+    "integrity": "sha512-PcYz4FDGblO6tM2kSC+VzhhK62vml6k6/YAkiWtyPvrgJVfnDRoHGDtKn5UiaRRUrvUTTocBpvc2rRgTCqxjsg=="
+  },
+  "upstream": {
+    "repository": "https://github.com/spalt08/cryptography",
+    "commit": "10560e255f20aba057c67a874bdb763e2580ed50",
+    "sourceUrl": "https://github.com/spalt08/cryptography/tree/10560e255f20aba057c67a874bdb763e2580ed50",
+    "selection": "Last package.json change on the npm release date; correspondence must be established by rebuild comparison, not a gitHead field."
+  },
+  "license": {
+    "spdx": "GPL-3.0-or-later",
+    "canonicalUrl": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "retrievedTextUrl": "https://raw.githubusercontent.com/gcc-mirror/gcc/master/COPYING3",
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  "sourceFiles": {
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "README.md": "beb43c7a0a15c9e1ae6597952240fef5d431f5dde45f8a79c430ea9c2eeae3b0",
+    "package.json": "8e37c4d8a3624d797b6e05d31eece802059849150b64568b80e07de4148528c0",
+    "yarn.lock": "ea43496573246b98b78b6c4f636a935a762c3c193d0163254cf54770da418232",
+    "tsconfig.json": "fbf8b7eb3696e6011f559195d571ccbf9525c437c0c6aec826f0f7cdaad8468d",
+    "lerna.json": "ed1a08628242e39bf7e812f77fab4974677208e6bc444d8a8a25a3d184610486",
+    "scripts/rollup.js": "0ad59b8b2db4b0ccde50fab6ae4083a141282608f0f2b7f5e02c774e6fa248e8",
+    "scripts/eslint.config.js": "62c70ec542da58da386b5bda52e7b8f3c94a7e087cbfefc0b2e921248319ef7d",
+    "packages/aes/.npmignore": "5c7f195dcdffd0c14d5180b5e1cb533850412cc7894e22dce7ae272abc6a5ee1",
+    "packages/aes/package.json": "6f7f747c7a9e3b92699d8b5a10286c0123ad3f54ff6a2def53b44dd7a0d3154b",
+    "packages/aes/README.md": "617d31e0a95c2487da6173d9468f80bc53b7ba3bef17914593a7fcb31e0dc81b",
+    "packages/aes/rollup.config.js": "6f83998b5206488ae26afd545be377d5eec0ba494921b629b8e5b9751e8d52ea",
+    "packages/aes/jest.config.js": "ec7b08b5175883eddd9a836289d6b8d4e8fca0d42bf3cdab60f59eda2d7aad2d",
+    "packages/aes/src/aes.ts": "a2d9210b16d3323b0145f7845116cfb32ce8a9883a1000cfc8b87895e0647323",
+    "packages/aes/src/index.ts": "a3231b7f71f728bd7a6709919351777ba628d3b7515b2b91aef659c8f87630f0",
+    "packages/aes/src/modes/ctr.ts": "65281e352b6efdc693b158b56a518c30e1a34df2c7ebd8dc1560996d2f122794",
+    "packages/aes/src/modes/ige.ts": "92d2134bd3c0a55e10da895f5df7a94647ce513fe43afaee7ce0f69689cf73e3",
+    "packages/aes/src/utils/precompute.ts": "54024963e679788767049ed7dd98eac0158b5d009f23ddf7dbb1875bd93081f2",
+    "packages/aes/src/utils/tables.ts": "35675ecaedca884bfc8099370db0530544d929b44a2b5863fd333bbacf9f9ad2",
+    "packages/aes/src/utils/words.ts": "35809e783381753ce17de7a5d40724470320df303fd89924804d6d6152fc7ad1",
+    "packages/aes/tests/aes-ctr.test.ts": "83848e5b0bf231e992654d8789aaa01f5e2c4d0940a8b4dc4c9fd0ab7b8b53e5",
+    "packages/aes/tests/aes-ige.test.ts": "196fc2696c451fe7aa8d20a8bb6138f45bbc6a7446e8f209d89beb80ea2ca9c5",
+    "packages/aes/tests/aes.test.ts": "807c3aa360dc4eb1b362fd296cf8a60197f1f9c80c1f6e6101732a03e16eff4e",
+    "packages/aes/tests/precompute.test.ts": "efbae82a737f0db7e78cf6d7f7b17e6e015830f5d77c23a4e3d374719c28e35a",
+    "packages/utils/package.json": "2d051da8694b07f0eb73d977ac1f0c1ed4301bacb63057bc6124ffd8596a8c1d",
+    "packages/utils/rollup.config.js": "6cf7756e1cb509c5db33366d9f820c247b9c20ad9d21a34f90219e01848ae5b1",
+    "packages/utils/src/converters.ts": "7536d3f2eb6f25dcb1ccf99bc97df08cc7bdb5ce41b4e497536ba2c7b76661d9",
+    "packages/utils/src/index.ts": "a3da4593a3b4d69d4a3419338f572872c822448c13fa6e156270fe39bf770245"
+  },
+  "sourceNormalizations": {
+    "packages/aes/.npmignore": "one trailing LF added by text-file import",
+    "packages/aes/README.md": "one trailing LF added by text-file import"
+  },
+  "rebuildTools": {
+    "@types/node": "12.12.31",
+    "@rollup/plugin-node-resolve": "7.1.1",
+    "@rollup/plugin-typescript": "4.0.0",
+    "@rollup/pluginutils": "3.0.8",
+    "rollup": "2.2.0",
+    "rollup-plugin-terser": "5.3.0",
+    "terser": "4.6.7",
+    "tslib": "1.11.1",
+    "typescript": "3.8.3"
+  },
+  "scope": "AES-specific source/provenance material. No assertion about licensing of the complete ARVIO/Telegram browser bundle or the complete container."
+}

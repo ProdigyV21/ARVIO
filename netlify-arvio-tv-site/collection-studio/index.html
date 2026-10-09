@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Collection Studio — Create and share an ARVIO Home row</title>
+  <meta name="description" content="Create an ARVIO Home collection with TMDB, MDBList or Trakt. Try three ready-to-use templates, customize folders, share a preview and export collection JSON.">
+  <link rel="canonical" href="https://arvio.tv/collection-studio/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ARVIO Collection Studio">
+  <meta property="og:description" content="Try three ready-to-use ARVIO collections, customize folders, share a public-safe preview and export JSON. Free, with no account required.">
+  <meta property="og:url" content="https://arvio.tv/collection-studio/">
+  <meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+  <meta property="og:image:alt" content="An example ARVIO Android TV Home screen; media is not included">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebApplication","name":"ARVIO Collection Studio","url":"https://arvio.tv/collection-studio/","applicationCategory":"UtilitiesApplication","operatingSystem":"Web browser","description":"Create an ARVIO Home collection with TMDB, MDBList or Trakt. Try three ready-to-use templates, customize folders, share a preview and export collection JSON.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Collection Studio","item":"https://arvio.tv/collection-studio/"}]}]}</script>
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="stylesheet" href="./studio.css">
+  <script type="module" src="./studio.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#studio">Skip to collection studio</a>
+  <header class="site-header shell">
+    <a class="brand" href="/" aria-label="ARVIO home">ARVIO<span class="brand-dot" aria-hidden="true"></span></a>
+    <nav aria-label="Main navigation"><a href="/collections-catalogs/">Collection guide</a><a class="nav-pill" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main class="shell">
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="eyebrow"><span aria-hidden="true"></span> Your taste, beautifully organized</p>
+        <h1 id="page-title">Your ARVIO collection.<br>Made to <em>share.</em></h1>
+        <p class="lead">Turn a few favorite lists into a Home row of your own. Give it a name, arrange its folders, and pass it on.</p>
+        <a class="button secondary" href="#examples">Browse starter collections <span aria-hidden="true">↓</span></a>
+      </div>
+      <aside class="intro-note"><div class="tiny-orbit" aria-hidden="true"><span></span><span></span><span></span></div><p><strong>Made here. Enjoyed in ARVIO.</strong><br>Build with public MDBList or Trakt lists and our TMDB Discover presets. Export the JSON and import it in the app.</p><a href="#how-to-use">How to use your collection <span aria-hidden="true">↓</span></a></aside>
+    </section>
+
+    <noscript><p class="notice">Collection Studio needs JavaScript to edit and decode previews. You can still use the <a href="/collections-catalogs/">collection guide and starter JSON</a>.</p></noscript>
+    <section id="recovery" class="recovery" hidden aria-labelledby="recovery-title"><p class="eyebrow">Let's start fresh</p><h2 id="recovery-title" tabindex="-1">This preview link could not be opened</h2><p id="recovery-error"></p><p>Ask the sender for a new link or the <code>collections.json</code> file. No collection has been loaded.</p><button id="start-new" class="button primary" type="button">Create a new collection</button></section>
+
+    <section id="studio" class="studio" aria-label="Collection studio" hidden>
+      <div class="workspace-heading"><div><p class="eyebrow" id="mode-label">Collection Studio · pilot</p><h2 id="workspace-title">Make it yours.</h2></div><p class="session-note" id="session-note"><span aria-hidden="true"></span> Draft stays in this tab</p><button id="fork-shared" class="button primary" type="button" hidden>Make your own copy <span aria-hidden="true">↗</span></button></div>
+      <div class="workspace" id="workspace">
+        <section class="editor panel" id="editor" aria-label="Collection editor">
+          <div class="panel-heading"><span class="step-number">01</span><h3>Your collection</h3></div>
+          <label for="row-title">Home row title</label><input id="row-title" type="text" autocomplete="off" spellcheck="true" aria-describedby="title-hint field-error"><p class="hint" id="title-hint">One row, up to 8 folders. Titles: up to 64 characters.</p>
+          <div class="folders-heading"><label id="folders-label">Folders</label><button type="button" id="add-folder" class="text-button">+ Add folder</button></div>
+          <div id="folder-tabs" class="folder-tabs" role="group" aria-labelledby="folders-label"></div>
+          <div class="folder-details">
+            <div class="folder-toolbar"><p id="editing-label">Editing folder 1</p><div><button class="icon-button" type="button" id="move-up" aria-label="Move folder earlier">↑</button><button class="icon-button" type="button" id="move-down" aria-label="Move folder later">↓</button><button class="text-button remove-button" type="button" id="remove-folder">Remove</button></div></div>
+            <label for="folder-title">Folder title</label><input id="folder-title" type="text" autocomplete="off" aria-describedby="field-error">
+            <label for="folder-description">A few words about it <span class="optional">optional</span></label><textarea id="folder-description" rows="2" aria-describedby="description-hint field-error"></textarea><p id="description-hint" class="hint">Up to 180 characters. Keep names and descriptions public-safe.</p>
+            <label for="source-kind">Folder source</label><select id="source-kind" aria-describedby="source-hint field-error"><option value="tmdb">TMDB Discover preset</option><option value="mdblist">Public MDBList list</option><option value="trakt">Public Trakt list</option></select>
+            <div id="preset-field"><label for="preset">Discover something</label><select id="preset" aria-describedby="preset-detail field-error"></select><p id="preset-detail" class="hint"></p></div>
+            <div id="url-field" hidden><label for="source-url">Public list URL</label><input id="source-url" type="url" autocomplete="off" spellcheck="false" aria-describedby="source-hint field-error"></div>
+            <p class="hint source-hint" id="source-hint">Each folder has one source. Presets are ARVIO-authored TMDB queries.</p>
+            <div class="theme-field"><div><label for="folder-theme">Preview color</label><select id="folder-theme"><option value="sage">Sage</option><option value="plum">Plum</option><option value="ocean">Ocean</option><option value="ember">Ember</option></select></div><div class="color-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
+            <p class="hint">These colors stay in the studio. ARVIO uses its available artwork.</p>
+          </div>
+          <p id="field-error" class="field-error" role="alert" hidden></p>
+        </section>
+
+        <section class="preview panel" aria-labelledby="preview-label">
+          <div class="panel-heading"><span class="step-number">02</span><h3 id="preview-label">A little preview</h3><span class="preview-badge">Home row</span></div>
+          <div class="preview-surface"><div class="preview-brand" aria-hidden="true">ARVIO<span>YOUR SPACE</span></div><p class="preview-eyebrow">A collection by you</p><h3 id="preview-title">Weekend discoveries</h3><div id="preview-folders" class="preview-folders"></div><p class="preview-footnote"><span aria-hidden="true">✦</span> Folder layout preview. Titles load from each source when opened in ARVIO.</p></div>
+          <div class="preview-caption"><span class="live-dot" aria-hidden="true"></span><p id="preview-caption-text">Select a folder to make it yours. No source requests are made here.</p></div>
+        </section>
+      </div>
+
+      <section class="export panel" aria-labelledby="export-title"><div class="export-heading"><div><p class="eyebrow">03 · Take it with you</p><h2 id="export-title">Ready for your Home screen.</h2><p>Copy the JSON into ARVIO, save a file, or share this preview.</p></div><div class="export-actions"><button id="copy-json" class="button primary" type="button">Copy JSON <span aria-hidden="true">↗</span></button><button id="download-json" class="button secondary" type="button">Download JSON <span aria-hidden="true">↓</span></button><button id="copy-share" class="button secondary" type="button">Copy preview link <span aria-hidden="true">↗</span></button></div></div>
+        <p id="share-warning" class="notice" hidden></p>
+        <p class="share-note"><strong>Anyone with the preview link can read its names, descriptions and public list references.</strong> The link contains the collection itself; it is not encrypted. No account, public database or server upload is used. Do not enter credentials or private information. Chat and social apps show a generic Studio link preview, not your custom row.</p>
+        <details id="json-details"><summary>See your collections.json <span aria-hidden="true">+</span></summary><label class="visually-hidden" for="json-output">Generated collections JSON</label><textarea id="json-output" class="json-output" rows="12" readonly spellcheck="false"></textarea><p class="hint">Copy this text for manual import. The preview link itself is not an import URL.</p></details>
+        <div id="clipboard-fallback" class="clipboard-fallback" hidden><label for="copy-fallback">Copy manually</label><p class="hint">Your browser could not copy automatically. Select this text and copy it.</p><textarea id="copy-fallback" rows="4" readonly spellcheck="false"></textarea></div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </section>
+
+    <section class="starter-gallery" id="examples" aria-labelledby="examples-title"><p class="eyebrow">Start with something useful</p><h2 id="examples-title">Three collections. Make one your own.</h2><p class="starter-intro">Open a read-only preview in a new tab, then choose <strong>Make your own copy</strong> to edit it. Your current draft stays here. These are TMDB discovery queries, not fixed movie lists, recommendations for children or included streams. Results change as TMDB changes.</p><div class="starter-grid">
+<!-- starters:start -->
+<article class="starter-card"><p class="eyebrow">3 discovery folders</p><h3>Weekend discoveries</h3><p>A movie night, a new series and a little science fiction.</p><ul><li>Cinema night</li><li>One more episode</li><li>Beyond the ordinary</li></ul><div class="starter-actions"><a class="button secondary" href="/collection-studio/#studio=eyJ2ZXJzaW9uIjoxLCJ0aXRsZSI6IldlZWtlbmQgZGlzY292ZXJpZXMiLCJmb2xkZXJzIjpbeyJpZCI6ImNpbmVtYSIsInRpdGxlIjoiQ2luZW1hIG5pZ2h0IiwiZGVzY3JpcHRpb24iOiJIaWdobHkgcmF0ZWQgbW92aWVzIHdpdGggYXQgbGVhc3QgMSwwMDAgdm90ZXMuIiwidGhlbWUiOiJzYWdlIiwic291cmNlIjp7ImtpbmQiOiJ0bWRiIiwicHJlc2V0IjoibW92aWUtYWNjbGFpbWVkIn19LHsiaWQiOiJlcGlzb2RlcyIsInRpdGxlIjoiT25lIG1vcmUgZXBpc29kZSIsImRlc2NyaXB0aW9uIjoiUG9wdWxhciBzaG93cyB3aXRoIGF0IGxlYXN0IDEwMCB2b3Rlcy4iLCJ0aGVtZSI6InBsdW0iLCJzb3VyY2UiOnsia2luZCI6InRtZGIiLCJwcmVzZXQiOiJ0di1wb3B1bGFyIn19LHsiaWQiOiJzY2lmaSIsInRpdGxlIjoiQmV5b25kIHRoZSBvcmRpbmFyeSIsImRlc2NyaXB0aW9uIjoiU2NpZW5jZSBmaWN0aW9uIHJhdGVkIDYrIHdpdGggYXQgbGVhc3QgMTAwIHZvdGVzLiIsInRoZW1lIjoib2NlYW4iLCJzb3VyY2UiOnsia2luZCI6InRtZGIiLCJwcmVzZXQiOiJtb3ZpZS1zY2lmaSJ9fV19" target="_blank" rel="noopener">Preview &amp; customize <span aria-hidden="true">↗</span></a><a href="/collection-studio/examples/weekend.json" download>Download JSON</a></div></article>
+<article class="starter-card"><p class="eyebrow">2 discovery folders</p><h3>Highly rated picks</h3><p>Two focused folders for well-rated movies and series.</p><ul><li>Highly rated movies</li><li>Highly rated shows</li></ul><div class="starter-actions"><a class="button secondary" href="/collection-studio/#studio=eyJ2ZXJzaW9uIjoxLCJ0aXRsZSI6IkhpZ2hseSByYXRlZCBwaWNrcyIsImZvbGRlcnMiOlt7ImlkIjoibW92aWVzIiwidGl0bGUiOiJIaWdobHkgcmF0ZWQgbW92aWVzIiwiZGVzY3JpcHRpb24iOiJSYXRpbmcgNysgYW5kIGF0IGxlYXN0IDEsMDAwIHZvdGVzLCBzb3J0ZWQgYnkgcmF0aW5nLiIsInRoZW1lIjoic2FnZSIsInNvdXJjZSI6eyJraW5kIjoidG1kYiIsInByZXNldCI6Im1vdmllLWFjY2xhaW1lZCJ9fSx7ImlkIjoic2hvd3MiLCJ0aXRsZSI6IkhpZ2hseSByYXRlZCBzaG93cyIsImRlc2NyaXB0aW9uIjoiUmF0aW5nIDcrIGFuZCBhdCBsZWFzdCA1MDAgdm90ZXMsIHNvcnRlZCBieSByYXRpbmcuIiwidGhlbWUiOiJwbHVtIiwic291cmNlIjp7ImtpbmQiOiJ0bWRiIiwicHJlc2V0IjoidHYtYWNjbGFpbWVkIn19XX0" target="_blank" rel="noopener">Preview &amp; customize <span aria-hidden="true">↗</span></a><a href="/collection-studio/examples/highly-rated.json" download>Download JSON</a></div></article>
+<article class="starter-card"><p class="eyebrow">2 discovery folders</p><h3>Animation and sci-fi</h3><p>Genre discovery for animation and science-fiction fans.</p><ul><li>Animated movies</li><li>Science fiction</li></ul><div class="starter-actions"><a class="button secondary" href="/collection-studio/#studio=eyJ2ZXJzaW9uIjoxLCJ0aXRsZSI6IkFuaW1hdGlvbiBhbmQgc2NpLWZpIiwiZm9sZGVycyI6W3siaWQiOiJhbmltYXRpb24iLCJ0aXRsZSI6IkFuaW1hdGVkIG1vdmllcyIsImRlc2NyaXB0aW9uIjoiQW5pbWF0ZWQgbW92aWVzIHdpdGggYXQgbGVhc3QgMTAwIHZvdGVzLiBOb3QgYWdlLWZpbHRlcmVkLiIsInRoZW1lIjoiZW1iZXIiLCJzb3VyY2UiOnsia2luZCI6InRtZGIiLCJwcmVzZXQiOiJtb3ZpZS1hbmltYXRpb24ifX0seyJpZCI6InNjaWZpIiwidGl0bGUiOiJTY2llbmNlIGZpY3Rpb24iLCJkZXNjcmlwdGlvbiI6IlNjaWVuY2UgZmljdGlvbiByYXRlZCA2KyB3aXRoIGF0IGxlYXN0IDEwMCB2b3Rlcy4iLCJ0aGVtZSI6Im9jZWFuIiwic291cmNlIjp7ImtpbmQiOiJ0bWRiIiwicHJlc2V0IjoibW92aWUtc2NpZmkifX1dfQ" target="_blank" rel="noopener">Preview &amp; customize <span aria-hidden="true">↗</span></a><a href="/collection-studio/examples/animation-scifi.json" download>Download JSON</a></div></article>
+<!-- starters:end -->
+    </div><p class="starter-intro">Download JSON, copy its text and paste it into ARVIO. Or use the JSON file's public address in the collection importer; a Studio preview link is not an import URL.</p></section>
+    <section class="how-to" id="how-to-use" aria-labelledby="how-title"><div class="how-intro"><p class="eyebrow">The next chapter</p><h2 id="how-title">Put your collection <br>where you watch.</h2><p>A collection organizes metadata. No playable media is included. Sender and recipient each use their own sources they are authorized to access.</p></div><div class="how-steps"><article><span>1</span><div><h3>Copy your JSON</h3><p>Use Copy JSON above. A downloaded file is useful for sharing or hosting; direct file uploads into ARVIO are not currently supported.</p></div></article><article><span>2</span><div><h3>Import it in ARVIO</h3><p>On Android, open Settings → Catalogs → Import Catalog Pack / Collections and paste the JSON. On ARVIO Web, open Settings → Catalogs (Home Rows), paste it into Collection, and choose Import collections.</p></div></article><article><span>3</span><div><h3>Find your new Home row</h3><p>Open a folder to browse its titles. Public list access and service availability are required; Studio cannot verify them. Import into the profile you want to use.</p><a href="/collections-catalogs/">Read the collection guide <span aria-hidden="true">↗</span></a></div></article></div></section>
+  </main>
+  <footer class="shell"><a class="brand" href="/">ARVIO<span class="brand-dot" aria-hidden="true"></span></a><p>Your media. Your sources. Your Home.</p><nav aria-label="Footer navigation"><a href="/collections-catalogs/">Guide</a><a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a><a href="/privacy">Privacy</a></nav></footer>
+</body>
+</html>

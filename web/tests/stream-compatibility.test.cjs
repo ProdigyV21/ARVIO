@@ -175,6 +175,21 @@ test('Desktop Chromium direct-MKV routing requires the supported version and cod
   assertPlan(compatibility({}, CHROME), { ...source, media: { videoCodec: 'hevc', audioCodec: 'aac' } }, 'external', 'vlc', 'direct');
 });
 
+test('unknown MKV audio is probed even when Chromium supports the video container', () => {
+  const module = compatibility({}, CHROME);
+  for (const metadata of [
+    {}, { media: { videoCodec: 'h264' } },
+    { description: 'Industry.S03E03.1080p.WEB-DL.H.264.mkv' },
+    { media: { audioCodec: 'unknown' } }
+  ]) {
+    const source = stream({ url: 'https://media.invalid/Industry.S03E03.mkv', ...metadata });
+    assert.equal(module.canDirectPlayMkvStream(source), false);
+    assertPlan(module, source, 'remux', 'here', 'remux');
+  }
+  assertPlan(module, stream({ url: 'https://media.invalid/Industry.mkv', description: 'H264.AAC' }), 'direct', 'here', 'direct');
+  assertPlan(compatibility({ opus: false }, CHROME), stream({ url: 'https://media.invalid/Industry.mkv', media: { audioCodec: 'opus' } }), 'remux', 'here', 'remux');
+});
+
 for (const audioCodec of ['ac3', 'eac3', 'ec-3', 'dts', 'dca']) {
   test(`${audioCodec} audio uses browser remux when MSE is available, including Chromium MKV`, () => {
     for (const container of ['mp4', 'mkv']) {

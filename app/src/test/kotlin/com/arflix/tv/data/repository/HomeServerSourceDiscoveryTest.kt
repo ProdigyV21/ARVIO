@@ -7,6 +7,7 @@ import io.mockk.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.*
@@ -50,7 +51,7 @@ class HomeServerSourceDiscoveryTest {
         assertEquals("movies", result.collections.single().id)
     }
 
-    private suspend fun repository(kind: HomeServerKind, response: (Request) -> Pair<Int, String>): HomeServerRepository {
+    private suspend fun repository(kind: HomeServerKind, baseUrl: String = "https://example.invalid", response: (Request) -> Pair<Int, String>): HomeServerRepository {
         val profile = "sources-${UUID.randomUUID()}"
         val profiles = mockk<ProfileManager> {
             every { activeProfileId } returns MutableStateFlow(profile)
@@ -69,10 +70,101 @@ class HomeServerSourceDiscoveryTest {
         }
         val repository = spyk(HomeServerRepository(RuntimeEnvironment.getApplication(), client, profiles))
         val connection = HomeServerConnection(connectionId = "shared", serverKind = kind,
-            serverUrl = "https://example.invalid", userId = "test", accessToken = "share-only",
+            serverUrl = baseUrl, userId = "test", accessToken = "share-only",
             collections = listOf(HomeServerCollection("library", "Shared library", if (kind == HomeServerKind.PLEX) "movie" else "tvshows")))
         coEvery { repository.currentConnections() } returns listOf(connection)
         return repository
+    }
+
+    @Test fun `Silo direct play uses negotiated route instead of forbidden 4K transcoding or file path`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,
+            "DirectStreamUrl":"/Videos/movie/stream?static=true&mediaSourceId=version&api_key=share-only&PlaySessionId=session&route=signed%2Bvalue",
+            "TranscodingUrl":"/Videos/movie/master.m3u8?PlaySessionId=session&MediaSourceId=version"""")
+        val source = repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).single()
+        val url = source.url!!.toHttpUrl()
+        assertEquals("/compat/Videos/movie/stream", url.encodedPath)
+        assertEquals("true", url.queryParameter("static"))
+        assertEquals("version", url.queryParameter("mediaSourceId"))
+        assertEquals("session", url.queryParameter("PlaySessionId"))
+        assertEquals("signed+value", url.queryParameter("route"))
+        assertEquals("share-only", source.behaviorHints!!.proxyHeaders!!.request!!["X-Emby-Token"])
+    }
+
+    @Test fun `Silo remux keeps static false and returned session with required playback headers`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":false,"SupportsDirectStream":true,"SupportsTranscoding":false,
+            "DirectStreamUrl":"/compat/Videos/movie/stream?static=false&mediaSourceId=version",
+            "RequiredHttpHeaders":{"X-Playback-Key":"route-key","authorization":"Bearer route-token"}""")
+        val source = repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).single()
+        val url = source.url!!.toHttpUrl()
+        assertEquals("/compat/Videos/movie/stream", url.encodedPath)
+        assertEquals("false", url.queryParameter("static"))
+        assertEquals("session", url.queryParameter("PlaySessionId"))
+        val headers = source.behaviorHints!!.proxyHeaders!!.request!!
+        assertEquals("route-key", headers["X-Playback-Key"])
+        assertEquals(listOf("Bearer route-token"), headers.filterKeys { it.equals("Authorization", true) }.values.toList())
+    }
+
+    @Test fun `negotiated transcode retains session and does not duplicate base path`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":false,"SupportsDirectStream":false,"SupportsTranscoding":true,
+            "TranscodingUrl":"/compat/Videos/movie/master.m3u8?MediaSourceId=version"""")
+        val source = repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).single()
+        val url = source.url!!.toHttpUrl()
+        assertEquals("/compat/Videos/movie/master.m3u8", url.encodedPath)
+        assertEquals("session", url.queryParameter("PlaySessionId"))
+        assertEquals("share-only", url.queryParameter("ApiKey"))
+    }
+
+    @Test fun `playback denial cannot resurrect stale catalogue media sources`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":false,"SupportsDirectStream":false,"SupportsTranscoding":false""")
+        assertTrue(repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).isEmpty())
+    }
+
+    @Test fun `signed external direct URL never receives server token or server authorization headers`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":true,
+            "DirectStreamUrl":"https://cdn.example.invalid/film.mp4?signature=signed%2Bvalue",
+            "RequiredHttpHeaders":{"Referer":"https://media.example.invalid/"}""")
+        val source = repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).single()
+        assertEquals("https://cdn.example.invalid/film.mp4?signature=signed%2Bvalue", source.url)
+        val headers = source.behaviorHints!!.proxyHeaders!!.request!!
+        assertEquals("https://media.example.invalid/", headers["Referer"])
+        assertFalse(headers.keys.any { it.equals("Authorization", true) || it.startsWith("X-Emby", true) })
+    }
+
+    @Test fun `empty or denied PlaybackInfo cannot fall back to stale catalogue versions`() = runBlocking {
+        for ((code, body) in listOf(200 to """{"PlaySessionId":"session","MediaSources":[]}""",
+            200 to """{"ErrorCode":"NotAllowed"}""", 401 to "{}", 403 to "{}")) {
+            val repository = repository(HomeServerKind.JELLYFIN) { request ->
+                if (request.url.encodedPath.endsWith("/PlaybackInfo")) code to body
+                else 200 to """{"Items":[{"Id":"movie","Name":"Shared Film","Type":"Movie","ProviderIds":{"Imdb":"tt42"},"MediaSources":[{"Id":"stale","Container":"mp4"}]}]}"""
+            }
+            assertTrue("Denied playback ($code, $body) returned a source",
+                repository.resolveMovieSources("tt42", "Shared Film", null, null).isEmpty())
+        }
+    }
+
+    @Test fun `direct play without a supplied URL retains session and skips HLS`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":true,"SupportsDirectStream":true,"SupportsTranscoding":true,
+            "TranscodingUrl":"/Videos/movie/master.m3u8"""")
+        val url = repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).single().url!!.toHttpUrl()
+        assertEquals("/compat/Videos/movie/stream.mkv", url.encodedPath)
+        assertEquals("true", url.queryParameter("Static"))
+        assertEquals("session", url.queryParameter("PlaySessionId"))
+    }
+
+    @Test fun `direct stream without a supplied URL requests remux instead of static file`() = runBlocking {
+        val repository = siloRepository(""""SupportsDirectPlay":false,"SupportsDirectStream":true,"SupportsTranscoding":false""")
+        val url = repository.resolveMovieSources("tt42", "Shared Film", 2024, 42).single().url!!.toHttpUrl()
+        assertEquals("/compat/Videos/movie/stream.mkv", url.encodedPath)
+        assertEquals("false", url.queryParameter("Static"))
+        assertEquals("session", url.queryParameter("PlaySessionId"))
+    }
+
+    private suspend fun siloRepository(fields: String) = repository(HomeServerKind.JELLYFIN, "https://example.invalid/compat") { request ->
+        when (request.url.encodedPath) {
+            "/compat/Users/test/Items" -> 200 to """{"Items":[{"Id":"movie","Name":"Shared Film","Type":"Movie","ProductionYear":2024,"ProviderIds":{"Imdb":"tt42","Tmdb":"42"},"MediaSources":[{"Id":"stale","Container":"mkv"}]}]}"""
+            "/compat/Items/movie/PlaybackInfo" -> 200 to """{"PlaySessionId":"session","MediaSources":[{"Id":"version","Name":"Shared Film 4K","Container":"mkv","Path":"https://native.example.invalid/api/playback/file","MediaStreams":[{"Type":"Video","Width":3840,"Height":2160}],$fields}]}"""
+            else -> error("Unexpected request ${request.url.encodedPath}")
+        }
     }
 
     @Test fun `shared Plex falls back from forbidden GUID search to matching section title`() = runBlocking {

@@ -12,6 +12,8 @@ import { useApp } from "@/lib/store";
 import { LazyRail } from "@/components/media/LazyRail";
 import { CustomCollectionRail } from "@/components/media/CustomCollectionRail";
 import { MediaRail } from "@/components/media/MediaRail";
+import { FavoriteTvRail } from "@/components/media/FavoriteTvRail";
+import { FAVORITE_TV_CATALOG_ID } from "@/lib/favoriteTv";
 import type { Category, MediaItem } from "@/lib/types";
 
 export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?: (open: boolean) => void }) {
@@ -190,6 +192,7 @@ export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?
         <MediaRail key={category.id} category={category} onOpen={openDetails} onFocus={onCardFocus} posterMode={posterMode} />
       ))}
       {collectionHomeCatalogs(catalogConfigs).map((catalog, index) => (
+        catalog.id === FAVORITE_TV_CATALOG_ID ? <FavoriteTvRail key={catalog.id} title={catalog.name} /> :
         String(catalog.kind).toUpperCase() === "COLLECTION_RAIL" ?
         <CustomCollectionRail key={catalog.id} catalog={catalog} onOpen={openDetails} onCollectionOpenChange={onCollectionOpenChange}
           folders={collectionFolders(catalog, catalogConfigs)} /> :
@@ -202,6 +205,8 @@ export function HomeScreen({ onCollectionOpenChange }: { onCollectionOpenChange?
           onLoaded={seedHeroFromRow}
         />
       ))}
+      {/* Like Android, a catalog list without the row still shows it, after the others. */}
+      {!catalogConfigs.some((catalog) => catalog.id === FAVORITE_TV_CATALOG_ID) && <FavoriteTvRail />}
       {homeServerRows.map((category) => (
         <MediaRail key={category.id} category={category} onOpen={openDetails} onFocus={onCardFocus} posterMode={posterMode} />
       ))}

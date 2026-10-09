@@ -7,7 +7,9 @@ import com.arflix.tv.data.model.StreamSource
 data class MovieRuntimeRequest(
     val imdbId: String,
     val title: String,
-    val year: Int?
+    val year: Int?,
+    /** A native addon item's own type ("tv"); streams are requested with it instead of "movie". */
+    val nativeType: String? = null
 )
 
 data class EpisodeRuntimeRequest(
@@ -20,7 +22,9 @@ data class EpisodeRuntimeRequest(
     val originalLanguage: String?,
     val title: String,
     val airDate: String?,
-    val animeQueryOverride: String? = null
+    val animeQueryOverride: String? = null,
+    /** A native addon item's own type ("Podcasts"); strict addons route /meta and /stream by it. */
+    val nativeType: String? = null
 )
 
 interface AddonRuntime {

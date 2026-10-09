@@ -126,6 +126,8 @@ class CloudSyncRepository @Inject constructor(
     private val customUserAgentKey = stringPreferencesKey(OkHttpProvider.USER_AGENT_PREF_KEY)
     @Volatile
     private var latestLocalDirtyAt: Long = 0L
+    private val dirtyStateLock = Any()
+    private var localMutationVersion = 0L
 
     private fun payloadSizeBucket(payload: String): String = when {
         payload.length < 10_000 -> "lt_10kb"
@@ -203,8 +205,11 @@ class CloudSyncRepository @Inject constructor(
 
     fun markLocalStateDirty() {
         val dirtyAt = System.currentTimeMillis()
-        latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
-        isPushDirty = true
+        synchronized(dirtyStateLock) {
+            localMutationVersion++
+            latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
+            isPushDirty = true
+        }
         repositoryScope.launch {
             persistLocalDirty(dirtyAt)
         }
@@ -212,8 +217,11 @@ class CloudSyncRepository @Inject constructor(
 
     suspend fun markLocalStateDirtyNow() {
         val dirtyAt = System.currentTimeMillis()
-        latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
-        isPushDirty = true
+        synchronized(dirtyStateLock) {
+            localMutationVersion++
+            latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
+            isPushDirty = true
+        }
         persistLocalDirty(dirtyAt)
     }
 
@@ -227,26 +235,34 @@ class CloudSyncRepository @Inject constructor(
     }
 
     private suspend fun markPushFailedDirty() {
-        val dirtyAt = latestLocalDirtyAt.takeIf { it > 0L } ?: System.currentTimeMillis()
-        latestLocalDirtyAt = max(latestLocalDirtyAt, dirtyAt)
-        isPushDirty = true
-        persistLocalDirty(dirtyAt)
+        markLocalStateDirtyNow()
     }
 
-    private suspend fun clearLocalDirtyAfterSuccessfulPush() {
-        latestLocalDirtyAt = 0L
-        isPushDirty = false
+    private suspend fun clearLocalDirtyAfterSuccessfulPush(uploadedVersion: Long) {
         context.settingsDataStore.edit { prefs ->
-            prefs.remove(cloudSyncLocalDirtyAtKey)
+            synchronized(dirtyStateLock) {
+                // A successful upload only acknowledges the snapshot it actually sent.
+                // Edits made while the network request was in flight still need another push.
+                if (localMutationVersion == uploadedVersion) {
+                    latestLocalDirtyAt = 0L
+                    isPushDirty = false
+                    prefs.remove(cloudSyncLocalDirtyAtKey)
+                }
+            }
             prefs[cloudSyncLastPushAtKey] = System.currentTimeMillis()
         }
     }
 
     private suspend fun clearStaleLocalDirtyBeforeRemoteRestore() {
-        latestLocalDirtyAt = 0L
-        isPushDirty = false
+        val version = synchronized(dirtyStateLock) { localMutationVersion }
         context.settingsDataStore.edit { prefs ->
-            prefs.remove(cloudSyncLocalDirtyAtKey)
+            synchronized(dirtyStateLock) {
+                if (version == localMutationVersion) {
+                    latestLocalDirtyAt = 0L
+                    isPushDirty = false
+                    prefs.remove(cloudSyncLocalDirtyAtKey)
+                }
+            }
         }
     }
 
@@ -289,7 +305,7 @@ class CloudSyncRepository @Inject constructor(
         val autoPlayMaxSizeGb: Int? = null,
         val trailerAutoPlay: Boolean = true,
         val trailerSoundEnabled: Boolean = false,
-        val trailerDelaySeconds: Int = 2,
+        val trailerDelaySeconds: Int = 1,
         val trailerInCards: Boolean = true,
         val clockFormat: String = "24h",
         val guideRowCount: Int? = null,
@@ -639,6 +655,7 @@ class CloudSyncRepository @Inject constructor(
         }
         base.put("fieldUpdatedAt", mergedTs)
         otherWon.addAll(IptvCloudFields.merge(base, other))
+        WatchlistCloudFields.merge(base, other)
         return SettingsMergeResult(base.toString(), otherWon)
     }
 
@@ -669,7 +686,7 @@ class CloudSyncRepository @Inject constructor(
 
                         trailerAutoPlay = prefs[trailerAutoPlayKeyFor(profile.id)] ?: true,
                         trailerSoundEnabled = prefs[trailerSoundEnabledKeyFor(profile.id)] ?: false,
-                        trailerDelaySeconds = prefs[trailerDelayKeyFor(profile.id)]?.toIntOrNull() ?: 2,
+                        trailerDelaySeconds = prefs[trailerDelayKeyFor(profile.id)]?.toIntOrNull() ?: 1,
                         trailerInCards = prefs[trailerInCardsKeyFor(profile.id)] ?: true,
                         clockFormat = prefs[clockFormatKeyFor(profile.id)] ?: "24h",
                         guideRowCount = prefs[guideRowCountKeyFor(profile.id)]?.toIntOrNull()
@@ -906,12 +923,12 @@ class CloudSyncRepository @Inject constructor(
         root.put("iptvByProfile", JSONObject(gson.toJson(iptvByProfile)))
 
         // Watchlist per profile
-        val watchlistByProfile = buildMap<String, List<LocalWatchlistItem>> {
+        val watchlistByProfile = buildMap<String, WatchlistSyncState> {
             profiles.forEach { profile ->
-                put(profile.id, watchlistRepository.exportWatchlistForProfile(profile.id))
+                put(profile.id, watchlistRepository.exportSyncStateForProfile(profile.id))
             }
         }
-        root.put("watchlistByProfile", JSONObject(gson.toJson(watchlistByProfile)))
+        WatchlistCloudFields.put(root, watchlistByProfile)
 
         // Backward compatibility fields (legacy single-profile clients)
         root.put("addons", JSONArray(gson.toJson(sharedAddons)))
@@ -1005,6 +1022,7 @@ class CloudSyncRepository @Inject constructor(
             )
             return Result.failure(IllegalStateException("Not logged in"))
         }
+        val uploadedVersion = synchronized(dirtyStateLock) { localMutationVersion }
         val payload = try {
             buildCloudSnapshotJson()
         } catch (it: Throwable) {
@@ -1047,7 +1065,7 @@ class CloudSyncRepository @Inject constructor(
                     applyCloudPayload(existingRemotePayload)
                 }
                 markCloudPayloadApplied(existingRemotePayload, existingRemotePayload.hashCode())
-                clearLocalDirtyAfterSuccessfulPush()
+                clearLocalDirtyAfterSuccessfulPush(uploadedVersion)
                 Log.i(TAG, "Restored richer remote snapshot before push")
                 Result.success(Unit)
             } catch (error: Throwable) {
@@ -1098,7 +1116,7 @@ class CloudSyncRepository @Inject constructor(
 
         val result = authRepository.saveAccountSyncPayload(effectivePayload)
         if (result.isSuccess) {
-            clearLocalDirtyAfterSuccessfulPush()
+            clearLocalDirtyAfterSuccessfulPush(uploadedVersion)
             lastPushedPayloadHash = payloadHash
             pushFailureCount = 0
             Log.i(TAG, "Push succeeded size=${payloadSizeBucket(effectivePayload)}")
@@ -1936,17 +1954,15 @@ class CloudSyncRepository @Inject constructor(
         }
 
         // ── Watchlist ──
+        var preservedLocalWatchlist = false
         try {
-            root.optJSONObject("watchlistByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
-                val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, LocalWatchlistItem::class.java).type).type
-                val map: Map<String, List<LocalWatchlistItem>> = gson.fromJson(json, type) ?: emptyMap()
-                map.forEach { (profileId, items) ->
-                    // Restore the cloud mirror for every profile, including Trakt profiles.
-                    // Trakt remains the source of truth after a successful live sync, but
-                    // skipping this cache made fresh installs show an empty watchlist while
-                    // auth/network refresh was still settling or failed.
-                    watchlistRepository.importWatchlistForProfile(profileId, items)
-                }
+            // Use the actual remote watchlist; comparing against the pre-merged root would hide
+            // pending local operations and prevent them being uploaded after a remote-first pull.
+            val remoteWatchlists = WatchlistCloudFields.states(JSONObject(payload))
+            val watchlistProfiles = profileRepository.getProfiles().map { it.id }.toSet()
+            watchlistProfiles.forEach { profileId ->
+                val state = remoteWatchlists[profileId] ?: WatchlistSyncState()
+                preservedLocalWatchlist = watchlistRepository.importWatchlistForProfile(profileId, state.items, state.changes) || preservedLocalWatchlist
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -2080,6 +2096,7 @@ class CloudSyncRepository @Inject constructor(
             persistFieldStateFromApplied(root)
             if (preservedLocalSettings) markLocalStateDirty()
         }
+        if (preservedLocalWatchlist) markLocalStateDirty()
 
         System.err.println("[CLOUD-SYNC] Full cloud restore applied successfully")
     }

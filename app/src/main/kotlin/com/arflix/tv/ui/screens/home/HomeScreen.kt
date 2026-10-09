@@ -70,6 +70,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -155,6 +156,7 @@ import com.arflix.tv.ui.components.SkeletonPosterCard
 import com.arflix.tv.ui.components.SkeletonMediaCard
 import androidx.compose.material3.TextButton
 import com.arflix.tv.ui.components.MobileHeroBanner
+import com.arflix.tv.ui.components.HomeTrailerPreview
 import com.arflix.tv.ui.components.MobileHeroLayoutSpec
 import com.arflix.tv.ui.components.resolveMobileHeroLayout
 import com.arflix.tv.ui.components.ProfileAvatarVisual
@@ -514,7 +516,7 @@ private fun preferredHomeStartRowIndex(categories: List<Category>): Int {
 }
 
 private fun isActionableHomeItem(item: MediaItem?): Boolean {
-    return item != null && item.id > 0 && !item.isPlaceholder
+    return item != null && item.hasOpenableId && !item.isPlaceholder
 }
 
 @androidx.compose.runtime.Immutable
@@ -535,9 +537,12 @@ private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHan
         .build()
     val heroDataSourceFactory =
         OkHttpDataSource.Factory(heroOkHttp).setUserAgent(OkHttpProvider.getAppUserAgent(context))
+    // The hero previews favorite IPTV channels, so it needs the same non-IDR keyframe
+    // extractors as the TV screens or those channels stall on the home screen.
     val heroHlsFactory = HlsMediaSource.Factory(heroDataSourceFactory)
         .setAllowChunklessPreparation(true)
-    val heroDefaultFactory = DefaultMediaSourceFactory(context)
+        .setExtractorFactory(com.arflix.tv.ui.screens.tv.live.iptvHlsExtractorFactory())
+    val heroDefaultFactory = DefaultMediaSourceFactory(context, com.arflix.tv.ui.screens.tv.live.iptvExtractorsFactory())
         .setDataSourceFactory(heroDataSourceFactory)
     val loadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(2_000, 8_000, 750, 1_500)
@@ -909,6 +914,24 @@ fun HomeScreen(
     var contextMenuIsContinueWatching by remember { mutableStateOf(false) }
     var contextMenuIsInWatchlist by remember { mutableStateOf(false) }
 
+    val focusedCategory = displayCategories.getOrNull(focusState.currentRowIndex)
+    val focusedHomeItem = focusedCategory?.items?.getOrNull(focusState.currentItemIndex)
+    val focusedTrailerAtMs = remember(focusedCategory?.id, focusedHomeItem?.let { homeRowItemKey(it) }, focusState.isSidebarFocused, showContextMenu) {
+        SystemClock.elapsedRealtime()
+    }
+    // Reserve space before metadata arrives, keeping the rail still while a trailer loads.
+    val reserveTrailerSpace = !isMobile && uiState.trailerAutoPlay && uiState.trailerInCards &&
+        focusedCategory?.id != "continue_watching" && focusedHomeItem != null &&
+        !viewModel.isIptvItem(focusedHomeItem) && !viewModel.isCollectionItem(focusedHomeItem) &&
+        !viewModel.isSportsHomeItem(focusedHomeItem)
+    val focusedHomeTrailerKey = uiState.heroTrailerKey.takeIf {
+        !isMobile && uiState.trailerAutoPlay && !showContextMenu && !focusState.isSidebarFocused &&
+            focusedCategory?.id != "continue_watching" && focusedHomeItem != null &&
+            uiState.heroItem.isSameHomeHero(focusedHomeItem) && displayHeroItem.isSameHomeHero(focusedHomeItem) &&
+            !viewModel.isIptvItem(focusedHomeItem) && !viewModel.isCollectionItem(focusedHomeItem) &&
+            !viewModel.isSportsHomeItem(focusedHomeItem)
+    }
+
     BackHandler(enabled = showContextMenu) {
         showContextMenu = false
         contextMenuItem = null
@@ -1033,6 +1056,7 @@ fun HomeScreen(
 
     // ── IPTV + service-collection hero player state ──
     val isHeroIptv = displayHeroItem != null && viewModel.isIptvItem(displayHeroItem)
+    val iptvChannelsVersion by viewModel.iptvChannelsVersion.collectAsStateWithLifecycle()
     val isHeroCollection = displayHeroItem != null && viewModel.isCollectionItem(displayHeroItem)
     // Track service-collection "played once" — after the video ends we stop
     // re-spawning the player until the user focuses a *different* service.
@@ -1040,18 +1064,31 @@ fun HomeScreen(
     // moving elsewhere replays it.
     var collectionVideoFinishedId by remember { mutableStateOf<Int?>(null) }
     val heroVideoAllowed = true
+    // Leaving the app (Home button / minimize) stops the activity but keeps this
+    // composition alive, so the hero preview has to follow the lifecycle or its
+    // audio keeps playing in the background.
+    val homeLifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
+    val isHomeStarted = homeLifecycleState.isAtLeast(Lifecycle.State.STARTED)
     val serviceHeroVideoUrl = displayHeroItem
         ?.takeIf { heroVideoAllowed && isHeroCollection && collectionVideoFinishedId != it.id }
         ?.let { viewModel.getCollectionHeroVideoUrl(it) }
     val heroVideoUrl = when {
         !isMobile && !focusState.userHasNavigated -> null
         !heroVideoAllowed -> null
+        !isHomeStarted -> null
         // Service collection MP4s should start as soon as the card becomes the hero.
         // Keep the idle gate for heavier IPTV/live playback, but do not delay MP4 previews.
         serviceHeroVideoUrl != null -> serviceHeroVideoUrl
         suppressHeroVideoPlayback -> null
-        isHeroIptv -> displayHeroItem?.let { viewModel.getIptvStreamUrl(it.id) }
+        // Reading the version re-evaluates this once resolveIptvChannels() finds the channel.
+        isHeroIptv -> displayHeroItem?.takeIf { iptvChannelsVersion >= 0 }?.let { viewModel.getIptvStreamUrl(it.id) }
         else -> null
+    }
+    // A focused channel card whose channel isn't known yet: look it up now rather than
+    // waiting for the home load to rebuild its row.
+    LaunchedEffect(displayHeroItem?.id, isHeroIptv) {
+        val item = displayHeroItem?.takeIf { isHeroIptv } ?: return@LaunchedEffect
+        if (viewModel.getIptvStreamUrl(item.id) == null) viewModel.resolveIptvChannels(listOf(item))
     }
 
     var heroPlaybackHandles by remember { mutableStateOf<HomeHeroPlaybackHandles?>(null) }
@@ -1061,6 +1098,19 @@ fun HomeScreen(
         onDispose {
             heroPlaybackHandles?.player?.release()
             heroPlaybackHandles = null
+            preparedHeroVideoUrl = null
+        }
+    }
+
+    // Fully release the stream while backgrounded: a paused live channel would be
+    // behind the live window on return, so it gets re-prepared fresh instead.
+    LaunchedEffect(isHomeStarted) {
+        if (!isHomeStarted) {
+            heroPlaybackHandles?.player?.let { player ->
+                player.playWhenReady = false
+                player.stop()
+                player.clearMediaItems()
+            }
             preparedHeroVideoUrl = null
         }
     }
@@ -1349,7 +1399,8 @@ fun HomeScreen(
             onNavigateToSettings = onNavigateToSettings,
             onSwitchProfile = onSwitchProfile,
             onExitApp = onExitApp,
-            featuredTrailerKey = null,
+            featuredTrailerKey = if (uiState.trailerInCards) focusedHomeTrailerKey else null,
+            reserveTrailerSpace = reserveTrailerSpace,
             featuredTrailerDelayMs = uiState.trailerDelaySeconds * 1000L,
             featuredTrailerVolume = if (uiState.trailerSoundEnabled) 1f else 0f,
             onOpenContextMenu = { item, isContinue ->
@@ -1369,12 +1420,42 @@ fun HomeScreen(
                 contentStartPadding = contentStartPadding,
                 isMobile = isMobile,
                 showBudget = uiState.showBudget,
+                compactForTrailer = reserveTrailerSpace,
                 onNavigateToDetails = navigateToDetailsWithCache,
                 onNavigateToTv = { channelId, streamUrl -> onNavigateToTv(channelId, streamUrl) },
                 isIptvItem = { item -> viewModel.isIptvItem(item) },
                 getIptvChannelId = { item -> viewModel.getIptvChannelId(item) }
             )
             } // end trailer-dim wrapper
+        }
+
+        // A clean 16:9 hero slot, beside the metadata and above the rails.
+        // The official player cannot sit behind our gradients, logos or cards.
+        if (!uiState.trailerInCards && focusedHomeTrailerKey != null && heroVideoUrl == null) {
+            val rowsHeight = if (configuration.screenHeightDp < 600) 238.dp else
+                (configuration.screenHeightDp.dp * 0.35f).coerceIn(260.dp, 340.dp)
+            // Leave room above the rail without landing exactly on the 200dp
+            // player minimum: rounding to physical pixels can make 200dp
+            // slightly smaller on 720p TVs (e.g. 266px at 213dpi).
+            val availableHeight = configuration.screenHeightDp.dp - rowsHeight - AppTopBarContentTopInset - 2.dp
+            val previewWidth = minOf(380.dp, availableHeight * (16f / 9f), configuration.screenWidthDp.dp * 0.4f)
+            if (previewWidth * (9f / 16f) >= 200.dp) {
+                HomeTrailerPreview(
+                    youtubeKey = focusedHomeTrailerKey,
+                    delayMs = uiState.trailerDelaySeconds * 1000L,
+                    autoplayNotBeforeMs = focusedTrailerAtMs + uiState.trailerDelaySeconds * 1000L,
+                    volume = if (uiState.trailerSoundEnabled) 1f else 0f,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .padding(top = AppTopBarContentTopInset, end = contentStartPadding)
+                        .width(previewWidth).height(previewWidth * (9f / 16f))
+                        .testTag("home_hero_trailer")
+                ) {
+                    // The existing hero backdrop already supplies artwork while
+                    // preparing, or when an embed is unavailable. Keep it intact
+                    // instead of repeating it inside a floating thumbnail.
+                    Box(Modifier.fillMaxSize())
+                }
+            }
         }
 
         // Error state - show message when loading failed and no content
@@ -1499,6 +1580,7 @@ private fun HeroSection(
     // `show_budget_on_home` DataStore key and defaults to true so existing
     // users see no behavior change. Issue #72.
     showBudget: Boolean = true,
+    compactForTrailer: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -1844,7 +1926,7 @@ private fun HeroSection(
                         ),
                         color = Color.White,
                         // Larger text, one line fewer: the block keeps its old height.
-                        maxLines = if (configuration.screenHeightDp < 450) 2 else 3,
+                        maxLines = if (compactForTrailer || configuration.screenHeightDp < 450) 2 else 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -1923,6 +2005,7 @@ private fun HomeHeroLayer(
     contentStartPadding: androidx.compose.ui.unit.Dp,
     isMobile: Boolean = false,
     showBudget: Boolean = true,
+    compactForTrailer: Boolean = false,
     onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
     onNavigateToTv: (channelId: String?, streamUrl: String?) -> Unit = { _, _ -> },
     isIptvItem: (MediaItem) -> Boolean = { false },
@@ -1934,7 +2017,7 @@ private fun HomeHeroLayer(
         // TV hero: full-screen overlay with clearlogo
         val configuration = LocalConfiguration.current
         val isCompactHeight = configuration.screenHeightDp < 720
-        val heroTopPadding = AppTopBarContentTopInset + if (isCompactHeight) 10.dp else 16.dp
+        val heroTopPadding = AppTopBarContentTopInset + if (compactForTrailer) 0.dp else if (isCompactHeight) 10.dp else 16.dp
 
         Box(
             modifier = Modifier
@@ -1948,6 +2031,7 @@ private fun HomeHeroLayer(
                         logoUrl = heroLogoUrl,
                         overviewOverride = heroOverviewOverride,
                         showBudget = showBudget,
+                        compactForTrailer = compactForTrailer,
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(
@@ -2477,11 +2561,13 @@ internal fun HomeInputLayer(
     onSwitchProfile: () -> Unit,
     onExitApp: () -> Unit,
     featuredTrailerKey: String? = null,
+    reserveTrailerSpace: Boolean = featuredTrailerKey != null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
     onOpenContextMenu: (MediaItem, Boolean) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
+    val homeView = androidx.compose.ui.platform.LocalView.current
     val isRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     var selectPressedInHome by remember { mutableStateOf(false) }
     var selectDownAtMs by remember { mutableLongStateOf(0L) }
@@ -2502,7 +2588,7 @@ internal fun HomeInputLayer(
     LaunchedEffect(rootHasFocus, isContextMenuOpen, isMobile) {
         if (isMobile || isContextMenuOpen || rootHasFocus) return@LaunchedEffect
         delay(focusRecoveryDelayMs)
-        if (!rootHasFocus && !isContextMenuOpen) {
+        if (!rootHasFocus && !isContextMenuOpen && homeView.findFocus() !is android.webkit.WebView) {
             runCatching { focusRequester.requestFocus() }
         }
     }
@@ -2532,7 +2618,11 @@ internal fun HomeInputLayer(
     BackHandler {
         selectPressedInHome = false
         selectDownAtMs = 0L
-        if (focusState.isSidebarFocused) {
+        val embeddedFocus = homeView.findFocus() as? android.webkit.WebView
+        if (embeddedFocus != null) {
+            embeddedFocus.clearFocus()
+            focusRequester.requestFocus()
+        } else if (focusState.isSidebarFocused) {
             onExitApp()
         } else {
             categories.getOrNull(focusState.currentRowIndex)?.id?.let { categoryId ->
@@ -2546,7 +2636,7 @@ internal fun HomeInputLayer(
         Modifier // No D-pad key handling on mobile
     } else {
         Modifier.onPreviewKeyEvent { event ->
-            if (isContextMenuOpen) {
+            if (isContextMenuOpen || homeView.findFocus() is android.webkit.WebView) {
                 return@onPreviewKeyEvent false
             }
             if (event.type == KeyEventType.KeyUp && isArvioDpadNavigationKey(event.key)) {
@@ -2864,6 +2954,7 @@ internal fun HomeInputLayer(
             onMobileCategoryVisiblePosition = onMobileCategoryVisiblePosition,
             onViewAllCategory = onNavigateToCategory,
             featuredTrailerKey = featuredTrailerKey,
+            reserveTrailerSpace = reserveTrailerSpace,
             featuredTrailerDelayMs = featuredTrailerDelayMs,
             featuredTrailerVolume = featuredTrailerVolume,
             onItemClick = { item ->
@@ -2930,6 +3021,7 @@ private fun HomeRowsLayer(
     onMobileCategoryVisiblePosition: (String, Int) -> Unit = { _, _ -> },
     onViewAllCategory: (String) -> Unit = {},
     featuredTrailerKey: String? = null,
+    reserveTrailerSpace: Boolean = featuredTrailerKey != null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
     onItemClick: (MediaItem) -> Unit,
@@ -2978,6 +3070,7 @@ private fun HomeRowsLayer(
             onLoadMoreCategory = onLoadMoreCategory,
             onItemFocusedPrefetch = onItemFocusedPrefetch,
             featuredTrailerKey = featuredTrailerKey,
+            reserveTrailerSpace = reserveTrailerSpace,
             featuredTrailerDelayMs = featuredTrailerDelayMs,
             featuredTrailerVolume = featuredTrailerVolume,
             onViewAllCategory = onViewAllCategory,
@@ -3285,6 +3378,7 @@ private fun TvHomeRowsLayer(
     onItemFocusedPrefetch: (MediaItem) -> Unit = {},
     onViewAllCategory: (String) -> Unit = {},
     featuredTrailerKey: String? = null,
+    reserveTrailerSpace: Boolean = featuredTrailerKey != null,
     featuredTrailerDelayMs: Long = 0L,
     featuredTrailerVolume: Float = 0f,
     onItemClick: (MediaItem) -> Unit
@@ -3333,7 +3427,8 @@ private fun TvHomeRowsLayer(
             .fillMaxSize()
             .padding(top = 24.dp)
     ) {
-        val rowsViewportHeight = if (maxHeight < 600.dp) 238.dp else (maxHeight * 0.35f).coerceIn(260.dp, 340.dp)
+        val normalRowsHeight = if (maxHeight < 600.dp) 238.dp else (maxHeight * 0.35f).coerceIn(260.dp, 340.dp)
+        val rowsViewportHeight = if (reserveTrailerSpace) maxOf(284.dp, normalRowsHeight) else normalRowsHeight
         val listState = rememberLazyListState()
         var lastAppliedTargetIndex by remember { mutableIntStateOf(-1) }
         val targetIndex = localCurrentRowIndex.coerceIn(0, (renderedCategories.size - 1).coerceAtLeast(0))
@@ -3404,7 +3499,8 @@ private fun TvHomeRowsLayer(
                     val rowIsFocused = !focusState.isSidebarFocused && actualRowIndex == focusState.currentRowIndex
                     val rowKey = remember(category.id) { "home:${category.id}" }
                     val rowUsePosterCards = rememberCatalogueRowLayoutMode(rowKey) == CardLayoutMode.POSTER
-                    val rowHeight = if (category.isPortrait(rowUsePosterCards)) 245.dp else 202.dp
+                    val rowHeight = if (rowIsFocused && reserveTrailerSpace) 284.dp else
+                        if (category.isPortrait(rowUsePosterCards)) 245.dp else 202.dp
                     val onRowLoadMore = remember(category.id) {
                         { onLoadMoreCategory(category.id) }
                     }
@@ -3725,23 +3821,27 @@ private fun ContentRow(
     val itemSpanPx = remember(density, itemWidth, itemSpacing) {
         with(density) { (itemWidth + itemSpacing).toPx().coerceAtLeast(1f) }
     }
-    val hasFeaturedCard = !effectivePosterMode && featuredTrailerKey != null
-    // Tracks which item index has held focus long enough to expand.
-    // Using an index (not a boolean) means the derived `featuredExpanded`
-    // evaluates to false immediately in the same composition frame when
-    // focusedItemIndex changes — no async LaunchedEffect reset needed.
-    // Without this, the new card briefly saw featuredExpanded=true
-    // (stale from the previous card) and rendered at 380dp, causing a
-    // layout overshoot in the LazyRow before snapping back.
-    var featuredExpandedForIndex by remember { mutableIntStateOf(-1) }
+    val hasFeaturedCard = !isContinueWatching && !isCollectionRow && !featuredTrailerKey.isNullOrBlank()
+    // Include the title identity and trailer key: a refresh can replace the
+    // item at the same index without changing the row's focus coordinates.
+    val previewItem = itemsToRender.getOrNull(focusedItemIndex)
+    val previewFocusedAtMs = remember(category.id, previewItem?.let { homeRowItemKey(it) }, isCurrentRow, focusedItemIndex) {
+        SystemClock.elapsedRealtime()
+    }
+    val autoplayNotBeforeMs = previewFocusedAtMs + featuredTrailerDelayMs.coerceAtLeast(500L)
+    val previewToken = "${category.id}:${previewItem?.mediaType}:${previewItem?.id}:$featuredTrailerKey"
+    var featuredExpandedToken by remember { mutableStateOf<String?>(null) }
     val featuredExpanded = hasFeaturedCard && isCurrentRow &&
-        featuredExpandedForIndex == focusedItemIndex && focusedItemIndex >= 0
+        featuredExpandedToken == previewToken && focusedItemIndex >= 0
     val context = LocalContext.current
-    LaunchedEffect(focusedItemIndex, hasFeaturedCard) {
-        featuredExpandedForIndex = -1
+    LaunchedEffect(previewToken, focusedItemIndex, isCurrentRow, featuredTrailerDelayMs) {
+        featuredExpandedToken = null
         if (hasFeaturedCard && isCurrentRow && focusedItemIndex >= 0) {
-            delay(featuredTrailerDelayMs.coerceAtLeast(500L))
-            featuredExpandedForIndex = focusedItemIndex
+            // Expand after a short stable focus, so the official player can
+            // prepare during the remaining autoplay delay. Metadata arriving
+            // later must not restart the full focus delay.
+            delay((previewFocusedAtMs + 500L - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+            featuredExpandedToken = previewToken
         }
     }
     // Collection rails keep one anchored outline while their tiles animate underneath.
@@ -3921,29 +4021,25 @@ private fun ContentRow(
                         // after the 500ms focus-settle delay, so the Animatable is always new.
                         val expandAnim = remember { Animatable(itemWidth.value) }
                         LaunchedEffect(Unit) {
-                            expandAnim.animateTo(380f, spring())
+                            expandAnim.animateTo(360f, spring())
                         }
                         val expandedWidth = expandAnim.value.dp
                         Box(modifier = Modifier.width(expandedWidth)) {
                             FeaturedMediaCard(
                                 item = item,
                                 width = expandedWidth,
-                                height = 146.dp,
-                                artworkWidth = 380.dp,
+                                height = if (effectivePosterMode) {
+                                    val progress = ((expandedWidth.value - itemWidth.value) / (360f - itemWidth.value)).coerceIn(0f, 1f)
+                                    (157.5f + 45f * progress).dp
+                                } else (expandedWidth * (9f / 16f)).coerceAtMost(202.5.dp),
+                                artworkWidth = 360.dp,
                                 trailerKey = featuredTrailerKey,
                                 trailerDelayMs = 0L,
                                 trailerVolume = featuredTrailerVolume,
+                                autoplayNotBeforeMs = autoplayNotBeforeMs,
                                 onClick = onCardClick,
                             )
-                            TopRankRibbon(
-                                rank = index + 1,
-                                isFocused = itemIsFocused,
-                                compact = !effectivePosterMode,
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .zIndex(2f)
-                                    .padding(start = 8.dp)
-                            )
+
                         }
                     } else {
                         // Collapsed: plain constant width — no animation state, no frame delay.
@@ -3982,7 +4078,7 @@ private fun ContentRow(
                     val cardLogoUrl = if (isCollectionRow) null else cardLogoUrls["${item.mediaType}_${item.id}"]
                     val cardExpanded = hasFeaturedCard && itemIsFocused && featuredExpanded
                     val animatedCardWidth by animateDpAsState(
-                        targetValue = if (cardExpanded) 380.dp else itemWidth,
+                        targetValue = if (cardExpanded) 360.dp else itemWidth,
                         animationSpec = if (cardExpanded) spring() else snap(),
                         label = "featuredCardWidth"
                     )
@@ -3990,11 +4086,15 @@ private fun ContentRow(
                         FeaturedMediaCard(
                             item = item,
                             width = animatedCardWidth,
-                            height = 146.dp,
-                            artworkWidth = 380.dp,
+                            height = if (effectivePosterMode) {
+                                    val progress = ((animatedCardWidth.value - itemWidth.value) / (360f - itemWidth.value)).coerceIn(0f, 1f)
+                                    (157.5f + 45f * progress).dp
+                                } else (animatedCardWidth * (9f / 16f)).coerceAtMost(202.5.dp),
+                            artworkWidth = 360.dp,
                             trailerKey = featuredTrailerKey,
                             trailerDelayMs = 0L,
                             trailerVolume = featuredTrailerVolume,
+                            autoplayNotBeforeMs = autoplayNotBeforeMs,
                             onClick = onCardClick,
                         )
                     } else {

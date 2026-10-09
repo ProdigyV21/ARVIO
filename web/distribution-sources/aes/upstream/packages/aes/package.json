@@ -1,0 +1,45 @@
+{
+  "name": "@cryptography/aes",
+  "description": "High-performance synchronous AES implementation for JavaScript",
+  "version": "0.1.1",
+  "author": "Konstantin Darutkin",
+  "scripts": {
+    "test": "jest --coverage",
+    "build": "rm -rf dist/* && rollup -c",
+    "analyze": "npm run build -- --analyze",
+    "prepublish": "npm test",
+    "pretest": "npm run build",
+    "publish": "npm publish"
+  },
+  "devDependencies": {},
+  "main": "dist/cjs/aes.min.js",
+  "module": "dist/es/aes.js",
+  "types": "dist/typings/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spalt08/cryptography.git",
+    "directory": "packages/aes"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "lint-staged": {
+    "*.{ts}": [
+      "eslint"
+    ]
+  },
+  "keywords": [
+    "aes",
+    "javascript",
+    "crypto"
+  ],
+  "bugs": {
+    "url": "https://github.com/spalt08/cryptography/issues"
+  },
+  "homepage": "https://github.com/spalt08/cryptography/tree/master/packages/aes",
+  "files": [
+    "dist/*",
+    "package.json"
+  ],
+  "license": "GPL-3.0-or-later"
+}

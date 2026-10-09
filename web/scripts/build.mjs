@@ -20,7 +20,16 @@ if (env.ARVIO_VERIFY_BUILD_CONFIG === "true") {
 // generated file, whose route is now built atomically with the client bundle.
 env.ARVIO_BUILD_STAMP = String(Date.now());
 rmSync(fileURLToPath(new URL('../public/version.json', import.meta.url)), { force: true });
-await import('./generate-translations.mjs');
+const translationMode = env.ARVIO_TRANSLATION_MODE || "generate";
+if (translationMode === "generate") {
+  await import('./generate-translations.mjs');
+} else if (translationMode === "prebuilt") {
+  const { validatePrebuiltTranslations } = await import('./validate-prebuilt-translations.mjs');
+  const checked = validatePrebuiltTranslations();
+  console.log(`Validated ${checked.locales} packaged interface languages (${checked.phrases} phrases each).`);
+} else {
+  throw new Error("ARVIO_TRANSLATION_MODE must be generate or prebuilt.");
+}
 const result = spawnSync(process.execPath, [require.resolve("next/dist/bin/next"), "build"], { env, stdio: "inherit" });
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);

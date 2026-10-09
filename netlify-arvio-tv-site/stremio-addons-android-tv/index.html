@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stremio Addons on Android TV: ARVIO Setup Guide</title>
+  <meta name="description" content="Install Stremio-compatible addons in ARVIO on Android TV or Google TV. Add a manifest URL, configure on your phone and troubleshoot catalogs, streams and subtitles.">
+  <link rel="canonical" href="https://arvio.tv/stremio-addons-android-tv/">
+  <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+  <link rel="stylesheet" href="/guides/guide.css">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="ARVIO">
+  <meta property="og:title" content="Stremio Addons on Android TV: ARVIO Setup Guide">
+  <meta property="og:description" content="Install Stremio-compatible addons in ARVIO on Android TV or Google TV. Add a manifest URL, configure on your phone and troubleshoot catalogs, streams and subtitles.">
+  <meta property="og:url" content="https://arvio.tv/stremio-addons-android-tv/">
+  <meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+  <meta property="og:image:width" content="1920">
+  <meta property="og:image:height" content="1080">
+  <meta property="og:image:alt" content="ARVIO Android TV home interface with library rows">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Stremio Addons on Android TV: ARVIO Setup Guide">
+  <meta name="twitter:description" content="Install Stremio-compatible addons in ARVIO on Android TV or Google TV. Add a manifest URL, configure on your phone and troubleshoot catalogs, streams and subtitles.">
+  <meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+  <meta name="twitter:image:alt" content="ARVIO Android TV home interface with library rows">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@graph":[
+    {"@type":"TechArticle","headline":"Use Stremio-compatible addons on Android TV with ARVIO.","description":"Install Stremio-compatible addons in ARVIO on Android TV or Google TV. Add a manifest URL, configure on your phone and troubleshoot catalogs, streams and subtitles.","dateModified":"2026-10-08","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/stremio-addons-android-tv/","image":"https://arvio.tv/assets/screenshots-v2/tv/01-home.webp"},
+    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Stremio-compatible addons on Android TV","item":"https://arvio.tv/stremio-addons-android-tv/"}]},
+    {"@type":"FAQPage","mainEntity":[
+      {"@type":"Question","name":"Can I use Stremio addons in ARVIO?","acceptedAnswer":{"@type":"Answer","text":"ARVIO supports installing compatible Stremio addon manifests by URL. Catalog, metadata, stream and subtitle behavior depends on the resources each addon exposes. Compatibility is not universal; a playable stream must resolve to media the device can access and decode."}},
+      {"@type":"Question","name":"Does ARVIO import my Stremio account and addons automatically?","acceptedAnswer":{"@type":"Answer","text":"No. Installing a manifest URL is not a full Stremio account import. Add your chosen configured manifests in ARVIO; do not assume your Stremio library, watched history or account settings will transfer."}},
+      {"@type":"Question","name":"Why do I see titles but no streams?","acceptedAnswer":{"@type":"Answer","text":"Catalog addons provide browsing entries, not necessarily playable video. Install and enable a compatible stream source, complete any required configuration and check that the provider offers the title to your account."}},
+      {"@type":"Question","name":"Do I need ARVIO Cloud to install addons?","acceptedAnswer":{"@type":"Answer","text":"No. You can paste a configured manifest directly into Add Addon on the TV. The phone-to-TV restoration flow requires a valid ARVIO Cloud session with the same account and intended profile; changing settings on a phone alone does not update the TV."}},
+      {"@type":"Question","name":"Can ARVIO play an addon that returns only torrents or magnets?","acceptedAnswer":{"@type":"Answer","text":"No. Raw P2P torrent, magnet and infoHash-only playback is not supported. Use an authorized integration that returns a source resolving to accessible HTTP or HTTPS media."}},
+      {"@type":"Question","name":"Is ARVIO an official Stremio app?","acceptedAnswer":{"@type":"Answer","text":"No. ARVIO is an independent media app with support for compatible addon manifests. It is not an official Stremio client, and this guide does not imply an affiliation or endorsement."}}
+    ]}
+  ]}
+  </script>
+  <script defer src="/assets/premium-journey.js?v=2"></script>
+</head>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/premium/">Premium</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Free APK</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell">
+<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Stremio-compatible addons on Android TV</span></nav>
+<p class="eyebrow">Android TV · Google TV · Addon guide</p>
+<h1>Use Stremio-compatible addons on Android TV with ARVIO.</h1>
+<p class="lead">Looking for an Android TV player that works with addon manifest URLs? ARVIO lets you install compatible Stremio addons alongside your own media servers and other sources. Here is how to configure them, understand what each addon provides and solve common setup problems.</p>
+<div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Install ARVIO</a><a class="button secondary" href="#setup">Follow the setup steps</a></div>
+<p class="guide-updated">Updated 8 October 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#choose">What you need</a><a href="#compatibility">Compatibility</a><a href="#setup">TV setup</a><a href="#phone">Phone configuration</a><a href="#troubleshooting">Troubleshooting</a><a href="#faq">FAQ</a></nav>
+</div></section>
+<section class="section" id="choose"><div class="shell guide-reading"><p class="eyebrow">Start with the right kind of source</p><h2>An addon, a catalog or a collection?</h2>
+<div class="decision-list">
+<article><h3>You have an addon manifest URL</h3><p>Use the setup steps below. Get the address from the addon's own developer or configuration page. Treat a configured URL as private if it contains your account token; do not paste it into public screenshots, collection files or reviewer messages.</p></article>
+<article><h3>You want more titles to browse</h3><p>A catalog supplies discovery and metadata, not necessarily streams. Try <a href="/collection-studio/#examples">three ready-to-use TMDB discovery collections</a>, then customize their folders. You do not need a separate streaming addon just to build these rows.</p></article>
+<article><h3>You have a Plex, Emby or Jellyfin server</h3><p>Add it as a <a href="/plex-emby-jellyfin/">Home Server connection</a>, not a manifest URL. Your server access and an addon's access are separate.</p></article>
+<article><h3>You want to carry watch tracking between devices</h3><p>Configure <a href="/trakt-simkl-sync/">Trakt or Simkl</a> separately and check which actions sync. ARVIO does not import all settings and addons from a Stremio account automatically.</p></article>
+</div><p>The Android app is free. If you also want browser access, compare <a href="/self-host-arvio-web/">free self-hosting</a> with <a href="/premium/" data-premium-placement="addons-browser">optional managed hosting</a> and use the <a href="/browser-playback-guide/">browser compatibility checklist</a>. Hosting cannot make an unavailable or incompatible addon work.</p></div></section>
+<section class="section compact" id="compatibility"><div class="shell guide-reading">
+<h2>Which kinds of addon can ARVIO use?</h2>
+<p>A manifest is an addon's description of its name, capabilities and available resources. It is not a movie file, a subscription or a copy of your Stremio account. What appears in ARVIO depends on the resources the addon provides.</p>
+<div class="guide-table-wrap" tabindex="0" role="region" aria-label="Addon resources and compatibility"><table class="guide-table"><thead><tr><th scope="col">Addon resource</th><th scope="col">What it does in ARVIO</th></tr></thead><tbody>
+<tr><th scope="row">Catalogs and metadata</th><td>Provide browseable titles, artwork and details. Compatible addon catalogs can be imported; these entries do not necessarily include a stream.</td></tr>
+<tr><th scope="row">Streams</th><td>Return source choices for a title or episode. Playback requires a source that resolves to accessible HTTP or HTTPS media and a device that supports the format.</td></tr>
+<tr><th scope="row">Subtitles</th><td>Provide available subtitle tracks for a title or selected source. Results depend on the addon, matching metadata and language availability.</td></tr>
+<tr><th scope="row">Raw torrent or magnet sources</th><td>Not supported for direct P2P playback. An infoHash without a playable URL is not enough.</td></tr>
+<tr><th scope="row">Other apps' plugins or accounts</th><td>A Kodi plugin ZIP, browser extension or Stremio account login is not a compatible addon manifest. ARVIO does not import an entire Stremio account.</td></tr>
+</tbody></table></div>
+<p>Compatibility is not universal. An addon may depend on its own configuration, availability, title IDs or playback format. If you are evaluating ARVIO as a Stremio alternative on Android TV, test the addons you actually use rather than assuming every feature transfers.</p>
+</div></section>
+<section class="section" id="setup"><div class="shell guide-reading">
+<h2>How to install a Stremio-compatible addon on Android TV</h2>
+<ol class="setup-list">
+<li><h3>Install ARVIO from an official source</h3><p>Use <a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a> or the <a href="https://github.com/ProdigyV21/ARVIO/releases/latest">official APK release</a>. The Android app is free. See the <a href="/android-tv-media-hub/">Android TV installation guide</a> for the first-run setup.</p></li>
+<li><h3>Copy the configured manifest URL</h3><p>Choose an addon from a provider you trust and are authorized to use. Complete any provider configuration before copying its installation URL, often ending in <code>/manifest.json</code>. Copy the manifest, not a configuration webpage or a single video URL. Configured URLs can contain credentials: do not post them publicly.</p></li>
+<li><h3>Open Settings → Addons → Add Addon</h3><p>Paste the manifest URL and review the addon information before confirming installation. If the same addon has another configuration installed, use <strong>Replace installed</strong> to replace it or <strong>Keep both</strong> if you intentionally need separate configurations.</p></li>
+<li><h3>Check what the addon provides</h3><p>If it says <strong>Setup required</strong>, finish its configuration. Open a title from a catalog or your library and request sources. A catalog-only addon needs a separate playable source. For provider-based streams, follow the <a href="/debrid-usenet-android-tv/">debrid and Usenet setup guide</a>.</p></li>
+<li><h3>Organize your browsing</h3><p>Compatible addon catalogs are imported after installation. Use the <a href="/collections-catalogs/">collections and catalogs guide</a> to organize Home rows. Start with one working addon so it is clear which integration supplies each result.</p></li>
+</ol>
+</div></section>
+<section class="section compact" id="phone"><div class="shell guide-reading">
+<h2>Configure an addon on your phone, then refresh the TV</h2>
+<p>The TV configuration flow can show a QR code for opening the addon's settings on your phone. After changing its settings, tap <strong>Install in ARVIO</strong> on the phone. On the TV, choose <strong>Settings → Addons → Refresh Addons</strong>.</p>
+<p><strong>The cross-device step requires ARVIO Cloud:</strong> use a valid session, the same account and the intended profile. Scanning the QR code or saving settings on an addon's website alone does not send the updated configuration to the TV.</p>
+<p>Prefer to keep installation local? Copy the configured manifest and paste it directly into <strong>Add Addon</strong> on the TV. Cloud is not required for this direct installation method.</p>
+</div></section>
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/01-home.webp" alt="ARVIO Android TV home screen with media rows and navigation for Search, Home, Library and TV" width="1920" height="1080" loading="lazy"><figcaption>ARVIO's TV Home interface. This screenshot shows the browsing layout, not an addon installation screen. The example titles are not included with the app.</figcaption></figure></div></section>
+<section class="section" id="troubleshooting"><div class="shell guide-reading">
+<h2>An addon is installed, but it does not work</h2>
+<div class="feature-list">
+<article class="feature-item"><h3>The manifest will not install</h3><p>Check that you copied the complete configured installation URL and that the addon service is online. A configuration page, expired private link or login page is not a usable manifest.</p></article>
+<article class="feature-item"><h3>Catalogs load, but sources are empty</h3><p>Check for an enabled stream-providing addon, complete its setup and confirm that your provider has the requested title. Catalog and subtitle addons alone do not supply videos.</p></article>
+<article class="feature-item"><h3>The TV still has the old settings</h3><p>Confirm the phone installation completed and the Cloud account and profile match before using Refresh Addons. Without cross-device sync, install the newly configured manifest directly on the TV.</p></article>
+<article class="feature-item"><h3>Sources appear, but playback fails</h3><p>Check provider access and service errors, then try another authorized source with a compatible format. Raw magnets, unsupported codecs and inaccessible links are different issues from manifest installation.</p></article>
+</div><p>For support, include your device, ARVIO version, addon name and the visible error in <a href="https://discord.gg/UavuEYMfQ4">ARVIO's Discord</a>. Never include private manifest URLs or access tokens.</p>
+</div></section>
+<section class="section" id="faq"><div class="shell guide-reading"><h2>Stremio-compatible addon FAQ</h2><div class="faq-list">
+<details><summary>Can I use Stremio addons in ARVIO?</summary><p>ARVIO supports installing compatible Stremio addon manifests by URL. Catalog, metadata, stream and subtitle behavior depends on the resources each addon exposes. Compatibility is not universal; a playable stream must resolve to media the device can access and decode.</p></details>
+<details><summary>Does ARVIO import my Stremio account and addons automatically?</summary><p>No. Installing a manifest URL is not a full Stremio account import. Add your chosen configured manifests in ARVIO; do not assume your Stremio library, watched history or account settings will transfer.</p></details>
+<details><summary>Why do I see titles but no streams?</summary><p>Catalog addons provide browsing entries, not necessarily playable video. Install and enable a compatible stream source, complete any required configuration and check that the provider offers the title to your account.</p></details>
+<details><summary>Do I need ARVIO Cloud to install addons?</summary><p>No. You can paste a configured manifest directly into Add Addon on the TV. The phone-to-TV restoration flow requires a valid ARVIO Cloud session with the same account and intended profile; changing settings on a phone alone does not update the TV.</p></details>
+<details><summary>Can ARVIO play an addon that returns only torrents or magnets?</summary><p>No. Raw P2P torrent, magnet and infoHash-only playback is not supported. Use an authorized integration that returns a source resolving to accessible HTTP or HTTPS media.</p></details>
+<details><summary>Is ARVIO an official Stremio app?</summary><p>No. ARVIO is an independent media app with support for compatible addon manifests. It is not an official Stremio client, and this guide does not imply an affiliation or endorsement.</p></details>
+</div></div></section>
+<section class="section"><div class="shell"><div class="section-head"><h2>More ways to use your sources</h2></div><div class="related-grid">
+<a class="related-link" href="/debrid-usenet-android-tv/"><small>Source setup</small><strong>Debrid and Usenet on Android TV</strong><span>Understand the player, addon and provider connection.</span></a>
+<a class="related-link" href="/plex-emby-jellyfin/"><small>Home servers</small><strong>Plex, Emby and Jellyfin in ARVIO</strong><span>Use your own media server alongside compatible addons.</span></a>
+<a class="related-link" href="/arvio-web/"><small>Other devices</small><strong>ARVIO Web on phones and computers</strong><span>Install manifests in the browser Addons panel; playback limits differ from Android.</span></a>
+</div></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><p>Free, open-source software. Optional hosting that supports its future.</p><nav class="footer-links" aria-label="Footer"><a href="/guides/">Guides</a><a href="/media-kit/">Media kit</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a href="/privacy">Privacy</a></nav><p>ARVIO includes no movies, channels or third-party subscriptions. Stremio is a separate project; ARVIO is not affiliated with or endorsed by it.</p></div></footer>
+</body>
+</html>

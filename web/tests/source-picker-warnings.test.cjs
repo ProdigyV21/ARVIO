@@ -9,6 +9,7 @@ const icons = require('lucide-react');
 const { load } = require('./load.cjs');
 
 const { sourcePlaybackPresentation } = load('components/details/sourcePlaybackPresentation.ts');
+const defaultFeature = load('lib/config.ts');
 const filename = path.resolve(__dirname, '../components/details/DetailsDrawer.tsx');
 const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const stream = (overrides = {}) => ({ source: 'Fixture', addonName: 'Library', addonId: 'library', url: 'https://media.invalid/movie.mp4', ...overrides });
@@ -36,11 +37,13 @@ const namedFunction = (name, globals) => extracted((node) => ts.isFunctionDeclar
 const detectSourceBadge = namedFunction('detectSourceBadge');
 const streamBadges = namedFunction('streamBadges', { detectSourceBadge, parseDebridStream: () => null });
 
-function row(selectedPlan = plan(), uncached = false) {
+function row(selectedPlan = plan(), uncached = false, feature = defaultFeature) {
   const calls = [];
   const render = extracted((node) => ts.isCallExpression(node) && node.expression.getText(source) === 'filtered.map'
     ? node.arguments[0] : undefined, {
     sourcePlaybackPresentation, streamBadges,
+    isDisabledTelegramSource: feature.isDisabledTelegramSource,
+    TELEGRAM_DISABLED_MESSAGE: feature.TELEGRAM_DISABLED_MESSAGE,
     playbackPlan: typeof selectedPlan === 'function' ? selectedPlan : () => selectedPlan, isUncachedDebridStream: () => uncached,
     TriangleAlert: icons.TriangleAlert, Info: icons.Info, Play: icons.Play,
     ExternalLink: icons.ExternalLink, Download: icons.Download, Copy: icons.Copy,
@@ -56,6 +59,35 @@ function elements(node, predicate) {
   return [...(predicate(node) ? [node] : []), ...elements(node.props?.children, predicate)];
 }
 const button = (node, label) => elements(node, (entry) => entry.type === 'button' && entry.props['aria-label'] === label)[0];
+
+test('disabled Telegram rows show the build limitation without playback, copy, download or external actions', () => {
+  const feature = load('lib/config.ts', {}, { process: { env: { NEXT_PUBLIC_TELEGRAM_ENABLED: 'false' } } });
+  const h = row(plan(), false, feature);
+  for (const selected of [stream({ addonId: 'telegram_native' }),
+    stream({ url: 'https://old-install.example/tg-stream/saved-id' }),
+    stream({ originalUrl: '/tg-stream/old-id' })]) {
+    const result = h.render(selected, 0);
+    const html = renderToStaticMarkup(result);
+    assert.ok(html.includes(feature.TELEGRAM_DISABLED_MESSAGE));
+    assert.match(html, /data-playback-state="blocked"/);
+    assert.match(html, /Not browser-playable/);
+    assert.doesNotMatch(html, /Browser playback unverified|Needs resolver/);
+    assert.equal(elements(result, entry => entry.type === 'button').length, 0);
+  }
+  assert.equal(h.calls.length, 0, 'disabled rows must not start any source action');
+});
+
+test('default builds retain the Telegram source browser-attempt action', () => {
+  const h = row();
+  const selected = stream({ addonId: 'telegram_native', url: '/tg-stream/hosted-id' });
+  const result = h.render(selected, 0);
+  const action = button(result, 'Try browser playback');
+  assert.ok(action);
+  action.props.onClick();
+  assert.equal(h.calls[0][0], 'play');
+  assert.equal(h.calls[0][1], selected);
+  assert.deepEqual(h.calls[1], ['close']);
+});
 
 for (const route of ['vlc', 'dead']) {
   test(`${route} rows explicitly reject browser playback while keeping the reason visible`, () => {

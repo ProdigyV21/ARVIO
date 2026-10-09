@@ -2,11 +2,13 @@ import { cachedDebridDirectUrl, parseDebridStream, resolveDebridDirectUrl, resol
 import { playbackPlan, canProviderTranscode, canTryRemux, videoDecodableForDevice, recordBrowserPlaybackFailure, streamTransport, streamContainer } from "./streamCompatibility";
 import { prepareHomeServerPlayback } from "./homeServerPlayback";
 import { declaredHeaderRelayUrl } from "./resolver";
+import { assertTelegramSourceAvailable } from "./config";
 import type { AppSettings, StreamSource } from "./types";
 
 export type PreparePlaybackOptions = { forceRemux?: boolean; forceTranscode?: boolean; signal?: AbortSignal };
 
 export async function prepareBrowserStream(stream: StreamSource, settings: AppSettings, options: PreparePlaybackOptions = {}): Promise<StreamSource> {
+  assertTelegramSourceAvailable(stream);
   const check = () => { if (options.signal?.aborted) throw new DOMException("Playback cancelled", "AbortError"); };
   check();
   if (!stream.url) throw new Error("This source has no playback URL");

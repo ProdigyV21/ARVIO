@@ -60,15 +60,17 @@ internal object ContinueWatchingMerge {
             .map { it.maxWithOrNull(localRecency)!! }
             .filter { item ->
                 item.showKey() !in remoteShows &&
-                    IptvVodSourceIds.isIptvVodAddonId(item.streamAddonId) &&
+                    (IptvVodSourceIds.isIptvVodAddonId(item.streamAddonId) || !item.addonNativeId.isNullOrBlank()) &&
                     !SportsAddonCapabilities.isLiveStreamOrSportsItem(
                         mediaType = item.mediaType, id = item.id,
-                        streamAddonId = item.streamAddonId, title = item.title
+                        streamAddonId = item.streamAddonId, title = item.title,
+                        isAddonNative = !item.addonNativeId.isNullOrBlank()
                     ) &&
                     item.progress < Constants.WATCHED_THRESHOLD &&
                     (item.durationSeconds <= 0L ||
                         item.resumePositionSeconds.toDouble() / item.durationSeconds < Constants.WATCHED_THRESHOLD / 100.0) &&
-                    (item.progress >= Constants.MIN_PROGRESS_THRESHOLD || item.resumePositionSeconds >= 60L)
+                    (item.progress >= Constants.MIN_PROGRESS_THRESHOLD || item.resumePositionSeconds >= 60L ||
+                        (item.isUpNext && !item.addonNativeId.isNullOrBlank()))
             }
         return (mergedRemote + localVod).sortedByDescending { it.updatedAtMs }
     }
@@ -132,6 +134,9 @@ internal object ContinueWatchingMerge {
             streamKey = preferred.streamKey ?: fallback.streamKey,
             streamAddonId = preferred.streamAddonId ?: fallback.streamAddonId,
             streamTitle = preferred.streamTitle ?: fallback.streamTitle,
+            addonNativeId = preferred.addonNativeId ?: fallback.addonNativeId,
+            addonNativeAddonId = preferred.addonNativeAddonId ?: fallback.addonNativeAddonId,
+            addonNativeType = preferred.addonNativeType ?: fallback.addonNativeType,
             year = preferred.year.ifBlank { fallback.year },
             releaseDate = preferred.releaseDate.ifBlank { fallback.releaseDate },
             overview = preferred.overview.ifBlank { fallback.overview },

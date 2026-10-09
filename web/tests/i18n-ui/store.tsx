@@ -1,5 +1,6 @@
 import {createContext, useContext, useState, type ReactNode} from 'react';
 import {app as library, titles} from '../library-ui/stubs';
+export {traktClient} from '../library-ui/stubs';
 export const defaultSettings = (window as any).fixtureDefaults;
 export const authClient = {session:null};
 const Context = createContext<any>(null);

@@ -6,6 +6,7 @@ import { Bookmark, Film, LoaderCircle, RefreshCw, Search, Server, Tv, SlidersHor
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MediaCard } from "@/components/media/MediaCard";
 import { CollectionCover, LibraryGrid, LibraryDialog } from "./LibraryPresentation";
+import { CalendarScreen } from "./CalendarScreen";
 import { LIBRARY_SORT_OPTIONS, compareLibraryItems } from "@/lib/librarySort";
 import type { HomeServerLibraryOption, HomeServerLibraryPage, HomeServerLibrarySort } from "@/lib/homeserver";
 import { useApp } from "@/lib/store";
@@ -26,7 +27,7 @@ const PROVIDER_LABELS: Record<HomeServerConfig["type"], string> = {
 };
 const libraryCache = new Map<string, HomeServerLibraryPage>();
 const viewportPositions = new Map<string, number>();
-interface LibraryView { section: "watchlists" | "lists" | "libraries"; openedList: string | null; tab: LibraryTab; trackerTab: "trakt" | "simkl" | null; trackerSource: string; selectedLibrary: string; sort: HomeServerLibrarySort; filter: WatchlistFilter; search: string }
+interface LibraryView { section: "watchlists" | "lists" | "libraries" | "calendar"; openedList: string | null; tab: LibraryTab; trackerTab: "trakt" | "simkl" | null; trackerSource: string; selectedLibrary: string; sort: HomeServerLibrarySort; filter: WatchlistFilter; search: string }
 const savedViews = new Map<string, LibraryView>();
 
 function itemKey(item: MediaItem): string {
@@ -53,7 +54,7 @@ export function WatchlistScreen() {
 
   const viewScope = `${auth?.userId ?? "local"}:${activeProfile?.id ?? "default"}`;
   const saved = savedViews.get(viewScope);
-  const [section, setSection] = useState<"watchlists" | "lists" | "libraries">(saved?.section ?? "watchlists");
+  const [section, setSection] = useState<LibraryView["section"]>(saved?.section ?? "watchlists");
   const [openedList, setOpenedList] = useState<string | null>(saved?.openedList ?? null);
   const [showFilters, setShowFilters] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -245,16 +246,17 @@ export function WatchlistScreen() {
   const sourceOptions = section === "libraries" ? libraries.map((entry) => ({ value: entry.value, name: `${entry.serverName} / ${entry.libraryName}` }))
     : [{ value: "saved", name: translateUi("My watchlist") }, ...trackerSources.map((entry) => ({ value: `${entry.provider}:${entry.id}`, name: `${entry.provider === "trakt" ? "Trakt" : "Simkl"} / ${translateUi(entry.name)}` }))];
   return (
-    <div className={`screen oled-library ${posterMode ? "poster-results" : ""}`}>
+    <div className={`screen oled-library ${section === "calendar" ? "oled-calendar-screen" : ""} ${posterMode ? "poster-results" : ""}`}>
       <header className="oled-library-toolbar">
-        <nav aria-label={translateUi("Library sections")}>{([ ["watchlists", "Watchlists"], ["lists", "My lists"], ["libraries", "Homeserver"] ] as const).map(([value, label]) =>
+        <nav aria-label={translateUi("Library sections")}>{([ ["watchlists", "Watchlists"], ["lists", "My lists"], ["libraries", "Homeserver"], ["calendar", "Calendar"] ] as const).map(([value, label]) =>
           <button key={value} aria-current={section === value ? "page" : undefined} onClick={() => changeSection(value)}>{translateUi(label)}</button>)}</nav>
-        <div className="oled-library-actions"><span>{collections ? translateUi("{value0} lists", {value0: personalLists.length}) : translateUi("{value0} titles", {value0: tab !== "watchlist" ? libraryPage.total : items.length})}</span>
+        {section !== "calendar" && <div className="oled-library-actions"><span>{collections ? translateUi("{value0} lists", {value0: personalLists.length}) : translateUi("{value0} titles", {value0: tab !== "watchlist" ? libraryPage.total : items.length})}</span>
           {collections && <button onClick={() => navigate("settings")}>{translateUi("+ New list")}</button>}
           <button aria-label={translateUi("Search library")} onClick={() => setShowSearch(true)}><Search size={22} /></button>
           <button className="oled-filter-button" onClick={() => setShowFilters(true)}><SlidersHorizontal size={20} /><span>{translateUi("Filters")}</span></button>
-        </div>
+        </div>}
       </header>
+      {section === "calendar" ? <CalendarScreen key={viewScope} /> : <>
       {!collections && !openedList && <select className="oled-source-select" value={sourceValue} onChange={(event) => selectSource(event.target.value)} aria-label={translateUi("Library source")}>{sourceOptions.map((source) => <option key={source.value} value={source.value}>{source.name}</option>)}</select>}
       {openedList && <div className="oled-list-breadcrumb"><button onClick={() => setOpenedList(null)}><ArrowLeft size={18}/> {translateUi(" My lists")}</button><span>{activeList?.name}</span></div>}
       <div className={`oled-library-body ${!collections && !openedList ? "with-sources" : ""}`}>
@@ -281,6 +283,7 @@ export function WatchlistScreen() {
         {!collections && <button onClick={refresh}><RefreshCw size={18}/>{translateUi("Refresh source")}</button>}
       </LibraryDialog>}
       {showSearch && <LibraryDialog title={translateUi("Search library")} close={() => setShowSearch(false)}><form onSubmit={(event) => { event.preventDefault(); setShowSearch(false); }}><label>{translateUi("Title")}<input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder={translateUi("Search titles or lists")} /></label><button type="submit">{translateUi("Done")}</button></form></LibraryDialog>}
+      </>}
     </div>
   );
 }

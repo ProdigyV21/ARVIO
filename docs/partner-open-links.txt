@@ -1,0 +1,40 @@
+ARVIO PARTNER TITLE LINKS
+
+This implementation is staged for coordinated Android, web and static-site release. It is not available in the currently published Android build until that build is updated. Do not advertise an official provider preset before joint validation and agreement.
+
+PUBLIC LANDING
+https://arvio.tv/open/?imdb=tt0137523
+https://arvio.tv/open/?type=movie&id=550
+https://arvio.tv/open/?type=tv&id=1399&season=0&episode=1
+Add a controlled campaign source, for example &utm_source=simkl.
+
+DESTINATIONS
+Android: arvio://open?imdb=tt0137523
+Web: https://web.arvio.tv/?open=1&imdb=tt0137523
+The landing offers explicit choices; there is no automatic redirect or playback. Android Chrome uses an intent scoped to com.arvio.tv with a fixed Google Play fallback. Other browsers can choose the web destination or official installation links. Older app builds may open Home instead of the linked title.
+
+The browser destination and store referrer carry utm_source, utm_medium=integration and utm_campaign=open_in_arvio. These parameters alone do not prove installs, active users or conversions. No new Android install-referrer reporting is included.
+
+VALIDATION
+- Use IMDb OR a TMDB type/id pair, never both. IMDb is lowercase tt followed by 5–12 digits. TMDB type is movie or tv; id is a canonical positive integer up to 2147483647.
+- Season is 0–10000 (0 means specials); episode is 1–10000 and requires a season. Movies cannot carry coordinates. Blank optional season/episode values are absent; whitespace and leading-zero numeric strings are invalid.
+- Duplicate recognized keys and ambiguous matches are rejected. Native links accept only the five title keys and are capped at 512 characters. Landing/web queries are capped at 4096 characters and do not forward arbitrary fields, redirect URLs or secrets.
+- An IMDb episode ID resolves to its parent series plus authoritative season/episode. Conflicting supplied coordinates fail.
+- Links open normal details, not playback, installation, a source URL or a watched-state mutation. Existing login, profile and hosted-web entitlement gates remain in force.
+- Pending links survive profile/login selection and are consumed once. New intents, cancellation and user navigation invalidate stale lookups. Provider failures can be retried and raw network errors/URLs are not exposed.
+- Native HTTPS app links are not claimed: verified Android signing fingerprints/assetlinks are a separate release task.
+
+PROVIDER TEMPLATE PROPOSALS — NOT APPROVED PRESETS
+Reeel: https://arvio.tv/open/?imdb={imdbId}&season={season}&episode={episode}&utm_source=reeel
+SIMKL: https://arvio.tv/open/?imdb=%IMDB%&season=%SEASON%&episode=%EPISODE%&utm_source=simkl
+Confirm real substitutions for movie, show, season, episode and specials with each provider before publishing.
+
+LOCAL CHECKS
+Verified in this branch: 779 web tests; TypeScript noEmit; direct Next.js optimized build (lint disabled); sideload Kotlin/Java/Hilt compilation plus 19 targeted JVM tests; landing parser and three responsive browser sizes; offline partner-component browser fixture. Local Next build had non-fatal webpack cache snapshot warnings. These checks are not a signed APK/store deployment or live provider certification.
+From repository root: node --test netlify-arvio-tv-site/scripts/open-links.test.cjs
+After installing web development dependencies: node netlify-arvio-tv-site/scripts/check-open-links.cjs
+From web: npm test; npx tsc --noEmit --incremental false; npm run test:partner-ui
+The browser fixture uses actual UI components with explicitly labeled offline store/API adapters. It blocks external traffic and does not prove live TMDB, real provider authorization, membership purchase, device launch or production deployment.
+
+RELEASE CHECKLIST
+Review the branch; run CI and production build. Test a signed/debug APK on Android phone and TV with cold/warm links, two consecutive episode links, rotation, profile/PIN selection, failed lookup/retry and specials. Test real web login/profile/access paths. Deploy web handler and landing together, confirm production routes, then publish the Android update. Provider presets can follow after validation. Do not publish this branch as an already working integration solely because unit tests pass.

@@ -22,6 +22,41 @@ The web collection view supports poster/landscape covers, keyboard navigation,
 missing-artwork fallback and retry. Animated hero videos are not played in the web
 collection dialog; their metadata is retained when syncing back to Android.
 
+## Collection Studio
+
+[Collection Studio](https://arvio.tv/collection-studio/) is a browser-only builder
+for one Home row with one to eight folders. Name the row and folders, choose a
+TMDB discovery preset, a public MDBList list URL, or a public numeric Trakt list
+URL such as `https://trakt.tv/lists/12345`. The studio does not resolve Trakt
+user/list slugs. It supports this small subset of the collection format, rather
+than every source supported by ARVIO's importer.
+
+Editing, JSON generation and preview-link encoding happen in the browser. The
+studio does not upload the collection, use an account or store it in a backend.
+The colored folder gradients are preview styles; they are not exported as
+collection artwork. Titles are limited to 64 characters and descriptions to 180
+characters; generated JSON is limited to 16 KiB.
+
+Use **Copy JSON**, then paste the JSON into **Settings > Catalogs > Import Catalog
+Pack / Collections** on Android. On ARVIO Web, paste it into **Settings > Catalogs
+(Home Rows) > Collection** and choose **Import collections**. Import into the
+profile that should receive the row. **Download JSON** saves `collections.json`
+for sharing or hosting; ARVIO does not currently accept direct file uploads.
+There is no one-click import from Studio.
+
+**Copy preview link** places the draft in the URL fragment. The recipient opens
+a read-only public preview and can make an editable copy or copy its JSON for
+manual import. The preview link is not a raw JSON URL for ARVIO's URL importer.
+Anyone with the link can read the draft's names, descriptions and public list
+references; it is not encrypted. Include no credentials or private information.
+Preview fragments are limited to 6,000 characters; if a draft is too long, shorten
+it or share the JSON file instead.
+
+Studio validates the supported document and URL shapes without requesting list
+contents. It cannot verify that a list is public, has titles or is available.
+Importing a collection does not grant access to private lists or playable media.
+The sender and recipient each need their own authorized playback sources.
+
 ## Android loading
 
 Collection cards reuse the titles and artwork already returned by TMDB lists,

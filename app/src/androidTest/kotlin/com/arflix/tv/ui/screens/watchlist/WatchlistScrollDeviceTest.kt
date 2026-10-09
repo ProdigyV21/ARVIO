@@ -56,7 +56,7 @@ class WatchlistScrollDeviceTest {
 
     @Test fun longSidebarCanSelectLastServerLibrary() {
         show(DeviceType.TV)
-        compose.onNodeWithText("Libraries").performClick()
+        compose.onNodeWithText("Homeserver").performClick()
         val tag = "library-source-server_EMBY-29"
         compose.onNodeWithTag("library-sources").performScrollToNode(hasTestTag(tag))
         compose.onNodeWithTag(tag).performClick()
@@ -64,7 +64,7 @@ class WatchlistScrollDeviceTest {
     }
     @Test fun landscapeGridNavigatesByRemoteWithoutHorizontalLayoutJump() {
         show(DeviceType.TV)
-        compose.onNodeWithText("Libraries").performClick()
+        compose.onNodeWithText("Homeserver").performClick()
         val card = compose.onAllNodes(hasAnyAncestor(hasTestTag("library-card-0")) and hasClickAction()).onFirst()
         card.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         keys(listOf(Key.DirectionRight))
@@ -81,7 +81,7 @@ class WatchlistScrollDeviceTest {
             val size = (state.value.items.size + 60).coerceAtMost(185)
             state.value = state.value.copy(items = items(size), hasMore = size < 185, isLoadingMore = false)
         }
-        compose.onNodeWithText("Libraries").performClick()
+        compose.onNodeWithText("Homeserver").performClick()
         compose.runOnIdle { state.value = state.value.copy(hasMore = true) }
         val grid = compose.onNodeWithTag("library-grid")
         grid.performScrollToIndex(55)
@@ -96,7 +96,7 @@ class WatchlistScrollDeviceTest {
     @Test fun mobilePaginationDoesNotResetScrollToFirstItem() = verifyAppend(false)
     private fun verifyAppend(poster: Boolean) {
         show(DeviceType.PHONE, poster)
-        compose.onNodeWithText("Libraries").performClick()
+        compose.onNodeWithText("Homeserver").performClick()
         val grid = compose.onNodeWithTag("library-grid")
         grid.performScrollToIndex(30)
         val before = grid.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()

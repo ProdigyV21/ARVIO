@@ -9,6 +9,8 @@ import com.arflix.tv.util.Constants
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
@@ -20,7 +22,8 @@ import javax.inject.Singleton
 class CatalogDiscoveryRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val traktApi: TraktApi,
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null
 ) {
     suspend fun searchCatalogLists(query: String): Result<List<CatalogDiscoveryResult>> = withContext(Dispatchers.IO) {
         val normalizedQuery = query.trim()
@@ -28,20 +31,15 @@ class CatalogDiscoveryRepository @Inject constructor(
             return@withContext Result.success(emptyList())
         }
 
-        val trakt = try {
-            Result.success(searchTraktLists(normalizedQuery))
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
+        val (trakt, mdblist, simkl) = coroutineScope {
+            suspend fun attempt(block: suspend () -> List<CatalogDiscoveryResult>) = try { Result.success(block()) }
+                catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; Result.failure(e) }
+            val trakt = async { attempt { searchTraktLists(normalizedQuery) } }
+            val mdblist = async { attempt { searchMdblistLists(normalizedQuery) } }
+            val simkl = async { attempt { simklListsRepository?.search(normalizedQuery).orEmpty() } }
+            Triple(trakt.await(), mdblist.await(), simkl.await())
         }
-        val mdblist = try {
-            Result.success(searchMdblistLists(normalizedQuery))
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
-        }
-
-        val combined = (trakt.getOrDefault(emptyList()) + mdblist.getOrDefault(emptyList()))
+        val combined = (trakt.getOrDefault(emptyList()) + mdblist.getOrDefault(emptyList()) + simkl.getOrDefault(emptyList()))
             .distinctBy { it.sourceUrl.lowercase() }
             .sortedWith(
                 compareByDescending<CatalogDiscoveryResult> { relevanceScore(normalizedQuery, it) > 0 }

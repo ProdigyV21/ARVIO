@@ -62,7 +62,7 @@ class DetailsStreamCompletionTest {
                     gates[2].await()
                     emptyList()
                 }
-                every { streams.resolveMovieStreamsProgressive(any(), any(), any(), any(), any()) } returns flow {
+                every { streams.resolveMovieStreamsProgressive(any(), any(), any(), any(), any(), any()) } returns flow {
                     gates[0].await()
                     emit(ProgressiveStreamResult(emptyList(), completedAddons = 0, totalAddons = 0, isFinal = true))
                 }
@@ -83,7 +83,8 @@ class DetailsStreamCompletionTest {
                     watchlistRepository = mockk(relaxed = true),
                     cloudSyncRepository = mockk(relaxed = true),
                     launcherContinueWatchingRepository = mockk(relaxed = true),
-                    streamIntegrationRepository = integrations
+                    streamIntegrationRepository = integrations,
+                    recentPlayedSourceRepository = mockk(relaxed = true)
                 )
                 val store = ViewModelStore().apply { put("details", model) }
                 try {

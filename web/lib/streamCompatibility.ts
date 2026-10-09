@@ -98,7 +98,16 @@ export function audioDecodableForDevice(stream: CompatStream) {
 export function canDirectPlayMkvStream(stream: CompatStream): boolean {
   if (typeof navigator === "undefined" || /iPhone|iPad|iPod|CriOS|FxiOS/.test(navigator.userAgent)) return false;
   const version = navigator.userAgent.match(/(?:Chrome|Chromium|Edg)\/(\d+)/);
-  return !!version && Number(version[1]) >= 145 && /^(mkv|matroska)$/.test(streamContainer(stream)) && !hasDolbyVision(stream) && !videoReason(stream) && !audioReason(stream);
+  // Chromium can render an MKV's video while silently dropping unsupported
+  // audio. Missing codec metadata is not evidence of a playable audio track.
+  const audio = stream.media?.audioCodec?.toLowerCase() || text(stream);
+  const knownAudio = /\baac\b|mp4a|\bopus\b|\bflac\b|\bmp3\b|\bac-?3\b|e-?ac-?3|ec-3|ddp|dd\+|dd5\.1|digital plus/.test(audio);
+  const caps = getMediaCapabilities();
+  const supportedAudio = knownAudio && !audioReason(stream)
+    && (!/\bopus\b/.test(audio) || caps.opus)
+    && (!/\bflac\b/.test(audio) || caps.flac)
+    && (!/\baac\b|mp4a/.test(audio) || caps.aac);
+  return !!version && Number(version[1]) >= 145 && /^(mkv|matroska)$/.test(streamContainer(stream)) && !hasDolbyVision(stream) && !videoReason(stream) && supportedAudio;
 }
 export function canTryRemux(stream: CompatStream): boolean {
   return /^https?:/i.test(stream.url ?? "") && getMediaCapabilities().mse

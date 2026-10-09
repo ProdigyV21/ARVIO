@@ -9,6 +9,20 @@ import org.junit.Test
 
 class CloudSyncInvalidationBusTest {
     @Test
+    fun `user removal during remote restore still schedules an upload`() = runTest {
+        val bus = CloudSyncInvalidationBus()
+        bus.events.test {
+            bus.suppressDuringRemoteApply {
+                bus.markUserDirty(CloudSyncScope.WATCHLIST, "main", "remove")
+                bus.markDirty(CloudSyncScope.WATCHLIST, "main", "remote import")
+            }
+            assertEquals("remove", awaitItem().reason)
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `markDirty emits local invalidations`() = runTest {
         val bus = CloudSyncInvalidationBus()
 

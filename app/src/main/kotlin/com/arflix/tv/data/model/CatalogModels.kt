@@ -6,6 +6,7 @@ import java.io.Serializable
 enum class CatalogSourceType {
     PREINSTALLED,
     TRAKT,
+    SIMKL,
     MDBLIST,
     // A TMDB page added by its URL: list, collection, company, network,
     // person, keyword or genre.
@@ -136,6 +137,7 @@ val CatalogConfig.effectivePackId: String
         CatalogSourceType.PREINSTALLED -> "system"
         CatalogSourceType.ADDON -> "addon"
         CatalogSourceType.TRAKT -> "trakt"
+        CatalogSourceType.SIMKL -> "simkl"
         CatalogSourceType.MDBLIST -> "mdblist"
         CatalogSourceType.TMDB -> "tmdb"
         CatalogSourceType.HOME_SERVER -> "home_server"
@@ -146,6 +148,7 @@ val CatalogConfig.effectivePackName: String
         CatalogSourceType.PREINSTALLED -> "System Catalogs"
         CatalogSourceType.ADDON -> "Addon Catalogs"
         CatalogSourceType.TRAKT -> "Trakt Catalogs"
+        CatalogSourceType.SIMKL -> "SIMKL Catalogs"
         CatalogSourceType.MDBLIST -> "MDBlist Catalogs"
         CatalogSourceType.TMDB -> "TMDB Catalogs"
         CatalogSourceType.HOME_SERVER -> "Home Server Catalogs"
@@ -156,6 +159,7 @@ val CatalogConfig.isBulkDeletablePack: Boolean
             packId != "system" &&
             packId != "addon" &&
             packId != "trakt" &&
+            packId != "simkl" &&
             packId != "mdblist" &&
             packId != "tmdb" &&
             packId != "home_server" &&

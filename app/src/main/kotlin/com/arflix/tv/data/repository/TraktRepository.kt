@@ -2745,13 +2745,17 @@ class TraktRepository @Inject constructor(
         isUpNext: Boolean = false,
         episodeAirDate: String = "",
         emitUpdate: Boolean = true,
+        addonNativeId: String? = null,
+        addonNativeAddonId: String? = null,
+        addonNativeType: String? = null,
     ) {
         ensureProfileCacheScope()
         if (SportsAddonCapabilities.isLiveStreamOrSportsItem(
                 mediaType = mediaType,
                 id = tmdbId,
                 streamAddonId = streamAddonId,
-                title = title
+                title = title,
+                isAddonNative = !addonNativeId.isNullOrBlank()
             )) {
             return
         }
@@ -2787,6 +2791,9 @@ class TraktRepository @Inject constructor(
             year = year,
             releaseDate = episodeAirDate,
             isUpNext = isUpNext,
+            addonNativeId = addonNativeId,
+            addonNativeAddonId = addonNativeAddonId,
+            addonNativeType = addonNativeType,
             updatedAtMs = System.currentTimeMillis()
         )
 
@@ -2912,6 +2919,11 @@ class TraktRepository @Inject constructor(
         return movies to episodes
     }
 
+    internal suspend fun getLocalWatchedSnapshot(): Pair<Set<Int>, Set<String>> {
+        ensureProfileCacheScope()
+        return loadLocalWatchedSnapshotForCurrentProfile()
+    }
+
     private fun decodeContinueWatchingList(json: String): List<ContinueWatchingItem> {
         return decodeContinueWatchingCache(json, gson)
     }
@@ -2953,7 +2965,8 @@ class TraktRepository @Inject constructor(
                 mediaType = item.mediaType,
                 id = item.id,
                 streamAddonId = item.streamAddonId,
-                title = item.title
+                title = item.title,
+                isAddonNative = !item.addonNativeId.isNullOrBlank()
             )
         }
     }
@@ -3025,7 +3038,8 @@ class TraktRepository @Inject constructor(
                 mediaType = item.mediaType,
                 id = item.id,
                 streamAddonId = item.streamAddonId,
-                title = item.title
+                title = item.title,
+                isAddonNative = !item.addonNativeId.isNullOrBlank()
             )
         }
         if (filtered.isEmpty()) return@coroutineScope emptyList()
@@ -3046,6 +3060,7 @@ class TraktRepository @Inject constructor(
         item: ContinueWatchingItem,
         seasonCache: java.util.concurrent.ConcurrentHashMap<Pair<Int, Int>, Deferred<com.arflix.tv.data.api.TmdbSeasonDetails?>> = java.util.concurrent.ConcurrentHashMap()
     ): ContinueWatchingItem = coroutineScope {
+        if (item.id < 0) return@coroutineScope item
         // Skip only when all Continue Watching metrics are already present.
         val needsRuntime = item.durationSeconds <= 0L
         val needsEpisodeCounts = item.mediaType == MediaType.TV && item.totalEpisodes <= 0
@@ -5106,7 +5121,11 @@ data class ContinueWatchingItem(
     val budget: Long? = null,
     val updatedAtMs: Long = 0L,
     val totalEpisodes: Int = 0,
-    val watchedEpisodes: Int = 0
+    val watchedEpisodes: Int = 0,
+    val addonNativeId: String? = null,
+    val addonNativeAddonId: String? = null,
+    // Portable, so a device restoring this entry asks the addon with its own type.
+    val addonNativeType: String? = null
 ) {
     fun toMediaItem(context: Context? = null): MediaItem {
         val effectiveDurationSeconds = durationSeconds.takeIf { it > 0L } ?: parseRuntimeLabelSeconds(duration)
@@ -5194,7 +5213,10 @@ data class ContinueWatchingItem(
             totalEpisodes = totalEpisodeCount,
             watchedEpisodes = watchedEpisodeCount,
             timeRemainingLabel = timeRemainingLabel,
-            showPlaybackProgress = showPlaybackProgress
+            showPlaybackProgress = showPlaybackProgress,
+            addonNativeId = addonNativeId,
+            addonNativeAddonId = addonNativeAddonId,
+            addonNativeType = addonNativeType
         )
     }
 }

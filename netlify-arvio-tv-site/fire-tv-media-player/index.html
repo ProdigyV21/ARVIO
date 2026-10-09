@@ -1,58 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ARVIO on Fire TV - Sideloading and Compatibility Guide</title>
-  <meta name="description" content="Learn how the ARVIO Android TV app can be sideloaded on compatible Fire TV devices, what works, and which playback and device limits to consider.">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install ARVIO on Fire TV: APK &amp; Fire OS Setup Guide</title>
+  <meta name="description" content="Install ARVIO on compatible Fire TV devices with the official signed APK. Check Fire OS vs Vega OS, follow sideload steps and fix common install problems.">
   <link rel="canonical" href="https://arvio.tv/fire-tv-media-player/">
   <!-- hreflang:start -->
   <link rel="alternate" hreflang="en" href="https://arvio.tv/fire-tv-media-player/">
   <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/arvio-fire-tv/">
   <link rel="alternate" hreflang="es" href="https://arvio.tv/es/arvio-fire-tv/">
   <link rel="alternate" hreflang="x-default" href="https://arvio.tv/fire-tv-media-player/">
-  <!-- hreflang:end --><link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
-  <meta property="og:type" content="website"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="ARVIO on Fire TV"><meta property="og:description" content="Sideload the signed Android build on compatible Fire TV hardware and use ARVIO's remote-first media interface."><meta property="og:url" content="https://arvio.tv/fire-tv-media-player/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="ARVIO on Fire TV"><meta name="twitter:description" content="Compatibility and sideloading guidance for the open-source ARVIO Android app."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+  <!-- hreflang:end -->
+  <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+  <link rel="stylesheet" href="/guides/guide.css">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="ARVIO">
+  <meta property="og:title" content="Install ARVIO on Fire TV: APK &amp; Fire OS Setup Guide">
+  <meta property="og:description" content="Install ARVIO on compatible Fire TV devices with the official signed APK. Check Fire OS vs Vega OS, follow sideload steps and fix common install problems.">
+  <meta property="og:url" content="https://arvio.tv/fire-tv-media-player/">
+  <meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
+  <meta property="article:modified_time" content="2026-10-04">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Install ARVIO on Fire TV: APK &amp; Fire OS Setup Guide">
+  <meta name="twitter:description" content="Install ARVIO on compatible Fire TV devices with the official signed APK. Check Fire OS vs Vega OS, follow sideload steps and fix common install problems.">
+  <meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@graph":[
-    {"@type":"SoftwareApplication","name":"ARVIO","applicationCategory":"MultimediaApplication","operatingSystem":"Android TV, Google TV, Android, Fire OS","url":"https://arvio.tv/fire-tv-media-player/","downloadUrl":"https://github.com/ProdigyV21/ARVIO/releases","codeRepository":"https://github.com/ProdigyV21/ARVIO","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"An open-source Android media management app that can be sideloaded on compatible Fire TV devices."},
-    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"ARVIO on Fire TV","item":"https://arvio.tv/fire-tv-media-player/"}]},
+    {"@type":"TechArticle","headline":"Install ARVIO on Fire TV.","description":"Install ARVIO on compatible Fire TV devices with the official signed APK. Check Fire OS vs Vega OS, follow sideload steps and fix common install problems.","dateModified":"2026-10-04","inLanguage":"en","author":{"@type":"Organization","name":"ARVIO"},"url":"https://arvio.tv/fire-tv-media-player/","image":"https://arvio.tv/assets/screenshots-v2/tv/01-home.webp"},
+    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Fire TV setup","item":"https://arvio.tv/fire-tv-media-player/"}]},
     {"@type":"FAQPage","mainEntity":[
-      {"@type":"Question","name":"Is ARVIO available in the Amazon Appstore?","acceptedAnswer":{"@type":"Answer","text":"ARVIO is distributed for Android through Google Play and as a signed APK on GitHub. Fire TV users may need to sideload the APK on a compatible device."}},
-      {"@type":"Question","name":"Will every Fire TV model support the same media formats?","acceptedAnswer":{"@type":"Answer","text":"No. Codec, HDR, audio passthrough, memory and performance support vary by Fire TV model and Fire OS version."}},
-      {"@type":"Question","name":"How are ARVIO updates installed on Fire TV?","acceptedAnswer":{"@type":"Answer","text":"A sideloaded installation can use a newer APK signed with the same ARVIO certificate. Users should obtain releases from the official ARVIO GitHub repository."}}
+      {"@type":"Question","name":"Is this a dedicated Amazon Appstore build?","acceptedAnswer":{"@type":"Answer","text":"No. This guide installs ARVIO's general Android sideload APK from the official GitHub releases. It is not a dedicated Amazon Appstore build, and compatibility depends on your Fire OS device and the release requirements."}},
+      {"@type":"Question","name":"Can I install the ARVIO APK on Vega OS?","acceptedAnswer":{"@type":"Answer","text":"No. This Android APK cannot be installed locally on Vega OS. Fire TV branding alone does not establish Android compatibility; check the operating system for your exact device."}},
+      {"@type":"Question","name":"Do I need ADB debugging to install ARVIO?","acceptedAnswer":{"@type":"Answer","text":"No. Downloading and opening the APK on a compatible Fire OS device uses the installer app's installation permission. ADB debugging is for a separate computer-based development workflow and is not needed for these steps."}},
+      {"@type":"Question","name":"Do I need Premium or a media subscription?","acceptedAnswer":{"@type":"Answer","text":"The Android APK is free and does not require ARVIO Premium. ARVIO includes no movies, channels or third-party subscriptions. Connect your own libraries or services that you are authorised to use."}}
     ]}
   ]}
   </script>
 </head>
-<body>
+<body class="practical-guide">
   <a class="skip-link" href="#content">Skip to content</a>
-  <header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases">APK releases</a></nav></div></header>
+  <header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="144" height="34"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Free APK</a></nav></div></header>
   <main id="content">
-    <section class="hero"><img class="hero-media" src="/assets/screenshots-v2/tv/01-home.webp" alt="ARVIO television home screen with media catalogs"><div class="hero-shade" aria-hidden="true"></div><div class="hero-content"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Fire TV</span></nav><p class="eyebrow">Compatible Fire OS devices</p><h1>Use ARVIO on Fire TV.</h1><p class="hero-copy">The Android TV build can be sideloaded on compatible Fire TV hardware, bringing ARVIO's remote-first library, tracking, live TV and player experience to supported Fire OS devices.</p><div class="actions"><a class="button" href="https://github.com/ProdigyV21/ARVIO/releases">Download the official APK</a><a class="button secondary" href="/android-tv-media-hub/">Explore ARVIO</a></div></div></section>
+    <section class="guide-intro"><div class="shell">
+      <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Fire TV setup</span></nav>
+      <p class="eyebrow">Official Android APK · Compatible Fire OS devices</p>
+      <h1>Install ARVIO on Fire TV.</h1>
+      <p class="lead">Sideload the free ARVIO Android APK on a compatible Fire TV Stick, Cube or television running Fire OS. Check your operating system first: the APK cannot be installed locally on Vega OS.</p>
+      <div class="actions"><a class="button" href="#compatibility">Check compatibility</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Official APK release</a></div>
+      <nav class="guide-jump" aria-label="On this page"><a href="#compatibility">Fire OS or Vega OS?</a><a href="#install">Install the APK</a><a href="#first-run">First playback</a><a href="#updates">Updates</a><a href="#help">Troubleshooting</a><a href="#faq">FAQ</a></nav>
+      <p class="guide-updated">Updated <time datetime="2026-10-04">4 October 2026</time> · By the ARVIO project</p>
+    </div></section>
 
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Before installing</p><h2>Android compatibility with device-specific limits.</h2><p>Fire OS is based on Android, but Fire TV models differ substantially in memory, codec support and system behavior. ARVIO keeps the same interface while playback capabilities follow the device.</p></div><div class="feature-list">
-      <article class="feature-item"><h3>TV remote navigation</h3><p>The Android TV layout is designed around directional focus, select, back and player controls rather than touch input.</p></article>
-      <article class="feature-item"><h3>Official signed APK</h3><p>GitHub releases use ARVIO's release signature so future official APKs can update an existing matching installation.</p></article>
-      <article class="feature-item"><h3>Home server support</h3><p>Connect supported Jellyfin, Plex and Emby servers that the Fire TV can reach over the network.</p></article>
-      <article class="feature-item"><h3>Tracking and profiles</h3><p>Use supported Trakt, Simkl and ARVIO cloud features in the same way as other compatible Android devices.</p></article>
-      <article class="feature-item"><h3>Hardware-dependent playback</h3><p>4K, HDR, Dolby formats, subtitles and passthrough depend on the exact Fire TV model, connected display and audio chain.</p></article>
-      <article class="feature-item"><h3>Storage awareness</h3><p>Lower-end sticks have tighter memory and storage constraints, especially for large guide data, cache and high-bitrate playback.</p></article>
-    </div></div></section>
+    <section class="section compact" id="compatibility"><div class="shell guide-reading">
+      <p class="eyebrow">Before downloading</p>
+      <h2>Check Fire OS, not just the Fire TV name.</h2>
+      <p>Open <strong>Settings → My Fire TV → About</strong> and check the device and software details. Some televisions call this menu <strong>Device &amp; Software</strong> or <strong>Device</strong>. Match the exact model and generation to <a href="https://developer.amazon.com/docs/fire-tv/fire-os-overview.html">Amazon's Fire TV operating-system table</a> if the screen is unclear.</p>
+      <h3>Fire OS: check the APK requirements.</h3>
+      <p>Fire OS is based on Android. The <a href="https://github.com/ProdigyV21/ARVIO/releases/tag/v2.0.1">ARVIO 2.0.1 release</a> provides a signed ARMv7/ARM64 APK requiring Android 6.0 or newer. Fire OS 5 is based on Android 5.1, so it does not meet that requirement. Check the release notes again when installing a newer version; meeting the minimum does not guarantee every playback feature.</p>
+      <h3>Vega OS: this APK does not apply.</h3>
+      <p>Vega OS uses a different app format. Amazon's <a href="https://developer.amazon.com/docs/app-submission/target-app.html">app-targeting documentation</a> distinguishes Fire OS APKs from Vega OS VPKGs. Changing installation permissions cannot make this Android APK compatible with Vega OS.</p>
+      <p>This is ARVIO's general Android sideload release, not a dedicated Amazon Appstore build. Codec support, HDR, audio passthrough and performance still depend on the exact device, television and audio equipment.</p>
+    </div></section>
 
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Installation outline</p><h2>Sideload only from the official release.</h2></div><div class="steps"><article class="step"><h3>Allow app installation</h3><p>Enable installation from the trusted downloader or file manager you use, following the controls available on your Fire OS version.</p></article><article class="step"><h3>Get the GitHub APK</h3><p>Download the current release from the official ARVIO GitHub repository, not an unrelated mirror.</p></article><article class="step"><h3>Install and test playback</h3><p>Connect your own services and verify the formats important to you on that specific Fire TV model.</p></article></div></div></section>
+    <section class="section" id="install"><div class="shell guide-reading">
+      <p class="eyebrow">Step by step · Fire OS only</p>
+      <h2>Sideload the official signed APK.</h2>
+      <p>You need a compatible Fire OS device, an internet connection and enough free storage for the download and installation. These steps use an on-device installer; ADB debugging is not required.</p>
+      <ol class="setup-list">
+        <li><h3>Install a downloader you trust.</h3><p>On Fire TV, use Find or Search to locate an APK-capable downloader or file manager in the Amazon Appstore. One option, where available, is <a href="https://www.aftvnews.com/downloader/">Downloader by AFTVnews</a>. Check the app's publisher, install it and open it once.</p></li>
+        <li><h3>Find Developer options if needed.</h3><p>Go to <strong>Settings → My Fire TV → Developer Options</strong>. If the entry is hidden, open <strong>About</strong>, highlight the device name and press the remote's centre/select button seven times, then press Back. Amazon documents this reveal step for <a href="https://developer.amazon.com/docs/fire-tv/connecting-adb-to-device.html">some software versions</a>; menu names and availability can vary.</p></li>
+        <li><h3>Allow installation for your chosen app.</h3><p>Open <strong>Install unknown apps</strong> and enable permission only for the downloader or file manager you selected. Older Fire OS menus may use <strong>Apps from Unknown Sources</strong> instead. Follow the installation prompt for your version. Leave <strong>ADB Debugging</strong> off; it is not part of this method.</p></li>
+        <li><h3>Open the official GitHub release.</h3><p>In the downloader's URL field, enter <a href="https://github.com/ProdigyV21/ARVIO/releases/latest"><code>https://github.com/ProdigyV21/ARVIO/releases/latest</code></a>. Expand <strong>Assets</strong> and select the file ending in <code>-sideload-release.apk</code>. Choose the APK, not a source-code ZIP or an AAB store bundle. Use the release page directly rather than an unverified mirror or numeric download code.</p></li>
+        <li><h3>Install and open ARVIO.</h3><p>When the download finishes, open the APK from the downloader's files list if the system installer does not open automatically. Confirm the app is ARVIO, choose <strong>Install</strong>, then <strong>Open</strong>. If installation fails, keep the error message and use the checks below.</p></li>
+        <li><h3>Finish the installation.</h3><p>After ARVIO opens successfully, remove the downloaded APK if you need the storage; removing that installer file does not remove the installed app. Return to the installation-permission menu and turn off permission for the downloader until you need it again.</p></li>
+      </ol>
+      <p>If GitHub does not load in your downloader, download the same official APK on a computer or phone and transfer it over your home network with a file-transfer app you trust. Open it with your chosen Fire TV file manager and grant that app installation permission when prompted.</p>
+    </div></section>
 
-    <section class="section compact"><div class="shell"><div class="note"><h2>More than Fire TV</h2><p>ARVIO can run on compatible Fire OS hardware, but device capabilities vary. The optional ARVIO Web companion also provides browser access on iPhone, iPad, Windows, Mac, Chromebook, Apple TV and compatible smart TVs when a native Android installation is unavailable.</p></div></div></section>
+    <section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/01-home.webp" alt="ARVIO's TV interface with media artwork and library navigation" width="1920" height="1080" loading="lazy"><figcaption>ARVIO's Android TV interface. This is an app screenshot, not a Fire OS settings screen. Libraries and services shown are examples and are not included.</figcaption></figure></div></section>
 
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions</p><h2>Fire TV FAQ</h2></div><div class="faq-list">
-      <details><summary>Is ARVIO available in the Amazon Appstore?</summary><p>ARVIO is distributed for Android through Google Play and as a signed APK on GitHub. Fire TV users may need to sideload the APK on a compatible device.</p></details>
-      <details><summary>Will every Fire TV model support the same media formats?</summary><p>No. Codec, HDR, audio passthrough, memory and performance support vary by Fire TV model and Fire OS version.</p></details>
-      <details><summary>How are ARVIO updates installed on Fire TV?</summary><p>A sideloaded installation can use a newer APK signed with the same ARVIO certificate. Obtain releases from the official ARVIO GitHub repository.</p></details>
-    </div></div></section>
+    <section class="section" id="first-run"><div class="shell guide-reading">
+      <h2>Connect one source and test playback.</h2>
+      <p>Create or select your ARVIO profile, then open Settings. Connect a <a href="/plex-emby-jellyfin/">Jellyfin, Plex or Emby server</a> the Fire TV can reach, or add your authorised playlist using the <a href="/live-tv-epg/">live TV and EPG guide</a>. ARVIO does not supply media or third-party subscriptions.</p>
+      <p>Choose a familiar title and test picture, audio, subtitles and remote controls before adding more services. Start with a modest bitrate and a format your device supports. A visible poster is metadata; it does not by itself mean a playable source is connected.</p>
+    </div></section>
 
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>Plan the complete setup.</h2></div><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><small>Overview</small><strong>Android TV media hub</strong><span>See the full ARVIO feature set.</span></a><a class="related-link" href="/live-tv-epg/"><small>Live TV</small><strong>Live TV and EPG</strong><span>Provider setup and guide behavior.</span></a><a class="related-link" href="/plex-emby-jellyfin/"><small>Home servers</small><strong>Plex, Emby and Jellyfin</strong><span>Connect authorized server libraries.</span></a></div></div></section>
-    <section class="cta-band"><div class="shell cta-inner"><div><h2>Get the signed Fire TV build.</h2><p>Use the official ARVIO GitHub releases page.</p></div><div class="actions"><a class="button" href="https://github.com/ProdigyV21/ARVIO/releases">Open APK releases</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
+    <section class="section compact" id="updates"><div class="shell guide-reading">
+      <h2>Update without removing your setup.</h2>
+      <p>To update manually, return to the <a href="https://github.com/ProdigyV21/ARVIO/releases/latest">official release page</a> and install the newer signed sideload APK over the existing app. A normal update requires a compatible package, matching signing certificate and a newer version. Re-enable permission for your chosen installer only when needed.</p>
+      <p>If the update is rejected, check its version and download source before changing anything. Keep your existing installation while seeking help: uninstalling ARVIO or choosing Clear Data can remove local profiles and settings.</p>
+    </div></section>
+
+    <section class="section" id="help"><div class="shell guide-reading">
+      <p class="eyebrow">Troubleshooting</p>
+      <h2>Find the step that failed.</h2>
+      <h3>Installation is blocked or permission is missing.</h3>
+      <p>Confirm that the device runs Fire OS, then check permission for the app actually opening the APK. A downloader and a file manager are separate installation sources. If your menus differ, follow the system prompt. If Fire OS reports a security or device-policy block, record the message and check with Amazon or ARVIO support before proceeding.</p>
+      <h3>“App not installed” or a package error appears.</h3>
+      <p>Check the release's minimum Android version against your Fire OS version. Confirm that the download finished and ends in <code>.apk</code>. Download a fresh copy from the official release if it is incomplete. For an update, an older version or a different signing certificate can cause rejection; keep the current app and report both versions rather than uninstalling it.</p>
+      <h3>The device is low on storage.</h3>
+      <p>Check available storage in Fire TV Settings. Remove old downloaded installer files you no longer need, then retry. Under Applications → Manage Installed Applications, Clear Cache can free temporary app files; Clear Data removes app data and is a different action.</p>
+      <h3>The app opens but video buffers, has no sound or fails.</h3>
+      <p>Confirm that your server or provider is reachable and that your account can play the item. Try another known-working title and a lower-bitrate source. If only one format fails, check your device's codec support and the TV or receiver's audio capabilities. Test a supported audio track or disable passthrough in player settings for that test. An installation succeeding does not establish 4K, HDR or Dolby support.</p>
+      <p>Still stuck? <a href="https://discord.gg/UavuEYMfQ4">Ask in the ARVIO Discord</a> or <a href="https://github.com/ProdigyV21/ARVIO/issues">check existing GitHub issues</a>. Include the exact Fire TV model, Fire OS version, ARVIO version, installation source and error text. For playback, include the codec and whether other titles work. Remove passwords, access tokens and private playlist URLs from screenshots and logs.</p>
+    </div></section>
+
+    <section class="section" id="faq"><div class="shell guide-reading">
+      <h2>Fire TV questions.</h2>
+      <div class="faq-list">
+        <details><summary>Is this a dedicated Amazon Appstore build?</summary><p>No. This guide installs ARVIO's general Android sideload APK from the official GitHub releases. It is not a dedicated Amazon Appstore build, and compatibility depends on your Fire OS device and the release requirements.</p></details>
+        <details><summary>Can I install the ARVIO APK on Vega OS?</summary><p>No. This Android APK cannot be installed locally on Vega OS. Fire TV branding alone does not establish Android compatibility; check the operating system for your exact device.</p></details>
+        <details><summary>Do I need ADB debugging to install ARVIO?</summary><p>No. Downloading and opening the APK on a compatible Fire OS device uses the installer app's installation permission. ADB debugging is for a separate computer-based development workflow and is not needed for these steps.</p></details>
+        <details><summary>Do I need Premium or a media subscription?</summary><p>The Android APK is free and does not require ARVIO Premium. ARVIO includes no movies, channels or third-party subscriptions. Connect your own libraries or services that you are authorised to use.</p></details>
+      </div>
+    </div></section>
+
+    <section class="section"><div class="shell"><h2>Keep building your setup.</h2><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><small>Android &amp; TV</small><strong>Set up your first source</strong><span>Profiles, libraries and watch tracking.</span></a><a class="related-link" href="/plex-emby-jellyfin/"><small>Home servers</small><strong>Connect your media library</strong><span>Jellyfin, Plex and Emby setup.</span></a><a class="related-link" href="/live-tv-epg/"><small>Live TV</small><strong>Add a playlist and guide</strong><span>Your channels and EPG, step by step.</span></a></div></div></section>
+    <section class="cta-band"><div class="shell cta-inner"><div><h2>Ready for a compatible Fire OS device?</h2><p>Get the free signed Android APK from the official release.</p></div><div class="actions"><a class="button" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Open APK release</a><a class="button secondary" href="#install">Back to install steps</a></div></div></section>
   </main>
-  <footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO is not affiliated with Amazon.</span></div></div></footer>
+  <footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="144" height="34"><p>Free, open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO includes no media. ARVIO is not affiliated with Amazon.</span></div></div></footer>
 </body>
 </html>

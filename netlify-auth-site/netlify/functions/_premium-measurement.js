@@ -1,6 +1,7 @@
 const { privacyHash } = require("./_backend");
 
-const JOURNEY_EVENTS = new Set(["premium_page_view", "membership_clicked", "web_clicked"]);
+const JOURNEY_EVENTS = new Set(["premium_page_view", "membership_clicked", "web_clicked", "guide_page_view"]);
+const GUIDE_PAGES = new Set(["guides", "android", "jellyfin", "servers", "addons", "debrid", "tracking", "live", "subtitles", "firetv", "browser", "collections", "selfhost", "playback"]);
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const FAILURE_KINDS = new Set(["network", "format", "timeout", "browser_restriction", "engine", "unknown"]);
 const TRANSPORTS = new Set(["file", "hls", "dash", "mpegts", "remux"]);
@@ -17,7 +18,7 @@ function marketingMetadata(input) {
     // Drop addresses/URLs entirely rather than turning private input into a tag.
     if (typeof value === "string" && /^[a-z0-9._-]{1,80}$/i.test(value)) result[name] = value.toLowerCase();
   }
-  if (["home", "premium", "handoff"].includes(input?.page)) result.page = input.page;
+  if (["home", "premium", "handoff"].includes(input?.page) || GUIDE_PAGES.has(input?.page)) result.page = input.page;
   return result;
 }
 
@@ -114,27 +115,33 @@ function summarizeMeasurements(records, journeys, verifiedLinks = []) {
     if (record.firstAt < journey.firstAt) { journey.firstAt = record.firstAt; journey.metadata = record.metadata || {}; }
     grouped.set(record.journeyKey, journey);
   }
-  const empty = () => ({ journeys: 0, premiumPageViews: 0, membershipClicks: 0, webClicks: 0, connectedAccounts: 0, trialsStarted: 0, confirmedNewMemberships: 0, paidAccessObserved: 0 });
+  const empty = () => ({ journeys: 0, guidePageViews: 0, premiumPageViews: 0, membershipClicks: 0, webClicks: 0, connectedAccounts: 0, trialsStarted: 0, confirmedNewMemberships: 0, paidAccessObserved: 0 });
   const total = empty();
   const sources = new Map();
+  const landings = new Map();
   const matched = new Set();
   const paid = new Set();
   for (const [key, journey] of grouped) {
     const source = marketingMetadata(journey.metadata).source || "unattributed";
     const row = sources.get(source) || empty();
+    const landing = marketingMetadata(journey.metadata).page || "unattributed";
+    const landingRow = landings.get(landing) || empty();
     const accountId = journeyOwners.get(key);
     // One account can navigate through multiple anonymous landing pages. Count
     // its conversion once, attributing to the earliest measured journey below.
     journey.accountId = accountId;
     journey.connectedAt = journeyConnections.get(key);
     journey.source = source;
-    for (const target of [total, row]) {
+    journey.landing = landing;
+    for (const target of [total, row, landingRow]) {
       target.journeys++;
+      if (journey.events.has("guide_page_view")) target.guidePageViews++;
       if (journey.events.has("premium_page_view")) target.premiumPageViews++;
       if (journey.events.has("membership_clicked")) target.membershipClicks++;
       if (journey.events.has("web_clicked")) target.webClicks++;
     }
     sources.set(source, row);
+    landings.set(landing, landingRow);
   }
   for (const journey of [...grouped.values()].sort((a, b) => a.firstAt.localeCompare(b.firstAt))) {
     const id = journey.accountId;
@@ -143,7 +150,7 @@ function summarizeMeasurements(records, journeys, verifiedLinks = []) {
     const account = accounts.get(id) || {};
     const row = sources.get(journey.source);
     const observed = event => (account.times?.[event] || []).some(time => time >= journey.firstAt);
-    for (const target of [total, row]) {
+    for (const target of [total, row, landings.get(journey.landing)]) {
       if (journey.connectedAt >= journey.firstAt) target.connectedAccounts++;
       if (observed("trial_started")) target.trialsStarted++;
       if (observed("subscription_started")) { target.confirmedNewMemberships++; paid.add(id); }
@@ -158,7 +165,7 @@ function summarizeMeasurements(records, journeys, verifiedLinks = []) {
     if (account.checkout_opened && account.checkout_opened <= account.subscription_started) paymentAfterMembershipClick++;
   }
   return {
-    journeys: { ...total, bySource: Object.fromEntries([...sources].sort(([a], [b]) => a.localeCompare(b))), confirmedPaymentsNotMatchedToJourney: Math.max(0, payments - paid.size) },
+    journeys: { ...total, bySource: Object.fromEntries([...sources].sort(([a], [b]) => a.localeCompare(b))), byLandingPage: Object.fromEntries([...landings].sort(([a], [b]) => a.localeCompare(b))), confirmedPaymentsNotMatchedToJourney: Math.max(0, payments - paid.size) },
     paymentActivation: { confirmedNewMemberships: payments, paidAccessObservedAfterPayment: activated, accessNotYetObservedInWindow: payments - activated, paymentAfterMembershipPageClick: paymentAfterMembershipClick },
     playbackDiagnostics: { unit: "account-event-day", classification: "first recorded failure of each account per UTC day", ...diagnostics }
   };

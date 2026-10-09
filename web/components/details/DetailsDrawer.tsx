@@ -2,12 +2,12 @@
 import { useTranslation } from "@/lib/i18n";
 
 
-import { BadgeCheck, Bookmark, CalendarDays, Check, Clapperboard, Copy, Download, ExternalLink, EyeOff, Filter, Info, MapPin, Play, Search, Star, Trash2, TriangleAlert, UserCircle, X } from "lucide-react";
+import { BadgeCheck, Bookmark, CalendarDays, Check, Clapperboard, Copy, Download, ExternalLink, EyeOff, Filter, Folder, Info, MapPin, Play, Search, Star, Trash2, TriangleAlert, UserCircle, X } from "lucide-react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { MediaCard } from "@/components/media/MediaCard";
 import { RailScroller } from "@/components/media/RailScroller";
-import { config } from "@/lib/config";
+import { config, isDisabledTelegramSource, TELEGRAM_DISABLED_MESSAGE } from "@/lib/config";
 import { chooseDownloadFile, startManagedDownload, recordDownloadHandoff } from "@/lib/downloads";
 import { trackPremiumEvent } from "@/lib/premiumAnalytics";
 import { createPendingExternalPlayback } from "@/lib/externalPlayback";
@@ -308,7 +308,7 @@ function DetailsView({ item }: { item: MediaItem }) {
             <button type="button" className="primary" onClick={playBest}>
               <Play size={18} fill="currentColor" /> {translateUi(continueLabel)}
             </button>
-            <button type="button" className="secondary" onClick={() => setSourcePickerVisible(true)}>{translateUi("Sources")}</button>
+            <button type="button" className="secondary text-button" onClick={() => setSourcePickerVisible(true)}><Folder size={18} /> {translateUi("Sources")}</button>
             {inWatchlist ? (
               <button type="button" className="secondary text-button" onClick={() => void toggleWatchlist(displayItem)}><Trash2 size={18} /> {translateUi(" Remove")}</button>
             ) : (
@@ -520,13 +520,20 @@ function SourcePickerModal({
   const prefetchSignature = filtered.slice(0, 3).map((stream) => stream.url ?? "").join("|");
   useEffect(() => {
     filtered.slice(0, 3).forEach((stream) => {
+      if (isDisabledTelegramSource(stream)) return;
       if (!isUncachedDebridStream(stream)) prefetchDebridDirectUrl(stream.url);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefetchSignature]);
 
   const title = selectedEpisode ? `${item.title} - S${selectedEpisode.season} E${selectedEpisode.episode}` : item.title;
+  const rejectDisabledTelegram = (stream: StreamSource) => {
+    if (!isDisabledTelegramSource(stream)) return false;
+    onToast(TELEGRAM_DISABLED_MESSAGE);
+    return true;
+  };
   const openExternal = (player: "vlc" | "infuse", stream: StreamSource) => {
+    if (rejectDisabledTelegram(stream)) return;
     if (!stream.url) {
       onToast("This source has no direct URL for an external player.");
       return;
@@ -567,6 +574,7 @@ function SourcePickerModal({
   // Android: open in whichever player the user picks (VLC, MX Player, …) via the
   // system chooser — the equivalent of the iOS-only Infuse button.
   const openAnyPlayer = (stream: StreamSource) => {
+    if (rejectDisabledTelegram(stream)) return;
     if (!stream.url) {
       onToast("This source has no direct URL for an external player.");
       return;
@@ -588,10 +596,12 @@ function SourcePickerModal({
     void trackPremiumEvent(authClient, "external_playback_requested", { player: "chooser", entry: "sources" }, true);
   };
   const copyUrl = async (stream: StreamSource) => {
+    if (rejectDisabledTelegram(stream)) return;
     const copied = await copyStreamUrl(stream).catch(() => false);
     onToast(copied ? "Stream URL copied." : "Could not copy this stream URL.");
   };
   const downloadSource = async (stream: StreamSource) => {
+    if (rejectDisabledTelegram(stream)) return;
     void trackPremiumEvent(authClient, "download_requested", { entry: "sources" }, true);
     if (!stream.url) {
       void trackPremiumEvent(authClient, "download_failed", { stage: "missing_url" }, true);
@@ -715,10 +725,13 @@ function SourcePickerModal({
             </p>
           )}
           {filtered.map((stream, index) => {
-            const locked = !stream.url;
+            const telegramDisabled = isDisabledTelegramSource(stream);
+            const locked = !stream.url || telegramDisabled;
             const uncached = isUncachedDebridStream(stream);
             const plan = playbackPlan(stream);
-            const playback = sourcePlaybackPresentation(stream, plan, uncached);
+            const playback = telegramDisabled
+              ? sourcePlaybackPresentation({ url: null }, { ...plan, detail: TELEGRAM_DISABLED_MESSAGE }, uncached)
+              : sourcePlaybackPresentation(stream, plan, uncached);
             const StatusIcon = playback.state === "blocked" ? TriangleAlert : Info;
             return (
               <article key={`${stream.addonId}-${stream.url ?? stream.source}`} className={`source-picker-row ${locked ? "is-locked" : ""}`}>
@@ -731,7 +744,7 @@ function SourcePickerModal({
                       <StatusIcon size={13} aria-hidden="true" style={{ flexShrink: 0 }} />
                       <span>{translateUi(playback.label)}</span>
                     </span>
-                    {playback.detail && <span className="source-warning">{translateUi(playback.detail)}</span>}
+                    {(telegramDisabled || playback.detail) && <span className="source-warning">{telegramDisabled ? TELEGRAM_DISABLED_MESSAGE : translateUi(playback.detail)}</span>}
                   </span>
                   <span className="stream-badges">
                     {streamBadges(stream).map((badge) => (
@@ -741,8 +754,8 @@ function SourcePickerModal({
                 </span>
                 <span className="source-side">
                   <b>{stream.quality || translateUi("Unknown")}</b>
-                  <small>{locked ? translateUi("Needs resolver") : playback.state === "conversion" ? translateUi("Conversion required") : playback.state === "blocked" ? translateUi("Not browser-playable") : translateUi("Unverified")}</small>
-                  <span className="source-row-actions">
+                  <small>{telegramDisabled ? translateUi("Not browser-playable") : locked ? translateUi("Needs resolver") : playback.state === "conversion" ? translateUi("Conversion required") : playback.state === "blocked" ? translateUi("Not browser-playable") : translateUi("Unverified")}</small>
+                  {!telegramDisabled && <span className="source-row-actions">
                     {playback.canTryBrowser && <button type="button" className="source-action primary-action" aria-label={playback.state === "conversion" ? translateUi("Try provider conversion in browser") : translateUi("Try browser playback")} title={translateUi(playback.detail) || translateUi("Try browser playback")} onClick={() => { playStream(stream, { forceBrowser: true }); onClose(); }}><Play size={13} /> {translateUi(" Try")}</button>}
                     <button
                       type="button"
@@ -759,7 +772,7 @@ function SourcePickerModal({
                     <button type="button" className="source-action icon-only" disabled={locked} onClick={() => void copyUrl(stream)} aria-label={translateUi("Copy stream URL")}>
                       <Copy size={13} />
                     </button>
-                  </span>
+                  </span>}
                 </span>
               </article>
             );
@@ -907,7 +920,7 @@ function buildContinueLabel(item: MediaItem, selectedEpisode: { season: number; 
   const season = selectedEpisode?.season ?? item.seasonNumber ?? null;
   const episode = selectedEpisode?.episode ?? item.episodeNumber ?? null;
   if (item.mediaType === "tv") {
-    return season && episode ? `Continue S${season} E${episode}` : "Choose episode";
+    return season != null && episode != null ? `Continue S${season} E${episode}` : "Choose episode";
   }
   const progress = item.progress ?? 0;
   return progress >= 1 && progress <= 94 ? `Continue ${Math.round(progress)}%` : "Play";
@@ -933,8 +946,8 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
 }) {
   const translateUi = useTranslation();
   const { openContextMenu, setToast, settings, toggleWatched } = useApp();
-  const seasons = item.seasons ?? [];
-  const [season, setSeason] = useState(seasons[0]?.seasonNumber ?? 1);
+  const seasons = (item.seasons ?? []).filter(entry => entry.seasonNumber > 0 || settings.includeSpecials || item.seasonNumber === 0);
+  const [season, setSeason] = useState(selectedEpisode?.season ?? item.seasonNumber ?? seasons[0]?.seasonNumber ?? 1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -1064,7 +1077,8 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
           </p>
         ) : null}
         {!loading && episodes.map((episode) => {
-          const active = selectedEpisode?.season === season && selectedEpisode?.episode === episode.episodeNumber;
+          const active = (selectedEpisode?.season ?? item.seasonNumber) === season &&
+            (selectedEpisode?.episode ?? item.episodeNumber) === episode.episodeNumber;
           const episodeRating = episode.imdbRating || (episode.voteAverage && episode.voteAverage > 0 ? episode.voteAverage.toFixed(1) : "");
           const watched = isWatched(item, season, episode.episodeNumber);
           return (

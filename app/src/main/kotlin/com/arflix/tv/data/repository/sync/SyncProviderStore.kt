@@ -88,7 +88,8 @@ internal fun repairUnavailableTrackingReadMode(
 @Singleton
 class SyncProviderStore @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val simklV2: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null
 ) {
     private companion object {
         const val SIMKL_TOKEN_ALIAS = "arvio_simkl_access_token"
@@ -165,7 +166,7 @@ class SyncProviderStore @Inject constructor(
         val settings = context.settingsDataStore.data.first()
         val credentials = context.traktDataStore.data.first()
         val hasTrakt = !credentials[traktAccessTokenKey()].isNullOrBlank()
-        val hasSimkl = !SecureStorage.decrypt(credentials[simklAccessTokenKey()], SIMKL_TOKEN_ALIAS).isNullOrBlank()
+        val hasSimkl = simklV2?.isConnected() == true || !SecureStorage.decrypt(credentials[simklAccessTokenKey()], SIMKL_TOKEN_ALIAS).isNullOrBlank()
         val hasMdbList = !credentials[mdbListKey()].isNullOrBlank() || !credentials[mdbListAccessTokenKey()].isNullOrBlank()
         val fallback = defaultTrackingReadMode(
             hasTrakt = hasTrakt,
@@ -256,7 +257,7 @@ class SyncProviderStore @Inject constructor(
         val settings = context.settingsDataStore.data.first()
         val credentials = context.traktDataStore.data.first()
         val hasTrakt = !credentials[profileManager.profileStringKeyFor(profileId, "trakt_access_token")].isNullOrBlank()
-        val hasSimkl = !SecureStorage.decrypt(credentials[simklAccessTokenKeyFor(profileId)], SIMKL_TOKEN_ALIAS).isNullOrBlank()
+        val hasSimkl = simklV2?.isConnected(profileId) == true || !SecureStorage.decrypt(credentials[simklAccessTokenKeyFor(profileId)], SIMKL_TOKEN_ALIAS).isNullOrBlank()
         val hasMdbList = !credentials[mdbListKeyFor(profileId)].isNullOrBlank() || !credentials[mdbListAccessTokenKeyFor(profileId)].isNullOrBlank()
         val currentProvider = SyncProvider.fromStorage(settings[providerKeyFor(profileId)])
         val connected = when (provider) {
@@ -308,7 +309,7 @@ class SyncProviderStore @Inject constructor(
         setWriteTarget(provider, false, profileId)
         val credentials = context.traktDataStore.data.first()
         val hasTrakt = !credentials[profileManager.profileStringKeyFor(profileId, "trakt_access_token")].isNullOrBlank()
-        val hasSimkl = !SecureStorage.decrypt(credentials[simklAccessTokenKeyFor(profileId)], SIMKL_TOKEN_ALIAS).isNullOrBlank()
+        val hasSimkl = simklV2?.isConnected(profileId) == true || !SecureStorage.decrypt(credentials[simklAccessTokenKeyFor(profileId)], SIMKL_TOKEN_ALIAS).isNullOrBlank()
         val hasMdbList = !credentials[mdbListKeyFor(profileId)].isNullOrBlank() || !credentials[mdbListAccessTokenKeyFor(profileId)].isNullOrBlank()
         val settings = context.settingsDataStore.data.first()
         val replacement = defaultTrackingReadMode(
@@ -353,6 +354,7 @@ class SyncProviderStore @Inject constructor(
         profileManager.profileStringKeyFor(profileId, "simkl_sync_watermark")
 
     suspend fun getSimklAccessToken(): String? {
+        if (simklV2?.isConnected() == true) return simklV2.accessToken()
         val prefs = context.traktDataStore.data.first()
         val stored = prefs[simklAccessTokenKey()]
         val token = SecureStorage.decrypt(stored, SIMKL_TOKEN_ALIAS)

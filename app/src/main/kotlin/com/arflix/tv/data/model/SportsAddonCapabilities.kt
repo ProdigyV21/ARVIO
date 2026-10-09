@@ -188,13 +188,14 @@ object SportsAddonCapabilities {
         streamAddonId: String? = null,
         title: String? = null,
         isLiveStream: Boolean = false,
-        addons: List<Addon> = emptyList()
+        addons: List<Addon> = emptyList(),
+        isAddonNative: Boolean = false
     ): Boolean {
         if (isLiveStream) return true
         if (status != null && (isSportsHomeStatus(status) || status.startsWith("iptv:") || status.startsWith("live:") || status.startsWith("channel:"))) {
             return true
         }
-        if (id != null && id <= 0) {
+        if (id != null && id <= 0 && !isAddonNative) {
             return true
         }
         if (!streamAddonId.isNullOrBlank()) {

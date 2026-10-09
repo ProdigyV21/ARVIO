@@ -1,58 +1,149 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Subtitles on TV, iPad, Windows and Mac - ARVIO</title>
-  <meta name="description" content="Use ARVIO's optional AI subtitle translation tools across Android TV, iPhone, iPad, Windows and Mac with your own supported AI credentials.">
-  <link rel="canonical" href="https://arvio.tv/ai-subtitles-android-tv/">
-  <!-- hreflang:start -->
-  <link rel="alternate" hreflang="en" href="https://arvio.tv/ai-subtitles-android-tv/">
-  <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/legendas-ia-android-tv/">
-  <link rel="alternate" hreflang="es" href="https://arvio.tv/es/subtitulos-ia-android-tv/">
-  <link rel="alternate" hreflang="x-default" href="https://arvio.tv/ai-subtitles-android-tv/">
-  <!-- hreflang:end --><link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
-  <meta property="og:type" content="website"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="AI Subtitles across TV, iPad, Windows and Mac"><meta property="og:description" content="Optional subtitle translation tools inside ARVIO's Android and browser players."><meta property="og:url" content="https://arvio.tv/ai-subtitles-android-tv/"><meta property="og:image" content="https://arvio.tv/assets/a9f9dd6c-4a0c-4ff5-b6d8-4cb8890875f6.webp">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="AI Subtitles across supported devices"><meta name="twitter:description" content="Bring your own supported AI account and manage subtitles from ARVIO's player."><meta name="twitter:image" content="https://arvio.tv/assets/a9f9dd6c-4a0c-4ff5-b6d8-4cb8890875f6.webp">
-  <script type="application/ld+json">
-  {"@context":"https://schema.org","@graph":[
-    {"@type":"SoftwareApplication","name":"ARVIO","applicationCategory":"MultimediaApplication","operatingSystem":"Android TV, Google TV, Android","url":"https://arvio.tv/ai-subtitles-android-tv/","downloadUrl":"https://play.google.com/store/apps/details?id=com.arvio.tv","codeRepository":"https://github.com/ProdigyV21/ARVIO","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"An open-source Android media player with subtitle search, styling and optional bring-your-own AI subtitle tools."},
-    {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"AI subtitles on Android TV","item":"https://arvio.tv/ai-subtitles-android-tv/"}]},
-    {"@type":"FAQPage","mainEntity":[
-      {"@type":"Question","name":"Does ARVIO include an AI subscription?","acceptedAnswer":{"@type":"Answer","text":"No. AI subtitle features are optional and require the user's own supported provider credentials. Provider charges and limits may apply."}},
-      {"@type":"Question","name":"Can subtitles be moved onto black bars?","acceptedAnswer":{"@type":"Answer","text":"ARVIO provides subtitle position and styling controls, and supported player layouts can place subtitles relative to the full display rather than only the encoded video area."}},
-      {"@type":"Question","name":"Are AI subtitles always accurate?","acceptedAnswer":{"@type":"Answer","text":"No. Generated or translated subtitles can contain timing, transcription or translation errors and should be treated as an assistive option, not an authoritative transcript."}}
-    ]}
-  ]}
-  </script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Subtitle Translation on Android TV: Groq &amp; Gemini | ARVIO</title>
+<meta name="description" content="Translate subtitles in ARVIO on Android TV with your own Groq or Gemini API key. Set your language, choose a subtitle source and troubleshoot AI translation.">
+<link rel="canonical" href="https://arvio.tv/ai-subtitles-android-tv/">
+<!-- hreflang:start -->
+<link rel="alternate" hreflang="en" href="https://arvio.tv/ai-subtitles-android-tv/">
+<link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/legendas-ia-android-tv/">
+<link rel="alternate" hreflang="es" href="https://arvio.tv/es/subtitulos-ia-android-tv/">
+<link rel="alternate" hreflang="x-default" href="https://arvio.tv/ai-subtitles-android-tv/">
+<!-- hreflang:end -->
+<link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
+<meta property="og:type" content="article"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="AI Subtitle Translation on Android TV: Groq &amp; Gemini | ARVIO"><meta property="og:description" content="Translate subtitles in ARVIO on Android TV with your own Groq or Gemini API key. Set your language, choose a subtitle source and troubleshoot AI translation."><meta property="og:url" content="https://arvio.tv/ai-subtitles-android-tv/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/02-details.webp">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="AI Subtitle Translation on Android TV: Groq &amp; Gemini | ARVIO"><meta name="twitter:description" content="Translate subtitles in ARVIO on Android TV with your own Groq or Gemini API key. Set your language, choose a subtitle source and troubleshoot AI translation."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/02-details.webp">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "AI subtitle translation on Android TV with Groq or Gemini.",
+      "description": "Translate subtitles in ARVIO on Android TV with your own Groq or Gemini API key. Set your language, choose a subtitle source and troubleshoot AI translation.",
+      "inLanguage": "en",
+      "url": "https://arvio.tv/ai-subtitles-android-tv/",
+      "dateModified": "2026-10-05",
+      "author": {
+        "@type": "Organization",
+        "name": "ARVIO",
+        "url": "https://arvio.tv/"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "ARVIO",
+          "item": "https://arvio.tv/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Guides",
+          "item": "https://arvio.tv/guides/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "AI subtitle translation",
+          "item": "https://arvio.tv/ai-subtitles-android-tv/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does ARVIO include an AI subscription?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. AI subtitle translation is optional and uses your own Groq or Gemini API key. Provider billing, quotas and model availability apply separately from ARVIO."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is AI subtitle translation unavailable?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Check that AI translation is enabled, the selected provider matches your API key and a target subtitle language is set. The text-translation path also needs an eligible readable subtitle source; image-based PGS tracks do not supply text."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why did translation stop or show the original text?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Check the API key, account quota, billing requirements, network connection and provider availability. Translation can pause or fall back when requests fail or are rate-limited. Switch to an ordinary subtitle track while resolving the provider issue."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does translating subtitles fix bad timing?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Translation follows the source subtitle cues. Use subtitle offset controls or choose a better synchronized source if the original track appears early or late."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can subtitles be moved onto black bars?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ARVIO offers subtitle position and styling controls, and supported player layouts can position text relative to the full display. The result depends on the player, video aspect ratio and available display space."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are AI-translated subtitles always accurate?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Translations may contain errors, omit context or mishandle names and dialogue. Review the output and keep a regular subtitle track available as a fallback."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
 </head>
-<body>
-  <a class="skip-link" href="#content">Skip to content</a>
-  <header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
-  <main id="content">
-    <section class="hero"><img class="hero-media" src="/assets/a9f9dd6c-4a0c-4ff5-b6d8-4cb8890875f6.webp" alt="ARVIO player interface on a television"><div class="hero-shade" aria-hidden="true"></div><div class="hero-content"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>AI subtitles</span></nav><p class="eyebrow">Optional accessibility tools</p><h1>Subtitle control across TV, mobile and browser.</h1><p class="hero-copy">Use subtitle search and optional AI translation in the free Android app or ARVIO Web on iPhone, iPad, Windows and Mac. Bring your own supported AI account; availability depends on the player and source.</p><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Install ARVIO</a><a class="button secondary" href="/arvio-web/">Explore browser access</a></div></div></section>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>AI subtitle translation</span></nav>
+<p class="eyebrow">Free Android app · Optional integrations</p><h1>AI subtitle translation on Android TV with Groq or Gemini.</h1><p class="lead">When a usable subtitle track exists but not in your preferred language, ARVIO can translate its text during playback. Use your own Groq or Gemini credentials, choose your subtitle language and keep control over the original track. The Android app is free; AI-provider charges and limits are separate.</p>
+<div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get the free Android app</a><a class="button secondary" href="#setup">Setup instructions</a></div>
+<p class="guide-updated">Updated 5 October 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#setup">Set up translation</a><a href="#tracks">Subtitle sources</a><a href="#browser">Browser translation</a><a href="#privacy">Costs and privacy</a><a href="#help">Troubleshooting</a></nav></div></section>
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/02-details.webp" alt="ARVIO Android TV series details screen with episode cards and a continue-playback button" width="1920" height="1080" loading="lazy" decoding="async"><figcaption>ARVIO's Android TV title screen. Subtitle choices are made during playback; this is not an AI translation demonstration.</figcaption></figure></div></section>
 
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Built around playback</p><h2>Find, adapt and read subtitles from the remote.</h2><p>ARVIO keeps common subtitle actions available without turning the television into a desktop editor.</p></div><div class="feature-list">
-      <article class="feature-item"><h3>Subtitle source search</h3><p>Search compatible subtitle services and attached tracks for the current movie or episode.</p></article>
-      <article class="feature-item"><h3>AI-assisted fallback</h3><p>Use supported generation or translation workflows with credentials from your own AI provider account.</p></article>
-      <article class="feature-item"><h3>Timing adjustment</h3><p>Correct subtitles that appear early or late without leaving the active playback session.</p></article>
-      <article class="feature-item"><h3>Readable styling</h3><p>Adjust size, color, background and other supported appearance options for the display and viewing distance.</p></article>
-      <article class="feature-item"><h3>Screen-aware position</h3><p>Place text relative to the display layout, including supported black-bar space, rather than forcing every subtitle over the picture.</p></article>
-      <article class="feature-item"><h3>Cross-device preferences</h3><p>Keep supported language and AI subtitle settings with the relevant ARVIO profile across Android and the optional browser companion.</p></article>
-    </div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Using AI responsibly</p><h2>Your credentials, your provider, your choice.</h2></div><div class="steps"><article class="step"><h3>Configure a supported provider</h3><p>Add your own API credential in ARVIO settings. ARVIO does not bundle a paid AI subscription.</p></article><article class="step"><h3>Choose the subtitle action</h3><p>Search existing tracks first, then use an available AI action when generation or translation is appropriate.</p></article><article class="step"><h3>Review during playback</h3><p>Generated text can be imperfect, so check timing and meaning and switch tracks when needed.</p></article></div></div></section>
-
-    <section class="section compact"><div class="shell"><div class="note"><h2>Accuracy and privacy vary</h2><p>AI output may contain errors. Media-derived text or subtitle content may be sent to the AI provider selected by the user, subject to that provider's privacy terms, retention policy, account limits and charges. Do not configure a provider you do not trust.</p></div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions</p><h2>AI subtitle FAQ</h2></div><div class="faq-list">
-      <details><summary>Does ARVIO include an AI subscription?</summary><p>No. AI subtitle features are optional and require your own supported provider credentials. Provider charges and limits may apply.</p></details>
-      <details><summary>Can subtitles be moved onto black bars?</summary><p>ARVIO provides subtitle position and styling controls, and supported player layouts can place subtitles relative to the full display rather than only the encoded video area.</p></details>
-      <details><summary>Are AI subtitles always accurate?</summary><p>No. Generated or translated subtitles can contain timing, transcription or translation errors and should be treated as an assistive option, not an authoritative transcript.</p></details>
-    </div></div></section>
-
-    <section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>More of the playback experience.</h2></div><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><small>Overview</small><strong>Android TV media hub</strong><span>All supported services and playback tools.</span></a><a class="related-link" href="/jellyfin-android-tv/"><small>Home servers</small><strong>Jellyfin on Android TV</strong><span>Libraries, media versions and playback.</span></a><a class="related-link" href="/fire-tv-media-player/"><small>Devices</small><strong>ARVIO on Fire TV</strong><span>Compatibility outside Google Play devices.</span></a></div></div></section>
-    <section class="cta-band"><div class="shell cta-inner"><div><h2>Make subtitles fit the way you watch.</h2><p>Start with the free, open-source Android app.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
-  </main>
-  <footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>Optional AI tools require your own provider account.</span></div></div></footer>
+<section class="section" id="setup"><div class="shell guide-reading"><p class="eyebrow">Step by step</p><h2>How to translate subtitles on Android TV.</h2><ol class="setup-list">
+<li><h3>Install ARVIO and choose your subtitle language</h3><p>Get the free app from <a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a> or the <a href="https://github.com/ProdigyV21/ARVIO/releases/latest">official GitHub release</a>. Set your preferred subtitle language in settings; translation needs a target language.</p></li>
+<li><h3>Configure the AI Subtitles controls</h3><p>In Settings, find AI Subtitles, available within General on TV layouts. Enable AI Subtitle Translation and select Groq or Google Gemini under AI Model. Labels and grouping can vary with layout and app version.</p></li>
+<li><h3>Add the matching provider key</h3><p>Enter your own API Key for the selected provider. Android settings also offer Scan QR Code to Set Key so you can enter the credential through your phone instead of a TV remote. Keep the key private and check the provider's account requirements.</p></li>
+<li><h3>Play a title with readable subtitles</h3><p>Open the player's subtitle menu and choose its available AI translation option. This path needs an eligible text subtitle source. Try an embedded or external text track rather than assuming that a file without subtitles will work.</p></li>
+<li><h3>Check meaning and timing</h3><p>Compare translated text with the original. If it is late or inaccurate, switch back to a regular track or choose another source. Auto-Select AI Translation is optional and still requires suitable source text.</p></li></ol></div></section>
+<section class="section" id="tracks"><div class="shell"><div class="section-head"><p class="eyebrow">Choose the right tool</p><h2>Subtitle translation, search and styling are different.</h2><p>Translated cues follow the source track's timing. Translating poorly synchronized subtitles does not automatically correct their timestamps.</p></div><div class="feature-list">
+<article class="feature-item"><h3>Find an existing subtitle first</h3><p>Check embedded tracks or search compatible subtitle sources. A good original track in your preferred language can avoid AI costs and translation errors entirely.</p></article>
+<article class="feature-item"><h3>Translate readable text</h3><p>AI subtitle translation works on text. Image-based PGS tracks do not provide readable text for this path. If no eligible source appears, try a different text track or an authorized external subtitle source.</p></article>
+<article class="feature-item"><h3>Adjust timing separately</h3><p>Use subtitle offset controls when text appears early or late. Translation does not reconstruct missing lines or repair the source's timing automatically.</p></article>
+<article class="feature-item"><h3>Make subtitles readable from the sofa</h3><p>Adjust supported subtitle size, colour, style and position. Supported layouts can position text relative to the full display, including available black-bar space, rather than always covering the picture.</p></article></div></div></section>
+<section class="section" id="browser"><div class="shell guide-reading"><p class="eyebrow">A separate player implementation</p><h2>Translate subtitles in ARVIO Web.</h2><p>Open Settings → AI Subtitles, enable AI subtitle enhancement, select Groq or Gemini under AI model and enter AI API key. In the player, open Subtitles and choose AI translation when an eligible English subtitle source is available. Set your preferred subtitle language before testing.</p><p>The browser implementation translates existing subtitle cues; it is not an arbitrary audio-to-text transcription service. Embedded subtitle access and playback capabilities depend on the browser and source. Do not assume Android and browser players offer identical controls.</p><p>Free self-hosted browser profiles and settings stay local to that browser. Optional managed hosting and supported ARVIO Cloud preferences are separate; see the <a href="/arvio-web/">ARVIO Web setup guide</a>.</p></div></section>
+<section class="section compact" id="privacy"><div class="shell guide-reading"><div class="note"><h2>Check AI costs and privacy before enabling translation.</h2><div><p>ARVIO does not include an AI subscription or guarantee free unlimited translation. Your provider may require billing, impose quotas or change model availability. Check <a href="https://console.groq.com/docs/rate-limits">Groq's rate limits</a> or <a href="https://ai.google.dev/gemini-api/docs/billing">Gemini API billing documentation</a> rather than relying on a fixed per-movie estimate.</p><p>Subtitle text is sent to the selected provider. Review its privacy and retention terms before using sensitive content. AI translations can lose context, mistranslate names or contain errors. They are not authoritative transcripts or guaranteed accessibility captions.</p></div></div></div></section>
+<section class="section" id="help"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions and troubleshooting</p><h2>AI subtitle translation FAQ.</h2></div><div class="faq-list"><details><summary>Does ARVIO include an AI subscription?</summary><p>No. AI subtitle translation is optional and uses your own Groq or Gemini API key. Provider billing, quotas and model availability apply separately from ARVIO.</p></details>
+<details><summary>Why is AI subtitle translation unavailable?</summary><p>Check that AI translation is enabled, the selected provider matches your API key and a target subtitle language is set. The text-translation path also needs an eligible readable subtitle source; image-based PGS tracks do not supply text.</p></details>
+<details><summary>Why did translation stop or show the original text?</summary><p>Check the API key, account quota, billing requirements, network connection and provider availability. Translation can pause or fall back when requests fail or are rate-limited. Switch to an ordinary subtitle track while resolving the provider issue.</p></details>
+<details><summary>Does translating subtitles fix bad timing?</summary><p>No. Translation follows the source subtitle cues. Use subtitle offset controls or choose a better synchronized source if the original track appears early or late.</p></details>
+<details><summary>Can subtitles be moved onto black bars?</summary><p>ARVIO offers subtitle position and styling controls, and supported player layouts can position text relative to the full display. The result depends on the player, video aspect ratio and available display space.</p></details>
+<details><summary>Are AI-translated subtitles always accurate?</summary><p>No. Translations may contain errors, omit context or mishandle names and dialogue. Review the output and keep a regular subtitle track available as a fallback.</p></details></div></div></section>
+<section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>More ways to use ARVIO.</h2></div><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><strong>Android TV installation</strong><span>Get the free app and set up playback.</span></a><a class="related-link" href="/jellyfin-android-tv/"><strong>Jellyfin on Android TV</strong><span>Use subtitles with your own server media.</span></a><a class="related-link" href="/stremio-addons-android-tv/"><strong>Compatible subtitle addons</strong><span>Understand addon setup and compatibility.</span></a></div></div></section>
+<section class="cta-band"><div class="shell cta-inner"><div><h2>Start with the free Android app.</h2><p>Connect only sources and accounts you are authorized to use.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO provides software, not media subscriptions.</span></div></div></footer>
 </body>
 </html>

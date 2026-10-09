@@ -21,6 +21,7 @@ export function completionTimes(movies: unknown[], shows: unknown[]): Map<string
     const row = raw as WatchedRow;
     const id = row.show?.ids?.tmdb;
     if (!id) continue;
+    if (row.status === "completed") add(`tv:${id}`, row.last_watched_at);
     for (const season of row.seasons ?? []) {
       for (const episode of season.episodes ?? []) {
         add(`tv:${id}:${season.number}:${episode.number}`, episode.last_watched_at);
@@ -35,8 +36,9 @@ export function pruneCompletedResume(items: MediaItem[], completions: Map<string
   const next = items.filter((item) => {
     const key = item.mediaType === "tv"
       ? `tv:${item.id}:${item.seasonNumber}:${item.episodeNumber}` : `movie:${item.id}`;
-    if (!completions.has(key)) return true;
-    const completedAt = completions.get(key) ?? 0;
+    const wholeShow = item.mediaType === "tv" ? `tv:${item.id}` : key;
+    if (!completions.has(key) && !completions.has(wholeShow)) return true;
+    const completedAt = Math.max(completions.get(key) ?? 0, completions.get(wholeShow) ?? 0);
     if (item.mediaType === "tv" && item.badge === "Up Next" && completedAt > 0) {
       // activityAt is the show's latest watch (possibly a DIFFERENT episode).
       // It must not make an already watched episode look like a new rewatch.

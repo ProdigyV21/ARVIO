@@ -41,6 +41,11 @@ class CloudSyncInvalidationBus @Inject constructor() {
 
     fun markDirty(scope: CloudSyncScope, profileId: String? = null, reason: String = "") {
         if (isApplyingRemoteState) return
+        markUserDirty(scope, profileId, reason)
+    }
+
+    /** Explicit user edits must not be swallowed by an unrelated in-flight remote restore. */
+    fun markUserDirty(scope: CloudSyncScope, profileId: String? = null, reason: String = "") {
         _events.tryEmit(
             CloudSyncInvalidation(
                 scope = scope,

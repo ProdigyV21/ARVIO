@@ -1,3 +1,6 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 // Build stamp for the in-app update watcher. iOS home-screen webapps cache the
 // start page HTML aggressively (days) with no service worker to bust it — the
 // client compares its baked-in stamp against /version.json (no-store) and
@@ -6,6 +9,7 @@
 // config must never rewrite a public version file during packaging or dev.
 const buildStamp = process.env.ARVIO_BUILD_STAMP || String(Date.now());
 process.env.ARVIO_BUILD_STAMP = buildStamp;
+const telegramEnabled = process.env.NEXT_PUBLIC_TELEGRAM_ENABLED !== "false";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -18,6 +22,9 @@ const nextConfig = {
     NEXT_PUBLIC_BUILD_STAMP: buildStamp,
     // Deployment mode is fixed at build time, never selected by a visitor.
     NEXT_PUBLIC_SELF_HOSTED: process.env.NEXT_PUBLIC_SELF_HOSTED === "true" ? "true" : "false",
+    // Only the independently built Unraid preview disables this integration.
+    // Missing configuration keeps the hosted application's current behavior.
+    NEXT_PUBLIC_TELEGRAM_ENABLED: telegramEnabled ? "true" : "false",
     // APP_ANON_KEY is intentionally a public client key (the same value is
     // bundled in Android). Expose it under Next's browser-visible name so a
     // production deploy cannot silently lose ARVIO Cloud login/sync when the
@@ -29,7 +36,9 @@ const nextConfig = {
     NEXT_PUBLIC_TRAKT_CLIENT_ID:
       process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID || process.env.TRAKT_CLIENT_ID || "",
     NEXT_PUBLIC_SIMKL_CLIENT_ID:
-      process.env.NEXT_PUBLIC_SIMKL_CLIENT_ID || process.env.SIMKL_CLIENT_ID || ""
+      process.env.NEXT_PUBLIC_SIMKL_CLIENT_ID || process.env.SIMKL_CLIENT_ID || "",
+    NEXT_PUBLIC_SIMKL_V2_CLIENT_ID:
+      process.env.NEXT_PUBLIC_SIMKL_V2_CLIENT_ID || process.env.SIMKL_V2_CLIENT_ID || ""
   },
   images: {
     remotePatterns: [
@@ -37,7 +46,28 @@ const nextConfig = {
       { protocol: "https", hostname: "**" }
     ]
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, nextRuntime }) => {
+    if (!telegramEnabled) {
+      config.resolve = config.resolve ?? {};
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "@/lib/telegram$": resolve(process.cwd(), "lib/telegram-disabled.ts"),
+        telegram: false,
+        "@cryptography/aes": false
+      };
+      config.plugins.push({
+        apply(compiler) {
+          compiler.hooks.done.tap("UnraidDependencyInventory", stats => {
+            const directory = join(process.cwd(), process.env.ARVIO_BUILD_DIR || ".next", "dependency-audit");
+            mkdirSync(directory, { recursive: true });
+            const name = isServer ? `server-${nextRuntime || "nodejs"}` : "client";
+            writeFileSync(join(directory, `${name}.json`), JSON.stringify(stats.toJson({
+              all: false, modules: true, nestedModules: true, children: true
+            })));
+          });
+        }
+      });
+    }
     // GramJS (the browser-side Telegram/MTProto client used by lib/telegram)
     // imports Node core modules for its Node TCP transport and StoreSession. In
     // the browser it uses WebSocket + StringSession instead, so stub the Node-only

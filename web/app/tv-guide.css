@@ -58,6 +58,7 @@
 .tv-guide-workspace .livetv-detail-art { max-height: calc(clamp(210px, 28dvh, 286px) - 24px); }
 .tv-guide-workspace .livetv-detail > :not(.livetv-detail-art) { grid-column: 1; margin: 0; }
 .tv-guide-workspace .livetv-detail h2 { font-size: 30px; }
+.tv-guide-workspace .livetv-program-title { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .tv-guide-workspace .livetv-channel-identity { color: #bfc3ca; font-size: 14px; display: flex; gap: 12px; align-items: center; min-height: 32px; }
 .tv-guide-workspace .tv-identity-logo { width: 72px; height: 32px; flex: none; overflow: hidden; }
 .tv-guide-workspace .tv-identity-logo > span { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }

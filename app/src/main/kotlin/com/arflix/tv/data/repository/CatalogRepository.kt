@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import com.arflix.tv.network.OkHttpProvider
+import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -70,7 +71,8 @@ class CatalogRepository @Inject constructor(
     private val profileManager: ProfileManager,
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient,
-    private val invalidationBus: CloudSyncInvalidationBus
+    private val invalidationBus: CloudSyncInvalidationBus,
+    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null
 ) {
     private val bundledPreinstalledCatalogsById by lazy {
         // Imported collections change at runtime, so they must not be frozen into
@@ -680,14 +682,18 @@ class CatalogRepository @Inject constructor(
         )
     }
 
+    // Addons may declare any catalog type (AIOMetadata's "anime"/"all"/custom display
+    // types, "Podcasts", debrid "other"). Unknown types keep their spelling: the addon
+    // routes /catalog/{type}/ by it, case included.
     private fun normalizeAddonCatalogType(rawType: String?): String? {
-        return when (rawType?.trim()?.lowercase()) {
+        val trimmed = rawType?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return when (trimmed.lowercase()) {
             "movie" -> "movie"
             "series" -> "series"
             "tv" -> "tv"
             "show" -> "show"
             "shows" -> "shows"
-            else -> null
+            else -> trimmed
         }
     }
 
@@ -745,7 +751,7 @@ class CatalogRepository @Inject constructor(
             return Result.failure(CatalogException(R.string.catalog_pack_invalid_url_scheme))
         }
 
-        val json = fetchUrl(trimmed)
+        val json = fetchUrl(trimmed, fresh = true)
             ?: return Result.failure(CatalogException(R.string.catalog_pack_fetch_failed))
         val manifest = try {
             val type = object : com.google.gson.reflect.TypeToken<CatalogPackManifest>() {}.type
@@ -803,11 +809,14 @@ class CatalogRepository @Inject constructor(
             val sourceType = validation.sourceType
 
             // Skip if this URL is already added
-            if (current.any { it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
+            if (current.any { it.sourceUrl.equals(normalizedUrl, ignoreCase = true) || (sourceType == CatalogSourceType.SIMKL && it.sourceRef == "simkl_list:${CatalogUrlParser.parseSimkl(normalizedUrl)?.id}") }) {
                 continue
             }
 
-            val resolved = resolveMetadata(normalizedUrl, sourceType)
+            val resolved = try { resolveMetadata(normalizedUrl, sourceType) } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                return Result.failure(e)
+            }
                 ?: fallbackMetadata(normalizedUrl, sourceType)
                 ?: continue
 
@@ -847,7 +856,7 @@ class CatalogRepository @Inject constructor(
         val json = if (isRawJson) {
             trimmed
         } else {
-            fetchUrl(url ?: return null) ?: return if (url.endsWith(".json", ignoreCase = true)) {
+            fetchUrl(url ?: return null, fresh = true) ?: return if (url.endsWith(".json", ignoreCase = true)) {
                 Result.failure(CatalogException(R.string.catalog_pack_fetch_failed))
             } else {
                 null
@@ -889,6 +898,7 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun addCustomCatalog(rawUrl: String): Result<CatalogConfig> {
+        val targetProfileId = profileManager.getProfileIdSync()
         val validation = validateCatalogUrl(rawUrl)
         if (!validation.isValid || validation.normalizedUrl == null || validation.sourceType == null) {
             return Result.failure(CatalogException(validation.errorRes ?: R.string.catalog_url_invalid))
@@ -896,12 +906,16 @@ class CatalogRepository @Inject constructor(
 
         val normalizedUrl = validation.normalizedUrl
         val sourceType = validation.sourceType
-        val resolved = resolveMetadata(normalizedUrl, sourceType)
+        val resolved = try { resolveMetadata(normalizedUrl, sourceType) } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            return Result.failure(e)
+        }
             ?: fallbackMetadata(normalizedUrl, sourceType)
             ?: return Result.failure(CatalogException(R.string.catalog_failed_read_metadata))
 
-        val current = getCatalogs().toMutableList()
-        if (current.any { it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
+        if (targetProfileId != profileManager.getProfileIdSync()) return Result.failure(IllegalStateException("Profile changed while adding the catalogue. Please try again."))
+        val current = getCatalogsForProfile(targetProfileId).toMutableList()
+        if (current.any { it.sourceUrl.equals(normalizedUrl, ignoreCase = true) || (sourceType == CatalogSourceType.SIMKL && it.sourceRef == "simkl_list:${CatalogUrlParser.parseSimkl(normalizedUrl)?.id}") }) {
             return Result.failure(CatalogException(R.string.catalog_already_added))
         }
 
@@ -914,12 +928,13 @@ class CatalogRepository @Inject constructor(
             isPreinstalled = false
         )
         current.add(0, newCatalog)
-        saveCatalogs(current)
+        saveCatalogs(current, targetProfileId = targetProfileId)
         return Result.success(newCatalog)
     }
 
     suspend fun updateCustomCatalog(catalogId: String, rawUrl: String): Result<CatalogConfig> {
-        val current = getCatalogs().toMutableList()
+        val targetProfileId = profileManager.getProfileIdSync()
+        val current = getCatalogsForProfile(targetProfileId).toMutableList()
         val index = current.indexOfFirst { it.id == catalogId }
         if (index < 0) return Result.failure(CatalogException(R.string.catalog_not_found))
         val existing = current[index]
@@ -933,13 +948,18 @@ class CatalogRepository @Inject constructor(
         }
 
         val normalizedUrl = validation.normalizedUrl
-        if (current.any { it.id != catalogId && it.sourceUrl.equals(normalizedUrl, ignoreCase = true) }) {
+        if (current.any { it.id != catalogId && (it.sourceUrl.equals(normalizedUrl, ignoreCase = true) ||
+                (validation.sourceType == CatalogSourceType.SIMKL && it.sourceRef == "simkl_list:${CatalogUrlParser.parseSimkl(normalizedUrl)?.id}")) }) {
             return Result.failure(CatalogException(R.string.catalog_already_added))
         }
 
-        val resolved = resolveMetadata(normalizedUrl, validation.sourceType)
+        val resolved = try { resolveMetadata(normalizedUrl, validation.sourceType) } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            return Result.failure(e)
+        }
             ?: fallbackMetadata(normalizedUrl, validation.sourceType)
             ?: return Result.failure(CatalogException(R.string.catalog_failed_read_metadata))
+        if (targetProfileId != profileManager.getProfileIdSync()) return Result.failure(IllegalStateException("Profile changed while updating the catalogue. Please try again."))
         val updated = existing.copy(
             title = resolved.title,
             sourceType = validation.sourceType,
@@ -947,7 +967,7 @@ class CatalogRepository @Inject constructor(
             sourceRef = resolved.sourceRef
         )
         current[index] = updated
-        saveCatalogs(current)
+        saveCatalogs(current, targetProfileId = targetProfileId)
         return Result.success(updated)
     }
 
@@ -1068,6 +1088,11 @@ class CatalogRepository @Inject constructor(
                     )
                 }
             }
+            host == "simkl.com" || host == "www.simkl.com" -> {
+                val parsed = CatalogUrlParser.parseSimkl(normalized)
+                if (parsed == null) CatalogValidationResult(isValid = false, errorRes = R.string.catalog_url_simkl_hint)
+                else CatalogValidationResult(isValid = true, normalizedUrl = parsed.canonicalUrl, sourceType = CatalogSourceType.SIMKL)
+            }
             host == "mdblist.com" || host.endsWith(".mdblist.com") -> {
                 CatalogValidationResult(
                     isValid = true,
@@ -1096,6 +1121,12 @@ class CatalogRepository @Inject constructor(
     private suspend fun resolveMetadata(url: String, sourceType: CatalogSourceType): ResolvedCatalog? {
         return when (sourceType) {
             CatalogSourceType.TRAKT -> resolveTraktMetadata(url)
+            CatalogSourceType.SIMKL -> {
+                val parsed = CatalogUrlParser.parseSimkl(url) ?: return null
+                val list = simklListsRepository?.load(parsed.id)
+                    ?: throw com.arflix.tv.data.repository.simkl.SimklListsException("user_token_required")
+                ResolvedCatalog(list.name, "simkl_list:${list.id}")
+            }
             CatalogSourceType.MDBLIST -> resolveMdblistMetadata(url)
             CatalogSourceType.TMDB -> resolveTmdbMetadata(url)
             CatalogSourceType.PREINSTALLED -> null
@@ -1106,6 +1137,7 @@ class CatalogRepository @Inject constructor(
 
     private fun fallbackMetadata(url: String, sourceType: CatalogSourceType): ResolvedCatalog? {
         return when (sourceType) {
+            CatalogSourceType.SIMKL -> null
             CatalogSourceType.TRAKT -> {
                 when (val parsed = CatalogUrlParser.parseTrakt(url)) {
                     is ParsedCatalogUrl.TraktUserList -> {
@@ -1263,12 +1295,17 @@ class CatalogRepository @Inject constructor(
         return CatalogRepoRegexes.TRAKT_URL_REGEX.find(html)?.value
     }
 
-    private suspend fun fetchUrl(url: String): String? {
+    /**
+     * [fresh] skips the HTTP cache for user-initiated imports: re-importing an edited pack must
+     * not get the copy cached by the previous import.
+     */
+    private suspend fun fetchUrl(url: String, fresh: Boolean = false): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder()
                     .url(url)
                     .header("User-Agent", OkHttpProvider.userAgentOr("Mozilla/5.0 (Android TV; ARVIO)"))
+                    .apply { if (fresh) cacheControl(CacheControl.FORCE_NETWORK) }
                     .build()
                 okHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use null
@@ -1500,6 +1537,8 @@ class CatalogRepository @Inject constructor(
             // URL/ref evidence always wins over stale enum values from older builds.
             sourceRef?.startsWith(HomeServerRepository.CATALOG_SOURCE_REF_PREFIX, ignoreCase = true) == true -> CatalogSourceType.HOME_SERVER
             sourceRef?.startsWith(ADDON_SOURCE_REF_PREFIX, ignoreCase = true) == true -> CatalogSourceType.ADDON
+            sourceRef?.startsWith("simkl_list:", ignoreCase = true) == true -> CatalogSourceType.SIMKL
+            sourceUrl?.let { CatalogUrlParser.parseSimkl(it) } != null -> CatalogSourceType.SIMKL
             sourceRef?.startsWith("trakt_", ignoreCase = true) == true -> CatalogSourceType.TRAKT
             sourceRef?.startsWith("mdblist", ignoreCase = true) == true -> CatalogSourceType.MDBLIST
             sourceRef?.startsWith("tmdb:", ignoreCase = true) == true -> CatalogSourceType.TMDB
@@ -1507,6 +1546,7 @@ class CatalogRepository @Inject constructor(
             sourceUrl?.contains("mdblist.com", ignoreCase = true) == true -> CatalogSourceType.MDBLIST
             sourceUrl?.contains("themoviedb.org", ignoreCase = true) == true -> CatalogSourceType.TMDB
             normalized == CatalogSourceType.TRAKT.name -> CatalogSourceType.TRAKT
+            normalized == CatalogSourceType.SIMKL.name -> CatalogSourceType.SIMKL
             normalized == CatalogSourceType.MDBLIST.name -> CatalogSourceType.MDBLIST
             normalized == CatalogSourceType.TMDB.name -> CatalogSourceType.TMDB
             normalized == CatalogSourceType.ADDON.name -> CatalogSourceType.ADDON

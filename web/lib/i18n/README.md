@@ -16,6 +16,9 @@ spot checked, including placeholders, product names and media terminology.
 They have not all been reviewed by native speakers. Builds and the running
 application do not contact a translation service. Language improvements belong
 in the explicit overrides or the community Android resources.
+All XML string resource files in each Android values directory are included.
+New phrases without a translated value use English until a translation is supplied;
+English fallback entries are not a claim of complete native-language coverage.
 
 `translation-sources.mjs` collects literal calls and supported label registries.
 When introducing dynamically selected UI text, include its registry in that

@@ -1,0 +1,53 @@
+{
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build:utils": "cd packages/utils && yarn build",
+    "build:sha256": "yarn build:utils && cd packages/sha256 && yarn build",
+    "build:sha512": "yarn build:utils && cd packages/sha512 && yarn build",
+    "build:hmac": "yarn build:utils && cd packages/hmac && yarn build",
+    "build:pbkdf2": "yarn build:hmac && cd packages/pbkdf2 && yarn build",
+    "build:aes": "cd packages/aes && yarn build",
+    "build": "yarn build:hmac && yarn build:sha256 && yarn build:sha512 && yarn build:hmac && yarn build:pbkdf2",
+    "lint:utils": "eslint --ext ts ./packages/utils/src",
+    "lint:sha256": "eslint --ext ts ./packages/sha256/src",
+    "lint:hmac": "eslint --ext ts ./packages/hmac/src",
+    "test:sha1": "cd packages/sha1 && yarn test",
+    "test:sha256": "cd packages/sha256 && yarn test",
+    "test:sha512": "cd packages/sha512 && yarn test",
+    "test:hmac": "cd packages/hmac && yarn test",
+    "test:pbkdf2": "cd packages/pbkdf2 && yarn test",
+    "test:aes": "cd packages/aes && yarn test",
+    "test": "yarn test:sha256 && yarn test:sha512 && yarn test:hmac && yarn test:pbkdf2",
+    "publish:sha256": "yarn build:utils && cd packages/sha256 && yarn publish",
+    "publish:sha1": "yarn build:utils && cd packages/sha1 && yarn publish",
+    "publish:sha512": "yarn build:utils && cd packages/sha512 && yarn publish",
+    "publish:aes": "cd packages/aes && yarn publish",
+    "publish:pbkdf2": "yarn build:hmac && cd packages/pbkdf2 && yarn publish"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^7.1.1",
+    "@rollup/plugin-typescript": "^4.0.0",
+    "@types/jest": "^25.1.4",
+    "@typescript-eslint/eslint-plugin": "^2.6.1",
+    "@typescript-eslint/parser": "^2.6.1",
+    "codecov": "^3.6.5",
+    "eslint": "^6.7.2",
+    "eslint-config-airbnb-typescript": "^6.0.0",
+    "eslint-import-resolver-webpack": "^0.11.1",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-jest": "^23.0.2",
+    "eslint-plugin-jsx-a11y": "^6.2.3",
+    "eslint-plugin-react": "^7.17.0",
+    "jest": "^25.2.3",
+    "jest-config": "^25.2.3",
+    "lerna": "^3.20.2",
+    "rollup": "^2.2.0",
+    "rollup-plugin-terser": "^5.3.0",
+    "ts-jest": "^25.2.1",
+    "tslib": "^1.11.1",
+    "typescript": "^3.8.3"
+  }
+}

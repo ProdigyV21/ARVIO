@@ -14,16 +14,17 @@ function read(file) {
   return Object.fromEntries([...fs.readFileSync(file, 'utf8').matchAll(/<string\s+([^>]*\bname="([^"]+)"[^>]*)>([\s\S]*?)<\/string>/g)]
     .filter(m => !/translatable="false"/.test(m[1])).map(m => [m[2], decode(m[3])]));
 }
-const english = read(path.join(resources, 'values/strings.xml'));
+function readDirectory(directory) {
+  return Object.assign({}, ...fs.readdirSync(directory).filter(file => file.endsWith('.xml')).sort().map(file => read(path.join(directory, file))));
+}
+const english = readDirectory(path.join(resources, 'values'));
 const output = path.join(root, 'public/i18n');
 fs.mkdirSync(output, {recursive:true});
 const manifest = {};
 const dictionaries = new Map();
 for (const dir of fs.readdirSync(resources).filter(d => /^values-[a-z]{2}(-r[A-Z]{2})?$/.test(d))) {
-  const file = path.join(resources, dir, 'strings.xml');
-  if (!fs.existsSync(file)) continue;
   const locale = dir.slice(7).replace('-r', '-').replace(/^iw$/, 'he').replace(/^in$/, 'id');
-  const translated = read(file);
+  const translated = readDirectory(path.join(resources, dir));
   const dictionary = {};
   // Keep the primary resource when Android has several context-specific IDs
   // with the same English wording. Web-specific overrides remain explicit.
@@ -48,6 +49,10 @@ for (const [locale, own] of dictionaries) {
   }
   // The Library tab uses the compact spelling of the existing Home Server label.
   dictionary.Homeserver ??= dictionary['Home Server'];
+  // Newly introduced UI remains readable until a community/explicit locale
+  // translation arrives. Keep this fallback after all translated sources.
+  const covered = new Set(Object.keys(dictionary).map(normalize));
+  for (const phrase of phrases) if (!covered.has(normalize(phrase))) dictionary[phrase] = phrase;
   const data = JSON.stringify(dictionary);
   fs.writeFileSync(path.join(output, `${locale}.json`), data + '\n');
   manifest[locale] = crypto.createHash('sha256').update(data).digest('hex').slice(0, 12);

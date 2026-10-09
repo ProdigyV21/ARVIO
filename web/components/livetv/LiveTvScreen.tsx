@@ -10,6 +10,7 @@ import { VirtualList } from "@/components/ui/VirtualList";
 import { SportsGuidePane } from "@/components/livetv/SportsGuidePane";
 import { sportsEventCatalogs } from "@/lib/sportsAddons";
 import { ChannelLogo } from "@/components/livetv/ChannelLogo";
+import { ChannelProgramInfo } from "@/components/livetv/ChannelProgramInfo";
 import { channelIdentityIndex, normalizeTvSession, resolveChannelReferences } from "@/lib/iptvSession";
 import { IPTV_SNAPSHOT_TTL_MS, iptvPlaylistSignature } from "@/lib/iptv";
 import { loadStored, saveStored } from "@/lib/storage";
@@ -512,27 +513,7 @@ export function LiveTvScreen() {
                   {!activeChannel && <button type="button" className="livetv-preview-play" aria-label={translateUi("Play {value0}", {value0: selectedChannel.name})} title={translateUi("Play {value0}", {value0: selectedChannel.name})} onClick={() => watchChannel(selectedChannel)}><Play size={28} fill="currentColor" /></button>}
                 </div>
                 <p className="livetv-detail-group">{selectedChannel.group || translateUi("Live TV")}</p>
-                <div className="livetv-channel-identity"><div className="tv-identity-logo"><ChannelLogo channel={selectedChannel} size={28} /></div><span>{selectedChannel.name}{selectedChannel.qualityLabel ? ` · ${selectedChannel.qualityLabel}` : ""}</span></div>
-                <h2>{selectedGuide?.now?.title || selectedChannel.name}</h2>
-                {selectedGuide?.now?.title ? (
-                  <div className="livetv-program">
-                    <div className="livetv-program-head">
-                      <em>{fmtTime(selectedGuide.now.startUtcMillis)} – {fmtTime(selectedGuide.now.endUtcMillis)}</em>
-                    </div>
-                    {selectedGuide.now.description && <p>{selectedGuide.now.description}</p>}
-                  </div>
-                ) : (
-                  <p className="livetv-detail-empty">{translateUi("No guide data for this channel.")}</p>
-                )}
-                {selectedGuide?.next?.title && (
-                  <div className="livetv-program is-next">
-                    <div className="livetv-program-head">
-                      <span>{translateUi("NEXT")}</span>
-                      <em>{fmtTime(selectedGuide.next.startUtcMillis)}</em>
-                    </div>
-                    <strong>{selectedGuide.next.title}</strong>
-                  </div>
-                )}
+                <ChannelProgramInfo channel={selectedChannel} guide={selectedGuide} formatTime={fmtTime} />
                 <div className="livetv-detail-actions">
                   {favoriteIds.has(selectedChannel.id) && <><button className="secondary" type="button" title={translateUi("Move favorite up")} aria-label={translateUi("Move favorite up")} disabled={channelById.get(favorites[0])?.id === selectedChannel.id} onClick={() => moveFavorite(selectedChannel.id, -1)}><ArrowUp size={17} /></button><button className="secondary" type="button" title={translateUi("Move favorite down")} aria-label={translateUi("Move favorite down")} disabled={channelById.get(favorites[favorites.length - 1])?.id === selectedChannel.id} onClick={() => moveFavorite(selectedChannel.id, 1)}><ArrowDown size={17} /></button></>}
                   <button type="button" className="primary" onClick={() => watchChannel(selectedChannel)}><Play size={17} fill="currentColor" /> {translateUi(" Watch")}</button>

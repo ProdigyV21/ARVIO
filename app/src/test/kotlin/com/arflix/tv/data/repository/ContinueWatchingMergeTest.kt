@@ -34,6 +34,11 @@ class ContinueWatchingMergeTest {
         assertEquals(listOf(vod), ContinueWatchingMerge.merge(emptyList(), listOf(vod)))
     }
 
+    @Test fun authoritativeEmptyTrackerDoesNotResurrectOldEpisodeHistory() {
+        val stale = remote.copy(isUpNext = false, progress = 40, resumePositionSeconds = 900)
+        assertTrue(ContinueWatchingMerge.merge(emptyList(), listOf(stale), listOf(stale)).isEmpty())
+    }
+
     @Test
     fun persistedStalkerVodProgressIsKeptAlongsideXtreamVod() {
         val stalkerVod = vod.copy(streamAddonId = "iptv_stalker_vod")

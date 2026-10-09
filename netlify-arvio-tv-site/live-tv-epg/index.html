@@ -1,26 +1,140 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Live TV in ARVIO: IPTV Playlist &amp; Browser Setup Guide</title>
-  <meta name="description" content="Add your own IPTV playlist to ARVIO, find channels and use the programme guide. Practical setup and browser playback troubleshooting for your own provider.">
-  <link rel="canonical" href="https://arvio.tv/live-tv-epg/">
-  <!-- hreflang:start -->
-  <link rel="alternate" hreflang="en" href="https://arvio.tv/live-tv-epg/">
-  <link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/tv-ao-vivo-epg/">
-  <link rel="alternate" hreflang="es" href="https://arvio.tv/es/tv-en-vivo-epg/">
-  <link rel="alternate" hreflang="x-default" href="https://arvio.tv/live-tv-epg/">
-  <!-- hreflang:end --><link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
-  <meta property="og:type" content="website"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="Live TV in ARVIO: IPTV Playlist &amp; Browser Setup Guide"><meta property="og:description" content="Add your own IPTV playlist to ARVIO, find channels and use the programme guide. Practical setup and browser playback troubleshooting for your own provider."><meta property="og:url" content="https://arvio.tv/live-tv-epg/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/web/05-tv.webp">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Live TV in ARVIO: IPTV Playlist &amp; Browser Setup Guide"><meta name="twitter:description" content="Add your own IPTV playlist to ARVIO, find channels and use the programme guide. Practical setup and browser playback troubleshooting for your own provider."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/web/05-tv.webp">
-  
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPTV Player for Android TV: M3U, Xtream &amp; EPG | ARVIO</title>
+<meta name="description" content="Set up live TV in ARVIO on Android TV or Google TV with your own M3U playlist, Xtream account or Stalker portal. Add XMLTV EPG and troubleshoot playback.">
+<link rel="canonical" href="https://arvio.tv/live-tv-epg/">
+<!-- hreflang:start -->
+<link rel="alternate" hreflang="en" href="https://arvio.tv/live-tv-epg/">
+<link rel="alternate" hreflang="pt-BR" href="https://arvio.tv/pt-br/tv-ao-vivo-epg/">
+<link rel="alternate" hreflang="es" href="https://arvio.tv/es/tv-en-vivo-epg/">
+<link rel="alternate" hreflang="x-default" href="https://arvio.tv/live-tv-epg/">
+<!-- hreflang:end -->
+<link rel="icon" href="/assets/arvio-icon-512.png" type="image/png"><link rel="stylesheet" href="/guides/guide.css">
+<meta property="og:type" content="article"><meta property="og:site_name" content="ARVIO"><meta property="og:title" content="IPTV Player for Android TV: M3U, Xtream &amp; EPG | ARVIO"><meta property="og:description" content="Set up live TV in ARVIO on Android TV or Google TV with your own M3U playlist, Xtream account or Stalker portal. Add XMLTV EPG and troubleshoot playback."><meta property="og:url" content="https://arvio.tv/live-tv-epg/"><meta property="og:image" content="https://arvio.tv/assets/screenshots-v2/tv/05-tv.webp">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="IPTV Player for Android TV: M3U, Xtream &amp; EPG | ARVIO"><meta name="twitter:description" content="Set up live TV in ARVIO on Android TV or Google TV with your own M3U playlist, Xtream account or Stalker portal. Add XMLTV EPG and troubleshoot playback."><meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/05-tv.webp">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "TechArticle",
+      "headline": "An IPTV player for Android TV, with M3U, Xtream and EPG.",
+      "description": "Set up live TV in ARVIO on Android TV or Google TV with your own M3U playlist, Xtream account or Stalker portal. Add XMLTV EPG and troubleshoot playback.",
+      "inLanguage": "en",
+      "url": "https://arvio.tv/live-tv-epg/",
+      "dateModified": "2026-10-05",
+      "author": {
+        "@type": "Organization",
+        "name": "ARVIO",
+        "url": "https://arvio.tv/"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "ARVIO",
+          "item": "https://arvio.tv/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Guides",
+          "item": "https://arvio.tv/guides/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Live TV and IPTV",
+          "item": "https://arvio.tv/live-tv-epg/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does ARVIO include IPTV channels or a subscription?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. ARVIO supplies player software, not channels, playlists or an IPTV subscription. You must connect a provider or source you are authorized to use."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use M3U, Xtream and Stalker on Android TV?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. ARVIO's Android playlist form supports M3U, Xtream and Stalker connections. The correct account details and available channels still depend on your provider."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why do channels play but the EPG is empty?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Channel playback and programme information are separate. Check the XMLTV URL, channel identifiers, schedule dates and time zones, and confirm that your provider supplies EPG data for that lineup."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why does IPTV work on Android but not in the browser?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Browsers have different codec, HTTPS and cross-origin restrictions. Check the provider's stream format and browser access rules; successful Android playback does not guarantee browser compatibility."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is a playlist or channel not loading?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Check the complete URL, account validity, network connection and provider device or simultaneous-stream limits. Test the same authorized source with your provider's recommended client to separate an account problem from an ARVIO problem."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body class="practical-guide">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a class="play-link" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a></nav></div></header>
+<main id="content">
+<section class="guide-intro"><div class="shell"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Live TV and IPTV</span></nav>
+<p class="eyebrow">Free Android app · Optional integrations</p><h1>An IPTV player for Android TV, with M3U, Xtream and EPG.</h1><p class="lead">Watch your authorized live TV sources on Android TV, Google TV or Android mobile. Connect an M3U playlist, an Xtream account or a Stalker portal, then browse channels and available programme information. ARVIO is the player: it does not sell subscriptions or include channels.</p>
+<div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get the free Android app</a><a class="button secondary" href="#setup">Setup instructions</a></div>
+<p class="guide-updated">Updated 5 October 2026 · By the ARVIO project</p>
+<nav class="guide-jump" aria-label="On this page"><a href="#formats">Supported formats</a><a href="#setup">Android TV setup</a><a href="#epg">XMLTV and EPG</a><a href="#browser">Browser setup</a><a href="#help">Troubleshooting</a></nav></div></section>
+<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/tv/05-tv.webp" alt="ARVIO Android TV live TV interface with channels and a programme guide" width="1920" height="1080" loading="lazy" decoding="async"><figcaption>The Live TV interface in ARVIO. Channels and programme information depend on the provider you connect; none are included with the app.</figcaption></figure></div></section>
 
-<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "headline": "Your live TV, with a guide that makes sense.", "description": "Add your own IPTV playlist to ARVIO, find channels and use the programme guide. Practical setup and browser playback troubleshooting for your own provider.", "dateModified": "2026-09-28", "author": {"@type": "Organization", "name": "ARVIO"}, "url": "https://arvio.tv/live-tv-epg/"}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Are channels included?", "acceptedAnswer": {"@type": "Answer", "text": "No. You connect your own authorised provider or playlist. Premium covers hosting, not a TV subscription."}}, {"@type": "Question", "name": "Why is there no programme information?", "acceptedAnswer": {"@type": "Answer", "text": "The guide may be missing, out of date or use different channel identifiers. Check the XMLTV address and matching before replacing a working playlist."}}, {"@type": "Question", "name": "Can I watch in a browser?", "acceptedAnswer": {"@type": "Answer", "text": "Supported streams can play in ARVIO Web. Provider CORS rules, HTTPS, network access and codecs can prevent playback, so test on your browser before subscribing."}}, {"@type": "Question", "name": "Does this cover every provider type?", "acceptedAnswer": {"@type": "Answer", "text": "These steps cover M3U setup. Other provider types have different requirements, and support can differ between Android and web."}}]}]}</script>
-<script defer src="/assets/premium-journey.js?v=2"></script></head>
-<body><a class="skip-link" href="#content">Skip to content</a><header class="site-header"><div class="header-inner"><a class="brand-link" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="134" height="34"></a><nav class="header-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/premium/">Premium</a><a class="play-link" href="https://github.com/ProdigyV21/ARVIO/releases/latest">Free APK</a></nav></div></header><main id="content">
-<section class="guide-intro"><div class="shell"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span>/</span><a href="/guides/">Guides</a></nav><p class="eyebrow">Your playlist · Your channels</p><h1>Your live TV, with a guide that makes sense.</h1><p class="lead">Bring your own provider to ARVIO on Android TV or in a compatible browser. Keep channels, favourites and programme information together.</p><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get the free Android app</a><a class="button secondary" href="#setup">Read the setup guide</a></div><p class="guide-updated">Updated 28 September 2026 · By the ARVIO project</p><nav class="guide-jump" aria-label="On this page"><a href="#setup">Setup</a><a href="#hosting">Free &amp; Premium</a><a href="#help">Troubleshooting</a></nav></div></section>
-<section class="screen-band"><div class="shell"><figure class="guide-capture"><img src="/assets/screenshots-v2/web/05-tv.webp" alt="Your live TV, with a guide that makes sense. ARVIO interface" width="1920" height="1080" fetchpriority="high"><figcaption>Existing ARVIO 2.0 screenshot. Libraries and services shown are examples, not included content.</figcaption></figure></div></section>
-<section class="section" id="setup"><div class="shell guide-reading"><p class="eyebrow">Step by step</p><h2>Get your first source working.</h2><ol class="setup-list"><li><h3>Get your provider’s details</h3><p>Have your authorised M3U playlist URL and, if supplied, an XMLTV guide URL ready. Keep URLs containing account credentials private.</p></li><li><h3>Open Settings → TV (IPTV)</h3><p>Enter the playlist name and M3U URL, then choose Add playlist. Add the guide URL where supported. The channel guide and video playlist are different resources.</p></li><li><h3>Load channels and guide data</h3><p>Open TV and choose a group or channel. Large playlists can take longer to load. If programmes are missing, check the XMLTV source and whether its channel identifiers match the playlist.</p></li><li><h3>Test a channel</h3><p>Choose a channel you know works through your provider. Check provider connection limits, network access and stream format if it fails. Browsers may reject formats that work in the native Android app.</p></li><li><h3>Make it your own</h3><p>Favourite your regular channels and hide unwanted groups. Catch-up requires a provider-supported archive; an earlier programme in the guide is not necessarily playable.</p></li></ol></div></section><section class="section compact" id="hosting"><div class="shell"><div class="note"><h2>Free software. Optional hosting.</h2><p>The Android APK is free. Self-host ARVIO Web for free with your own API credentials, or choose Premium at $2.99/month for managed hosting that supports development.</p><div class="actions"><a class="button" href="/premium/">Explore Premium hosting</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO/blob/main/web/README.md">Free self-hosting instructions</a></div><p>Self-hosted settings live in your browser. The official README explains setup, updates, network access and what does and does not sync.</p></div></div></section>
-<section class="section" id="help"><div class="shell"><p class="eyebrow">Useful answers</p><h2>Before you get stuck.</h2><div class="faq-list"><details><summary>Are channels included?</summary><p>No. You connect your own authorised provider or playlist. Premium covers hosting, not a TV subscription.</p></details><details><summary>Why is there no programme information?</summary><p>The guide may be missing, out of date or use different channel identifiers. Check the XMLTV address and matching before replacing a working playlist.</p></details><details><summary>Can I watch in a browser?</summary><p>Supported streams can play in ARVIO Web. Provider CORS rules, HTTPS, network access and codecs can prevent playback, so test on your browser before subscribing.</p></details><details><summary>Does this cover every provider type?</summary><p>These steps cover M3U setup. Other provider types have different requirements, and support can differ between Android and web.</p></details></div><p>Still need help? <a href="https://discord.gg/UavuEYMfQ4">Ask in the ARVIO Discord</a> with your app version, device and error. Keep passwords and provider URLs private.</p></div></section>
-<section class="section"><div class="shell"><h2>Keep building your setup.</h2><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><strong>Set up ARVIO on Android TV.</strong><span>Free Android &amp; TV app</span></a><a class="related-link" href="/plex-emby-jellyfin/"><strong>Your servers. One familiar library.</strong><span>Jellyfin · Plex · Emby</span></a><a class="related-link" href="/arvio-web/"><strong>ARVIO in your browser. Your choice of hosting.</strong><span>Free self-hosting · Optional Premium</span></a></div></div></section></main><footer class="site-footer"><div class="shell"><p>Free, open-source software. Optional hosting that supports its future.</p><nav class="footer-links" aria-label="Footer"><a href="/guides/">Guides</a><a href="/media-kit/">Media kit</a><a href="https://discord.gg/UavuEYMfQ4">Discord</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a><a href="/privacy">Privacy</a></nav><p>ARVIO includes no movies, channels or third-party subscriptions.</p></div></footer></body>
+<section class="section" id="formats"><div class="shell"><div class="section-head"><p class="eyebrow">Use the account you already have</p><h2>M3U playlists, Xtream accounts and Stalker portals.</h2><p>Ask your provider which connection type your account supports. An EPG is programme information, not a source of channels.</p></div><div class="feature-list">
+<article class="feature-item"><h3>M3U playlist URL</h3><p>Add the full playlist URL supplied by your provider, with an optional XMLTV EPG URL. If the playlist URL contains a username or token, treat the entire address as a password.</p></article>
+<article class="feature-item"><h3>Xtream account</h3><p>Choose Xtream in the Android form and use the provider's server address, username and password. This is a different form from M3U: use the connection details supplied for that format.</p></article>
+<article class="feature-item"><h3>Stalker portal</h3><p>Enter the portal URL and the MAC address authorized for your account. Do not invent an address or copy another customer's identity. Portal access and device limits are controlled by your provider.</p></article>
+<article class="feature-item"><h3>Guide, favourites and categories</h3><p>Browse the TV guide, organize favourites and use channel groups where supplied. Programme details and catch-up availability depend on provider data; an empty guide does not necessarily mean playback is unavailable.</p></article></div></div></section>
+<section class="section" id="setup"><div class="shell guide-reading"><p class="eyebrow">Step by step</p><h2>How to set up IPTV on Android TV and Google TV.</h2><ol class="setup-list">
+<li><h3>Install ARVIO and prepare your provider details</h3><p>Get the free Android app from <a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a> or the <a href="https://github.com/ProdigyV21/ARVIO/releases/latest">official GitHub release</a>. Have an authorized playlist URL or account ready. See the <a href="/android-tv-media-hub/">Android TV installation guide</a> for first-time setup.</p></li>
+<li><h3>Open Settings → TV and add a playlist</h3><p>Choose M3U, Xtream or Stalker in the Android playlist form. Give the connection a recognizable name so you can distinguish it from other providers.</p></li>
+<li><h3>Enter the matching connection details</h3><p>For M3U, paste the playlist URL and optional EPG URL. For Xtream, enter the server address and credentials. For Stalker, enter the portal and authorized MAC address. Preserve the ports, paths and query parameters supplied by your provider.</p></li>
+<li><h3>Save and check the TV view</h3><p>Allow the channel list to load, open TV and choose a known channel. If the form offers Live, Movies and Series import options, enable the categories you want and that your provider supplies.</p></li>
+<li><h3>Check playback and programme data separately</h3><p>Test a channel first, then check its current programme. Channels may play without EPG data; a populated guide does not establish that every stream works on your device.</p></li></ol></div></section>
+<section class="section compact" id="epg"><div class="shell guide-reading"><div class="note"><h2>How to add XMLTV EPG and fix an empty TV guide.</h2><div><p>For an M3U connection, add the provider's XMLTV address in the EPG field. The playlist describes channels and stream URLs; XMLTV supplies schedules. Use guide data intended for the same channel lineup.</p><p>If channels load but the guide stays empty, check that the EPG URL is reachable and returns XML rather than a login page. Matching channel identifiers, schedule dates and time zones matter. Confirm your provider supplies compatible EPG data before changing working playback settings.</p></div></div></div></section>
+<section class="section" id="browser"><div class="shell guide-reading"><p class="eyebrow">Android and web are not identical</p><h2>Use your IPTV playlist in ARVIO Web.</h2><p>In the browser, open Settings → TV (IPTV). Enter Playlist name, M3U playlist URL and EPG XMLTV URL (optional), then choose Add playlist. Stalker portal URL and MAC address have their own settings. The Android Xtream form is not a dedicated browser form.</p><p>Browser playback depends on HTTPS, CORS, stream codecs and provider access rules. A stream working in Android can still fail in a browser. Self-hosting does not remove these restrictions. Compare free self-hosting and optional managed hosting in the <a href="/arvio-web/">ARVIO Web guide</a>.</p><p>Never share complete provider URLs, passwords or tokens in public troubleshooting posts.</p></div></section>
+<section class="section" id="help"><div class="shell"><div class="section-head"><p class="eyebrow">Common questions and troubleshooting</p><h2>Live TV and IPTV FAQ.</h2></div><div class="faq-list"><details><summary>Does ARVIO include IPTV channels or a subscription?</summary><p>No. ARVIO supplies player software, not channels, playlists or an IPTV subscription. You must connect a provider or source you are authorized to use.</p></details>
+<details><summary>Can I use M3U, Xtream and Stalker on Android TV?</summary><p>Yes. ARVIO's Android playlist form supports M3U, Xtream and Stalker connections. The correct account details and available channels still depend on your provider.</p></details>
+<details><summary>Why do channels play but the EPG is empty?</summary><p>Channel playback and programme information are separate. Check the XMLTV URL, channel identifiers, schedule dates and time zones, and confirm that your provider supplies EPG data for that lineup.</p></details>
+<details><summary>Why does IPTV work on Android but not in the browser?</summary><p>Browsers have different codec, HTTPS and cross-origin restrictions. Check the provider's stream format and browser access rules; successful Android playback does not guarantee browser compatibility.</p></details>
+<details><summary>Why is a playlist or channel not loading?</summary><p>Check the complete URL, account validity, network connection and provider device or simultaneous-stream limits. Test the same authorized source with your provider's recommended client to separate an account problem from an ARVIO problem.</p></details></div></div></section>
+<section class="section"><div class="shell"><div class="section-head"><p class="eyebrow">Related guides</p><h2>More ways to use ARVIO.</h2></div><div class="related-grid"><a class="related-link" href="/android-tv-media-hub/"><strong>Android TV installation</strong><span>Install and configure the free Android app.</span></a><a class="related-link" href="/arvio-web/"><strong>Browser access and self-hosting</strong><span>Understand hosting options and browser limits.</span></a><a class="related-link" href="/plex-emby-jellyfin/"><strong>Plex, Emby and Jellyfin</strong><span>Add your own media-server libraries.</span></a></div></div></section>
+<section class="cta-band"><div class="shell cta-inner"><div><h2>Start with the free Android app.</h2><p>Connect only sources and accounts you are authorized to use.</p></div><div class="actions"><a class="button" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO</a><a class="button secondary" href="https://github.com/ProdigyV21/ARVIO">View source</a></div></div></section>
+</main>
+<footer class="site-footer"><div class="shell"><div class="footer-main"><div class="footer-brand"><img src="/assets/arvio-wordmark.png" alt="ARVIO" width="630" height="135"><p>Open-source media management for Android TV, Google TV and Android mobile.</p></div><nav class="footer-links" aria-label="Footer navigation"><a href="/">Home</a><a href="/guides/">Guides</a><a href="/privacy">Privacy</a><a href="https://github.com/ProdigyV21/ARVIO">GitHub</a></nav></div><div class="footer-bottom"><span>© 2026 ARVIO</span><span>ARVIO provides software, not media subscriptions.</span></div></div></footer>
+</body>
 </html>

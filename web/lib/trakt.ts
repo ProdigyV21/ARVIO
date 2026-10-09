@@ -273,6 +273,18 @@ export class TraktClient {
     );
   }
 
+  /** Public metadata: an ARVIO-only watchlist does not need a linked Trakt account. */
+  async calendarSeason(tmdbId: number, season: number, traktId?: number | null) {
+    if (!config.traktClientId) return [];
+    let id = traktId;
+    if (!id) {
+      const matches = await this.trakt<Array<{ show?: { ids?: { trakt?: number; tmdb?: number } } }>>(`/search/tmdb/${tmdbId}?type=show`);
+      id = matches.find(row => row.show?.ids?.tmdb === tmdbId)?.show?.ids?.trakt;
+    }
+    if (!id) return [];
+    return this.trakt<Array<{ season: number; number: number; first_aired?: string | null }>>(`/shows/${id}/seasons/${season}?extended=full`);
+  }
+
   async history(type?: "movies" | "shows" | "episodes") {
     const token = await this.refreshIfNeeded();
     if (!token) return [];

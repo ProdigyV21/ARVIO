@@ -15,6 +15,16 @@ import retrofit2.Response
  */
 interface TraktApi {
 
+    /** Public episode metadata; no tracking account is required. */
+    @GET("shows/{id}/seasons/{season}")
+    suspend fun getCalendarSeasonEpisodes(
+        @Header("trakt-api-key") clientId: String,
+        @Path("id") showId: Int,
+        @Path("season") season: Int,
+        @Header("trakt-api-version") version: String = "2",
+        @Query("extended") extended: String = "full"
+    ): List<TraktCalendarEpisode>
+
     // ========== Authentication ==========
 
     @POST("oauth/device/code")
@@ -678,6 +688,13 @@ data class TraktWatchingItem(
     val movie: TraktMovieInfo?,
     val episode: TraktEpisodeInfo?,
     val show: TraktShowInfo?
+)
+
+data class TraktCalendarEpisode(
+    val season: Int = 0,
+    val number: Int = 0,
+    val title: String? = null,
+    @SerializedName("first_aired") val firstAired: String? = null
 )
 
 data class TraktShowInfo(

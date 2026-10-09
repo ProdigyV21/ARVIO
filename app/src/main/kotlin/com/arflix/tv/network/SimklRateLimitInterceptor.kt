@@ -4,6 +4,9 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import java.io.InterruptedIOException
 
+// Tracking and custom lists share the same per-app/account request budget.
+internal val sharedSimklRateLimiter = SimklRateLimitInterceptor()
+
 internal class SimklRateLimitInterceptor(
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000L },
     private val sleepMs: (Long) -> Unit = { Thread.sleep(it) },

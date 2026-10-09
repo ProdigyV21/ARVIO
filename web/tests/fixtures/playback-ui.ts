@@ -30,6 +30,7 @@ let rms = 0;
 let analyser: AnalyserNode | undefined;
 let context: AudioContext | undefined;
 let selection = 0;
+let selectedAudioIndex = -1;
 let abort: AbortController | undefined;
 function audioMeter() {
   if (!context) {
@@ -59,7 +60,8 @@ async function start(file: string, audioIndex?: number, position = 0) {
     probeMs = performance.now() - started;
     if (!prepared) throw new Error(error || "Probe failed");
     handle = prepared; phase = "buffering";
-    await handle.start(video, audioIndex ?? handle.probe.chosenAudioIndex, position);
+    selectedAudioIndex = audioIndex ?? handle.probe.chosenAudioIndex;
+    await handle.start(video, selectedAudioIndex, position);
     if (run !== selection) return;
     firstFrameMs = performance.now() - started;
     await video.play(); phase = "playing";
@@ -98,6 +100,6 @@ setInterval(() => {
   status.textContent = JSON.stringify({ phase, error, probeMs: Math.round(probeMs), firstFrameMs: Math.round(firstFrameMs),
     time: video.currentTime, duration: video.duration, paused: video.paused, seeking: video.seeking, readyState: video.readyState,
     width: video.videoWidth, height: video.videoHeight, audioRms: rms,
-    frames: video.getVideoPlaybackQuality()?.totalVideoFrames,
+    frames: video.getVideoPlaybackQuality()?.totalVideoFrames, selectedAudioIndex,
     buffered: Array.from({ length: video.buffered.length }, (_, i) => [video.buffered.start(i), video.buffered.end(i)]), probe: handle?.probe }, null, 2);
 }, 250);

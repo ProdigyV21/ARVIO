@@ -73,7 +73,19 @@ data class MediaItem(
     val homeServerSourceRef: String? = null,
     val homeServerProvider: String? = null,
     val homeServerImdbId: String? = null,
-) : Serializable
+    // Native addon identity: an addon catalog item with no TMDB/IMDb id whose addon serves
+    // its own metadata (e.g. a broadcaster VOD addon). `id` is then a stable negative
+    // number; details, episodes and streams come from the addon by this id.
+    val addonNativeId: String? = null,
+    val addonNativeAddonId: String? = null,
+    // The addon's own type for that id ("Podcasts", "tv"); its /meta and /stream route by it.
+    val addonNativeType: String? = null,
+) : Serializable {
+    val isAddonNative: Boolean get() = !addonNativeId.isNullOrBlank()
+
+    /** True when the item can be opened: it has a TMDB id or is a native addon item. */
+    val hasOpenableId: Boolean get() = id > 0 || (id < 0 && isAddonNative)
+}
 
 enum class MediaType {
     @com.google.gson.annotations.SerializedName(value = "MOVIE", alternate = ["movie"])

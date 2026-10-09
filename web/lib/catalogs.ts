@@ -1,6 +1,17 @@
 import type { CatalogConfig } from "./types";
+import bundledDefaults from "./defaultCatalogs.json";
 
-export const defaultCatalogs: CatalogConfig[] = [
+// Exported from MediaRepository.buildPreinstalledDefaults; checked by the APK tests.
+export const defaultCatalogs = bundledDefaults as CatalogConfig[];
+export const DEFAULT_COLLECTIONS_DISABLED = "collection_defaults_disabled";
+const defaultCollectionIds = new Set(defaultCatalogs
+  .filter(catalog => catalog.kind === "COLLECTION" || catalog.kind === "COLLECTION_RAIL")
+  .map(catalog => catalog.id));
+
+// Retained only to recognize and migrate the old, uncustomized web defaults.
+export const legacyWebDefaultCatalogs: CatalogConfig[] = [
+  // The profile's favorite IPTV channels (see favoriteTv.ts), not a TMDB list.
+  { id: "favorite_tv", name: "Favorite TV", sourceType: "preinstalled", mediaType: "tv", enabled: true, isPreinstalled: true },
   { id: "trending_movies", name: "Trending in Movies", sourceType: "mdblist", mediaType: "movie", sourceUrl: "https://mdblist.com/lists/snoak/trending-movies", enabled: true, isPreinstalled: true },
   { id: "trending_tv", name: "Trending in Shows", sourceType: "mdblist", mediaType: "tv", sourceUrl: "https://mdblist.com/lists/snoak/trakt-s-trending-shows", enabled: true, isPreinstalled: true },
   { id: "trending_anime", name: "Trending in Anime", sourceType: "mdblist", mediaType: "tv", sourceUrl: "https://mdblist.com/lists/snoak/trending-anime-shows", enabled: true, isPreinstalled: true },
@@ -30,6 +41,46 @@ export const defaultCatalogs: CatalogConfig[] = [
   { id: "tmdb_popular_tv", name: "Popular Series", sourceType: "tmdb", mediaType: "tv", endpoint: "discover/tv", params: { sort_by: "popularity.desc" }, enabled: true, isPreinstalled: true }
 ];
 
+export function isDefaultCollection(catalog: CatalogConfig) {
+  return catalog.isPreinstalled === true && defaultCollectionIds.has(catalog.id);
+}
+
+const legacyCollectionAliases: Record<string, string> = {
+  collection_genre_action: "action", collection_genre_comedy: "comedy",
+  collection_genre_science_fiction: "scifi", collection_genre_thriller: "thriller",
+  collection_genre_horror: "horror", collection_genre_documentary: "documentary",
+  collection_genre_family: "family", collection_franchise_harry_potter: "harry_potter",
+  collection_franchise_the_matrix: "matrix", collection_franchise_lord_of_the_rings: "lotr",
+  collection_franchise_jurassic_park: "jurassic"
+};
+
+function matchesLegacyDefault(catalog: CatalogConfig, legacy: CatalogConfig) {
+  return catalog.id === legacy.id && catalog.name === legacy.name && catalog.isPreinstalled === true &&
+    String(catalog.kind ?? "STANDARD").toUpperCase() === "STANDARD" &&
+    catalog.sourceType === legacy.sourceType && catalog.sourceUrl === legacy.sourceUrl &&
+    catalog.endpoint === legacy.endpoint &&
+    Object.keys(catalog.params ?? {}).length === Object.keys(legacy.params ?? {}).length &&
+    Object.entries(legacy.params ?? {}).every(([key, value]) => catalog.params?.[key] === value);
+}
+
+function migrateLegacyWebDefaults(catalogs: CatalogConfig[], hidden: Set<string>) {
+  const start = catalogs.findIndex(catalog => matchesLegacyDefault(catalog, legacyWebDefaultCatalogs[0]));
+  if (start < 0 || !legacyWebDefaultCatalogs.every((legacy, index) =>
+    catalogs[start + index] && matchesLegacyDefault(catalogs[start + index], legacy))) return catalogs;
+  const before = catalogs.slice(0, start), after = catalogs.slice(start + legacyWebDefaultCatalogs.length);
+  if ([...before, ...after].some(catalog => defaultCollectionIds.has(catalog.id))) return catalogs;
+  const previous = new Map(catalogs.slice(start, start + legacyWebDefaultCatalogs.length).map(catalog => [catalog.id, catalog]));
+  const allHidden = [...previous.values()].every(catalog => catalog.enabled === false || hidden.has(catalog.id));
+  const migrated = defaultCatalogs.map(catalog => {
+    const old = previous.get(catalog.id);
+    if (old) return { ...catalog, ...old, sourceRef: catalog.sourceRef };
+    const alias = legacyCollectionAliases[catalog.id];
+    return { ...catalog, enabled: !allHidden && !(alias &&
+      (previous.get(alias)?.enabled === false || hidden.has(alias))) };
+  });
+  return [...before, ...migrated.map(normalizedCatalog), ...after];
+}
+
 function isValidCatalog(catalog: CatalogConfig | null | undefined): catalog is CatalogConfig {
   if (!catalog || typeof catalog !== "object") return false;
   if (!String(catalog.id ?? "").trim()) return false;
@@ -42,6 +93,7 @@ function normalizedSourceType(value: unknown): CatalogConfig["sourceType"] {
   const raw = String(value ?? "").trim().toLowerCase().replace(/_/g, "-");
   if (raw === "preinstalled") return "preinstalled";
   if (raw === "trakt") return "trakt";
+  if (raw === "simkl") return "simkl";
   if (raw === "mdblist" || raw === "mdb-list") return "mdblist";
   if (raw === "addon") return "addon";
   if (raw === "home-server" || raw === "homeserver") return "home-server";
@@ -77,35 +129,59 @@ function isLegacyServiceCatalog(catalog: CatalogConfig) {
   return catalog.sourceType === "mdblist" && ["netflix", "disney", "prime", "hbo", "apple_tv", "hulu", "paramount"].includes(catalog.id);
 }
 
-export function mergeCatalogs(saved: CatalogConfig[] | undefined, hiddenIds: string[] = []) {
-  const cleaned = (saved ?? [])
+export function mergeCatalogs(saved: CatalogConfig[] | undefined, hiddenIds: string[] = [], hiddenAddonIds: string[] = []) {
+  // A saved empty list is intentional, just as it is on Android. Only a new
+  // installation without a saved list should receive the defaults.
+  const cleaned = (saved ?? defaultCatalogs)
     .filter(isValidCatalog)
     .map(normalizedCatalog)
-    .filter((catalog) => catalog.id !== "favorite_tv")
     .filter((catalog) => !(
       ["sports", "popular_live_tv"].includes(catalog.id) &&
       catalog.sourceType === "preinstalled" &&
       !catalog.sourceUrl?.trim() && !catalog.sourceRef?.trim() && !catalog.addonId?.trim()
     ))
     .filter((catalog) => !isLegacyServiceCatalog(catalog));
-  if (cleaned.length) {
-    const hiddenRails = new Set(cleaned.filter(c => String(c.kind).toUpperCase() === "COLLECTION_RAIL" && !c.collectionRailKey &&
-      (hiddenIds.includes(c.id) || c.enabled === false)).map(c => String(c.collectionGroup).toUpperCase()));
-    return cleaned.map((catalog) => ({
-      ...catalog,
-      enabled: !hiddenIds.includes(catalog.id) && catalog.enabled !== false &&
-        !(String(catalog.kind).toUpperCase() === "COLLECTION" && !catalog.collectionRailKey &&
-          (hiddenRails.has(String(catalog.collectionGroup).toUpperCase()) ||
-            hiddenIds.includes(`collection_row_${String(catalog.collectionGroup).toLowerCase()}`)))
-    }));
-  }
-  const savedById = new Map(cleaned.map((catalog) => [catalog.id, catalog]));
-  const merged = defaultCatalogs.map((catalog) => ({
+  const hidden = new Set(hiddenIds);
+  const catalogs = migrateLegacyWebDefaults(cleaned, hidden);
+  const defaultsDisabled = hidden.has(DEFAULT_COLLECTIONS_DISABLED) ||
+    ["collection_rail_service", "collection_rail_genre", "collection_rail_franchise"].every(id => hidden.has(id)) &&
+    defaultCatalogs.filter(catalog => catalog.kind === "COLLECTION" && catalog.collectionGroup === "SERVICE")
+      .every(catalog => hidden.has(catalog.id));
+  const hiddenAddons = new Set(hiddenAddonIds);
+  const seen = new Set<string>();
+  return catalogs.filter(catalog => {
+    if (seen.has(catalog.id)) return false;
+    seen.add(catalog.id);
+    return true;
+  }).map(catalog => ({
     ...catalog,
-    ...savedById.get(catalog.id),
-    enabled: !hiddenIds.includes(catalog.id) && (savedById.get(catalog.id)?.enabled ?? catalog.enabled)
+    enabled: catalog.enabled !== false && !hidden.has(catalog.id) &&
+      !(defaultsDisabled && isDefaultCollection(catalog)) &&
+      !(catalog.sourceType === "addon" && hiddenAddons.has(catalog.id)) &&
+      !(String(catalog.kind).toUpperCase() === "COLLECTION_RAIL" &&
+        hidden.has(`collection_row_${String(catalog.collectionRailKey || catalog.collectionGroup).toLowerCase()}`))
   }));
-  const defaultIds = new Set(defaultCatalogs.map((catalog) => catalog.id));
-  const custom = cleaned.filter((catalog) => !defaultIds.has(catalog.id));
-  return [...merged, ...custom];
+}
+
+export function setDefaultCollectionsEnabled(catalogs: CatalogConfig[], hiddenIds: string[], enabled: boolean) {
+  const next = catalogs.map(catalog => isDefaultCollection(catalog) ? { ...catalog, enabled } : catalog);
+  const hidden = updateHiddenCatalogIds(next, hiddenIds.filter(id => id !== DEFAULT_COLLECTIONS_DISABLED));
+  if (!enabled) hidden.push(DEFAULT_COLLECTIONS_DISABLED);
+  return { catalogs: next, hiddenIds: hidden };
+}
+
+export function updateHiddenCatalogIds(catalogs: CatalogConfig[], hiddenIds: string[] = []) {
+  const present = new Set(catalogs.map(catalog => catalog.id));
+  for (const catalog of catalogs) {
+    const key = catalog.collectionRailKey || catalog.collectionGroup;
+    if (key && String(catalog.kind).toUpperCase() === "COLLECTION_RAIL") {
+      present.add(`collection_row_${key.toLowerCase()}`);
+    }
+  }
+  // Keep tombstones for deleted/unavailable catalogs so discovery on another
+  // device cannot restore them after an unrelated reorder or rename.
+  return [...new Set([
+    ...hiddenIds.filter(id => !present.has(id)),
+    ...catalogs.filter(catalog => !catalog.enabled).map(catalog => catalog.id)
+  ])];
 }

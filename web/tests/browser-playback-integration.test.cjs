@@ -171,6 +171,97 @@ function extracted(relative, selector, globals) {
   return module.exports;
 }
 
+test('rejected play never silently mutes, and stale or aborted requests leave playback alone', async () => {
+  for (const name of ['NotAllowedError', 'AbortError', 'NotSupportedError', 'stale']) {
+    const pending = deferred();
+    const video = { paused: true, currentSrc: 'first', muted: false, play: () => pending.promise };
+    const state = {};
+    const toggle = extracted('components/player/PlayerOverlay.tsx', node =>
+      ts.isVariableDeclaration(node) && node.name.getText() === 'togglePlay' ? node.initializer.arguments[0] : undefined, {
+        videoRef: { current: video }, flashControls: () => {},
+        setError: value => { state.error = value; }, setBuffering: value => { state.buffering = value; },
+        setShowControls: value => { state.controls = value; }, setPlayBlocked: value => { state.blocked = value; }
+      });
+    toggle();
+    if (name === 'stale') video.currentSrc = 'next';
+    pending.reject(new DOMException('Fixture', name === 'stale' ? 'NotAllowedError' : name));
+    await flush();
+    assert.equal(video.muted, false);
+    assert.equal(state.blocked, name === 'NotAllowedError' ? true : undefined);
+    assert.equal(state.error, name === 'NotSupportedError');
+    assert.equal(state.controls, name === 'stale' || name === 'AbortError' ? undefined : true);
+  }
+});
+
+test('audio menu resolves selected debrid links, retains single tracks and reports probe failures honestly', async () => {
+  for (const outcome of ['single', 'multiple', 'failed', 'cancelled', 'mp4']) {
+    const state = { tracks: [], resolutions: 0, destroyed: 0 };
+    const pending = deferred();
+    const abortRef = { current: null };
+    const extension = outcome === 'mp4' ? 'mp4' : 'mkv';
+    const tracks = Array.from({ length: ['multiple', 'mp4'].includes(outcome) ? 4 : 1 }, (_, index) => ({ index, codec: 'ec-3', browserPlayable: index !== 2 }));
+    const probe = extracted('components/player/PlayerOverlay.tsx', node =>
+      ts.isVariableDeclaration(node) && node.name.getText() === 'probeAudioTracks' ? node.initializer.arguments[0] : undefined, {
+        liveTv: false, currentStreamRef: { current: { url: `https://addon.example/file.${extension}` } },
+        canTryRemux: source => /\.(mkv|mp4)$/.test(source.url),
+        settings: { audioLanguage: 'English' }, audioProbeAbort: abortRef,
+        setAudioProbeState: value => { state.phase = value; }, setRemuxTracks: value => { state.tracks = value; },
+        cachedDebridDirectUrl: () => null, parseDebridStream: () => ({ provider: 'torbox' }),
+        resolveDebridDirectUrl: async () => { state.resolutions++; return { url: `https://cdn.example/file.${extension}` }; },
+        require: () => ({ probeAndPrepareRemux: async url => { assert.equal(url, `https://cdn.example/file.${extension}`); return pending.promise; } })
+      });
+    probe();
+    await flush();
+    if (outcome === 'cancelled') abortRef.current.abort();
+    pending.resolve(outcome === 'failed' ? null : { probe: { audioTracks: tracks }, destroy: () => state.destroyed++ });
+    await flush();
+    assert.equal(state.resolutions, 1);
+    assert.equal(state.phase, outcome === 'failed' ? 'failed' : outcome === 'cancelled' ? 'probing' : 'done');
+    assert.equal(state.tracks.length, outcome === 'failed' || outcome === 'cancelled' ? 0 : tracks.length);
+    assert.equal(state.destroyed, outcome === 'failed' ? 0 : 1);
+  }
+});
+
+test('audio panel probes only on opening and never replaces adaptive or already discovered tracks', () => {
+  for (const [activePanel, phase, remuxCount, nativeCount, expected] of [
+    [null, 'idle', 0, 0, 1], ['audio', 'idle', 0, 0, 0],
+    [null, 'probing', 0, 0, 0], [null, 'failed', 0, 0, 0],
+    [null, 'idle', 4, 0, 0], [null, 'idle', 0, 2, 0]
+  ]) {
+    let calls = 0;
+    const open = extracted('components/player/PlayerOverlay.tsx', node =>
+      ts.isVariableDeclaration(node) && node.name.getText() === 'openPanel' ? node.initializer.arguments[0] : undefined, {
+        activePanel, audioProbeState: phase, remuxTracks: Array(remuxCount), transportTracks: { audioTracks: Array(nativeCount) },
+        setActivePanel: next => assert.equal(typeof next === 'function', false, 'Network calls must not run inside replayable React state updaters'),
+        setShowControls: () => {}, probeAudioTracks: () => calls++
+      });
+    open('audio');
+    assert.equal(calls, expected);
+  }
+});
+
+test('manual audio choice survives native-to-remux preparation and player remount', async () => {
+  const selections = [];
+  const source = { url: 'https://media.example/film.mp4', source: 'Home library' };
+  const pick = extracted('components/player/PlayerOverlay.tsx', node =>
+    ts.isVariableDeclaration(node) && node.name.getText() === 'switchRemuxAudio' ? node.initializer.arguments[0] : undefined, {
+      stream: source, videoRef: { current: { currentTime: 130 } }, resumeAtRef: { current: 0 },
+      remuxAudioIndexRef: { current: -1 }, setRemuxAudioIndex: () => {},
+      onSelectStream: (...args) => selections.push(args)
+    });
+  pick(2);
+  assert.equal(selections[0][0].remuxAudioIndex, 2);
+  assert.equal(selections[0][1].forceRemux, true);
+  const h = preparation();
+  const prepared = await h.prepareBrowserStream(selections[0][0], settings, selections[0][1]);
+  assert.equal(prepared.remuxAudioIndex, 2);
+  const initialRef = extracted('components/player/PlayerOverlay.tsx', node =>
+    ts.isVariableDeclaration(node) && node.name.getText() === 'remuxAudioIndexRef'
+      ? node.initializer : undefined,
+    { stream: prepared, useRef: value => value });
+  assert.equal(initialRef, 2);
+});
+
 test('each live playback fallback receives a fresh frame deadline', () => {
   let now = 0;
   let failures = 0;
@@ -522,7 +613,9 @@ test('failed converted HLS never refreshes back to the incompatible original CDN
 
 function storeHarness(prepare, report = async () => {}, overrides = {}) {
   const state = { active: null, accepted: [], toasts: [], timers: new Map() };
+  const { isDisabledTelegramSource, TELEGRAM_DISABLED_MESSAGE } = load('lib/config.ts');
   const globals = {
+    isDisabledTelegramSource, TELEGRAM_DISABLED_MESSAGE,
     playbackPreparation: { current: null }, playbackGeneration: { current: 0 }, ownedPlayback: { current: null },
     activeProfileIdRef: { current: 'profile-a' }, settingsRef: { current: settings },
     authClient: { session: { userId: 'account-a' } }, selected: { title: 'Fixture' }, activeProfile: { id: 'profile-a' }, selectedEpisode: null,
@@ -548,6 +641,34 @@ function storeHarness(prepare, report = async () => {}, overrides = {}) {
     profileCleanup: profileEffect()
   };
 }
+
+test('disabled build rejects saved Telegram selections before preparation or external handoff', async () => {
+  const feature = load('lib/config.ts', {}, { process: { env: { NEXT_PUBLIC_TELEGRAM_ENABLED: 'false' } } });
+  const forbidden = () => assert.fail('Disabled Telegram reached a playback path');
+  const h = storeHarness(forbidden, forbidden, {
+    isDisabledTelegramSource: feature.isDisabledTelegramSource,
+    TELEGRAM_DISABLED_MESSAGE: feature.TELEGRAM_DISABLED_MESSAGE,
+    settingsRef: { current: { ...settings, defaultPlayer: 'vlc' } },
+    openExternalPlayer: forbidden
+  });
+  for (const stream of [{ addonId: 'telegram_native', url: 'https://media.example/video.mp4' },
+    { url: '/tg-stream/saved-id' },
+    { url: 'https://new-install.example/prepared.mp4', originalUrl: 'https://old-install.example/tg-stream/id' }]) {
+    h.play(stream);
+    await flush();
+    assert.equal(h.state.active, null);
+    assert.equal(h.state.toasts.at(-1), feature.TELEGRAM_DISABLED_MESSAGE);
+  }
+});
+
+test('default build still prepares an existing Telegram selection', async () => {
+  const inputs = [];
+  const h = storeHarness(async stream => { inputs.push(stream); return stream; });
+  h.play({ addonId: 'telegram_native', url: '/tg-stream/hosted-id' });
+  await flush();
+  assert.equal(inputs.length, 1);
+  assert.equal(h.state.active.url, '/tg-stream/hosted-id');
+});
 
 function sessionEffect(stream, report, update = () => {}) {
   const video = new EventTarget();
@@ -896,6 +1017,20 @@ test('Dolby Vision conversion keeps the manually selected file and propagates fa
   assert.equal(requested, provider);
 });
 
+test('an audio file is never sent to the missing-video recovery', () => {
+  let monitored = false;
+  const effect = extracted('components/player/PlayerOverlay.tsx', (node, source) =>
+    ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
+      && ts.isArrowFunction(node.arguments[0]) && node.arguments[0].getText(source).includes('monitorVideoFrames(')
+      ? node.arguments[0] : undefined, {
+    booted: true, liveTv: false, videoRef: { current: {} }, stream: { ...file(), url: 'https://cdn.test/episode.mp3' },
+    isAudioOnlySource: (url) => url.endsWith('.mp3'),
+    monitorVideoFrames: () => { monitored = true; return () => {}; }
+  });
+  assert.equal(effect(), undefined);
+  assert.equal(monitored, false);
+});
+
 for (const converted of [false, true]) test(`missing video ${converted ? 'after conversion stops with an error' : 'requests conversion of the same file'}`, () => {
   const stream = { ...file(), transcoded: converted };
   const video = { pause: () => { paused = true; } };
@@ -907,7 +1042,7 @@ for (const converted of [false, true]) test(`missing video ${converted ? 'after 
     ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
       && ts.isArrowFunction(node.arguments[0]) && node.arguments[0].getText(source).includes('monitorVideoFrames(')
       ? node.arguments[0] : undefined, {
-    booted: true, liveTv: false, videoRef: { current: video }, stream,
+    booted: true, liveTv: false, videoRef: { current: video }, stream, isAudioOnlySource: () => false,
     monitorVideoFrames: (_, callback) => { missing = callback; return () => {}; },
     canProviderTranscode: () => true,
     recordBrowserPlaybackFailure: (...args) => failures.push(args),

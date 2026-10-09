@@ -14,8 +14,12 @@
     "check:selfhost": "node scripts/selfhost.mjs check",
     "test": "node --test tests/*.test.cjs",
     "test:library-ui": "node scripts/check-library-ui.cjs",
+    "test:calendar-ui": "node scripts/check-calendar-ui.cjs",
+    "test:player-sources-ui": "node scripts/check-player-sources-ui.cjs",
+    "test:player-loading-ui": "node scripts/check-player-loading-ui.cjs",
     "test:iptv-groups-ui": "node scripts/check-iptv-groups-ui.cjs",
     "test:i18n-ui": "node scripts/check-i18n-ui.cjs",
+    "test:partner-ui": "node scripts/check-partner-ui.cjs",
     "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "next lint"

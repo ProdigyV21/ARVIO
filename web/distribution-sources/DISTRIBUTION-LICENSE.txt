@@ -1,0 +1,24 @@
+ARVIO Web — Unraid distribution
+
+This Unraid preview omits the Telegram integration and its Telegram/AES runtime
+dependencies. The ARVIO project source remains under its original Apache-2.0
+licence, supplied at ARVIO-LICENSE.txt. This is not a declaration that every
+component of the container has that licence. Source and build materials for
+the distributed copyleft/native components, and individual notices, accompany
+the image at /distribution-sources/index.html.
+
+This distribution-specific notice does not replace the Apache-2.0 licence on
+ARVIO's original source files, or change the Android app or hosted service. All
+original copyright, attribution and dependency notices remain applicable.
+The Node/Debian runtime is an aggregate of separately licensed components, not
+an assertion that the entire operating-system image is Apache-2.0.
+See the runtime inventory, individual notices and sources for those components.
+
+The original project licence is supplied at ARVIO-LICENSE.txt. Mediabunny retains MPL-2.0 and the
+rebuilt FFmpeg libraries retain LGPL-2.1-or-later. Native components retain the
+licences recorded in their sources and runtime notices.
+
+No additional restriction on modifying, debugging, reverse engineering or
+relinking these free-software components is imposed by this distribution.
+Media content, external-service access and trademarks are not licensed by this
+software distribution. Use only services/media you are authorized to use.

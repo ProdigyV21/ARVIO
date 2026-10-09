@@ -4,20 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Create and Add Collections and Catalogs - ARVIO Guide</title>
-  <meta name="description" content="Create ARVIO collections with a JSON starter, host them free on GitHub, and import them by URL. Add Trakt and MDBList catalogs on Android or ARVIO Web.">
+  <meta name="description" content="Build ARVIO collections in Collection Studio or use a JSON starter, then import the JSON or a public file URL. Add Trakt and MDBList catalogs on Android or ARVIO Web.">
   <link rel="canonical" href="https://arvio.tv/collections-catalogs/">
   <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
   <link rel="stylesheet" href="/guides/guide.css">
   <link rel="stylesheet" href="/collections-catalogs/guide.css">
   <meta property="og:type" content="article">
   <meta property="og:title" content="Create and Add Collections and Catalogs - ARVIO">
-  <meta property="og:description" content="A practical guide to collection JSON, free hosting, URL imports and custom catalogs.">
+  <meta property="og:description" content="A practical guide to Collection Studio, collection JSON, free hosting, URL imports and custom catalogs.">
   <meta property="og:url" content="https://arvio.tv/collections-catalogs/">
   <meta property="og:image" content="https://arvio.tv/assets/arvio-social.webp">
   <meta name="twitter:card" content="summary_large_image">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@graph":[
-    {"@type":"TechArticle","headline":"Create and add collections and catalogs","description":"Create collection JSON, host it at a public URL and import it into ARVIO. Add custom catalogs from supported list services.","url":"https://arvio.tv/collections-catalogs/","dateModified":"2026-09-29","author":{"@type":"Organization","name":"ARVIO"}},
+    {"@type":"TechArticle","headline":"Create and add collections and catalogs","description":"Build collection JSON in Collection Studio or use a starter, then paste the JSON or a public file URL into ARVIO. Add custom catalogs from supported list services.","url":"https://arvio.tv/collections-catalogs/","dateModified":"2026-10-08","author":{"@type":"Organization","name":"ARVIO"}},
     {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://arvio.tv/guides/"},{"@type":"ListItem","position":3,"name":"Collections and catalogs","item":"https://arvio.tv/collections-catalogs/"}]}
   ]}
   </script>
@@ -33,8 +33,8 @@
       <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">ARVIO</a><span aria-hidden="true">/</span><a href="/guides/">Guides</a><span aria-hidden="true">/</span><span>Collections and catalogs</span></nav>
       <p class="eyebrow">Make Home your own</p>
       <h1>Collections and catalogs</h1>
-      <p class="lead">Create folders of movies and shows, add your favorite lists, and organize them into your own Home rows. Start with the ready-to-import example, or build your own JSON file.</p>
-      <p class="guide-updated">Updated 29 September 2026 &middot; Android TV, Android mobile and ARVIO Web</p>
+      <p class="lead">Create folders of movies and shows, add your favorite lists, and organize them into your own Home rows. Build in your browser with Collection Studio, or start with the ready-to-import JSON example.</p>
+      <p class="guide-updated">Updated 8 October 2026 &middot; Android TV, Android mobile and ARVIO Web</p>
       <nav class="guide-jump" aria-label="On this page"><a href="#create">Create a collection</a><a href="#host">Get a public URL</a><a href="#import">Import into ARVIO</a><a href="#catalogs">Add catalogs</a><a href="#help">Troubleshooting</a></nav>
     </div></section>
 
@@ -47,6 +47,12 @@
 
     <section class="section" id="create"><div class="shell guide-reading">
       <p class="eyebrow">1. Create</p><h2>Start with a working collection</h2>
+      <h3>Build in Collection Studio</h3>
+      <p>Want to try a complete example first? Open <a href="/collection-studio/#examples">Weekend discoveries, Highly rated picks, or Animation and sci-fi</a>. Preview one without changing your current draft, make your own copy, or download its ready-to-import JSON. The queries supply discovery metadata, not media files.</p>
+      <p><a href="/collection-studio/">Open Collection Studio</a> to name one Home row, add up to eight folders, choose a TMDB discovery preset or a public MDBList or numeric Trakt list, and preview the layout. It runs in your browser without an account.</p>
+      <p>Choose <strong>Copy JSON</strong> and paste that text into ARVIO using the import steps below. You can also download <code>collections.json</code> or share a public preview link. A preview link opens Studio; it does not import into ARVIO. The colored gradients are preview styles, not artwork included in the import.</p>
+      <p>Studio checks the supported format but does not fetch list contents or verify that a list is public or available. Anyone with the preview link can read its names, descriptions and list references. Include only information you are comfortable sharing.</p>
+      <h3>Use the JSON starter</h3>
       <p><a href="/collections-catalogs/collections.json" download="collections.json">Download the starter JSON</a> or <a href="/collections-catalogs/collections.json">open it as plain JSON</a>. It creates one Home row with two folders using TMDB discovery. No add-on is required for this example.</p>
       <p>To try it immediately, paste this URL into ARVIO's collection importer:</p>
       <pre tabindex="0" aria-label="Starter collection URL"><code>https://arvio.tv/collections-catalogs/collections.json</code></pre>

@@ -90,6 +90,32 @@ fun tr(text: String): String {
     if (text.isBlank()) return text
     @StringRes val resId: Int? = when (text.trim()) {
         "Homeserver" -> R.string.library_homeserver_tab
+        "Calendar" -> R.string.library_calendar
+        "All watchlists" -> R.string.calendar_all_watchlists
+        "ARVIO watchlist" -> R.string.calendar_arvio_watchlist
+        "Today" -> R.string.live_label_today
+        "Local time" -> R.string.calendar_local_time
+        "Time TBA" -> R.string.calendar_time_tba
+        "Next month" -> R.string.calendar_next_month
+        "Previous month" -> R.string.calendar_previous_month
+        "release" -> R.string.calendar_release
+        "releases" -> R.string.calendar_releases
+        "more" -> R.string.calendar_more
+        "Navigate days" -> R.string.calendar_navigate_days
+        "Open day" -> R.string.calendar_open_day
+        "Some sources unavailable" -> R.string.calendar_partial
+        "Some release details unavailable" -> R.string.calendar_partial_details
+        "Next release" -> R.string.calendar_next_release
+        "Refresh calendar" -> R.string.calendar_refresh
+        "Finding your releases…" -> R.string.calendar_loading
+        "Calendar unavailable" -> R.string.calendar_unavailable
+        "Your watchlist, on the calendar" -> R.string.calendar_empty_watchlist
+        "No releases on this day" -> R.string.calendar_empty_day
+        "Add movies and shows to your ARVIO watchlist. No tracking account needed." -> R.string.calendar_add_watchlist
+        "Choose another day or watchlist to explore upcoming releases." -> R.string.calendar_choose_day
+        "Cinema" -> R.string.calendar_cinema
+        "Digital" -> R.string.calendar_digital
+        "Physical" -> R.string.calendar_physical
         // Navigation
         "Home" -> R.string.home
         "Search",

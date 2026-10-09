@@ -500,8 +500,7 @@ fun PlayerScreen(
     var unavailablePreviewTarget by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     // Post-episode "Up Next" prompt (issue #86). Shown on STATE_ENDED for TV shows:
     // a 10-second countdown lets the user stop watching or immediately Continue. On timeout we
-    // advance to the next episode. Gated on the existing autoPlayNext profile setting —
-    // when disabled we simply stay on the ended frame rather than advancing silently.
+    // advance to the next episode. Otherwise completion returns to the previous screen.
     var showNextEpisodePrompt by remember { mutableStateOf(false) }
     var pendingNextIdentity by remember { mutableStateOf<EpisodeIdentity?>(null) }
     var pendingNextAddonId by remember { mutableStateOf<String?>(null) }
@@ -540,15 +539,32 @@ fun PlayerScreen(
                 kitsuId = kitsuId,
                 kitsuEpisode = kitsuEpisodeNumber
             )
-            val next = viewModel.adjacentEpisodeIdentity(mediaId, current, forward = true)
+            val next = try {
+                withTimeoutOrNull(10_000L) {
+                    viewModel.adjacentEpisodeIdentity(mediaId, current, forward = true)
+                }
+            } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                null
+            }
             nextEpisodeIdentity = next
-            previousEpisodeIdentity = viewModel.adjacentEpisodeIdentity(mediaId, current, forward = false)
             nextEpisodeAirDateResolution = if (next == null) {
                 NextEpisodeAirDateResolution.Blocked(
                     NextEpisodeAirDateBlockReason.MissingEpisode,
                 )
             } else {
                 viewModel.resolveNextEpisodeAirDate(mediaId, next)
+            }
+            // Previous-episode metadata must not delay the end-of-episode decision.
+            previousEpisodeIdentity = try {
+                withTimeoutOrNull(10_000L) {
+                    viewModel.adjacentEpisodeIdentity(mediaId, current, forward = false)
+                }
+            } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                null
             }
         } else {
             nextEpisodeAirDateResolution = NextEpisodeAirDateResolution.Blocked(
@@ -576,14 +592,20 @@ fun PlayerScreen(
                 }
 
                 coroutineScope.launch {
-                    runCatching {
-                        viewModel.saveProgressAndWait(
-                            position = positionSnapshot,
-                            duration = durationSnapshot,
-                            progressPercent = progressPercentSnapshot,
-                            isPlaying = false,
-                            playbackState = playbackStateSnapshot
-                        )
+                    try {
+                        withTimeoutOrNull(2_000L) {
+                            viewModel.saveProgressAndWait(
+                                position = positionSnapshot,
+                                duration = durationSnapshot,
+                                progressPercent = progressPercentSnapshot,
+                                isPlaying = false,
+                                playbackState = playbackStateSnapshot
+                            )
+                        }
+                    } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                        throw cancellation
+                    } catch (_: Exception) {
+                        // A failed tracking write must not block the next episode.
                     }
 
                     onPlayNext(
@@ -1874,6 +1896,57 @@ fun PlayerScreen(
         showNextEpisodePrompt = false
         onExitPlayer()
     }
+    val playbackEpisodeKey = if (mediaType == MediaType.TV && seasonNumber != null && episodeNumber != null) {
+        PlaybackEpisodeKey(mediaId, seasonNumber, episodeNumber,
+            tmdbSeasonNumber ?: seasonNumber, tmdbEpisodeNumber ?: episodeNumber,
+            kitsuId, kitsuEpisodeNumber)
+    } else null
+    val finishPlayback: () -> Unit = {
+        // Preserve the final watched/progress write, but a slow tracking server must not hold
+        // navigation hostage. The save job belongs to the ViewModel, not this waiting coroutine.
+        showControls = true
+        val finalPosition = exoPlayer.currentPosition
+        val finalDuration = exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: duration
+        coroutineScope.launch {
+            try {
+                withTimeoutOrNull(2_000L) {
+                    viewModel.saveProgressAndWait(finalPosition, finalDuration, 100, false, Player.STATE_ENDED)
+                }
+            } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Tracking failures do not prevent leaving a finished video.
+            }
+            onExitPlayer()
+        }
+    }
+    PlayerCompletionEffect(
+        ended = currentPlaybackState == Player.STATE_ENDED,
+        enabled = hasPlaybackStarted && !isLiveStream && !isCasting,
+        blocked = exitTransition.isExiting || nextEpisodeTransitionInProgress ||
+            showNextEpisodePrompt || showSourceMenu || showSubtitleMenu || showSubtitleSettings || uiState.error != null,
+        waitingForNextEpisode = uiState.autoPlayNext && playbackEpisodeKey != null &&
+            (nextEpisodeAirDateSource != playbackEpisodeKey || nextEpisodeAirDateResolution == NextEpisodeAirDateResolution.Pending),
+        offerNextEpisode = uiState.autoPlayNext && playbackEpisodeKey != null && nextEpisodeIdentity != null &&
+            nextEpisodeAirDateResolution == NextEpisodeAirDateResolution.Allowed,
+        onNextEpisode = {
+            val next = nextEpisodeIdentity
+            if (next != null && nextEpisodePromptGate.tryOpen(
+                    playbackEpisodeKey, true, nextEpisodeAirDateResolution
+                )) {
+                val selected = latestUiState.selectedStream
+                pendingNextIdentity = next
+                pendingNextAddonId = selected?.addonId?.takeIf { it.isNotBlank() }
+                pendingNextSourceName = selected?.source?.takeIf { it.isNotBlank() }
+                pendingNextBingeGroup = selected?.behaviorHints?.bingeGroup?.takeIf { it.isNotBlank() }
+                nextEpisodePromptButton = 0
+                showNextEpisodePrompt = true
+            } else {
+                finishPlayback()
+            }
+        },
+        onFinish = finishPlayback,
+    )
     DisposableEffect(exoPlayer, exitTransition) {
         val listener = object : Player.Listener {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -2954,53 +3027,6 @@ fun PlayerScreen(
                     )
                 }
 
-            }
-
-            // Post-episode prompt: when a TV episode ends, show the "Up Next" overlay with a
-            // 10-second countdown that auto-advances (or lets the user cancel / continue
-            // immediately). Gated on the profile's autoPlayNext setting — when disabled we
-            // stay on the ended frame rather than silently advancing. STATE_ENDED remains active
-            // after closing, so the per-episode gate prevents the countdown from reopening.
-            val endedEpisodeKey = if (
-                mediaType == MediaType.TV &&
-                seasonNumber != null &&
-                episodeNumber != null
-            ) {
-                PlaybackEpisodeKey(
-                    mediaId = mediaId,
-                    seasonNumber = seasonNumber,
-                    episodeNumber = episodeNumber,
-                    tmdbSeasonNumber = tmdbSeasonNumber ?: seasonNumber,
-                    tmdbEpisodeNumber = tmdbEpisodeNumber ?: episodeNumber,
-                    kitsuId = kitsuId,
-                    kitsuEpisodeNumber = kitsuEpisodeNumber,
-                )
-            } else {
-                null
-            }
-            if (endedEpisodeKey != null && nextEpisodePromptGate.tryOpen(
-                    episode = endedEpisodeKey,
-                    eligible = exoPlayer.playbackState == Player.STATE_ENDED &&
-                        !showNextEpisodePrompt &&
-                        !showSourceMenu &&
-                        !showSubtitleMenu &&
-                        uiState.error == null &&
-                        uiState.autoPlayNext &&
-                        nextEpisodeIdentity != null &&
-                        nextEpisodeAirDateSource == endedEpisodeKey,
-                    airDateResolution = nextEpisodeAirDateResolution,
-                )
-            ) {
-                val selected = uiState.selectedStream
-                val next = nextEpisodeIdentity
-                if (next != null) {
-                    pendingNextIdentity = next
-                    pendingNextAddonId = selected?.addonId?.takeIf { it.isNotBlank() }
-                    pendingNextSourceName = selected?.source?.takeIf { it.isNotBlank() }
-                    pendingNextBingeGroup = selected?.behaviorHints?.bingeGroup?.takeIf { it.isNotBlank() }
-                    nextEpisodePromptButton = 0
-                    showNextEpisodePrompt = true
-                }
             }
 
             val tickDelayMs = when {
@@ -4719,6 +4745,7 @@ fun PlayerScreen(
                 isVisible = showSourceMenu,
                 streams = uiState.streams,
                 selectedStream = uiState.selectedStream,
+                recentSource = uiState.recentSource,
                 isLoading = uiState.isLoadingStreams,
                 hasStreamingAddons = !uiState.isSetupError,
                 addonOrderedIds = uiState.addonOrderedIds,

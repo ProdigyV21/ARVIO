@@ -24,6 +24,8 @@ import com.arflix.tv.data.api.StalkerApi
 import com.arflix.tv.data.api.TraktDeviceCode
 import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.needsConfiguration
+import com.arflix.tv.data.model.isRemovable
+import com.arflix.tv.data.model.CommunityAddon
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogDiscoveryResult
 import com.arflix.tv.data.model.CatalogKind
@@ -41,6 +43,7 @@ import com.arflix.tv.data.repository.CatalogDiscoveryRepository
 import com.arflix.tv.data.repository.CatalogRepository
 import com.arflix.tv.data.repository.CollectionTemplateManifest
 import com.arflix.tv.data.repository.CloudSyncRepository
+import com.arflix.tv.data.repository.CommunityAddonRepository
 import com.arflix.tv.data.repository.HomeServerConnection
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlexPinAuthSession
@@ -228,7 +231,7 @@ data class SettingsUiState(
     val secondarySubtitle: String = "Off",
     val trailerAutoPlay: Boolean = true,
     val trailerSoundEnabled: Boolean = false,
-    val trailerDelaySeconds: Int = 2,
+    val trailerDelaySeconds: Int = 1,
     /** 0 keeps the fixed row height; 6..10 divides the TV guide into that many rows. */
     val guideRowCount: Int = 0,
     val trailerInCards: Boolean = true,
@@ -279,6 +282,7 @@ data class SettingsUiState(
     val isSimklConnected: Boolean = false,
     val isSimklAuthStarting: Boolean = false,
     val isSimklPolling: Boolean = false,
+    val isSimklV2Connected: Boolean = false,
     val simklUserCode: String? = null,
     val simklVerificationUrl: String? = null,
     val simklCodeExpiresAtMillis: Long? = null,
@@ -357,6 +361,12 @@ data class SettingsUiState(
     val isRefreshingAddons: Boolean = false,
     val isAddonInstallLoading: Boolean = false,
     val pendingAddonInstall: PendingAddonInstall? = null,
+    // Community addon catalog
+    val communityAddons: List<CommunityAddon> = emptyList(),
+    val isCommunityAddonsLoading: Boolean = false,
+    val communityAddonsFailed: Boolean = false,
+    /** Transport URLs of community addons being installed or removed right now. */
+    val communityAddonBusyUrls: Set<String> = emptySet(),
     val torrServerBaseUrl: String = "",
     val homeServerConnection: HomeServerConnection? = null,
     val homeServerConnections: List<HomeServerConnection> = emptyList(),
@@ -433,7 +443,8 @@ class SettingsViewModel @Inject constructor(
     private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val pluginManager: PluginManager,
-    private val telegramRepository: TelegramRepository
+    private val telegramRepository: TelegramRepository,
+    private val communityAddonRepository: CommunityAddonRepository
 ) : ViewModel() {
     private fun visibleCatalogs(catalogs: List<CatalogConfig>): List<CatalogConfig> {
         return catalogs.filter { config ->
@@ -697,7 +708,7 @@ class SettingsViewModel @Inject constructor(
             val autoPlayMaxSizeGb = AutoplayLimits.normalizeSizeGb(prefs[profileManager.profileIntKey("auto_play_max_size_gb")] ?: 0)
             val trailerAutoPlay = prefs[trailerAutoPlayKey()] ?: true
             val trailerSoundEnabled = prefs[trailerSoundEnabledKey()] ?: false
-            val trailerDelaySeconds = prefs[trailerDelayKey()]?.toIntOrNull() ?: 2
+            val trailerDelaySeconds = prefs[trailerDelayKey()]?.toIntOrNull() ?: 1
             val guideRowCount = prefs[guideRowCountKey()]?.toIntOrNull()
                 ?.takeIf { it in 6..10 } ?: 0
             val trailerInCards = prefs[trailerInCardsKey()] ?: true
@@ -2553,6 +2564,83 @@ class SettingsViewModel @Inject constructor(
             }
     }
 
+    fun loadCommunityAddons(forceRefresh: Boolean = false) {
+        if (_uiState.value.isCommunityAddonsLoading) return
+        _uiState.value = _uiState.value.copy(isCommunityAddonsLoading = true, communityAddonsFailed = false)
+        viewModelScope.launch {
+            communityAddonRepository.getCommunityAddons(forceRefresh)
+                .onSuccess { addons ->
+                    _uiState.value = _uiState.value.copy(
+                        communityAddons = addons,
+                        isCommunityAddonsLoading = false
+                    )
+                }
+                .onFailure {
+                    _uiState.value = _uiState.value.copy(
+                        isCommunityAddonsLoading = false,
+                        communityAddonsFailed = true
+                    )
+                }
+        }
+    }
+
+    /** Install a community addon straight away: it was picked from a list, not opened from a link. */
+    fun installCommunityAddon(entry: CommunityAddon) {
+        if (!markCommunityAddonBusy(entry)) return
+        viewModelScope.launch {
+            try {
+                streamRepository.prepareCustomAddon(entry.transportUrl)
+                    .onSuccess { addon -> installAddon(addon, replaceAddonIds = emptySet()) }
+                    .onFailure { error ->
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = error.message.orMessage(
+                                SettingsMessage.Res(R.string.addon_failed_add)
+                            ),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+            } finally {
+                clearCommunityAddonBusy(entry)
+            }
+        }
+    }
+
+    /** Remove every installed setup of a community addon. */
+    fun uninstallCommunityAddon(entry: CommunityAddon) {
+        if (!markCommunityAddonBusy(entry)) return
+        viewModelScope.launch {
+            try {
+                val setups = entry.installedSetups(streamRepository.installedAddons.first())
+                    .filter { it.isRemovable }
+                if (setups.isEmpty()) return@launch
+                setups.forEach { streamRepository.removeAddon(it.id) }
+                runCatching {
+                    catalogRepository.syncAddonCatalogs(streamRepository.installedAddons.first())
+                }
+                _uiState.value = _uiState.value.copy(
+                    toastMessage = SettingsMessage.Res(R.string.settings_community_addon_removed, listOf(entry.name)),
+                    toastType = ToastType.SUCCESS
+                )
+                syncLocalStateToCloud(silent = true)
+            } finally {
+                clearCommunityAddonBusy(entry)
+            }
+        }
+    }
+
+    private fun markCommunityAddonBusy(entry: CommunityAddon): Boolean {
+        val busy = _uiState.value.communityAddonBusyUrls
+        if (entry.transportUrl in busy) return false
+        _uiState.value = _uiState.value.copy(communityAddonBusyUrls = busy + entry.transportUrl)
+        return true
+    }
+
+    private fun clearCommunityAddonBusy(entry: CommunityAddon) {
+        _uiState.value = _uiState.value.copy(
+            communityAddonBusyUrls = _uiState.value.communityAddonBusyUrls - entry.transportUrl
+        )
+    }
+
     fun refreshAddons() {
         if (_uiState.value.isRefreshingAddons) return
         _uiState.value = _uiState.value.copy(isRefreshingAddons = true)
@@ -2876,6 +2964,10 @@ class SettingsViewModel @Inject constructor(
             catalogSearchQuery = query,
             catalogSearchError = null
         )
+    }
+
+    fun refreshSimklListsConnection() {
+        _uiState.value = _uiState.value.copy(isSimklV2Connected = simklAuthManager.isV2Connected())
     }
 
     fun searchCatalogLists(query: String = _uiState.value.catalogSearchQuery) {
@@ -5136,6 +5228,7 @@ class SettingsViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(
                             isSimklPolling = false,
                             isSimklConnected = true,
+                            isSimklV2Connected = simklAuthManager.isV2Connected(),
                             simklUserCode = null,
                             simklCodeExpiresAtMillis = null,
                             simklVerificationUrl = null,
@@ -5192,6 +5285,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         isSimklPolling = false,
                         isSimklConnected = true,
+                            isSimklV2Connected = simklAuthManager.isV2Connected(),
                         simklUserCode = null,
                         simklCodeExpiresAtMillis = null,
                         simklVerificationUrl = null,
@@ -5219,6 +5313,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cancelSimklAuth() {
+        simklAuthManager.cancelPinAuth()
         simklPollingJob?.cancel()
         simklPollingJob = null
         _uiState.value = _uiState.value.copy(

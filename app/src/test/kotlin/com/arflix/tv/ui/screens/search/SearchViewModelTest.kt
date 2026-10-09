@@ -73,6 +73,56 @@ class SearchViewModelTest {
         assertEquals(listOf(loki), model.uiState.value.results)
     }
 
+    @Test fun ordinaryResultsPublishBeforeSlowAddonAndNativeResultsAppendLater() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val native = loki.copy(id = -12, title = "Loki special", addonNativeId = "provider:12",
+            addonNativeAddonId = "provider")
+        coEvery { repository.searchWithPeople("Loki", any()) } returns MediaSearchResults(listOf(loki), emptyList())
+        coEvery { repository.searchNativeAddonItems("Loki") } coAnswers {
+            started.complete(Unit)
+            release.await()
+            listOf(native)
+        }
+        model.updateQuery("Loki"); model.search()
+        assertEquals(listOf(loki), awaitResults("Loki").results)
+        withTimeout(5_000) { started.await() }
+        assertFalse(model.uiState.value.isLoading)
+        release.complete(Unit)
+        val complete = withTimeout(5_000) { model.uiState.first { it.results.size == 2 } }
+        assertEquals(setOf(loki, native), complete.results.toSet())
+    }
+
+    @Test fun cancelledAddonQueryCannotAppendToNewQuery() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        coEvery { repository.searchWithPeople(any(), any()) } returns MediaSearchResults(listOf(loki), emptyList())
+        coEvery { repository.searchNativeAddonItems("old") } coAnswers {
+            withContext(NonCancellable) {
+                started.complete(Unit)
+                release.await()
+                listOf(loki.copy(id = -12, title = "Old native", addonNativeId = "provider:12"))
+            }
+        }
+        model.updateQuery("old"); model.search()
+        withTimeout(5_000) { started.await() }
+        model.updateQuery("new"); model.search()
+        assertEquals(listOf(loki), awaitResults("new").results)
+        release.complete(Unit)
+        delay(100)
+        assertEquals(listOf(loki), model.uiState.value.results)
+    }
+
+    @Test fun addonResultsStillWorkWhenTmdbFails() = runBlocking {
+        val native = loki.copy(id = -12, addonNativeId = "provider:12", addonNativeAddonId = "provider")
+        coEvery { repository.searchWithPeople("Loki", any()) } throws IllegalStateException("Offline")
+        coEvery { repository.searchNativeAddonItems("Loki") } returns listOf(native)
+        model.updateQuery("Loki"); model.search()
+        val results = awaitResults("Loki")
+        assertEquals(listOf(native), results.results)
+        assertNull(results.error)
+    }
+
     @Test fun cancelledOldQueryCannotReplaceNewResults() = runBlocking {
         val oldStarted = CompletableDeferred<Unit>()
         val finishOld = CompletableDeferred<Unit>()

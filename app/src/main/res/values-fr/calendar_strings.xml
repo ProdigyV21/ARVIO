@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_calendar">Calendrier</string>
+    <string name="calendar_all_watchlists">Toutes les listes</string>
+    <string name="calendar_arvio_watchlist">Liste ARVIO</string>
+    <string name="calendar_today">Aujourd’hui</string>
+    <string name="calendar_local_time">Heure locale</string>
+    <string name="calendar_time_tba">Heure à confirmer</string>
+    <string name="calendar_next_month">Mois suivant</string>
+    <string name="calendar_previous_month">Mois précédent</string>
+    <string name="calendar_release">sortie</string>
+    <string name="calendar_releases">sorties</string>
+    <string name="calendar_more">autres</string>
+    <string name="calendar_navigate_days">Changer de jour</string>
+    <string name="calendar_open_day">Ouvrir le jour</string>
+    <string name="calendar_partial">Certaines sources sont indisponibles</string>
+    <string name="calendar_loading">Recherche de vos sorties…</string>
+    <string name="calendar_unavailable">Calendrier indisponible</string>
+    <string name="calendar_empty_watchlist">Votre liste dans le calendrier</string>
+    <string name="calendar_empty_day">Aucune sortie ce jour</string>
+    <string name="calendar_add_watchlist">Ajoutez des films et séries à votre liste ARVIO. Aucun compte de suivi nécessaire.</string>
+    <string name="calendar_choose_day">Choisissez un autre jour ou une autre liste pour découvrir les prochaines sorties.</string>
+    <string name="calendar_cinema">Cinéma</string>
+    <string name="calendar_digital">Numérique</string>
+    <string name="calendar_physical">Physique</string>
+    <string name="calendar_next_release">Prochaine sortie</string>
+    <string name="calendar_partial_details">Certains détails des sorties sont indisponibles</string>
+    <string name="calendar_refresh">Actualiser le calendrier</string>
+</resources>

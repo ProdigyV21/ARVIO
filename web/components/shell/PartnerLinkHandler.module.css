@@ -1,0 +1,32 @@
+.notice {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 16px;
+  background: #17191e;
+  color: #f5f5f7;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+}
+.message { display: flex; align-items: center; gap: 10px; line-height: 1.5; }
+.actions { display: flex; gap: 10px; margin-top: 12px; }
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 8px;
+  color: inherit;
+  background: #252830;
+  cursor: pointer;
+}
+.actions button:hover { background: #323640; }
+.actions button:focus-visible { outline: 2px solid var(--accent, #ededed); outline-offset: 3px; }
+.spinner { flex-shrink: 0; animation: partner-spin 1s linear infinite; }
+@keyframes partner-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

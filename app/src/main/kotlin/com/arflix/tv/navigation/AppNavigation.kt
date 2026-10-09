@@ -7,9 +7,20 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -33,8 +44,33 @@ import com.arflix.tv.ui.screens.settings.SettingsScreen
 import com.arflix.tv.ui.screens.settings.telegram.TelegramSettingsScreen
 import com.arflix.tv.ui.screens.tv.live.LiveTvScreen
 import com.arflix.tv.ui.screens.watchlist.WatchlistScreen
+import com.arflix.tv.ui.screens.watchlist.calendar.ReleaseCalendarViewModel
 import com.arflix.tv.ui.screens.profile.ProfileSelectionScreen
 import com.arflix.tv.util.LocalDeviceType
+import kotlinx.coroutines.delay
+
+@Composable
+private fun CalendarIdlePreload(viewModel: ReleaseCalendarViewModel, profileId: String?, content: @Composable () -> Unit) {
+    var lastInteraction by remember { mutableLongStateOf(0L) }
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    LaunchedEffect(profileId, lifecycle, lastInteraction) {
+        if (profileId != null && lifecycle == Lifecycle.State.RESUMED) {
+            delay(6_000)
+            viewModel.preloadIdle()
+        }
+    }
+    Box(Modifier.fillMaxSize().onPreviewKeyEvent {
+        lastInteraction = android.os.SystemClock.uptimeMillis()
+        false
+    }.pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                awaitPointerEvent(PointerEventPass.Initial)
+                lastInteraction = android.os.SystemClock.uptimeMillis()
+            }
+        }
+    }) { content() }
+}
 
 /**
  * Navigation destinations
@@ -156,6 +192,8 @@ fun AppNavigation(
     onTvSubScreenChanged: (Boolean) -> Unit = {},
     onExitApp: () -> Unit = {}
 ) {
+    // Activity-scoped results survive Home/Library navigation and remain profile-scoped internally.
+    val calendarViewModel: ReleaseCalendarViewModel = hiltViewModel()
     val navigateTopLevel: (String) -> Unit = { route ->
         navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
@@ -209,6 +247,7 @@ fun AppNavigation(
 
         // Home screen
         composable(Screen.Home.route) {
+          CalendarIdlePreload(calendarViewModel, currentProfile?.id) {
             HomeScreen(
                 preloadedCategories = preloadedCategories,
                 preloadedHeroItem = preloadedHeroItem,
@@ -254,6 +293,7 @@ fun AppNavigation(
                 },
                 onExitApp = onExitApp
             )
+          }
         }
 
         // Search screen
@@ -277,7 +317,12 @@ fun AppNavigation(
 
         // Watchlist screen
         composable(Screen.Watchlist.route) {
+            DisposableEffect(calendarViewModel) {
+                calendarViewModel.onVisible()
+                onDispose { calendarViewModel.onHidden() }
+            }
             WatchlistScreen(
+                calendarViewModel = calendarViewModel,
                 currentProfile = currentProfile,
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
@@ -478,7 +523,8 @@ fun AppNavigation(
         ) { backStackEntry ->
             val mediaTypeStr = backStackEntry.arguments?.getString("mediaType") ?: "movie"
             val mediaId = backStackEntry.arguments?.getInt("mediaId") ?: 0
-            if (mediaId <= 0) {
+            // Negative ids are native addon items (see AddonNativeCatalog).
+            if (mediaId == 0) {
                 navigateHome()
                 return@composable
             }

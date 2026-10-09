@@ -1,0 +1,22 @@
+{
+  "name": "arvio-aes-source-rebuild",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated verification tools for the unmodified @cryptography/aes 0.1.1 source snapshot",
+  "dependencies": {
+    "@types/node": "12.12.31",
+    "@rollup/plugin-node-resolve": "7.1.1",
+    "@rollup/plugin-typescript": "4.0.0",
+    "rollup": "2.2.0",
+    "rollup-plugin-terser": "5.3.0",
+    "tslib": "1.11.1",
+    "typescript": "3.8.3"
+  },
+  "overrides": {
+    "@types/node": "12.12.31",
+    "@rollup/pluginutils": "3.0.8",
+    "jest-worker": "24.9.0",
+    "serialize-javascript": "2.1.2",
+    "terser": "4.6.7"
+  }
+}

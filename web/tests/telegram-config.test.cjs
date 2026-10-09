@@ -9,9 +9,9 @@ test('Telegram configuration accepts valid build environment credentials', () =>
     NEXT_PUBLIC_TELEGRAM_API_ID: '123456',
     NEXT_PUBLIC_TELEGRAM_API_HASH: 'test-app-hash',
   } } });
-  assert.equal(config.TELEGRAM_API_ID, 123456);
-  assert.equal(config.TELEGRAM_API_HASH, 'test-app-hash');
-  assert.equal(config.isTelegramConfigured, true);
+  assert.equal(config.getTelegramCredentials().apiId, 123456);
+  assert.equal(config.getTelegramCredentials().apiHash, 'test-app-hash');
+  assert.equal(config.isTelegramConfigured(), true);
 });
 
 test('missing or empty Telegram build variables resolve to unconfigured defaults', () => {
@@ -19,14 +19,14 @@ test('missing or empty Telegram build variables resolve to unconfigured defaults
     NEXT_PUBLIC_TELEGRAM_API_ID: '',
     NEXT_PUBLIC_TELEGRAM_API_HASH: '',
   } } });
-  assert.equal(configEmpty.TELEGRAM_API_ID, 0);
-  assert.equal(configEmpty.TELEGRAM_API_HASH, '');
-  assert.equal(configEmpty.isTelegramConfigured, false);
+  assert.equal(configEmpty.getTelegramCredentials().apiId, 0);
+  assert.equal(configEmpty.getTelegramCredentials().apiHash, '');
+  assert.equal(configEmpty.isTelegramConfigured(), false);
 
   const configUndefined = load('lib/telegram/config.ts', {}, { process: { env: {} } });
-  assert.equal(configUndefined.TELEGRAM_API_ID, 0);
-  assert.equal(configUndefined.TELEGRAM_API_HASH, '');
-  assert.equal(configUndefined.isTelegramConfigured, false);
+  assert.equal(configUndefined.getTelegramCredentials().apiId, 0);
+  assert.equal(configUndefined.getTelegramCredentials().apiHash, '');
+  assert.equal(configUndefined.isTelegramConfigured(), false);
 });
 
 test('placeholder template values resolve to unconfigured', () => {
@@ -34,9 +34,9 @@ test('placeholder template values resolve to unconfigured', () => {
     NEXT_PUBLIC_TELEGRAM_API_ID: 'your-telegram-api-id',
     NEXT_PUBLIC_TELEGRAM_API_HASH: 'your-telegram-api-hash',
   } } });
-  assert.equal(config.TELEGRAM_API_ID, 0);
-  assert.equal(config.TELEGRAM_API_HASH, '');
-  assert.equal(config.isTelegramConfigured, false);
+  assert.equal(config.getTelegramCredentials().apiId, 0);
+  assert.equal(config.getTelegramCredentials().apiHash, '');
+  assert.equal(config.isTelegramConfigured(), false);
 });
 
 test('malformed Telegram build variables are safely sanitized to unconfigured', () => {
@@ -54,7 +54,7 @@ test('malformed Telegram build variables are safely sanitized to unconfigured', 
       NEXT_PUBLIC_TELEGRAM_API_ID: id,
       NEXT_PUBLIC_TELEGRAM_API_HASH: hash,
     } } });
-    assert.equal(config.isTelegramConfigured, false, `Expected unconfigured for id="${id}", hash="${hash}"`);
+    assert.equal(config.isTelegramConfigured(), false, `Expected unconfigured for id="${id}", hash="${hash}"`);
   }
 });
 

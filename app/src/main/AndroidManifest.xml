@@ -108,6 +108,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Partner title links open details only; payload is validated before navigation. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="arvio" android:host="open" />
+            </intent-filter>
+
             <!-- Custom Scheme: arvio://install-pack?url=... -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

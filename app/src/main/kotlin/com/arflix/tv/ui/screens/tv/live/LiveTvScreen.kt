@@ -117,6 +117,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.arflix.tv.R
 import com.arflix.tv.ui.theme.Pink
@@ -1642,6 +1643,17 @@ fun LiveTvScreen(
         playingCatchupProgram?.let { IptvNowNext(now = it) }
             ?: effectiveGuideNowNext[playingChannelId]?.atTime(guideClockMillis)
     }
+    fun focusedChannelPreview(): Pair<EnrichedChannel, IptvNowNext?>? {
+        if (focusZone != LiveTvFocusZone.CHANNEL_LIST && focusZone != LiveTvFocusZone.EPG) return null
+        val channelId = focusedChannelId ?: return null
+        val channel = focusedChannelObject[0]?.takeIf { it.id == channelId }
+            ?: visibleEnrichedState.value.index.byId[channelId]
+            ?: filteredChannelIndexById[channelId]?.let(filteredChannels::getOrNull)
+            ?: return null
+        val guide = if (channel.id == playingChannelId) currentNowNext
+            else effectiveGuideNowNext[channel.id]?.atTime(guideClockMillis)
+        return channel to guide
+    }
     val actionGuideNowNext = remember(state.snapshot.nowNext, effectiveGuideNowNext) {
         HashMap(state.snapshot.nowNext).apply { putAll(effectiveGuideNowNext) }
     }
@@ -2601,6 +2613,9 @@ fun LiveTvScreen(
 
     fun focusEpg(channelId: String) {
         noteGuideUserNavigation()
+        // Until a real guide cell reports focus, show this channel's own
+        // current programme/fallback rather than a cell from the previous visit.
+        focusedProgramme = null
         focusedChannelId = channelId
         epgPrefetchAnchorId = channelId
         rememberedChannelByCategory[categoryScope] = channelId
@@ -3025,7 +3040,7 @@ fun LiveTvScreen(
             .setDefaultRequestProperties(baseRequestHeaders)
     }
     val mediaSourceFactory = remember(iptvDataSourceFactory) {
-        DefaultMediaSourceFactory(context)
+        DefaultMediaSourceFactory(context, iptvExtractorsFactory())
             .setDataSourceFactory(iptvDataSourceFactory)
             .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
     }
@@ -3252,8 +3267,17 @@ fun LiveTvScreen(
             val upstream = sourceHttpFactory.createDataSource()
             if (isHls) upstream else IptvHlsDetectingDataSource(upstream, stream)
         }
-        val source = DefaultMediaSourceFactory(context).setDataSourceFactory(sourceDataFactory)
-            .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy()).createMediaSource(mediaItem)
+        // HLS gets its own factory: DefaultMediaSourceFactory cannot set the HLS extractors,
+        // and channels without IDR frames need iptvHlsExtractorFactory() to show video.
+        val source = if (isHls) {
+            HlsMediaSource.Factory(sourceDataFactory)
+                .setExtractorFactory(iptvHlsExtractorFactory())
+                .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
+                .createMediaSource(mediaItem)
+        } else {
+            DefaultMediaSourceFactory(context, iptvExtractorsFactory()).setDataSourceFactory(sourceDataFactory)
+                .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy()).createMediaSource(mediaItem)
+        }
         if (initialPositionMs > 0L) exoPlayer.setMediaSource(source, initialPositionMs)
         else exoPlayer.setMediaSource(source)
         exoPlayer.prepare()
@@ -4075,6 +4099,7 @@ fun LiveTvScreen(
                         ) {
                             MiniPlayerRow(
                                 focusedProgrammeProvider = { focusedProgramme.takeIf { focusZone == LiveTvFocusZone.EPG } },
+                                focusedChannelProvider = ::focusedChannelPreview,
                                 exoPlayer = exoPlayer,
                                 channel = playingDisplayChannel ?: playingChannel,
                                 clockTickMillis = guideClockMillis,
@@ -4243,6 +4268,7 @@ fun LiveTvScreen(
                 ) {
                     if (!sportsSelected) MiniPlayerRow(
                         focusedProgrammeProvider = { focusedProgramme.takeIf { focusZone == LiveTvFocusZone.EPG } },
+                        focusedChannelProvider = ::focusedChannelPreview,
                         exoPlayer = exoPlayer,
                         channel = playingDisplayChannel,
                         clockTickMillis = guideClockMillis,
@@ -4771,10 +4797,13 @@ fun LiveTvScreen(
                 },
                 onDismiss = { searchOpen = false },
                 onPick = { channel ->
+                    retainedPlayingChannel = channel
                     selectedCategoryId = bestCategoryIdForChannel(channel, visibleEnrichedState.value.tree)
                     playingChannelId = channel.id
                     focusedChannelId = channel.id
                     epgPrefetchAnchorId = channel.id
+                    playingCatchupProgram = null
+                    catchupPlaybackOffsetMs = 0L
                     searchOpen = false
                     if (isTouchDevice) {
                         sportsSelected = false

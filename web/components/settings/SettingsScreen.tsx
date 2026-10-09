@@ -37,8 +37,9 @@ import {
 } from "lucide-react";
 import { Component, CSSProperties, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { defaultCatalogs, mergeCatalogs } from "@/lib/catalogs";
+import { defaultCatalogs, isDefaultCollection, mergeCatalogs, setDefaultCollectionsEnabled, updateHiddenCatalogIds } from "@/lib/catalogs";
 import { parseCustomCollections, mergeImportedCollections } from "@/lib/customCollections";
+import { loadSimklCustomList, parseSimklListUrl, searchSimklCustomLists, type SimklCustomList } from "@/lib/simklLists";
 import { textRequest, proxiedUrl } from "@/lib/http";
 import {
   config,
@@ -127,6 +128,7 @@ const SECTIONS = [
   { id: "credits", label: "About & Credits", icon: Eye },
 ] as const;
 
+const VISIBLE_SECTIONS = SECTIONS.filter(section => config.telegramEnabled || section.id !== "telegram");
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -242,7 +244,7 @@ export function SettingsScreen() {
     return () => window.removeEventListener(SOURCE_SETTINGS_EVENT, navigate);
   }, []);
 
-  const activeSectionObj = SECTIONS.find((s) => s.id === section);
+  const activeSectionObj = VISIBLE_SECTIONS.find((s) => s.id === section);
 
   return (
     <div className={`settings-shell ${collapsed ? "sidebar-collapsed" : "sidebar-expanded"}`}>
@@ -270,7 +272,7 @@ export function SettingsScreen() {
           <h2 className="settings-sidebar-title">{translateUi("Settings")}</h2>
         </div>
         <nav className="settings-nav">
-          {SECTIONS.map((s) => {
+          {VISIBLE_SECTIONS.map((s) => {
             const Icon = s.icon;
             return (
               <button
@@ -312,7 +314,7 @@ export function SettingsScreen() {
             </button>
           </div>
           <nav className="settings-mobile-nav">
-            {SECTIONS.map((s) => {
+            {VISIBLE_SECTIONS.map((s) => {
               const Icon = s.icon;
               const isActive = section === s.id;
               return (
@@ -592,6 +594,10 @@ function SectionBody({ section }: { section: SectionId }) {
     case "credits":
       return (
         <Panel title={translateUi("About ARVIO")}>
+          {process.env.NEXT_PUBLIC_UNRAID_DISTRIBUTION === "true" && (
+            <p><a className="secondary text-button" href="/distribution-sources/index.html" target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={16} /> Source code & licences</a></p>
+          )}
           <h3>{translateUi("Credits")}</h3>
           <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer">
             <img src="/tmdb-logo.svg" alt="TMDB" width={100} height={16} />
@@ -1122,7 +1128,7 @@ function SectionBody({ section }: { section: SectionId }) {
     case "homeserver":
       return <HomeServerSection />;
     case "telegram":
-      return <TelegramSection />;
+      return config.telegramEnabled ? <TelegramSection /> : null;
     case "catalogs":
       return <CatalogsSection />;
     case "addons":
@@ -1818,6 +1824,7 @@ function TelegramSection() {
 
   // Load the Telegram module and subscribe to its auth state.
   useEffect(() => {
+    if (!config.telegramEnabled) return;
     let unsub: (() => void) | undefined;
     let active = true;
     void (async () => {
@@ -1866,7 +1873,7 @@ function TelegramSection() {
     );
   }
 
-  if (!mod.isTelegramConfigured) {
+  if (!mod.isTelegramConfigured()) {
     return (
       <Panel title={translateUi("Telegram")}>
         <p className="empty">
@@ -2101,6 +2108,12 @@ function TvSettingsSection() {
           ]}
         />
       </Row>
+      <Row label="Favorite channels on Home" hint="Pin your starred IPTV channels to the top of the Home screen">
+        <Toggle
+          value={settings.iptvFavoritesOnHome !== false}
+          onChange={(v) => updateSettings({ iptvFavoritesOnHome: v })}
+        />
+      </Row>
       <p className="empty">
         {playlists.length} {translateUi(" playlist(s) configured. These are cloud-saved and used by the TV page.")}</p>
       <div className="inline-form wide">
@@ -2233,9 +2246,14 @@ function CatalogsSection() {
   const standardCatalogs = mergeCatalogs(
     safeArray(settings.catalogs),
     safeArray(settings.hiddenCatalogIds),
+    safeArray(settings.hiddenAddonCatalogIds),
   ).filter((catalog) => catalog.sourceType !== "home-server");
   const [homeServerCatalogs, setHomeServerCatalogs] = useState<CatalogConfig[]>([]);
   const [customCatalogUrl, setCustomCatalogUrl] = useState("");
+  const [simklQuery, setSimklQuery] = useState("");
+  const [simklResults, setSimklResults] = useState<SimklCustomList[]>([]);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  useEffect(() => { setSimklResults([]); setSimklQuery(""); }, [activeProfile?.id]);
   const [collectionsInput, setCollectionsInput] = useState("");
   const [importingCollections, setImportingCollections] = useState(false);
   const catalogs = [...homeServerCatalogs, ...standardCatalogs];
@@ -2260,13 +2278,14 @@ function CatalogsSection() {
     };
   }, [settings.catalogs, settings.hiddenHomeServerCatalogIds, settings.homeServers]);
 
-  const updateCatalogs = (next: CatalogConfig[]) => {
+  const updateCatalogs = (next: CatalogConfig[], hiddenIds = settings.hiddenCatalogIds) => {
     const homeServer = next.filter((catalog) => catalog.sourceType === "home-server");
     const standard = next.filter((catalog) => catalog.sourceType !== "home-server");
     updateSettings({
       catalogs: next,
-      hiddenCatalogIds: standard.filter((catalog) => !catalog.enabled).map((catalog) => catalog.id),
-      hiddenHomeServerCatalogIds: homeServer.filter((catalog) => !catalog.enabled).map((catalog) => catalog.id),
+      hiddenCatalogIds: updateHiddenCatalogIds(standard, hiddenIds),
+      hiddenAddonCatalogIds: updateHiddenCatalogIds(standard.filter(catalog => catalog.sourceType === "addon"), settings.hiddenAddonCatalogIds),
+      hiddenHomeServerCatalogIds: updateHiddenCatalogIds(homeServer, settings.hiddenHomeServerCatalogIds),
     });
   };
   const moveCatalog = (id: string, offset: number) => {
@@ -2277,6 +2296,24 @@ function CatalogsSection() {
     const [moved] = next.splice(index, 1);
     next.splice(target, 0, moved);
     updateCatalogs(next);
+  };
+
+  const addSimklCatalog = async (rawUrl: string) => {
+    const simkl = parseSimklListUrl(rawUrl);
+    if (!simkl || catalogBusy) return;
+    const profile = activeProfile?.id;
+    setCatalogBusy(true);
+    try {
+      if (catalogs.some(c => c.sourceType === "simkl" && c.sourceUrl && parseSimklListUrl(c.sourceUrl)?.id === simkl.id)) throw new Error("This catalogue is already added.");
+      const list = await loadSimklCustomList(simkl.url);
+      if (!mounted.current || currentImportTarget.current.profileId !== profile) return;
+      const latest = currentImportTarget.current.catalogs;
+      if (latest.some(c => c.sourceType === "simkl" && c.sourceUrl && parseSimklListUrl(c.sourceUrl)?.id === simkl.id)) throw new Error("This catalogue is already added.");
+      updateCatalogs([{ id: `custom_${crypto.randomUUID()}`, name: list.name, sourceType: "simkl", sourceUrl: simkl.url,
+        sourceRef: `simkl_list:${simkl.id}`, mediaType: list.media_type === "movies" ? "movie" : "tv", enabled: true }, ...latest]);
+      setCustomCatalogUrl("");
+    } catch (error) { if (mounted.current && currentImportTarget.current.profileId === profile) setToast((error as Error).message); }
+    finally { if (mounted.current) setCatalogBusy(false); }
   };
 
   return (
@@ -2302,10 +2339,12 @@ function CatalogsSection() {
             finally { setImportingCollections(false); }
           }}><Download size={18} />{translateUi(importingCollections ? "Importing..." : "Import collections")}</button>
       </div>
-      {catalogs.some(c => !c.collectionRailKey && String(c.kind).toUpperCase() === "COLLECTION_RAIL") && <label className="inline-form">
-        <input type="checkbox" checked={catalogs.some(c => !c.collectionRailKey && String(c.kind).toUpperCase() === "COLLECTION_RAIL" && c.enabled)}
-          onChange={e => updateCatalogs(catalogs.map(c => !c.collectionRailKey && ["COLLECTION_RAIL", "COLLECTION"].includes(String(c.kind).toUpperCase())
-            ? { ...c, enabled: e.target.checked } : c))} />
+      {catalogs.some(c => isDefaultCollection(c) && c.kind === "COLLECTION_RAIL") && <label className="inline-form">
+        <input type="checkbox" checked={catalogs.some(c => isDefaultCollection(c) && c.kind === "COLLECTION_RAIL" && c.enabled)}
+          onChange={e => {
+            const next = setDefaultCollectionsEnabled(catalogs, settings.hiddenCatalogIds, e.target.checked);
+            updateCatalogs(next.catalogs, next.hiddenIds);
+          }} />
         {translateUi("Default")} {translateUi("Collection")}
       </label>}
       {Array.from(new Map(catalogs.filter(c => c.packId?.startsWith("usercol_")).map(c => [c.packId!, c.packName || c.name])).entries()).map(([id, name]) =>
@@ -2316,14 +2355,21 @@ function CatalogsSection() {
         <input
           value={customCatalogUrl}
           onChange={(e) => setCustomCatalogUrl(e.target.value)}
-          placeholder={translateUi("https://mdblist.com/lists/user/list")}
+          placeholder="Trakt / MDBList / SIMKL list URL"
         />
         <button
           type="button"
           className="primary"
-          onClick={() => {
+          disabled={catalogBusy}
+          onClick={async () => {
+            if (catalogBusy) return;
             if (!customCatalogUrl.trim()) {
               setToast("Enter a catalog URL first.");
+              return;
+            }
+            const simkl = parseSimklListUrl(customCatalogUrl);
+            if (simkl) {
+              await addSimklCatalog(simkl.url);
               return;
             }
             updateCatalogs([
@@ -2348,6 +2394,24 @@ function CatalogsSection() {
         >
           <RotateCcw size={18} /> {translateUi(" Reset")}</button>
       </div>
+      <p className="muted">SIMKL custom-list contents require SIMKL PRO or VIP. Search personal, followed, shared and featured official lists below, or paste any accessible list URL.</p>
+      <div className="inline-form">
+        <input value={simklQuery} onChange={event => setSimklQuery(event.target.value)} placeholder="Search SIMKL lists" />
+        <button type="button" className="secondary" disabled={catalogBusy || simklQuery.trim().length < 2} onClick={async () => {
+          const profile = activeProfile?.id;
+          setCatalogBusy(true);
+          try {
+            const results = await searchSimklCustomLists(simklQuery);
+            if (mounted.current && currentImportTarget.current.profileId === profile) setSimklResults(results);
+          } catch (error) { if (mounted.current && currentImportTarget.current.profileId === profile) setToast((error as Error).message); }
+          finally { if (mounted.current) setCatalogBusy(false); }
+        }}>{translateUi("Search")}</button>
+      </div>
+      {simklResults.length > 0 && <div className="settings-list">{simklResults.map(list => <div className="settings-list-row" key={list.id}>
+        <span>{list.name} · SIMKL · {list.counts?.items ?? "—"}</span>
+        <button type="button" className="secondary" disabled={catalogBusy || catalogs.some(c => c.sourceRef === `simkl_list:${list.id}`)}
+          onClick={() => void addSimklCatalog(list.user?.id ? `https://simkl.com/${list.user.id}/list/${list.id}` : `https://simkl.com/lists/${list.id}`)}>{translateUi("Add")}</button>
+      </div>)}</div>}
       <div className="settings-list">
         {catalogs.map((catalog, index) => (
           <div

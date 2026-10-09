@@ -11,11 +11,14 @@ export const app={
  openDetails:(item:unknown)=>{(window as any).openedLibraryItem=item;},isWatched:()=>false,openContextMenu:()=>{},setSection:()=>{}
 };
 export const useApp=()=>app;
+export const authClient={session:null};
+export const traktClient={watchlist:async()=>[],calendarSeason:async()=>[]};
 export const getLogoUrl=async(item:{id:number})=>asset(fixtures.find((row)=>row.id===item.id)?.logo);
 export const getCardMeta=async()=>({});
 export const getCardProviders=async()=>[];
 export const prefetchDetails=()=>{};
 export const resolveTmdbId=async(item:{id:number})=>item.id;
 export const getImdbRating=async()=>null;
+export const searchMediaPage=async()=>({items:titles,hasMore:false});
 export const listHomeServerLibraries=async()=>[{value:"fixture-movies",serverId:"fixture",serverName:"Home NAS",serverType:"jellyfin",libraryName:"Movies",mediaType:"movie"}];
 export const loadHomeServerLibraryPage=async(_servers:unknown,_source:unknown,options:{offset:number,limit:number})=>({items:titles.slice(options.offset,options.offset+options.limit),hasMore:options.offset+options.limit<titles.length,total:titles.length});

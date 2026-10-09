@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "noErrorTruncation": true,
+    "strict": true,
+    "strictFunctionTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "importHelpers": false,
+    "declaration": true,
+    "moduleResolution": "node",
+    "sourceMap": false,
+    "esModuleInterop": true,
+    "target": "es5",
+    "lib": ["es5", "es6", "es7", "es2017", "dom"],
+  }
+}

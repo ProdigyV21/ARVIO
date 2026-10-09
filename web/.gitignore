@@ -1,5 +1,6 @@
 node_modules/
 .library-ui-test/
+.calendar-ui-test/
 .custom-collections-ui-test/
 .iptv-groups-ui-test/
 .next/
@@ -9,6 +10,8 @@ out/
 .env
 .env.local
 .env.*.local
+distribution-artifacts/
+public/distribution-sources/
 
 # The repo-root .gitignore ignores all *.png (screenshots). Re-include the
 # bundled avatar/static image assets the web app needs at runtime.

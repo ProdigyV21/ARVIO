@@ -10,7 +10,7 @@ const {load}=require('../tests/load.cjs');
  let defaults;function visit(n){if(ts.isVariableDeclaration(n)&&n.name.getText(source)==='defaultSettings')defaults=n.initializer.getText(source);ts.forEachChild(n,visit)}visit(source);
  assert(defaults);
  const defaultsScript=ts.transpileModule(`const defaultCatalogs=[]; window.fixtureDefaults=${defaults};`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
- await esbuild.build({entryPoints:[path.join(root,'tests/i18n-ui/entry.tsx')],bundle:true,outfile:path.join(out,'app.js'),jsx:'automatic',define:{'process.env.NODE_ENV':'"test"','process.env':'{}'},plugins:[{name:'fixture',setup(build){
+ await esbuild.build({entryPoints:[path.join(root,'tests/i18n-ui/entry.tsx')],bundle:true,outfile:path.join(out,'app.js'),jsx:'automatic',nodePaths:(process.env.NODE_PATH||'').split(path.delimiter).filter(Boolean),define:{'process.env.NODE_ENV':'"test"','process.env':'{}'},plugins:[{name:'fixture',setup(build){
    build.onResolve({filter:/^@\/lib\/telegram$/},()=>({path:'telegram',namespace:'offline'}));
    build.onLoad({filter:/.*/,namespace:'offline'},()=>({contents:'export const isTelegramConfigured=false; export const subscribe=()=>()=>{};',loader:'js'}));
    build.onResolve({filter:/^@\/lib\/store$/},()=>({path:path.join(root,'tests/i18n-ui/store.tsx')}));

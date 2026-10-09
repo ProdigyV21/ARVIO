@@ -20,6 +20,7 @@ import { EntitlementGate } from "./Paywall";
 import { Toast } from "./Toast";
 import { TopNav } from "./TopNav";
 import { PremiumUsage } from "./PremiumUsage";
+import { PartnerLinkHandler } from "./PartnerLinkHandler";
 
 const ACCENTS: Record<string, string> = {
   arctic: "#ededed",
@@ -90,6 +91,7 @@ export function AppShell() {
       style={{ ["--accent" as string]: accent }}
     >
       {(!activeStream || (section === "tv" && activeChannel)) && <TopNav />}
+      <PartnerLinkHandler />
 
       <section className="content">
         {section === "home" && (!selected || collectionOpen) && <div hidden={Boolean(selected)}><NoAddonsPrompt /><HomeScreen onCollectionOpenChange={setCollectionOpen} /></div>}

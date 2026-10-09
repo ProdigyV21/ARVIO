@@ -140,6 +140,32 @@ test('JF DirectStreamUrl is preferred over transcode when the browser can decode
   assert.equal(h.calls[1].body.PlayMethod, 'DirectStream');
 });
 
+test('Silo direct play preserves the negotiated URL and query instead of manufacturing a file URL', async () => {
+  const silo = { ...jf, url: 'https://media.example/compat' };
+  const h = harness(() => playbackInfo(source('version-b', {
+    DirectStreamUrl: '/compat/Videos/movie/stream?static=true&mediaSourceId=version-b&route=signed%2Bvalue',
+    TranscodingUrl: '/Videos/movie/master.m3u8?PlaySessionId=play-session'
+  })));
+  const result = await h.prepareHomeServerPlayback(stream(silo), silo);
+  const url = new URL(result.url);
+  assert.equal(url.pathname, '/compat/Videos/movie/stream');
+  assert.equal(url.searchParams.get('static'), 'true');
+  assert.equal(url.searchParams.get('route'), 'signed+value');
+  assert.equal(url.searchParams.get('MediaSourceId'), 'version-b');
+  assert.equal(url.searchParams.get('PlaySessionId'), 'play-session');
+  assert.equal(url.searchParams.get('ApiKey'), silo.token);
+  assert.equal(result.transport, 'file');
+  await h.reportHomeServerPlayback(result, silo, 'start');
+  assert.equal(h.calls[1].body.PlayMethod, 'DirectPlay');
+});
+
+test('direct-play provider URLs receive the same safety checks as transcoding URLs', async () => {
+  const h = harness(({ kind }) => kind === 'json' ? playbackInfo(source('version-b', {
+    DirectStreamUrl: 'https://other.example/Videos/movie/stream.mp4'
+  })) : '');
+  await assert.rejects(h.prepareHomeServerPlayback(stream(), jf), /unsafe playback URL/);
+});
+
 test('JF negotiates incompatible MKV HEVC/TrueHD to HLS, preserving version and offset', async () => {
   const selected = source('version-b', { Container: 'mkv', SupportsDirectPlay: false, SupportsDirectStream: false,
     TranscodingUrl: '/Videos/movie/master.m3u8?VideoCodec=h264&AudioCodec=aac', TranscodingSubProtocol: 'hls',
@@ -455,10 +481,10 @@ test('failed stop can retry, while successful stop uses credentials captured bef
   assert.equal(h.calls[2].url.hostname, 'media.example');
 });
 
-test('JF constructs a static DirectStream route when compatible source has no DirectStreamUrl', async () => {
+test('JF constructs a remux DirectStream route when compatible source has no DirectStreamUrl', async () => {
   const h = harness(({ kind }) => kind === 'json' ? playbackInfo(source('version-b', { SupportsDirectPlay: false })) : '');
   const result = await h.prepareHomeServerPlayback(stream(), jf);
-  assert.equal(new URL(result.url).searchParams.get('Static'), 'true');
+  assert.equal(new URL(result.url).searchParams.get('Static'), 'false');
   await h.reportHomeServerPlayback(result, jf, 'start');
   assert.equal(h.calls[1].body.PlayMethod, 'DirectStream');
 });

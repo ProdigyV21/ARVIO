@@ -2,6 +2,7 @@ package com.arflix.tv.data.repository.sync
 
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.repository.ContinueWatchingItem
+import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.simkl.SimklAuthManager
 import com.arflix.tv.data.repository.simkl.SimklScrobbler
 import com.arflix.tv.data.repository.simkl.SimklSyncService
@@ -15,7 +16,8 @@ import javax.inject.Singleton
 class SimklRemoteProvider @Inject constructor(
     private val authManager: SimklAuthManager,
     private val scrobbler: SimklScrobbler,
-    private val syncService: SimklSyncService
+    private val syncService: SimklSyncService,
+    private val traktRepository: TraktRepository
 ) : RemoteSyncProvider {
 
     override val provider: SyncProvider = SyncProvider.SIMKL
@@ -85,8 +87,10 @@ class SimklRemoteProvider @Inject constructor(
 
     override suspend fun getWatchedEpisodes(): Set<String> = syncService.getWatchedEpisodes()
 
-    override suspend fun getContinueWatching(forceRefresh: Boolean): List<ContinueWatchingItem> =
-        syncService.getContinueWatching(forceRefresh)
+    override suspend fun getContinueWatching(forceRefresh: Boolean): List<ContinueWatchingItem> {
+        val (movies, episodes) = traktRepository.getLocalWatchedSnapshot()
+        return syncService.getContinueWatching(forceRefresh, movies, episodes)
+    }
 
     override suspend fun dismissContinueWatching(
         mediaType: MediaType,

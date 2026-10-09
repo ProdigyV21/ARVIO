@@ -53,8 +53,11 @@ import com.arflix.tv.ui.components.*
 import com.arflix.tv.ui.skin.resolveAccentColor
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.tr
+import com.arflix.tv.ui.screens.watchlist.calendar.*
+import java.time.LocalDate
 
-internal enum class LibrarySection(val label: String) { WATCHLISTS("Watchlists"), LISTS("My lists"), SERVERS("Homeserver") }
+internal enum class LibrarySection(val label: String) { WATCHLISTS("Watchlists"), LISTS("My lists"), SERVERS("Homeserver"), CALENDAR("Calendar") }
+internal val LibraryTabsTopInset = AppTopBarHeight - 8.dp
 internal fun libraryColumns(width: Int, poster: Boolean, collections: Boolean = false): Int =
     if (collections) (width / 270).coerceIn(1, 3) else if (poster) (width / 115).coerceIn(2, 8) else (width / 180).coerceIn(2, 4)
 internal fun WatchlistSourceItem.isPersonalCollection(): Boolean = this is WatchlistSourceItem.Catalog ||
@@ -64,6 +67,7 @@ internal fun librarySources(sources: List<WatchlistSourceItem>, section: Library
         LibrarySection.WATCHLISTS -> it is WatchlistSourceItem.MyWatchlist || (it is WatchlistSourceItem.TrackerList && !it.isPersonalCollection())
         LibrarySection.LISTS -> it.isPersonalCollection()
         LibrarySection.SERVERS -> it is WatchlistSourceItem.HomeServer
+        LibrarySection.CALENDAR -> false
     } }
 
 @OptIn(androidx.tv.material3.ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -74,7 +78,13 @@ fun WatchlistScreen(
     onNavigateToDetails: (MediaType, Int) -> Unit = { _, _ -> },
     onNavigateToHome: () -> Unit = {}, onNavigateToSearch: () -> Unit = {},
     onNavigateToTv: () -> Unit = {}, onNavigateToSettings: (String?) -> Unit = {},
-    onSwitchProfile: () -> Unit = {}, onBack: () -> Unit = {}
+    onSwitchProfile: () -> Unit = {}, onBack: () -> Unit = {},
+    calendarStateOverride: ReleaseCalendarUiState? = null,
+    onCalendarSelectDate: (LocalDate) -> Unit = {},
+    onCalendarChangeMonth: (Long) -> Unit = {},
+    onCalendarSelectSource: (String) -> Unit = {},
+    onCalendarRefresh: () -> Unit = {},
+    calendarViewModel: ReleaseCalendarViewModel? = null
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val servers by viewModel.libraryState.collectAsStateWithLifecycle()
@@ -84,6 +94,8 @@ fun WatchlistScreen(
     val poster = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val scrollScope = rememberCoroutineScope()
     var section by rememberSaveable { mutableStateOf(LibrarySection.WATCHLISTS) }
+    val calendarMode = section == LibrarySection.CALENDAR
+    val calendarTab = remember { FocusRequester() }
     var openedList by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf(HomeServerLibrarySort.RECENTLY_ADDED) }
@@ -152,23 +164,22 @@ fun WatchlistScreen(
     val hasMore = if(serverMode) servers.hasMore else state.hasMore
     LaunchedEffect(grid, sourceKey, items.size, rawItems.size, error, loading, loadingMore, hasMore) {
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }.collect { last ->
-            if (!collections && error == null && !loading && !loadingMore && hasMore && (items.isEmpty() || last >= items.size - 16)) {
+            if (!calendarMode && !collections && error == null && !loading && !loadingMore && hasMore && (items.isEmpty() || last >= items.size - 16)) {
                 if (serverMode) viewModel.loadMoreLibrary() else viewModel.loadMoreActiveSource()
             }
         }
     }
     LaunchedEffect(grid, sourceKey, items, poster) {
-        if (!poster && !collections) snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
+        if (!calendarMode && !poster && !collections) snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
             val first = grid.firstVisibleItemIndex
             viewModel.prefetchLogos(items.subList(first.coerceAtMost(items.size), (last + 17).coerceAtMost(items.size)))
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("oled-library")) {
-        val compact = touch && maxWidth < 600.dp
+        val compact = touch && maxWidth < 700.dp
         val sideWidth = if (touch) 160.dp else 126.dp
-        Column(Modifier.fillMaxSize().padding(horizontal = if (compact) 16.dp else 26.dp)) {
             if (!touch) {
-                Box(Modifier.fillMaxWidth().height(60.dp).focusRequester(topFocus).onFocusChanged { topFocused = it.isFocused }
+                Box(Modifier.fillMaxWidth().height(AppTopBarContentTopInset).focusRequester(topFocus).onFocusChanged { topFocused = it.isFocused }
                     .onKeyEvent { event ->
                         // The top bar's index runs left-to-right, but Compose mirrors
                         // the row in an RTL locale, so the physical key has to be
@@ -188,20 +199,24 @@ fun WatchlistScreen(
                             else -> false
                         }
                     }.focusable()) {
-                    AppTopBar(SidebarItem.WATCHLIST, topFocused, topIndex, profile = currentProfile, modifier = Modifier.offset(y = (-6).dp))
+                    AppTopBar(SidebarItem.WATCHLIST, topFocused, topIndex, profile = currentProfile)
                 }
-            } else Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth().padding(bottom = if(compact) 10.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,
+            }
+        Column(Modifier.fillMaxSize().padding(top = if (touch) 0.dp else LibraryTabsTopInset)
+            .padding(horizontal = if (compact) 16.dp else 26.dp)) {
+            if (touch) Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth().testTag("library-section-tabs").then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+                .heightIn(min = 48.dp)
+                .padding(bottom = if(compact) 10.dp else 6.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
                 LibrarySection.entries.forEachIndexed { index, entry ->
                     OledControl(tr(entry.label), selected = section == entry,
                         modifier = (if(index == 0) Modifier.focusRequester(firstTab).onGloballyPositioned {
                             if(!touch && !initialFocusPlaced) { initialFocusPlaced = true; firstTab.requestFocus() }
-                        } else Modifier)
-                            .then(if(compact) Modifier.weight(1f) else Modifier), compact = compact,
+                        } else if (entry == LibrarySection.CALENDAR) Modifier.focusRequester(calendarTab) else Modifier), compact = compact,
                         onClick = { selectSection(entry) })
                 }
-                if (!compact) {
+                if (!compact && !calendarMode) {
                     Spacer(Modifier.weight(1f))
                     val serverTotal = servers.totalCount.takeIf { serverMode && mediaFilter == null }
                     Text(if(collections) "${scopeSources.size} ${tr("lists")}" else "${serverTotal ?: items.size}${if(serverTotal == null && hasMore) "+" else ""} ${tr("titles")}", color = Color.LightGray, fontSize = 13.sp)
@@ -210,6 +225,16 @@ fun WatchlistScreen(
                     OledControl(tr("Filters"), modifier = Modifier.focusRequester(filterButton), onClick = { sourcesOpen = false; filters = true })
                 }
             }
+            if (calendarMode) {
+                if (calendarStateOverride != null) LibraryCalendarPane(
+                    state = calendarStateOverride, onSelectDate = onCalendarSelectDate,
+                    onChangeMonth = onCalendarChangeMonth, onSelectSource = onCalendarSelectSource,
+                    onRefresh = onCalendarRefresh, onOpenDetails = onNavigateToDetails,
+                    modifier = Modifier.weight(1f), onExitUp = { calendarTab.requestFocus() })
+                else LibraryCalendarRoute(onOpenDetails = onNavigateToDetails,
+                    modifier = Modifier.weight(1f), onExitUp = { calendarTab.requestFocus() },
+                    viewModel = calendarViewModel ?: hiltViewModel())
+            } else {
             if (compact) Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (!collections) OledControl(scopeSources.firstOrNull { it.id == selectedId }?.title ?: tr("Choose library"),
                     modifier = Modifier.weight(1f).testTag("library-source-picker"), onClick = { sourcesOpen = true })
@@ -272,6 +297,7 @@ fun WatchlistScreen(
                         }
                     }
                 }
+            }
             }
         }
         state.toastMessage?.let { message ->

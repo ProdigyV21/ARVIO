@@ -79,6 +79,34 @@ class RemoteSyncManagerTest {
         assertEquals(55, result.single().progress)
     }
 
+    @Test(expected = IllegalStateException::class)
+    fun failedContinueWatchingReadIsNotAnAuthoritativeEmptyResult(): Unit = runBlocking {
+        coEvery { store.readProviders(TrackingFeature.CONTINUE_WATCHING) } returns setOf(SyncProvider.SIMKL)
+        coEvery { simkl.getContinueWatching(false) } throws IllegalStateException("offline")
+        manager.getContinueWatching()
+    }
+
+    @Test fun successfulEmptyContinueWatchingIsAuthoritative() = runBlocking {
+        coEvery { store.readProviders(TrackingFeature.CONTINUE_WATCHING) } returns setOf(SyncProvider.SIMKL)
+        coEvery { simkl.getContinueWatching(false) } returns emptyList()
+        assertTrue(manager.getContinueWatching().isEmpty())
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun emptyPartialSnapshotCannotClearProgressFromAFailedProvider(): Unit = runBlocking {
+        coEvery { store.readProviders(TrackingFeature.CONTINUE_WATCHING) } returns setOf(SyncProvider.SIMKL, SyncProvider.TRAKT)
+        coEvery { simkl.getContinueWatching(false) } throws IllegalStateException("offline")
+        coEvery { trakt.getContinueWatching(false) } returns emptyList()
+        manager.getContinueWatching()
+    }
+
+    @Test fun healthyProviderStillReturnsResultsWhenAnotherFails() = runBlocking {
+        coEvery { store.readProviders(TrackingFeature.CONTINUE_WATCHING) } returns setOf(SyncProvider.SIMKL, SyncProvider.TRAKT)
+        coEvery { simkl.getContinueWatching(false) } throws IllegalStateException("offline")
+        coEvery { trakt.getContinueWatching(false) } returns listOf(ContinueWatchingItem(7, "Show", MediaType.TV, 0, season = 1, episode = 3, isUpNext = true))
+        assertEquals(3, manager.getContinueWatching().single().episode)
+    }
+
     @Test
     fun traktUpNextKeepsItsActivityOrderingWhenSimklHasNoTimestamp() = runBlocking {
         coEvery { store.readProviders(TrackingFeature.CONTINUE_WATCHING) } returns

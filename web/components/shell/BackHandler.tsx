@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useApp } from '@/lib/store';
 import { readWebRoute, writeWebRoute, type WebRoute } from '@/lib/webNavigation';
 import type { MediaItem } from '@/lib/types';
+import { parsePartnerLink } from '@/lib/partnerLinks';
 export function BackHandler(){
   const app=useApp();const latest=useRef(app);latest.current=app;
   const initialized=useRef(false);
@@ -12,6 +13,9 @@ export function BackHandler(){
   useEffect(()=>{
     if(app.view!=='app')return;
     const apply=()=>{
+      // The partner handler resolves metadata after access/profile readiness.
+      // Do not race it by opening an unrelated legacy title= or closing details.
+      if(parsePartnerLink(location.search).status!=='none')return;
       const route=readWebRoute(new URL(location.href));applying.current=route;
       const current=latest.current;current.closePlayer();
       current.setSection(route.section);current.setQuery(route.query);
@@ -28,6 +32,8 @@ export function BackHandler(){
   },[app.view]);
   useEffect(()=>{
     if(app.view!=='app'||!initialized.current)return;
+    // Retain pending/failed title links unchanged until success or explicit cancel.
+    if(parsePartnerLink(location.search).status!=='none')return;
     const title=app.selected&&!app.selected.isHomeServer&&app.selected.id>0?{id:app.selected.id,mediaType:app.selected.mediaType}:null;
     const route:WebRoute={section:app.section,query:app.section==='search'?app.query:'',title};
     const signature=JSON.stringify(route);const player=!!app.activeStream;

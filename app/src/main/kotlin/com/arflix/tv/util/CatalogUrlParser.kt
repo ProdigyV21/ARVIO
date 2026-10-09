@@ -8,6 +8,9 @@ sealed class ParsedCatalogUrl {
     data class TraktUserList(val username: String, val listId: String) : ParsedCatalogUrl()
     data class TraktList(val listId: String) : ParsedCatalogUrl()
     data class Mdblist(val url: String) : ParsedCatalogUrl()
+    data class SimklList(val id: Long, val ownerId: Long? = null) : ParsedCatalogUrl() {
+        val canonicalUrl: String get() = if (ownerId != null) "https://simkl.com/$ownerId/list/$id" else "https://simkl.com/lists/$id"
+    }
 
     /**
      * A TMDB website page used as a catalog: `kind` is list / collection /
@@ -40,6 +43,7 @@ data object CatalogUrlParser {
         val normalized = normalize(url)
         return when {
             isTraktHost(normalized) -> CatalogSourceType.TRAKT
+            isSimklHost(normalized) -> CatalogSourceType.SIMKL
             isMdblistHost(normalized) -> CatalogSourceType.MDBLIST
             isTmdbHost(normalized) -> CatalogSourceType.TMDB
             else -> null
@@ -50,6 +54,7 @@ data object CatalogUrlParser {
         val normalized = normalize(url)
         return when (detectSource(normalized)) {
             CatalogSourceType.TRAKT -> parseTrakt(normalized)
+            CatalogSourceType.SIMKL -> parseSimkl(normalized)
             CatalogSourceType.MDBLIST -> ParsedCatalogUrl.Mdblist(normalized)
             CatalogSourceType.TMDB -> parseTmdb(normalized)
             else -> null
@@ -67,6 +72,26 @@ data object CatalogUrlParser {
             return ParsedCatalogUrl.TraktList(parts[1])
         }
         return null
+    }
+
+    fun parseSimkl(url: String): ParsedCatalogUrl.SimklList? {
+        val uri = try { URI(normalize(url)) } catch (_: Exception) { null } ?: return null
+        if (!isSimklHost(uri.host ?: return null) || uri.userInfo != null || uri.scheme !in setOf("http", "https")) return null
+        val parts = uri.path.trim('/').split('/').filter { it.isNotBlank() }
+        val owner = parts.firstOrNull()?.toLongOrNull()?.takeIf { it > 0 }
+        val id = when {
+            owner != null && parts.getOrNull(1) == "list" -> parts.getOrNull(2)
+            parts.firstOrNull() == "lists" -> parts.getOrNull(1)
+            else -> null
+        }?.toLongOrNull()?.takeIf { it > 0 } ?: return null
+        return ParsedCatalogUrl.SimklList(id, owner)
+    }
+
+    private fun isSimklHost(urlOrHost: String): Boolean {
+        val host = if (urlOrHost.contains("://")) {
+            try { URI(urlOrHost).host.orEmpty() } catch (_: Exception) { "" }
+        } else urlOrHost
+        return host.equals("simkl.com", true) || host.equals("www.simkl.com", true)
     }
 
     /** Media types TMDB pages can be scoped to. */

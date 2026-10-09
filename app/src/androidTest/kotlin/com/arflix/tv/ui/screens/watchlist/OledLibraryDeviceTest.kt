@@ -72,7 +72,7 @@ class OledLibraryDeviceTest {
         capture("personal-lists")
         compose.onNodeWithText("Friday night").performClick()
         compose.onNodeWithTag("library-card-0").assertIsDisplayed()
-        compose.onNodeWithText("Libraries").performClick()
+        compose.onNodeWithText("Homeserver").performClick()
         compose.onNodeWithTag("library-card-0").assertIsDisplayed()
         capture("server-libraries")
     }

@@ -105,6 +105,8 @@
     <string name="confirm">Confirm</string>
     <string name="retry">Retry</string>
     <string name="search_discover_load_failed">Could not load titles</string>
+    <string name="partner_link_loading">Opening title details…</string>
+    <string name="partner_link_failed">Could not find or load this title. Try again or open another link.</string>
     <string name="search_discover_load_more">Load more</string>
     <string name="delete">Delete</string>
     <string name="add">Add</string>
@@ -191,15 +193,15 @@
     <string name="auto_play_desc">Start next episode automatically</string>
     <string name="autoplay_desc">Off opens the source picker on Play</string>
     <string name="auto_play_quality_desc">Min quality for auto-play</string>
-    <string name="trailer_desc">TV: play trailers in the home background</string>
+    <string name="trailer_desc">TV: automatically preview trailers on Home</string>
     <string name="trailer_sound">Trailer Sound</string>
-    <string name="trailer_sound_desc">TV: play trailer audio in the home background</string>
+    <string name="trailer_sound_desc">TV: enable audio for Home trailer previews</string>
     <string name="trailer_delay">Trailer Delay</string>
     <string name="trailer_delay_desc">Seconds before trailer starts playing</string>
     <string name="guide_rows">Guide Rows</string>
     <string name="guide_rows_desc">Channel rows shown in the TV guide</string>
     <string name="trailer_in_cards">Trailers In Cards</string>
-    <string name="trailer_in_cards_desc">TV: play trailers inside the focused card instead of full screen</string>
+    <string name="trailer_in_cards_desc">TV: preview trailers in the expanded card instead of the hero</string>
     <string name="frame_rate_desc">Off, Seamless, or Always</string>
     <string name="quality_filters_desc">Exclude quality tiers on this device</string>
     <string name="card_layout_desc">Landscape or poster cards</string>
@@ -637,7 +639,7 @@
     <string name="settings_help_source_autoplay">Source autoplay</string>
     <string name="settings_help_source_autoplay_desc">Controls whether a single source starts immediately or opens the picker.</string>
     <string name="settings_help_trailers">Trailers</string>
-    <string name="settings_help_trailers_desc">Tune trailer autoplay and sound behavior in the home background.</string>
+    <string name="settings_help_trailers_desc">Tune trailer autoplay, sound and placement on Home.</string>
     <string name="settings_help_volume_boost_desc">Boosts playback audio output when enabled.</string>
     <string name="settings_help_playback_desc">Tune source quality, frame-rate matching and playback behavior.</string>
     <string name="settings_help_interface_desc">Control layout, OLED mode, clock and focus styling.</string>
@@ -740,11 +742,11 @@
     <string name="settings_badge_full_short">Full</string>
     <string name="settings_search_lists">Search Lists</string>
     <string name="settings_paste_url">Paste URL</string>
-    <string name="settings_ph_trakt_mdblist">Trakt, MDBList or TMDB URL</string>
+    <string name="settings_ph_trakt_mdblist">Trakt, MDBList, SIMKL or TMDB URL</string>
     <string name="settings_add_url">Add URL</string>
     <string name="settings_searching_both_sources">Searching both sources</string>
     <string name="settings_lists_found">%1$d lists found</string>
-    <string name="settings_searches_trakt_mdblist">Searches Trakt and MDBList automatically</string>
+    <string name="settings_searches_trakt_mdblist">Searches Trakt and MDBList, SIMKL automatically</string>
     <string name="settings_tap_field_to_edit">Tap a field to edit</string>
     <string name="settings_press_select_to_edit">Press Select on a field to edit</string>
     <string name="settings_searching_lists">Searching lists</string>
@@ -1347,6 +1349,7 @@
     <string name="update_msg_ready">The latest ARVIO update has been downloaded and is ready to install.</string>
     <string name="update_msg_installer_hint">The Android package installer should appear. If it does not, you can try pressing Install again.</string>
     <string name="stream_tab_all_sources">All sources</string>
+    <string name="stream_recently_played">Recently played</string>
     <string name="stream_title_select_source">Select Source</string>
     <string name="stream_no_streaming_addons">No Streaming Addons</string>
     <string name="stream_no_sources_found">No sources found</string>
@@ -1462,6 +1465,27 @@
     <string name="settings_addon_keep_both">Keep both</string>
     <string name="settings_addon_configure_qr_title">Configure %1$s</string>
     <string name="settings_addon_configure_qr_hint">Scan with your phone, change the settings there and tap Install in ARVIO on your phone. Then choose Refresh Addons here.</string>
+    <string name="settings_community_addons">Community addons</string>
+    <string name="settings_community_addons_desc">Browse and install addons made by the Stremio community</string>
+    <string name="settings_community_addons_count">%1$d addons from the Stremio community</string>
+    <string name="settings_community_addons_search">Search addons</string>
+    <string name="settings_community_addons_all">All</string>
+    <string name="settings_community_addons_empty">No addons match your search</string>
+    <string name="settings_community_addons_failed">Couldn\'t load community addons</string>
+    <string name="settings_community_addon_configure">Configure</string>
+    <string name="settings_community_addon_configurable">Configurable</string>
+    <string name="settings_community_addon_uninstall">Uninstall</string>
+    <string name="settings_community_addon_removed">Removed %1$s</string>
+    <string name="settings_community_addon_setup_hint">This addon has to be set up before it works. Open Configure, choose your settings, then tap Install on its page.</string>
+    <string name="settings_community_addon_disclaimer">Community addons are made by third parties, not by ARVIO. Only add addons you trust.</string>
+    <string name="settings_community_addon_type_movie">Movies</string>
+    <string name="settings_community_addon_type_series">Series</string>
+    <string name="settings_community_addon_type_anime">Anime</string>
+    <string name="settings_community_addon_type_subtitles">Subtitles</string>
+    <string name="settings_community_addon_type_other">Other</string>
+    <string name="settings_community_addon_type_channel">Channels</string>
+    <string name="settings_community_addon_type_tv">TV</string>
+    <string name="settings_community_addon_type_music">Music</string>
     <string name="settings_addons_cloud_restore_failed">Cloud restore failed; addons were not changed</string>
     <string name="settings_addons_refresh_report">%1$d addons refreshed, %2$d failed</string>
     <string name="settings_addons_refresh_failed">Failed to refresh addons</string>
@@ -1593,7 +1617,7 @@
     <string name="catalog_url_invalid_format">Invalid URL format</string>
     <string name="catalog_url_invalid_host">Invalid host</string>
     <string name="catalog_url_trakt_hint">Use a Trakt list URL: trakt.tv/users/{user}/lists/{list}</string>
-    <string name="catalog_url_unsupported">Only Trakt, MDBList and TMDB URLs are supported</string>
+    <string name="catalog_url_unsupported">Only Trakt, MDBList, SIMKL and TMDB URLs are supported</string>
     <string name="iptv_progress_loading_channels">Loading channels from portal...</string>
     <string name="iptv_progress_loading_full_epg">Loading full EPG (%1$d/%2$d)...</string>
     <string name="iptv_progress_loading_live">Loading live streams...</string>
@@ -1855,5 +1879,10 @@
     <string name="catalog_collections_invalid">This is not a valid collections file (Nuvio collections export JSON expected)</string>
     <string name="catalog_tmdb_title">TMDB catalog</string>
     <string name="catalog_url_tmdb_hint">Use a TMDB list, collection, company, network, person, keyword or genre page URL</string>
+    <string name="catalog_url_simkl_hint">Use a SIMKL custom-list URL, e.g. simkl.com/5/list/14462.</string>
+    <string name="settings_simkl_lists_hint">SIMKL personal, followed and featured official lists. List items require SIMKL PRO/VIP.</string>
+    <string name="settings_simkl_lists_connect">Connect SIMKL</string>
+    <string name="settings_simkl_lists_connected">SIMKL connected</string>
+    <string name="settings_simkl_open">Open SIMKL</string>
 </resources>
 
