@@ -85,11 +85,55 @@ class PlaybackFrameRateTest {
     @Test fun transientFormatChangesDoNotSwitchHdmi() {
         val detector = PlaybackFrameRate()
         detector.onFrame(0, 24f)
-        repeat(200) { detector.onFrame(it * 40_000L, if (it % 2 == 0) 25f else 24f) }
+        repeat(200) { detector.onFrame((it + 1) * 41_667L, if (it % 2 == 0) 25f else 24f) }
         assertEquals(24f, detector.rate.value, 0f)
-        repeat(47) { detector.onFrame(it * 40_000L, 25f) }
+        repeat(48) { detector.onFrame(200 * 41_667L + (it + 1) * 40_000L, 25f) }
         assertEquals(24f, detector.rate.value, 0f)
-        detector.onFrame(48 * 40_000L, 25f)
+        repeat(96) { detector.onFrame(200 * 41_667L + (it + 49) * 40_000L, 25f) }
+        assertEquals(25f, detector.rate.value, 0f)
+    }
+
+    @Test fun millisecondContainerTimestampsMatchIntegerAndFractionalHdmiModes() {
+        val rates = listOf(24000f / 1001f, 24f, 25f, 30000f / 1001f, 30f, 50f, 60000f / 1001f, 60f)
+        rates.forEachIndexed { index, fps ->
+            repeat(48) { phase ->
+                val detector = PlaybackFrameRate()
+                repeat(49) { frame ->
+                    val timestamp = kotlin.math.round((frame + phase) * 1_000.0 / fps).toLong() * 1_000
+                    detector.onFrame(timestamp, -1f)
+                }
+                assertEquals("$fps fps, PTS phase $phase", fps, detector.rate.value, 0.001f)
+                assertEquals(index, matchingRefreshRateIndex(rates, detector.rate.value))
+            }
+        }
+    }
+
+    @Test fun decodedCadenceCorrectsWrongDeclaredRateAndDoesNotRevert() {
+        val detector = PlaybackFrameRate()
+        detector.onInputFormat(30f)
+        repeat(49) { detector.onFrame(it * 41_708L, 30f) }
+        assertEquals(30f, detector.rate.value, 0f)
+        repeat(48) { detector.onFrame((it + 49) * 41_708L, 30f) }
+        assertEquals(24000f / 1001f, detector.rate.value, 0f)
+        detector.onInputFormat(30f)
+        repeat(200) { detector.onFrame((it + 97) * 41_708L, 30f) }
+        assertEquals(24000f / 1001f, detector.rate.value, 0f)
+    }
+
+    @Test fun inaccurateNonStandardMetadataStillGetsCorrectDisplayMode() {
+        val detector = PlaybackFrameRate()
+        repeat(97) { detector.onFrame(it * 40_000L, 25.12f) }
+        assertEquals(25f, detector.rate.value, 0f)
+        assertEquals(1, matchingRefreshRateIndex(listOf(60f, 50f, 24f), detector.rate.value))
+    }
+
+    @Test fun seekDoesNotCarryPendingCadenceCorrectionAcrossDiscontinuity() {
+        val detector = PlaybackFrameRate()
+        detector.onInputFormat(30f)
+        repeat(49) { detector.onFrame(it * 40_000L, 30f) }
+        repeat(49) { detector.onFrame(300_000_000L + it * 40_000L, 30f) }
+        assertEquals(30f, detector.rate.value, 0f)
+        repeat(48) { detector.onFrame(300_000_000L + (it + 49) * 40_000L, 30f) }
         assertEquals(25f, detector.rate.value, 0f)
     }
 

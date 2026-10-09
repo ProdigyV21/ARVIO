@@ -13,6 +13,9 @@ class PlaybackFrameRate {
     private val intervals = ArrayList<Long>(48)
     private var candidateRate = 0f
     private var candidateFrames = 0
+    private var measuredRate = 0f
+    private var measuredCandidate = 0f
+    private var measuredCandidateWindows = 0
 
     @Synchronized
     fun reset() {
@@ -20,6 +23,9 @@ class PlaybackFrameRate {
         intervals.clear()
         candidateRate = 0f
         candidateFrames = 0
+        measuredRate = 0f
+        measuredCandidate = 0f
+        measuredCandidateWindows = 0
         mutableRate.value = 0f
     }
 
@@ -33,7 +39,7 @@ class PlaybackFrameRate {
 
     @Synchronized
     fun onFrame(timeUs: Long, declaredRate: Float) {
-        if (declaredRate.isFinite() && declaredRate in 10f..120f) {
+        if (measuredRate == 0f && declaredRate.isFinite() && declaredRate in 10f..120f) {
             val rate = stablePlaybackRate(declaredRate)
             if (mutableRate.value == 0f || rate == mutableRate.value) {
                 mutableRate.value = rate
@@ -47,25 +53,51 @@ class PlaybackFrameRate {
                     candidateFrames = 0
                 }
             }
-            previousUs = timeUs
-            intervals.clear()
-            return
+        } else {
+            candidateFrames = 0
         }
-        candidateFrames = 0
         val delta = previousUs?.let { timeUs - it }
         previousUs = timeUs
         if (delta == null) return
         if (delta !in 8_000L..100_000L) {
             intervals.clear()
+            measuredCandidateWindows = 0
             return
         }
         intervals.add(delta)
         if (intervals.size < 48) return
         val sorted = intervals.sorted()
         val median = sorted[sorted.size / 2]
-        // Do not infer a fixed refresh rate from variable-rate or discontinuous output.
-        if (intervals.count { abs(it - median) <= median * 0.02 } >= 44) {
-            mutableRate.value = stablePlaybackRate(1_000_000f / median)
+        // Matroska commonly rounds PTS to milliseconds: 24fps alternates 41/42ms.
+        // Fit their cumulative timestamps to smooth rounding without losing the
+        // distinction between 23.976/24 and 59.94/60. No wall-clock timing is used.
+        val tolerance = maxOf(1_000.0, median * 0.02)
+        val stable = intervals.filter { abs(it - median) <= tolerance }
+        if (stable.size >= 44) {
+            val midpoint = stable.size / 2.0
+            var timestamp = 0L
+            var covariance = 0.0
+            stable.forEachIndexed { index, interval ->
+                timestamp += interval
+                covariance += (index + 1 - midpoint) * timestamp
+            }
+            val count = stable.size.toDouble()
+            val slope = covariance / (count * (count + 1) * (count + 2) / 12)
+            val estimate = stablePlaybackRate((1_000_000.0 / slope).toFloat())
+            if (estimate in 10f..120f) {
+                measuredCandidateWindows = if (abs(measuredCandidate - estimate) <= 0.01f) {
+                    measuredCandidateWindows + 1
+                } else 1
+                measuredCandidate = estimate
+                // Missing metadata can start immediately; correcting a declared rate
+                // needs two stable windows so an intro or dropped frame cannot flip HDMI.
+                if (mutableRate.value == 0f || measuredCandidateWindows >= 2) {
+                    measuredRate = estimate
+                    mutableRate.value = estimate
+                }
+            }
+        } else {
+            measuredCandidateWindows = 0
         }
         intervals.clear()
     }
