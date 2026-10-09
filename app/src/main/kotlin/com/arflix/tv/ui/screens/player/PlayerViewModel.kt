@@ -1335,7 +1335,8 @@ class PlayerViewModel @Inject constructor(
                                         originalLanguage = currentOriginalLanguage,
                                         animeQueryOverride = animeQueryOverride,
                                         airDate = currentAirDate,
-                                        timeoutMs = 3_500L
+                                        timeoutMs = 3_500L,
+                                        nativeType = mediaRepository.addonNativeType(mediaId)
                                     )
                                 } else emptyList()
                             }
@@ -1480,7 +1481,8 @@ class PlayerViewModel @Inject constructor(
                         imdbId = effectiveStreamId,
                         title = currentItemTitle,
                         year = null,
-                        forceRefresh = forceRefresh
+                        forceRefresh = forceRefresh,
+                        nativeType = mediaRepository.addonNativeType(mediaId)
                     )
                 } else {
                     streamRepository.resolveEpisodeStreamsProgressive(
@@ -1494,7 +1496,8 @@ class PlayerViewModel @Inject constructor(
                         title = currentItemTitle,
                         forceRefresh = forceRefresh,
                         animeQueryOverride = animeQueryOverride,
-                        airDate = currentAirDate
+                        airDate = currentAirDate,
+                        nativeType = mediaRepository.addonNativeType(mediaId)
                     )
                 }
 
@@ -7715,6 +7718,7 @@ class PlayerViewModel @Inject constructor(
             emitUpdate = aired,
             addonNativeId = mediaRepository.getCachedItem(MediaType.TV, currentMediaId)?.addonNativeId,
             addonNativeAddonId = mediaRepository.getCachedItem(MediaType.TV, currentMediaId)?.addonNativeAddonId,
+            addonNativeType = mediaRepository.addonNativeType(currentMediaId),
         )
     }
 
@@ -7963,7 +7967,8 @@ class PlayerViewModel @Inject constructor(
                         streamAddonId = streamAddonId,
                         streamTitle = streamTitle,
                         addonNativeId = mediaRepository.getCachedItem(currentMediaType, currentMediaId)?.addonNativeId,
-                        addonNativeAddonId = mediaRepository.getCachedItem(currentMediaType, currentMediaId)?.addonNativeAddonId
+                        addonNativeAddonId = mediaRepository.getCachedItem(currentMediaType, currentMediaId)?.addonNativeAddonId,
+                        addonNativeType = mediaRepository.addonNativeType(currentMediaId)
                     )
 
                     // Push local CW to cloud so other devices see mid-playback progress.
@@ -8320,7 +8325,8 @@ class PlayerViewModel @Inject constructor(
                 streamRepository.resolveMovieStreams(
                     imdbId = imdbId,
                     title = currentItemTitle,
-                    year = null
+                    year = null,
+                    nativeType = mediaRepository.addonNativeType(mediaId)
                 )
             } else {
                 streamRepository.resolveEpisodeStreams(
@@ -8332,7 +8338,8 @@ class PlayerViewModel @Inject constructor(
                     genreIds = currentGenreIds,
                     originalLanguage = currentOriginalLanguage,
                     title = currentItemTitle,
-                    animeQueryOverride = currentAnimeQueryOverride
+                    animeQueryOverride = currentAnimeQueryOverride,
+                    nativeType = mediaRepository.addonNativeType(mediaId)
                 )
             }
 

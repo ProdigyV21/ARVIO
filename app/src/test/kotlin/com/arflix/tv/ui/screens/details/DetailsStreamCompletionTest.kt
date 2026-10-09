@@ -62,7 +62,7 @@ class DetailsStreamCompletionTest {
                     gates[2].await()
                     emptyList()
                 }
-                every { streams.resolveMovieStreamsProgressive(any(), any(), any(), any(), any()) } returns flow {
+                every { streams.resolveMovieStreamsProgressive(any(), any(), any(), any(), any(), any()) } returns flow {
                     gates[0].await()
                     emit(ProgressiveStreamResult(emptyList(), completedAddons = 0, totalAddons = 0, isFinal = true))
                 }

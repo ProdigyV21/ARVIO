@@ -136,6 +136,7 @@ internal object ContinueWatchingMerge {
             streamTitle = preferred.streamTitle ?: fallback.streamTitle,
             addonNativeId = preferred.addonNativeId ?: fallback.addonNativeId,
             addonNativeAddonId = preferred.addonNativeAddonId ?: fallback.addonNativeAddonId,
+            addonNativeType = preferred.addonNativeType ?: fallback.addonNativeType,
             year = preferred.year.ifBlank { fallback.year },
             releaseDate = preferred.releaseDate.ifBlank { fallback.releaseDate },
             overview = preferred.overview.ifBlank { fallback.overview },

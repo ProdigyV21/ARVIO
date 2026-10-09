@@ -2,6 +2,14 @@ package com.arflix.tv.data.repository
 
 import java.net.URLEncoder
 
+/**
+ * One addon URL path segment (a type, an id or an extra). Addon types and ids may hold spaces
+ * ("Live Docs"), `:` or non-ASCII text; URLEncoder's "+" for a space would reach the addon as a
+ * literal plus, so it is written as %20. Used for catalog, meta and stream URLs alike.
+ */
+internal fun encodePathSegment(value: String): String =
+    URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
 internal fun buildCatalogRequestUrls(
     baseUrl: String,
     catalogType: String,
@@ -10,14 +18,13 @@ internal fun buildCatalogRequestUrls(
     queryBase: String?,
     genre: String? = null
 ): List<String> {
-    // Path segments: URLEncoder's "+" for a space ("Live Docs") would reach the addon as a plus.
-    val type = URLEncoder.encode(catalogType, "UTF-8").replace("+", "%20")
-    val id = URLEncoder.encode(catalogId, "UTF-8").replace("+", "%20")
+    val type = encodePathSegment(catalogType)
+    val id = encodePathSegment(catalogId)
     val base = "$baseUrl/catalog/$type/$id"
     val query = queryBase?.takeIf { it.isNotBlank() }
     val configSuffix = query?.let { "?$it" }.orEmpty()
     if (!genre.isNullOrBlank()) {
-        val encodedGenre = URLEncoder.encode(genre, "UTF-8").replace("+", "%20")
+        val encodedGenre = encodePathSegment(genre)
         val extras = listOfNotNull("genre=$encodedGenre", "skip=$skip".takeIf { skip > 0 }).joinToString("&")
         return listOf("$base/$extras.json$configSuffix")
     }

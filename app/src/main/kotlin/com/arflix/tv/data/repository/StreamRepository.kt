@@ -385,7 +385,8 @@ class StreamRepository @Inject constructor(
                 addon = addon,
                 imdbId = request.imdbId,
                 title = request.title,
-                year = request.year
+                year = request.year,
+                nativeType = request.nativeType
             )
         },
         episodeResolver = { addon, request ->
@@ -400,7 +401,8 @@ class StreamRepository @Inject constructor(
                 originalLanguage = request.originalLanguage,
                 title = request.title,
                 animeQueryOverride = request.animeQueryOverride,
-                airDate = request.airDate
+                airDate = request.airDate,
+                nativeType = request.nativeType
             )
         }
     )
@@ -1619,9 +1621,9 @@ class StreamRepository @Inject constructor(
         val (baseUrl, queryParams) = getAddonBaseUrl(addonUrl)
 
         val typeCandidates = catalogTypeAliases(mediaType)
-        val encodedId = URLEncoder.encode(mediaId, "UTF-8")
+        val encodedId = encodePathSegment(mediaId)
         for (typeCandidate in typeCandidates) {
-            val encodedType = URLEncoder.encode(typeCandidate, "UTF-8")
+            val encodedType = encodePathSegment(typeCandidate)
             val query = queryParams?.takeIf { it.isNotBlank() }?.let { "?$it" }.orEmpty()
             val url = "$baseUrl/meta/$encodedType/$encodedId.json$query"
             val meta = try {
@@ -1647,6 +1649,21 @@ class StreamRepository @Inject constructor(
     suspend fun addonServesOwnMeta(addonId: String, type: String, contentId: String): Boolean {
         val addon = installedAddons.first().firstOrNull { it.id == addonId } ?: return false
         return addonServesOwnMeta(addon, type, contentId)
+    }
+
+    /**
+     * The types [addonId] declares under which it serves its own metadata for [contentId]. Used
+     * for watch-history entries saved before the item's own type was recorded with them.
+     */
+    suspend fun ownMetaTypes(addonId: String, contentId: String): List<String> {
+        val addon = installedAddons.first().firstOrNull { it.id == addonId } ?: return emptyList()
+        val manifest = addon.manifest
+        // Gson leaves absent manifest fields null despite the Kotlin types.
+        val declared: List<String?> = manifest?.types.orEmpty() + manifest?.catalogs.orEmpty().map { it.type }
+        return declared.mapNotNull { it?.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+            .filter { addonServesOwnMeta(addon, it, contentId) }
     }
 
     /**
@@ -1836,10 +1853,12 @@ class StreamRepository @Inject constructor(
         tmdbId: Int?,
         isAnime: Boolean,
         genreIds: List<Int>,
-        originalLanguage: String?
+        originalLanguage: String?,
+        // A native item's own type ("Podcasts"): an addon declaring only that type still qualifies.
+        nativeType: String? = null
     ): List<Addon> {
         val seriesAddons = buildEpisodeAddonLookupIds(imdbId, tmdbId)
-            .flatMap { id -> getStreamAddons(addons, "series", id) }
+            .flatMap { id -> getStreamAddons(addons, nativeType ?: "series", id) }
             .distinctBy { it.id }
         val hasNativeAnimeAddon = addons.any(::shouldPreferNativeAnimeIds)
         val shouldIncludeAnimeAddons = isAnime ||
@@ -2032,7 +2051,9 @@ class StreamRepository @Inject constructor(
         addon: Addon,
         imdbId: String,
         title: String = "",
-        year: Int? = null
+        year: Int? = null,
+        // A native item's own type ("tv" for a live channel): its addon may declare no movie type.
+        nativeType: String? = null
     ): List<StreamSource> {
         val startedAt = System.currentTimeMillis()
         val addonTimeoutMs = when {
@@ -2057,10 +2078,15 @@ class StreamRepository @Inject constructor(
                     return@withTimeout streams
                 }
                 val (baseUrl, queryParams) = getAddonBaseUrl(addon.url ?: return@withTimeout emptyList())
-                val url = if (queryParams != null) {
-                    "$baseUrl/stream/movie/$imdbId.json?$queryParams"
+                val path = if (nativeType != null) {
+                    "${encodePathSegment(nativeType)}/${encodePathSegment(imdbId)}"
                 } else {
-                    "$baseUrl/stream/movie/$imdbId.json"
+                    "movie/$imdbId"
+                }
+                val url = if (queryParams != null) {
+                    "$baseUrl/stream/$path.json?$queryParams"
+                } else {
+                    "$baseUrl/stream/$path.json"
                 }
                 Log.d(
                     TAG,
@@ -2128,7 +2154,8 @@ class StreamRepository @Inject constructor(
         originalLanguage: String? = null,
         title: String = "",
         animeQueryOverride: String? = null,
-        airDate: String? = null
+        airDate: String? = null,
+        nativeType: String? = null
     ): List<StreamSource> {
         val startedAt = System.currentTimeMillis()
         val nativeAnimeAddonHint = shouldPreferNativeAnimeIds(addon)
@@ -2189,7 +2216,9 @@ class StreamRepository @Inject constructor(
                     animeQueryOverride ?: resolveAnimeQuery(animeLookupTimeoutMs)
                 } else null
 
-                val nativeTypes = nativeContainerTypes(addon).filter { addonServesOwnMeta(addon, it, imdbId) }
+                val nativeTypes = (listOfNotNull(nativeType) + nativeContainerTypes(addon))
+                    .distinctBy { it.lowercase(Locale.US) }
+                    .filter { addonServesOwnMeta(addon, it, imdbId) }
                 val isNative = nativeTypes.isNotEmpty()
                 // The type the addon answered /meta with; strict addons route /stream by it too.
                 var nativeType: String? = null
@@ -2212,11 +2241,12 @@ class StreamRepository @Inject constructor(
                 val useKitsuFallback = resolveAsAnime && supportsKitsu && animeQuery != null && animeQuery != seriesId
                 val preferNativeAnimeIds = useKitsuFallback && nativeAnimeAddon
                 fun streamUrl(type: String, contentId: String): String {
-                    val encodedId = if (isNative) URLEncoder.encode(contentId, "UTF-8") else contentId
+                    val encodedId = if (isNative) encodePathSegment(contentId) else contentId
+                    val encodedType = encodePathSegment(type)
                     return if (queryParams != null) {
-                        "$baseUrl/stream/$type/$encodedId.json?$queryParams"
+                        "$baseUrl/stream/$encodedType/$encodedId.json?$queryParams"
                     } else {
-                        "$baseUrl/stream/$type/$encodedId.json"
+                        "$baseUrl/stream/$encodedType/$encodedId.json"
                     }
                 }
 
@@ -2492,12 +2522,13 @@ class StreamRepository @Inject constructor(
         imdbId: String,
         title: String = "",
         year: Int? = null,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        nativeType: String? = null
     ): StreamResult = withContext(Dispatchers.IO) {
         ensureAddonHealthLoaded()
         val subtitles = mutableListOf<Subtitle>()
         val allAddons = installedAddonsForSourceResolution()
-        val streamAddons = getStreamAddons(allAddons, "movie", imdbId)
+        val streamAddons = getStreamAddons(allAddons, nativeType ?: "movie", imdbId)
         val cacheKey = streamCacheKey(
             profileId = profileManager.getProfileIdSync(),
             type = "movie",
@@ -2525,7 +2556,7 @@ class StreamRepository @Inject constructor(
         }
 
         val prioritizedAddons = prioritizeStreamingAddons(streamAddons)
-        val movieRequest = MovieRuntimeRequest(imdbId = imdbId, title = title, year = year)
+        val movieRequest = MovieRuntimeRequest(imdbId = imdbId, title = title, year = year, nativeType = nativeType)
         val streams = addonRuntimeAggregator.resolveMovieStreams(
             stremioAddons = prioritizedAddons,
             request = movieRequest
@@ -2557,14 +2588,15 @@ class StreamRepository @Inject constructor(
         title: String = "",
         year: Int? = null,
         forceRefresh: Boolean = false,
-        sequential: Boolean = false
+        sequential: Boolean = false,
+        nativeType: String? = null
     ): Flow<ProgressiveStreamResult> = callbackFlow {
         // Retained so cancelling the collector (back-nav, superseded prefetch)
         // also stops the scrape instead of leaking it in repositoryScope.
         val workerJob = repositoryScope.launch {
             ensureAddonHealthLoaded()
             val allAddons = installedAddonsForSourceResolution()
-            val streamAddons = getStreamAddons(allAddons, "movie", imdbId)
+            val streamAddons = getStreamAddons(allAddons, nativeType ?: "movie", imdbId)
             val profileId = profileManager.getProfileIdSync()
             val baseCacheKey = streamCacheKey(
                 profileId = profileId,
@@ -2710,7 +2742,7 @@ class StreamRepository @Inject constructor(
                 for (addon in prioritizedAddons) {
                     val addonStreams = try {
                         withTimeoutOrNull(3_500L) {
-                            fetchMovieStreamsFromAddon(addon, imdbId)
+                            fetchMovieStreamsFromAddon(addon, imdbId, nativeType = nativeType)
                         } ?: emptyList()
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e
@@ -2773,7 +2805,7 @@ class StreamRepository @Inject constructor(
                 prioritizedAddons.forEach { addon ->
                     launch {
                         val addonStreams = try {
-                            fetchMovieStreamsFromAddon(addon, imdbId)
+                            fetchMovieStreamsFromAddon(addon, imdbId, nativeType = nativeType)
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -2863,12 +2895,13 @@ class StreamRepository @Inject constructor(
         originalLanguage: String? = null,
         animeQueryOverride: String? = null,
         airDate: String? = null,
-        timeoutMs: Long = 3_500L
+        timeoutMs: Long = 3_500L,
+        nativeType: String? = null
     ): List<StreamSource> = withContext(Dispatchers.IO) {
         withTimeoutOrNull(timeoutMs) {
             try {
                 if (mediaType == MediaType.MOVIE) {
-                    fetchMovieStreamsFromAddon(addon = addon, imdbId = imdbId, title = title, year = year)
+                    fetchMovieStreamsFromAddon(addon = addon, imdbId = imdbId, title = title, year = year, nativeType = nativeType)
                 } else {
                     fetchEpisodeStreamsFromAddon(
                         addon = addon,
@@ -2881,7 +2914,8 @@ class StreamRepository @Inject constructor(
                         originalLanguage = originalLanguage,
                         title = title,
                         animeQueryOverride = animeQueryOverride,
-                        airDate = airDate
+                        airDate = airDate,
+                        nativeType = nativeType
                     )
                 }
             } catch (e: Exception) {
@@ -3168,7 +3202,9 @@ class StreamRepository @Inject constructor(
         title: String = "",
         forceRefresh: Boolean = false,
         animeQueryOverride: String? = null,
-        airDate: String? = null
+        airDate: String? = null,
+        // A native addon item's own type ("Podcasts"), for addon selection and /meta, /stream.
+        nativeType: String? = null
     ): StreamResult = withContext(Dispatchers.IO) {
         // Native addon items carry a negative stand-in id, which no addon knows as TMDB.
         val tmdbId = tmdbId?.takeIf { it > 0 }
@@ -3182,7 +3218,8 @@ class StreamRepository @Inject constructor(
             tmdbId = tmdbId,
             isAnime = isAnime,
             genreIds = genreIds,
-            originalLanguage = originalLanguage
+            originalLanguage = originalLanguage,
+            nativeType = nativeType
         )
         val cacheKey = streamCacheKey(
             profileId = profileManager.getProfileIdSync(),
@@ -3217,7 +3254,8 @@ class StreamRepository @Inject constructor(
             originalLanguage = originalLanguage,
             title = title,
             airDate = airDate,
-            animeQueryOverride = animeQueryOverride
+            animeQueryOverride = animeQueryOverride,
+            nativeType = nativeType
         )
         val streams = addonRuntimeAggregator.resolveEpisodeStreams(
             stremioAddons = prioritizedAddons,
@@ -3247,7 +3285,9 @@ class StreamRepository @Inject constructor(
         forceRefresh: Boolean = false,
         animeQueryOverride: String? = null,
         airDate: String? = null,
-        sequential: Boolean = false
+        sequential: Boolean = false,
+        // A native addon item's own type ("Podcasts"), for addon selection and /meta, /stream.
+        nativeType: String? = null
     ): Flow<ProgressiveStreamResult> = callbackFlow {
         // Native addon items carry a negative stand-in id, which no addon knows as TMDB.
         val tmdbId = tmdbId?.takeIf { it > 0 }
@@ -3263,7 +3303,8 @@ class StreamRepository @Inject constructor(
                 tmdbId = tmdbId,
                 isAnime = isAnime,
                 genreIds = genreIds,
-                originalLanguage = originalLanguage
+                originalLanguage = originalLanguage,
+                nativeType = nativeType
             )
             val baseCacheKey = streamCacheKey(
                 profileId = profileManager.getProfileIdSync(),
@@ -3399,7 +3440,8 @@ class StreamRepository @Inject constructor(
                                 originalLanguage = originalLanguage,
                                 title = title,
                                 animeQueryOverride = animeQueryOverride,
-                                airDate = airDate
+                                airDate = airDate,
+                                nativeType = nativeType
                             )
                         } ?: emptyList()
                     } catch (e: Exception) {
@@ -3481,7 +3523,8 @@ class StreamRepository @Inject constructor(
                                 originalLanguage = originalLanguage,
                                 title = title,
                                 animeQueryOverride = animeQueryOverride,
-                                airDate = airDate
+                                airDate = airDate,
+                                nativeType = nativeType
                             )
                         } catch (e: Exception) {
                             if (e is kotlinx.coroutines.CancellationException) throw e

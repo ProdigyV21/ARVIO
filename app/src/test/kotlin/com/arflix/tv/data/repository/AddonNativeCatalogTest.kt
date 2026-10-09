@@ -17,8 +17,46 @@ import org.junit.rules.TemporaryFolder
 
 class AddonNativeCatalogTest {
     @get:Rule val folder = TemporaryFolder()
-    private fun context(): Context = mockk<Context> {
-        every { filesDir } returns folder.root
+    // A second device: same cloud history, empty native registry.
+    @get:Rule val freshDevice = TemporaryFolder()
+    private fun context(dir: java.io.File = folder.root): Context = mockk<Context> {
+        every { filesDir } returns dir
+    }
+
+    private fun savedPodcastEpisode(type: String?): ContinueWatchingItem {
+        val id = AddonNativeCatalog(context(), mockk(relaxed = true)).stableId("provider", "provider:pod")
+        return ContinueWatchingItem(id = id, title = "Pod", mediaType = MediaType.TV, progress = 20,
+            resumePositionSeconds = 300, season = 1, episode = 2, addonNativeId = "provider:pod",
+            addonNativeAddonId = "provider", addonNativeType = type)
+    }
+
+    @Test fun freshDeviceRestoreKeepsTheAddonsOwnType() = runBlocking {
+        val history = decodeContinueWatchingCache(Gson().toJson(listOf(savedPodcastEpisode("Podcasts"))), Gson())
+        val streams = mockk<StreamRepository>(relaxed = true)
+        coEvery { streams.getAddonMeta(any(), any(), any()) } returns null
+        val device = AddonNativeCatalog(context(freshDevice.root), streams)
+        val card = history.single().toMediaItem()
+        device.restore(card)
+        device.details(MediaType.TV, card.id)
+        assertEquals("Podcasts", device.addonType(card.id))
+        io.mockk.coVerify { streams.getAddonMeta("provider", "Podcasts", "provider:pod") }
+        io.mockk.coVerify(exactly = 0) { streams.getAddonMeta(any(), "series", any()) }
+    }
+
+    @Test fun historySavedWithoutTheTypeResolvesItFromTheOwningAddon() = runBlocking {
+        val streams = mockk<StreamRepository>(relaxed = true)
+        coEvery { streams.getAddonMeta("provider", "series", "provider:pod") } returns null
+        coEvery { streams.ownMetaTypes("provider", "provider:pod") } returns listOf("Podcasts")
+        coEvery { streams.getAddonMeta("provider", "Podcasts", "provider:pod") } returns
+            StremioMetaPreview(id = "provider:pod", name = "Pod", videos = listOf(
+                StremioMetaVideo(id = "provider:pod:1:2", season = 1, episode = 2)))
+        val device = AddonNativeCatalog(context(freshDevice.root), streams)
+        val card = savedPodcastEpisode(type = null).toMediaItem()
+        device.restore(card)
+        assertEquals(1, device.episodes(card.id, 1).size)
+        // Remembered, so stream lookup and later opens use it directly.
+        assertEquals("Podcasts", device.addonType(card.id))
+        assertEquals("Podcasts", AddonNativeCatalog(context(freshDevice.root), streams).addonType(card.id))
     }
 
     @Test fun episodeLookupKeepsOpaqueIdsAndSeasonCoordinates() {

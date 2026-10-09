@@ -480,6 +480,9 @@ class MediaRepository @Inject constructor(
     /** True for a native addon item (see [AddonNativeCatalog]). */
     fun isAddonNative(mediaId: Int): Boolean = mediaId < 0 && addonNative.isNative(mediaId)
 
+    /** A native addon item's own type, for stream lookup; null for TMDB items. */
+    fun addonNativeType(mediaId: Int): String? = if (mediaId < 0) addonNative.addonType(mediaId) else null
+
     /** An addon's live channel, which must be played as live and kept out of Continue Watching. */
     fun isAddonNativeLiveChannel(mediaId: Int): Boolean = mediaId < 0 && addonNative.isLiveChannel(mediaId)
 

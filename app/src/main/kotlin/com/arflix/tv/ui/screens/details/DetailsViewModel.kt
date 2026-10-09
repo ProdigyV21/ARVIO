@@ -1889,7 +1889,8 @@ class DetailsViewModel @Inject constructor(
                     streamRepository.resolveMovieStreamsProgressive(
                         imdbId = imdbId,
                         title = _uiState.value.item?.title.orEmpty(),
-                        year = _uiState.value.item?.year?.toIntOrNull()
+                        year = _uiState.value.item?.year?.toIntOrNull(),
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         prewarmVisibleStreams(
                             sortPlayableStreamsFirst(
@@ -1923,7 +1924,8 @@ class DetailsViewModel @Inject constructor(
                         genreIds = _uiState.value.item?.genreIds ?: emptyList(),
                         originalLanguage = _uiState.value.item?.originalLanguage,
                         title = _uiState.value.item?.title ?: "",
-                        airDate = prefetchAirDate
+                        airDate = prefetchAirDate,
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         prewarmVisibleStreams(
                             sortPlayableStreamsFirst(
@@ -2311,7 +2313,8 @@ class DetailsViewModel @Inject constructor(
                     streamRepository.resolveMovieStreamsProgressive(
                         imdbId = effectiveStreamId,
                         title = item?.title.orEmpty(),
-                        year = item?.year?.toIntOrNull()
+                        year = item?.year?.toIntOrNull(),
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         if (!isCurrentRequest()) return@collect
                         val existingVod = _uiState.value.streams.filter(::isSupplementalStream)
@@ -2380,7 +2383,8 @@ class DetailsViewModel @Inject constructor(
                         originalLanguage = originalLanguage,
                         title = item?.title ?: "",
                         animeQueryOverride = animeQueryOverride,
-                        airDate = episodeAirDate
+                        airDate = episodeAirDate,
+                        nativeType = mediaRepository.addonNativeType(currentMediaId)
                     ).collect { progressive ->
                         if (!isCurrentRequest()) return@collect
                         val existingVod = _uiState.value.streams.filter(::isSupplementalStream)

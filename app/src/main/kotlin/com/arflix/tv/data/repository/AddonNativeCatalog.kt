@@ -90,6 +90,9 @@ internal class AddonNativeCatalog(
 
     fun isNative(mediaId: Int): Boolean = mediaId < 0 && entry(mediaId) != null
 
+    /** The addon's own type for this item ("series", "Podcasts", "tv"), which its /meta and /stream answer to. */
+    fun addonType(mediaId: Int): String? = entry(mediaId)?.type
+
     /** A live channel (Stremio's "tv" type): it plays live, so it has no progress to resume. */
     fun isLiveChannel(mediaId: Int): Boolean = entry(mediaId)?.type.equals("tv", ignoreCase = true)
 
@@ -105,8 +108,11 @@ internal class AddonNativeCatalog(
         val metaId = item.addonNativeId?.takeIf { it.isNotBlank() } ?: return
         if (item.id != stableId(addonId, metaId)) return
         ensureRegistryLoaded()
-        // The card doesn't carry the addon's own type; keep one the catalog already recorded.
-        val type = registry[item.id]?.type ?: if (item.mediaType == MediaType.TV) "series" else "movie"
+        // Prefer the type this device's catalog recorded, then the one the history entry carries.
+        // Older entries carry none; loadMeta then finds the addon's own type (see resolveMeta).
+        val type = registry[item.id]?.type
+            ?: item.addonNativeType?.trim()?.takeIf { it.isNotBlank() }
+            ?: if (item.mediaType == MediaType.TV) "series" else "movie"
         val restored = Entry(addonId, metaId, type, item.title, item.image, item.backdrop, item.overview)
         if (registry.put(item.id, restored) != restored) registryDirty = true
     }
@@ -160,13 +166,36 @@ internal class AddonNativeCatalog(
     private suspend fun loadMeta(mediaId: Int, entry: Entry): StremioMetaPreview? {
         flush()
         metas[mediaId]?.takeIf { System.currentTimeMillis() - it.loadedAtMs < META_TTL_MS }?.let { return it.meta }
-        val meta = runCatching {
-            streamRepository.getAddonMeta(entry.addonId, entry.type, entry.metaId)
-        }.onFailure { Log.w(TAG, "meta for ${entry.metaId} failed: ${it.message}") }.getOrNull()
+        val meta = resolveMeta(mediaId, entry)
         if (meta != null) {
             metas[mediaId] = CachedMeta(meta, System.currentTimeMillis())
         }
         return meta ?: metas[mediaId]?.meta
+    }
+
+    /**
+     * The addon's /meta for [entry]. When its recorded type gets no answer (a history entry
+     * restored without the addon's own type, e.g. a podcast saved as "series"), the other types
+     * the addon declares are tried, and the one that answers is remembered.
+     */
+    private suspend fun resolveMeta(mediaId: Int, entry: Entry): StremioMetaPreview? {
+        suspend fun fetch(type: String): StremioMetaPreview? =
+            runCatching { streamRepository.getAddonMeta(entry.addonId, type, entry.metaId) }
+                .onFailure { Log.w(TAG, "meta for ${entry.metaId} failed: ${it.message}") }
+                .getOrNull()
+        fetch(entry.type)?.let { return it }
+        val others = runCatching { streamRepository.ownMetaTypes(entry.addonId, entry.metaId) }.getOrDefault(emptyList())
+            .filterNot { it.equals(entry.type, ignoreCase = true) }
+        for (type in others) {
+            val meta = fetch(type) ?: continue
+            if (registry[mediaId] == entry) {
+                registry[mediaId] = entry.copy(type = type)
+                registryDirty = true
+                flush()
+            }
+            return meta
+        }
+        return null
     }
 
     private fun Entry.toMediaItem(id: Int, mediaType: MediaType) = MediaItem(
@@ -177,7 +206,8 @@ internal class AddonNativeCatalog(
         image = poster.orEmpty(),
         backdrop = background,
         addonNativeId = metaId,
-        addonNativeAddonId = addonId
+        addonNativeAddonId = addonId,
+        addonNativeType = type
     )
 
     private fun ensureRegistryLoaded() {

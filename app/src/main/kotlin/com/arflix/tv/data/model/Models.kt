@@ -78,6 +78,8 @@ data class MediaItem(
     // number; details, episodes and streams come from the addon by this id.
     val addonNativeId: String? = null,
     val addonNativeAddonId: String? = null,
+    // The addon's own type for that id ("Podcasts", "tv"); its /meta and /stream route by it.
+    val addonNativeType: String? = null,
 ) : Serializable {
     val isAddonNative: Boolean get() = !addonNativeId.isNullOrBlank()
 
