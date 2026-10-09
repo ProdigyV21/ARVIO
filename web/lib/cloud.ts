@@ -1454,6 +1454,29 @@ export async function saveCloudProfiles(auth: AuthClient, profiles: Profile[], a
   });
 }
 
+/** Add imported profiles without asserting a stale copy of the account's list. */
+export async function addCloudProfiles(auth: AuthClient, additions: Profile[]): Promise<Profile[]> {
+  if (!auth.session) throw new Error("Sign in to your ARVIO account first");
+  let profiles: Profile[] = [];
+  await mutateCloudPayload(auth, (root) => {
+    if (root.profiles != null && !Array.isArray(root.profiles)) {
+      throw new Error("Could not read your ARVIO profiles");
+    }
+    profiles = [...arrayValue<Profile>(root.profiles)];
+    const ids = new Set(profiles.map(profile => profile.id));
+    for (const profile of additions) {
+      if (ids.has(profile.id)) continue;
+      profiles.push(profile);
+      ids.add(profile.id);
+    }
+    root.profiles = profiles;
+    if (!profiles.some(profile => profile.id === root.activeProfileId)) {
+      root.activeProfileId = profiles[0]?.id ?? null;
+    }
+  });
+  return profiles;
+}
+
 const liveAddonIdMarkers = [
   "livetv",
   "live_tv",
