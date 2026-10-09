@@ -128,6 +128,12 @@ class CustomCollectionsTest {
     }
 
     @Test
+    fun `addon-defined catalog type with a space is percent-encoded in the path`() {
+        assertEquals(listOf("https://addon/catalog/Live%20Docs/kids.json"),
+            buildCatalogRequestUrls("https://addon", "Live Docs", "kids", 0, null))
+    }
+
+    @Test
     fun `person and director sources use credits rather than unsupported TV discovery filters`() {
         val document = """{"title":"People","folders":[{"title":"Director","sources":[{"provider":"tmdb","tmdbSourceType":"DIRECTOR","tmdbId":123,"mediaType":"TV"}]}]}"""
         val source = CustomCollections.parse(document, null).getOrThrow().single().entries.single().sources.single()

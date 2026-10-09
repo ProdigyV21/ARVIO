@@ -623,9 +623,14 @@ class CollectionDetailsViewModel @Inject constructor(
             if (mediaType == "all" || mediaType == "any" || mediaType == "both" || mediaType == "mixed") {
                 return true
             }
+            val isMovie = mediaType == "movie" || mediaType == "film"
+            val isSeries = mediaType == "series" || mediaType == "tv" || mediaType == "show" || mediaType == "anime"
+            // Addon-defined types ("Live Docs", "Podcasts") can hold either; the loader keeps
+            // only the items whose own type matches the tab.
+            if (!isMovie && !isSeries) return true
             return when (tab) {
-                CollectionTab.MOVIES -> mediaType == "movie" || mediaType == "film"
-                CollectionTab.SERIES -> mediaType == "series" || mediaType == "tv" || mediaType == "show" || mediaType == "anime"
+                CollectionTab.MOVIES -> isMovie
+                CollectionTab.SERIES -> isSeries
             }
         }
 

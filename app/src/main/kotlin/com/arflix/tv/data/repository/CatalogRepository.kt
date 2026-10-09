@@ -682,14 +682,18 @@ class CatalogRepository @Inject constructor(
         )
     }
 
+    // Addons may declare any catalog type (AIOMetadata's "anime"/"all"/custom display
+    // types, "Podcasts", debrid "other"). Unknown types keep their spelling: the addon
+    // routes /catalog/{type}/ by it, case included.
     private fun normalizeAddonCatalogType(rawType: String?): String? {
-        return when (rawType?.trim()?.lowercase()) {
+        val trimmed = rawType?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return when (trimmed.lowercase()) {
             "movie" -> "movie"
             "series" -> "series"
             "tv" -> "tv"
             "show" -> "show"
             "shows" -> "shows"
-            else -> null
+            else -> trimmed
         }
     }
 

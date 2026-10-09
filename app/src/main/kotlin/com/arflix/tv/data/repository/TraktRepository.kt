@@ -2747,6 +2747,7 @@ class TraktRepository @Inject constructor(
         emitUpdate: Boolean = true,
         addonNativeId: String? = null,
         addonNativeAddonId: String? = null,
+        addonNativeType: String? = null,
     ) {
         ensureProfileCacheScope()
         if (SportsAddonCapabilities.isLiveStreamOrSportsItem(
@@ -2792,6 +2793,7 @@ class TraktRepository @Inject constructor(
             isUpNext = isUpNext,
             addonNativeId = addonNativeId,
             addonNativeAddonId = addonNativeAddonId,
+            addonNativeType = addonNativeType,
             updatedAtMs = System.currentTimeMillis()
         )
 
@@ -5121,7 +5123,9 @@ data class ContinueWatchingItem(
     val totalEpisodes: Int = 0,
     val watchedEpisodes: Int = 0,
     val addonNativeId: String? = null,
-    val addonNativeAddonId: String? = null
+    val addonNativeAddonId: String? = null,
+    // Portable, so a device restoring this entry asks the addon with its own type.
+    val addonNativeType: String? = null
 ) {
     fun toMediaItem(context: Context? = null): MediaItem {
         val effectiveDurationSeconds = durationSeconds.takeIf { it > 0L } ?: parseRuntimeLabelSeconds(duration)
@@ -5211,7 +5215,8 @@ data class ContinueWatchingItem(
             timeRemainingLabel = timeRemainingLabel,
             showPlaybackProgress = showPlaybackProgress,
             addonNativeId = addonNativeId,
-            addonNativeAddonId = addonNativeAddonId
+            addonNativeAddonId = addonNativeAddonId,
+            addonNativeType = addonNativeType
         )
     }
 }

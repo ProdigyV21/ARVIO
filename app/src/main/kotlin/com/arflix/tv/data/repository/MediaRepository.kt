@@ -18,6 +18,7 @@ import com.arflix.tv.data.api.TmdbWatchProviderRegion
 import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.api.TraktPublicListItem
 import com.arflix.tv.data.api.StremioMetaPreview
+import com.arflix.tv.data.model.Addon
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -477,6 +479,12 @@ class MediaRepository @Inject constructor(
 
     /** True for a native addon item (see [AddonNativeCatalog]). */
     fun isAddonNative(mediaId: Int): Boolean = mediaId < 0 && addonNative.isNative(mediaId)
+
+    /** A native addon item's own type, for stream lookup; null for TMDB items. */
+    fun addonNativeType(mediaId: Int): String? = if (mediaId < 0) addonNative.addonType(mediaId) else null
+
+    /** An addon's live channel, which must be played as live and kept out of Continue Watching. */
+    fun isAddonNativeLiveChannel(mediaId: Int): Boolean = mediaId < 0 && addonNative.isLiveChannel(mediaId)
 
     // Catalog rows show native items as registered cards: loading full addon metadata per
     // card would cost one request per item, and the details screen loads it anyway.
@@ -1943,15 +1951,25 @@ class MediaRepository @Inject constructor(
         val nativeRefs = mutableListOf<Pair<MediaType, Int>>()
         val nativeMetaIds = HashSet<String>()
         val nativeItems = mutableListOf<MediaItem>()
+        // Read once per page: each read parses every installed manifest, and per item that
+        // starved the heap on a 500-item catalog (ANR).
+        val installed = installedAddonsSnapshot()
+        val catalogAddon = installed.firstOrNull { it.id == descriptor.addonId }
         metas.forEach { meta ->
             if (parseTmdbRefFromAddonMeta(meta, typeHint) != null || extractImdbId(meta) != null) return@forEach
             val metaId = meta.id?.trim().orEmpty()
-            val mediaType = typeHint ?: addonCatalogTypeToMediaType(meta.type) ?: return@forEach
-            val requestType = if (mediaType == MediaType.TV) "series" else "movie"
-            if (metaId.isBlank() || !addonServesOwnMeta(descriptor.addonId, requestType, metaId)) {
-                return@forEach
-            }
-            val item = addonNative.register(descriptor.addonId, meta, mediaType) ?: return@forEach
+            // The addon's own type ("Podcasts", "tv", ...) is what its /meta answers to.
+            val addonType = meta.type?.trim()?.takeIf { it.isNotBlank() } ?: descriptor.catalogType
+            val mediaType = nativeAddonMediaType(addonType, typeHint)
+            if (metaId.isBlank()) return@forEach
+            // A metadata addon (AIOMetadata) can re-list another addon's catalog; that addon
+            // owns the ids and serves their details and streams.
+            val owner = if (catalogAddon != null && addonServesOwnMeta(catalogAddon, addonType, metaId)) {
+                descriptor.addonId
+            } else {
+                findAddonServingOwnMeta(installed, addonType, metaId, excludeAddonId = descriptor.addonId)
+            } ?: return@forEach
+            val item = addonNative.register(owner, meta, mediaType, addonType) ?: return@forEach
             if (nativeMetaIds.add(metaId)) {
                 nativeItems += item
                 nativeRefs += mediaType to item.id
@@ -1990,15 +2008,21 @@ class MediaRepository @Inject constructor(
             if (extractImdbId(meta) != null) return@forEach
             val title = meta.name?.trim().orEmpty()
             if (title.isBlank()) return@forEach
-            val metaHint = typeHint ?: addonCatalogTypeToMediaType(meta.type)
-            val titleKey = "${metaHint?.name ?: "ANY"}|${title.lowercase(Locale.US)}"
+            // A title alone, with no movie/series type to narrow it, matches unrelated TMDB titles.
+            val metaHint = typeHint ?: addonCatalogTypeToMediaType(meta.type) ?: return@forEach
+            val titleKey = "${metaHint.name}|${title.lowercase(Locale.US)}"
             if (seenTitle.add(titleKey)) {
                 titleCandidates += title to metaHint
             }
         }
 
         val metaSemaphore = Semaphore(2)
-        val resolvedFromMeta = unresolvedMetaCandidates.take(8).map { unresolved ->
+        // Don't ask an addon for metadata its manifest says it can't serve (a metadata addon for
+        // ids it re-lists from another addon): each miss is several requests, and a page of them
+        // gets us rate limited.
+        val resolvedFromMeta = unresolvedMetaCandidates
+            .filter { addonMayServeMeta(catalogAddon, it.id) }
+            .take(8).map { unresolved ->
             async {
                 metaSemaphore.withPermit {
                     resolveAddonMetaToTmdbRef(
@@ -2030,13 +2054,13 @@ class MediaRepository @Inject constructor(
         (nativeRefs + directRefs + resolvedFromMeta + resolvedImdbRefs + resolvedTitleRefs).distinct()
     }
 
-    private suspend fun addonServesOwnMeta(addonId: String, type: String, metaId: String): Boolean = try {
-        streamRepository.addonServesOwnMeta(addonId, type, metaId)
+    private suspend fun installedAddonsSnapshot(): List<Addon> = try {
+        streamRepository.installedAddons.first()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         // Unknown means "match it to TMDB as before", never a failed row.
-        false
+        emptyList()
     }
 
     private suspend fun resolveAddonMetaToTmdbRef(
@@ -2183,15 +2207,27 @@ class MediaRepository @Inject constructor(
         return try { URLDecoder.decode(value, "UTF-8") } catch (_: Exception) { value }
     }
 
+    /** Known types are canonicalised; any other addon type keeps its spelling (see CatalogRepository). */
     private fun normalizeAddonCatalogType(rawType: String?): String? {
-        return when (rawType?.trim()?.lowercase()) {
+        val trimmed = rawType?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return when (trimmed.lowercase()) {
             "movie" -> "movie"
             "series" -> "series"
             "tv" -> "tv"
             "show" -> "show"
             "shows" -> "shows"
-            else -> null
+            else -> trimmed
         }
+    }
+
+    /**
+     * How a native item is shown. Stremio's "tv" type is a live channel: one stream, no
+     * episodes, so it opens like a movie and plays straight away. Other unknown types
+     * (podcasts, debrid libraries) are containers of videos, which the series page shows.
+     */
+    private fun nativeAddonMediaType(rawType: String, typeHint: MediaType?): MediaType {
+        if (rawType.equals("tv", ignoreCase = true)) return MediaType.MOVIE
+        return typeHint ?: addonCatalogTypeToMediaType(rawType) ?: MediaType.TV
     }
 
     private fun addonCatalogTypeToMediaType(rawType: String?): MediaType? {
