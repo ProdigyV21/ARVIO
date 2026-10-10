@@ -205,6 +205,10 @@
     <string name="frame_rate_desc">Off, Seamless, or Always</string>
     <string name="quality_filters_desc">Exclude quality tiers on this device</string>
     <string name="card_layout_desc">Landscape or poster cards</string>
+    <string name="settings_top_bar_style">Top Bar Style</string>
+    <string name="settings_top_bar_style_desc">Choose between standard top bar and floating frosted glass pill</string>
+    <string name="settings_top_bar_standard">Standard</string>
+    <string name="settings_top_bar_pill">Floating Pill</string>
     <string name="ui_mode_desc">Force TV, Tablet, or Phone</string>
     <string name="skip_profile_desc">Auto-load last used profile after restart</string>
     <string name="oled_black_background_desc">Use pure black app backgrounds for OLED screens</string>

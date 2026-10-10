@@ -211,6 +211,7 @@ data class SettingsUiState(
     val defaultAudioLanguage: String = "Auto (Original)",
     val audioLanguageOptions: List<String> = emptyList(),
     val cardLayoutMode: String = CARD_LAYOUT_MODE_LANDSCAPE,
+    val topBarStyle: String = "Standard",
     val frameRateMatchingMode: String = "Off",
     val autoPlayNext: Boolean = true,
     val autoPlaySingleSource: Boolean = true,
@@ -469,6 +470,8 @@ class SettingsViewModel @Inject constructor(
     private fun subtitleUsageKey() = profileManager.profileStringKey("subtitle_usage_v1")
     private fun cardLayoutModeKey() = profileManager.profileStringKey("card_layout_mode")
     private fun cardLayoutModeKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "card_layout_mode")
+    private fun topBarStyleKey() = profileManager.profileStringKey("top_bar_style")
+    private fun topBarStyleKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "top_bar_style")
     private fun frameRateMatchingModeKey() = profileManager.profileStringKey("frame_rate_matching_mode")
     private fun frameRateMatchingModeKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "frame_rate_matching_mode")
     private fun autoPlayNextKey() = profileManager.profileBooleanKey("auto_play_next")
@@ -686,6 +689,7 @@ class SettingsViewModel @Inject constructor(
             var defaultSub = prefs[defaultSubtitleKey()] ?: "Off"
             val defaultAudio = prefs[defaultAudioLanguageKey()] ?: "Auto (Original)"
             val cardLayoutMode = normalizeCardLayoutMode(prefs[cardLayoutModeKey()])
+            val topBarStyle = prefs[topBarStyleKey()] ?: "Standard"
             val frameRateMode = normalizeFrameRateMode(prefs[frameRateMatchingModeKey()])
             val deviceModeOverride = prefs[com.arflix.tv.util.DEVICE_MODE_OVERRIDE_KEY] ?: "auto"
             val skipProfileSelection = prefs[com.arflix.tv.util.SKIP_PROFILE_SELECTION_KEY] ?: false
@@ -820,6 +824,7 @@ class SettingsViewModel @Inject constructor(
                 defaultAudioLanguage = defaultAudio,
                 audioLanguageOptions = audioLanguageOptions,
                 cardLayoutMode = cardLayoutMode,
+                topBarStyle = topBarStyle,
                 frameRateMatchingMode = frameRateMode,
                 autoPlayNext = autoPlay,
                 autoPlaySingleSource = autoPlaySingleSource,
@@ -1760,6 +1765,26 @@ class SettingsViewModel @Inject constructor(
                 prefs[cardLayoutModeKey()] = normalized
             }
             _uiState.value = _uiState.value.copy(cardLayoutMode = normalized)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun toggleTopBarStyle() {
+        val next = if (_uiState.value.topBarStyle.equals("Pill", ignoreCase = true)) {
+            "Standard"
+        } else {
+            "Pill"
+        }
+        setTopBarStyle(next)
+    }
+
+    fun setTopBarStyle(style: String) {
+        val normalized = if (style.equals("Pill", ignoreCase = true)) "Pill" else "Standard"
+        viewModelScope.launch {
+            context.settingsDataStore.edit { prefs ->
+                prefs[topBarStyleKey()] = normalized
+            }
+            _uiState.value = _uiState.value.copy(topBarStyle = normalized)
             syncLocalStateToCloud(silent = true)
         }
     }
