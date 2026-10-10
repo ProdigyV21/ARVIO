@@ -463,7 +463,9 @@ interface TraktApi {
         @Path("type") type: String,
         @Query("extended") extended: String = "full",
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 100
+        @Query("limit") limit: Int = 100,
+        /** See listFreshnessMarker: keeps a day-long cache lifetime from hiding list edits. */
+        @Query("_") freshness: Long? = null
     ): List<TraktPublicListItem>
 
     @GET("lists/{listId}")
@@ -481,7 +483,9 @@ interface TraktApi {
         @Path("type") type: String,
         @Query("extended") extended: String = "full",
         @Query("page") page: Int = 1,
-        @Query("limit") limit: Int = 100
+        @Query("limit") limit: Int = 100,
+        /** See listFreshnessMarker: keeps a day-long cache lifetime from hiding list edits. */
+        @Query("_") freshness: Long? = null
     ): List<TraktPublicListItem>
 
     // ========== User Profile ==========

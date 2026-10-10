@@ -1427,7 +1427,7 @@ class MediaRepository @Inject constructor(
         val slug = source.mdblistSlug?.trim()?.trim('/').orEmpty()
         if (slug.isBlank()) return emptyList()
         val body = withContext(Dispatchers.IO) {
-            fetchUrl("https://mdblist.com/lists/$slug/json")
+            fetchUrl(withListFreshness("https://mdblist.com/lists/$slug/json"))
         } ?: throw java.io.IOException("Collection list could not be loaded")
         val array = org.json.JSONArray(body)
         val refs = mutableListOf<Pair<MediaType, Int>>()
@@ -3316,10 +3316,12 @@ class MediaRepository @Inject constructor(
                     val rows = when (parsed) {
                         is ParsedCatalogUrl.TraktUserList -> traktApi.getUserListItems(
                             clientId = Constants.TRAKT_CLIENT_ID, username = parsed.username,
-                            listId = parsed.listId, type = type, page = page, limit = 100)
+                            listId = parsed.listId, type = type, page = page, limit = 100,
+                            freshness = listFreshnessMarker())
                         is ParsedCatalogUrl.TraktList -> traktApi.getListItems(
                             clientId = Constants.TRAKT_CLIENT_ID, listId = parsed.listId,
-                            type = type, page = page, limit = 100)
+                            type = type, page = page, limit = 100,
+                            freshness = listFreshnessMarker())
                         else -> emptyList()
                     }
                     if (rows == previous) break
@@ -3418,7 +3420,7 @@ class MediaRepository @Inject constructor(
         }
         val url = sourceUrl ?: return emptyList()
 
-        val jsonUrl = "${url.removeSuffix("/")}/json"
+        val jsonUrl = withListFreshness("${url.removeSuffix("/")}/json")
         val fromJson = fetchUrl(jsonUrl)?.let { payload ->
             parseMdblistJson(payload)
         } ?: emptyList()
