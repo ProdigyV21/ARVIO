@@ -7097,7 +7097,7 @@ private fun buildSeekPreviewCacheIdentity(
 }
 
 @Composable
-private fun PlayerMetadataChrome(
+internal fun PlayerMetadataChrome(
     uiState: PlayerUiState,
     mediaType: MediaType,
     seasonNumber: Int?,
@@ -7114,7 +7114,9 @@ private fun PlayerMetadataChrome(
     val selectedStream = uiState.selectedStream
     val streamSizeLabel = selectedStream?.let { formatStreamSizeInGb(it) }
     val hasQualityBadges = selectedStream?.let { buildPlaybackBadges(it).isNotEmpty() } == true
-    val overview = uiState.overview?.trim().orEmpty()
+    val overview = playerPauseOverview(
+        mediaType, seasonNumber, episodeNumber, uiState.seasonEpisodes, uiState.overview
+    )
     val logoHeight = 44.dp
     val logoWidth = 230.dp
     val chromeHeight = when {

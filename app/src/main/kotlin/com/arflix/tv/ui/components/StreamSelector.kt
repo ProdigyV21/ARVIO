@@ -89,7 +89,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
@@ -116,7 +115,6 @@ import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import androidx.compose.ui.res.stringResource
-import coil.compose.AsyncImage
 import com.arflix.tv.R
 import java.util.Locale
 
@@ -938,8 +936,8 @@ private fun OledSourceSelectorTv(
         modifier = Modifier
             .fillMaxSize()
             .padding(start = 30.dp, top = 26.dp, end = 30.dp, bottom = 24.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.032f), RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.032f), RoundedCornerShape(8.dp))
     ) {
         Row(
             modifier = Modifier
@@ -1181,35 +1179,8 @@ private data class SourcePresentation(
 
 @androidx.compose.runtime.Immutable
 private data class SourceBadge(
-    val text: String,
-    val imageUrl: String? = null
+    val text: String
 )
-
-private object SourceBadgeImages {
-    private const val WHITE_TAGS =
-        "https://raw.githubusercontent.com/nobnobz/Omni-Template-Bot-Bid-Raiser/main/Other/white%20regex%20tags"
-
-    const val UHD_4K = "$WHITE_TAGS/white_4k.png"
-    const val FULL_HD_1080 = "$WHITE_TAGS/white_1080p.png"
-    const val HD_720 = "$WHITE_TAGS/white_720p.png"
-    const val REMUX = "https://raw.githubusercontent.com/9mousaa/BetterFormatter/main/images/mono-remux.png"
-    const val BLURAY = "https://raw.githubusercontent.com/9mousaa/BetterFormatter/main/images/mono-bluray.png"
-    const val IMAX = "$WHITE_TAGS/white_imax.png"
-    const val DOLBY_VISION = "$WHITE_TAGS/white_DV.png"
-    const val HDR10_PLUS = "$WHITE_TAGS/white_HDR10Plus.png"
-    const val HDR10 = "$WHITE_TAGS/white_HDR10.png"
-    const val HDR = "$WHITE_TAGS/white_HDR.png"
-    const val ATMOS = "$WHITE_TAGS/white_Atmos.png"
-    const val TRUEHD = "$WHITE_TAGS/white_TrueHD.png"
-    const val DOLBY_DIGITAL_PLUS = "$WHITE_TAGS/white_DDPLUS.png"
-    const val DOLBY_DIGITAL = "$WHITE_TAGS/white_DD.png"
-    const val DTS_X = "$WHITE_TAGS/white_dtsx.png"
-    const val DTS_HD_MA = "$WHITE_TAGS/white_dtsHDMA.png"
-    const val DTS_HD = "$WHITE_TAGS/white_dtsHD.png"
-    const val DTS = "$WHITE_TAGS/white_dts.png"
-    const val AUDIO_7_1 = "$WHITE_TAGS/white_71.png"
-    const val AUDIO_5_1 = "$WHITE_TAGS/white_51.png"
-}
 
 
 
@@ -1636,9 +1607,9 @@ private fun sourceBadges(presentation: SourcePresentation): List<SourceBadge> = 
     }
 
     when (presentation.resolutionLabel) {
-        "4K" -> add(SourceBadge("4K", SourceBadgeImages.UHD_4K))
-        "1080p" -> add(SourceBadge("1080p", SourceBadgeImages.FULL_HD_1080))
-        "720p" -> add(SourceBadge("720p", SourceBadgeImages.HD_720))
+        "4K" -> add(SourceBadge("4K"))
+        "1080p" -> add(SourceBadge("1080p"))
+        "720p" -> add(SourceBadge("720p"))
         "480p" -> add(SourceBadge("480p"))
         // A source whose text names no resolution has nothing to show here, and
         // an empty badge is a pill with no word in it. Leave the slot out.
@@ -1648,8 +1619,8 @@ private fun sourceBadges(presentation: SourcePresentation): List<SourceBadge> = 
     }
 
     when (presentation.releaseLabel) {
-        "REMUX" -> add(SourceBadge("REMUX", SourceBadgeImages.REMUX))
-        "BluRay" -> add(SourceBadge("BluRay", SourceBadgeImages.BLURAY))
+        "REMUX" -> add(SourceBadge("REMUX"))
+        "BluRay" -> add(SourceBadge("BluRay"))
         "WEB-DL" -> add(SourceBadge("WEB-DL"))
         "WEBRip" -> add(SourceBadge("WEBRip"))
         "HDTV" -> add(SourceBadge("HDTV"))
@@ -1666,27 +1637,27 @@ private fun sourceBadges(presentation: SourcePresentation): List<SourceBadge> = 
     // releases advertise both ("DV HDR10"). Show them together like the aggregators do; the
     // generic HDR badge only stands in when nothing more specific matched.
     val hasDv = StreamRegexes.DV.containsMatchIn(blob)
-    if (hasDv) add(SourceBadge("DV", SourceBadgeImages.DOLBY_VISION))
+    if (hasDv) add(SourceBadge("DV"))
     when {
-        StreamRegexes.HDR10_PLUS.containsMatchIn(blob) -> add(SourceBadge("HDR10+", SourceBadgeImages.HDR10_PLUS))
-        StreamRegexes.HDR10.containsMatchIn(blob) -> add(SourceBadge("HDR10", SourceBadgeImages.HDR10))
-        !hasDv && StreamRegexes.HDR.containsMatchIn(blob) -> add(SourceBadge("HDR", SourceBadgeImages.HDR))
+        StreamRegexes.HDR10_PLUS.containsMatchIn(blob) -> add(SourceBadge("HDR10+"))
+        StreamRegexes.HDR10.containsMatchIn(blob) -> add(SourceBadge("HDR10"))
+        !hasDv && StreamRegexes.HDR.containsMatchIn(blob) -> add(SourceBadge("HDR"))
     }
     if (StreamRegexes.IMAX.containsMatchIn(blob)) {
-        add(SourceBadge("IMAX", SourceBadgeImages.IMAX))
+        add(SourceBadge("IMAX"))
     }
 
     when {
-        presentation.audioLabel.equals("Atmos", ignoreCase = true) -> add(SourceBadge("Atmos", SourceBadgeImages.ATMOS))
-        presentation.audioLabel.equals("TrueHD", ignoreCase = true) -> add(SourceBadge("TrueHD", SourceBadgeImages.TRUEHD))
-        presentation.audioLabel.equals("7.1", ignoreCase = true) -> add(SourceBadge("7.1", SourceBadgeImages.AUDIO_7_1))
-        presentation.audioLabel.equals("5.1", ignoreCase = true) -> add(SourceBadge("5.1", SourceBadgeImages.AUDIO_5_1))
-        StreamRegexes.DTS_X.containsMatchIn(blob) -> add(SourceBadge("DTS:X", SourceBadgeImages.DTS_X))
-        StreamRegexes.DTS_HD_MA.containsMatchIn(blob) -> add(SourceBadge("DTS-HD MA", SourceBadgeImages.DTS_HD_MA))
-        StreamRegexes.DTS_HD_ONLY.containsMatchIn(blob) -> add(SourceBadge("DTS-HD", SourceBadgeImages.DTS_HD))
-        presentation.audioLabel?.contains("DTS", ignoreCase = true) == true -> add(SourceBadge("DTS", SourceBadgeImages.DTS))
-        StreamRegexes.DD_PLUS.containsMatchIn(blob) -> add(SourceBadge("DD+", SourceBadgeImages.DOLBY_DIGITAL_PLUS))
-        StreamRegexes.DD.containsMatchIn(blob) -> add(SourceBadge("DD", SourceBadgeImages.DOLBY_DIGITAL))
+        presentation.audioLabel.equals("Atmos", ignoreCase = true) -> add(SourceBadge("Atmos"))
+        presentation.audioLabel.equals("TrueHD", ignoreCase = true) -> add(SourceBadge("TrueHD"))
+        presentation.audioLabel.equals("7.1", ignoreCase = true) -> add(SourceBadge("7.1"))
+        presentation.audioLabel.equals("5.1", ignoreCase = true) -> add(SourceBadge("5.1"))
+        StreamRegexes.DTS_X.containsMatchIn(blob) -> add(SourceBadge("DTS:X"))
+        StreamRegexes.DTS_HD_MA.containsMatchIn(blob) -> add(SourceBadge("DTS-HD MA"))
+        StreamRegexes.DTS_HD_ONLY.containsMatchIn(blob) -> add(SourceBadge("DTS-HD"))
+        presentation.audioLabel?.contains("DTS", ignoreCase = true) == true -> add(SourceBadge("DTS"))
+        StreamRegexes.DD_PLUS.containsMatchIn(blob) -> add(SourceBadge("DD+"))
+        StreamRegexes.DD.containsMatchIn(blob) -> add(SourceBadge("DD"))
     }
 
 }.distinctBy { it.text }
@@ -2145,42 +2116,28 @@ private fun OledSourceRow(
             .heightIn(min = 92.dp)
             .padding(horizontal = 3.dp, vertical = 1.dp)
             .focusProperties { canFocus = false }
-            .clip(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 when {
-                    isFocused -> Color.White.copy(alpha = 0.11f)
+                    isFocused -> Color.White
                     isSelected -> Color.White.copy(alpha = 0.07f)
                     else -> Color.White.copy(alpha = 0.028f)
                 },
-                RoundedCornerShape(15.dp)
+                RoundedCornerShape(8.dp)
             )
             .then(
                 if (isFocused) {
-                    Modifier.border(1.5.dp, Color.White.copy(alpha = 0.96f), RoundedCornerShape(15.dp))
+                    Modifier.border(1.5.dp, Color.White, RoundedCornerShape(8.dp))
                 } else {
                     Modifier
                 }
             )
             .clickable { onClick() }
-            .padding(horizontal = 11.dp, vertical = 7.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Badges take a bounded ~42% and WRAP into 2-3 rows instead of a single row that
-            // eats the whole card on high-chip sources; the filename then always keeps ≥55%.
-            OledBadgeFlow(
-                presentation = presentation,
-                maxBadges = 8,
-                modifier = Modifier.weight(0.42f)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(0.58f)) {
+            Column {
                 if (isRecent) {
-                    RecentlyPlayedChip()
+                    RecentlyPlayedChip(inverted = isFocused)
                     Spacer(modifier = Modifier.height(5.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2189,11 +2146,11 @@ private fun OledSourceRow(
                     Text(
                         text = presentation.rawTitle,
                         style = ArflixTypography.body.copy(
-                            fontSize = 12.sp,
-                            lineHeight = 15.sp,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
                             fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold
                         ),
-                        color = TextPrimary,
+                        color = if (isFocused) Color.Black else TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     if (isSelected) {
@@ -2201,14 +2158,13 @@ private fun OledSourceRow(
                         Box(
                             modifier = Modifier
                                 .size(22.dp)
-                                .background(Color.White.copy(alpha = 0.14f), CircleShape)
-                                .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                                .background(if (isFocused) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.14f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = stringResource(R.string.selected),
-                                tint = Color.White,
+                                tint = if (isFocused) Color.Black else Color.White,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -2218,24 +2174,25 @@ private fun OledSourceRow(
                 Text(
                     text = rowSubtitle(presentation),
                     style = ArflixTypography.caption.copy(
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     ),
-                    color = OledMutedText,
+                    color = if (isFocused) Color.Black.copy(alpha = 0.65f) else OledMutedText,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(Modifier.height(8.dp))
+                OledBadgeFlow(presentation, Int.MAX_VALUE, inverted = isFocused)
             }
-        }
     }
 }
 
 /** Inverted (white) so it reads at a glance against the monochrome rows. */
 @Composable
-private fun RecentlyPlayedChip() {
+private fun RecentlyPlayedChip(inverted: Boolean = false) {
     Row(
         modifier = Modifier
-            .background(Color.White, RoundedCornerShape(999.dp))
+            .background(if (inverted) Color.Black.copy(alpha = 0.08f) else Color.White, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -2348,28 +2305,36 @@ private fun OledBadgeRow(
     }
 }
 
-/**
- * Bounded-width badge block that WRAPS into multiple rows. Size (and language) are the first
- * items, so they land at the same top-start corner on every card regardless of how many quality
- * chips follow — the "size in a consistent position" requirement — while the quality chips flow
- * onto 2-3 rows instead of a single row that would starve the filename column.
- */
+/** Metadata wraps below the release name, never taking width away from it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OledBadgeFlow(
     presentation: SourcePresentation,
     maxBadges: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    inverted: Boolean = false
 ) {
     FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        SourceSizeBadge(size = presentation.stream.size)
-        SourceLanguageBadge(language = presentation.languageLabel)
+        SourceSizeBadge(size = presentation.stream.size, compact = true, inverted = inverted)
+        SourceLanguageBadge(language = presentation.languageLabel, compact = true, inverted = inverted)
         sourceBadges(presentation).take(maxBadges).forEach { badge ->
-            SourceBadgeView(badge)
+            SourceBadgeView(badge, inverted = inverted)
+        }
+        if (presentation.stream.behaviorHints?.cached == true) {
+            val statusColor = if (inverted) Color(0xFF146B38) else Color(0xFF58D68D)
+            Row(
+                modifier = Modifier.height(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(Modifier.size(5.dp).background(statusColor, CircleShape))
+                Text(stringResource(R.string.stream_source_cached), color = statusColor,
+                    style = ArflixTypography.caption.copy(fontSize = 10.sp))
+            }
         }
     }
 }
@@ -2379,41 +2344,8 @@ private fun SourceBadgeView(
     badge: SourceBadge,
     inverted: Boolean = false
 ) {
-    if (badge.imageUrl != null && !inverted) {
-        AsyncImage(
-            model = badge.imageUrl,
-            contentDescription = badge.text,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .width(sourceBadgeWidth(badge.text))
-                .height(20.dp)
-        )
-    } else {
-        OledTextBadge(text = badge.text, inverted = inverted)
-    }
-}
-
-private fun sourceBadgeWidth(text: String) = when {
-    text.equals("4K", ignoreCase = true) -> 42.dp
-    text.equals("1080p", ignoreCase = true) -> 56.dp
-    text.equals("720p", ignoreCase = true) -> 50.dp
-    text.equals("REMUX", ignoreCase = true) -> 62.dp
-    text.equals("BluRay", ignoreCase = true) -> 62.dp
-    text.equals("Atmos", ignoreCase = true) -> 66.dp
-    text.equals("TrueHD", ignoreCase = true) -> 62.dp
-    text.equals("DTS-HD MA", ignoreCase = true) -> 78.dp
-    text.equals("DTS-HD", ignoreCase = true) -> 64.dp
-    text.equals("DTS:X", ignoreCase = true) -> 58.dp
-    text.equals("DD+", ignoreCase = true) -> 48.dp
-    text.equals("DD", ignoreCase = true) -> 42.dp
-    text.equals("DV", ignoreCase = true) -> 76.dp
-    text.equals("IMAX", ignoreCase = true) -> 54.dp
-    text.equals("7.1", ignoreCase = true) -> 40.dp
-    text.equals("5.1", ignoreCase = true) -> 40.dp
-    text.equals("HDR10+", ignoreCase = true) -> 64.dp
-    text.equals("HDR10", ignoreCase = true) -> 58.dp
-    text.equals("HDR", ignoreCase = true) -> 48.dp
-    else -> 52.dp
+    // Technical labels must remain readable offline and on the first frame.
+    OledTextBadge(text = badge.text, inverted = inverted)
 }
 
 @Composable
@@ -2452,7 +2384,7 @@ private fun MobileStreamCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isSelected) Color.White.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.04f)
             )
@@ -2473,9 +2405,7 @@ private fun MobileStreamCard(
                     text = presentation.rawTitle,
                     style = ArflixTypography.body.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
                     color = TextPrimary,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -2484,23 +2414,11 @@ private fun MobileStreamCard(
                 text = rowSubtitle(presentation),
                 style = ArflixTypography.caption.copy(fontSize = 10.sp),
                 color = OledMutedText,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(7.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                sourceBadges(presentation).take(5).forEach { badge ->
-                    SourceBadgeView(badge)
-                }
-                SourceLanguageBadge(language = presentation.languageLabel, compact = true)
-                SourceSizeBadge(size = presentation.stream.size, compact = true)
-            }
+            OledBadgeFlow(presentation, Int.MAX_VALUE, Modifier.fillMaxWidth())
             if (!presentation.description.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(

@@ -6,6 +6,7 @@ import "./premium.css";
 import "./tv-guide.css";
 import "./source-setup.css";
 import "./calendar.css";
+import "./ui-refinements.css";
 
 export const metadata: Metadata = {
   title: "ARVIO",

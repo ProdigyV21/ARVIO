@@ -176,11 +176,10 @@ fun MediaContextMenu(
                 Column(
                     modifier = Modifier
                         .padding(top = 110.dp)
-                        .width(320.dp)
-                        .background(BackgroundCard, RoundedCornerShape(14.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .width(360.dp)
+                        .background(BackgroundElevated, RoundedCornerShape(8.dp))
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
                     // Title
                     Text(
@@ -210,14 +209,6 @@ fun MediaContextMenu(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Hint
-                    Text(
-                        text = stringResource(R.string.press_back_to_close),
-                        style = ArflixTypography.caption,
-                        color = TextSecondary.copy(alpha = 0.5f)
-                    )
                 }
             }
         }
@@ -354,7 +345,7 @@ private fun ContextMenuItem(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isFocused) Pink else Color.Transparent,
+                if (isFocused) Color.White else Color.Transparent,
                 RoundedCornerShape(8.dp)
             )
             .border(
@@ -362,6 +353,8 @@ private fun ContextMenuItem(
                 color = if (isFocused) Color.Transparent else Color.White.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(8.dp)
             )
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(

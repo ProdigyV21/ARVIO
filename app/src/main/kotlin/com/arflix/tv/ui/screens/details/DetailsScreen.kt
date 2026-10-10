@@ -99,6 +99,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
@@ -170,6 +173,7 @@ import com.arflix.tv.ui.components.AppTopBar
 import com.arflix.tv.ui.components.AppTopBarContentTopInset
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.DetailsTvHeroLayout
+import com.arflix.tv.ui.components.AppTopBarHeight
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.PersonModal
 import com.arflix.tv.ui.components.PosterCard
@@ -1961,10 +1965,16 @@ private fun DetailsContent(
         val heroEndPadding = 400.dp
         val configuration = LocalConfiguration.current
         val isCompactHeight = configuration.screenHeightDp < 720
-        val heroTopPadding = AppTopBarContentTopInset + if (isCompactHeight) 10.dp else 16.dp
+        val hasEpisodeRail = item.mediaType == MediaType.TV && (episodes.isNotEmpty() || isSeasonLoading)
+        val compactEpisodeHero = isCompactHeight && hasEpisodeRail
+        val heroTopPadding = if (compactEpisodeHero) AppTopBarHeight else
+            AppTopBarContentTopInset + if (isCompactHeight) 10.dp else 16.dp
 
         val hasPosterDetailRails = usePosterCards && (collectionItems.isNotEmpty() || similar.isNotEmpty())
-        val isBrowsingRails = focusSectionForUi != null && focusSectionForUi != FocusSection.BUTTONS
+        // Seasons and episodes share the hero composition; only deeper rails need more space.
+        val isBrowsingRails = focusSectionForUi != null && focusSectionForUi !in setOf(
+            FocusSection.BUTTONS, FocusSection.SEASONS, FocusSection.EPISODES
+        )
 
         val shiftAmount = if (isCompactHeight) 135.dp else 175.dp
         val railExpansionProgress by animateFloatAsState(
@@ -1974,8 +1984,8 @@ private fun DetailsContent(
         )
         val heroAlpha = 1f - 0.65f * railExpansionProgress
 
-        val minRestingRowHeight = if (hasPosterDetailRails) 226.dp else 210.dp
-        val maxRestingRowHeight = if (hasPosterDetailRails) 246.dp else 226.dp
+        val minRestingRowHeight = if (hasEpisodeRail) 240.dp else if (hasPosterDetailRails) 226.dp else 210.dp
+        val maxRestingRowHeight = if (hasEpisodeRail) 260.dp else if (hasPosterDetailRails) 246.dp else 226.dp
         val restingRowHeight = if (isCompactHeight) {
             minRestingRowHeight
         } else {
@@ -2009,7 +2019,7 @@ private fun DetailsContent(
                     isInCinema(item)
                 }
                 val inCinemaColor = Color(0xFF8AD5FF)
-                val logoHeight = if (isCompactHeight) 64.dp else 72.dp
+                val logoHeight = if (compactEpisodeHero) 48.dp else if (isCompactHeight) 64.dp else 72.dp
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2066,7 +2076,7 @@ private fun DetailsContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (compactEpisodeHero) 6.dp else 8.dp))
 
                 val tvSeriesLabel = stringResource(R.string.details_label_tv_series)
                 val movieLabel = stringResource(R.string.movie)
@@ -2228,7 +2238,7 @@ private fun DetailsContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(if (compactEpisodeHero) 8.dp else 10.dp))
 
                 val displayOverview = item.overview
 
@@ -2253,7 +2263,7 @@ private fun DetailsContent(
                 }
 
                 // Space before action buttons (flexible slot for future in-between items)
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(if (compactEpisodeHero) 8.dp else 14.dp))
 
                 val buttonWatched = if (item.mediaType == MediaType.TV) {
                     episodes.getOrNull(episodeIndex)?.isWatched ?: item.isWatched
@@ -3041,7 +3051,8 @@ private fun DetailsEpisodeRail(
                 startPadding = contentStartPadding,
                 topPadding = 6.dp,
                 width = episodeCardWidth,
-                aspectRatio = 16f / 9f
+                aspectRatio = 16f / 9f,
+                highContrast = true
             )
         }
     }
@@ -3410,17 +3421,19 @@ private fun FixedDetailsRailFocusOverlay(
     startPadding: Dp,
     topPadding: Dp,
     width: Dp,
-    aspectRatio: Float
+    aspectRatio: Float,
+    highContrast: Boolean = false
 ) {
     ArvioFocusableSurface(
         modifier = Modifier
             .padding(start = startPadding, top = topPadding)
             .width(width)
             .aspectRatio(aspectRatio)
-            .zIndex(4f),
+            .zIndex(4f)
+            .then(if (highContrast) Modifier.border(5.dp, Color.Black, rememberArvioCardShape(ArvioSkin.radius.md)) else Modifier),
         shape = rememberArvioCardShape(ArvioSkin.radius.md),
         backgroundColor = Color.Transparent,
-        outlineColor = ArvioSkin.colors.focusOutline,
+        outlineColor = if (highContrast) Color.White else ArvioSkin.colors.focusOutline,
         outlineWidth = 2.5.dp,
         focusedScale = 1f,
         pressedScale = 0.97f,
@@ -3976,7 +3989,7 @@ private fun PremiumActionButton(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun EpisodeCard(
+internal fun EpisodeCard(
     episode: Episode,
     playbackProgress: EpisodePlaybackProgress? = null,
     isSelected: Boolean = false,
@@ -3991,13 +4004,8 @@ private fun EpisodeCard(
     val metadataLogoImageLoader = context.imageLoader
 
     val shape = rememberArvioCardShape(ArvioSkin.radius.md)
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.03f else 1f,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 400f),
-        label = "episode_scale"
-    )
     val borderWidth = when {
-        isFocused || scale != 1f -> 3.dp
+        isFocused -> 3.dp
         isSelected -> 2.dp
         else -> 0.dp
     }
@@ -4028,24 +4036,15 @@ private fun EpisodeCard(
     val episodeAirDateLabel = remember(episode.airDate) { formatEpisodeAirDateLabel(episode.airDate) }
     val isEpisodeUnaired = remember(episode.airDate) { isFutureEpisodeAirDate(episode.airDate) }
 
-    val scaleModifier = if (scale != 1f) {
-        Modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
-        }
-    } else {
-        Modifier
-    }
-
     ArvioFocusableSurface(
         modifier = Modifier
             .width(cardWidth)
             .aspectRatio(aspectRatio)
-            .then(scaleModifier),
+            .testTag("episode_${episode.seasonNumber}_${episode.episodeNumber}")
+            .then(if (isFocused) Modifier.border(5.dp, Color.Black, shape) else Modifier),
         shape = shape,
         backgroundColor = ArvioSkin.colors.surface,
-        outlineColor = ArvioSkin.colors.focusOutline,
+        outlineColor = Color.White,
         outlineWidth = borderWidth,
         focusedScale = 1f,
         pressedScale = 1f,
@@ -4072,9 +4071,9 @@ private fun EpisodeCard(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Black.copy(alpha = 0.18f),
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.28f),
-                                Color.Black.copy(alpha = 0.86f)
+                                Color.Black.copy(alpha = 0.05f),
+                                Color.Black.copy(alpha = 0.65f),
+                                Color.Black.copy(alpha = 0.95f)
                             )
                         )
                     )
@@ -4105,54 +4104,21 @@ private fun EpisodeCard(
                 Box(
                     modifier = Modifier
                         .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
                     Text(
                         text = episodeCode,
                         style = ArvioSkin.typography.caption.copy(
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.3.sp
+                            letterSpacing = 0.sp
                         ),
                         color = Color.White.copy(alpha = 0.95f),
                         maxLines = 1
                     )
                 }
-            }
-
-            if (episodeAirDateLabel != null) {
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                        .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(6.dp))
-                        .border(
-                            width = 1.dp,
-                            color = if (isEpisodeUnaired) Color(0xFF8AD5FF) else Color.White.copy(alpha = 0.24f),
-                            shape = RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isEpisodeUnaired) {
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = null,
-                            tint = Color(0xFF8AD5FF),
-                            modifier = Modifier.size(10.dp)
-                        )
-                    }
-                    Text(
-                        text = episodeAirDateLabel,
-                        style = ArvioSkin.typography.caption.copy(
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = if (isEpisodeUnaired) Color(0xFFBDEBFF) else Color.White.copy(alpha = 0.92f),
-                        maxLines = 1
-                    )
+                if (episode.isWatched) {
+                    Icon(Icons.Default.Check, stringResource(R.string.watched), tint = ArvioSkin.colors.watchedGreen, modifier = Modifier.size(16.dp))
                 }
             }
 
@@ -4162,7 +4128,6 @@ private fun EpisodeCard(
                         .align(Alignment.TopEnd)
                         .padding(horizontal = 8.dp, vertical = 8.dp)
                         .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
                     DetailsImdbSvgRatingBadge(
@@ -4200,6 +4165,19 @@ private fun EpisodeCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val metadata = listOfNotNull(
+                    episodeAirDateLabel,
+                    episode.runtime.takeIf { it > 0 }?.let { "${it}m" }
+                ).joinToString(" · ")
+                if (metadata.isNotEmpty()) {
+                    Text(
+                        text = metadata,
+                        style = ArvioSkin.typography.caption.copy(fontSize = 10.sp, lineHeight = 14.sp),
+                        color = if (isEpisodeUnaired) Color(0xFFBDEBFF) else Color.White.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
                     text = previewText,
                     style = ArvioSkin.typography.caption.copy(
@@ -4208,7 +4186,7 @@ private fun EpisodeCard(
                         fontWeight = FontWeight.Medium
                     ),
                     color = Color.White.copy(alpha = 0.92f),
-                    maxLines = 4,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -4235,31 +4213,6 @@ private fun EpisodeCard(
                 }
             }
 
-            if (episode.isWatched) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 8.dp, end = 8.dp)
-                        .size(16.dp)
-                        .background(
-                            color = ArvioSkin.colors.watchedGreen.copy(alpha = 0.22f),
-                            shape = CircleShape
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = ArvioSkin.colors.watchedGreen,
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = ArvioSkin.colors.watchedGreen,
-                        modifier = Modifier.size(9.dp)
-                    )
-                }
-            }
         }
     }
 }
@@ -4292,7 +4245,7 @@ private fun isFutureEpisodeAirDate(rawDate: String): Boolean {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SeasonButton(
+internal fun SeasonButton(
     season: Int,
     isSelected: Boolean,
     isFocused: Boolean,
@@ -4301,33 +4254,16 @@ private fun SeasonButton(
     onClick: () -> Unit = {},
     onLongClick: (() -> Unit)? = null
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(6.dp)
     val targetBackgroundColor = when {
         isFocused -> Color.White
-        isSelected -> Color.White.copy(alpha = 0.22f)
-        else -> Color.White.copy(alpha = 0.08f)
+        else -> Color.Transparent
     }
     val targetTextColor = when {
         isFocused -> Color.Black
         isSelected -> Color.White
         else -> Color.White.copy(alpha = 0.6f)
     }
-    val backgroundColor by animateColorAsState(
-        targetValue = targetBackgroundColor,
-        animationSpec = androidx.compose.animation.core.tween(
-            durationMillis = 180,
-            easing = FastOutSlowInEasing
-        ),
-        label = "season_btn_bg"
-    )
-    val textColor by animateColorAsState(
-        targetValue = targetTextColor,
-        animationSpec = androidx.compose.animation.core.tween(
-            durationMillis = 180,
-            easing = FastOutSlowInEasing
-        ),
-        label = "season_btn_txt"
-    )
 
     val isFullyWatched = totalCount > 0 && watchedCount >= totalCount
 
@@ -4346,21 +4282,28 @@ private fun SeasonButton(
         Modifier.clickable(onClick = onClick)
     }
 
-    Row(
+    Column(
         modifier = clickModifier
-            .background(backgroundColor, shape)
+            .semantics { selected = isSelected }
+            .testTag("season_$season")
+            .background(targetBackgroundColor, shape)
             .defaultMinSize(minWidth = 96.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .width(androidx.compose.foundation.layout.IntrinsicSize.Max)
+            .padding(horizontal = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Row(
+            modifier = Modifier.heightIn(min = if (LocalDeviceType.current.isTouchDevice()) 48.dp else 36.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
         Text(
             text = "${stringResource(R.string.season_label)} $season",
             style = ArvioSkin.typography.button.copy(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             ),
-            color = textColor
+            color = targetTextColor
         )
 
         if (isFullyWatched) {
@@ -4386,6 +4329,8 @@ private fun SeasonButton(
                 )
             }
         }
+        }
+        Box(Modifier.fillMaxWidth().height(2.dp).background(if (isSelected) targetTextColor else Color.Transparent))
     }
 }
 

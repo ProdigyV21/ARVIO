@@ -27,6 +27,7 @@ import { syncClient, syncSeasonWatched } from "@/lib/sync";
 import { getDetails, getLogoUrl, getPersonDetails, getReviews, getSeasonEpisodes } from "@/lib/tmdb";
 import type { EpisodeInfo, InstalledAddon, MediaItem, PersonCredit, PersonDetails, ReviewInfo, StreamSource, SubtitleTrack } from "@/lib/types";
 import { sourcePlaybackPresentation } from "./sourcePlaybackPresentation";
+import { EpisodeCard } from "./EpisodeCard";
 
 export function DetailsDrawer() {
   const { selected: item } = useApp();
@@ -1060,6 +1061,7 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
             type="button"
             key={s.id}
             className={`season-tab ${s.seasonNumber === season ? "is-active" : ""}`}
+            aria-pressed={s.seasonNumber === season}
             onClick={() => setSeason(s.seasonNumber)}
             onContextMenu={(e) => handleSeasonContextMenu(e, s.seasonNumber, s.name || `Season ${s.seasonNumber}`)}
           >
@@ -1079,37 +1081,16 @@ function SeasonEpisodes({ item, loadingDetails, selectedEpisode, isWatched, onPl
         {!loading && episodes.map((episode) => {
           const active = (selectedEpisode?.season ?? item.seasonNumber) === season &&
             (selectedEpisode?.episode ?? item.episodeNumber) === episode.episodeNumber;
-          const episodeRating = episode.imdbRating || (episode.voteAverage && episode.voteAverage > 0 ? episode.voteAverage.toFixed(1) : "");
           const watched = isWatched(item, season, episode.episodeNumber);
           return (
-            <button
-              type="button"
+            <EpisodeCard
               key={episode.id}
-              className={`episode-row ${active ? "is-active" : ""} ${watched ? "is-watched" : ""}`}
-              onClick={() => onPlayEpisode(season, episode.episodeNumber)}
-              onContextMenu={(e) => handleEpisodeContextMenu(e, episode)}
-            >
-              <div className="episode-still">
-                {episode.still ? <img src={episode.still} alt="" /> : <Clapperboard size={24} />}
-                <span className="episode-chip episode-chip-left">{translateUi("S")}{season} {translateUi(" E")}{episode.episodeNumber.toString().padStart(2, "0")}</span>
-                {episode.airDate && <span className="episode-chip episode-chip-center">{episode.airDate}</span>}
-                {watched && <span className="watched-badge episode-watched-badge" aria-label={translateUi("Watched")}><BadgeCheck size={12} /></span>}
-                <span className="episode-play"><Play size={18} fill="currentColor" /></span>
-              </div>
-              <div className="episode-info">
-                <strong>{episode.name}</strong>
-                <span className="episode-subline">
-                  {episode.runtime ? translateUi("{value0}m", {value0: episode.runtime}) : translateUi("Episode {value0}", {value0: episode.episodeNumber})}
-                  {episodeRating && (
-                    <em className="episode-imdb">
-                      <img src={IMDB_LOGO} alt="IMDb" loading="lazy" />
-                      {episodeRating}
-                    </em>
-                  )}
-                </span>
-                <p>{episode.overview || ""}</p>
-              </div>
-            </button>
+              episode={episode}
+              active={active}
+              watched={watched}
+              onPlay={() => onPlayEpisode(season, episode.episodeNumber)}
+              onContextMenu={event => handleEpisodeContextMenu(event, episode)}
+            />
           );
         })}
       </RailScroller>

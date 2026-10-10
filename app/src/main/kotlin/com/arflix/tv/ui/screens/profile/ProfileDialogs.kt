@@ -35,6 +35,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -278,43 +281,45 @@ private fun ProfileDialogContent(
                         .imePadding()
                         .fillMaxWidth()
                         .heightIn(max = (configuration.screenHeightDp - 24).dp)
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF141414))
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.Start
                 ) {
                     Text(
                         text = title,
-                        fontSize = 19.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    ProfileAvatarPreview(
-                        name = name,
-                        selectedColorIndex = selectedColorIndex,
-                        selectedAvatarId = selectedAvatarId,
-                        selectedAvatarImageUri = selectedAvatarImageUri,
-                        useCustomAvatarImage = useCustomAvatarImage,
-                        profile = profile,
-                        size = 84.dp,
-                        iconPadding = 8.dp,
-                        letterSize = 34.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ProfileAvatarPreview(
+                            name = name,
+                            selectedColorIndex = selectedColorIndex,
+                            selectedAvatarId = selectedAvatarId,
+                            selectedAvatarImageUri = selectedAvatarImageUri,
+                            useCustomAvatarImage = useCustomAvatarImage,
+                            profile = profile,
+                            size = 80.dp,
+                            iconPadding = 8.dp,
+                            letterSize = 34.sp
+                        )
+                        Column(Modifier.weight(1f)) {
+                            AvatarImageButtons(
+                                hasCustomAvatar = hasCustomAvatar,
+                                onUpload = { launchAvatarPicker() },
+                                onRemove = onRemoveAvatarImage
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    AvatarImageButtons(
-                        hasCustomAvatar = hasCustomAvatar,
-                        onUpload = { launchAvatarPicker() },
-                        onRemove = onRemoveAvatarImage
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
+                    Text(text = profileNameHint, fontSize = 12.sp, color = Color.White.copy(alpha = 0.6f))
+                    Spacer(Modifier.height(6.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -377,19 +382,20 @@ private fun ProfileDialogContent(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     if (profile != null && onShowPinSetup != null && onRemovePin != null) {
-                        Column(
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = stringResource(R.string.profile_lock),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFB0B0B0),
-                                modifier = Modifier.padding(start = 4.dp)
+                                modifier = Modifier.weight(1f)
                             )
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.weight(1.4f),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (profile.pin.isNullOrEmpty()) {
@@ -462,6 +468,7 @@ private fun ProfileDialogContent(
                                     text = stringResource(R.string.delete),
                                     isPrimary = false,
                                     isDestructive = true,
+                                    icon = Icons.Default.DeleteOutline,
                                     onClick = {
                                         hideKeyboard()
                                         onDelete()
@@ -854,6 +861,7 @@ private fun AvatarImageButtons(
         DialogButton(
             text = if (hasCustomAvatar) stringResource(R.string.profile_change_photo) else stringResource(R.string.profile_upload_photo),
             isPrimary = false,
+            icon = Icons.Default.FileUpload,
             onClick = onUpload,
             modifier = Modifier.fillMaxWidth()
         )
@@ -937,12 +945,12 @@ private fun AvatarGridItem(
     if (isTouchDevice) {
         Box(
             modifier = Modifier
-                .size(54.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .border(
                     width = if (isSelected || isFocused > 0) 2.dp else 1.dp,
                     color = if (isSelected || isFocused > 0) Color.White else Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
                 .clickable { onClick() }
                 .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 }
@@ -995,6 +1003,7 @@ private fun DialogButton(
     isPrimary: Boolean,
     isDestructive: Boolean = false,
     enabled: Boolean = true,
+    icon: ImageVector? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1002,27 +1011,31 @@ private fun DialogButton(
     var isFocused by remember { mutableIntStateOf(0) }
 
     val containerColor = when {
-        isDestructive -> Color(0xFFDC2626)
-        isPrimary -> Color(0xFFE50914)
+        isPrimary -> Color.White
         else -> Color.Transparent
     }
-    val focusedContainerColor = when {
-        isDestructive -> Color(0xFFEF4444)
-        isPrimary -> Color(0xFFFF1A1A)
-        else -> Color.White.copy(alpha = 0.1f)
-    }
+    val focusedContainerColor = Color.White
+    val contentColor = when {
+        isDestructive -> if (isFocused > 0) Color(0xFFB21E32) else Color(0xFFFF6B75)
+        isPrimary || isFocused > 0 -> Color.Black
+        else -> Color.White
+    }.copy(alpha = if (enabled) 1f else 0.4f)
 
     val buttonContent: @Composable () -> Unit = {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
+            if (icon != null) {
+                Icon(icon, null, tint = contentColor, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+            }
             Text(
                 text = text,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (enabled) Color.White else Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                color = contentColor
             )
         }
     }
@@ -1033,7 +1046,7 @@ private fun DialogButton(
                 .clip(RoundedCornerShape(6.dp))
                 .background(containerColor)
                 .then(
-                    if (!isPrimary && !isDestructive) {
+                    if (!isPrimary) {
                         Modifier.border(
                             width = 1.dp,
                             color = Color.White.copy(alpha = 0.3f),
@@ -1043,14 +1056,15 @@ private fun DialogButton(
                         Modifier
                     }
                 )
-                .clickable { if (enabled) onClick() }
-                .heightIn(min = 44.dp)
+                .clickable(enabled = enabled, onClick = onClick)
+                .heightIn(min = 48.dp)
         ) {
             buttonContent()
         }
     } else {
         Surface(
             onClick = { if (enabled) onClick() },
+            enabled = enabled,
             modifier = modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(6.dp)),
             colors = ClickableSurfaceDefaults.colors(

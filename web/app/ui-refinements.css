@@ -1,0 +1,223 @@
+/* Shared episode composition, matching the TV/mobile detail cards. */
+.episodes-section.detail-wide .episode-list {
+  grid-auto-columns: min(380px, calc(100vw - 48px)) !important;
+  gap: 16px;
+  padding-block: 5px 18px;
+}
+
+.episodes-section.detail-wide .episode-art-card {
+  display: block;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 0 !important;
+  padding: 0;
+  border: 0;
+  border-radius: 8px !important;
+  background: #171717 !important;
+  box-shadow: none;
+  text-align: start;
+  transform: none !important;
+  transition: box-shadow 120ms ease;
+}
+
+.episodes-section.detail-wide .episode-art-card:is(:hover, :focus-visible) {
+  outline: none;
+  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #000;
+}
+
+.episodes-section.detail-wide .episode-art-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.episodes-section.detail-wide .episode-art-card.is-active::after {
+  box-shadow: inset 0 0 0 1px #fff6;
+}
+
+.episodes-section.detail-wide .episode-art-card:is(:hover, :focus-visible)::after {
+  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px #000;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-still {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100% !important;
+  aspect-ratio: auto;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-still > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: none !important;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-still > svg {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  transform: translate(-50%, -50%);
+  color: #8a8a8a;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-still::after {
+  inset: 0;
+  height: 100%;
+  background: linear-gradient(180deg, #0003 0%, #0001 25%, #000a 60%, #000f 100%);
+}
+
+.episode-art-card .episode-chip-left,
+.episode-card-rating {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  min-height: 24px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: #000b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+.episode-card-rating {
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+
+.episode-card-rating img { height: 13px; width: auto; }
+
+.episodes-section.detail-wide .episode-art-card .episode-info {
+  position: absolute;
+  z-index: 2;
+  bottom: 12px;
+  inset-inline: 12px;
+  padding: 0;
+  color: #fff;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-info strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  margin-bottom: 4px;
+  font-size: 17px;
+  line-height: 21px;
+  letter-spacing: 0;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-subline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 5px;
+  color: #d0d0d0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.episodes-section.detail-wide .episode-art-card .episode-card-overview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 0;
+  padding-inline-end: 24px;
+  color: #dedede;
+  font-size: 13px;
+  line-height: 17px;
+}
+
+.episode-card-watched {
+  position: absolute;
+  z-index: 3;
+  bottom: 10px;
+  inset-inline-end: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #111;
+  background: #fff;
+}
+
+.spoiler-blur .episode-art-card .episode-card-overview { filter: blur(5px); transition: filter 160ms ease; }
+.spoiler-blur .episode-art-card:is(:hover, :focus-visible) .episode-card-overview { filter: none; }
+
+.episodes-section .season-tabs { gap: 8px; }
+.episodes-section .season-tab {
+  position: relative;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #aaa;
+  font-size: 14px;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+.episodes-section .season-tab.is-active { color: #fff; background: transparent; }
+.episodes-section .season-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  inset-inline: 14px;
+  height: 2px;
+  background: currentColor;
+}
+.episodes-section .season-tab:is(:hover, :focus-visible) { background: #fff; color: #111; outline: none; }
+
+.context-menu-card,
+.context-menu-card.is-floating { border-radius: 8px; background: #171717; }
+.context-menu-card.is-bottom-sheet { border-radius: 8px 8px 0 0; }
+.context-menu-action-btn { border-radius: 4px; min-height: 44px; transition: background 100ms ease; }
+.context-menu-action-btn:is(:hover, :focus-visible),
+.context-menu-action-btn.is-danger:is(:hover, :focus-visible) { background: #fff; color: #111; }
+.context-menu-title, .context-menu-subtitle { white-space: normal; overflow-wrap: anywhere; }
+
+.settings-shell .set-control .option-button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: none;
+}
+.settings-shell .set-control .option-button span { margin-inline-start: auto; white-space: normal; text-align: end; }
+.settings-shell .set-control .option-button:is(:hover, :focus-visible) { background: #fff; color: #111; outline: none; }
+.option-row:focus-visible { background: #fff; color: #111; outline: none; }
+
+.profile-dialog { border-radius: 8px; }
+.profile-name-label { display: block; margin-block: 12px 8px; color: #ccc; font-size: 13px; }
+.profile-dialog-actions { flex-wrap: wrap; }
+.profile-dialog-actions .primary,
+.profile-dialog-actions .secondary { min-height: 44px; width: auto; padding: 10px 16px; border-radius: 6px; }
+.profile-dialog-actions .primary { background: #fff; color: #111; }
+.profile-dialog-actions .danger { margin-inline-end: auto; border: 1px solid #b65e5e; color: #f2aaaa; }
+
+@media (max-width: 480px) {
+  .episodes-section.detail-wide .episode-art-card { aspect-ratio: 16 / 10; }
+  .episodes-section.detail-wide .episode-art-card .episode-info strong { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .episodes-section.detail-wide .episode-art-card, .context-menu-action-btn { transition: none; }
+}

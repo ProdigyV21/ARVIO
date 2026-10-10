@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLivePlayerDock } from "./useLivePlayerDock";
+import { usePlayerEpisodeMetadata } from "./usePlayerEpisodeMetadata";
 import { config } from "@/lib/config";
 import { createPendingExternalPlayback } from "@/lib/externalPlayback";
 import { isLiveStreamOrSportsItem, saveProgress, saveWatchedState } from "@/lib/cloud";
@@ -48,7 +49,7 @@ import {
   monitorVideoFrames,
   playbackFailureKind,
 } from "@/lib/playerRecovery";
-import { authClient, useApp } from "@/lib/store";
+import { authClient, getPriorityConfig, useApp } from "@/lib/store";
 import { trackPremiumDaily, trackPremiumEvent, trackPremiumMilestone } from "@/lib/premiumAnalytics";
 import { syncClient } from "@/lib/sync";
 import { SubtitleTranslator, subtitleLanguageName } from "@/lib/subtitleAi";
@@ -296,6 +297,8 @@ function VideoPlayer({
   const translateUi = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const metadataPriority = useMemo(() => getPriorityConfig(settings), [settings]);
+  const pauseOverview = usePlayerEpisodeMetadata(item, selectedEpisode, metadataPriority, liveTv);
   const dock = useLivePlayerDock(liveTv, stream.url ?? "", close);
   const onClose = useCallback(() => {
     videoRef.current?.dispatchEvent(new Event("arvio-tracking-stop"));
@@ -1671,7 +1674,7 @@ function VideoPlayer({
           <div>
             <p className="eyebrow">{mediaMeta || stream.source}</p>
             <h2>{title}</h2>
-            {!playing && item?.overview && <p className="player-overview">{item.overview}</p>}
+            {!playing && pauseOverview && <p className="player-overview">{pauseOverview}</p>}
           </div>
         </div>
         <div className="player-top-actions">

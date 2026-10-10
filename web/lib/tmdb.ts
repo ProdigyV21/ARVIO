@@ -1119,6 +1119,11 @@ const seriesEpisodeRatingsCache = new Map<string, Map<string, string>>();
 const SEASON_EPISODE_CACHE_KEY = "arvio.web.seasonEpisodes.v1";
 const SEASON_EPISODE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
+export function peekSeasonEpisodes(tvId: number, seasonNumber: number, language = "en-US"): EpisodeInfo[] {
+  const key = `${tvId}:${seasonNumber}:${language}`;
+  return seasonCache.get(key) ?? readSeasonEpisodesCache(key) ?? [];
+}
+
 export interface SeasonMetadataContext {
   tvdbId?: number | null;
   anilistId?: number | null;

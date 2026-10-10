@@ -121,7 +121,7 @@ class SettingsLocalizationDeviceTest(private val language: String) {
     @Test fun formattedMessagesAndUntranslatedLocaleFallbackLoadCorrectly() {
         val context = localizedAppContext(compose.activity, language)
         assertEquals(
-            if (language == "de") "Katalog-Paket importieren" else "Import Catalog Pack",
+            if (language == "de") "Katalog-Paket importieren" else "Import Catalog Pack / Collections",
             context.getString(R.string.settings_catalog_pack_import_title)
         )
         assertEquals(

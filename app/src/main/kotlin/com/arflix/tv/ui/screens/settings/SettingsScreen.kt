@@ -10875,60 +10875,14 @@ private fun SettingsActionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val focusRingColor = resolveAccentColor(fallback = Pink)
-    Row(
+    SettingsRow(
+        title = title,
+        subtitle = description,
+        value = actionLabel,
+        isFocused = isFocused,
+        onClick = onClick,
         modifier = modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) focusRingColor else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = ArflixTypography.cardTitle.copy(fontSize = 16.sp),
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (description.isNotEmpty()) {
-                Text(
-                    text = description,
-                    style = ArflixTypography.caption.copy(fontSize = 13.sp),
-                    color = TextSecondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-        Box(
-            modifier = Modifier
-                .background(Pink.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
-                .border(1.dp, Pink.copy(alpha = 0.3f), RoundedCornerShape(999.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = actionLabel.uppercase(),
-                style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
-                color = Pink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -11438,39 +11392,21 @@ private fun TrackingServiceRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Status pill
-            val (pillText, pillBg, pillText2) = when {
-                comingSoon -> Triple(
-                    stringResource(R.string.settings_coming_soon),
-                    Color.White.copy(alpha = 0.10f),
-                    TextSecondary
-                )
-                isWorking -> Triple(
-                    stringResource(R.string.settings_connecting),
-                    Color.White.copy(alpha = 0.10f),
-                    TextSecondary
-                )
-                isConnected -> Triple(
-                    stringResource(R.string.connected),
-                    Color(0xFF1CE783).copy(alpha = 0.15f),
-                    Color(0xFF1CE783)
-                )
-                else -> Triple(
-                    stringResource(R.string.connect),
-                    Pink.copy(alpha = 0.15f),
-                    Pink
-                )
+            val statusText = when {
+                comingSoon -> stringResource(R.string.settings_coming_soon)
+                isWorking -> stringResource(R.string.settings_connecting)
+                isConnected -> stringResource(R.string.connected)
+                else -> stringResource(R.string.connect)
             }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(pillBg)
-                    .padding(horizontal = 12.dp, vertical = 5.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                if (isConnected) Box(Modifier.size(6.dp).background(SuccessGreen, androidx.compose.foundation.shape.CircleShape))
                 Text(
-                    text = pillText,
+                    text = statusText,
                     style = ArflixTypography.caption.copy(fontSize = 12.sp),
-                    color = pillText2
+                    color = TextSecondary
                 )
             }
         }
@@ -11504,7 +11440,8 @@ private fun AccountRow(
     secondaryActionLabel: String? = null,
     expirationText: String? = null
 ) {
-    val focusRingColor = resolveAccentColor(fallback = Pink)
+    val foreground = if (isFocused) Color.Black else TextPrimary
+    val secondary = if (isFocused) Color.Black.copy(alpha = 0.65f) else TextSecondary
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -11512,13 +11449,8 @@ private fun AccountRow(
                 if (isConnected) onDisconnect() else onConnect()
             }
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) focusRingColor else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
+                if (isFocused) Color.White else Color.White.copy(alpha = 0.05f),
+                RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
@@ -11531,7 +11463,7 @@ private fun AccountRow(
                 Text(
                     text = name,
                     style = ArflixTypography.cardTitle.copy(fontSize = 16.sp),
-                    color = TextPrimary,
+                    color = foreground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -11539,7 +11471,7 @@ private fun AccountRow(
                     Text(
                         text = description,
                         style = ArflixTypography.caption.copy(fontSize = 13.sp),
-                        color = TextSecondary,
+                        color = secondary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -11548,46 +11480,33 @@ private fun AccountRow(
             Spacer(modifier = Modifier.width(12.dp))
 
             if (isConnected) {
-                Box(
-                    modifier = Modifier
-                        .background(SuccessGreen.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
-                        .border(1.dp, SuccessGreen.copy(alpha = 0.3f), RoundedCornerShape(999.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.size(6.dp).background(SuccessGreen, androidx.compose.foundation.shape.CircleShape))
                     Text(
-                        text = stringResource(R.string.connected).uppercase(),
-                        style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
-                        color = SuccessGreen,
+                        text = stringResource(R.string.connected),
+                        style = ArflixTypography.body.copy(fontSize = 13.sp),
+                        color = foreground,
                         maxLines = 1
                     )
                 }
             } else if (isWorking) {
                 LoadingIndicator(
-                    color = Pink,
+                    color = foreground,
                     size = 24.dp,
                     strokeWidth = 2.dp
                 )
             } else if (isEnabled) {
-                Box(
-                    modifier = Modifier
-                        .background(Pink.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
-                        .border(1.dp, Pink.copy(alpha = 0.3f), RoundedCornerShape(999.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
                     Text(
-                        text = stringResource(R.string.connect).uppercase(),
-                        style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
-                        color = Pink,
+                        text = stringResource(R.string.connect),
+                        style = ArflixTypography.body.copy(fontSize = 13.sp),
+                        color = foreground,
                         maxLines = 1
                     )
-                }
             } else {
                 Text(
-                    text = stringResource(R.string.unavailable).uppercase(),
-                    style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
-                    color = TextSecondary,
+                    text = stringResource(R.string.unavailable),
+                    style = ArflixTypography.body.copy(fontSize = 13.sp),
+                    color = secondary,
                     maxLines = 1
                 )
             }
@@ -11599,7 +11518,7 @@ private fun AccountRow(
             Text(
                 text = expirationText,
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
-                color = TextSecondary.copy(alpha = 0.7f)
+                color = secondary.copy(alpha = 0.7f)
             )
         }
 
@@ -11610,7 +11529,7 @@ private fun AccountRow(
             Text(
                 text = stringResource(R.string.settings_go_to, authUrl),
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
-                color = TextSecondary.copy(alpha = 0.9f)
+                color = secondary
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -11619,19 +11538,18 @@ private fun AccountRow(
                 Text(
                     text = stringResource(R.string.enter_code),
                     style = ArflixTypography.caption.copy(fontSize = 13.sp),
-                    color = TextSecondary.copy(alpha = 0.9f)
+                    color = secondary
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Box(
                     modifier = Modifier
-                        .background(Pink.copy(alpha = 0.18f), RoundedCornerShape(8.dp))
-                        .border(1.dp, Pink.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                        .background(foreground.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = authCode,
                         style = ArflixTypography.label,
-                        color = Pink
+                        color = foreground
                     )
                 }
             }
@@ -11641,7 +11559,7 @@ private fun AccountRow(
             Text(
                 text = stringResource(R.string.loading_label),
                 style = ArflixTypography.caption.copy(fontSize = 13.sp),
-                color = TextSecondary.copy(alpha = 0.7f)
+                color = secondary.copy(alpha = 0.7f)
             )
         }
     }

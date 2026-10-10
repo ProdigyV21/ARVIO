@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="stream_source_cached">Cached</string>
     <string name="live_sports_source_count">Sources: %1$d</string>
     <string name="live_sports_addon_sources">Broadcast listed by add-on</string>
     <string name="live_sports_addon_retry">No sources returned. Select to retry.</string>

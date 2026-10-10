@@ -55,7 +55,9 @@ export function ProfileDialog({ mode, initial, onConfirm, onDelete, onClose }: {
           </div>
         </div>
 
+        <label className="profile-name-label" htmlFor="profile-name">{translateUi("Profile name")}</label>
         <input
+          id="profile-name"
           className="profile-name-input"
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -106,6 +108,7 @@ export function ProfileDialog({ mode, initial, onConfirm, onDelete, onClose }: {
           {mode === "edit" && onDelete && (
             <button type="button" className="secondary text-button danger" onClick={onDelete}><Trash2 size={18} /> {translateUi(" Delete")}</button>
           )}
+          <button type="button" className="secondary text-button" onClick={onClose}>{translateUi("Cancel")}</button>
           <button type="button" className="primary" onClick={() => onConfirm(name.trim() || "Profile", avatarColor, avatarId)} disabled={!name.trim()}>
             {mode === "add" ? translateUi("Create") : translateUi("Save")}
           </button>

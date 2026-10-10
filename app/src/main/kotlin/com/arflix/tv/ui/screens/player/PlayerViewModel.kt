@@ -771,6 +771,16 @@ class PlayerViewModel @Inject constructor(
         aiSourceSubtitle = null
         val cachedItem = mediaRepository.getCachedItem(mediaType, mediaId)
         val cachedLogoUrl = mediaRepository.peekCachedLogoUrl(mediaType, mediaId)
+        val cachedSeasonEpisodes = if (mediaType == MediaType.TV && seasonNumber != null) {
+            mediaRepository.peekCachedSeasonEpisodes(mediaId, seasonNumber).orEmpty()
+        } else {
+            emptyList()
+        }
+        val cachedEpisode = currentPlayerEpisode(cachedSeasonEpisodes, seasonNumber, episodeNumber)
+        currentEpisodeTitle = cachedEpisode?.name?.takeIf { it.isNotBlank() }
+        val cachedOverview = playerPauseOverview(
+            mediaType, seasonNumber, episodeNumber, cachedSeasonEpisodes, cachedItem?.overview
+        )
         _uiState.value = _uiState.value.copy(
             isLoading = true,
             isLoadingStreams = false,
@@ -786,6 +796,9 @@ class PlayerViewModel @Inject constructor(
             mediaType = mediaType,
             seasonNumber = seasonNumber,
             episodeNumber = episodeNumber,
+            episodeTitle = currentEpisodeTitle,
+            overview = cachedOverview,
+            seasonEpisodes = cachedSeasonEpisodes,
             streamProgress = null,
             streamLoadPhase = if (providedStreamUrl.isNullOrBlank()) null else PlayerMessage.Res(R.string.player_phase_preparing_stream),
             sourceSearchActive = false,
@@ -884,6 +897,9 @@ class PlayerViewModel @Inject constructor(
                 mediaType = mediaType,
                 seasonNumber = seasonNumber,
                 episodeNumber = episodeNumber,
+                episodeTitle = currentEpisodeTitle,
+                overview = cachedOverview,
+                seasonEpisodes = cachedSeasonEpisodes,
                 isLoading = true,
                 isLoadingStreams = true,
                 sourceSearchActive = true,
@@ -1809,6 +1825,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     private suspend fun fetchMediaMetadata(mediaType: MediaType, mediaId: Int) {
+        val season = currentSeason
+        val episode = currentEpisode
+        val displaySeason = currentDisplaySeason ?: season
+        val sessionStart = playbackSessionStartTime
         try {
             val details = if (mediaType == MediaType.TV) {
                 tmdbApi.getTvDetails(mediaId, Constants.TMDB_API_KEY)
@@ -1838,22 +1858,32 @@ class PlayerViewModel @Inject constructor(
                 releaseYear = tvDetails.firstAirDate?.take(4)
 
                 // Keep episode title aligned with saved progress rows for TV playback sessions.
-                val season = currentSeason
-                val episode = currentEpisode
                 if (season != null && episode != null) {
-                    val episodeDetails = runCatching {
-                        val seasonDetails = tmdbApi.getTvSeason(mediaId, season, Constants.TMDB_API_KEY)
-                        seasonDetails.episodes.firstOrNull { it.episodeNumber == episode }
-                    }.getOrNull()
-                    currentEpisodeTitle = episodeDetails?.name?.takeIf { it.isNotBlank() }
-                    overview = episodeDetails?.overview?.takeIf { it.isNotBlank() } ?: overview
                     fetchedSeasonEpisodes = try {
-                        loadPlayerSeasonEpisodes(mediaId, season)
+                        loadPlayerSeasonEpisodes(mediaId, displaySeason ?: season)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (_: Exception) {
                         emptyList()
                     }
+                    val matchingEpisode = currentPlayerEpisode(fetchedSeasonEpisodes, season, episode)
+                    var episodeTitle = matchingEpisode?.name?.takeIf { it.isNotBlank() }
+                    var episodeOverview = matchingEpisode?.overview?.takeIf { it.isNotBlank() }
+                    if (episodeOverview == null || episodeTitle == null) {
+                        val episodeDetails = try {
+                            tmdbApi.getTvSeason(mediaId, season, Constants.TMDB_API_KEY)
+                                .episodes.firstOrNull { it.episodeNumber == episode }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            null
+                        }
+                        episodeTitle = episodeTitle ?: episodeDetails?.name?.takeIf { it.isNotBlank() }
+                        episodeOverview = episodeOverview ?: episodeDetails?.overview?.takeIf { it.isNotBlank() }
+                    }
+                    if (playbackSessionStartTime != sessionStart) return
+                    currentEpisodeTitle = episodeTitle
+                    overview = episodeOverview ?: overview
                 }
             } else {
                 val movieDetails = details as com.arflix.tv.data.api.TmdbMovieDetails
@@ -1864,6 +1894,11 @@ class PlayerViewModel @Inject constructor(
                 overview = movieDetails.overview
                 releaseYear = movieDetails.releaseDate?.take(4)
             }
+
+            // A late response must never replace the next video's episode metadata.
+            if (playbackSessionStartTime != sessionStart || currentMediaType != mediaType ||
+                currentMediaId != mediaId || currentSeason != season || currentEpisode != episode
+            ) return
 
             // Store info for watch history
             currentTitle = title

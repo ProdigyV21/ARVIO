@@ -168,9 +168,9 @@ fun ContextMenu(
                     modifier = Modifier
                         .padding(top = 110.dp)
                         .width(360.dp)
-                        .background(BackgroundElevated, RoundedCornerShape(18.dp))
+                        .background(BackgroundElevated, RoundedCornerShape(8.dp))
                         .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.Start
                 ) {
                     // Title
                     Text(
@@ -208,33 +208,12 @@ fun ContextMenu(
                         actions.forEachIndexed { index, action ->
                             ContextMenuItem(
                                 action = action,
-                                isFocused = index == focusedIndex
+                                isFocused = index == focusedIndex,
+                                onClick = { onAction(action) }
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Close hint
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.context_press_back_cancel),
-                            style = ArflixTypography.caption,
-                            color = TextSecondary
-                        )
-                    }
                 }
             }
         }
@@ -367,27 +346,25 @@ fun ContextMenu(
 @Composable
 private fun ContextMenuItem(
     action: ContextAction,
-    isFocused: Boolean
+    isFocused: Boolean,
+    onClick: () -> Unit
 ) {
-    val bgColor = if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent
-    val borderColor = if (isFocused) Pink else Color.Transparent
+    val bgColor = if (isFocused) Color.White else Color.Transparent
+    val foreground = if (isFocused) Color.Black else TextPrimary
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bgColor, RoundedCornerShape(12.dp))
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            )
+            .heightIn(min = 48.dp)
+            .background(bgColor, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = action.icon,
             contentDescription = null,
-            tint = if (isFocused) Pink else action.color,
+            tint = foreground,
             modifier = Modifier.size(24.dp)
         )
 
@@ -396,26 +373,11 @@ private fun ContextMenuItem(
         Text(
             text = stringResource(action.labelRes),
             style = ArflixTypography.body,
-            color = if (isFocused) TextPrimary else action.color
+            color = foreground
         )
 
         Spacer(modifier = Modifier.weight(1f))
 
-        if (isFocused) {
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .background(Pink, RoundedCornerShape(6.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = Color.Black,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
     }
 }
 

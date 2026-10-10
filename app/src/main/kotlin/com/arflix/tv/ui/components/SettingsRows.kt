@@ -5,7 +5,6 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -42,11 +42,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
-import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.SuccessGreen
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
-import com.arflix.tv.ui.skin.resolveAccentColor
 
 /** Display-only localization of stored setting values (Off/Any/Medium/White...).
  *  The stored/compared value stays English; only the shown label is translated.
@@ -95,7 +93,7 @@ internal fun localizeSettingValue(value: String?): String {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsRow(
-    icon: ImageVector,
+    icon: ImageVector? = null,
     title: String,
     subtitle: String = "",
     value: String?,
@@ -104,7 +102,8 @@ fun SettingsRow(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val focusRingColor = resolveAccentColor(fallback = Pink)
+    val foreground = if (isFocused) Color.Black else TextPrimary
+    val secondary = if (isFocused) Color.Black.copy(alpha = 0.65f) else TextSecondary
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -114,31 +113,26 @@ fun SettingsRow(
                 onClick = onClick
             )
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) focusRingColor else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
+                if (isFocused) Color.White else Color.White.copy(alpha = 0.05f),
+                RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Icon(
+            if (icon != null) Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = TextSecondary,
+                tint = secondary,
                 modifier = Modifier.size(19.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            if (icon != null) Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = ArflixTypography.cardTitle.copy(fontSize = 16.sp),
-                    color = TextPrimary,
+                    color = foreground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -146,7 +140,7 @@ fun SettingsRow(
                     Text(
                         text = subtitle,
                         style = ArflixTypography.caption.copy(fontSize = 13.sp, lineHeight = 17.sp),
-                        color = TextSecondary,
+                        color = secondary,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -157,20 +151,19 @@ fun SettingsRow(
 
         val safeValue = value.orEmpty()
         if (safeValue.isNotBlank()) {
-            Box(
-                modifier = Modifier
-                    .background(Pink.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
-                    .border(1.dp, Pink.copy(alpha = 0.3f), RoundedCornerShape(999.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = localizeSettingValue(safeValue).uppercase(),
-                    style = ArflixTypography.label.copy(fontSize = 11.sp, letterSpacing = 0.5.sp),
-                    color = Pink,
-                    maxLines = 1,
+                    text = localizeSettingValue(safeValue),
+                    style = ArflixTypography.body.copy(fontSize = 14.sp),
+                    color = secondary,
+                    modifier = Modifier.widthIn(max = 220.dp),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = secondary, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -187,23 +180,23 @@ fun SettingsToggleRow(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val focusRingColor = resolveAccentColor(fallback = Pink)
+    val foreground = if (isFocused) Color.Black else TextPrimary
+    val secondary = if (isFocused) Color.Black.copy(alpha = 0.65f) else TextSecondary
+    val toggleDescription = stringResource(if (isEnabled) R.string.on else R.string.off)
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(
+            .toggleable(
+                value = isEnabled,
+                role = Role.Switch,
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = { onToggle(!isEnabled) }
+                onValueChange = onToggle
             )
+            .semantics { stateDescription = toggleDescription }
             .background(
-                if (isFocused) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.05f),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = if (isFocused) 2.dp else 0.dp,
-                color = if (isFocused) focusRingColor else Color.Transparent,
-                shape = RoundedCornerShape(12.dp)
+                if (isFocused) Color.White else Color.White.copy(alpha = 0.05f),
+                RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -213,7 +206,7 @@ fun SettingsToggleRow(
             Text(
                 text = title,
                 style = ArflixTypography.cardTitle.copy(fontSize = 16.sp),
-                color = TextPrimary,
+                color = foreground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -221,19 +214,20 @@ fun SettingsToggleRow(
                 Text(
                     text = subtitle,
                     style = ArflixTypography.caption.copy(fontSize = 13.sp, lineHeight = 17.sp),
-                    color = TextSecondary,
+                    color = secondary,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
 
+        Spacer(Modifier.width(12.dp))
         Box(
             modifier = Modifier
                 .width(44.dp)
                 .height(24.dp)
                 .background(
-                    color = if (isEnabled) SuccessGreen else Color.White.copy(alpha = 0.2f),
+                    color = if (isEnabled) SuccessGreen else if (isFocused) Color.Black.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.2f),
                     shape = RoundedCornerShape(13.dp)
                 )
                 .padding(3.dp),
@@ -360,7 +354,6 @@ fun MobileSettingsRow(
                 }
             }
             val safeValue = value.orEmpty()
-            val isOpenLabel = safeValue.equals("Open", ignoreCase = true) || safeValue == stringResource(R.string.settings_open)
             if (checked != null || safeValue.isNotEmpty() || isExternalLink || actionIcon != null) {
                 Spacer(modifier = Modifier.width(16.dp))
                 if (checked != null) {
@@ -399,9 +392,12 @@ fun MobileSettingsRow(
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                         ),
                         color = TextSecondary,
+                        modifier = Modifier.widthIn(max = 120.dp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
                 }
             }
         }
