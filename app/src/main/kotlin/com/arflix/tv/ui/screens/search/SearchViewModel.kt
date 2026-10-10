@@ -8,6 +8,7 @@ import com.arflix.tv.data.model.Category
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.MediaSearchResults
 import com.arflix.tv.data.repository.PersonMediaSearchResult
+import com.arflix.tv.data.repository.RecentSearchRepository
 import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.util.ContentRating
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,8 +21,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -155,11 +158,18 @@ data class SearchUiState(
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
-    private val traktRepository: TraktRepository
+    private val traktRepository: TraktRepository,
+    private val recentSearchRepository: RecentSearchRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+
+    /** The profile's recent queries, newest first; shown while the search bar is empty. */
+    val recentSearches: StateFlow<List<String>> = recentSearchRepository.recentSearches
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /** A submitted query waiting for its results: only a query that found something is kept. */
+    private var pendingRecentSearch: String? = null
 
     private var searchJob: Job? = null
     private var discoverJob: Job? = null
@@ -843,6 +853,7 @@ class SearchViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = sorted.isEmpty() && peopleRows.isEmpty() && peopleNeedingCredits.isNotEmpty(), results = marked,
                     movieResults = marked.filter { item -> item.mediaType == MediaType.MOVIE },
                     tvResults = marked.filter { item -> item.mediaType == MediaType.TV }, personResults = markedPeople) }
+                if (sorted.isNotEmpty() || peopleRows.isNotEmpty()) savePendingRecentSearch(query)
 
                 // Cards are usable now. Bounded, cancellable logo enrichment never replaces the rows.
                 val slots = Semaphore(3)
@@ -859,6 +870,7 @@ class SearchViewModel @Inject constructor(
                         _uiState.update { it.copy(isLoading = false, results = markedMerged,
                             movieResults = markedMerged.filter { item -> item.mediaType == MediaType.MOVIE },
                             tvResults = markedMerged.filter { item -> item.mediaType == MediaType.TV }) }
+                        savePendingRecentSearch(query)
                     }
                     launch {
                         for (person in peopleNeedingCredits) {
@@ -871,6 +883,7 @@ class SearchViewModel @Inject constructor(
                             if (credits.isNotEmpty()) {
                                 val row = Category("person_${person.personId}", person.name, credits.distinctBy { it.mediaType to it.id })
                                 cachedPeopleResults = cachedPeopleResults + row
+                                savePendingRecentSearch(query)
                                 val creditsWatched = watchedMatcher()
                                 _uiState.update { it.copy(personResults = it.personResults + row.copy(items = markWatched(row.items, creditsWatched)), isLoading = false) }
                             }
@@ -919,6 +932,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun executeSmartSearch(sq: SmartQuery) {
+        val query = _uiState.value.query.trim()
         searchJob?.cancel(); searchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, isAiSearch = true, aiInterpretation = sq.interpretation, error = null, movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS, personResults = EMPTY_CATEGORIES)
             try {
@@ -943,9 +957,46 @@ class SearchViewModel @Inject constructor(
                 items.forEach { mediaRepository.cacheItem(it) }
                 val isWatched = watchedMatcher()
                 _uiState.value = _uiState.value.copy(isLoading = false, aiResults = markWatched(if (sq.limit != null) items.take(sq.limit) else items, isWatched))
+                if (items.isNotEmpty()) savePendingRecentSearch(query)
             } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e
  _uiState.value = _uiState.value.copy(isLoading = false, error = e.message) }
         }
+    }
+
+    // ── Recent searches ─────────────────────────────────────────────────
+
+    /**
+     * Keeps the current query once it has results: on submit, and when a result is opened.
+     * Typing alone never saves, or every pause on the remote keyboard would land in the list.
+     */
+    fun rememberSearch() {
+        val query = _uiState.value.query.trim()
+        if (query.length < MIN_RECENT_SEARCH_LENGTH) return
+        pendingRecentSearch = query
+        // A changed query clears the results (updateQuery), so any on screen are this query's.
+        val state = _uiState.value
+        val hasResults = if (state.isAiSearch) state.aiResults.isNotEmpty()
+            else state.results.isNotEmpty() || state.personResults.isNotEmpty()
+        if (hasResults) savePendingRecentSearch(query)
+    }
+
+    /** Searches a recent query straight away, without the typing debounce. */
+    fun searchRecent(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        pendingRecentSearch = trimmed
+        updateQuery(trimmed)
+        search()
+    }
+
+    fun clearRecentSearches() {
+        viewModelScope.launch { recentSearchRepository.clear() }
+    }
+
+    private fun savePendingRecentSearch(query: String) {
+        if (!pendingRecentSearch.equals(query, ignoreCase = true)) return
+        pendingRecentSearch = null
+        viewModelScope.launch { recentSearchRepository.add(query) }
     }
 
     private fun debounceSearch() { searchJob?.cancel(); searchJob = viewModelScope.launch { delay(260); search() } }
@@ -970,6 +1021,9 @@ class SearchViewModel @Inject constructor(
     fun getGenresForType(): List<Genre> = when (_uiState.value.selectedType) { DiscoverType.MOVIES -> MOVIE_GENRES; DiscoverType.TV_SHOWS -> TV_GENRES; DiscoverType.ALL -> ALL_GENRES; DiscoverType.ANIME -> ANIME_GENRES }
     private fun interleave(a: List<MediaItem>, b: List<MediaItem>): List<MediaItem> { val r = mutableListOf<MediaItem>(); for (i in 0 until maxOf(a.size, b.size)) { if (i < a.size) r.add(a[i]); if (i < b.size) r.add(b[i]) }; return r }
 }
+
+/** A single letter is a search still being typed, not one worth offering again. */
+private const val MIN_RECENT_SEARCH_LENGTH = 2
 
 private object SearchRegexes {
     val LIKE_MATCH_REGEX = Regex("(?:movies?|shows?|series|films?)\\s+like\\s+(.+)", RegexOption.IGNORE_CASE)

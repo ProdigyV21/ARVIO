@@ -1089,6 +1089,9 @@
     <string name="search_filter_rating_to">Rating up to</string>
     <string name="search_filter_rating_range">%1$s – %2$s</string>
     <string name="search_filter_clear">Clear filters</string>
+    <string name="search_recent">Recent</string>
+    <string name="search_recent_clear">Clear</string>
+    <string name="search_clear_query">Clear search</string>
     <string name="search_filter_panel_hint">The grid updates as you tick · BACK closes the panel</string>
     <string name="search_filter_age_movies_only">Movies only — TMDB has no age filter for series</string>
     <string name="search_filter_language_hint">The language a title was made in — not the language of the app</string>
