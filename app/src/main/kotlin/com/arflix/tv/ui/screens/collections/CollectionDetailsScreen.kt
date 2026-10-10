@@ -81,6 +81,7 @@ import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
+import com.arflix.tv.ui.screens.home.stableHomeRowItemKeys
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.theme.TextPrimary
@@ -1008,7 +1009,10 @@ internal fun CollectionItemsGrid(
     emptyMessage: String,
     topContentPadding: androidx.compose.ui.unit.Dp,
     onPreviewItemChanged: (MediaItem) -> Unit = {},
-    providerLogos: Map<String, String?> = emptyMap()
+    providerLogos: Map<String, String?> = emptyMap(),
+    showTabs: Boolean = true,
+    previewItemOverride: MediaItem? = null,
+    onVisiblePositionChanged: (Int, Int) -> Unit = { _, _ -> }
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -1016,6 +1020,8 @@ internal fun CollectionItemsGrid(
     val gridColumns = layout.columns
     val cardWidth = layout.cardWidthDp.dp
     val compact = LocalConfiguration.current.screenHeightDp < 480
+    val headerItems = if (showTabs) 1 else 0
+    val itemKeys = remember(catalog?.id, items) { stableHomeRowItemKeys(catalog?.id.orEmpty(), items) }
     var focusedKey by rememberSaveable(catalog?.id, selectedTab) { mutableStateOf<String?>(null) }
     var previewKey by remember(catalog?.id, selectedTab) { mutableStateOf<String?>(null) }
     LaunchedEffect(focusedKey) {
@@ -1023,12 +1029,15 @@ internal fun CollectionItemsGrid(
         delay(100)
         previewKey = focusedKey
     }
-    val previewItem = remember(items, previewKey) {
-        items.firstOrNull { "${it.mediaType}-${it.id}" == previewKey } ?: items.firstOrNull()
+    val focusedItem = remember(items, itemKeys, previewKey) {
+        items.getOrNull(itemKeys.indexOf(previewKey)) ?: items.firstOrNull()
     }
+    val previewItem = previewItemOverride?.takeIf {
+        it.id == focusedItem?.id && it.mediaType == focusedItem?.mediaType
+    } ?: focusedItem
     val latestPreviewChanged by rememberUpdatedState(onPreviewItemChanged)
-    LaunchedEffect(previewItem?.mediaType, previewItem?.id) {
-        previewItem?.let { latestPreviewChanged(it) }
+    LaunchedEffect(focusedItem?.mediaType, focusedItem?.id) {
+        focusedItem?.let { latestPreviewChanged(it) }
     }
     val cardContentType = if (usePosterCards) "poster_card" else "landscape_card"
     val focusBleedPadding = if (usePosterCards) 10.dp else 6.dp
@@ -1041,10 +1050,11 @@ internal fun CollectionItemsGrid(
     val latestOnVisibleItemsChanged by rememberUpdatedState(onVisibleItemsChanged)
     val latestOnVisibleDetailsChanged by rememberUpdatedState(onVisibleDetailsChanged)
     val latestOnNearEnd by rememberUpdatedState(onNearEnd)
-    LaunchedEffect(gridState) {
+    val latestOnVisiblePositionChanged by rememberUpdatedState(onVisiblePositionChanged)
+    LaunchedEffect(gridState, headerItems) {
         try {
             snapshotFlow {
-                gridState.layoutInfo.visibleItemsInfo.mapNotNull { latestItems.getOrNull(it.index - 1) }
+                gridState.layoutInfo.visibleItemsInfo.mapNotNull { latestItems.getOrNull(it.index - headerItems) }
             }.distinctUntilChanged().collect { latestOnVisibleDetailsChanged(it) }
         } finally {
             latestOnVisibleDetailsChanged(emptyList())
@@ -1053,17 +1063,18 @@ internal fun CollectionItemsGrid(
     // Collect scroll position without restarting on page-load-size changes —
     // items.size used to live in the key, which relaunched the snapshotFlow on
     // every page append and caused a stutter frame during scroll.
-    LaunchedEffect(gridState) {
+    LaunchedEffect(gridState, headerItems) {
         snapshotFlow {
             val layout = gridState.layoutInfo
             val last = layout.visibleItemsInfo.lastOrNull()?.index ?: 0
             val mediaIndexes = layout.visibleItemsInfo
                 .asSequence()
-                .map { it.index - 1 }
+                .map { it.index - headerItems }
                 .filter { it >= 0 }
                 .toList()
             Triple(last, layout.totalItemsCount, mediaIndexes)
         }.distinctUntilChanged().collect { (last, total, mediaIndexes) ->
+            latestOnVisiblePositionChanged(last - headerItems, latestGridColumns)
             if (total > 12 && last >= total - 3) latestOnNearEnd()
             if (mediaIndexes.isNotEmpty()) {
                 val start = (mediaIndexes.minOrNull() ?: 0).coerceAtLeast(0)
@@ -1105,7 +1116,7 @@ internal fun CollectionItemsGrid(
         verticalArrangement = Arrangement.spacedBy(if (usePosterCards) 18.dp else 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(
+        if (showTabs) item(
             span = { androidx.tv.foundation.lazy.grid.TvGridItemSpan(maxLineSpan) },
             contentType = "header"
         ) {
@@ -1149,7 +1160,7 @@ internal fun CollectionItemsGrid(
         } else {
             itemsIndexed(
                 items,
-                key = { _, item -> "${item.mediaType}-${item.id}" },
+                key = { index, _ -> itemKeys[index] },
                 contentType = { _, _ -> cardContentType }
             ) { index, item ->
                 val cardLogoUrl = cardLogoUrls["${item.mediaType}_${item.id}"]
@@ -1185,7 +1196,7 @@ internal fun CollectionItemsGrid(
                             revealJob?.cancel()
                             revealJob = scrollScope.launch {
                                 val layout = gridState.layoutInfo
-                                val cell = layout.visibleItemsInfo.firstOrNull { it.index == index + 1 }
+                                val cell = layout.visibleItemsInfo.firstOrNull { it.index == index + headerItems }
                                 if (cell != null) {
                                     val top = cell.offset.y.toFloat()
                                     val bottom = top + cell.size.height
@@ -1198,11 +1209,11 @@ internal fun CollectionItemsGrid(
                                     }
                                     if (delta != 0f) gridState.animateScrollBy(delta, tween(160))
                                 } else {
-                                    gridState.animateScrollToItem(row * gridColumns + 1, -focusBleedPx.toInt())
+                                    gridState.animateScrollToItem(row * gridColumns + headerItems, -focusBleedPx.toInt())
                                 }
                             }
                         }
-                        focusedKey = "${item.mediaType}-${item.id}"
+                        focusedKey = itemKeys[index]
                         onItemFocused(item, index)
                         if (items.size > 10 && index >= items.size - 2) onNearEnd()
                     },

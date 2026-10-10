@@ -829,6 +829,19 @@ class HomeViewModel @Inject constructor(
         mediaRepository.cacheLogoUrl(mediaType, mediaId, logoUrl)
     }
 
+    /** Reuse Home's metadata cache without changing Home's focused hero underneath this screen. */
+    suspend fun loadViewAllPreview(item: MediaItem): MediaItem = withContext(networkDispatcher) {
+        if (item.id <= 0 || item.isHomeServer || item.isAddonNative ||
+            !isActionableMediaItem(item) || isIptvItem(item)
+        ) return@withContext item
+        val cached = getCachedHeroDetailsSnapshot(item)
+        val snapshot = if (cached?.fullyLoaded == true) cached else loadHeroDetailsSnapshot(item) ?: cached
+        if (snapshot != null) {
+            heroDetailsCache[heroDetailsKey(item)] = snapshot
+            item.withHeroDetails(snapshot)
+        } else item
+    }
+
     private fun getCachedHeroDetailsSnapshot(item: MediaItem): HeroDetailsSnapshot? {
         val key = heroDetailsKey(item)
         return heroDetailsCache[key]
