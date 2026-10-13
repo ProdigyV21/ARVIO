@@ -7164,7 +7164,7 @@ internal fun PlayerMetadataChrome(
                 )
             }
 
-            if (!uiState.logoUrl.isNullOrBlank() && displayTitle.isNotBlank()) {
+            if (!uiState.logoUrl.isNullOrBlank() && mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank()) {
                 Text(
                     text = displayTitle,
                     style = ArflixTypography.sectionTitle.copy(
