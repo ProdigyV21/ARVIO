@@ -5,6 +5,7 @@ import { PremiumAccount } from '../../components/shell/PremiumAccount';
 import { MembershipCheckout } from '../../components/shell/MembershipCheckout';
 import { fixture } from './premium-http';
 import { setFixtureAccount } from './premium-store';
+import { BadgeCheck } from 'lucide-react';
 import '../../app/globals.css';
 import '../../app/premium.css';
 import '../../app/source-setup.css';
@@ -19,10 +20,11 @@ function CheckoutOnly() {
   const [activated, setActivated] = useState(false);
   const [offerMounted, setOfferMounted] = useState(true);
   const [offerVisible, setOfferVisible] = useState(new URLSearchParams(location.search).get('case') !== 'checkout-hidden');
+  const iconOnly = new URLSearchParams(location.search).get('case') === 'checkout-icon-only';
   Object.assign(fixture, { setOfferVisible, setOfferMounted });
   return <main style={{maxWidth: 820, margin: '24px auto', padding: '0 20px'}}>
     <h1>Isolated membership checkout</h1>
-    {offerMounted && <div hidden={!offerVisible} data-testid="fixture-offer"><MembershipCheckout className="paywall-primary" entry="account_settings" showEmailHint onEntitled={() => setActivated(true)}>Keep Premium - $2.99/month</MembershipCheckout></div>}
+    {offerMounted && <div hidden={!offerVisible} data-testid="fixture-offer"><MembershipCheckout className={iconOnly ? 'mobile-premium-link' : 'paywall-primary'} entry={iconOnly ? 'trial_mobile_nav' : 'account_settings'} iconOnly={iconOnly} title={iconOnly ? 'Keep Premium' : undefined} showEmailHint={!iconOnly} onEntitled={() => setActivated(true)}>{iconOnly ? <BadgeCheck size={20} /> : 'Keep Premium - $2.99/month'}</MembershipCheckout></div>}
     <p data-testid="activation-result">{activated ? 'Paid activation applied' : 'No paid activation applied'}</p>
   </main>;
 }

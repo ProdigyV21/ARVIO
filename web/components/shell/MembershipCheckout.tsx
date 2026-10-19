@@ -13,7 +13,7 @@ const flow = { flow_version: "direct_v2" };
 
 type MembershipCheckoutProps = {
   children: React.ReactNode; className?: string; entry: string; title?: string;
-  onEntitled?: (state: EntitlementState) => void; showEmailHint?: boolean;
+  onEntitled?: (state: EntitlementState) => void; showEmailHint?: boolean; iconOnly?: boolean;
 };
 
 export function MembershipCheckout(props: MembershipCheckoutProps) {
@@ -23,7 +23,7 @@ export function MembershipCheckout(props: MembershipCheckoutProps) {
   return <MembershipCheckoutSession key={auth?.userId ?? "signed-out"} {...props} />;
 }
 
-function MembershipCheckoutSession({ children, className, entry, title, onEntitled, showEmailHint = false }: MembershipCheckoutProps) {
+function MembershipCheckoutSession({ children, className, entry, title, onEntitled, showEmailHint = false, iconOnly = false }: MembershipCheckoutProps) {
   const translateUi = useTranslation();
   const { auth, goToLogin } = useApp();
   const [open, setOpen] = useState(false);
@@ -133,15 +133,16 @@ function MembershipCheckoutSession({ children, className, entry, title, onEntitl
     if (waiting || status === "active") { event.preventDefault(); setOpen(true); }
     else handoff();
   };
+  const recoveryLabel = waiting || status === "active" ? translateUi(status === "active" ? "Membership active" : "Check payment status") : undefined;
 
   return <>
     {!auth ? <button ref={element => { trigger.current = element; }} type="button" className={className} title={title} aria-label={title} onClick={goToLogin}>{children}</button>
-      : <a ref={element => { trigger.current = element; }} className={className} title={waiting || status === "active" ? undefined : title} aria-label={waiting || status === "active" ? undefined : title}
+      : <a ref={element => { trigger.current = element; }} className={className} title={recoveryLabel ?? title} aria-label={recoveryLabel ?? title}
         role={waiting || status === "active" ? "button" : undefined}
         aria-describedby={showEmailHint ? `${id}-hint` : undefined} href={kofiSubscribeUrl()} target="_blank" rel="noopener noreferrer"
         onKeyDown={event => { if ((waiting || status === "active") && event.key === " ") { event.preventDefault(); setOpen(true); } }}
         onClick={onPaymentClick} onAuxClick={event => { if (event.button === 1) onPaymentClick(event); }}>
-          {waiting || status === "active" ? translateUi(status === "active" ? "Membership active" : "Check payment status") : children}
+          {recoveryLabel && !iconOnly ? recoveryLabel : children}
       </a>}
     {showEmailHint && auth && <div className="membership-inline-hint" id={`${id}-hint`}>
       <p>{translateUi("Use this email at checkout")} <strong>{auth.email}</strong></p>

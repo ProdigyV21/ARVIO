@@ -157,10 +157,45 @@ const assert = require('node:assert/strict');
       assert.match(await page.getByTestId('activation-result').innerText(), /No paid/);
       passed++;
     };
+    const mobileIconScenario = async () => {
+      await page.setViewportSize({ width: 320, height: 720 });
+      await go('checkout-icon-only');
+      const initial = page.getByRole('link', { name: 'Keep Premium', exact: true });
+      const assertIcon = async (offer, label) => {
+        assert.equal((await offer.innerText()).trim(), '', `${label}: compact nav has no visible status text`);
+        assert.equal(await offer.locator('svg').count(), 1, `${label}: original badge icon is retained`);
+        const box = await offer.boundingBox();
+        assert.equal(box.width, 38, `${label}: fixed 38px width`);
+        assert.equal(box.height, 38, `${label}: fixed 38px height`);
+        await noOverflow(label);
+      };
+      await assertIcon(initial, 'mobile nav initial');
+      await handoff(initial);
+      await page.getByRole('dialog').waitFor();
+      await page.keyboard.press('Escape');
+      const pending = page.getByRole('button', { name: 'Check payment status', exact: true });
+      await assertIcon(pending, 'mobile nav pending');
+      assert.equal(await pending.getAttribute('aria-label'), 'Check payment status');
+      assert.equal(await pending.getAttribute('title'), 'Check payment status');
+      const externalBefore = externalAttempts.length;
+      await pending.click();
+      await page.getByRole('dialog').waitFor();
+      assert.equal((await events('checkout_opened')).length, 1, 'compact recovery does not start another purchase');
+      assert.equal(externalAttempts.length, externalBefore, 'compact recovery opens locally, not a second Ko-fi tab');
+      await page.evaluate(() => window.__premiumFixture.markPaid());
+      await page.getByRole('dialog').getByRole('button', { name: 'Check payment status', exact: true }).click();
+      await page.getByTestId('activation-result').filter({ hasText: /^Paid activation/ }).waitFor();
+      await page.getByRole('dialog').getByRole('button', { name: 'Continue watching', exact: true }).click();
+      const active = page.getByRole('button', { name: 'Membership active', exact: true });
+      await assertIcon(active, 'mobile nav active');
+      assert.equal(await active.getAttribute('aria-label'), 'Membership active');
+      passed++;
+    };
     // A bounded subset is useful while reviewing recovery-only changes. The
     // default command always exercises the complete UI suite below.
-    if (['focus-order', 'recovery-regressions', 'account-boundary'].includes(process.env.PAYMENT_UI_ONLY)) {
-      if (process.env.PAYMENT_UI_ONLY === 'account-boundary') await accountBoundaryScenario();
+    if (['focus-order', 'recovery-regressions', 'account-boundary', 'mobile-nav'].includes(process.env.PAYMENT_UI_ONLY)) {
+      if (process.env.PAYMENT_UI_ONLY === 'mobile-nav') { await mobileIconScenario(); await accountBoundaryScenario(); }
+      else if (process.env.PAYMENT_UI_ONLY === 'account-boundary') await accountBoundaryScenario();
       else {
         await focusOrderScenario();
         if (process.env.PAYMENT_UI_ONLY === 'recovery-regressions') await exhaustedCycleScenario();
@@ -255,6 +290,7 @@ const assert = require('node:assert/strict');
     await focusOrderScenario();
     await exhaustedCycleScenario();
     await accountBoundaryScenario();
+    await mobileIconScenario();
 
     // The recovery path still requires proof of ownership, not just knowing a
     // billing address. All requests remain in the fixture transport.

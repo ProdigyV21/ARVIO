@@ -107,6 +107,7 @@ export function TopNav() {
           {trialActive && (
             <MembershipCheckout
               className="mobile-premium-link"
+              iconOnly
               entry="trial_mobile_nav"
               title={trialTitle}
             >
