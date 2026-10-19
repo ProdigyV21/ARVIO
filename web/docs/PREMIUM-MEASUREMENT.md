@@ -41,6 +41,25 @@ server's actual expiry, including existing shorter trials. Prices are unchanged.
   renewals. The server separately records `paid_access_observed` when a signed-in
   account actually retrieves an active paid entitlement; the browser cannot claim
   this event. Access observation is not proof of successful media playback.
+- The October 19 direct flow opens the existing Ko-fi membership URL in one
+  native link activation, without an entitlement preflight or preparation step.
+  Email guidance appears inline on the paywall/account screen; optional recovery
+  is available after handoff or through "Already paid? Check access". Its
+  `flow_version=direct_v2` marks diagnostics, not a randomized experiment.
+- `checkoutDiagnostics` counts unique authenticated accounts at visible CTAs,
+  membership-link handoffs, returns, recovery opens/closes and access checks.
+  Hidden mobile/desktop duplicates are not CTA impressions. Entry and version
+  groups can overlap across days. These overlapping events are not click counts
+  or proof of checkout abandonment. New visibility/recovery measurements have
+  no historical baseline before October 19.
+- Small authenticated telemetry POSTs use `keepalive` and never block payment
+  navigation. Privacy settings, blockers, closing the browser and network errors
+  can still prevent measurement. Nothing identifying is added to Ko-fi URLs.
+- Status checks retain the first timestamp for each of pending/active/error per
+  account/UTC day, with bounded conditional writes. Browser-reported activation
+  is distinct from server-confirmed payment and observed paid entitlement.
+  Return diagnostics require a recorded click before return before status check;
+  a journey connected after payment cannot retroactively claim that payment.
 - `journeys.bySource` reports navigation IDs, matched trials, new memberships and
   access observations. Each account conversion belongs to at most the earliest
   matched navigation in this window. Direct Ko-fi sales, different unverified

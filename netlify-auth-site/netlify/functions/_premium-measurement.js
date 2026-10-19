@@ -6,6 +6,42 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const FAILURE_KINDS = new Set(["network", "format", "timeout", "browser_restriction", "engine", "unknown"]);
 const TRANSPORTS = new Set(["file", "hls", "dash", "mpegts", "remux"]);
 const PHASES = new Set(["startup", "playback"]);
+const CHECKOUT_EVENTS = {
+  membership_cta_viewed: "ctaViewed", checkout_opened: "membershipLinkOpened",
+  checkout_returned: "returned", payment_status_checked: "statusChecked",
+  checkout_recovery_opened: "recoveryOpened", checkout_recovery_closed: "recoveryClosed",
+  membership_link_started: "billingLinkStarted", membership_linked: "billingLinkReportedComplete",
+  membership_link_failed: "billingLinkFailed", billing_email_verified: "billingOwnershipVerified"
+};
+const CHECKOUT_ENTRIES = new Set(["trial_nav", "trial_mobile_nav", "paywall", "account_settings"]);
+
+function summarizeCheckoutDiagnostics(records) {
+  const empty = () => Object.fromEntries(Object.values(CHECKOUT_EVENTS).map(name => [name, new Set()]));
+  const totals = empty(), versions = new Map(), entries = new Map();
+  const statuses = { pending: new Set(), active: new Set(), error: new Set() };
+  for (const record of records) {
+    const stage = CHECKOUT_EVENTS[record.eventName];
+    if (!stage || !record.accountKey) continue;
+    const version = record.metadata?.flow_version === "direct_v2" ? "direct_v2" : "unversioned";
+    const entry = CHECKOUT_ENTRIES.has(record.metadata?.entry) ? record.metadata.entry : "unspecified";
+    if (!versions.has(version)) versions.set(version, empty());
+    if (!entries.has(entry)) entries.set(entry, empty());
+    for (const group of [totals, versions.get(version), entries.get(entry)]) group[stage].add(record.accountKey);
+    if (record.eventName === "payment_status_checked") {
+      for (const status of Object.keys(statuses)) {
+        if (record.observedStatuses?.[status] || record.metadata?.status === status) statuses[status].add(record.accountKey);
+      }
+    }
+  }
+  const count = group => Object.fromEntries(Object.entries(group).map(([name, accounts]) => [name, accounts.size]));
+  const byGroup = groups => Object.fromEntries([...groups].sort(([a], [b]) => a.localeCompare(b)).map(([name, group]) => [name, count(group)]));
+  return {
+    unit: "unique authenticated accounts per observed event in the report window",
+    ...count(totals), byFlowVersion: byGroup(versions), byEntry: byGroup(entries),
+    browserReportedStatusResults: count(statuses),
+    note: "These are overlapping observed stages, not a sequential funnel or abandonment rate. First placement/version per event/account/UTC day is retained; groups can overlap across days. Direct flow labels, visible CTAs, recovery open/close and bounded status outcomes begin with the October 19, 2026 release. Missing historical events mean unmeasured stages. Browser-reported active status is not a confirmed payment."
+  };
+}
 
 function journeyKey(value) {
   return UUID.test(String(value || "")) ? privacyHash("premium-journey", value.toLowerCase()) : null;
@@ -104,6 +140,12 @@ function summarizeMeasurements(records, journeys, verifiedLinks = [], { contextR
     if (!account[record.eventName] || time < account[record.eventName]) account[record.eventName] = time;
     (account.times ||= {});
     (account.times[record.eventName] ||= []).push(time);
+    if (record.eventName === "payment_status_checked") {
+      for (const status of ["pending", "active", "error"]) {
+        const observedAt = record.observedStatuses?.[status];
+        if (typeof observedAt === "string" && Number.isFinite(Date.parse(observedAt))) account.times[record.eventName].push(observedAt);
+      }
+    }
     accounts.set(id, account);
     connectJourney(record, id, time);
     if (/^[a-f0-9]{64}$/.test(record.metadata?.journey_key || "")) currentConnections.add(id);
@@ -128,7 +170,7 @@ function summarizeMeasurements(records, journeys, verifiedLinks = [], { contextR
   const total = empty();
   const sources = new Map();
   const landings = new Map();
-  const matched = new Set();
+  const matched = { connectedAccounts: new Set(), trialsStarted: new Set(), confirmedNewMemberships: new Set(), paidAccessObserved: new Set() };
   const paid = new Set();
   for (const [key, journey] of grouped) {
     if (!journey.currentEvents.size && !accounts.has(journeyOwners.get(key))) continue;
@@ -155,27 +197,41 @@ function summarizeMeasurements(records, journeys, verifiedLinks = [], { contextR
   }
   for (const journey of [...grouped.values()].sort((a, b) => a.firstAt.localeCompare(b.firstAt))) {
     const id = journey.accountId;
-    if (!id || matched.has(id)) continue;
-    matched.add(id);
+    if (!id) continue;
     const account = accounts.get(id) || {};
     const row = sources.get(journey.source);
     if (!row) continue;
-    const observed = event => (account.times?.[event] || []).some(time => time >= journey.firstAt);
-    for (const target of [total, row, landings.get(journey.landing)]) {
-      if (currentConnections.has(id) && journey.connectedAt >= journey.firstAt) target.connectedAccounts++;
-      if (observed("trial_started")) target.trialsStarted++;
-      if (observed("subscription_started")) { target.confirmedNewMemberships++; paid.add(id); }
-      if (observed("paid_access_observed")) target.paidAccessObserved++;
+    // An account connecting a browser journey after paying must not credit an
+    // earlier sale retroactively. Select the first eligible journey per stage.
+    const observed = event => (account.times?.[event] || []).some(time => time >= journey.firstAt && time >= journey.connectedAt);
+    const stages = {
+      connectedAccounts: currentConnections.has(id) && journey.connectedAt >= journey.firstAt,
+      trialsStarted: observed("trial_started"), confirmedNewMemberships: observed("subscription_started"),
+      paidAccessObserved: observed("paid_access_observed")
+    };
+    for (const [stage, qualifies] of Object.entries(stages)) {
+      if (!qualifies || matched[stage].has(id)) continue;
+      matched[stage].add(id);
+      for (const target of [total, row, landings.get(journey.landing)]) target[stage]++;
+      if (stage === "confirmedNewMemberships") paid.add(id);
     }
   }
   let payments = 0, activated = 0, paymentAfterMembershipClick = 0;
   const attributionDiagnostics = { unmatchedPayments: 0, unmatchedWithMembershipClickInWindow: 0, unmatchedWithPaidAccessInWindow: 0 };
   const recovery = { accountsWithMembershipClick: 0, returnedAfterClick: 0, checkedStatusAfterReturn: 0, confirmedPaymentAfterClick: 0 };
   for (const [id, account] of accounts) {
-    const follows = (before, after) => Boolean(account[before] && (account.times?.[after] || []).some(time => time >= account[before]));
+    const follows = (...stages) => {
+      let previous = "";
+      for (const stage of stages) {
+        const next = (account.times?.[stage] || []).filter(time => time >= previous).sort()[0];
+        if (!next) return false;
+        previous = next;
+      }
+      return true;
+    };
     if (account.checkout_opened) recovery.accountsWithMembershipClick++;
     if (follows("checkout_opened", "checkout_returned")) recovery.returnedAfterClick++;
-    if (follows("checkout_returned", "payment_status_checked")) recovery.checkedStatusAfterReturn++;
+    if (follows("checkout_opened", "checkout_returned", "payment_status_checked")) recovery.checkedStatusAfterReturn++;
     if (follows("checkout_opened", "subscription_started")) recovery.confirmedPaymentAfterClick++;
     if (!account.subscription_started) continue;
     payments++;
@@ -185,13 +241,14 @@ function summarizeMeasurements(records, journeys, verifiedLinks = [], { contextR
       if (follows("subscription_started", "paid_access_observed")) attributionDiagnostics.unmatchedWithPaidAccessInWindow++;
     }
     if ((account.times?.paid_access_observed || []).some(time => time >= account.subscription_started)) activated++;
-    if (account.checkout_opened && account.checkout_opened <= account.subscription_started) paymentAfterMembershipClick++;
+    if (follows("checkout_opened", "subscription_started")) paymentAfterMembershipClick++;
   }
   return {
     journeys: { ...total, bySource: Object.fromEntries([...sources].sort(([a], [b]) => a.localeCompare(b))), byLandingPage: Object.fromEntries([...landings].sort(([a], [b]) => a.localeCompare(b))), confirmedPaymentsNotMatchedToJourney: Math.max(0, payments - paid.size) },
     paymentActivation: { confirmedNewMemberships: payments, paidAccessObservedAfterPayment: activated, accessNotYetObservedInWindow: payments - activated, paymentAfterMembershipPageClick: paymentAfterMembershipClick },
-    checkoutRecovery: { ...recovery, note: "Membership clicks and returns are browser diagnostics, not Ko-fi checkout attempts. Paid counts require server payment events. Return/status diagnostics begin with this release." },
-    attributionDiagnostics: { ...attributionDiagnostics, note: "These are overlapping diagnostic counts, not inferred traffic sources. Different billing emails require verified linking; direct anonymous Ko-fi purchases can remain unattributed." },
+    checkoutRecovery: { ...recovery, note: "Membership clicks and returns are browser diagnostics, not Ko-fi checkout attempts. Chronological chains use retained first account-event-day timestamps and can miss repeated same-day attempts. Paid counts require server payment events. Return/status diagnostics began October 13, 2026; earlier absence means unmeasured returns, not abandonment." },
+    checkoutDiagnostics: summarizeCheckoutDiagnostics(records),
+    attributionDiagnostics: { ...attributionDiagnostics, note: "These are overlapping diagnostic counts, not inferred traffic sources. Journey attribution requires an authenticated connection before the attributed event; a later login cannot retroactively credit an earlier payment. Different billing emails require verified linking; direct anonymous Ko-fi purchases can remain unattributed." },
     playbackDiagnostics: { unit: "account-event-day", classification: "first recorded failure of each account per UTC day", ...diagnostics }
   };
 }

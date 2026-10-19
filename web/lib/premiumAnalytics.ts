@@ -15,6 +15,9 @@ export type PremiumFunnelEvent =
   | "trial_requested"
   | "trial_start_failed"
   | "checkout_opened"
+  | "membership_cta_viewed"
+  | "checkout_recovery_opened"
+  | "checkout_recovery_closed"
   | "checkout_returned"
   | "payment_status_checked"
   | "membership_link_started"
@@ -150,6 +153,7 @@ export async function trackPremiumEvent(
     if (auth.session?.userId !== accountId) return false;
     await jsonRequest(`${config.netlifyBackendUrl.replace(/\/+$/, "")}/premium-funnel-event`, {
       method: "POST",
+      keepalive: true,
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({
         event_name: eventName,

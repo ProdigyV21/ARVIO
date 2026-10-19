@@ -18,22 +18,42 @@ const {chromium}=require('@playwright/test');
   res.setHeader('content-type',file.endsWith('.css')?'text/css':file.endsWith('.js')?'application/javascript':file.endsWith('.png')?'image/png':file.endsWith('.jpg')?'image/jpeg':'application/octet-stream');fs.createReadStream(location).pipe(res);
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- const browser=await chromium.launch({channel:'chrome',headless:true});const url=`http://127.0.0.1:${server.address().port}`;
+ const browser=await chromium.launch({channel:'msedge',headless:true});const url=`http://127.0.0.1:${server.address().port}`;
  const evidence=path.resolve(root,'../artifacts/library-emulator');fs.mkdirSync(evidence,{recursive:true});
  try {
   for(const [name,width,height] of [['web-tv',1672,940],['web-tablet',1024,768],['web-phone',390,844]]){
-   const page=await browser.newPage({viewport:{width,height}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+   const page=await browser.newPage({viewport:{width,height},isMobile:width<=650,hasTouch:width<=650});const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.goto(url);await page.locator('.media-card .poster-art.is-loaded').first().waitFor();await page.waitForTimeout(700);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No horizontal overflow');
    assert(await page.locator('.media-card').count()<100,'Grid virtualizes the full library');
    assert(await page.locator('.card-logo').count()>0,'Horizontal cards render clearlogos');
    if(width>650) await page.locator('.oled-source-nav').getByRole('button',{name:'My watchlist',exact:true}).focus();
    await page.screenshot({path:path.join(evidence,`${name}-watchlists.png`)});
+   const backdrop=page.locator('.collection-page-backdrop');
+   const image=await backdrop.evaluate(node=>{const image=node.style.backgroundImage;node.style.backgroundImage='linear-gradient(white,white)';return image;});
+   const hidden=await page.addStyleTag({content:'.oled-library-content.has-preview > :not(.collection-page-backdrop) { visibility:hidden !important; }'});
+   try {
+    const pixels=await page.evaluate(async encoded=>{
+     const image=new Image();image.src=`data:image/png;base64,${encoded}`;await image.decode();
+     const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+     const context=canvas.getContext('2d');context.drawImage(image,0,0);
+     const w=image.width,h=image.height;
+     const level=(x,y)=>Math.max(...context.getImageData(x,y,1,1).data.slice(0,3));
+     return {edges:[[0,Math.floor(h/2)],[w-1,Math.floor(h/3)],[Math.floor(w*0.8),0],[Math.floor(w/2),h-1]].map(([x,y])=>level(x,y)),interior:level(Math.floor(w*0.8),Math.floor(h*0.35))};
+    },(await backdrop.screenshot()).toString('base64'));
+    assert(pixels.edges.every(level=>level<=6),`${name}: every artwork edge must fade to pure black`);
+    assert(pixels.interior>40,'Fade must not hide the main artwork');
+   } finally { await hidden.evaluate(node=>node.remove());await backdrop.evaluate((node,image)=>node.style.backgroundImage=image,image); }
    await page.locator('[data-library-index="0"] button').focus();
+   await page.locator('.collection-spotlight p').filter({hasText:'A detailed description'}).waitFor();
+   const initialPreview=await page.locator('.collection-spotlight').getAttribute('data-preview-key');
    await page.keyboard.press('ArrowRight');
    await page.waitForFunction(()=>document.activeElement?.closest('[data-library-index]')?.getAttribute('data-library-index')==='1');
+   assert.notEqual(await page.locator('.collection-spotlight').getAttribute('data-preview-key'),initialPreview,'Keyboard focus updates the shared collection preview');
+   assert(await page.locator('.oled-grid-viewport').evaluate(node=>node.clientHeight)>170,'Preview leaves room for usable cards');
    await page.locator('.oled-grid-viewport').evaluate(node=>node.scrollTop=500);
    await page.waitForTimeout(100);
+   if(width<=650) assert.notEqual(await page.locator('.collection-spotlight').getAttribute('data-preview-key'),initialPreview,'Touch scrolling updates the first-visible title preview');
    const savedOffset=await page.locator('.oled-grid-viewport').evaluate(node=>node.scrollTop);
    if(width<=650) await page.getByLabel('Library source',{exact:true}).selectOption('trakt:watchlist');
    else await page.locator('.oled-source-nav').getByRole('button',{name:'Watchlist',exact:true}).click();

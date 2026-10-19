@@ -46,6 +46,14 @@ jobs:
       - name: Run web regression tests
         run: npm test
 
+      - name: Install payment backend dependencies
+        working-directory: netlify-auth-site
+        run: npm ci
+
+      - name: Run payment backend regression tests
+        working-directory: netlify-auth-site
+        run: npm test
+
       # CLI builds do not reliably inherit the site's browser build variables.
       # Export only these public client values, never the OAuth client secret.
       - name: Load required public build configuration
@@ -86,6 +94,22 @@ jobs:
             exit 1
           fi
           echo "EXPECTED_BUILD_STAMP=$expected_stamp" >> "$GITHUB_ENV"
+
+      # The compatible backend must accept the new diagnostics before the web
+      # client is published. Keep this after all tests and web build guards.
+      - name: Deploy payment backend to production
+        working-directory: netlify-auth-site
+        env:
+          NETLIFY_SITE_ID: 17ccb668-bf3c-412d-9573-a28a09e52122
+        run: >-
+          npx --yes netlify-cli@25.6.0 deploy
+          --prod
+          --no-build
+          --dir .
+          --functions netlify/functions
+          --site 17ccb668-bf3c-412d-9573-a28a09e52122
+          --message "Payment backend GitHub ${GITHUB_SHA}"
+          --timeout 900
 
       # Deploy the generated function source so Netlify preserves its /* route.
       - name: Deploy to production

@@ -4,7 +4,7 @@ const { load } = require('./load.cjs');
 
 const id = 'a1101111-2222-4333-8444-555566667777';
 function fixture({ privacy = {}, blocked = false, now = Date.now() } = {}) {
-  const values = new Map(); const requests = []; let clock = now;
+  const values = new Map(); const requests = []; const options = []; let clock = now;
   const location = new URL(`https://web.arvio.tv/?intent=trial&arvio_journey=${id}&utm_source=discord&utm_campaign=launch`);
   const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
   const window = { location, history: { state: null, replaceState(_state, _title, value) { const target = new URL(value); location.href = target.href; } } };
@@ -13,10 +13,10 @@ function fixture({ privacy = {}, blocked = false, now = Date.now() } = {}) {
   class Clock extends Date { static now() { return clock; } }
   const module = load('lib/premiumAnalytics.ts', {
     './config': { config: { paywallEnabled: true, netlifyBackendUrl: 'https://backend.invalid' } },
-    './http': { jsonRequest: async (_url, init) => { requests.push(JSON.parse(init.body)); } }
+    './http': { jsonRequest: async (_url, init) => { requests.push(JSON.parse(init.body)); options.push(init); } }
   }, { window, document: { referrer: 'https://arvio.tv/premium/' }, navigator: privacy, Date: Clock });
   const auth = { session: { userId: 'account-a' }, accessToken: async () => 'fixture' };
-  return { module, requests, auth, values, location, advance: ms => { clock += ms; } };
+  return { module, requests, options, auth, values, location, advance: ms => { clock += ms; } };
 }
 
 test('campaign navigation links to an account using expiring session storage and removes the URL id', async () => {
@@ -38,6 +38,15 @@ test('membership entry placement does not overwrite the original campaign source
   assert.equal(f.requests[0].metadata.source, 'discord');
   assert.equal(f.requests[0].metadata.entry, 'trial_nav');
   assert.equal(f.requests[0].journey_id, id);
+});
+
+test('handoff telemetry survives navigation without sending identity in a provider URL', async () => {
+  const f = fixture();
+  await f.module.trackPremiumEvent(f.auth, 'checkout_opened', { entry: 'paywall', flow_version: 'direct_v2' });
+  assert.equal(f.options[0].keepalive, true);
+  assert.equal(f.options[0].headers.Authorization, 'Bearer fixture');
+  assert.equal(f.requests[0].metadata.flow_version, 'direct_v2');
+  assert.equal(JSON.stringify(f.requests).includes('email'), false);
 });
 
 test('a new signed-in account and expired sessions cannot inherit the previous campaign', async () => {

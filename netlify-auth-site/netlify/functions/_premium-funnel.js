@@ -10,9 +10,12 @@ const PREMIUM_EVENTS = new Set([
   "trial_requested",
   "trial_started",
   "trial_start_failed",
+  "membership_cta_viewed",
   "checkout_opened",
   "checkout_returned",
   "payment_status_checked",
+  "checkout_recovery_opened",
+  "checkout_recovery_closed",
   "membership_link_started",
   "membership_linked",
   "billing_email_verified",
@@ -36,9 +39,10 @@ const CLIENT_PREMIUM_EVENTS = new Set([
   "journey_connected", "web_opened", "sources_configured", "sources_missing",
   "playback_requested", "playback_started", "playback_failed",
   "paywall_view", "account_connected", "trial_requested", "trial_start_failed",
-  "checkout_opened", "checkout_returned", "payment_status_checked", "membership_link_started", "membership_linked", "membership_link_failed", "first_playback", "external_playback_requested",
+  "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "first_playback", "external_playback_requested",
   "download_requested", "download_handoff", "download_failed"
 ]);
+const PAYMENT_CHECK_RESULTS = new Set(["pending", "active", "error"]);
 
 function premiumFunnelStore(event) {
   connectLambda(event);
@@ -48,12 +52,13 @@ function premiumFunnelStore(event) {
 function sanitizeMetadata(metadata) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
   const result = {};
-  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase"]);
+  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version"]);
   for (const [key, value] of Object.entries(metadata).slice(0, 16)) {
     if (!allowed.has(key)) continue;
     if (key === "failure_kind" && !FAILURE_KINDS.has(value)) continue;
     if (key === "transport" && !TRANSPORTS.has(value)) continue;
     if (key === "phase" && !PHASES.has(value)) continue;
+    if (key === "flow_version" && value !== "direct_v2") continue;
     if (!/^[a-z][a-z0-9_]{0,31}$/i.test(key)) continue;
     if (typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
       result[key] = value;
@@ -74,6 +79,34 @@ async function getJSON(store, key) {
     if (error?.status === 404 || error?.name === "BlobNotFoundError") return null;
     throw error;
   }
+}
+
+async function recordPaymentCheckResult(store, key, existing, status, at) {
+  let current = existing;
+  // ETag compare-and-set prevents concurrent pending/active/error callbacks
+  // from erasing one another. Three outcomes bound successful writes; retries
+  // are bounded too, and analytics must never hold up payment access.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (current.observedStatuses?.[status] || current.metadata?.status === status) return current;
+    let snapshot;
+    try {
+      snapshot = await store.getWithMetadata(key, { type: "json", consistency: "strong" });
+    } catch (error) {
+      if (!String(error?.message || "").includes("uncachedEdgeURL")) throw error;
+      snapshot = await store.getWithMetadata(key, { type: "json" });
+    }
+    if (!snapshot?.data || !snapshot.etag) return current;
+    current = snapshot.data;
+    const observedStatuses = { ...current.observedStatuses };
+    if (PAYMENT_CHECK_RESULTS.has(current.metadata?.status) && !observedStatuses[current.metadata.status]) {
+      observedStatuses[current.metadata.status] = current.firstAt;
+    }
+    if (observedStatuses[status]) return current;
+    const record = { ...current, observedStatuses: { ...observedStatuses, [status]: at.toISOString() } };
+    const result = await store.setJSON(key, record, { onlyIfMatch: snapshot.etag });
+    if (result.modified) return record;
+  }
+  return current;
 }
 
 async function recordPremiumEvent(event, { email, accountId, eventName, metadata = {}, occurredAt, journeyId } = {}) {
@@ -99,10 +132,16 @@ async function recordPremiumEvent(event, { email, accountId, eventName, metadata
     }, { onlyIfNew: true });
   }
   const existing = await getJSON(store, key);
+  const safeMetadata = sanitizeMetadata(metadata);
+  // A pending check followed by activation must not disappear behind daily
+  // deduplication. Retain only the first timestamp of each bounded result,
+  // never every poll. The original event timestamp/placement stays immutable.
+  if (existing && eventName === "payment_status_checked" && PAYMENT_CHECK_RESULTS.has(safeMetadata.status)) {
+    return recordPaymentCheckResult(store, key, existing, safeMetadata.status, at);
+  }
   // Reports count unique account-event-days, not clicks. Repeated browser
   // callbacks must not rewrite the same blob or replace its first attribution.
   if (existing && (CLIENT_PREMIUM_EVENTS.has(eventName) || eventName === "paid_access_observed")) return existing;
-  const safeMetadata = sanitizeMetadata(metadata);
   if (attributionKey) safeMetadata.journey_key = attributionKey;
   const record = {
     date,
@@ -113,7 +152,19 @@ async function recordPremiumEvent(event, { email, accountId, eventName, metadata
     firstAt: existing?.firstAt || at.toISOString(),
     updatedAt: at.toISOString()
   };
-  await store.setJSON(key, record);
+  if (eventName === "payment_status_checked" && PAYMENT_CHECK_RESULTS.has(safeMetadata.status)) {
+    record.observedStatuses = { [safeMetadata.status]: at.toISOString() };
+  }
+  if (CLIENT_PREMIUM_EVENTS.has(eventName) || eventName === "paid_access_observed") {
+    const written = await store.setJSON(key, record, { onlyIfNew: true });
+    if (!written.modified) {
+      const current = await getJSON(store, key);
+      if (current && eventName === "payment_status_checked" && PAYMENT_CHECK_RESULTS.has(safeMetadata.status)) {
+        return recordPaymentCheckResult(store, key, current, safeMetadata.status, at);
+      }
+      return current || record;
+    }
+  } else await store.setJSON(key, record);
 
   return record;
 }
@@ -176,7 +227,7 @@ async function premiumFunnelReport(event, days = 30, endDate) {
   const inContext = key => key.split("/")[2] >= contextStart && key.split("/")[2] < dates[0];
   const allJourneyKeys = await listKeys(store, "journeys/date/");
   const journeyKeys = allJourneyKeys.filter(key => dateSet.has(key.split("/")[2]));
-  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "checkout_opened", "checkout_returned", "payment_status_checked", "playback_failed"]);
+  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed"]);
   const detailKeys = keys.filter(key => detailedEvents.has(key.split("/")[5]?.replace(/\.json$/, "")));
   // Look back only for actual new payers, not every historic visitor or trial.
   // This avoids turning a small period report into thousands of extra reads.
@@ -285,6 +336,8 @@ function summarizePremiumKeys(keys, dates, generatedAt = new Date().toISOString(
       "Different billing emails are joined only after verified ownership in retained history before the report end; unverified links remain unmatched. Renewals are separate from starts.",
       "Event-days are deduplicated per account/event/day, not total clicks. External-player and download handoffs do not confirm successful playback or completed downloads.",
       "checkout_opened means a membership page link was opened, not a verified checkout/payment attempt. Ko-fi does not report abandoned checkouts.",
+      "Membership CTA visibility, direct_v2 flow labels and recovery open/close diagnostics begin with the October 19, 2026 release. Missing historical events mean unmeasured stages, not abandonment. Each event retains its first placement/version per account/UTC day, not every impression or click.",
+      "Payment status checks retain the first timestamp per pending/active/error result per account/UTC day from the October 19 release. Browser-reported active results do not establish a confirmed payment; earlier records retain only their first result.",
       "Anonymous journeys are transient navigation identifiers, not unique visitors; storage blockers, shared networks and a 256-event/hour budget can undercount. Direct Ko-fi payments may remain unattributed. Journey events expire after 30 days.",
       "Paid access observed confirms an authenticated server access check, not successful playback. Daily failure categories describe the first reported failure, never an attempt-level failure rate.",
       "Daily activation diagnostics begin with the September 2026 activation release; missing earlier diagnostics mean unmeasured usage, not failed playback. Cohorts use full calendar days and exclude trials without enough observation time."

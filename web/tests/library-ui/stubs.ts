@@ -16,6 +16,7 @@ export const traktClient={watchlist:async()=>[],calendarSeason:async()=>[]};
 export const getLogoUrl=async(item:{id:number})=>asset(fixtures.find((row)=>row.id===item.id)?.logo);
 export const getCardMeta=async()=>({});
 export const getCardProviders=async()=>[];
+export const getCollectionPreview=async(item:any)=>({...item,overview:`A detailed description of ${item.title}.`,duration:"1h 48m",rating:"7.8"});
 export const prefetchDetails=()=>{};
 export const resolveTmdbId=async(item:{id:number})=>item.id;
 export const getImdbRating=async()=>null;

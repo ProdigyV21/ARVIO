@@ -225,6 +225,7 @@ export class SimklClient implements SyncClient {
   private snapshot: SimklSnapshot | null = null;
   private recentCompletions = new Map<string, number>();
   private snapshotPromise: Promise<SimklSnapshot> | null = null;
+  private snapshotRevision = 0;
   private playbackSnapshot: SimklPlaybackSnapshot | null = null;
   private playbackPromise: Promise<SimklPlaybackRow[]> | null = null;
   private lastPlaybackFailureAt = 0;
@@ -407,12 +408,12 @@ export class SimklClient implements SyncClient {
   }
 
   private invalidateSnapshot() {
+    this.snapshotRevision++;
     if (this.snapshot) {
       this.snapshot.checkedAt = 0;
       this.persistSnapshot(this.snapshot);
     }
-    this.snapshotPromise = null;
-    this.lastSnapshotFailureAt = 0;
+    // A write must not detach an in-flight read or bypass failure backoff.
   }
 
   private resetScrobbleQueue() {
@@ -436,6 +437,7 @@ export class SimklClient implements SyncClient {
     }
     const scope = this.scope();
     const accessToken = this.token?.access_token;
+    if (this.snapshotPromise) return this.snapshotPromise;
     const cached = this.snapshot?.scope === scope ? this.snapshot : null;
     const now = Date.now();
     if (cached?.complete && now - cached.checkedAt < SNAPSHOT_TTL_MS) return cached;
@@ -445,8 +447,7 @@ export class SimklClient implements SyncClient {
         movies: [], shows: [], anime: []
       };
     }
-    if (this.snapshotPromise) return this.snapshotPromise;
-
+    const revision = this.snapshotRevision;
     const request = (async () => {
       const activities = await this.simkl<unknown>("/sync/activities", {}, accessToken);
       const marker = activityMarker(activities);
@@ -533,6 +534,8 @@ export class SimklClient implements SyncClient {
     try {
       const result = await request;
       if (result.scope === this.scope()) {
+        // A write completed during this read: do not mark its older snapshot fresh.
+        if (this.snapshotRevision !== revision) result.checkedAt = 0;
         this.snapshot = result;
         if (result.complete) this.persistSnapshot(result);
       }
@@ -910,7 +913,7 @@ export class SimklClient implements SyncClient {
       if (action !== "stop" || (error as { status?: number }).status !== 409) throw error;
     }
     // Keep metadata and the incremental watermark; only expire freshness.
-    if (action === "stop" && scope === this.scope() && this.snapshot) this.snapshot.checkedAt = 0;
+    if (action === "stop" && scope === this.scope()) this.invalidateSnapshot();
   }
 
   async scrobble(action: "start" | "pause" | "stop", item: SyncMediaRef & { progress: number }): Promise<void> {

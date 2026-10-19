@@ -86,12 +86,14 @@ test('guide events retain existing deduplication and write ceilings', async () =
   assert.equal(store.writes(), writes);
 });
 function memoryStore() {
-  const data = new Map(); let writes = 0;
+  const data = new Map(), versions = new Map(); let writes = 0;
   return { data, writes: () => writes,
     get: async key => data.get(key) || null,
+    getWithMetadata: async key => data.has(key) ? { data: data.get(key), etag: String(versions.get(key) || 0) } : null,
     setJSON: async (key, value, options) => {
       if (options?.onlyIfNew && data.has(key)) return { modified: false };
-      writes++; data.set(key, value); return { modified: true };
+      if (options?.onlyIfMatch !== undefined && (!data.has(key) || options.onlyIfMatch !== String(versions.get(key) || 0))) return { modified: false };
+      writes++; data.set(key, value); versions.set(key, (versions.get(key) || 0) + 1); return { modified: true };
     },
     list: async ({ prefix }) => ({ blobs: [...data.keys()].filter(key => key.startsWith(prefix)).map(key => ({ key })) }),
     delete: async key => { data.delete(key); }
@@ -284,4 +286,197 @@ test('anonymous visits support Lambda contexts without uncachedEdgeURL while pre
   assert.equal(store.writes(), writes);
   store.get = async () => { throw Error('unrelated storage outage'); };
   await assert.rejects(measurement.recordJourneyEvent(store, event, body), /unrelated storage outage/);
+});
+
+test('direct checkout stages count unique accounts, retain bounded labels, and never imply payments', () => {
+  const record = (eventName, accountKey = 'buyer', metadata = {}) => ({ accountKey, eventName, firstAt: '2026-10-19T12:00:00Z', metadata });
+  const report = measurement.summarizeMeasurements([
+    record('membership_cta_viewed', 'buyer', { entry: 'trial_nav', flow_version: 'direct_v2' }),
+    record('membership_cta_viewed', 'buyer', { entry: 'paywall', flow_version: 'direct_v2' }),
+    record('checkout_opened', 'buyer', { entry: 'paywall', flow_version: 'direct_v2' }),
+    record('checkout_recovery_opened', 'buyer', { entry: 'paywall', flow_version: 'direct_v2' }),
+    record('checkout_recovery_closed', 'buyer', { entry: 'paywall', flow_version: 'direct_v2' }),
+    record('membership_linked'), record('membership_link_failed', 'other'),
+    record('checkout_opened', 'old', { entry: '__proto__', flow_version: 'anything-private' })
+  ], []);
+  const result = report.checkoutDiagnostics;
+  assert.equal(result.ctaViewed, 1);
+  assert.equal(result.membershipLinkOpened, 2);
+  assert.equal(result.recoveryOpened, 1);
+  assert.equal(result.recoveryClosed, 1);
+  assert.equal(result.billingLinkReportedComplete, 1);
+  assert.equal(result.billingOwnershipVerified, 0);
+  assert.equal(result.byEntry.trial_nav.ctaViewed, 1);
+  assert.equal(result.byEntry.paywall.ctaViewed, 1);
+  assert.equal(result.byEntry.unspecified.membershipLinkOpened, 1);
+  assert.equal(result.byFlowVersion.direct_v2.membershipLinkOpened, 1);
+  assert.equal(result.byFlowVersion.unversioned.membershipLinkOpened, 1);
+  assert.equal(report.paymentActivation.confirmedNewMemberships, 0);
+  assert.match(result.note, /not a sequential funnel or abandonment rate/);
+  assert.match(result.note, /Missing historical events mean unmeasured/);
+  assert.deepEqual(funnel._test.sanitizeMetadata({ flow_version: 'direct_v2' }), { flow_version: 'direct_v2' });
+  for (const flow_version of ['private-person', 'https://private', 'buyer@example.test', 1]) assert.deepEqual(funnel._test.sanitizeMetadata({ flow_version }), {});
+});
+
+test('checkout recovery requires an observed click then return then check, not unrelated earlier activity', () => {
+  const record = (eventName, time) => ({ accountKey: 'buyer', eventName, firstAt: `2026-10-19T${time}:00Z` });
+  const early = [record('checkout_returned', '10:00'), record('payment_status_checked', '10:01'), record('checkout_opened', '11:00')];
+  const before = measurement.summarizeMeasurements(early, []).checkoutRecovery;
+  assert.equal(before.accountsWithMembershipClick, 1);
+  assert.equal(before.returnedAfterClick, 0);
+  assert.equal(before.checkedStatusAfterReturn, 0);
+  const after = measurement.summarizeMeasurements([...early, record('checkout_returned', '11:01'), record('payment_status_checked', '11:02')], []).checkoutRecovery;
+  assert.equal(after.returnedAfterClick, 1);
+  assert.equal(after.checkedStatusAfterReturn, 1);
+});
+
+test('a post-payment journey connection cannot retroactively attribute a sale', () => {
+  const records = [
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-10-19T11:00:00Z' },
+    { accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-10-19T12:00:00Z', metadata: { journey_key: journeyKey } }
+  ];
+  const result = measurement.summarizeMeasurements(records, [{ journeyKey, eventName: 'premium_page_view', firstAt: '2026-10-19T10:00:00Z', metadata: { source: 'google' } }]);
+  assert.equal(result.journeys.connectedAccounts, 1);
+  assert.equal(result.journeys.confirmedNewMemberships, 0);
+  assert.equal(result.journeys.confirmedPaymentsNotMatchedToJourney, 1);
+});
+
+test('an ineligible earlier journey cannot swallow a later eligible payment attribution', () => {
+  const otherKey = 'f'.repeat(64);
+  const connected = (journey_key, firstAt) => ({ accountKey: 'buyer', eventName: 'journey_connected', firstAt, metadata: { journey_key } });
+  const result = measurement.summarizeMeasurements([
+    connected(journeyKey, '2026-10-19T12:00:00Z'), connected(otherKey, '2026-10-19T10:05:00Z'),
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-10-19T11:00:00Z' }
+  ], [
+    { journeyKey, eventName: 'premium_page_view', firstAt: '2026-10-19T09:00:00Z', metadata: { source: 'google' } },
+    { journeyKey: otherKey, eventName: 'premium_page_view', firstAt: '2026-10-19T10:00:00Z', metadata: { source: 'discord' } }
+  ]);
+  assert.equal(result.journeys.confirmedNewMemberships, 1);
+  assert.equal(result.journeys.bySource.google.confirmedNewMemberships, 0);
+  assert.equal(result.journeys.bySource.discord.confirmedNewMemberships, 1);
+});
+
+test('pending then active and error status outcomes survive daily dedup with bounded atomic updates', async () => {
+  const store = memoryStore();
+  const module = fixtureModule('_premium-funnel', {
+    '@netlify/blobs': { connectLambda() {}, getStore: () => store },
+    './_backend': { privacyHash: (_namespace, value) => value }, './_premium-measurement': measurement
+  });
+  const body = { email: 'buyer@example.test', eventName: 'payment_status_checked', occurredAt: '2026-10-19T10:00:00Z', metadata: { entry: 'paywall', flow_version: 'direct_v2', status: 'pending' } };
+  await module.recordPremiumEvent({}, body);
+  await Promise.all(['active', 'error'].map((status, index) => module.recordPremiumEvent({}, { ...body, occurredAt: `2026-10-19T10:0${index + 1}:00Z`, metadata: { entry: 'trial_nav', flow_version: 'direct_v2', status } })));
+  for (let index = 0; index < 20; index++) await module.recordPremiumEvent({}, { ...body, metadata: { status: ['pending', 'active', 'error'][index % 3] } });
+  assert.equal(store.data.size, 1);
+  assert.equal(store.writes(), 3);
+  const record = [...store.data.values()][0];
+  assert.equal(record.firstAt, '2026-10-19T10:00:00.000Z');
+  assert.equal(record.metadata.status, 'pending');
+  assert.equal(record.metadata.entry, 'paywall');
+  assert.deepEqual(Object.keys(record.observedStatuses).sort(), ['active', 'error', 'pending']);
+  const result = measurement.summarizeMeasurements([record], []);
+  assert.deepEqual(result.checkoutDiagnostics.browserReportedStatusResults, { pending: 1, active: 1, error: 1 });
+  assert.equal(result.checkoutDiagnostics.statusChecked, 1);
+  assert.equal(result.paymentActivation.confirmedNewMemberships, 0);
+});
+
+test('concurrent duplicate checkout events preserve the first stored timestamp and placement', async () => {
+  const store = memoryStore();
+  const module = fixtureModule('_premium-funnel', {
+    '@netlify/blobs': { connectLambda() {}, getStore: () => store },
+    './_backend': { privacyHash: (_namespace, value) => value }, './_premium-measurement': measurement
+  });
+  await Promise.all(Array.from({ length: 20 }, (_, index) => module.recordPremiumEvent({}, {
+    email: 'buyer@example.test', eventName: 'checkout_opened', metadata: { entry: index ? 'trial_nav' : 'paywall' }, occurredAt: `2026-10-19T10:00:${String(index).padStart(2, '0')}Z`
+  })));
+  assert.equal(store.data.size, 1);
+  assert.equal(store.writes(), 1);
+  const record = [...store.data.values()][0];
+  assert.equal(record.firstAt, '2026-10-19T10:00:00.000Z');
+  assert.equal(record.metadata.entry, 'paywall');
+});
+
+test('status outcomes from historical records are not invented or treated as confirmed payments', () => {
+  const result = measurement.summarizeMeasurements([
+    { accountKey: 'buyer', eventName: 'payment_status_checked', firstAt: '2026-10-18T12:00:00Z', metadata: { status: 'pending' } },
+    { accountKey: 'other', eventName: 'payment_status_checked', firstAt: '2026-10-18T12:00:00Z', metadata: { status: 'active' } }
+  ], []);
+  assert.deepEqual(result.checkoutDiagnostics.browserReportedStatusResults, { pending: 1, active: 1, error: 0 });
+  assert.equal(result.paymentActivation.confirmedNewMemberships, 0);
+  assert.equal(result.checkoutDiagnostics.ctaViewed, 0);
+});
+
+test('a later retained status outcome can establish a check after return without inventing another click', () => {
+  const record = (eventName, firstAt, extra = {}) => ({ accountKey: 'buyer', eventName, firstAt, ...extra });
+  const result = measurement.summarizeMeasurements([
+    record('payment_status_checked', '2026-10-19T10:00:00Z', { metadata: { status: 'pending' }, observedStatuses: { pending: '2026-10-19T10:00:00Z', active: '2026-10-19T11:02:00Z' } }),
+    record('checkout_opened', '2026-10-19T11:00:00Z'), record('checkout_returned', '2026-10-19T11:01:00Z')
+  ], []);
+  assert.equal(result.checkoutDiagnostics.statusChecked, 1);
+  assert.equal(result.checkoutRecovery.checkedStatusAfterReturn, 1);
+  assert.equal(result.paymentActivation.confirmedNewMemberships, 0);
+});
+
+test('status updates tolerate missing uncached endpoints and stop retrying ETag contention', async () => {
+  const store = memoryStore();
+  const read = store.getWithMetadata;
+  store.getWithMetadata = async (key, options) => {
+    if (options?.consistency === 'strong') throw Error("Netlify Blobs has not been configured with an 'uncachedEdgeURL' property");
+    return read(key);
+  };
+  const module = fixtureModule('_premium-funnel', {
+    '@netlify/blobs': { connectLambda() {}, getStore: () => store },
+    './_backend': { privacyHash: (_namespace, value) => value }, './_premium-measurement': measurement
+  });
+  const body = { email: 'buyer@example.test', eventName: 'payment_status_checked', occurredAt: '2026-10-19T10:00:00Z', metadata: { status: 'pending' } };
+  await module.recordPremiumEvent({}, body);
+  await module.recordPremiumEvent({}, { ...body, metadata: { status: 'active' } });
+  assert.equal(store.writes(), 2);
+  let conflicts = 0;
+  const write = store.setJSON;
+  store.setJSON = async (key, value, options) => {
+    if (options?.onlyIfMatch !== undefined) { conflicts++; return { modified: false }; }
+    return write(key, value, options);
+  };
+  await module.recordPremiumEvent({}, { ...body, metadata: { status: 'error' } });
+  assert.equal(conflicts, 3);
+  assert.equal(store.writes(), 2);
+});
+
+test('authenticated funnel endpoint accepts bounded diagnostics but rejects fabricated server payments and identities', async () => {
+  const events = [];
+  const handler = fixtureModule('premium-funnel-event', {
+    './_backend': {
+      json: (statusCode, body) => ({ statusCode, body }), options: () => null,
+      parseBody: event => JSON.parse(event.body),
+      resolveIdentity: async event => { if (!event.authenticated) throw Object.assign(Error('unauthorized'), { statusCode: 401 }); return { email: 'verified@example.test', supabaseUserId: 'real-account' }; }
+    },
+    './_premium-funnel': { CLIENT_PREMIUM_EVENTS: funnel.CLIENT_PREMIUM_EVENTS, recordPremiumEvent: async (_event, body) => events.push(body) }
+  }).handler;
+  const request = event_name => ({ httpMethod: 'POST', authenticated: true, body: JSON.stringify({ event_name, email: 'forged@example.test', accountId: 'forged', occurredAt: '2000-01-01', metadata: { flow_version: 'direct_v2' } }) });
+  for (const event_name of ['membership_cta_viewed', 'checkout_opened', 'checkout_recovery_opened', 'checkout_recovery_closed', 'payment_status_checked']) assert.equal((await handler(request(event_name))).statusCode, 200);
+  assert.equal(events.length, 5);
+  assert.equal(events[0].email, 'verified@example.test');
+  assert.equal(events[0].accountId, 'real-account');
+  assert.equal(events[0].occurredAt, undefined);
+  for (const event_name of ['subscription_started', 'subscription_renewed', 'paid_access_observed', 'billing_email_verified', 'trial_started']) assert.equal((await handler(request(event_name))).statusCode, 400);
+  assert.equal((await handler({ ...request('checkout_opened'), authenticated: false })).statusCode, 401);
+  assert.equal(events.length, 5);
+});
+
+test('protected report includes new checkout detail records without counting future events or anonymous payment guesses', async () => {
+  const store = memoryStore();
+  for (const [date, eventName] of [['2026-10-18', 'membership_cta_viewed'], ['2026-10-18', 'checkout_recovery_opened'], ['2026-10-18', 'checkout_recovery_closed'], ['2026-10-19', 'checkout_opened']]) {
+    store.data.set(`events/date/${date}/account/buyer/${eventName}.json`, { date, accountKey: 'buyer', eventName, firstAt: `${date}T12:00:00Z`, metadata: { entry: 'paywall', flow_version: 'direct_v2' } });
+  }
+  const module = fixtureModule('_premium-funnel', {
+    '@netlify/blobs': { connectLambda() {}, getStore: () => store },
+    './_backend': { privacyHash: (_namespace, value) => value }, './_premium-measurement': measurement
+  });
+  const report = await module.premiumFunnelReport({}, 1, '2026-10-18');
+  assert.equal(report.checkoutDiagnostics.ctaViewed, 1);
+  assert.equal(report.checkoutDiagnostics.recoveryOpened, 1);
+  assert.equal(report.checkoutDiagnostics.recoveryClosed, 1);
+  assert.equal(report.checkoutDiagnostics.membershipLinkOpened, 0);
+  assert.equal(report.paymentActivation.confirmedNewMemberships, 0);
+  assert.equal(report.uniqueAccounts.membership_cta_viewed, 1);
 });

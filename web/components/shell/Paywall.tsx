@@ -16,7 +16,6 @@ import { authClient, useApp } from "@/lib/store";
 import { capturePremiumAttribution, trackPremiumEvent, trackPremiumMilestone, TRIAL_INTENT_KEY } from "@/lib/premiumAnalytics";
 import { currentEntitlement, entitlementCheckDelay } from "@/lib/entitlementPolicy";
 import { EntitlementContext } from "@/lib/entitlementContext";
-import { BillingEmailForm } from "./BillingEmailForm";
 import { ENTITLEMENT_REFRESH_EVENT } from "@/lib/entitlement";
 import { MembershipCheckout } from "./MembershipCheckout";
 
@@ -138,7 +137,6 @@ export function EntitlementGate({ children }: { children: React.ReactNode }) {
     <PaywallScreen
       state={access}
       accountId={accountId}
-      accountEmail={auth?.email}
       isSignedIn={Boolean(auth)}
       onEntitled={(next) => {
         if (authClient.session?.userId !== accountId) return;
@@ -153,7 +151,6 @@ export function EntitlementGate({ children }: { children: React.ReactNode }) {
 export function PaywallScreen({
   state,
   accountId,
-  accountEmail,
   isSignedIn,
   onEntitled,
   onConnect,
@@ -161,14 +158,13 @@ export function PaywallScreen({
 }: {
   state: EntitlementState | null;
   accountId: string | null;
-  accountEmail?: string;
   isSignedIn: boolean;
   onEntitled: (next: EntitlementState) => void;
   onConnect: () => void;
   onSignOut: () => void;
 }) {
   const translateUi = useTranslation();
-  const [busy, setBusy] = useState<"trial" | "check" | null>(null);
+  const [busy, setBusy] = useState<"trial" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const trialAvailable = state?.trialAvailable ?? true;
   const trialDays = state?.trialDurationDays ?? 3;
@@ -180,19 +176,6 @@ export function PaywallScreen({
     void trackPremiumEvent(authClient, "paywall_view", {}, true);
     void trackPremiumMilestone(authClient, "account_connected");
   }, [isSignedIn, accountId]);
-
-  const checkAccess = async () => {
-    if (!isSignedIn) { onConnect(); return; }
-    setBusy("check"); setError(null);
-    try {
-      const next = await fetchEntitlement(authClient);
-      if (next.entitled) onEntitled(next);
-      else setError("Payment may take a moment to arrive. Check again shortly, or link the email used for your Ko-fi payment. Do not pay again.");
-    } catch (err) {
-      if (err instanceof HttpError && err.status === 401) onConnect();
-      else setError("Could not check your membership. Please try again; do not pay again.");
-    } finally { setBusy(null); }
-  };
 
   const beginTrial = useCallback(async () => {
     if (!isSignedIn) {
@@ -278,15 +261,11 @@ export function PaywallScreen({
           className={SHOW_TRIAL && trialAvailable && !expired ? "paywall-trial" : "paywall-primary"}
           entry="paywall"
           onEntitled={onEntitled}
+          showEmailHint
         >
           <BadgeCheck size={18} /> {translateUi(" Subscribe on Ko-fi ")}<ExternalLink size={15} />
         </MembershipCheckout>
-        {isSignedIn && accountEmail && <p className="paywall-account-email">{translateUi("ARVIO Cloud account")}<strong>{accountEmail}</strong></p>}
         <p className="paywall-disclaimer">{translateUi("Use the email on your ARVIO Cloud account at checkout, or link your billing email below. Membership does not include media or subscriptions to other services.")}</p>
-
-        <button type="button" className="paywall-trial" onClick={() => void checkAccess()} disabled={busy !== null}>
-          {busy === "check" ? <Loader2 className="paywall-spinner" size={16} /> : <RefreshCw size={16} />} {translateUi(" I have paid, check access")}</button>
-        <BillingEmailForm key={accountId} onEntitled={onEntitled} />
 
         {error && <p className="paywall-error">{translateUi(error ?? "")}</p>}
 

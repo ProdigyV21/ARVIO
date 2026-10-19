@@ -26,7 +26,7 @@ export function TopNav() {
   const [now, setNow] = useState(Date.now);
   const trialLabel = trialRemainingLabel(entitlement, now);
   const trialActive = trialLabel !== null;
-  const trialTitle = trialActive ? `${trialLabel}. Keep Premium after ${new Date(entitlement!.expiresAt!).toLocaleString()}` : "Keep Premium";
+  const trialTitle = trialActive ? `${trialLabel}. ${translateUi("Keep Premium - $2.99/month")}` : translateUi("Keep Premium - $2.99/month");
 
   useEffect(() => {
     setNow(Date.now());
@@ -77,10 +77,10 @@ export function TopNav() {
             <MembershipCheckout
               className="trial-membership-link"
               entry="trial_nav"
-              title={translateUi(trialTitle)}
+              title={trialTitle}
             >
               <BadgeCheck size={18} />
-              <span>{translateUi(trialLabel)}</span>
+              <span>{translateUi("Keep Premium")}</span>
             </MembershipCheckout>
           )}
           <button
@@ -108,7 +108,7 @@ export function TopNav() {
             <MembershipCheckout
               className="mobile-premium-link"
               entry="trial_mobile_nav"
-              title={translateUi(trialTitle)}
+              title={trialTitle}
             >
               <BadgeCheck size={20} />
             </MembershipCheckout>

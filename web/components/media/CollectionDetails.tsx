@@ -8,9 +8,7 @@ import { useApp } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { collectionMediaTypes } from '@/lib/collectionPresentation';
 import { createCollectionLoader } from '@/lib/collectionLoader';
-import { getCollectionPreview, getCardProviders, getLogoUrl } from '@/lib/tmdb';
-import { getImdbRating } from '@/lib/imdbRatings';
-import { IMDB_LOGO, serviceClearLogo } from '@/lib/serviceLogos';
+import { CollectionPreview } from './CollectionPreview';
 import type { CatalogConfig, MediaItem, MediaType } from '@/lib/types';
 import { MediaCard } from './MediaCard';
 
@@ -93,48 +91,10 @@ function CollectionContent({ catalog, type, types, setType, onBack, onOpen, lang
   }, [type, load]);
   const focus = useCallback((item: MediaItem) => { tabs.current[item.mediaType].focus = item; update(n => n + 1); }, []);
   const preview = tab.focus || tab.items[0];
-  const [hero, setHero] = useState<{ key: string; item: MediaItem; logo: string | null; rating: string | null; services: string[] } | null>(null);
-  const heroCache = useRef(new Map<string, NonNullable<typeof hero>>());
-  const previewKey = preview ? `${preview.mediaType}:${preview.id}` : '';
-  useEffect(() => {
-    if (!preview) return;
-    const cached = heroCache.current.get(`${language}:${previewKey}`);
-    if (cached) { setHero(cached); return; }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      const [details, logo, services] = await Promise.all([
-        getCollectionPreview(preview, language).catch(() => null),
-        getLogoUrl(preview).catch(() => null), getCardProviders(preview).catch(() => [])
-      ]);
-      const item = details || preview;
-      const serviceLogos = services.map(serviceClearLogo).filter((url): url is string => Boolean(url));
-      if (!cancelled) setHero({ key: previewKey, item, logo, rating: null, services: serviceLogos });
-      const rating = await getImdbRating(item.mediaType, item.imdbId).catch(() => null);
-      if (!cancelled) {
-        const result = { key: previewKey, item, logo, rating, services: serviceLogos };
-        if (heroCache.current.size >= 100) heroCache.current.delete(heroCache.current.keys().next().value!);
-        heroCache.current.set(`${language}:${previewKey}`, result);
-        setHero(result);
-      }
-    }, 120);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [previewKey, language]);
-  const metadata = hero?.key === previewKey ? hero : null;
-  const item = metadata?.item || preview;
-  const artwork = item?.backdrop || catalog.collectionHeroImageUrl;
-  const budget = item?.mediaType === 'movie' && item.budget && item.budget > 0 ? new Intl.NumberFormat(language, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(item.budget) : null;
   return <div className="collection-page-body">
-    {artwork && <div className="collection-page-backdrop" style={{ backgroundImage: `url(${JSON.stringify(artwork)})` }} />}
     <header className="collection-page-header"><button className="icon-button" type="button" title={t('Back')} aria-label={t('Back')} onClick={onBack}><ArrowLeft size={24} /></button><h1>{catalog.name}</h1></header>
-    <section className="collection-spotlight" aria-label={item?.title || catalog.name}>
-      <div className="collection-spotlight-title">{metadata?.logo ? <img src={metadata.logo} alt={item?.title} onError={() => setHero(h => h ? { ...h, logo: null } : null)} /> : <h2>{item?.title || catalog.name}</h2>}</div>
-      <div className="collection-spotlight-facts">
-        {metadata?.services.slice(0, 2).map(url => <img key={url} src={url} alt="" className="collection-service" />)}
-        {metadata?.rating ? <span className="collection-imdb"><img src={IMDB_LOGO} alt="IMDb" />{metadata.rating}</span> : item?.rating && <span>TMDB {item.rating}</span>}
-        {item?.year && <span>{item.year}</span>}{item?.duration && <span>{item.duration}</span>}{budget && <span>{t('Budget')} {budget}</span>}
-      </div>
-      <p>{item?.overview || catalog.collectionDescription}</p>
-    </section>
+    <CollectionPreview preview={preview} language={language} fallbackTitle={catalog.name}
+      fallbackOverview={catalog.collectionDescription} fallbackArtwork={catalog.collectionHeroImageUrl} />
     <div className="collection-tabs" role="tablist" aria-label={catalog.name}>{types.map(value => <button key={value} id={`collection-tab-${value}`} type="button" role="tab" aria-selected={type === value} aria-controls="collection-items"
       onClick={() => setType(value)} onKeyDown={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const next = types[(types.indexOf(value) + 1) % types.length]; setType(next); document.getElementById(`collection-tab-${next}`)?.focus(); } }}>{t(value === 'movie' ? 'Movies' : 'Series')}</button>)}</div>
     <div ref={viewport} id="collection-items" className="collection-grid-viewport" role="tabpanel" aria-labelledby={`collection-tab-${type}`} aria-busy={tab.loading}

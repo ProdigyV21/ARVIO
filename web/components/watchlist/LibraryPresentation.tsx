@@ -19,7 +19,7 @@ async function loadCoverItems(load: () => Promise<MediaItem[]>, active: () => bo
   }
 }
 
-export function LibraryGrid({ items, poster, onOpen, onNearEnd, positions, positionKey }: { positions: Map<string, number>; positionKey: string; items: MediaItem[]; poster: boolean; onOpen: (item: MediaItem) => void; onNearEnd?: () => void }) {
+export function LibraryGrid({ items, poster, onOpen, onNearEnd, onPreview, positions, positionKey }: { positions: Map<string, number>; positionKey: string; items: MediaItem[]; poster: boolean; onOpen: (item: MediaItem) => void; onNearEnd?: () => void; onPreview?: (item: MediaItem) => void }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1000);
   useLayoutEffect(() => {
@@ -32,6 +32,11 @@ export function LibraryGrid({ items, poster, onOpen, onNearEnd, positions, posit
   const columns = Math.max(2, Math.min(poster ? 8 : 4, Math.floor(width / (poster ? 145 : 245))));
   const cardWidth = (width - (columns - 1) * 20) / columns;
   const rowHeight = cardWidth * (poster ? 1.5 : 9 / 16) + 86;
+  const previewRef = useRef(onPreview); previewRef.current = onPreview;
+  useEffect(() => {
+    const item = items[Math.floor((viewport.current?.scrollTop ?? 0) / rowHeight) * columns];
+    if (item) previewRef.current?.(item);
+  }, [items, rowHeight, columns]);
   const virtual = useVirtualizer({ count: Math.ceil(items.length / columns), getScrollElement: () => viewport.current, estimateSize: () => rowHeight, initialOffset: positions.get(positionKey) ?? 0, overscan: 3 });
   useEffect(() => {
     const node = viewport.current;
@@ -40,7 +45,13 @@ export function LibraryGrid({ items, poster, onOpen, onNearEnd, positions, posit
   useEffect(() => virtual.measure(), [rowHeight, virtual]);
   const lastRow = virtual.getVirtualItems().at(-1)?.index ?? -1;
   useEffect(() => { if (lastRow >= 0 && (lastRow + 2) * columns >= items.length) onNearEnd?.(); }, [lastRow, columns, items.length, onNearEnd]);
-  return <div ref={viewport} className="oled-grid-viewport" onScroll={(event) => positions.set(positionKey, event.currentTarget.scrollTop)} onKeyDown={(event) => {
+  return <div ref={viewport} className="oled-grid-viewport" onScroll={(event) => {
+    positions.set(positionKey, event.currentTarget.scrollTop);
+    if (matchMedia('(hover: none)').matches) {
+      const item = items[Math.floor(event.currentTarget.scrollTop / rowHeight) * columns];
+      if (item) previewRef.current?.(item);
+    }
+  }} onKeyDown={(event) => {
     const cell = (event.target as HTMLElement).closest<HTMLElement>("[data-library-index]");
     if (!cell) return;
     const index = Number(cell.dataset.libraryIndex);
@@ -60,8 +71,8 @@ export function LibraryGrid({ items, poster, onOpen, onNearEnd, positions, posit
   }}>
     <div className="oled-virtual-grid" style={{ height: virtual.getTotalSize() }}>
       {virtual.getVirtualItems().map((row) => <div key={row.key} className="oled-grid-row" style={{ transform: `translateY(${row.start}px)`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-        {items.slice(row.index * columns, (row.index + 1) * columns).map((item, column) => <div key={`${item.homeServerId ?? item.mediaType}:${item.homeServerItemId ?? item.id}`} data-library-index={row.index * columns + column}>
-          <MediaCard item={item} posterMode={poster} onOpen={onOpen}/>
+        {items.slice(row.index * columns, (row.index + 1) * columns).map((item, column) => <div key={`${item.homeServerId ?? item.mediaType}:${item.homeServerItemId ?? item.id}`} data-library-index={row.index * columns + column} onMouseEnter={() => previewRef.current?.(item)}>
+          <MediaCard item={item} posterMode={poster} onOpen={onOpen} onFocus={onPreview}/>
         </div>)}
       </div>)}
     </div>

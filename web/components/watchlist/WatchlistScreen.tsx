@@ -5,6 +5,8 @@ import { useTranslation } from "@/lib/i18n";
 import { Bookmark, Film, LoaderCircle, RefreshCw, Search, Server, Tv, SlidersHorizontal, ArrowLeft, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MediaCard } from "@/components/media/MediaCard";
+import { CollectionPreview } from "@/components/media/CollectionPreview";
+import { mediaPreviewKey } from "@/lib/mediaPreview";
 import { CollectionCover, LibraryGrid, LibraryDialog } from "./LibraryPresentation";
 import { CalendarScreen } from "./CalendarScreen";
 import { LIBRARY_SORT_OPTIONS, compareLibraryItems } from "@/lib/librarySort";
@@ -245,6 +247,14 @@ export function WatchlistScreen() {
   const refresh = () => { if(tab === "watchlist") setRetry((value) => value + 1); else void loadLibrary(true); };
   const sourceOptions = section === "libraries" ? libraries.map((entry) => ({ value: entry.value, name: `${entry.serverName} / ${entry.libraryName}` }))
     : [{ value: "saved", name: translateUi("My watchlist") }, ...trackerSources.map((entry) => ({ value: `${entry.provider}:${entry.id}`, name: `${entry.provider === "trakt" ? "Trakt" : "Simkl"} / ${translateUi(entry.name)}` }))];
+  const previewScope = `${viewScope}:${section}:${sourceValue}:${openedList}:${sort}:${searchQuery}:${filter}`;
+  const [focusedPreview, setFocusedPreview] = useState<{ scope: string; key: string } | null>(null);
+  const preview = focusedPreview?.scope === previewScope
+    ? items.find(item => mediaPreviewKey(item) === focusedPreview.key) ?? items[0] : items[0];
+  const updatePreview = useCallback((item: MediaItem) => {
+    const key = mediaPreviewKey(item);
+    setFocusedPreview(current => current?.scope === previewScope && current.key === key ? current : { scope: previewScope, key });
+  }, [previewScope]);
   return (
     <div className={`screen oled-library ${section === "calendar" ? "oled-calendar-screen" : ""} ${posterMode ? "poster-results" : ""}`}>
       <header className="oled-library-toolbar">
@@ -267,12 +277,13 @@ export function WatchlistScreen() {
           </> : homeServers.map((server) => <div key={server.id}><p>{server.name}<small>{PROVIDER_LABELS[server.type]}</small></p>{libraries.filter((library) => library.serverId === server.id).map((library) => <button key={library.value} aria-current={selectedLibrary === library.value ? "true" : undefined} onClick={() => selectSource(library.value)}>{library.mediaType === "movie" ? <Film size={18}/> : <Tv size={18}/>}<span>{library.libraryName}</span></button>)}</div>)}
           {section === "libraries" && <button className="oled-connect" onClick={() => navigate("settings")}>{translateUi("+ Connect server")}</button>}
         </aside>}
-        <section className="oled-library-content" aria-label={collections ? translateUi("Personal lists") : activeList?.name || translateUi("Library titles")}>
+        <section className={`oled-library-content ${!collections && items.length ? 'has-preview' : ''}`} aria-label={collections ? translateUi("Personal lists") : activeList?.name || translateUi("Library titles")}>
+          {!collections && items.length > 0 && <CollectionPreview key={previewScope} preview={preview} language={settings.language} />}
           {collections ? <div className="oled-collections">{personalLists.filter((list) => list.name.toLowerCase().includes(searchQuery.toLowerCase())).map((list) => <CollectionCover key={list.id} title={list.name} provider={list.provider} load={() => list.catalog ? loadCatalogRow(list.catalog).then((row) => row?.items ?? []) : loadTraktListItems(list.id)} onOpen={() => { setOpenedList(list.id); setSearch(""); setSearchQuery(""); }} />)}{!personalLists.length && <div className="watchlist-empty"><p>{translateUi("No personal lists yet")}</p><span>{translateUi("Your custom catalogs and connected personal lists appear here.")}</span></div>}</div>
           : section === "libraries" && !libraries.length ? <div className="watchlist-empty"><Server size={36}/><p>{translateUi("No libraries connected")}</p><button onClick={() => navigate("settings")}>{translateUi("Connect a server")}</button></div>
           : loading && !items.length ? <div className="library-loading" aria-label={translateUi("Loading library")}><LoaderCircle size={32}/></div>
           : !items.length ? <div className="watchlist-empty"><Bookmark size={36}/><p>{libraryError ? translateUi("Library unavailable") : translateUi("No titles found")}</p>{libraryError ? <button onClick={refresh}>{translateUi("Retry")}</button> : <span>{translateUi("Choose another source or add titles to your watchlist.")}</span>}</div>
-          : <><LibraryGrid key={`${auth?.userId}:${activeProfile?.id}:${sourceValue}:${openedList}:${sort}:${searchQuery}:${filter}`} positions={viewportPositions} positionKey={`${viewScope}:${sourceValue}:${openedList}:${sort}:${searchQuery}:${filter}:${posterMode}`} items={items} poster={posterMode} onOpen={openDetails} onNearEnd={tab !== "watchlist" ? loadMore : undefined}/>
+          : <><LibraryGrid key={`${auth?.userId}:${activeProfile?.id}:${sourceValue}:${openedList}:${sort}:${searchQuery}:${filter}`} positions={viewportPositions} positionKey={`${viewScope}:${sourceValue}:${openedList}:${sort}:${searchQuery}:${filter}:${posterMode}`} items={items} poster={posterMode} onOpen={openDetails} onPreview={updatePreview} onNearEnd={tab !== "watchlist" ? loadMore : undefined}/>
             {libraryError && <div className="library-error" role="alert">{translateUi("Could not update this source. ")}<button onClick={refresh}>{translateUi("Retry")}</button></div>}
             {tab !== "watchlist" && <div ref={loadMoreRef} className="library-load-more">{loadingMore && <LoaderCircle size={24}/>}</div>}</>}
         </section>

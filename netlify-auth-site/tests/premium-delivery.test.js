@@ -60,7 +60,10 @@ test('genuine trial reminder still sends once and removes encrypted address', as
 
 test('repeated browser events do not create repeated Blob writes', async () => {
   const records = new Map(); let writes = 0;
-  const store = { get: async key => records.get(key), setJSON: async (key, value) => { writes++; records.set(key, value); } };
+  const store = { get: async key => records.get(key), setJSON: async (key, value, options) => {
+    if (options?.onlyIfNew && records.has(key)) return { modified: false };
+    writes++; records.set(key, value); return { modified: true };
+  } };
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(require.resolve('../netlify/functions/_premium-funnel'), 'utf8'), {
     module, exports: module.exports, Date, Map, Set,

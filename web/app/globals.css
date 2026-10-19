@@ -13131,6 +13131,27 @@ html { background: #000; }
 .collection-load-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90px; gap: 12px; padding-bottom: 20px; }
 .collection-load-state > span, .collection-load-state button { display: flex; align-items: center; gap: 8px; }
 .collection-load-state button { min-height: 44px; padding: 10px 18px; border-radius: 6px; }
+/* Library and Collections share the same persistent preview and continuous artwork. */
+.oled-library-content.has-preview { position:relative; isolation:isolate; display:flex; flex-direction:column; height:calc(100dvh - 184px); min-height:0; }
+.oled-library-content.has-preview .collection-spotlight { flex-basis:230px; padding:16px 6px 18px; max-width:750px; }
+.oled-library-content.has-preview .collection-page-backdrop { height:min(620px,100%); }
+.oled-library-content.has-preview .collection-page-backdrop::after {
+  background:linear-gradient(90deg, #000 0%, #000 25%, #000000e0 40%, #00000073 65%, transparent 92%, #000 100%),
+    linear-gradient(180deg, #000 0%, #00000059 12%, transparent 25%, #0000002e 55%, #000000b8 78%, #000 100%);
+}
+.oled-library-content.has-preview .oled-grid-viewport { height:auto; min-height:0; flex:1; }
+@media(max-width:650px) {
+  .oled-library-content.has-preview { height:calc(100dvh - 280px); }
+  .oled-library-content.has-preview .collection-spotlight { flex-basis:195px; padding:12px 3px 12px; }
+  .oled-library-content.has-preview .collection-spotlight-title { height:58px; }
+  .oled-library-content.has-preview .collection-spotlight-title img { max-height:54px; }
+}
+@media(max-height:700px) {
+  .oled-library-content.has-preview .collection-spotlight { flex-basis:155px; padding-bottom:8px; }
+  .oled-library-content.has-preview .collection-spotlight-title { height:44px; }
+  .oled-library-content.has-preview .collection-spotlight-title img { max-height:42px; }
+  .oled-library-content.has-preview .collection-spotlight p { -webkit-line-clamp:2; margin-top:6px; }
+}
 @media (max-width: 600px) {
   .collection-page-body { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
   .collection-page-header { min-height: 52px; gap: 6px; }

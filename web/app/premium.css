@@ -1,6 +1,12 @@
 /* Shared OLED surfaces: restrained selection, stable dimensions, visible focus. */
 .membership-checkout { position: fixed; inset: 0; margin: auto; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 28px; border: 1px solid #444; border-radius: 16px; background: #151515; color: #f5f5f5; box-shadow: 0 24px 90px #0008; text-align: left; }
 .membership-checkout::backdrop { background: #000b; }
+.membership-inline-hint { flex-basis: 100%; min-width: 0; color: #aaa; font-size: 12px; text-align: center; }
+.membership-inline-hint p { margin: 8px 0 4px; line-height: 1.5; }
+.membership-inline-hint strong { display: block; color: #ddd; overflow-wrap: anywhere; font-weight: 500; }
+.membership-inline-hint .paywall-link-toggle { margin: 4px 0; }
+.membership-return-link { display: flex; align-items: center; justify-content: center; gap: 6px; color: #bbb; font-size: 13px; margin-top: 18px; padding: 8px; }
+.membership-return-link:hover { color: #fff; }
 .membership-checkout h2 { font-size: 23px; padding-right: 24px; margin-bottom: 16px; }
 .membership-checkout p { color: #bbb; font-size: 14px; line-height: 1.6; margin: 16px 0; overflow-wrap: anywhere; }
 .membership-checkout [role="status"] { display: flex; gap: 8px; align-items: center; }
