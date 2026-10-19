@@ -129,11 +129,42 @@ const assert = require('node:assert/strict');
       assert.equal(await page.evaluate(() => window.__premiumFixture.statusRequests), 9, 'manual reopen and new return restart exhausted four-check cycles; paid access stops checking');
       passed++;
     };
+    const accountBoundaryScenario = async () => {
+      await go('checkout');
+      await page.evaluate(() => { window.__premiumFixture.deferNextStatus = true; });
+      await page.getByRole('button', { name: 'Already paid? Check access', exact: true }).click();
+      await waitEvent('checkout_recovery_opened');
+      await page.waitForFunction(() => window.__premiumFixture.statusRequests === 1);
+      await page.evaluate(() => { window.__premiumFixture.setAccount('second-fixture'); });
+      await page.getByRole('dialog').waitFor({ state: 'detached' });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal((await events('checkout_recovery_opened')).length, 1, 'switching accounts does not invent a recovery opening for the new account');
+      assert.equal(await page.evaluate(() => window.__premiumFixture.statusRequests), 1, 'old open state does not initiate a new-account recovery request');
+      assert.equal((await events('checkout_opened')).length, 0, 'account switch is not a payment handoff');
+      assert.equal((await events('checkout_returned')).length, 0, 'account switch is not a checkout return');
+      await page.evaluate(() => { window.__premiumFixture.completeStatusAsPaid(); });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.match(await page.getByTestId('activation-result').innerText(), /No paid/, 'late old-account payment response cannot activate the new account');
+      assert.equal((await events('payment_status_checked')).length, 0, 'late old-account response does not emit a new-account payment result');
+      assert.equal(await page.evaluate(() => window.__premiumFixture.statusRequests), 1);
+      assert.match(await page.locator('body').innerText(), /second-fixture@example\.test/);
+      const newAccountOffer = page.getByRole('link', { name: /Keep Premium/ });
+      await newAccountOffer.waitFor();
+      await handoff(newAccountOffer);
+      assert.equal((await events('checkout_opened')).length, 1, 'new account gets its own fresh native payment CTA');
+      await page.getByRole('dialog', { name: 'Finish your membership' }).waitFor();
+      assert.equal((await events('checkout_recovery_opened')).length, 2, 'only the new account actual click opens its recovery dialog');
+      assert.match(await page.getByTestId('activation-result').innerText(), /No paid/);
+      passed++;
+    };
     // A bounded subset is useful while reviewing recovery-only changes. The
     // default command always exercises the complete UI suite below.
-    if (process.env.PAYMENT_UI_ONLY === 'focus-order' || process.env.PAYMENT_UI_ONLY === 'recovery-regressions') {
-      await focusOrderScenario();
-      if (process.env.PAYMENT_UI_ONLY === 'recovery-regressions') await exhaustedCycleScenario();
+    if (['focus-order', 'recovery-regressions', 'account-boundary'].includes(process.env.PAYMENT_UI_ONLY)) {
+      if (process.env.PAYMENT_UI_ONLY === 'account-boundary') await accountBoundaryScenario();
+      else {
+        await focusOrderScenario();
+        if (process.env.PAYMENT_UI_ONLY === 'recovery-regressions') await exhaustedCycleScenario();
+      }
       assert.deepEqual(errors, []);
       console.log(`Payment recovery UI passed ${passed} targeted scenarios (${process.env.PAYMENT_UI_ONLY}); external network, emails and real payments blocked.`);
       return;
@@ -223,6 +254,7 @@ const assert = require('node:assert/strict');
 
     await focusOrderScenario();
     await exhaustedCycleScenario();
+    await accountBoundaryScenario();
 
     // The recovery path still requires proof of ownership, not just knowing a
     // billing address. All requests remain in the fixture transport.

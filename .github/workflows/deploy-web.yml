@@ -44,7 +44,8 @@ jobs:
         run: npm ci
 
       - name: Run web regression tests
-        run: npm test
+        # Run the same complete test set without competing test processes.
+        run: node --test --test-concurrency=1 tests/*.test.cjs
 
       - name: Install payment backend dependencies
         working-directory: netlify-auth-site

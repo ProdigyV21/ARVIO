@@ -11,10 +11,19 @@ import { BillingEmailForm } from "./BillingEmailForm";
 
 const flow = { flow_version: "direct_v2" };
 
-export function MembershipCheckout({ children, className, entry, title, onEntitled, showEmailHint = false }: {
+type MembershipCheckoutProps = {
   children: React.ReactNode; className?: string; entry: string; title?: string;
   onEntitled?: (state: EntitlementState) => void; showEmailHint?: boolean;
-}) {
+};
+
+export function MembershipCheckout(props: MembershipCheckoutProps) {
+  const { auth } = useApp();
+  // Reset synchronously on identity changes. An effect-only reset would let
+  // the previous account's open dialog emit events for the next account first.
+  return <MembershipCheckoutSession key={auth?.userId ?? "signed-out"} {...props} />;
+}
+
+function MembershipCheckoutSession({ children, className, entry, title, onEntitled, showEmailHint = false }: MembershipCheckoutProps) {
   const translateUi = useTranslation();
   const { auth, goToLogin } = useApp();
   const [open, setOpen] = useState(false);
