@@ -469,14 +469,22 @@ fun DetailsScreen(
     val currentUiState = rememberUpdatedState(uiState)
     val currentEpisodeIndex = rememberUpdatedState(episodeIndex)
     val currentSelectedEpisodeIdentity = rememberUpdatedState(selectedEpisodeIdentity)
+    // The episode card the user tapped, kept as an object. The phone layout
+    // draws a season from its own per-season cache while uiState.episodes may still hold another
+    // season (e.g. season 1 right after reopening the page), so an index or identity lookup in
+    // uiState.episodes alone resolved taps to the wrong episode — usually S1E1.
+    var tappedEpisode by remember { mutableStateOf<Episode?>(null) }
+    val currentTappedEpisode = rememberUpdatedState(tappedEpisode)
+    fun selectedEpisodeIn(state: DetailsUiState, identity: EpisodeIdentity?): Episode? =
+        if (identity == null) null
+        else state.episodes.firstOrNull { it.identity == identity }
+            ?: currentTappedEpisode.value?.takeIf { it.identity == identity }
 
     val onButtonClickRemembered = remember(isMobile, mediaType, mediaId) {
         { idx: Int ->
             val state = currentUiState.value
             val currentEpIdx = currentEpisodeIndex.value
-            val selectedEp = state.episodes.firstOrNull {
-                it.identity == currentSelectedEpisodeIdentity.value
-            }
+            val selectedEp = selectedEpisodeIn(state, currentSelectedEpisodeIdentity.value)
             when (idx) {
                 0 -> { // Play
                     val season = if (mediaType == MediaType.TV) {
@@ -562,12 +570,13 @@ fun DetailsScreen(
         }
     }
 
-    val onEpisodeClickRemembered = remember(isMobile, mediaType, mediaId) {
-        { idx: Int ->
+    val onEpisodeItemClickRemembered: (Episode) -> Unit = remember(isMobile, mediaType, mediaId) {
+        { ep: Episode ->
             val state = currentUiState.value
-            val ep = state.episodes.getOrNull(idx)
-            if (ep != null) {
-                episodeIndex = idx
+            tappedEpisode = ep
+            val idx = state.episodes.indexOfFirst { it.identity == ep.identity }
+            run {
+                if (idx >= 0) episodeIndex = idx
                 if (isMobile && currentSelectedEpisodeIdentity.value != ep.identity) {
                     selectedEpisodeIdentity = ep.identity
                 } else if (isMobile || !state.autoPlaySingleSource) {
@@ -582,6 +591,12 @@ fun DetailsScreen(
                     )
                 }
             }
+        }
+    }
+    val onEpisodeClickRemembered: (Int) -> Unit = remember(onEpisodeItemClickRemembered) {
+        { idx: Int ->
+            currentUiState.value.episodes.getOrNull(idx)?.let { onEpisodeItemClickRemembered(it) }
+            Unit
         }
     }
 
@@ -905,9 +920,7 @@ fun DetailsScreen(
                 )
             } else {
                 uiState.item?.let { item ->
-                    val selectedEpisode = uiState.episodes.firstOrNull {
-                        it.identity == selectedEpisodeIdentity
-                    }
+                    val selectedEpisode = selectedEpisodeIn(uiState, selectedEpisodeIdentity)
                     val selectedProgress = selectedEpisode?.let {
                         uiState.episodePlaybackProgress[it.identity]
                     }
@@ -965,6 +978,7 @@ fun DetailsScreen(
                         onSeasonClick = onSeasonClickRemembered,
                         onSeasonLongClick = onSeasonLongClickRemembered,
                         onEpisodeClick = onEpisodeClickRemembered,
+                        onEpisodeItemClick = onEpisodeItemClickRemembered,
                         onCastClick = onCastClickRemembered,
                         onSimilarClick = onSimilarClickRemembered,
                         onCollectionClick = onCollectionClickRemembered
@@ -1191,6 +1205,7 @@ private fun DetailsContent(
     onSeasonClick: (Int) -> Unit = {},
     onSeasonLongClick: ((Int) -> Unit)? = null,
     onEpisodeClick: (Int) -> Unit = {},
+    onEpisodeItemClick: ((Episode) -> Unit)? = null,
     onCastClick: (Int) -> Unit = {},
     spoilerBlurEnabled: Boolean = false,
     onSimilarClick: (Int) -> Unit = {},
@@ -1719,7 +1734,9 @@ private fun DetailsContent(
                                                 isSelected = episode.identity == selectedEpisodeIdentity,
                                                 isFocused = false,
                                                 spoilerBlurEnabled = spoilerBlurEnabled,
-                                                onClick = { onEpisodeClick(index) }
+                                                onClick = {
+                                                    onEpisodeItemClick?.invoke(episode) ?: onEpisodeClick(index)
+                                                }
                                             )
                                         }
                                     }

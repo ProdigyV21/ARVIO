@@ -4344,6 +4344,11 @@ class StreamRepository @Inject constructor(
     /**
      * Resolve a single stream for playback - with timeout to prevent hanging forever
      */
+    /** Drops the cached playback resolution of [stream] (its link failed). */
+    fun forgetResolvedStream(stream: StreamSource) {
+        resolvedStreamCache.remove(resolvedStreamCacheKey(stream))
+    }
+
     suspend fun resolveStreamForPlayback(stream: StreamSource): StreamSource? = withContext(Dispatchers.IO) {
         cachedResolvedStream(stream)?.let { return@withContext it }
         try {

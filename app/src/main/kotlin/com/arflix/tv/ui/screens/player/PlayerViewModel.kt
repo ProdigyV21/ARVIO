@@ -364,6 +364,46 @@ class PlayerViewModel @Inject constructor(
     // True only when the user explicitly picked a subtitle track from the menu (not AI/auto-match).
     // A late-arriving embedded preferred-language track overrides auto selections but never this.
     private var userPickedSubtitle: Boolean = false
+    // The track the user explicitly chose from the menu (base id), held until they choose again,
+    // turn subtitles off, start a "Find best match" themselves, or the video changes. No automatic
+    // path (scan verdict, remembered match, late addon pick, AI source re-resolve) may swap it for
+    // another track, and AI translation translates this exact track.
+    private var userLockedSubtitleId: String? = null
+
+    init {
+        // Last line of defence for the lock above: several paths (scan verdicts, restores, the
+        // preferred-language auto-selection) write selectedSubtitle directly instead of going
+        // through selectSubtitle. Whatever path it was, a different track replacing the user's own
+        // pick is put back at once.
+        viewModelScope.launch {
+            _uiState.collect { st -> enforceUserSubtitleLock(st) }
+        }
+    }
+
+    private fun enforceUserSubtitleLock(st: PlayerUiState) {
+        val locked = userLockedSubtitleId ?: return
+        val sel = st.selectedSubtitle ?: return
+        if (sel.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX) == locked) return
+        if (st.isLiveAudioTranslating) return
+        val mine = st.subtitles.firstOrNull { it.id == locked } ?: return
+        if (st.isAiTranslating && mine.isBitmap) return
+        Log.w("SubMatch", "lock: \"${sel.label}\" (${sel.provider}) replaced the user's \"${mine.label}\" - restoring it")
+        if (st.isAiTranslating) {
+            aiSourceSubtitle = mine
+            translationManager.reset()
+        }
+        _uiState.value = st.copy(
+            selectedSubtitle = mine,
+            subtitleSelectionNonce = st.subtitleSelectionNonce + 1
+        )
+    }
+
+    /** The user's locked track when it can be an AI translation source. */
+    private fun lockedTextSubtitle(): Subtitle? {
+        val id = userLockedSubtitleId ?: return null
+        return _uiState.value.subtitles.firstOrNull { it.id == id && !it.isBitmap }
+            ?: _uiState.value.selectedSubtitle?.takeIf { it.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX) == id && !it.isBitmap }
+    }
     private var playbackSessionStartTime: Long = 0L
     private val recentSourcePlayTracker = RecentSourcePlayTracker()
     private var recentSourceLoad: Deferred<RecentPlayedSource?>? = null
@@ -774,6 +814,7 @@ class PlayerViewModel @Inject constructor(
         resetPlaybackClock()
         hasManualSubtitleSelection = false
         userPickedSubtitle = false
+        userLockedSubtitleId = null
         autoMatchAttempted = false
         aiSourceSubtitle = null
         val cachedItem = mediaRepository.getCachedItem(mediaType, mediaId)
@@ -3167,6 +3208,7 @@ class PlayerViewModel @Inject constructor(
             resetPlaybackClock()
             hasManualSubtitleSelection = false
             userPickedSubtitle = false
+            userLockedSubtitleId = null
             autoMatchAttempted = false
             aiSourceSubtitle = null
             untranslatableSourceIds.clear()
@@ -3396,6 +3438,10 @@ class PlayerViewModel @Inject constructor(
                 null
             }
 
+            // Embedded tracks are re-indexed as they resolve: the lock follows the user's track.
+            if (selected != null && resolvedSelected != null && resolvedSelected.id != selected.id &&
+                userLockedSubtitleId == selected.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
+            ) userLockedSubtitleId = resolvedSelected.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
             _uiState.value = _uiState.value.copy(
                 subtitles = finalList,
                 selectedSubtitle = resolvedSelected
@@ -3472,8 +3518,14 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun selectSubtitle(subtitle: Subtitle, isUserAction: Boolean = true) {
+        val locked = userLockedSubtitleId
+        if (!isUserAction && locked != null && subtitle.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX) != locked) {
+            Log.i("SubMatch", "automatic pick \"${subtitle.label}\" ignored: the user chose another track")
+            return
+        }
+        if (isUserAction) userLockedSubtitleId = subtitle.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
         hasManualSubtitleSelection = true
-        userPickedSubtitle = isUserAction
+        userPickedSubtitle = isUserAction || locked != null
         if (isUserAction) {
             // The user's own pick — the ground truth a scan verdict is judged against.
             Log.i(
@@ -3823,6 +3875,11 @@ class PlayerViewModel @Inject constructor(
      * found, fall back to the AI translation option when one is available.
      */
     fun runFindBestMatch(isUserAction: Boolean = true) {
+        if (!isUserAction && userLockedSubtitleId != null) {
+            Log.i("SubMatch", "auto scan skipped: the user chose a subtitle track")
+            return
+        }
+        if (isUserAction) userLockedSubtitleId = null
         // The timing-based scan is AI-independent — no aiSubtitleEnabled gate. Only the optional
         // AI interim below and the hearing fallback (gated at the scoring dispatch) need AI.
         // A user-triggered rescan means the current (possibly remembered) pick is unwanted —
@@ -3921,13 +3978,16 @@ class PlayerViewModel @Inject constructor(
         // Re-resolve the source on every activation: an early activation (before embedded tracks
         // resolve) may have cached an external fallback source, and translation inherits the
         // source's timing — keep the cached one only when nothing better is available now.
-        val source = findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle ?: return
+        // A text track the user chose stays the source: translation never switches tracks behind
+        // their back.
+        val lockedSource = lockedTextSubtitle()
+        val source = lockedSource ?: findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle ?: return
         aiSourceSubtitle = source
         cancelSubtitleLocalization()
         hasManualSubtitleSelection = true
         // AI activation is not a specific user track pick — a late embedded preferred-language
-        // track may still displace it.
-        userPickedSubtitle = false
+        // track may still displace it (unless it translates the user's own pick).
+        userPickedSubtitle = lockedSource != null
         // The silent-scan path never populates aiTargetLanguageName (it's set only when a source
         // existed at scan start) — resolve from the preferred-language code so a late activation
         // doesn't hand the manager a BLANK target (which silently translates to nothing).
@@ -7384,6 +7444,7 @@ class PlayerViewModel @Inject constructor(
         // hearing scan (it also disconnects the Gemini Live audio stream). Without this, the scan
         // kept running with no way to cancel it. Mirrors selectSubtitle()'s user-action path.
         userPickedSubtitle = true
+        userLockedSubtitleId = null
         cancelFindBestMatch("subtitles disabled")
         subtitleSelectionJob?.cancel()
         cancelSubtitleLocalization()
@@ -7671,10 +7732,40 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    /** Set by [refetchSameSourceFresh]: the source to pick again from a freshly fetched list. */
+    private var refetchRecent: RecentPlayedSource? = null
+    private var refetchedSourceKey: String? = null
+
+    /**
+     * The selected source failed before its first frame with a network / HTTP error — typically an
+     * expired link from a source list saved before the app was closed. Re-fetches the source list
+     * (bypassing the resolved-link cache) and autoplays the same source, matched by torrent hash /
+     * file name / title and never by the stale URL, resuming at the same position. Once per source.
+     */
+    fun refetchSameSourceFresh(): Boolean {
+        val stream = _uiState.value.selectedStream ?: return false
+        val key = "$currentMediaType:$currentMediaId:$currentSeason:$currentEpisode:${stream.addonId}:${stream.infoHash ?: stream.source}"
+        if (key == refetchedSourceKey) return false // already re-fetched once: let failover proceed
+        refetchedSourceKey = key
+        streamRepository.forgetResolvedStream(stream)
+        refetchRecent = RecentPlayedSource.of(
+            currentMediaType, currentMediaId, currentSeason, currentEpisode, stream, System.currentTimeMillis()
+        ).copy(url = null)
+        Log.i("PlayerViewModel", "re-fetching sources to replay \"${stream.source.take(60)}\" with a fresh link")
+        reloadStreams()
+        return true
+    }
+
     private fun loadRecentSource(mediaType: MediaType, mediaId: Int, season: Int?, episode: Int?) {
         recentSourcePlayTracker.reset()
         recentSourceGate.disarm()
         preparedStream = null
+        val forced = refetchRecent?.takeIf { it.appliesTo(mediaType, mediaId, season, episode) }
+        refetchRecent = null
+        if (forced != null) {
+            recentSourceLoad = kotlinx.coroutines.CompletableDeferred(forced)
+            return
+        }
         recentSourceLoad = viewModelScope.async {
             val recent = recentPlayedSourceRepository.get(mediaType, mediaId, season, episode)
             val stillCurrent = currentMediaType == mediaType && currentMediaId == mediaId &&
