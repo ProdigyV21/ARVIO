@@ -213,11 +213,10 @@ private class TranslatingTextOutput(
     private val scope: CoroutineScope
 ) : TextOutput {
 
-    private val handler = Handler(outputLooper)
     @Volatile private var lastCueGroup: CueGroup? = null
+    private val publisher = com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualCuePublisher(manager, scope)
     var onFirstCueOnPlaybackThread: (() -> Unit)? = null
     private var hasFiredFirstCue = false
-    private var cueSerial = 0
 
     override fun onCues(cueGroup: CueGroup) {
         val cues = cueGroup.cues
@@ -242,6 +241,7 @@ private class TranslatingTextOutput(
         if (cues.isEmpty()) {
             // Genuine end-of-subtitle marker — update so pending translations know display cleared.
             lastCueGroup = cueGroup
+            publisher.clear(cueGroup.presentationTimeUs)
             delegate.onCues(cueGroup)
             return
         }
@@ -256,41 +256,30 @@ private class TranslatingTextOutput(
             // language and looking like "AI returned English".
             manager.onUntranslatableSource?.invoke()
             lastCueGroup = cueGroup
+            publisher.clear(cueGroup.presentationTimeUs)
             delegate.onCues(cueGroup)
             return
         }
         val text = if (manager.removeHearingImpaired) stripHearingImpaired(rawText) else rawText
         if (text.isBlank()) {
-            // SDH sound-effect-only cue (e.g. "[CROWD CHEERING]") — hide it but do NOT update
-            // lastCueGroup. Updating here would invalidate any in-flight dialogue translation
-            // that arrived just before this sound-effect cue, causing the translated text to be
-            // silently discarded and the user to see English instead of Hebrew on every line.
+            // SDH sound-effect-only cue (e.g. "[CROWD CHEERING]") — nothing to show. The
+            // bilingual layer follows the source timeline strictly, so the previous dialogue
+            // (and any translation still in flight for it) leaves the screen here.
+            lastCueGroup = cueGroup
+            publisher.clear(cueGroup.presentationTimeUs)
             delegate.onCues(CueGroup(emptyList(), cueGroup.presentationTimeUs))
             return
         }
 
-        // Real translatable dialogue cue — update lastCueGroup so any stale in-flight
-        // translation from the previous cue is correctly discarded.
+        // ── Bilingual subtitles ──────────────────────────────────────────────
+        // Bilingual subtitles are drawn by the Compose BilingualSubtitleOverlay (two
+        // independently styled text layers), not by Media3's SubtitleView: hand SubtitleView an
+        // empty group and publish the primary text; its second language comes from the AI
+        // translation (path B) or the aligned second embedded track (path A). Both languages
+        // share this single cue event, so they follow exactly the primary's timeline.
         lastCueGroup = cueGroup
-        val serial = ++cueSerial
-        val cached = manager.getCached(text)
-        if (cached != null) {
-            delegate.onCues(buildTranslated(cueGroup, cues, cached))
-            return
-        }
-
-        // Hide cues while translating, then post translated result back on the output looper.
-        // The lastCueGroup guard prevents a stale translation from overwriting a newer cue.
         delegate.onCues(CueGroup(emptyList(), cueGroup.presentationTimeUs))
-        val captured = cueGroup
-        scope.launch {
-            val translated = manager.translate(text)
-            handler.post {
-                if (lastCueGroup === captured) {
-                    delegate.onCues(buildTranslated(captured, captured.cues, translated))
-                }
-            }
-        }
+        publisher.publish(text, cueGroup.presentationTimeUs)
     }
 
     @Deprecated("Uses the deprecated Media3 callback.")
@@ -310,24 +299,9 @@ private class TranslatingTextOutput(
             delegate.onCues(emptyList())
             return
         }
-        // Cache-only path — full async translation is driven by onCues(CueGroup).
-        // If translation is in-flight, hide cues so this call doesn't race and show English
-        // while onCues(CueGroup) is waiting for the async result.
-        val cached = manager.getCached(text)
-        when {
-            cached != null -> delegate.onCues(applyTranslatedLinesToCues(cues, cached))
-            manager.isInFlight(text) -> delegate.onCues(emptyList())
-            // Hide, never pass the source language through. Media3's TextRenderer invokes BOTH
-            // callbacks for the same cue — this deprecated one first, then onCues(CueGroup) about
-            // 2 ms later (From S02E04, Sept 2026: "Wait a second…" logged at .951 here and .953
-            // there). Passing the originals through therefore painted English on screen for every
-            // line that was not already cached, a moment before the modern path hid it and
-            // requested the translation. That flash is the "AI translated but I saw English"
-            // report. Hiding costs nothing: the CueGroup path owns translation and will deliver
-            // the translated cue — and if it somehow does not, a blank is the same outcome the
-            // in-flight branch above already accepts.
-            else -> delegate.onCues(emptyList())
-        }
+        // The CueGroup path owns the bilingual overlay; SubtitleView shows nothing for text
+        // cues while AI translation is active (no flash of untranslated text either).
+        delegate.onCues(emptyList())
     }
 
     // Raw joined cue text before any hearing-impaired stripping. Blank when cues carry no
@@ -352,36 +326,6 @@ private class TranslatingTextOutput(
         }
     }
 
-    private fun buildTranslated(group: CueGroup, originalCues: List<Cue>, translatedText: String): CueGroup =
-        CueGroup(applyTranslatedLinesToCues(originalCues, translatedText), group.presentationTimeUs)
-
-    /**
-     * Maps translated lines back to cues, respecting how many lines each original cue had.
-     * A multi-line cue (text with \n) receives the corresponding translated lines so the full
-     * translated text is preserved rather than only the first line being applied per cue.
-     * RTL text is wrapped with RTL marks so Android's bidi algorithm places trailing
-     * punctuation on the correct side.
-     */
-    private fun applyTranslatedLinesToCues(originalCues: List<Cue>, translatedText: String): List<Cue> {
-        val translatedLines = translatedText.split("\n")
-        var lineIndex = 0
-        return originalCues.map { cue ->
-            val originalLineCount = (cue.text?.toString() ?: "").split("\n").size
-            val end = (lineIndex + originalLineCount).coerceAtMost(translatedLines.size)
-            val cueText = if (lineIndex < translatedLines.size) {
-                translatedLines.subList(lineIndex, end).joinToString("\n")
-            } else {
-                cue.text?.toString() ?: ""
-            }
-            lineIndex += originalLineCount
-            val rtlAware = if (cueText.any { ch ->
-                val dir = Character.getDirectionality(ch)
-                dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
-                    dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
-            }) "‏$cueText‏" else cueText
-            cue.buildUpon().setText(android.text.SpannableString(rtlAware)).build()
-        }
-    }
 }
 
 /**
@@ -442,7 +386,7 @@ private class SubtitleOffsetRenderer(
     }
 
     private fun tryPeriodicLookahead() {
-        if (!translationManager.isEnabled) return
+        if (!translationManager.translationNeeded) return
         val now = System.currentTimeMillis()
         val isFreshSeek = pendingSeek
         // Periodic check every 5 s; seeks always proceed immediately
@@ -467,7 +411,7 @@ private class SubtitleOffsetRenderer(
         // No AI translation active → no lookahead. tryPeriodicLookahead already checks this;
         // this first-cue trigger fires for any newly selected track (e.g. the reference track
         // "find best match" selects with AI off) and must not spend API requests either.
-        if (!translationManager.isEnabled) return
+        if (!translationManager.translationNeeded) return
         if (preTranslatedUpToUs != Long.MIN_VALUE &&
             preTranslatedUpToUs > currentPositionUs + PREFETCH_TRIGGER_US) {
             return

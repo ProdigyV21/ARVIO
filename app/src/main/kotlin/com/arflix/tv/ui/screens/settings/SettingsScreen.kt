@@ -5817,6 +5817,9 @@ private fun MobileSettingsSubPage(
                 }
             }
             "Audio & Subtitles" -> {
+                // Bilingual subtitles: style of the AI translation / two-language subtitles
+                // (separate from the Secondary Subtitle setting).
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSettingsEntry()
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_subtitles)) {
                     MobileSettingsRow(
                         icon = Icons.Default.Subtitles,
