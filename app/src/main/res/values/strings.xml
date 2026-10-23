@@ -1922,5 +1922,14 @@
     <string name="profile_parent_pin_set">Set a parent PIN for this kids profile</string>
     <string name="profile_parent_pin_enter">Parent PIN</string>
     <string name="profile_parent_pin_hint">4-5 digits. Needed to change or delete this kids profile, not to watch.</string>
+    <!-- Playback cache (on-disk cache of streamed video for instant rewinds) -->
+    <string name="settings_section_playback_cache">PLAYBACK CACHE</string>
+    <string name="playback_cache_size">Playback Cache Size</string>
+    <string name="playback_cache_size_desc">Already-watched video kept on this device, so rewinding plays from storage instead of downloading again. Used: %1$s</string>
+    <string name="playback_cache_limited">%1$s (free space)</string>
+    <string name="clear_playback_cache">Clear Playback Cache</string>
+    <string name="clear_playback_cache_desc">Delete all cached video data. Anything playing simply downloads again.</string>
+    <string name="playback_cache_cleared">Playback cache cleared</string>
+    <string name="settings_help_playback_cache_desc">Streamed video is kept on this device up to this size, so rewinding to any part already watched is instant. It never grows beyond the free space and always leaves 1 GB free.</string>
 </resources>
 

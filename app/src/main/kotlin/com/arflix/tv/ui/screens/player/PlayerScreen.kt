@@ -144,10 +144,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
-import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
-import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -1051,7 +1048,7 @@ fun PlayerScreen(
             .setUserAgent(OkHttpProvider.userAgent)
             .setDefaultRequestProperties(baseRequestHeaders)
     }
-    val mediaCache = remember(context) { PlaybackCacheSingleton.getInstance(context) }
+    val mediaCache = remember(context) { com.arflix.tv.player.cache.PlaybackCache.get(context) }
     // Wrap the OkHttp factory so file:// URIs also work — matched subtitles are served from a
     // local cache file (already downloaded by the scan) instead of re-fetching addon servers.
     // http/https still routes through the same OkHttp client as before.
@@ -1191,7 +1188,8 @@ fun PlayerScreen(
             )
             .setTargetBufferBytes(playbackBufferProfile.targetBufferBytes)
             .setPrioritizeTimeOverSizeThresholds(playbackBufferProfile.prioritizeTimeOverSizeThresholds)
-            .setBackBuffer(playbackBufferProfile.backBufferMs, false)
+            // retainBackBufferFromKeyframe: a seek back can start decoding right away.
+            .setBackBuffer(playbackBufferProfile.backBufferMs, true)
             .build()
 
         ExoPlayer.Builder(context)
@@ -6764,10 +6762,15 @@ private fun buildPlaybackBufferProfile(
         heapMb <= 512 -> 6_500
         else -> 8_000
     }
+    // Keep what was just played in memory so a short rewind (the 10 s skip-back, a quick seek
+    // back) stays inside the buffer instead of re-opening the stream. It counts against
+    // targetBufferBytes, so on size-limited devices it trades forward buffer, never extra RAM;
+    // longer rewinds are served from the on-disk playback cache (player/cache/PlaybackCache).
     val backBufferMs = when {
-        isLowRamDevice || heapMb <= 256 -> 2_000
-        heapMb <= 384 -> 3_000
-        else -> 5_000
+        isLowRamDevice || heapMb <= 256 -> 10_000
+        heapMb <= 384 -> 15_000
+        heapMb <= 768 -> 30_000
+        else -> 20_000 // time-prioritised: the back buffer is not capped by bytes there
     }
 
     return PlaybackBufferProfile(
@@ -7022,23 +7025,6 @@ private const val PLAYER_SCREEN_DIAGNOSTICS = true
 private fun playbackStartupDiag(message: String) {
     if (PLAYER_SCREEN_DIAGNOSTICS) {
         System.err.println("[PlaybackStartup] $message")
-    }
-}
-
-private object PlaybackCacheSingleton {
-    @Volatile
-    private var instance: SimpleCache? = null
-
-    fun getInstance(context: android.content.Context): SimpleCache {
-        return instance ?: synchronized(this) {
-            instance ?: run {
-                val cacheDir = java.io.File(context.applicationContext.cacheDir, "media3_playback_cache").apply { mkdirs() }
-                val evictor = LeastRecentlyUsedCacheEvictor(256L * 1024L * 1024L)
-                SimpleCache(cacheDir, evictor, StandaloneDatabaseProvider(context.applicationContext)).also {
-                    instance = it
-                }
-            }
-        }
     }
 }
 

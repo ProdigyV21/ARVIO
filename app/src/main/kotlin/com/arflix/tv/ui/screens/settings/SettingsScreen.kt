@@ -330,7 +330,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27)
+        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27, 51, 52)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -1473,6 +1473,8 @@ fun SettingsScreen(
                                                 37 -> viewModel.setTrailerInCards(!uiState.trailerInCards)
                                                 49 -> viewModel.setNetflixHomeStyle(!uiState.netflixHomeStyle)
                                                 50 -> viewModel.setWatchlistOnHome(!uiState.watchlistOnHome)
+                                                51 -> viewModel.cyclePlaybackCacheSize()
+                                                52 -> viewModel.clearPlaybackCache()
                                             }
                                         }
                                         "iptv" -> {
@@ -2152,7 +2154,12 @@ fun SettingsScreen(
                             onSubtitleAiApiKeyClick = { showAiApiKeyDialog = true },
                             onSubtitleAiQrClick = { viewModel.startAiKeyServer() },
                             customUserAgent = uiState.customUserAgent,
-                            onCustomUserAgentClick = { showCustomUserAgentDialog = true }
+                            onCustomUserAgentClick = { showCustomUserAgentDialog = true },
+                            playbackCacheLimitGb = uiState.playbackCacheLimitGb,
+                            playbackCacheUsedBytes = uiState.playbackCacheUsedBytes,
+                            playbackCacheMaxBytes = uiState.playbackCacheMaxBytes,
+                            onPlaybackCacheSizeClick = { viewModel.cyclePlaybackCacheSize() },
+                            onClearPlaybackCacheClick = { viewModel.clearPlaybackCache() }
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -5790,6 +5797,25 @@ private fun MobileSettingsSubPage(
                         onClick = openQualityFiltersModal
                     )
                 }
+                MobileSettingsCategory(title = stringResource(R.string.settings_section_playback_cache)) {
+                    MobileSettingsRow(
+                        icon = Icons.Default.Storage,
+                        title = stringResource(R.string.playback_cache_size),
+                        subtitle = stringResource(R.string.playback_cache_size_desc, formatPlaybackCacheBytes(uiState.playbackCacheUsedBytes)),
+                        value = playbackCacheLimitLabel(uiState.playbackCacheLimitGb, uiState.playbackCacheMaxBytes),
+                        isFocused = false,
+                        onClick = { viewModel.cyclePlaybackCacheSize() }
+                    )
+                    MobileSettingsRow(
+                        icon = Icons.Default.Delete,
+                        title = stringResource(R.string.clear_playback_cache),
+                        subtitle = stringResource(R.string.clear_playback_cache_desc),
+                        value = null,
+                        isFocused = false,
+                        showDivider = false,
+                        onClick = { viewModel.clearPlaybackCache() }
+                    )
+                }
                 MobileSettingsCategory(title = stringResource(R.string.settings_section_controls)) {
                     MobileSettingsRow(
                         icon = Icons.Default.Person,
@@ -7098,6 +7124,7 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_source_autoplay), stringResource(R.string.settings_help_source_autoplay_desc))
             in 5..8 -> TvSettingsHelp(stringResource(R.string.settings_help_trailers), stringResource(R.string.settings_help_trailers_desc))
             12 -> TvSettingsHelp(stringResource(R.string.volume_boost), stringResource(R.string.settings_help_volume_boost_desc))
+            13, 14 -> TvSettingsHelp(stringResource(R.string.playback_cache_size), stringResource(R.string.settings_help_playback_cache_desc))
             else -> TvSettingsHelp(stringResource(R.string.playback), stringResource(R.string.settings_help_playback_desc))
         }
         "appearance" -> TvSettingsHelp(stringResource(R.string.interface_label), stringResource(R.string.settings_help_interface_desc))
@@ -7255,7 +7282,12 @@ private fun TvGeneralSettingsRows(
     onSubtitleAiApiKeyClick: () -> Unit = {},
     onSubtitleAiQrClick: () -> Unit = {},
     customUserAgent: String = "",
-    onCustomUserAgentClick: () -> Unit = {}
+    onCustomUserAgentClick: () -> Unit = {},
+    playbackCacheLimitGb: Int = com.arflix.tv.player.cache.PlaybackCache.DEFAULT_LIMIT_GB,
+    playbackCacheUsedBytes: Long = 0L,
+    playbackCacheMaxBytes: Long = 0L,
+    onPlaybackCacheSizeClick: () -> Unit = {},
+    onClearPlaybackCacheClick: () -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
@@ -7390,8 +7422,43 @@ private fun TvGeneralSettingsRows(
                 37 -> SettingsToggleRow(stringResource(R.string.trailer_in_cards), stringResource(R.string.trailer_in_cards_desc), trailerInCards, focusedIndex == localIndex, onTrailerInCardsToggle, Modifier.settingsFocusSlot(localIndex))
                 49 -> SettingsToggleRow(stringResource(R.string.netflix_home_style), stringResource(R.string.netflix_home_style_desc), netflixHomeStyle, focusedIndex == localIndex, onNetflixHomeStyleToggle, Modifier.settingsFocusSlot(localIndex))
                 50 -> SettingsToggleRow(stringResource(R.string.watchlist_on_home), stringResource(R.string.watchlist_on_home_desc), watchlistOnHome, focusedIndex == localIndex, onWatchlistOnHomeToggle, Modifier.settingsFocusSlot(localIndex))
+                51 -> SettingsRow(
+                    icon = Icons.Default.Storage,
+                    title = stringResource(R.string.playback_cache_size),
+                    subtitle = stringResource(R.string.playback_cache_size_desc, formatPlaybackCacheBytes(playbackCacheUsedBytes)),
+                    value = playbackCacheLimitLabel(playbackCacheLimitGb, playbackCacheMaxBytes),
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onPlaybackCacheSizeClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                52 -> SettingsRow(
+                    icon = Icons.Default.Delete,
+                    title = stringResource(R.string.clear_playback_cache),
+                    subtitle = stringResource(R.string.clear_playback_cache_desc),
+                    value = "",
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onClearPlaybackCacheClick,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
             }
         }
+    }
+}
+
+private fun formatPlaybackCacheBytes(bytes: Long): String = when {
+    bytes >= 1L shl 30 -> String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024 * 1024))
+    bytes >= 1L shl 20 -> String.format(java.util.Locale.US, "%.0f MB", bytes / (1024.0 * 1024))
+    else -> "0 MB"
+}
+
+/** The chosen size, or the free-space cap when that is smaller than the choice. */
+@Composable
+private fun playbackCacheLimitLabel(limitGb: Int, maxAllowedBytes: Long): String {
+    val chosenBytes = limitGb.toLong() shl 30
+    return if (maxAllowedBytes in 1 until chosenBytes) {
+        stringResource(R.string.playback_cache_limited, formatPlaybackCacheBytes(maxAllowedBytes))
+    } else {
+        "$limitGb GB"
     }
 }
 
