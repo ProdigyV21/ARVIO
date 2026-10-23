@@ -170,13 +170,15 @@ internal class ArvioAudioSync(
          * setting (the audio switching to a better subtitle).
          */
         holdUntilConfirmed: Boolean? = null,
+        /** The user asked for this sync from the menu: run it even with the fallback setting off. */
+        force: Boolean = false,
     ): Boolean {
         val keepHold = holdUntilConfirmed ?: hold
         val next = onFailed ?: pendingFailure
         val better = hasBetterFallback ?: betterFallback
         // A switch to another subtitle keeps nothing: the anchor measured the one before.
         val keptAnchor = localAnchor
-        if (!canTakeOver || cues.isEmpty()) {
+        if ((!canTakeOver && !force) || cues.isEmpty()) {
             stop()
             return false
         }

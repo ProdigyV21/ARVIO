@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit
 
 private const val TAG = "SubtitleTranslation"
 
+/** Process-wide: servers that rejected the "thinking off" field (see SubtitleTranslationService.callCustom). */
+private val THINKING_REJECTED: MutableSet<String> = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap())
+
 private val RTL_LANGUAGES = setOf("hebrew", "arabic", "urdu", "persian", "farsi", "yiddish")
 
 data class TranslationResult(
@@ -60,8 +63,109 @@ private val GEMINI_RETRYABLE_HTTP = setOf(500, 502, 503)
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
-    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B }
+    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B },
+    /** A user-configured model (OpenAI Chat / Responses / Anthropic). Wins when active. */
+    private val customConfigProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = { null },
 ) {
+    private fun activeCustom() = runCatching { customConfigProvider() }.getOrNull()?.takeIf { it.isActive }
+
+    /** True when either the custom model or a Gemini/Groq key can translate. */
+    fun isConfigured(): Boolean = activeCustom() != null || apiKeyProvider().isNotBlank()
+
+    /**
+     * One round trip to the custom model. Returns the model text, or an error string in the same
+     * vocabulary the manager already understands ("RATE_LIMITED", "HTTP 401: …").
+     */
+    private suspend fun callCustom(
+        c: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig,
+        system: String,
+        user: String,
+        transientAttempt: Int = 0,
+        withThinkingControl: Boolean = !thinkingRejected.contains(c.baseUrl + "|" + c.model),
+    ): Pair<String?, String?> {
+        val wire = com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiWire
+        val url = c.endpointUrl()
+        val builder = runCatching { Request.Builder().url(url) }.getOrElse {
+            return null to "Invalid API URL: $url"
+        }
+        wire.headers(c).forEach { (k, v) -> builder.header(k, v) }
+        builder.header("Content-Type", "application/json")
+        val request = builder
+            .post(wire.buildBody(c, system, user, jsonMode = true, withThinkingControl = withThinkingControl).toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        return withContext(Dispatchers.IO) {
+            try {
+                customClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string()
+                    if (!response.isSuccessful) {
+                        if (response.code in GEMINI_RETRYABLE_HTTP && transientAttempt < GEMINI_MAX_TRANSIENT_RETRIES) {
+                            geminiBackoff(transientAttempt)
+                            return@withContext callCustom(c, system, user, transientAttempt + 1, withThinkingControl)
+                        }
+                        // The server rejected our "thinking off" field: remember and retry without it.
+                        if (response.code in setOf(400, 422) && withThinkingControl && c.disableThinking &&
+                            wire.thinkingOff(c).isNotEmpty()
+                        ) {
+                            Log.w(TAG, "custom model rejected the thinking switch — retrying without it")
+                            thinkingRejected.add(c.baseUrl + "|" + c.model)
+                            return@withContext callCustom(c, system, user, transientAttempt, withThinkingControl = false)
+                        }
+                        val reason = wire.errorMessage(body).orEmpty()
+                        Log.w(TAG, "custom model HTTP ${response.code}: ${reason.take(200)}")
+                        return@withContext null to when (response.code) {
+                            429 -> "RATE_LIMITED"
+                            else -> "HTTP ${response.code}: $reason"
+                        }
+                    }
+                    body?.let { com.arflix.tv.ui.screens.player.subtitles.ai.AiUsageMeter.add(wire.extractUsage(c.protocol, it)) }
+                    val text = body?.let { wire.extractText(c.protocol, it) }
+                    if (text.isNullOrBlank()) null to "Empty response from ${c.model}" else text to null
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is java.io.IOException && transientAttempt < GEMINI_MAX_TRANSIENT_RETRIES) {
+                    geminiBackoff(transientAttempt)
+                    return@withContext callCustom(c, system, user, transientAttempt + 1, withThinkingControl)
+                }
+                Log.w(TAG, "custom model call failed: ${e.message}")
+                null to (e.message ?: "Network error")
+            }
+        }
+    }
+
+    private suspend fun translateCustom(
+        c: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig,
+        lines: List<String>,
+        targetLanguage: String,
+        context: List<Pair<String, String>> = emptyList(),
+        title: String? = null,
+        attempt: Int = 0,
+    ): TranslationResult {
+        val NL = "⏎"
+        // The system prompt never varies within an episode, so providers with prefix caching
+        // (DeepSeek, OpenAI, Qwen…) bill it at the cache-hit rate after the first batch.
+        val (text, error) = callCustom(
+            c,
+            buildContextSystemPrompt(targetLanguage, NL),
+            buildContextUserMessage(lines, targetLanguage, context, title, NL),
+        )
+        if (text == null) return TranslationResult(lines, false, error)
+        val parsed = parseTranslationResult(lines, targetLanguage, text, NL)
+        if (!parsed.success && attempt == 0) return translateCustom(c, lines, targetLanguage, context, title, attempt = 1)
+        return parsed
+    }
+
+    /** Settings "Test": translates one line with the given config. */
+    suspend fun testCustom(c: com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig, targetLanguage: String): TranslationResult =
+        translateCustom(c.copy(enabled = true), listOf("Winter is coming."), targetLanguage, attempt = 1)
+
+    /** Servers (baseUrl|model) that rejected the "thinking off" field; not sent to them again. */
+    private val thinkingRejected: MutableSet<String> get() = THINKING_REJECTED
+
+    private val customClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .build()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -117,6 +221,34 @@ class SubtitleTranslationService(
         return null
     }
 
+    internal fun buildContextSystemPrompt(targetLanguage: String, NL: String) =
+        "You are a professional film and TV subtitle translator. Translate subtitle lines into natural, spoken $targetLanguage.\n" +
+        "Rules:\n" +
+        "1. Return ONLY a valid JSON array of strings — no comments, no reasoning.\n" +
+        "2. Every input element starts with a numeric prefix like '7: ' — keep the EXACT same prefix on the corresponding output element. One output element per input element; never merge or split.\n" +
+        "3. The lines are consecutive dialogue. Read the whole batch (and any CONTEXT) first, and translate each line with that context: resolve pronouns, keep sentences that continue across lines coherent, and keep names, places and terms consistent.\n" +
+        "4. CONTEXT lines are earlier dialogue with their existing translations. Use them only for consistency; never output them.\n" +
+        "5. Preserve the '$NL' symbol exactly where it appears as a line break. Keep it short enough to read on screen.\n" +
+        "6. Do not translate names unless they have an established $targetLanguage form. Keep songs, signs and sound tags short."
+
+    internal fun buildContextUserMessage(
+        lines: List<String>,
+        targetLanguage: String,
+        context: List<Pair<String, String>>,
+        title: String?,
+        NL: String,
+    ): String = buildString {
+        if (!title.isNullOrBlank()) append("Title: ").append(title).append('\n')
+        if (context.isNotEmpty()) {
+            append("CONTEXT (earlier lines → their translation, do not output):\n")
+            context.forEach { (src, tr) ->
+                append("- ").append(src.replace("\n", " ")).append(" → ").append(tr.replace("\n", " ")).append('\n')
+            }
+        }
+        append("Translate to ").append(targetLanguage).append(":\n")
+        append(encodeIndexed(lines, NL))
+    }
+
     private fun buildSystemPrompt(targetLanguage: String, NL: String) =
         "You are a professional subtitle translator. Translate the following JSON array into natural $targetLanguage.\n" +
         "Rules:\n" +
@@ -166,14 +298,15 @@ class SubtitleTranslationService(
         candidateLines: List<String>
     ): List<LineMatch>? {
         if (referenceLines.isEmpty() || candidateLines.isEmpty()) return null
-        val apiKey = apiKeyProvider()
-        if (apiKey.isBlank()) return null
         val prompt = buildMatchPrompt()
         val payload = "REFERENCE:\n${encodeIndexed(referenceLines, " ")}\n\nCANDIDATE:\n${encodeIndexed(candidateLines, " ")}"
-        val raw = when (modelProvider()) {
+        val custom = activeCustom()
+        val apiKey = apiKeyProvider()
+        if (custom == null && apiKey.isBlank()) return null
+        val raw = (if (custom != null) callCustom(custom, prompt, payload).first else when (modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> matchGroq(prompt, payload, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> matchGemini(prompt, payload, apiKey)
-        } ?: return null
+        }) ?: return null
         val array = extractJsonArray(raw) ?: return null
         val matches = ArrayList<LineMatch>(array.length())
         for (i in 0 until array.length()) {
@@ -277,22 +410,29 @@ class SubtitleTranslationService(
         }
     }
 
-    suspend fun translateBatch(lines: List<String>, targetLanguage: String): TranslationResult =
-        translateBatchInternal(lines, targetLanguage, depth = 0)
+    suspend fun translateBatch(
+        lines: List<String>,
+        targetLanguage: String,
+        context: List<Pair<String, String>> = emptyList(),
+        title: String? = null,
+    ): TranslationResult = translateBatchInternal(lines, targetLanguage, depth = 0, context = context, title = title)
 
     private suspend fun translateBatchInternal(
         lines: List<String>,
         targetLanguage: String,
-        depth: Int
+        depth: Int,
+        context: List<Pair<String, String>> = emptyList(),
+        title: String? = null,
     ): TranslationResult {
         if (lines.isEmpty()) return TranslationResult(lines, true)
+        val custom = activeCustom()
         val apiKey = apiKeyProvider()
-        if (apiKey.isBlank()) {
+        if (custom == null && apiKey.isBlank()) {
             Log.e(TAG, "API key is blank — translation skipped")
             return TranslationResult(lines, false, "API key missing")
         }
 
-        val result = when (modelProvider()) {
+        val result = if (custom != null) translateCustom(custom, lines, targetLanguage, context, title) else when (modelProvider()) {
             SubtitleAiModel.GROQ_LLAMA_70B -> translateGroq(lines, targetLanguage, apiKey)
             SubtitleAiModel.GEMINI_FLASH_25 -> translateGemini(lines, targetLanguage, apiKey)
         }
@@ -307,8 +447,8 @@ class SubtitleTranslationService(
         ) {
             Log.w(TAG, "Content-blocked batch of ${lines.size} — bisecting (depth=$depth)")
             val mid = lines.size / 2
-            val left = translateBatchInternal(lines.subList(0, mid), targetLanguage, depth + 1)
-            val right = translateBatchInternal(lines.subList(mid, lines.size), targetLanguage, depth + 1)
+            val left = translateBatchInternal(lines.subList(0, mid), targetLanguage, depth + 1, context, title)
+            val right = translateBatchInternal(lines.subList(mid, lines.size), targetLanguage, depth + 1, context, title)
             // Best-effort merge: failed halves already carry their original lines.
             return TranslationResult(left.lines + right.lines, true)
         }

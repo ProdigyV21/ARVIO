@@ -241,6 +241,12 @@ data class PlayerUiState(
     val sourceSearchActive: Boolean = false,
     // True while AI subtitle translation is active for this playback session
     val isAiTranslating: Boolean = false,
+    /** Bilingual subtitles: the smart bilingual mode owns the subtitle (merge or AI, see SmartBilingualController). */
+    val smartBilingualActive: Boolean = false,
+    /** Increments on every explicit user subtitle choice (pick / off): smart mode then steps aside. */
+    val subtitleUserPickNonce: Int = 0,
+    /** Increments when the user asks for the smart bilingual mode from the player menu. */
+    val smartBilingualRequestNonce: Int = 0,
     // True when AI translation is available (settings enabled + source track exists), even if not currently active
     val isAiAvailable: Boolean = false,
     // Language name being translated into (e.g. "Hebrew") when AI is available
@@ -424,7 +430,10 @@ class PlayerViewModel @Inject constructor(
     ): NextEpisodeAirDateResolution = nextEpisodeAirDateResolver.resolve(tmdbId, target)
 
     // AI subtitle settings (read once per video load)
-    private var aiSubtitleEnabled = false
+    private var aiSubtitleEnabledPref = false
+    /** The AI feature is on in Settings, or a custom translation service is active (read live, so a service saved mid-playback works at once). */
+    private val aiSubtitleEnabled: Boolean
+        get() = aiSubtitleEnabledPref || customAiStore.current.isActive
     private var aiSubtitleAutoSelect = false
     // When true (default), activating AI first tries to auto-pick a synced addon subtitle in the
     // user's preferred language (Find Best Match); only if nothing matches does it translate the
@@ -478,9 +487,21 @@ class PlayerViewModel @Inject constructor(
     private val untranslatableSourceIds = mutableSetOf<String>()
 
     /** Shared with [translationManager]; also used directly for AI subtitle line-matching. */
+    /** A user-configured translation model (OpenAI Chat / Responses / Anthropic protocol). */
+    private val customAiStore by lazy {
+        com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfigStore.from(context)
+    }
+    private val customAiProvider: () -> com.arflix.tv.ui.screens.player.subtitles.ai.CustomAiConfig? = {
+        customAiStore.current
+    }
+    /** A Gemini/Groq key or an active custom model: AI translation can run. */
+    private val aiKeyReady: Boolean
+        get() = aiApiKey.isNotBlank() || customAiStore.current.isActive
+
     private val translationService = SubtitleTranslationService(
         apiKeyProvider = { aiApiKey },
-        modelProvider = { aiModel }
+        modelProvider = { aiModel },
+        customConfigProvider = customAiProvider,
     )
 
     val translationManager: SubtitleTranslationManager = SubtitleTranslationManager(
@@ -488,6 +509,7 @@ class PlayerViewModel @Inject constructor(
         targetLanguage = "",
         scope = viewModelScope
     ).also { mgr ->
+        mgr.diskCache = runCatching { TranslationDiskCacheHolder.get(context) }.getOrNull()
         mgr.onTranslatingChanged = { isTranslating -> _isTranslatingLive.value = isTranslating }
         mgr.onUntranslatableSource = { viewModelScope.launch { onAiSourceUntranslatable() } }
         mgr.onBatchResult = { success, errorMessage ->
@@ -550,6 +572,17 @@ class PlayerViewModel @Inject constructor(
      * subtitle, which is why the caller checks for a self-match by text before scoring against it.
      */
     @Volatile var bufferedReferenceCuesProvider: ((Int) -> List<SubtitleSyncMatcher.TimedCue>)? = null
+
+    /**
+     * Set by the player screen: the cues read so far from every embedded text track of the
+     * playing file (any language), one list per track, WITH text — for the AI line-matching
+     * fallback of [calibrateUserPick].
+     */
+    @Volatile var embeddedTextReferenceProvider: (() -> List<List<SubtitleSyncMatcher.TimedCue>>)? = null
+
+    /** Set by the player screen: the same embedded tracks as timing intervals — the reference for lining up an external subtitle. */
+    @Volatile var embeddedTimingReferenceProvider:
+        (() -> List<List<com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Interval>>)? = null
 
     /**
      * Set by the player screen: the text track the player has ACTUALLY selected, as
@@ -880,7 +913,7 @@ class PlayerViewModel @Inject constructor(
             setTargetSubtitleLang(normalizeLanguage(preferredSub))
 
             // Load AI subtitle settings
-            aiSubtitleEnabled = prefs[aiEnabledKey] ?: false
+            aiSubtitleEnabledPref = prefs[aiEnabledKey] ?: false
             aiSubtitleAutoSelect = prefs[aiAutoSelectKey] ?: false
             aiFindBestMatchFirst = prefs[aiFindBestMatchKey] ?: false
             hearingSyncEnabled = prefs[hearingSyncKey] ?: hearingSyncDefault(context)
@@ -890,9 +923,10 @@ class PlayerViewModel @Inject constructor(
                 SubtitleAiModel.valueOf(prefs[aiModelKey] ?: SubtitleAiModel.GROQ_LLAMA_70B.name)
             }.getOrDefault(SubtitleAiModel.GROQ_LLAMA_70B)
             aiRemoveHearingImpaired = prefs[aiRemoveHearingImpairedKey] ?: true
-            translationManager.updateService(apiKey = aiApiKey, model = aiModel)
+            translationManager.updateService(apiKey = aiApiKey, model = aiModel, customConfigProvider = customAiProvider)
             translationManager.removeHearingImpaired = aiRemoveHearingImpaired
             translationManager.isEnabled = false
+            leaveSmartBilingual()
             untranslatableSourceIds.clear()
             translationManager.reset()
 
@@ -1928,6 +1962,10 @@ class PlayerViewModel @Inject constructor(
 
             // Store info for watch history
             currentTitle = title
+            translationManager.contentTitle = buildString {
+                append(title)
+                if (currentSeason != null && currentEpisode != null) append(" S${currentSeason}E${currentEpisode}")
+            }
             currentPoster = posterUrl
             currentBackdrop = backdropUrl
 
@@ -3497,9 +3535,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun selectSubtitle(subtitle: Subtitle, isUserAction: Boolean = true) {
+        if (isUserAction) {
+            // A menu pick replaces any primary track chosen earlier in the bilingual panel.
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualPlayerBridge.primaryOverride.value = null
+        }
         hasManualSubtitleSelection = true
         userPickedSubtitle = isUserAction
         if (isUserAction) {
+            // An explicit pick always wins over the smart bilingual mode.
+            leaveSmartBilingual()
+            _uiState.value = _uiState.value.copy(subtitleUserPickNonce = _uiState.value.subtitleUserPickNonce + 1)
             // The user's own pick — the ground truth a scan verdict is judged against.
             Log.i(
                 "SubMatch",
@@ -3514,6 +3559,8 @@ class PlayerViewModel @Inject constructor(
             if (!audioSyncSwitching) {
                 audioSyncTarget = null
                 audioSync?.stop()
+                lastCalibratedKey = calibrationKey(subtitle)
+                calibrateUserPick(subtitle)
             }
         }
         subtitleSelectionJob?.cancel()
@@ -3592,6 +3639,25 @@ class PlayerViewModel @Inject constructor(
 
     /** Commits [served] as the playing subtitle (a local copy of the user's pick, or the pick). */
     private fun applySelectedSubtitle(served: Subtitle) {
+        // AI translation is a mode on top of the subtitle, not a track of its own. While it is on,
+        // a newly picked text subtitle becomes the translation source (same file, no track
+        // switching behind the user's back) instead of silently turning translation off.
+        val keepAi = _uiState.value.isAiTranslating && !_uiState.value.smartBilingualActive &&
+            !served.isBitmap && aiSubtitleEnabled && isAiTranslationConfigured()
+        if (keepAi) {
+            aiSourceSubtitle = served
+            untranslatableSourceIds.remove(served.id)
+            translationManager.isEnabled = true
+            translationManager.reset()
+            aiErrorToastShown = false
+            _uiState.value = _uiState.value.copy(
+                selectedSubtitle = served,
+                isAiTranslating = true,
+                subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + 1
+            )
+            maybeAutoCalibrate(served)
+            return
+        }
         translationManager.isEnabled = false
         // Keep isAiAvailable/aiTargetLanguageName so the AI entry stays in the menu for re-selection
         _uiState.value = _uiState.value.copy(
@@ -3599,6 +3665,84 @@ class PlayerViewModel @Inject constructor(
             isAiTranslating = false,
             subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + 1
         )
+        maybeAutoCalibrate(served)
+    }
+
+    /** The external track last aligned automatically (stream|provider|id). */
+    private var lastCalibratedKey: String? = null
+
+    private fun calibrationKey(sub: Subtitle): String =
+        "${_uiState.value.selectedStreamUrl}|${sub.provider}|${sub.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)}"
+
+    /**
+     * Every switch to an external subtitle track — the user's or an automatic one — is lined up
+     * once: against the video's embedded text track when the file has one, else by the audio
+     * (when Sync by hearing is on). A running match scan owns its own timing, and a re-timed copy
+     * is already the result of a calibration.
+     */
+    private fun maybeAutoCalibrate(served: Subtitle) {
+        if (served.isEmbedded || served.isBitmap) return
+        if (served.id.endsWith(RETIMED_SUBTITLE_ID_SUFFIX) || audioSyncSwitching) return
+        if (_uiState.value.isFindingBestMatch || findMatchJob?.isActive == true) return
+        val key = calibrationKey(served)
+        if (key == lastCalibratedKey) return
+        lastCalibratedKey = key
+        if (_uiState.value.autoSyncSubtitleKey == "${served.provider}|${served.id}") return
+        if (audioSyncTarget?.let { it.provider == served.provider && it.id == served.id } == true) return
+        Log.i("SubMatch", "auto calibration on track switch: \"${served.label}\"")
+        calibrateUserPick(served)
+    }
+
+    /** Called by the screen whenever the shown subtitle track changes, whichever path selected it. */
+    fun onShownSubtitleTrackChanged() {
+        val shown = _uiState.value.selectedSubtitle ?: return
+        maybeAutoCalibrate(shown)
+    }
+
+    /** The external subtitle on screen (also the AI translation's source), as listed by the addons. */
+    private fun currentExternalSubtitle(): Subtitle? {
+        val sel = (if (_uiState.value.isAiTranslating) aiSourceSubtitle else null) ?: _uiState.value.selectedSubtitle ?: return null
+        if (sel.isEmbedded || sel.isBitmap) return null
+        return _uiState.value.subtitles.firstOrNull {
+            !it.isEmbedded && it.provider == sel.provider && it.id == sel.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
+        } ?: sel
+    }
+
+    /** Subtitle menu: align the current external subtitle to the video's embedded text track. */
+    fun alignSubtitleToEmbedded() {
+        val sub = currentExternalSubtitle() ?: run {
+            showSyncToast("Pick an online subtitle first")
+            return
+        }
+        if (_uiState.value.subtitles.none { it.isEmbedded && !it.isBitmap }) {
+            showSyncToast("This video has no embedded text subtitle to align to")
+            return
+        }
+        // The embedded track is the more exact reference: it replaces a running audio sync.
+        audioSyncWorkJob?.cancel()
+        audioSync?.stop()
+        audioSyncTarget = null
+        lastCalibratedKey = calibrationKey(sub)
+        showSyncToast("Aligning to the embedded subtitle…")
+        calibrateUserPick(sub, embeddedOnly = true)
+    }
+
+    /**
+     * Subtitle menu: sync the current external subtitle to the audio (speech recognition). An
+     * explicit request, so it runs even when Sync by hearing or its fallback setting is off.
+     */
+    fun syncSubtitleToAudio() {
+        val sub = currentExternalSubtitle() ?: run {
+            showSyncToast("Pick an online subtitle first")
+            return
+        }
+        if (!BuildConfig.AUDIO_SYNC_AVAILABLE) {
+            showSyncToast("Sync by hearing isn't available in this build")
+            return
+        }
+        embeddedCalibrationJob?.cancel()
+        lastCalibratedKey = calibrationKey(sub)
+        calibrateUserPickByAudio(sub, force = true)
     }
 
     /** Cancel a running/queued "Find best match" scan and clear its transient state. */
@@ -3904,7 +4048,7 @@ class PlayerViewModel @Inject constructor(
      * pick. Returns true when AI took over.
      */
     private fun tryAiFallbackAfterScan(): Boolean {
-        if (!aiSubtitleEnabled || aiApiKey.isBlank()) return false
+        if (!aiSubtitleEnabled || !aiKeyReady) return false
         if (findAiSourceSubtitle(_uiState.value.subtitles) == null) return false
         activateAiTranslation()
         showMatchToast(PlayerMessage.Res(R.string.player_match_none_using_ai))
@@ -3937,22 +4081,131 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // ── Bilingual subtitles: smart mode ─────────────────────────────────────
+    /** True when a Gemini/Groq key is saved or a custom service is active (smart mode path B needs nothing else). */
+    fun isAiTranslationConfigured(): Boolean = aiKeyReady
+
+    /** Player menu: (re)start the smart bilingual mode for this video. */
+    fun requestSmartBilingual() {
+        _uiState.value = _uiState.value.copy(smartBilingualRequestNonce = _uiState.value.smartBilingualRequestNonce + 1)
+    }
+
+    /** Takes the subtitle state over for the smart mode so ARVIO's auto-selection does not fight it. */
+    private fun claimSubtitleForSmartMode() {
+        cancelFindBestMatch("smart bilingual")
+        subtitleSelectionJob?.cancel()
+        cancelSubtitleLocalization()
+        hasManualSubtitleSelection = true
+        // Not a menu pick, but it must not be displaced by a late preferred-language track.
+        userPickedSubtitle = true
+    }
+
+    /**
+     * Path A: show [primary] with the second language from another embedded track (no AI).
+     * The caller sets [SubtitleTranslationManager.secondarySource].
+     */
+    fun activateSmartBilingualMerge(primary: Subtitle) {
+        claimSubtitleForSmartMode()
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.EMBEDDED_TRACK
+        translationManager.isEnabled = true
+        val changed = _uiState.value.selectedSubtitle?.id != primary.id
+        Log.i("Bilingual", "smart merge: primary=${primary.lang}/${primary.label}")
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitle = primary,
+            isAiTranslating = false,
+            smartBilingualActive = true,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
+        )
+    }
+
+    /** Path B: AI-translate [primary] into [targetLanguageName] and show both. */
+    fun activateSmartBilingualAi(primary: Subtitle, targetLanguageName: String) {
+        if (!aiKeyReady) return
+        claimSubtitleForSmartMode()
+        aiSourceSubtitle = primary
+        translationManager.secondarySource = null
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.AI_TRANSLATION
+        translationManager.targetLanguage = targetLanguageName
+        val wasActive = translationManager.isEnabled && _uiState.value.selectedSubtitle?.id == primary.id
+        translationManager.isEnabled = true
+        if (!wasActive) translationManager.reset()
+        aiErrorToastShown = false
+        val changed = _uiState.value.selectedSubtitle?.id != primary.id
+        Log.i("Bilingual", "smart AI: primary=${primary.lang}/${primary.label} target=$targetLanguageName")
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitle = primary,
+            isAiTranslating = true,
+            isAiAvailable = true,
+            aiTargetLanguageName = targetLanguageName,
+            aiErrorToast = null,
+            smartBilingualActive = true,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
+        )
+    }
+
+    /** Smart mode, primary only (same language / nothing to pair with and no AI). */
+    fun activateSmartBilingualPrimaryOnly(primary: Subtitle) {
+        claimSubtitleForSmartMode()
+        translationManager.secondarySource = null
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.EMBEDDED_TRACK
+        translationManager.isEnabled = true
+        val changed = _uiState.value.selectedSubtitle?.id != primary.id
+        _uiState.value = _uiState.value.copy(
+            selectedSubtitle = primary,
+            isAiTranslating = false,
+            smartBilingualActive = true,
+            subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + if (changed) 1 else 0
+        )
+    }
+
+    /** Hands the subtitle back to ARVIO's normal behaviour (path flags only; selection unchanged). */
+    fun leaveSmartBilingual() {
+        translationManager.secondarySource = null
+        translationManager.bilingualSource = SubtitleTranslationManager.BilingualSource.AI_TRANSLATION
+        if (_uiState.value.smartBilingualActive) {
+            if (!_uiState.value.isAiTranslating) translationManager.isEnabled = false
+            _uiState.value = _uiState.value.copy(smartBilingualActive = false)
+        }
+    }
+
+    /** Menu toggle: AI translation on top of the current subtitle, or off again (track unchanged). */
+    fun toggleAiTranslation() {
+        if (_uiState.value.isAiTranslating && !_uiState.value.smartBilingualActive) deactivateAiTranslation()
+        else activateAiTranslation(userInitiated = true)
+    }
+
+    /** Turns AI translation off and keeps showing the same subtitle track. */
+    fun deactivateAiTranslation() {
+        translationManager.isEnabled = false
+        _uiState.value = _uiState.value.copy(isAiTranslating = false)
+    }
+
     /** Existing behavior: translate the built-in/source subtitle to the target language. */
-    fun activateAiTranslation() {
+    fun activateAiTranslation(userInitiated: Boolean = false) {
+        // The regular AI option is a different choice than the smart bilingual mode.
+        if (_uiState.value.smartBilingualActive) leaveSmartBilingual()
         // Defense-in-depth: every caller is already gated on the AI master toggle (menu entry via
         // isAiAvailable, interim via auto-select, fallback via tryAiFallbackAfterScan), but AI
         // must never activate — and never spend API requests — when the feature is off.
         if (!aiSubtitleEnabled) return
-        // Re-resolve the source on every activation: an early activation (before embedded tracks
-        // resolve) may have cached an external fallback source, and translation inherits the
-        // source's timing — keep the cached one only when nothing better is available now.
-        val source = findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle ?: return
+        // Translate the subtitle that is ON SCREEN. Turning translation on must not swap the
+        // viewer's track for another one (a subtitle from a different episode/release could
+        // appear that way). Only when nothing usable is selected is a source chosen — re-resolved
+        // on every activation, since an early activation (before embedded tracks resolve) may have
+        // cached an external fallback source. Automatic activations (auto-select at start, scan
+        // fallback) keep the rule of never translating an addon track ARVIO picked by itself,
+        // whose timing is unverified.
+        val current = _uiState.value.selectedSubtitle?.takeIf {
+            !it.isBitmap && it.id !in untranslatableSourceIds && _uiState.value.subtitles.any { s -> s.id == it.id } &&
+                (userInitiated || it.isEmbedded || userPickedSubtitle)
+        }
+        val source = current ?: findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle ?: return
         aiSourceSubtitle = source
         cancelSubtitleLocalization()
         hasManualSubtitleSelection = true
-        // AI activation is not a specific user track pick — a late embedded preferred-language
-        // track may still displace it.
-        userPickedSubtitle = false
+        // Translating the track already on screen keeps that pick protected; a source chosen here
+        // (nothing was selected) may still be displaced by a late preferred-language track.
+        userPickedSubtitle = current != null
         // The silent-scan path never populates aiTargetLanguageName (it's set only when a source
         // existed at scan start) — resolve from the preferred-language code so a late activation
         // doesn't hand the manager a BLANK target (which silently translates to nothing).
@@ -4194,7 +4447,7 @@ class PlayerViewModel @Inject constructor(
                 // mean a long blank screen, so wait a short bounded time only: long enough for
                 // tracks to appear on a normal start, short enough that a source without an
                 // embedded English track falls back to the optimistic pick quickly.
-                val aiPossible = aiSubtitleEnabled && aiApiKey.isNotBlank()
+                val aiPossible = aiSubtitleEnabled && aiKeyReady
                 val aiInterimSource = if (!aiPossible) null else {
                     // The scan begins BEFORE the player has opened the file — preload mode gates
                     // prepare on the addon-subtitle fetch, and that same fetch triggers the scan.
@@ -5353,7 +5606,7 @@ class PlayerViewModel @Inject constructor(
              */
             val aiVerdicts = HashMap<String, AiVerdict>()
             while (aiChecks < MATCH_AI_MAX_VERIFICATIONS && referenceCues.isNotEmpty() &&
-                aiSubtitleEnabled && aiApiKey.isNotBlank()
+                aiSubtitleEnabled && aiKeyReady
             ) {
                 aiChecks++
                 val aiTarget = results?.let { list ->
@@ -5638,7 +5891,7 @@ class PlayerViewModel @Inject constructor(
             // not be accepted just because the loop ran out of budget. Timing alone put three
             // rejected subtitles at 0.81-0.82 in one scan, so "highest remaining score" is not a
             // safe default — silence from the verifier means unverified, not approved.
-            val aiIsArbiter = referenceCues.isNotEmpty() && aiSubtitleEnabled && aiApiKey.isNotBlank()
+            val aiIsArbiter = referenceCues.isNotEmpty() && aiSubtitleEnabled && aiKeyReady
             // "Cleared" = the model looked at it and did not reject it. That is enough to SELECT it:
             // a failed or inconclusive check leaves a timing-only fallback, which is fine. Whether it
             // counts as VERIFIED, and may be remembered, is a separate question — see the cache write.
@@ -5897,7 +6150,7 @@ class PlayerViewModel @Inject constructor(
         candidateCues: List<SubtitleSyncMatcher.TimedCue>,
         label: String
     ): AiLineSync? {
-        if (!aiSubtitleEnabled || aiApiKey.isBlank()) return null
+        if (!aiSubtitleEnabled || !aiKeyReady) return null
         // Dialogue only: music/SFX cues ("♪", "[DOOR SLAMS]") are SDH-only and have no counterpart
         // in a translated file, so they can only produce false pairs.
         val refs = referenceCues
@@ -6235,9 +6488,9 @@ class PlayerViewModel @Inject constructor(
     }
 
     /** Created on first use (a scan), and never where sync by hearing can't run. */
-    private fun audioSyncOrNull(): com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync? {
+    private fun audioSyncOrNull(force: Boolean = false): com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync? {
         audioSyncInstance?.let { return it }
-        if (!hearingAvailable) return null
+        if (!hearingAvailable && !(force && BuildConfig.AUDIO_SYNC_AVAILABLE)) return null
         return com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync(
             context = context,
             scope = viewModelScope,
@@ -6311,7 +6564,9 @@ class PlayerViewModel @Inject constructor(
         // only replace it once the model's own measurement confirms the audio's timing. Without
         // that measurement there is nothing to confirm it against: AI stays, and the audio does
         // not run at all.
-        val aiPossible = aiSubtitleEnabled && aiApiKey.isNotBlank() && findAiSourceSubtitle(_uiState.value.subtitles) != null
+        // Only the Settings AI switch counts here, so a saved custom translation service never
+        // switches Sync by Hearing off on its own.
+        val aiPossible = aiSubtitleEnabledPref && aiKeyReady && findAiSourceSubtitle(_uiState.value.subtitles) != null
         if (aiPossible && anchor == null) {
             Log.i("SubMatch", "audio sync: skipped — AI translation can run and the model measured nothing to check the audio against")
             return false
@@ -6338,7 +6593,7 @@ class PlayerViewModel @Inject constructor(
             if (generation != audioSyncGeneration || !hearingAvailable || userPickedSubtitle) return@launch
             audioSyncTarget = original
             audioSyncRaw = raw
-            val aiCanTakeOver = { aiSubtitleEnabled && aiApiKey.isNotBlank() && findAiSourceSubtitle(_uiState.value.subtitles) != null }
+            val aiCanTakeOver = { aiSubtitleEnabledPref && aiKeyReady && findAiSourceSubtitle(_uiState.value.subtitles) != null }
             // Where AI can run it holds the screen while the audio works (its timing comes from the
             // built-in track, so it is right from the first line), and the subtitle replaces it
             // only once the audio has confirmed its timing. Otherwise the subtitle is shown now and
@@ -6384,6 +6639,10 @@ class PlayerViewModel @Inject constructor(
             single != null && kotlin.math.abs(single.scale - 1.0) < 1e-4 -> {
                 val offsetMs = kotlin.math.round(single.shiftMs).toLong()
                 Log.i("SubMatch", "audio sync: \"${sub.label}\" shifted ${offsetMs}ms")
+                if (userCalibrationKey == key) {
+                    userCalibrationKey = null
+                    showSyncToast("Subtitle synced to the audio: {0}", formatShift(offsetMs))
+                }
                 val local = localizeSubtitle(sub, raw)
                 applyAutoSync(sub, SubtitleAutoSync.ofMs(offsetMs))
                 if (_uiState.value.selectedSubtitle?.id != local.id || _uiState.value.selectedSubtitle?.url != local.url) {
@@ -6397,9 +6656,277 @@ class PlayerViewModel @Inject constructor(
                         model.segments.joinToString { "x${"%.4f".format(it.scale)} ${kotlin.math.round(it.shiftMs).toLong()}ms from ${it.fromMediaMs}ms" }
                 )
                 val rewritten = com.arflix.tv.ui.screens.player.audiosync.ArvioAudioSync.retime(raw, model)
+                if (userCalibrationKey == key) {
+                    userCalibrationKey = null
+                    showSyncToast("Subtitle re-timed to the audio")
+                }
                 applyAutoSync(sub, null)
                 selectSubtitle(localizeSubtitle(sub.copy(id = sub.id + RETIMED_SUBTITLE_ID_SUFFIX), rewritten), isUserAction = false)
             }
+        }
+    }
+
+    /**
+     * Lines an external subtitle up with the timing of the video's own embedded text track (any
+     * language): the extractor-demuxed cues, plus the container index (Matroska Cues) when the
+     * file has one. Timing alone is tried first; when it does not settle it, the translation model
+     * pairs lines that say the same thing. When there is no embedded text track, or no confident
+     * match, the audio sync measures it instead ([calibrateUserPickByAudio]; only when Sync by
+     * hearing is on). With [embeddedOnly] (the menu action) the audio is not tried.
+     */
+    private var embeddedCalibrationJob: Job? = null
+
+    private fun calibrateUserPick(pick: Subtitle, embeddedOnly: Boolean = false) {
+        embeddedCalibrationJob?.cancel()
+        if (pick.isEmbedded || pick.isBitmap) return
+        val original = _uiState.value.subtitles.firstOrNull {
+            !it.isEmbedded && it.provider == pick.provider && it.id == pick.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
+        } ?: pick
+        val streamUrl = _uiState.value.selectedStreamUrl
+        val lockedId = original.id
+        embeddedCalibrationJob = viewModelScope.launch {
+            val raw = (preloadedCopyFor(original)?.url?.let { SubtitleSyncMatcher.loadRaw(it, original.lang) })
+                ?: SubtitleSyncMatcher.loadRaw(original.url, original.lang)
+            if (raw == null) {
+                if (embeddedOnly) showSyncToast("Couldn't download the subtitle to align it")
+                else calibrateUserPickByAudio(pick)
+                return@launch
+            }
+            val cues = withContext(Dispatchers.Default) { SubtitleSyncMatcher.parseCues(raw) }
+            val target = cues.map { com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Interval(it.startMs, it.endMs) }
+            fun stillMine() = _uiState.value.selectedStreamUrl == streamUrl && isCurrentExternal(lockedId)
+            var sawReference = false
+            // The container's index (Matroska Cues) carries the embedded tracks' cue times for the
+            // WHOLE file without downloading media — a far stronger reference than the few minutes
+            // the extractor has demuxed so far. Read once; the demuxed slice is added on every try.
+            val indexed = indexedEmbeddedReference(streamUrl)
+            var aiTries = 0
+            // The extractor reads ahead of playback, so the reference grows; retry for a while.
+            for (attempt in 0 until EMBEDDED_CALIBRATION_ATTEMPTS) {
+                if (!stillMine()) return@launch
+                // Timing alone did not settle it after a couple of tries: ask the translation model
+                // which lines of the embedded track and this subtitle say the same thing.
+                if (attempt >= 2 && aiTries < 2 && sawReference) {
+                    val textRefs = runCatching { embeddedTextReferenceProvider?.invoke() }.getOrNull().orEmpty()
+                        .filter { it.size >= EMBEDDED_AI_MIN_REF_LINES }
+                    if (textRefs.isNotEmpty() && aiSubtitleEnabled && aiKeyReady) {
+                        aiTries++
+                        val offset = measureEmbeddedOffsetWithAi(textRefs.maxBy { it.size }, cues, original.label, aiTries)
+                        if (offset != null) {
+                            if (!stillMine()) return@launch
+                            applyEmbeddedCalibration(
+                                original, raw,
+                                com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Result(
+                                    scale = 1.0, shiftMs = offset, matched = 0, considered = 0, prominence = 0.0
+                                ),
+                                viaAi = true,
+                            )
+                            return@launch
+                        }
+                    }
+                }
+                val refs = (indexed + runCatching { embeddedTimingReferenceProvider?.invoke() }.getOrNull().orEmpty())
+                    .filter { it.size >= com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.MIN_MATCHED }
+                if (refs.isNotEmpty()) {
+                    sawReference = true
+                    val best = withContext(Dispatchers.Default) {
+                        refs.mapNotNull { ref -> com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.align(ref, target) }
+                            .filter { it.confident }
+                            .maxByOrNull { it.matched }
+                    }
+                    if (best != null) {
+                        if (!stillMine()) return@launch
+                        applyEmbeddedCalibration(original, raw, best)
+                        return@launch
+                    }
+                } else if (attempt >= 3 && !sawReference) {
+                    break // No embedded text track: the audio has to do it.
+                }
+                if (embeddedOnly && attempt >= 6) break // The user is waiting on the menu action.
+                delay(EMBEDDED_CALIBRATION_INTERVAL_MS)
+            }
+            if (!stillMine()) return@launch
+            if (embeddedOnly) {
+                Log.i("SubMatch", "embedded calibration (menu): no confident match for \"${original.label}\" (reference=$sawReference)")
+                showSyncToast(
+                    if (sawReference) "Couldn't match this subtitle to the embedded track's timing"
+                    else "The embedded subtitle hasn't loaded yet; try again in a moment"
+                )
+                return@launch
+            }
+            Log.i("SubMatch", "embedded calibration: no confident match for \"${original.label}\" (reference=$sawReference) — trying the audio")
+            calibrateUserPickByAudio(pick)
+        }
+    }
+
+    /** The user's subtitle being calibrated by the audio (its url): its result is announced once. */
+    private var userCalibrationKey: String? = null
+
+    /**
+     * Times an external subtitle by the audio (speech detection), the fallback when the video has
+     * no embedded text track to align to. Runs only when Sync by hearing and its fallback setting
+     * are on, unless [force] (the "Sync to Audio" menu action), which needs only the build to
+     * include audio sync. Nothing is changed when no confident timing is found.
+     */
+    private fun calibrateUserPickByAudio(pick: Subtitle, force: Boolean = false) {
+        if (pick.isEmbedded || pick.isBitmap) return
+        if (!hearingAvailable && !force) {
+            Log.i("SubMatch", "audio calibration: Sync by hearing is off")
+            return
+        }
+        val sync = audioSyncOrNull(force) ?: run {
+            if (force) showSyncToast("Sync by hearing isn't available in this build")
+            return
+        }
+        if (!sync.canTakeOver && !force) {
+            Log.i("SubMatch", "audio calibration: audio sync fallback disabled in settings")
+            return
+        }
+        val original = _uiState.value.subtitles.firstOrNull {
+            !it.isEmbedded && it.provider == pick.provider && it.id == pick.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX)
+        } ?: pick
+        if (original.url.isBlank()) return
+        val streamUrl = _uiState.value.selectedStreamUrl
+        val lockedId = original.id
+        audioSyncWorkJob?.cancel()
+        audioSyncWorkJob = viewModelScope.launch {
+            val raw = (preloadedCopyFor(original)?.url?.let { SubtitleSyncMatcher.loadRaw(it, original.lang) })
+                ?: SubtitleSyncMatcher.loadRaw(original.url, original.lang)
+                ?: run {
+                    if (force) showSyncToast("Couldn't download the subtitle to align it")
+                    return@launch
+                }
+            val cues = withContext(Dispatchers.Default) { SubtitleSyncMatcher.parseCues(raw) }
+            if (_uiState.value.selectedStreamUrl != streamUrl || !isCurrentExternal(lockedId) || (!hearingAvailable && !force)) return@launch
+            armAudioSync()
+            audioSyncTarget = original
+            audioSyncRaw = raw
+            Log.i("SubMatch", "audio calibration: listening to time \"${original.label}\" (${cues.size} cues)")
+            userCalibrationKey = original.url
+            showSyncToast("Syncing the subtitle to the audio…")
+            val started = sync.takeOver(original.url, cues, onFailed = {
+                Log.i("SubMatch", "audio calibration: no confident timing for \"${original.label}\" — kept as authored")
+                if (userCalibrationKey == original.url) {
+                    userCalibrationKey = null
+                    showSyncToast("Audio sync couldn't confirm the timing; the subtitle keeps its own timing")
+                }
+            }, holdUntilConfirmed = false, force = force)
+            if (!started) {
+                userCalibrationKey = null
+                if (force) showSyncToast("Audio sync couldn't start for this subtitle")
+            }
+        }
+    }
+
+    /** True while the external track [baseId] is the one shown (or the AI translation's source). */
+    private fun isCurrentExternal(baseId: String): Boolean {
+        val shown = (if (_uiState.value.isAiTranslating) aiSourceSubtitle else null) ?: _uiState.value.selectedSubtitle
+        return shown != null && !shown.isEmbedded && shown.id.removeSuffix(RETIMED_SUBTITLE_ID_SUFFIX) == baseId
+    }
+
+    /** Whole-file embedded subtitle timelines from the container index, or empty (not Matroska, no index, timeout). */
+    private suspend fun indexedEmbeddedReference(streamUrl: String?):
+        List<List<com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Interval>> {
+        val url = streamUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") } ?: return emptyList()
+        val headers = _uiState.value.selectedStream?.behaviorHints?.proxyHeaders?.request.orEmpty()
+        val timeline = runCatching {
+            com.arflix.tv.ui.screens.player.subtitles.MatroskaIndexSource.load(url, headers) { Log.i("SubMatch", it) }
+        }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull() ?: return emptyList()
+        return timeline.tracks.filter { !it.isForced }.map { track ->
+            track.cues.map { com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Interval(it.startMs, it.endMs) }
+        }.also { Log.i("SubMatch", "embedded calibration: container index gave ${it.size} track(s) ${it.map { t -> t.size }}") }
+    }
+
+    /**
+     * The AI fallback for embedded calibration. The translation model pairs lines of the embedded
+     * track with lines of the subtitle that say the same thing (any two languages); the median
+     * time difference of the pairs that agree is the shift. Only a clear majority within
+     * ±[MATCH_AI_OUTLIER_MS] of the median is accepted, so a few wrong pairings cannot move it.
+     */
+    private suspend fun measureEmbeddedOffsetWithAi(
+        reference: List<SubtitleSyncMatcher.TimedCue>,
+        candidate: List<SubtitleSyncMatcher.TimedCue>,
+        label: String,
+        attempt: Int,
+    ): Long? {
+        val dialogue = reference.filter { it.text.isNotBlank() && !isSdhOnly(it.text) && it.text.trim().length >= 4 }
+        if (dialogue.size < EMBEDDED_AI_MIN_REF_LINES) return null
+        // A second try uses a later slice of the reference (more of it has been demuxed by then).
+        val start = if (attempt <= 1) (dialogue.size / 4) else (dialogue.size / 2)
+        val refs = dialogue.drop(start).take(EMBEDDED_AI_REF_LINES).takeIf { it.size >= EMBEDDED_AI_MIN_REF_LINES }
+            ?: dialogue.takeLast(EMBEDDED_AI_REF_LINES)
+        val from = refs.first().startMs - EMBEDDED_AI_MAX_SHIFT_MS
+        val to = refs.last().endMs + EMBEDDED_AI_MAX_SHIFT_MS
+        val window = candidate.filter { it.endMs >= from && it.startMs <= to && it.text.isNotBlank() }
+        if (window.size < EMBEDDED_AI_MIN_PAIRS) return null
+        // Keep the window near the reference when it is very long (bounded request size).
+        val trimmed = if (window.size <= EMBEDDED_AI_CANDIDATE_LINES) window else {
+            val mid = (refs.first().startMs + refs.last().endMs) / 2
+            window.sortedBy { kotlin.math.abs((it.startMs + it.endMs) / 2 - mid) }
+                .take(EMBEDDED_AI_CANDIDATE_LINES).sortedBy { it.startMs }
+        }
+        Log.i("SubMatch", "[ai-embedded] \"$label\" asking the model: ${refs.size} embedded lines vs ${trimmed.size} subtitle lines")
+        val matches = runCatching {
+            translationService.matchSubtitleLines(
+                refs.map { it.text.replace("\n", " ") },
+                trimmed.map { it.text.replace("\n", " ") }
+            )
+        }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull()
+        if (matches.isNullOrEmpty()) {
+            Log.i("SubMatch", "[ai-embedded] \"$label\" no usable answer")
+            return null
+        }
+        val deltas = matches.map { refs[it.referenceIndex].startMs - trimmed[it.candidateIndex].startMs }.sorted()
+        val median = deltas[deltas.size / 2]
+        val kept = deltas.filter { kotlin.math.abs(it - median) <= MATCH_AI_OUTLIER_MS }
+        if (kept.size < EMBEDDED_AI_MIN_PAIRS || kept.size * 2 < deltas.size + 1) {
+            Log.i("SubMatch", "[ai-embedded] \"$label\" pairs disagree: $deltas")
+            return null
+        }
+        val offset = kept.average().toLong()
+        Log.i("SubMatch", "[ai-embedded] \"$label\" offset=${offset}ms from ${kept.size}/${deltas.size} pairs")
+        return offset
+    }
+
+    private fun applyEmbeddedCalibration(
+        sub: Subtitle,
+        raw: String,
+        r: com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Result,
+        viaAi: Boolean = false,
+    ) {
+        Log.i(
+            "SubMatch",
+            "embedded calibration: \"${sub.label}\" x${"%.5f".format(r.scale)} ${r.shiftMs}ms " +
+                "(${r.matched}/${r.considered} cues, prominence ${"%.1f".format(r.prominence)})"
+        )
+        if (r.isPlainShift) {
+            if (kotlin.math.abs(r.shiftMs) < 80L) {
+                showSyncToast("Subtitle timing matches the video's own track")
+                return
+            }
+            applyAutoSync(sub, SubtitleAutoSync.ofMs(r.shiftMs))
+            showSyncToast(
+                if (viaAi) "Subtitle aligned to the video's own track by AI line matching: {0}"
+                else "Subtitle aligned to the video's own track: {0}",
+                formatShift(r.shiftMs)
+            )
+        } else {
+            val rewritten = SubtitleSyncMatcher.retimeTimestamps(raw) { start, end ->
+                (kotlin.math.round(start * r.scale).toLong() + r.shiftMs) to (kotlin.math.round(end * r.scale).toLong() + r.shiftMs)
+            }
+            applyAutoSync(sub, null)
+            selectSubtitle(localizeSubtitle(sub.copy(id = sub.id + RETIMED_SUBTITLE_ID_SUFFIX), rewritten), isUserAction = false)
+            showSyncToast("Subtitle aligned to the video's own track: {0}", formatShift(r.shiftMs))
+        }
+    }
+
+    private fun formatShift(ms: Long): String = (if (ms >= 0) "+" else "-") + "%.1f s".format(kotlin.math.abs(ms) / 1000.0)
+
+    private fun showSyncToast(message: String, arg: String? = null) {
+        val text = com.arflix.tv.ui.screens.player.subtitles.bilingual.bt(message)
+            .let { if (arg != null) it.replace("{0}", arg) else it }
+        viewModelScope.launch(Dispatchers.Main) {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -7413,8 +7940,10 @@ class PlayerViewModel @Inject constructor(
         subtitleSelectionJob?.cancel()
         cancelSubtitleLocalization()
         translationManager.isEnabled = false
+        leaveSmartBilingual()
         aiSourceSubtitle = null
         _uiState.value = _uiState.value.copy(
+            subtitleUserPickNonce = _uiState.value.subtitleUserPickNonce + 1,
             selectedSubtitle = null,
             isAiTranslating = false,
             isAiAvailable = false,
@@ -8452,6 +8981,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     companion object {
+        private const val EMBEDDED_CALIBRATION_ATTEMPTS = 24
+        private const val EMBEDDED_CALIBRATION_INTERVAL_MS = 5_000L
+        private const val EMBEDDED_AI_REF_LINES = 12
+        private const val EMBEDDED_AI_MIN_REF_LINES = 6
+        private const val EMBEDDED_AI_CANDIDATE_LINES = 90
+        private const val EMBEDDED_AI_MIN_PAIRS = 4
+        private const val EMBEDDED_AI_MAX_SHIFT_MS = 60_000L
         private const val TAG = "PlayerViewModel"
 
         // ── "Find best match" tuning ──────────────────────────────────────────
@@ -8687,4 +9223,13 @@ private object PlayerViewModelRegexes {
     // A cue that is ONLY music notation or a bracketed sound effect — SDH decoration with no
     // counterpart in a translated file, so it can only produce false pairs when line-matching.
     val SDH_ONLY = Regex("""^[\s♪♫]*(\[[^]]*]|\([^)]*\)|[-–—\s])*[\s♪♫]*$""")
+}
+
+/** One persistent translation cache per process. */
+internal object TranslationDiskCacheHolder {
+    @Volatile private var cache: com.arflix.tv.ui.screens.player.subtitles.TranslationDiskCache? = null
+    fun get(context: Context): com.arflix.tv.ui.screens.player.subtitles.TranslationDiskCache =
+        cache ?: synchronized(this) {
+            cache ?: com.arflix.tv.ui.screens.player.subtitles.TranslationDiskCache(context.applicationContext.cacheDir).also { cache = it }
+        }
 }

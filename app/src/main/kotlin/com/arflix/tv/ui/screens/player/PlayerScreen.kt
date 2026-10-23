@@ -1094,9 +1094,16 @@ fun PlayerScreen(
 
     // Sync by hearing (audiosync.ArvioAudioSync): every extractor also copies the playing stream's
     // audio to the audio sync — idle unless it is listening. DV stripping, when on, stays underneath.
+    // Bilingual subtitles: second-subtitle text tap. Copies the text of every embedded subtitle
+    // track (selected or not) while the extractor demuxes it anyway — the smart bilingual mode
+    // merges a second embedded language from here without a second player/decoder or any AI call.
+    val embeddedSubtitleStore = remember { com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedSubtitleStore() }
     val audioTapExtractorsFactory = remember(dvStripExtractorsFactory) {
-        com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapExtractors(
-            dvStripExtractorsFactory ?: androidx.media3.extractor.DefaultExtractorsFactory()
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.SubtitleTextTapExtractorsFactory(
+            com.arflix.tv.ui.screens.player.audiosync.AudioSyncTaps.wrapExtractors(
+                dvStripExtractorsFactory ?: androidx.media3.extractor.DefaultExtractorsFactory()
+            ) { latestUiState.selectedStreamUrl },
+            embeddedSubtitleStore,
         ) { latestUiState.selectedStreamUrl }
     }
 
@@ -1161,6 +1168,20 @@ fun PlayerScreen(
         viewModel.bufferedReferenceCuesProvider = { max ->
             aiRenderersFactory.extractBufferedReferenceCues(max)
         }
+        viewModel.embeddedTextReferenceProvider = {
+            embeddedSubtitleStore.tracks().filter { !it.isForced && !it.isBitmap }.map { track ->
+                embeddedSubtitleStore.cues(track.trackId).map {
+                    com.arflix.tv.ui.screens.player.subtitles.SubtitleSyncMatcher.TimedCue(it.startMs, it.endMs, it.text)
+                }
+            }
+        }
+        viewModel.embeddedTimingReferenceProvider = {
+            embeddedSubtitleStore.tracks().filter { !it.isForced }.map { track ->
+                embeddedSubtitleStore.cues(track.trackId).map {
+                    com.arflix.tv.ui.screens.player.subtitles.bilingual.EmbeddedTimingAligner.Interval(it.startMs, it.endMs)
+                }
+            }
+        }
     }
     // The auto-match correction reaches the renderer only while its own track is the selected one.
     LaunchedEffect(uiState.autoSync, uiState.autoSyncSubtitleKey, uiState.selectedSubtitle) {
@@ -1176,6 +1197,8 @@ fun PlayerScreen(
             viewModel.bufferedReferenceIntervalsProvider = null
             viewModel.bufferedCueTextsProvider = null
             viewModel.bufferedReferenceCuesProvider = null
+            viewModel.embeddedTimingReferenceProvider = null
+            viewModel.embeddedTextReferenceProvider = null
             viewModel.selectedTextTrackProvider = null
             viewModel.geminiLiveService.disconnect()
         }
@@ -2439,6 +2462,9 @@ fun PlayerScreen(
                 exoPlayer.playWhenReady = false
             }
 
+            // Second-subtitle reads are scoped to exactly this media (keyed by the URI its
+            // extractor reads), so cues from another episode can never be merged in.
+            embeddedSubtitleStore.setActiveSource(mediaItem.localConfiguration?.uri?.toString())
             val resumePosition = uiState.savedPosition
             if (resumePosition > 0L) {
                 exoPlayer.setMediaSource(mediaSource, resumePosition)
@@ -2722,6 +2748,15 @@ fun PlayerScreen(
     // Sync in-player subtitle delay with the renderer factory (microseconds = ms * 1000)
     LaunchedEffect(subtitleSyncOffsetMs) {
         aiRenderersFactory.syncOffsetUs.set(subtitleSyncOffsetMs * 1000L)
+    }
+    // Every external subtitle track shown is lined up once with the embedded track's timing,
+    // whichever path selected it (see PlayerViewModel.onShownSubtitleTrackChanged).
+    val shownSubtitleTrackKey = uiState.selectedSubtitle?.let { sub ->
+        if (sub.isEmbedded) "embedded|${sub.id}"
+        else "${sub.provider}|${sub.id.removeSuffix(com.arflix.tv.ui.screens.player.subtitles.RETIMED_SUBTITLE_ID_SUFFIX)}"
+    }
+    LaunchedEffect(shownSubtitleTrackKey) {
+        if (shownSubtitleTrackKey != null) viewModel.onShownSubtitleTrackChanged()
     }
 
     // When cast starts: keep controls permanently visible.
@@ -3568,7 +3603,7 @@ fun PlayerScreen(
                                     if (matchGroup && subtitleTrackIndex == 0) {
                                         viewModel.runFindBestMatch()
                                     } else if (aiGroup && subtitleTrackIndex == aiHeaderIdx) {
-                                        if (!latestUiState.isAiTranslating) viewModel.activateAiTranslation()
+                                        if (!latestUiState.isAiTranslating) viewModel.activateAiTranslation(userInitiated = true)
                                     } else {
                                         group?.second?.getOrNull(realIdx)?.second
                                             ?.let { viewModel.selectSubtitle(it) }
@@ -3765,6 +3800,23 @@ fun PlayerScreen(
                         }
                     }
                 },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Bilingual subtitles: the AI-translation / smart bilingual subtitles drawn as two
+            // independently styled layers above the video. Fed by the same single text track;
+            // ordinary subtitle tracks are still drawn by the PlayerView's SubtitleView above.
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.SmartBilingualController(
+                viewModel = viewModel,
+                uiState = uiState,
+                store = embeddedSubtitleStore,
+                audioLanguage = { exoPlayer.audioFormat?.language },
+            )
+            com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleOverlay(
+                manager = viewModel.translationManager,
+                aiActive = uiState.isAiTranslating || uiState.smartBilingualActive,
+                hidden = false,
+                isInPictureInPicture = isInPipMode,
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -4091,8 +4143,10 @@ fun PlayerScreen(
                 onFindBestMatch = {
                     viewModel.runFindBestMatch()
                 },
+                onAlignToEmbedded = { viewModel.alignSubtitleToEmbedded() },
+                onSyncToAudio = { viewModel.syncSubtitleToAudio() },
                 onActivateAiTranslation = {
-                    viewModel.activateAiTranslation()
+                    viewModel.toggleAiTranslation()
                 },
                 subtitleDelayMs = subtitleSyncOffsetMs,
                 onUpdateSubtitleDelay = { delayMs ->
@@ -4757,7 +4811,7 @@ fun PlayerScreen(
                     },
                     isLiveAudioTranslating = uiState.isLiveAudioTranslating,
                     isFindingBestMatch = uiState.isFindingBestMatch,
-                    onToggleAi = { viewModel.activateAiTranslation() },
+                    onToggleAi = { viewModel.toggleAiTranslation() },
                     onToggleLiveAudio = { viewModel.toggleLiveAudioTranslation() },
                     onFindBestMatch = { viewModel.runFindBestMatch() },
                     onClose = {
