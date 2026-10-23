@@ -1146,6 +1146,13 @@
     <string name="player_ai_translating">AI Translating</string>
     <string name="player_cd_stop_casting">Stop casting</string>
     <string name="player_cd_cast_to_tv">Cast to TV</string>
+    <string name="cast_chooser_title">Cast to device</string>
+    <string name="cast_chooser_search_again">Search again</string>
+    <string name="cast_chooser_searching">Searching for TVs on this Wi-Fi…</string>
+    <string name="cast_chooser_none_found">No TV found. Make sure the phone and TV are on the same Wi-Fi and the TV\'s casting (DLNA / Chromecast) is turned on.</string>
+    <string name="cast_chooser_cancel">Cancel</string>
+    <string name="cast_error_local_source">This source plays through the phone and can\'t be cast. Pick a direct or debrid source.</string>
+    <string name="cast_error_format_refused">The TV refused this video format</string>
     <string name="player_muted">Muted</string>
     <string name="player_cd_setup">Setup</string>
     <string name="player_cd_error">Error</string>
