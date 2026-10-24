@@ -495,6 +495,10 @@ export interface AppSettings {
   aiSubtitleModel: "off" | "groq" | "gemini";
   aiAutoSelect: boolean;
   aiApiKey: string;
+  // ARVIO Premium: translate with ARVIO's hosted AI, no personal key needed.
+  aiSubtitlesHosted: boolean;
+  // Premium: when no subtitle exists in the subtitle language, translate the English one automatically.
+  aiHostedAutoTranslate: boolean;
   // Playback target: "browser" plays in the built-in player; "vlc"/"infuse"
   // hand the top source straight to that external player on Play (Trakt still
   // syncs via the return-to-app prompt).

@@ -59,10 +59,12 @@ class SubtitleTranslationManager(
         }
     }
 
-    fun updateService(apiKey: String, model: SubtitleAiModel) {
+    /** [hosted] set → translate through ARVIO's hosted service (Premium) rather than [apiKey]. */
+    fun updateService(apiKey: String, model: SubtitleAiModel, hosted: HostedSubtitleTranslator? = null) {
         service = SubtitleTranslationService(
             apiKeyProvider = { apiKey },
-            modelProvider = { model }
+            modelProvider = { model },
+            hostedTranslator = hosted
         )
     }
 

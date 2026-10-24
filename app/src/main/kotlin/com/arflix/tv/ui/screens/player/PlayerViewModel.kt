@@ -25,6 +25,7 @@ import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.repository.YouTubeCollection
 import com.arflix.tv.data.repository.KidsContentFilter
+import com.arflix.tv.data.repository.HostedSubtitleRepository
 import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlaybackTelemetryRepository
@@ -309,7 +310,8 @@ class PlayerViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    private val hostedSubtitleRepository: HostedSubtitleRepository
 ) : ViewModel() {
 
     /** Whether the active profile may play this title; always true outside a kids profile. */
@@ -426,6 +428,12 @@ class PlayerViewModel @Inject constructor(
     // AI subtitle settings (read once per video load)
     private var aiSubtitleEnabled = false
     private var aiSubtitleAutoSelect = false
+    // Hosted AI subtitles (ARVIO Premium): translation through ARVIO's service, no own key.
+    // Both settings default to on, so a Premium member gets subtitles in their language
+    // without any setup. Resolved once per video load, like the other AI flags.
+    private var aiHostedEnabled = true
+    private var aiHostedAutoTranslate = true
+    private var aiHostedActive = false
     // When true (default), activating AI first tries to auto-pick a synced addon subtitle in the
     // user's preferred language (Find Best Match); only if nothing matches does it translate the
     // built-in subtitle.
@@ -447,6 +455,15 @@ class PlayerViewModel @Inject constructor(
     private val aiEnabledKey = booleanPreferencesKey("subtitle_ai_enabled")
     private val aiAutoSelectKey = booleanPreferencesKey("subtitle_ai_auto_select")
     private val aiFindBestMatchKey = booleanPreferencesKey("subtitle_ai_find_best_match")
+    private val aiHostedKey = booleanPreferencesKey("subtitle_ai_hosted")
+    private val aiHostedAutoKey = booleanPreferencesKey("subtitle_ai_hosted_auto")
+
+    /** AI translation is on: Premium hosted subtitles, or the user's own AI key setup. */
+    private val aiTranslateEnabled: Boolean get() = aiHostedActive || aiSubtitleEnabled
+    /** Translate automatically at playback start when no subtitle exists in the user's language. */
+    private val aiTranslateAuto: Boolean get() = if (aiHostedActive) aiHostedAutoTranslate else aiSubtitleAutoSelect
+    /** AI translation can actually run (hosted, or own setup with a key). */
+    private val aiTranslateReady: Boolean get() = aiHostedActive || (aiSubtitleEnabled && aiApiKey.isNotBlank())
     /** "Sync by hearing" (sideload build only): the audio sync after an unverified scan. */
     // v2: the setting is stored (and synced) only once the user sets it, so an untouched device
     // keeps its own default — on, except on low-memory devices (see hearingSyncDefault).
@@ -501,6 +518,8 @@ class PlayerViewModel @Inject constructor(
                 aiErrorToastShown = true
                 val msg = when {
                     errorMessage == "API key missing" -> PlayerMessage.Res(R.string.player_ai_no_key)
+                    errorMessage == HostedSubtitleRepository.ERROR_PREMIUM_REQUIRED -> PlayerMessage.Res(R.string.player_ai_hosted_premium_required)
+                    errorMessage == HostedSubtitleRepository.ERROR_MONTHLY_LIMIT -> PlayerMessage.Res(R.string.player_ai_hosted_limit)
                     errorMessage == "RATE_LIMITED"    -> PlayerMessage.Res(R.string.player_ai_rate_limited)
                     errorMessage?.startsWith("HTTP 401") == true -> PlayerMessage.Res(R.string.player_ai_invalid_key)
                     else -> PlayerMessage.Res(
@@ -890,7 +909,17 @@ class PlayerViewModel @Inject constructor(
                 SubtitleAiModel.valueOf(prefs[aiModelKey] ?: SubtitleAiModel.GROQ_LLAMA_70B.name)
             }.getOrDefault(SubtitleAiModel.GROQ_LLAMA_70B)
             aiRemoveHearingImpaired = prefs[aiRemoveHearingImpairedKey] ?: true
-            translationManager.updateService(apiKey = aiApiKey, model = aiModel)
+            aiHostedEnabled = prefs[aiHostedKey] ?: true
+            aiHostedAutoTranslate = prefs[aiHostedAutoKey] ?: true
+            // Premium check is cached for 30 minutes; the first one is bounded to a short wait.
+            aiHostedActive = aiHostedEnabled && hostedSubtitleRepository.isSupported &&
+                hostedSubtitleRepository.lastRefusal == null &&
+                runCatching { hostedSubtitleRepository.isPremium() }.getOrDefault(false)
+            translationManager.updateService(
+                apiKey = aiApiKey,
+                model = aiModel,
+                hosted = if (aiHostedActive) { lines, language -> hostedSubtitleRepository.translate(lines, language) } else null
+            )
             translationManager.removeHearingImpaired = aiRemoveHearingImpaired
             translationManager.isEnabled = false
             untranslatableSourceIds.clear()
@@ -2239,9 +2268,9 @@ class PlayerViewModel @Inject constructor(
 
         // When AI is active, only an embedded built-in subtitle suppresses AI.
         // External addon subtitles (WIZDOM, KTUVIT, etc.) do not count — AI takes priority over them.
-        val aiModeActive = aiSubtitleEnabled && aiSubtitleAutoSelect && normalizedPref.isNotBlank()
+        val aiModeActive = aiTranslateEnabled && aiTranslateAuto && normalizedPref.isNotBlank()
         // AI enabled regardless of auto-select — used to expose the AI option in the picker
-        val aiEnabledForLanguage = aiSubtitleEnabled && normalizedPref.isNotBlank()
+        val aiEnabledForLanguage = aiTranslateEnabled && normalizedPref.isNotBlank()
         val embeddedOnly = subtitles.filter { it.isEmbedded }
 
         // In AI mode, only the user's preferred language embedded sub suppresses AI.
@@ -2435,7 +2464,7 @@ class PlayerViewModel @Inject constructor(
     private suspend fun refreshAiAvailability(subtitles: List<Subtitle>) {
         val preferred = getDefaultSubtitle()
         val normalizedPref = normalizeLanguage(preferred)
-        if (!aiSubtitleEnabled || normalizedPref.isBlank() || isSubtitleDisabledPreference(preferred)) return
+        if (!aiTranslateEnabled || normalizedPref.isBlank() || isSubtitleDisabledPreference(preferred)) return
         if (_uiState.value.isAiAvailable) return
         val source = findAiSourceSubtitle(subtitles) ?: return
         aiSourceSubtitle = aiSourceSubtitle ?: source
@@ -3453,7 +3482,7 @@ class PlayerViewModel @Inject constructor(
             // ~15s later when the embedded English track finally resolved.)
             if (_uiState.value.isFindingBestMatch && !_uiState.value.isAiTranslating &&
                 _uiState.value.provisionalMatch == null &&
-                aiSubtitleEnabled && aiSubtitleAutoSelect &&
+                aiTranslateEnabled && aiTranslateAuto &&
                 findAiSourceSubtitle(finalList) != null
             ) {
                 Log.i("SubMatch", "late AI interim: embedded source arrived mid-scan, nothing on screen")
@@ -3861,7 +3890,7 @@ class PlayerViewModel @Inject constructor(
         // With AI auto-select OFF (or the AI feature disabled), the user opted out of automatic
         // AI translation entirely: the scan runs "silent" (reference cues hidden, zero AI/API
         // usage) and falls back to whatever was selected before.
-        val source = if (aiSubtitleEnabled && aiSubtitleAutoSelect) {
+        val source = if (aiTranslateEnabled && aiTranslateAuto) {
             findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle
         } else {
             null
@@ -3904,7 +3933,7 @@ class PlayerViewModel @Inject constructor(
      * pick. Returns true when AI took over.
      */
     private fun tryAiFallbackAfterScan(): Boolean {
-        if (!aiSubtitleEnabled || aiApiKey.isBlank()) return false
+        if (!aiTranslateReady) return false
         if (findAiSourceSubtitle(_uiState.value.subtitles) == null) return false
         activateAiTranslation()
         showMatchToast(PlayerMessage.Res(R.string.player_match_none_using_ai))
@@ -3942,7 +3971,7 @@ class PlayerViewModel @Inject constructor(
         // Defense-in-depth: every caller is already gated on the AI master toggle (menu entry via
         // isAiAvailable, interim via auto-select, fallback via tryAiFallbackAfterScan), but AI
         // must never activate — and never spend API requests — when the feature is off.
-        if (!aiSubtitleEnabled) return
+        if (!aiTranslateEnabled) return
         // Re-resolve the source on every activation: an early activation (before embedded tracks
         // resolve) may have cached an external fallback source, and translation inherits the
         // source's timing — keep the cached one only when nothing better is available now.
@@ -4194,7 +4223,7 @@ class PlayerViewModel @Inject constructor(
                 // mean a long blank screen, so wait a short bounded time only: long enough for
                 // tracks to appear on a normal start, short enough that a source without an
                 // embedded English track falls back to the optimistic pick quickly.
-                val aiPossible = aiSubtitleEnabled && aiApiKey.isNotBlank()
+                val aiPossible = aiTranslateReady
                 val aiInterimSource = if (!aiPossible) null else {
                     // The scan begins BEFORE the player has opened the file — preload mode gates
                     // prepare on the addon-subtitle fetch, and that same fetch triggers the scan.

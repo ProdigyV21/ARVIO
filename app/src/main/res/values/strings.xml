@@ -280,6 +280,11 @@
     <string name="ai_model_desc">Select translation provider and model</string>
     <string name="ai_auto_select_title">Auto-Select AI Translation</string>
     <string name="ai_auto_select_desc">Automatically activate AI when any built in language is available</string>
+    <string name="ai_hosted_title">Hosted AI subtitles</string>
+    <string name="ai_hosted_desc">Included with ARVIO Premium: translate subtitles into your language, no API key needed</string>
+    <string name="ai_hosted_desc_locked">Included with ARVIO Premium. Subscribe at arvio.tv with your account email to unlock it</string>
+    <string name="ai_hosted_auto_title">Translate automatically</string>
+    <string name="ai_hosted_auto_desc">With hosted AI subtitles, translate when no subtitle exists in your language</string>
     <string name="ai_find_best_match_title">Auto Find Best Subtitle Match</string>
     <string name="ai_find_best_match_desc">Auto-pick the best-synced subtitle from your addons</string>
     <string name="subtitle_hearing_sync_title">Sync by Hearing</string>
@@ -1405,6 +1410,8 @@
     <string name="update_install_failed">Update install failed.</string>
     <string name="player_ai_no_key">AI subtitles: no API key set. Add it in Settings → General.</string>
     <string name="player_ai_rate_limited">AI subtitles: rate limit hit — translation paused.</string>
+    <string name="player_ai_hosted_premium_required">Hosted AI subtitles are included with ARVIO Premium.</string>
+    <string name="player_ai_hosted_limit">Hosted AI subtitles: this month\'s fair-use limit is reached. You can still use your own AI key.</string>
     <string name="player_ai_invalid_key">AI subtitles: invalid API key.</string>
     <string name="player_ai_translation_error">AI subtitles: translation error — %1$s</string>
     <string name="player_ai_no_text_source">AI subtitles: this file only has image-based subtitles (PGS) — there is no text to translate.</string>

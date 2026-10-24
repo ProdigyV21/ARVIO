@@ -38,6 +38,7 @@ import com.arflix.tv.data.model.StreamIntegrationConfig
 import com.arflix.tv.data.model.StreamIntegrationType
 import com.arflix.tv.data.model.StreamProviderItem
 import com.arflix.tv.data.repository.AuthRepository
+import com.arflix.tv.data.repository.HostedSubtitleRepository
 import com.arflix.tv.data.repository.YouTubeCollection
 import com.arflix.tv.data.repository.AuthState
 import com.arflix.tv.data.repository.CatalogDiscoveryRepository
@@ -403,6 +404,13 @@ data class SettingsUiState(
     val subtitleAiEnabled: Boolean = false,
     val subtitleAiAutoSelect: Boolean = false,
     val subtitleAiFindBestMatch: Boolean = false,
+    /** Hosted AI subtitles (ARVIO Premium): translate with ARVIO's service, no own key. */
+    val subtitleAiHosted: Boolean = true,
+    val subtitleAiHostedAuto: Boolean = true,
+    /** Hosted AI subtitles exist in this build (ARVIO Cloud). */
+    val subtitleAiHostedSupported: Boolean = false,
+    /** The signed-in account has Premium, so hosted AI subtitles are unlocked. */
+    val subtitleAiHostedPremium: Boolean = false,
     /** Sync by hearing after an unverified scan (the setting exists in the sideload build only). */
     val subtitleHearingSync: Boolean = true,
     /** Below 2.5 GB of RAM sync by hearing is off unless the user turns it on. */
@@ -435,6 +443,7 @@ class SettingsViewModel @Inject constructor(
     private val homeServerRepository: HomeServerRepository,
     private val watchlistRepository: WatchlistRepository,
     private val authRepository: AuthRepository,
+    private val hostedSubtitleRepository: HostedSubtitleRepository,
     private val profileRepository: ProfileRepository,
     private val tvDeviceAuthRepository: TvDeviceAuthRepository,
     private val traktSyncService: TraktSyncService,
@@ -539,6 +548,8 @@ class SettingsViewModel @Inject constructor(
     private val subtitleAiEnabledKey = booleanPreferencesKey("subtitle_ai_enabled")
     private val subtitleAiAutoSelectKey = booleanPreferencesKey("subtitle_ai_auto_select")
     private val subtitleAiFindBestMatchKey = booleanPreferencesKey("subtitle_ai_find_best_match")
+    private val subtitleAiHostedKey = booleanPreferencesKey("subtitle_ai_hosted")
+    private val subtitleAiHostedAutoKey = booleanPreferencesKey("subtitle_ai_hosted_auto")
     private val subtitleHearingSyncKey = booleanPreferencesKey("subtitle_hearing_sync_v2")
     private val hearingLowMemory by lazy { com.arflix.tv.ui.screens.player.audiosync.SpotConnections.isLowMemoryTv(context) }
     private val subtitlePreloadEnabledKey = booleanPreferencesKey("subtitle_preload_enabled")
@@ -624,6 +635,7 @@ class SettingsViewModel @Inject constructor(
             usageStatisticsEnabled = DiagnosticsManager.isUsageEnabled(context)
         )
         loadSettings()
+        refreshHostedSubtitlePremium()
         observeProfileChanges()
         observeAddons()
         observeTorrServer()
@@ -800,6 +812,8 @@ class SettingsViewModel @Inject constructor(
             val subtitleAiEnabled = prefs[subtitleAiEnabledKey] ?: false
             val subtitleAiAutoSelect = prefs[subtitleAiAutoSelectKey] ?: false
             val subtitleAiFindBestMatch = prefs[subtitleAiFindBestMatchKey] ?: false
+            val subtitleAiHosted = prefs[subtitleAiHostedKey] ?: true
+            val subtitleAiHostedAuto = prefs[subtitleAiHostedAutoKey] ?: true
             val subtitleHearingSync = prefs[subtitleHearingSyncKey] ?: !hearingLowMemory
             val subtitlePreloadEnabled = prefs[subtitlePreloadEnabledKey] ?: true
             val dolbyVisionCompatEnabled = prefs[dolbyVisionCompatKey] ?: true
@@ -920,6 +934,10 @@ class SettingsViewModel @Inject constructor(
                 qualityFilterPresetLabel = detectQualityFilterPreset(qualityFilters).label,
                 subtitleAiEnabled = subtitleAiEnabled,
                 subtitleAiAutoSelect = subtitleAiAutoSelect,
+                subtitleAiHosted = subtitleAiHosted,
+                subtitleAiHostedAuto = subtitleAiHostedAuto,
+                subtitleAiHostedSupported = hostedSubtitleRepository.isSupported,
+                subtitleAiHostedPremium = currentState.subtitleAiHostedPremium || hostedSubtitleRepository.cachedPremium(),
                 subtitleAiFindBestMatch = subtitleAiFindBestMatch,
                 subtitleHearingSync = subtitleHearingSync,
                 subtitleHearingSyncLowMemory = hearingLowMemory,
@@ -2028,6 +2046,31 @@ class SettingsViewModel @Inject constructor(
             context.settingsDataStore.edit { it[subtitleAiAutoSelectKey] = enabled }
             _uiState.value = _uiState.value.copy(subtitleAiAutoSelect = enabled)
             syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun setSubtitleAiHosted(enabled: Boolean) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[subtitleAiHostedKey] = enabled }
+            _uiState.value = _uiState.value.copy(subtitleAiHosted = enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    fun setSubtitleAiHostedAuto(enabled: Boolean) {
+        viewModelScope.launch {
+            context.settingsDataStore.edit { it[subtitleAiHostedAutoKey] = enabled }
+            _uiState.value = _uiState.value.copy(subtitleAiHostedAuto = enabled)
+            syncLocalStateToCloud(silent = true)
+        }
+    }
+
+    /** Re-checks Premium (e.g. when the AI settings open) so the hosted rows show the live state. */
+    fun refreshHostedSubtitlePremium() {
+        if (!hostedSubtitleRepository.isSupported) return
+        viewModelScope.launch {
+            val premium = runCatching { hostedSubtitleRepository.isPremium(forceRefresh = true) }.getOrDefault(false)
+            _uiState.value = _uiState.value.copy(subtitleAiHostedPremium = premium)
         }
     }
 

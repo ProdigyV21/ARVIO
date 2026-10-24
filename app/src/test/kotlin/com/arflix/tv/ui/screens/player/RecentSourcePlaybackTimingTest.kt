@@ -69,7 +69,8 @@ class RecentSourcePlaybackTimingTest {
             streamIntegrationRepository = mockk(relaxed = true),
             recentPlayedSourceRepository = recentRepository,
 
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true),
+            hostedSubtitleRepository = mockk(relaxed = true)
         )
         store.put("player", model)
         field("currentMediaId").setInt(model, 42)

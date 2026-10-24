@@ -54,6 +54,8 @@ import { authClient, getPriorityConfig, useApp } from "@/lib/store";
 import { trackPremiumDaily, trackPremiumEvent, trackPremiumMilestone } from "@/lib/premiumAnalytics";
 import { syncClient } from "@/lib/sync";
 import { SubtitleTranslator, subtitleLanguageName } from "@/lib/subtitleAi";
+import { hostedSubtitlesSupported, translateHosted } from "@/lib/hostedSubtitles";
+import { useEntitlement } from "@/lib/entitlementContext";
 import { getLogoUrl } from "@/lib/tmdb";
 import type { AppSettings, InstalledAddon, MediaItem, StreamSource } from "@/lib/types";
 
@@ -330,7 +332,13 @@ function VideoPlayer({
   const [aiSubsActive, setAiSubsActive] = useState(false);
   const [aiTranslating, setAiTranslating] = useState(false);
   const aiTargetName = subtitleLanguageName(settings.defaultSubtitle);
-  const aiAvailable = settings.aiSubtitlesEnabled && settings.aiSubtitleModel !== "off" && Boolean(settings.aiApiKey) && Boolean(aiTargetName) && !aiTargetName.toLowerCase().startsWith("engl");
+  // ARVIO Premium includes hosted AI subtitles: no personal key, any subtitle language.
+  // Without Premium (or with it switched off) the bring-your-own-key setup applies as before.
+  const entitlement = useEntitlement();
+  const aiHosted = hostedSubtitlesSupported() && settings.aiSubtitlesHosted && entitlement?.entitled === true && Boolean(authClient.session);
+  const aiOwnKey = settings.aiSubtitlesEnabled && settings.aiSubtitleModel !== "off" && Boolean(settings.aiApiKey);
+  const aiAvailable = (aiHosted || aiOwnKey) && Boolean(aiTargetName) && !aiTargetName.toLowerCase().startsWith("engl");
+  const aiAutoTranslate = aiHosted ? settings.aiHostedAutoTranslate : settings.aiAutoSelect;
   const translatorRef = useRef<SubtitleTranslator | null>(null);
   const [playbackRate, setPlaybackRateState] = useState(1);
   const setPlaybackRate = useCallback((rate: number) => {
@@ -550,8 +558,14 @@ function VideoPlayer({
     const video = videoRef.current;
     const track = subtitleState.track;
     if (!video || !track) return undefined;
-    const translator = new SubtitleTranslator(settings.aiApiKey, settings.aiSubtitleModel === "gemini" ? "gemini" : "groq", aiTargetName);
+    const translator = aiHosted
+      ? new SubtitleTranslator("", "hosted", aiTargetName, (lines, language) => translateHosted(() => authClient.accessToken(), lines, language))
+      : new SubtitleTranslator(settings.aiApiKey, settings.aiSubtitleModel === "gemini" ? "gemini" : "groq", aiTargetName);
     translator.onTranslatingChanged = setAiTranslating;
+    translator.onHostedError = (code) => {
+      if (code === "monthly_limit_reached") onToast("This month's AI subtitle allowance is used up. Original subtitles are shown.");
+      else if (code === "premium_required") onToast("AI subtitles are included with ARVIO Premium.");
+    };
     translatorRef.current = translator;
     const originals = new WeakMap<VTTCue, string>();
     const applyToCue = (cue: VTTCue) => {
@@ -580,7 +594,7 @@ function VideoPlayer({
       setAiTranslating(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiSubsActive, aiAvailable, activeSubtitle, subtitleState.track, stream.url, settings.aiApiKey, settings.aiSubtitleModel, aiTargetName]);
+  }, [aiSubsActive, aiAvailable, aiHosted, activeSubtitle, subtitleState.track, stream.url, settings.aiApiKey, settings.aiSubtitleModel, aiTargetName]);
 
   // Adaptive downswitch: repeated mid-play buffering means the connection
   // can't sustain this file's bitrate (common with huge remuxes over VPN) —
@@ -724,11 +738,11 @@ function VideoPlayer({
       const preferred = defaultSubtitleIndex(stream, settings.defaultSubtitle);
       const language = settings.defaultSubtitle.trim().toLowerCase();
       const english = (stream.subtitles ?? []).findIndex(subtitle => (subtitle.lang ?? "").toLowerCase().startsWith("en"));
-      const translate = !!(aiAvailable && settings.aiAutoSelect && !liveTv && language && language !== "off" && preferred < 0 && english >= 0);
+      const translate = !!(aiAvailable && aiAutoTranslate && !liveTv && language && language !== "off" && preferred < 0 && english >= 0);
       setActiveSubtitle(translate ? english : preferred);
       setAiSubsActive(translate);
     }
-  }, [stream.subtitles, stream.url, settings.defaultSubtitle, aiAvailable, settings.aiAutoSelect, liveTv]);
+  }, [stream.subtitles, stream.url, settings.defaultSubtitle, aiAvailable, aiAutoTranslate, liveTv]);
 
   useEffect(() => {
     const video = videoRef.current;

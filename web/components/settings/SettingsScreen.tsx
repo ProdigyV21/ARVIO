@@ -63,6 +63,8 @@ import { buildHomeServerCatalogConfigs } from "@/lib/homeserver";
 import { defaultSettings, useApp } from "@/lib/store";
 import { DownloadsPanel } from "./DownloadsPanel";
 import { PremiumAccount } from "@/components/shell/PremiumAccount";
+import { useEntitlement } from "@/lib/entitlementContext";
+import { hostedSubtitlesSupported } from "@/lib/hostedSubtitles";
 import { IptvGroupSettings } from "./IptvGroupSettings";
 import { iptvPlaylistSignature } from "@/lib/iptv";
 import { clearSourceSettingsRequest, requestedSourceSettings, SOURCE_SETTINGS_EVENT } from "@/lib/sourceSetup";
@@ -553,6 +555,7 @@ function SectionBody({ section }: { section: SectionId }) {
   const translateUi = useTranslation();
   const app = useApp();
   const { settings } = app;
+  const entitlement = useEntitlement();
   const set = (patch: Partial<AppSettings>) => app.updateSettings(patch);
   const [qualityFilterName, setQualityFilterName] = useState("");
   const [qualityFilterPattern, setQualityFilterPattern] = useState("");
@@ -953,6 +956,30 @@ function SectionBody({ section }: { section: SectionId }) {
     case "ai":
       return (
         <Panel title={translateUi("AI Subtitles")}>
+          {hostedSubtitlesSupported() && (
+            <>
+              <Row
+                label={translateUi("Hosted AI subtitles")}
+                hint={entitlement?.entitled
+                  ? translateUi("Included with ARVIO Premium. Translates into your subtitle language, no API key needed.")
+                  : translateUi("Included with ARVIO Premium. Your own API key below still works without it.")}
+              >
+                <Toggle
+                  value={settings.aiSubtitlesHosted}
+                  onChange={(v) => set({ aiSubtitlesHosted: v })}
+                />
+              </Row>
+              <Row
+                label={translateUi("Translate automatically")}
+                hint={translateUi("When a title has no subtitle in your language, translate the English one.")}
+              >
+                <Toggle
+                  value={settings.aiHostedAutoTranslate}
+                  onChange={(v) => set({ aiHostedAutoTranslate: v })}
+                />
+              </Row>
+            </>
+          )}
           <Row label={translateUi("AI subtitle enhancement")}>
             <Toggle
               value={settings.aiSubtitlesEnabled}

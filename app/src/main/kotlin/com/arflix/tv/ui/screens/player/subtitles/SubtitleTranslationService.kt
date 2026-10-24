@@ -58,9 +58,18 @@ private const val GEMINI_MAX_TRANSIENT_RETRIES = 2        // 3 attempts total
 private const val GEMINI_RETRY_BASE_DELAY_MS = 400L       // 400ms, then 800ms (×2 each retry)
 private val GEMINI_RETRYABLE_HTTP = setOf(500, 502, 503)
 
+/** Translates a batch through ARVIO's hosted service (Premium) instead of the user's own key. */
+typealias HostedSubtitleTranslator = suspend (lines: List<String>, targetLanguage: String) -> TranslationResult
+
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
-    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B }
+    private val modelProvider: () -> SubtitleAiModel = { SubtitleAiModel.GROQ_LLAMA_70B },
+    /**
+     * Hosted AI subtitles (ARVIO Premium). When set, subtitle translation goes through ARVIO's
+     * service and needs no personal key; line matching ([matchSubtitleLines]) still uses the
+     * user's own key, as before.
+     */
+    private val hostedTranslator: HostedSubtitleTranslator? = null
 ) {
 
     private val client = OkHttpClient.Builder()
@@ -286,6 +295,8 @@ class SubtitleTranslationService(
         depth: Int
     ): TranslationResult {
         if (lines.isEmpty()) return TranslationResult(lines, true)
+        // The hosted service handles provider fallback and content filtering on its side.
+        hostedTranslator?.let { return it(lines, targetLanguage) }
         val apiKey = apiKeyProvider()
         if (apiKey.isBlank()) {
             Log.e(TAG, "API key is blank — translation skipped")

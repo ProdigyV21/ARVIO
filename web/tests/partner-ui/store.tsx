@@ -24,7 +24,7 @@ const settings: AppSettings = {
   secondarySubtitle: "", audioLanguage: "", subtitleSize: 100, subtitleColor: "#fff", subtitleColorName: "White",
   subtitleOffsetMs: 0, subtitleOffset: "bottom", subtitleStyle: "outline", subtitleStylized: false,
   filterSubtitlesByLanguage: false, removeHearingImpaired: false, aiSubtitlesEnabled: false, aiSubtitleModel: "off",
-  aiAutoSelect: false, aiApiKey: "", defaultPlayer: "browser", cardLayoutMode: "landscape", deviceModeOverride: "auto",
+  aiAutoSelect: false, aiApiKey: "", aiSubtitlesHosted: false, aiHostedAutoTranslate: false, defaultPlayer: "browser", cardLayoutMode: "landscape", deviceModeOverride: "auto",
   oledBlack: true, clockFormat: "24h", showBudget: false, iptvFavoritesOnHome: false, smoothScrolling: false, spoilerBlur: false, accentColor: "arctic",
   dnsProvider: "system", showLoadingStats: false, customUserAgent: "", torrServerBaseUrl: "", skipProfileSelection: false,
   cardDensity: "comfortable", catalogs: [], hiddenCatalogIds: [], hiddenAddonCatalogIds: [], hiddenHomeServerCatalogIds: [], disabledAddonIds: [],

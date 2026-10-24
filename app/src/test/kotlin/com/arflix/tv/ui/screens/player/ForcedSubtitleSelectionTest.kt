@@ -52,7 +52,8 @@ class ForcedSubtitleSelectionTest {
             streamIntegrationRepository = mockk(relaxed = true),
             recentPlayedSourceRepository = mockk(relaxed = true),
 
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true),
+            hostedSubtitleRepository = mockk(relaxed = true)
         )
         store.put("player", model)
         state().value = PlayerUiState(useForcedSubtitles = true)

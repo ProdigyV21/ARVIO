@@ -330,7 +330,9 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
-        "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
+        // 51/52 (hosted AI subtitles, Premium) only in builds with ARVIO Cloud.
+        "ai_subtitles" -> (if (Constants.USE_NETLIFY_CLOUD_SYNC) listOf(51, 52) else emptyList()) +
+            listOf(28, 29, 30, 31, 32, 33)
         "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
@@ -1465,6 +1467,8 @@ fun SettingsScreen(
                                                 26 -> viewModel.setShowLoadingStats(!uiState.showLoadingStats)
                                                 35 -> showCustomUserAgentDialog = true
                                                 27 -> viewModel.cycleVolumeBoost()
+                                                51 -> viewModel.setSubtitleAiHosted(!uiState.subtitleAiHosted)
+                                                52 -> viewModel.setSubtitleAiHostedAuto(!uiState.subtitleAiHostedAuto)
                                                 28 -> viewModel.setSubtitleAiEnabled(!uiState.subtitleAiEnabled)
                                                 29 -> showAiModelDialog = true
                                                 30 -> viewModel.setSubtitleAiAutoSelect(!uiState.subtitleAiAutoSelect)
@@ -2146,6 +2150,11 @@ fun SettingsScreen(
                             onUseForcedSubtitlesToggle = { viewModel.setUseForcedSubtitles(it) },
                             qualityFilterValue = uiState.qualityFilterPresetLabel,
                             onQualityFiltersClick = { showQualityFiltersModal = true },
+                            subtitleAiHosted = uiState.subtitleAiHosted,
+                            subtitleAiHostedAuto = uiState.subtitleAiHostedAuto,
+                            subtitleAiHostedPremium = uiState.subtitleAiHostedPremium,
+                            onSubtitleAiHostedToggle = { viewModel.setSubtitleAiHosted(it) },
+                            onSubtitleAiHostedAutoToggle = { viewModel.setSubtitleAiHostedAuto(it) },
                             subtitleAiEnabled = uiState.subtitleAiEnabled,
                             subtitleAiAutoSelect = uiState.subtitleAiAutoSelect,
                             subtitleAiFindBestMatch = uiState.subtitleAiFindBestMatch,
@@ -5983,6 +5992,26 @@ private fun MobileSettingsSubPage(
                     )
                 }
                 MobileSettingsCategory(title = stringResource(R.string.ai_subtitles_section)) {
+                    if (uiState.subtitleAiHostedSupported) {
+                        MobileSettingsRow(
+                            icon = Icons.Default.AutoAwesome,
+                            title = stringResource(R.string.ai_hosted_title),
+                            subtitle = stringResource(if (uiState.subtitleAiHostedPremium) R.string.ai_hosted_desc else R.string.ai_hosted_desc_locked),
+                            value = stringResource(if (uiState.subtitleAiHosted) R.string.on else R.string.off),
+                            toggleChecked = uiState.subtitleAiHosted,
+                            isFocused = false,
+                            onClick = { viewModel.setSubtitleAiHosted(!uiState.subtitleAiHosted) }
+                        )
+                        MobileSettingsRow(
+                            icon = Icons.Default.AutoAwesome,
+                            title = stringResource(R.string.ai_hosted_auto_title),
+                            subtitle = stringResource(R.string.ai_hosted_auto_desc),
+                            value = stringResource(if (uiState.subtitleAiHostedAuto) R.string.on else R.string.off),
+                            toggleChecked = uiState.subtitleAiHostedAuto,
+                            isFocused = false,
+                            onClick = { viewModel.setSubtitleAiHostedAuto(!uiState.subtitleAiHostedAuto) }
+                        )
+                    }
                     MobileSettingsRow(
                         icon = Icons.Default.AutoAwesome,
                         title = stringResource(R.string.ai_subtitle_translation_title),
@@ -7019,7 +7048,7 @@ private fun tvSettingsSectionPills(
             stringResource(R.string.settings_pill_size, localizeSettingValue(uiState.subtitleSize))
         )
         "ai_subtitles" -> listOf(
-            if (uiState.subtitleAiEnabled) stringResource(R.string.settings_pill_ai_on) else stringResource(R.string.settings_pill_ai_off),
+            if (uiState.subtitleAiEnabled || (uiState.subtitleAiHostedPremium && uiState.subtitleAiHosted)) stringResource(R.string.settings_pill_ai_on) else stringResource(R.string.settings_pill_ai_off),
             if (uiState.subtitleAiAutoSelect) stringResource(R.string.settings_pill_autoselect_on) else stringResource(R.string.settings_pill_autoselect_off)
         )
         "playback" -> listOf(
@@ -7294,6 +7323,11 @@ private fun TvGeneralSettingsRows(
     onGuideRowCountClick: () -> Unit = {},
     qualityFilterValue: String = "OFF",
     onQualityFiltersClick: () -> Unit = {},
+    subtitleAiHosted: Boolean = true,
+    subtitleAiHostedAuto: Boolean = true,
+    subtitleAiHostedPremium: Boolean = false,
+    onSubtitleAiHostedToggle: (Boolean) -> Unit = {},
+    onSubtitleAiHostedAutoToggle: (Boolean) -> Unit = {},
     subtitleAiEnabled: Boolean = false,
     subtitleAiAutoSelect: Boolean = false,
     subtitleAiFindBestMatch: Boolean = false,
@@ -7421,6 +7455,22 @@ private fun TvGeneralSettingsRows(
                     isFocused = focusedIndex == localIndex,
                     onClick = onVolumeBoostClick,
                     modifier = Modifier.settingsFocusSlot(localIndex)
+                )
+                51 -> SettingsToggleRow(
+                    stringResource(R.string.ai_hosted_title),
+                    stringResource(if (subtitleAiHostedPremium) R.string.ai_hosted_desc else R.string.ai_hosted_desc_locked),
+                    subtitleAiHosted,
+                    focusedIndex == localIndex,
+                    onSubtitleAiHostedToggle,
+                    Modifier.settingsFocusSlot(localIndex).alpha(if (subtitleAiHostedPremium) 1f else 0.6f)
+                )
+                52 -> SettingsToggleRow(
+                    stringResource(R.string.ai_hosted_auto_title),
+                    stringResource(R.string.ai_hosted_auto_desc),
+                    subtitleAiHostedAuto,
+                    focusedIndex == localIndex,
+                    onSubtitleAiHostedAutoToggle,
+                    Modifier.settingsFocusSlot(localIndex).alpha(if (subtitleAiHostedPremium && subtitleAiHosted) 1f else 0.4f)
                 )
                 28 -> SettingsToggleRow(stringResource(R.string.ai_subtitle_translation_title), stringResource(R.string.ai_subtitle_translation_desc), subtitleAiEnabled, focusedIndex == localIndex, onSubtitleAiEnabledToggle, Modifier.settingsFocusSlot(localIndex))
                 29 -> SettingsRow(

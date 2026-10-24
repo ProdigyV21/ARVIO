@@ -219,6 +219,8 @@ export const defaultSettings: AppSettings = {
   aiSubtitleModel: "off",
   aiAutoSelect: false,
   aiApiKey: "",
+  aiSubtitlesHosted: true,
+  aiHostedAutoTranslate: true,
   defaultPlayer: "browser",
   cardLayoutMode: "landscape",
   deviceModeOverride: "auto",
