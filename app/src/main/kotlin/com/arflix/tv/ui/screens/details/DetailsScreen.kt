@@ -63,8 +63,11 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import com.arflix.tv.ui.components.LocalBottomBarInset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed as standardItemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -140,11 +143,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.TvLazyListState
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.itemsIndexed
-import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import androidx.lifecycle.Lifecycle
@@ -196,6 +194,7 @@ import com.arflix.tv.ui.components.ListPickerMenu
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
+import com.arflix.tv.ui.focus.ArvioTvListFocusScrolling
 import com.arflix.tv.ui.focus.arvioManualBringIntoViewBoundary
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.focus.isArvioDpadNavigationKey
@@ -1764,7 +1763,7 @@ private fun DetailsContent(
                                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        standardItemsIndexed(
+                                        itemsIndexed(
                                             seasonEpisodes,
                                             key = { index, ep -> "mob_ep_${ep.seasonNumber}_${ep.episodeNumber}_$index" },
                                             contentType = { _, _ -> "episode" }
@@ -1823,7 +1822,7 @@ private fun DetailsContent(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        standardItemsIndexed(
+                        itemsIndexed(
                             cast,
                             key = { index, c -> "mob_cast_${c.id}_$index" },
                             contentType = { _, _ -> "cast" }
@@ -1857,7 +1856,7 @@ private fun DetailsContent(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        standardItemsIndexed(
+                        itemsIndexed(
                             similar,
                             key = { index, m -> "mob_sim_${m.mediaType.name}_${m.id}_$index" },
                             contentType = { _, _ -> "similar" }
@@ -1894,7 +1893,7 @@ private fun DetailsContent(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        standardItemsIndexed(
+                        itemsIndexed(
                             collectionItems,
                             key = { index, m -> "mob_col_${m.mediaType.name}_${m.id}_$index" },
                             contentType = { _, _ -> "collection" }
@@ -1930,7 +1929,7 @@ private fun DetailsContent(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        standardItemsIndexed(
+                        itemsIndexed(
                             reviews,
                             key = { index, r -> "mob_review_${r.author}_$index" },
                             contentType = { _, _ -> "review" }
@@ -2435,44 +2434,47 @@ private fun DetailsContent(
                 }
             }
 
-            DetailsTvRows(
-                modifier = Modifier,
-                item = item,
-                episodes = episodes,
-                totalSeasons = totalSeasons,
-                currentSeason = currentSeason,
-                cast = cast,
-                reviews = reviews,
-                similar = similar,
-                similarLogoUrls = similarLogoUrls,
-                collectionItems = collectionItems,
-                collectionName = collectionName,
-                collectionIndex = collectionIndex,
-                focusedSection = focusedSection,
-                focusSectionForUi = focusSectionForUi,
-                episodeIndex = episodeIndex,
-                ratingsIndex = ratingsIndex,
-                seasonIndex = seasonIndex,
-                castIndex = castIndex,
-                reviewIndex = reviewIndex,
-                similarIndex = similarIndex,
-                seasonProgress = seasonProgress,
-                episodePlaybackProgress = episodePlaybackProgress,
-                selectedEpisodeIdentity = selectedEpisodeIdentity,
-                usePosterCards = usePosterCards,
-                showEpisodeRatings = showEpisodeRatings,
-                spoilerBlurEnabled = spoilerBlurEnabled,
-                isSeasonLoading = isSeasonLoading,
-                contentRowBottomPadding = contentRowBottomPadding,
-                configuration = configuration,
-                contentHasFocus = contentHasFocus,
-                onSeasonClick = onSeasonClick,
-                onSeasonLongClick = onSeasonLongClick,
-                onEpisodeClick = onEpisodeClick,
-                onCastClick = onCastClick,
-                onSimilarClick = onSimilarClick,
-                onCollectionClick = onCollectionClick
-            )
+            // The rails were tv-foundation lists; keep their focus scrolling on every TV.
+            ArvioTvListFocusScrolling {
+                DetailsTvRows(
+                    modifier = Modifier,
+                    item = item,
+                    episodes = episodes,
+                    totalSeasons = totalSeasons,
+                    currentSeason = currentSeason,
+                    cast = cast,
+                    reviews = reviews,
+                    similar = similar,
+                    similarLogoUrls = similarLogoUrls,
+                    collectionItems = collectionItems,
+                    collectionName = collectionName,
+                    collectionIndex = collectionIndex,
+                    focusedSection = focusedSection,
+                    focusSectionForUi = focusSectionForUi,
+                    episodeIndex = episodeIndex,
+                    ratingsIndex = ratingsIndex,
+                    seasonIndex = seasonIndex,
+                    castIndex = castIndex,
+                    reviewIndex = reviewIndex,
+                    similarIndex = similarIndex,
+                    seasonProgress = seasonProgress,
+                    episodePlaybackProgress = episodePlaybackProgress,
+                    selectedEpisodeIdentity = selectedEpisodeIdentity,
+                    usePosterCards = usePosterCards,
+                    showEpisodeRatings = showEpisodeRatings,
+                    spoilerBlurEnabled = spoilerBlurEnabled,
+                    isSeasonLoading = isSeasonLoading,
+                    contentRowBottomPadding = contentRowBottomPadding,
+                    configuration = configuration,
+                    contentHasFocus = contentHasFocus,
+                    onSeasonClick = onSeasonClick,
+                    onSeasonLongClick = onSeasonLongClick,
+                    onEpisodeClick = onEpisodeClick,
+                    onCastClick = onCastClick,
+                    onSimilarClick = onSimilarClick,
+                    onCollectionClick = onCollectionClick
+                )
+            }
         }
     }
 }
@@ -2516,7 +2518,7 @@ private fun DetailsTvRows(
     onSimilarClick: (Int) -> Unit,
     onCollectionClick: (Int) -> Unit = {}
 ) {
-    val contentScrollState = rememberTvLazyListState()
+    val contentScrollState = rememberLazyListState()
     val isTV = item.mediaType == MediaType.TV
     val hasEpisodes = isTV && episodes.isNotEmpty()
     val hasAnyValidRating = remember(episodes) {
@@ -2608,7 +2610,7 @@ private fun DetailsTvRows(
     val contentStartPadding = 12.dp
     val contentOuterStartPadding = 24.dp
 
-    TvLazyColumn(
+    LazyColumn(
         state = contentScrollState,
         modifier = modifier
             .fillMaxWidth()
@@ -2747,7 +2749,7 @@ private fun DetailsSeasonRail(
     onSeasonClick: (Int) -> Unit,
     onSeasonLongClick: ((Int) -> Unit)? = null
 ) {
-    val seasonRowState = rememberTvLazyListState()
+    val seasonRowState = rememberLazyListState()
     val seasonItems = remember(totalSeasons) { (1..totalSeasons).toList() }
     HomeStyleRowAutoScroll(
         rowState = seasonRowState,
@@ -2766,7 +2768,7 @@ private fun DetailsSeasonRail(
 
     val currentOnSeasonClick = rememberUpdatedState(onSeasonClick)
 
-    TvLazyRow(
+    LazyRow(
         state = seasonRowState,
         modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
         contentPadding = PaddingValues(
@@ -2921,7 +2923,7 @@ private fun DetailsEpisodeRatingsRail(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = PaddingValues(0.dp)
             ) {
-                standardItemsIndexed(
+                itemsIndexed(
                     episodes,
                     key = { index, ep -> "mob_rate_${ep.seasonNumber}_${ep.episodeNumber}_$index" }
                 ) { index, episode ->
@@ -3079,7 +3081,7 @@ private fun DetailsEpisodeRail(
     onEpisodeClick: (Int) -> Unit
 ) {
     val episodeCardWidth = if (configuration.screenWidthDp < 1400) 292.dp else 300.dp
-    val episodeRowState = rememberTvLazyListState()
+    val episodeRowState = rememberLazyListState()
     val episodeFixedFocus = focusSectionForUi == FocusSection.EPISODES &&
         detailsRailUsesFixedFirstSlotFocus(
             totalItems = episodes.size,
@@ -3100,7 +3102,7 @@ private fun DetailsEpisodeRail(
     val currentOnEpisodeClick = rememberUpdatedState(onEpisodeClick)
 
     Box(modifier = Modifier.fillMaxWidth()) {
-        TvLazyRow(
+        LazyRow(
             state = episodeRowState,
             modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
             contentPadding = PaddingValues(
@@ -3162,7 +3164,7 @@ private fun DetailsCastRail(
     contentOuterStartPadding: Dp,
     onCastClick: (Int) -> Unit
 ) {
-    val castRowState = rememberTvLazyListState()
+    val castRowState = rememberLazyListState()
     HomeStyleRowAutoScroll(
         rowState = castRowState,
         isCurrentRow = focusSectionForUi == FocusSection.CAST,
@@ -3185,7 +3187,7 @@ private fun DetailsCastRail(
             modifier = Modifier.padding(start = contentStartPadding, bottom = 10.dp)
         )
 
-        TvLazyRow(
+        LazyRow(
             state = castRowState,
             modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
             contentPadding = PaddingValues(
@@ -3226,7 +3228,7 @@ private fun DetailsReviewRail(
     contentStartPadding: Dp,
     contentOuterStartPadding: Dp
 ) {
-    val reviewRowState = rememberTvLazyListState()
+    val reviewRowState = rememberLazyListState()
     HomeStyleRowAutoScroll(
         rowState = reviewRowState,
         isCurrentRow = focusSectionForUi == FocusSection.REVIEWS,
@@ -3247,7 +3249,7 @@ private fun DetailsReviewRail(
             modifier = Modifier.padding(start = contentStartPadding, bottom = 10.dp)
         )
 
-        TvLazyRow(
+        LazyRow(
             state = reviewRowState,
             modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
             contentPadding = PaddingValues(
@@ -3287,7 +3289,7 @@ private fun DetailsSimilarRail(
     contentOuterStartPadding: Dp,
     onSimilarClick: (Int) -> Unit
 ) {
-    val similarRowState = rememberTvLazyListState()
+    val similarRowState = rememberLazyListState()
     val similarCardWidth = if (usePosterCards) 126.dp else 210.dp
     val similarFocusBleed = if (usePosterCards) 18.dp else 14.dp
     val similarFixedFocus = focusSectionForUi == FocusSection.SIMILAR &&
@@ -3318,7 +3320,7 @@ private fun DetailsSimilarRail(
         )
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            TvLazyRow(
+            LazyRow(
                 state = similarRowState,
                 modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
                 contentPadding = PaddingValues(
@@ -3373,7 +3375,7 @@ private fun DetailsCollectionRail(
     contentOuterStartPadding: Dp,
     onCollectionClick: (Int) -> Unit
 ) {
-    val collectionRowState = rememberTvLazyListState()
+    val collectionRowState = rememberLazyListState()
     val collectionCardWidth = if (usePosterCards) 126.dp else 210.dp
     val collectionFocusBleed = if (usePosterCards) 18.dp else 14.dp
     val collectionFixedFocus = focusSectionForUi == FocusSection.COLLECTION &&
@@ -3405,7 +3407,7 @@ private fun DetailsCollectionRail(
         )
 
         Box(modifier = Modifier.fillMaxWidth()) {
-            TvLazyRow(
+            LazyRow(
                 state = collectionRowState,
                 modifier = Modifier.arvioDpadFocusGroup(enableFocusRestorer = false),
                 contentPadding = PaddingValues(
@@ -3489,7 +3491,7 @@ private fun lockedDetailsRailEndPadding(
 
 private val DetailsScrollEasing = FastOutSlowInEasing
 
-private suspend fun TvLazyListState.animateDetailsScrollDelta(
+private suspend fun LazyListState.animateDetailsScrollDelta(
     deltaPx: Float,
     durationMillis: Int,
     easing: Easing = DetailsScrollEasing
@@ -3541,7 +3543,7 @@ private fun FixedDetailsRailFocusOverlay(
 
 @Composable
 private fun HomeStyleRowAutoScroll(
-    rowState: TvLazyListState,
+    rowState: LazyListState,
     isCurrentRow: Boolean,
     focusedItemIndex: Int,
     totalItems: Int,

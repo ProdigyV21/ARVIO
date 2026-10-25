@@ -3,9 +3,12 @@ package com.arflix.tv.ui.focus
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.relocation.BringIntoViewResponder
 import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -44,6 +47,46 @@ private object ArvioNoOpBringIntoViewResponder : BringIntoViewResponder {
 @OptIn(ExperimentalFoundationApi::class)
 fun Modifier.arvioManualBringIntoViewBoundary(): Modifier {
     return bringIntoViewResponder(ArvioNoOpBringIntoViewResponder)
+}
+
+/**
+ * The focus scrolling the tv-foundation lazy lists had built in: a focused item's leading edge
+ * moves to [parentFraction] of the viewport, and nothing scrolls while user scrolling is off.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private data class ArvioTvListBringIntoViewSpec(
+    val parentFraction: Float,
+    val userScrollEnabled: Boolean
+) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        if (!userScrollEnabled) return 0f
+        val initialTarget = parentFraction * containerSize
+        val target = if (size <= containerSize && containerSize - initialTarget < size) {
+            containerSize - size
+        } else {
+            initialTarget
+        }
+        return offset - target
+    }
+}
+
+/**
+ * Gives the foundation lazy lists in [content] the focus scrolling of the tv-foundation lists they
+ * replaced. Without it they follow the platform default, which only pivots on FEATURE_LEANBACK
+ * devices (not no-touch boxes or the "tv" device mode) and still scrolls to focus when
+ * userScrollEnabled is false.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ArvioTvListFocusScrolling(
+    parentFraction: Float = 0.3f,
+    userScrollEnabled: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val spec = remember(parentFraction, userScrollEnabled) {
+        ArvioTvListBringIntoViewSpec(parentFraction, userScrollEnabled)
+    }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
 }
 
 fun isArvioDpadNavigationKey(key: Key): Boolean {

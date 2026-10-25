@@ -18,6 +18,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,11 +63,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.tv.foundation.lazy.grid.TvGridCells
-import androidx.tv.foundation.PivotOffsets
-import androidx.tv.foundation.lazy.grid.TvLazyVerticalGrid
-import androidx.tv.foundation.lazy.grid.itemsIndexed
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
@@ -81,6 +82,7 @@ import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.components.MediaCard
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
+import com.arflix.tv.ui.focus.ArvioTvListFocusScrolling
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.screens.home.stableHomeRowItemKeys
 import com.arflix.tv.ui.theme.ArflixTypography
@@ -695,8 +697,8 @@ fun CollectionDetailsScreen(
         else -> CollectionTab.MOVIES
     }
     var selectedTab by rememberSaveable(uiState.catalog?.id) { mutableStateOf(initialTab) }
-    val moviesGridState = rememberTvLazyGridState()
-    val seriesGridState = rememberTvLazyGridState()
+    val moviesGridState = rememberLazyGridState()
+    val seriesGridState = rememberLazyGridState()
     val moviesTabFocusRequester = remember { FocusRequester() }
     val seriesTabFocusRequester = remember { FocusRequester() }
     // True after the first focus has been delivered; subsequent ON_RESUME uses saved index.
@@ -1007,7 +1009,7 @@ internal fun CollectionItemsGrid(
     onBack: () -> Unit,
     items: List<MediaItem>,
     usePosterCards: Boolean,
-    gridState: androidx.tv.foundation.lazy.grid.TvLazyGridState,
+    gridState: LazyGridState,
     pendingFocusIndex: Int,
     onClearPendingFocus: () -> Unit,
     hasMovies: Boolean,
@@ -1117,13 +1119,13 @@ internal fun CollectionItemsGrid(
                 ?: previewItem?.primaryNetworkLogo,
             clearLogoUrl = cardLogoUrls["${previewItem?.mediaType}_${previewItem?.id}"]
         )
-        TvLazyVerticalGrid(
-        columns = TvGridCells.Fixed(gridColumns),
+        ArvioTvListFocusScrolling(parentFraction = 0f, userScrollEnabled = isMobile) {
+        LazyVerticalGrid(
+        columns = GridCells.Fixed(gridColumns),
         state = gridState,
         // On TV, reveal whole rows ourselves; automatic pivot scrolling follows
         // the focus scale and fights the row animation. Touch retains native scrolling.
         userScrollEnabled = isMobile,
-        pivotOffsets = PivotOffsets(parentFraction = 0f),
         modifier = Modifier.weight(1f).fillMaxWidth().arvioDpadFocusGroup().clipToBounds()
             .testTag("collection_grid"),
         contentPadding = PaddingValues(
@@ -1136,7 +1138,7 @@ internal fun CollectionItemsGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (showTabs) item(
-            span = { androidx.tv.foundation.lazy.grid.TvGridItemSpan(maxLineSpan) },
+            span = { GridItemSpan(maxLineSpan) },
             contentType = "header"
         ) {
             CollectionTabBar(
@@ -1171,7 +1173,7 @@ internal fun CollectionItemsGrid(
             }
         } else if (items.isEmpty() && !isLoadingMore) {
             item(
-                span = { androidx.tv.foundation.lazy.grid.TvGridItemSpan(maxLineSpan) },
+                span = { GridItemSpan(maxLineSpan) },
                 contentType = "empty"
             ) {
                 CollectionEmptyState(message = emptyMessage)
@@ -1246,7 +1248,7 @@ internal fun CollectionItemsGrid(
 
         if (isLoadingMore) {
             item(
-                span = { androidx.tv.foundation.lazy.grid.TvGridItemSpan(maxLineSpan) },
+                span = { GridItemSpan(maxLineSpan) },
                 contentType = "loading_more"
             ) {
                 Box(
@@ -1264,6 +1266,7 @@ internal fun CollectionItemsGrid(
             }
         }
     }
+        }
     }
     }
 }

@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.unit.sp
 import com.arflix.tv.util.LocalDeviceType
-import androidx.tv.foundation.lazy.list.TvLazyRow
 
 /**
  * Shared shimmer animation state - only one animation for all skeleton loaders
@@ -254,7 +253,7 @@ fun SkeletonCategoryRow(
                 }
             }
         } else {
-            TvLazyRow(
+            androidx.compose.foundation.lazy.LazyRow(
                 contentPadding = PaddingValues(end = 48.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {

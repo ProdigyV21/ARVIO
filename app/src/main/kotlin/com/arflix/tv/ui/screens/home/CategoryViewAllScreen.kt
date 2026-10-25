@@ -1,6 +1,7 @@
 package com.arflix.tv.ui.screens.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -19,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogSourceType
@@ -117,7 +117,7 @@ internal fun CategoryViewAllContent(
     BackHandler(onBack = onBack)
     val catalog = remember(categoryId, title) { CatalogConfig(categoryId, title, CatalogSourceType.PREINSTALLED) }
     val isMobile = LocalDeviceType.current.isTouchDevice()
-    val gridState = rememberTvLazyGridState()
+    val gridState = rememberLazyGridState()
     var lastFocusedIndex by rememberSaveable(categoryId) { mutableIntStateOf(0) }
     var pendingFocusIndex by remember(categoryId) { mutableIntStateOf(-1) }
     val latestItemCount by rememberUpdatedState(items.size)

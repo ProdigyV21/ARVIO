@@ -3,6 +3,8 @@ package com.arflix.tv.ui.screens.collections
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -11,7 +13,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
@@ -27,12 +28,12 @@ class CollectionMobileGridDeviceTest {
         val containerWidth = mutableStateOf(360.dp)
         val posters = mutableStateOf(false)
         val selectedTab = mutableStateOf(CollectionTab.MOVIES)
-        var renderedGridState: androidx.tv.foundation.lazy.grid.TvLazyGridState? = null
+        var renderedGridState: LazyGridState? = null
         var opened: MediaItem? = null
         val items = (1..40).map { MediaItem(it, "Title $it") }
         compose.setContent {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.PHONE) {
-                val gridState = rememberTvLazyGridState()
+                val gridState = rememberLazyGridState()
                 renderedGridState = gridState
                 Box(Modifier.width(containerWidth.value).fillMaxSize()) {
                     CollectionItemsGrid(
