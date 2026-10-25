@@ -34,8 +34,9 @@ class CategoryViewAllDeviceTest {
     @get:Rule val compose = createComposeRule()
     private val items = (1..48).map { MediaItem(it, "Movie $it", overview = "Overview $it", year = "2026") }
 
-    private fun card(index: Int) = compose.onNodeWithTag("collection_item_$index")
-        .onChildren().filter(hasClickAction()).onFirst()
+    // Descendant, not child: the card's graphicsLayer can add a semantics node in between.
+    private fun card(index: Int) =
+        compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag("collection_item_$index"))).onFirst()
 
     @Test fun tvHeroFocusPaginationAndRestoration() {
         val restoration = StateRestorationTester(compose)

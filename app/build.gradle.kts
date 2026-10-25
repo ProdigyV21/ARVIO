@@ -364,33 +364,32 @@ ksp {
     compileOnly("org.checkerframework:checker-qual:3.43.0")
 
     // Core Android
-    implementation("androidx.core:core-ktx:1.12.0")
+    // core and lifecycle match what Compose 1.11 pulls in; lower pins would be raised anyway.
+    implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.core:core-splashscreen:1.0.1")  // Android 12+ Splash Screen
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.2")
     // Provides collectAsStateWithLifecycle — pauses Flow collection while the
     // screen is off so we don't drive recompositions on invisible UI.
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    implementation("androidx.activity:activity:1.10.0")
-    implementation("androidx.activity:activity-ktx:1.10.0")
-    implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
+    implementation("androidx.activity:activity:1.11.0")
+    implementation("androidx.activity:activity-ktx:1.11.0")
+    implementation("androidx.activity:activity-compose:1.11.0")
 
-    // Compose BOM — bumped alongside Kotlin 2.1. Staying on the 2024.06
-    // line keeps tv-foundation 1.0.0-alpha11 happy; newer BOMs drift the
-    // runtime off alpha11 and cause invalid-slot-table crashes on D-pad.
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    // Compose BOM 2026.06.01: Compose 1.11.4, material3 1.4.0. Compose 1.12 (BOM 2026.08+)
+    // needs compileSdk 37, which AGP 8.x can't target (AGP 9 is blocked by the Hilt pin below).
+    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3:1.3.2")
+    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.animation:animation")
     implementation("dev.chrisbanes.haze:haze:0.7.3")
 
-    // Compose for TV - Core TV components
-    // tv-foundation stays alpha (no beta/stable releases exist); tv-material bumped to stable
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
-    implementation("androidx.tv:tv-material:1.0.0")
+    // Compose for TV. Lists use foundation's LazyColumn/LazyRow/LazyVerticalGrid; tv-foundation's
+    // lazy layouts are gone, so it is no longer a direct dependency.
+    implementation("androidx.tv:tv-material:1.1.0")
 
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.8.9")
@@ -450,9 +449,9 @@ ksp {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Image loading - Coil
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("io.coil-kt:coil-gif:2.5.0")
-    implementation("io.coil-kt:coil-svg:2.5.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
     implementation("com.google.zxing:core:3.5.3")
 
     // Supabase (optional - for cloud sync)
@@ -535,7 +534,7 @@ ksp {
     testImplementation("org.robolectric:robolectric:4.11.1")  // Android mocking
 
     // Android Instrumented Testing
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:core-ktx:1.5.0")
     androidTestImplementation("androidx.test:runner:1.5.2")

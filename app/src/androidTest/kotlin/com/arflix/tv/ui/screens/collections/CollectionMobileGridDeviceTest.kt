@@ -64,7 +64,7 @@ class CollectionMobileGridDeviceTest {
             assertTrue("Following row must be below the first", next.top > first.top)
         }
         checkColumns(2)
-        compose.onNodeWithTag("collection_item_1").onChildren().filter(hasClickAction()).onFirst().performClick()
+        compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag("collection_item_1"))).onFirst().performClick()
         compose.runOnIdle { assertEquals(2, opened?.id) }
         // Simulates a split-screen pane: LocalConfiguration still describes the wider screen.
         compose.runOnIdle { containerWidth.value = 280.dp }

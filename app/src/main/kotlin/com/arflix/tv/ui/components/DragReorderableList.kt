@@ -318,7 +318,7 @@ fun rememberDragReorderState(
 /**
  * Put on every row, and it does both halves: it takes the press and hold that picks the row up and
  * the drag that moves it, and it lifts the held row above the list while the others slide out of
- * its way. The sliding is [Modifier.animateItemPlacement], which needs nothing but stable keys.
+ * its way. The sliding is [Modifier.animateItem] with no fades, which needs nothing but stable keys.
  *
  * Called from inside the item itself - `modifier = dragReorderItem(state, key)`.
  *
@@ -358,7 +358,8 @@ fun LazyItemScope.dragReorderItem(state: DragReorderState, key: Any): Modifier =
                     clip = false
                 }
         } else {
-            Modifier.animateItemPlacement()
+            // Placement only, as animateItemPlacement (removed after Compose 1.7) animated.
+            Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
         }
     )
 

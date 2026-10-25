@@ -191,11 +191,11 @@ class CollectionDetailsUiDeviceTest {
                 compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
             }
             repeat(14) { compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) } }
-            compose.onNodeWithTag("collection_item_0").onChildren().filter(hasClickAction()).onFirst()
+            compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag("collection_item_0"))).onFirst()
                 .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus) { it() }
             compose.mainClock.advanceTimeBy(200)
         } else {
-            compose.onNodeWithTag("collection_item_0").onChildren().filter(hasClickAction()).onFirst().performClick()
+            compose.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag("collection_item_0"))).onFirst().performClick()
             compose.runOnIdle { assertEquals(items.first().id, opened?.id) }
             compose.onNodeWithTag("collection_grid").performTouchInput { swipeUp() }
             assertEquals("Hero must also remain visible on touch devices", heroBottom,
