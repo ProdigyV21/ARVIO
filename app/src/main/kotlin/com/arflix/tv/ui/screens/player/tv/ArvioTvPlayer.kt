@@ -31,6 +31,7 @@ import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.ui.components.NextEpisodeOverlay
 import com.arflix.tv.ui.components.StreamSelector
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgeData
 import com.arflix.tv.ui.screens.player.AudioTrackInfo
 import com.arflix.tv.ui.screens.player.PlayerUiState
 import com.arflix.tv.ui.screens.player.localizedText
@@ -49,6 +50,7 @@ fun ArvioTvPlayer(
     progress: Float,
     audioTracks: List<AudioTrackInfo>,
     selectedAudioIndex: Int,
+    activePlaybackBadges: ActivePlaybackBadgeData? = null,
     aspectModeLabel: String,
     clockFormat: String,
     mediaType: MediaType,
@@ -419,6 +421,7 @@ fun ArvioTvPlayer(
             seasonNumber = seasonNumber,
             episodeNumber = episodeNumber,
             playerAccent = playerAccent,
+            activePlaybackBadges = activePlaybackBadges,
             seekPreviewFrame = seekPreviewFrame,
             formatTime = formatTime,
             formatClockTime = formatClockTime,

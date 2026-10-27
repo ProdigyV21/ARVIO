@@ -47,6 +47,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.wrapContentHeight
 import com.arflix.tv.ui.screens.player.preview.ReadySeekPreview
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgeData
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgesRow
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewFrame
 import kotlin.math.roundToInt
 import androidx.compose.runtime.mutableFloatStateOf
@@ -468,6 +470,7 @@ private fun UpNextPromptCard(
 fun MobilePlayerBottomSection(
     eyebrow: String,
     mainTitle: String,
+    activePlaybackBadges: ActivePlaybackBadgeData? = null,
     currentPositionMs: Long,
     durationMs: Long,
     bufferedPositionMs: Long,
@@ -536,6 +539,13 @@ fun MobilePlayerBottomSection(
                         shadow = MobilePlayerTokens.TextShadow
                     )
                 )
+                if (activePlaybackBadges?.hasAnyBadge == true) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ActivePlaybackBadgesRow(
+                        badges = activePlaybackBadges,
+                        compact = true
+                    )
+                }
             }
 
             // Secondary Controls (Sources & Episodes) — faded out if prompt is showing

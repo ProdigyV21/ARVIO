@@ -732,6 +732,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     // Audio tracks from ExoPlayer
     var audioTracks by remember { mutableStateOf<List<AudioTrackInfo>>(emptyList()) }
     var selectedAudioIndex by remember { mutableIntStateOf(0) }
+    var activeVideoWidth by remember { mutableStateOf<Int?>(null) }
+    var activeVideoHeight by remember { mutableStateOf<Int?>(null) }
+    var activeVideoMimeType by remember { mutableStateOf<String?>(null) }
+    var activeVideoCodecs by remember { mutableStateOf<String?>(null) }
+    var activeVideoColorTransfer by remember { mutableStateOf<Int?>(null) }
+    var activeVideoLabel by remember { mutableStateOf<String?>(null) }
     // Once the user picks an audio track for the current stream, stop auto-applying
     // the preferred-language selection so we don't fight their choice.
     var userPickedAudioForStream by remember { mutableStateOf(false) }
@@ -1615,7 +1621,35 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         }
                     }
 
+                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                        if (videoSize.width > 0) activeVideoWidth = videoSize.width
+                        if (videoSize.height > 0) activeVideoHeight = videoSize.height
+                    }
+
                     override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                        val selectedVideoFormat = tracks.groups
+                            .asSequence()
+                            .filter { it.type == C.TRACK_TYPE_VIDEO && it.isSelected }
+                            .flatMap { group ->
+                                (0 until group.length).asSequence()
+                                    .filter { group.isTrackSelected(it) }
+                                    .map { group.getTrackFormat(it) }
+                            }
+                            .firstOrNull()
+                            ?: tracks.groups
+                                .asSequence()
+                                .filter { it.type == C.TRACK_TYPE_VIDEO && it.length > 0 }
+                                .map { it.getTrackFormat(0) }
+                                .firstOrNull()
+                        selectedVideoFormat?.width?.takeIf { it > 0 }?.let { activeVideoWidth = it }
+                        selectedVideoFormat?.height?.takeIf { it > 0 }?.let { activeVideoHeight = it }
+                        activeVideoMimeType = selectedVideoFormat?.sampleMimeType
+                            ?: selectedVideoFormat?.containerMimeType
+                        activeVideoCodecs = selectedVideoFormat?.codecs
+                        activeVideoColorTransfer = selectedVideoFormat?.colorInfo?.colorTransfer
+                            ?.takeIf { it != C.INDEX_UNSET }
+                        activeVideoLabel = selectedVideoFormat?.label
+
                         // Extract audio tracks from ExoPlayer
                         val extractedAudioTracks = mutableListOf<AudioTrackInfo>()
                         var trackIndex = 0
@@ -1631,7 +1665,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                         label = format.label,
                                         channelCount = format.channelCount,
                                         sampleRate = format.sampleRate,
-                                        codec = format.sampleMimeType
+                                        codec = format.sampleMimeType,
+                                        codecs = format.codecs
                                     )
                                     extractedAudioTracks.add(track)
                                     trackIndex++
@@ -3961,6 +3996,29 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             }
         }
 
+        val activePlaybackBadges = remember(
+            activeVideoWidth,
+            activeVideoHeight,
+            activeVideoMimeType,
+            activeVideoCodecs,
+            activeVideoColorTransfer,
+            activeVideoLabel,
+            audioTracks,
+            selectedAudioIndex,
+            uiState.selectedStream
+        ) {
+            ActivePlaybackBadgeUtils.resolveBadgeData(
+                videoWidth = activeVideoWidth,
+                videoHeight = activeVideoHeight,
+                videoMimeType = activeVideoMimeType,
+                videoCodecs = activeVideoCodecs,
+                videoColorTransfer = activeVideoColorTransfer,
+                videoLabel = activeVideoLabel,
+                audioTrack = audioTracks.getOrNull(selectedAudioIndex),
+                stream = uiState.selectedStream
+            )
+        }
+
         // ARVIO Mobile Player Overlay (Phone & Tablet Touch Devices)
         if (isTouchDevice && !isInPipMode) {
             ArvioMobilePlayer(
@@ -3973,6 +4031,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 bufferedPositionMs = exoPlayer.bufferedPosition,
                 audioTracks = audioTracks,
                 selectedAudioIndex = selectedAudioIndex,
+                activePlaybackBadges = activePlaybackBadges,
                 currentPlaybackSpeed = currentPlaybackSpeed,
                 aspectModeLabel = aspectModeLabel,
                 isCasting = isCasting,
@@ -4229,7 +4288,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             episodeNumber = args.episodeNumber,
                             isPaused = isPaused,
                             accentColor = playerAccent,
-                            modifier = Modifier.weight(1f, fill = false)
+                            modifier = Modifier.weight(1f, fill = false),
+                            activePlaybackBadges = activePlaybackBadges
                         )
 
                         // Right side - Cast button (mobile) + Ends At + Clock
@@ -5448,7 +5508,8 @@ data class AudioTrackInfo(
     val label: String?,
     val channelCount: Int,
     val sampleRate: Int,
-    val codec: String?
+    val codec: String?,
+    val codecs: String? = null
 )
 
 /**
@@ -7190,7 +7251,8 @@ internal fun PlayerMetadataChrome(
     episodeNumber: Int?,
     isPaused: Boolean,
     accentColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    activePlaybackBadges: ActivePlaybackBadgeData? = null
 ) {
     val displayTitle = when {
         mediaType == MediaType.TV && !uiState.episodeTitle.isNullOrBlank() -> uiState.episodeTitle
@@ -7199,20 +7261,24 @@ internal fun PlayerMetadataChrome(
     val metaLine = buildPlaybackBaseMetaLine(uiState, mediaType, seasonNumber, episodeNumber)
     val selectedStream = uiState.selectedStream
     val streamSizeLabel = selectedStream?.let { formatStreamSizeInGb(it) }
-    val hasQualityBadges = selectedStream?.let { buildPlaybackBadges(it).isNotEmpty() } == true
+    val resolvedBadges = remember(activePlaybackBadges, selectedStream) {
+        activePlaybackBadges ?: ActivePlaybackBadgeUtils.resolveBadgeData(stream = selectedStream)
+    }
+    val hasActiveBadges = resolvedBadges.hasAnyBadge
     val overview = playerPauseOverview(
         mediaType, seasonNumber, episodeNumber, uiState.seasonEpisodes, uiState.overview
     )
     val logoHeight = 44.dp
     val logoWidth = 230.dp
-    val chromeHeight = when {
+    val baseChromeHeight = when {
         isPaused && overview.isNotBlank() -> 138.dp
         isPaused -> 104.dp
         else -> 86.dp
     }
+    val chromeHeight = if (hasActiveBadges) baseChromeHeight + 28.dp else baseChromeHeight
 
     Row(
-        modifier = modifier.widthIn(max = if (isPaused) 620.dp else 520.dp),
+        modifier = modifier.widthIn(max = if (isPaused) 620.dp else 560.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
@@ -7224,7 +7290,7 @@ internal fun PlayerMetadataChrome(
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(
-            modifier = Modifier.widthIn(max = if (isPaused) 560.dp else 470.dp),
+            modifier = Modifier.widthIn(max = if (isPaused) 580.dp else 510.dp),
             verticalArrangement = Arrangement.spacedBy(if (isPaused) 5.dp else 4.dp)
         ) {
             if (!uiState.logoUrl.isNullOrBlank()) {
@@ -7263,7 +7329,14 @@ internal fun PlayerMetadataChrome(
                 )
             }
 
-            if (metaLine.isNotBlank() || hasQualityBadges || !streamSizeLabel.isNullOrBlank()) {
+            if (hasActiveBadges) {
+                ActivePlaybackBadgesRow(
+                    badges = resolvedBadges,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 1.dp)
+                )
+            }
+
+            if (metaLine.isNotBlank() || !streamSizeLabel.isNullOrBlank()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -7282,12 +7355,6 @@ internal fun PlayerMetadataChrome(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        hasPreviousMetaPart = true
-                    }
-
-                    if (selectedStream != null && hasQualityBadges) {
-                        if (hasPreviousMetaPart) PlayerMetaSeparator()
-                        PlaybackQualityBadgeRow(stream = selectedStream)
                         hasPreviousMetaPart = true
                     }
 
