@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -665,6 +666,8 @@ fun MobileSubtitlesSheet(
     isFindingBestMatch: Boolean = false,
     matchLanguageName: String = "",
     onFindBestMatch: () -> Unit = {},
+    onAlignToEmbedded: () -> Unit = {},
+    onSyncToAudio: () -> Unit = {},
     isAiTranslating: Boolean = false,
     isAiAvailable: Boolean = false,
     aiTargetLanguageName: String = "",
@@ -745,6 +748,7 @@ fun MobileSubtitlesSheet(
         currentView == "fonts" -> "Subtitle Font"
         currentView == "tracks" -> "${selectedLanguageName ?: "Track"} Subtitles"
         currentView == "substyle" -> "Subtitle Settings"
+        currentView == "bilingual" -> "Bilingual Subtitles"
         else -> "Subtitles"
     }
     val showBack = viewStack.size > 1
@@ -775,7 +779,19 @@ fun MobileSubtitlesSheet(
                     onUpdateDelay = onUpdateSubtitleDelay
                 )
             }
+            currentView == "bilingual" -> {
+                com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleSettingsPanel(
+                    modifier = Modifier.fillMaxWidth(),
+                    aiAvailable = isAiAvailable || isAiTranslating,
+                    aiTranslating = isAiTranslating,
+                    onEnableAiTranslation = { onActivateAiTranslation() },
+                )
+            }
             currentView == "substyle" -> {
+                BilingualEntryRow(
+                    isAiTranslating = isAiTranslating,
+                    onClick = { viewStack.add("bilingual") }
+                )
                 SubtitleSettingsContent(
                     subtitleSizePct = subtitleSizePct,
                     onUpdateSubtitleSize = onUpdateSubtitleSize,
@@ -961,6 +977,37 @@ fun MobileSubtitlesSheet(
                             }
                             SubtitleBadge(text = if (isFindingBestMatch) "Scanning" else "Auto Sync")
                         }
+                    }
+
+                    // The two timing tools for the current online subtitle: align it to the video's
+                    // own embedded text track, or sync it to the audio. Both also run automatically
+                    // when an online track is switched to (audio only with Sync by hearing on).
+                    item {
+                        NavRow(
+                            label = "Align to Embedded Subtitle",
+                            meta = "Embedded timing",
+                            onClick = {
+                                onAlignToEmbedded()
+                                onClose()
+                            }
+                        )
+                    }
+                    item {
+                        NavRow(
+                            label = "Sync to Audio",
+                            meta = "Speech detection",
+                            onClick = {
+                                onSyncToAudio()
+                                onClose()
+                            }
+                        )
+                    }
+
+                    item {
+                        BilingualEntryRow(
+                            isAiTranslating = isAiTranslating,
+                            onClick = { viewStack.add("bilingual") }
+                        )
                     }
 
                     if (isAiAvailable || isAiTranslating) {
@@ -2558,5 +2605,51 @@ fun MobileSubtitleRepositionOverlay(
                 }
             }
         }
+    }
+}
+
+
+/** Entry into the bilingual AI subtitle settings (mode, order, gap, colours...). */
+@Composable
+private fun BilingualEntryRow(isAiTranslating: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val store = remember {
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualSubtitleSettingsStore.from(context)
+    }
+    val settings by store.settings.collectAsState()
+    val modeLabel = when (settings.mode) {
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualDisplayMode.BILINGUAL -> "Bilingual"
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualDisplayMode.ORIGINAL_ONLY -> "Primary"
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualDisplayMode.TRANSLATION_ONLY -> "Secondary"
+        com.arflix.tv.ui.screens.player.subtitles.bilingual.BilingualDisplayMode.OFF -> "Off"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MobilePlayerTokens.ShapeCard)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Bilingual Subtitles",
+                color = MobilePlayerTokens.InkPrimary,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = if (isAiTranslating) "Two-language mode, colours, order, gap, position"
+                    else "Style for AI Translation (turn it on below)",
+                color = MobilePlayerTokens.InkTertiary,
+                fontSize = 11.sp
+            )
+        }
+        SubtitleBadge(text = modeLabel)
     }
 }
