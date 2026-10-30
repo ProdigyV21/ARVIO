@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.arflix.tv.ui.theme.AccentGreen
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -138,7 +139,7 @@ fun MobilePlayerTopBar(
                 MobileIconButton(
                     iconRes = if (isCasting) R.drawable.ic_huge_cast_connected else R.drawable.ic_huge_cast,
                     contentDescription = stringResource(R.string.player_cd_cast_to_tv),
-                    tint = if (isCasting) Color(0xFF66D9FF) else MobilePlayerTokens.InkPrimary,
+                    tint = if (isCasting) AccentGreen else MobilePlayerTokens.InkPrimary,
                     onClick = onCast
                 )
             }
@@ -659,7 +660,7 @@ fun MobilePlayerBottomSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(trackHeight)
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MobilePlayerTokens.TrackBg)
                 )
 
@@ -669,7 +670,7 @@ fun MobilePlayerBottomSection(
                         modifier = Modifier
                             .fillMaxWidth(bufferedFraction)
                             .height(trackHeight)
-                            .clip(RoundedCornerShape(3.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MobilePlayerTokens.TrackBuffered)
                     )
                 }
@@ -680,7 +681,7 @@ fun MobilePlayerBottomSection(
                         modifier = Modifier
                             .fillMaxWidth(progressFraction)
                             .height(trackHeight)
-                            .clip(RoundedCornerShape(3.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MobilePlayerTokens.TrackFill)
                     )
                 }

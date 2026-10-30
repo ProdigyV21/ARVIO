@@ -55,6 +55,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.annotation.StringRes
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -250,6 +252,8 @@ fun AppBottomBar(
         modifier.background(Color(0xCC000000))
     }
 
+    val haptic = LocalHapticFeedback.current
+
     Column(
         modifier = baseModifier
             .then(
@@ -322,6 +326,7 @@ private fun BottomBarItemButton(
     modifier: Modifier,
 ) {
     val isSelected = currentRoute?.contains(item.route, ignoreCase = true) == true
+    val haptic = LocalHapticFeedback.current
     var isFocused by remember { mutableStateOf(false) }
     val label = stringResource(item.labelRes)
     val iconColor by animateColorAsState(
@@ -339,7 +344,12 @@ private fun BottomBarItemButton(
                 role = Role.Tab,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = false, radius = 24.dp),
-                onClick = { onNavigate(item.route) }
+                onClick = {
+                    if (!isSelected) {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                    onNavigate(item.route)
+                }
             )
             .onFocusChanged { isFocused = it.isFocused }
             .then(if (isFocused) Modifier.border(1.dp, accent, CircleShape) else Modifier),

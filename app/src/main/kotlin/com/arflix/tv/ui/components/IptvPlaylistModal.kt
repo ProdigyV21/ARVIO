@@ -374,8 +374,8 @@ fun IptvPlaylistModal(
                     .navigationBarsPadding()
                     .imePadding()
                     .heightIn(max = maxDialogHeight)
-                    .background(BackgroundElevated, RoundedCornerShape(14.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .padding(
                         horizontal = if (isTvLayout) 20.dp else 16.dp,
                         vertical = if (isTvLayout) 20.dp else 18.dp
@@ -676,9 +676,9 @@ fun IptvPlaylistModal(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(Color.White.copy(alpha = 0.05f))
-                                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                                         .padding(12.dp)
                                 ) {
                                     Text(
@@ -1113,15 +1113,15 @@ fun IptvPlaylistModal(
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(
                                             if (isCancelFocused) Color.White else Color.Black.copy(alpha = 0.82f),
-                                            RoundedCornerShape(10.dp)
+                                            RoundedCornerShape(12.dp)
                                         )
                                         .border(
                                             width = 1.dp,
                                             color = if (isCancelFocused) Color.White else Color.White.copy(alpha = 0.14f),
-                                            shape = RoundedCornerShape(10.dp)
+                                            shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable {
                                             hideKeyboardAll()
@@ -1140,15 +1140,15 @@ fun IptvPlaylistModal(
                                 Box(
                                     modifier = Modifier
                                         .weight(1.3f)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(
                                             if (isSaveFocused) Color.White else Color.Black.copy(alpha = 0.82f),
-                                            RoundedCornerShape(10.dp)
+                                            RoundedCornerShape(12.dp)
                                         )
                                         .border(
                                             width = 1.dp,
                                             color = if (isSaveFocused) Color.White else Color.White.copy(alpha = 0.14f),
-                                            shape = RoundedCornerShape(10.dp)
+                                            shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable { saveSource() }
                                         .padding(vertical = 12.dp),
@@ -1362,9 +1362,9 @@ fun IptvPlaylistModal(
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(RoundedCornerShape(12.dp))
                                             .background(Color.White.copy(alpha = 0.05f))
-                                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                                             .padding(12.dp)
                                     ) {
                                         Text(
@@ -1452,9 +1452,9 @@ fun IptvPlaylistModal(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(10.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
                                 .clickable {
                                     pasteClipboardIntoRow(mobilePasteTargetIndex())
                                 }
@@ -1487,9 +1487,9 @@ fun IptvPlaylistModal(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(10.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
                                     .clickable {
                                         hideKeyboardAll()
                                         onDismiss()
@@ -1507,8 +1507,8 @@ fun IptvPlaylistModal(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White, RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White, RoundedCornerShape(12.dp))
                                     .clickable { saveSource() }
                                     .padding(vertical = 12.dp),
                                 contentAlignment = Alignment.Center
@@ -1607,12 +1607,12 @@ private fun StepBadge(stepNumber: Int, isFocused: Boolean) {
             .size(20.dp)
             .background(
                 if (isFocused) Pink.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.08f),
-                RoundedCornerShape(10.dp)
+                RoundedCornerShape(12.dp)
             )
             .border(
                 1.dp,
                 if (isFocused) Pink else Color.White.copy(alpha = 0.12f),
-                RoundedCornerShape(10.dp)
+                RoundedCornerShape(12.dp)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -1644,15 +1644,15 @@ private fun AccountRefreshBlock(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(
                     Color.White.copy(alpha = if (isFocused) 0.14f else 0.05f),
-                    RoundedCornerShape(10.dp)
+                    RoundedCornerShape(12.dp)
                 )
                 .border(
                     width = if (isFocused) 2.dp else 1.dp,
                     color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1688,15 +1688,15 @@ private fun ToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(
                 Color.White.copy(alpha = if (isFocused) 0.14f else 0.05f),
-                RoundedCornerShape(10.dp)
+                RoundedCornerShape(12.dp)
             )
             .border(
                 width = if (isFocused) 2.dp else 1.dp,
                 color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1714,7 +1714,7 @@ private fun ToggleRow(
                 .height(22.dp)
                 .background(
                     color = if (value) SuccessGreen else Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(11.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .padding(2.dp),
             contentAlignment = if (value) Alignment.CenterEnd else Alignment.CenterStart
@@ -1722,7 +1722,7 @@ private fun ToggleRow(
             Box(
                 modifier = Modifier
                     .size(18.dp)
-                    .background(Color.White, RoundedCornerShape(9.dp))
+                    .background(Color.White, RoundedCornerShape(12.dp))
             )
         }
     }
@@ -1769,12 +1769,12 @@ private fun InputFieldWithPaste(
                 .height(if (singleLine) 46.dp else 84.dp)
                 .background(
                     Color.White.copy(alpha = if (isInputFocused || isPasteFocused) 0.12f else 0.05f),
-                    RoundedCornerShape(10.dp)
+                    RoundedCornerShape(12.dp)
                 )
                 .border(
                     width = if (isInputFocused || isPasteFocused) 2.dp else 1.dp,
                     color = if (isInputFocused || isPasteFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .padding(start = 2.dp, top = buttonPadding, bottom = buttonPadding, end = buttonPadding),
             verticalAlignment = Alignment.CenterVertically
@@ -1885,7 +1885,7 @@ private fun InputFieldWithPaste(
                 modifier = Modifier
                     .fillMaxHeight()
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(7.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(
                         if (isPasteFocused) Color.White
                         else Color.White.copy(alpha = 0.10f)
@@ -1893,7 +1893,7 @@ private fun InputFieldWithPaste(
                     .border(
                         1.dp,
                         if (isPasteFocused) Color.White else Color.White.copy(alpha = 0.15f),
-                        RoundedCornerShape(7.dp)
+                        RoundedCornerShape(8.dp)
                     )
                     .clickable(onClick = onPasteClick),
                 contentAlignment = Alignment.Center
@@ -1945,12 +1945,12 @@ private fun InputFieldBlock(
                 .height(if (singleLine) 46.dp else 84.dp)
                 .background(
                     Color.White.copy(alpha = if (isFocused) 0.12f else 0.05f),
-                    RoundedCornerShape(10.dp)
+                    RoundedCornerShape(12.dp)
                 )
                 .border(
                     width = if (isFocused) 2.dp else 1.dp,
                     color = if (isFocused) resolveAccentColor(fallback = Pink) else Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(12.dp)
                 )
                 .padding(horizontal = 2.dp),
             contentAlignment = Alignment.CenterStart

@@ -192,6 +192,7 @@ import com.arflix.tv.ui.screens.player.common.NextEpisodePromptGate
 import com.arflix.tv.ui.screens.player.common.PlaybackEpisodeKey
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.ArflixTypography
+import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.PurpleDark
 import com.arflix.tv.ui.theme.PurpleLight
@@ -4183,7 +4184,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 modifier = Modifier
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.65f),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -4217,7 +4218,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     .padding(top = 16.dp, start = 24.dp)
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .zIndex(6f),
@@ -4274,7 +4275,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     .padding(top = if (hasPlaybackStarted && (uiState.isFindingBestMatch || uiState.isHearingSync)) 60.dp else 16.dp)
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .zIndex(6f),
@@ -5010,11 +5011,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             ) {
                                 // Visible thin bar centered in the larger touch target
                                 val barHeight = if (trackbarFocused) 8.dp else if (isTouchDevice) 6.dp else 4.dp
-                                Box(modifier = Modifier.fillMaxWidth().height(barHeight).background(Color.White.copy(alpha = if (trackbarFocused) 0.25f else 0.15f), RoundedCornerShape(3.dp)))
+                                Box(modifier = Modifier.fillMaxWidth().height(barHeight).background(Color.White.copy(alpha = if (trackbarFocused) 0.25f else 0.15f), RoundedCornerShape(8.dp)))
                                 val frac = if (duration > 0) (controlsPreviewPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else progress
                                 Box(modifier = Modifier.fillMaxWidth().height(barHeight).align(Alignment.Center), contentAlignment = Alignment.CenterStart) {
                                 Box(modifier = Modifier.fillMaxWidth(frac).fillMaxHeight().background(
-                                    if (trackbarFocused) playerAccent else playerAccent.copy(alpha = 0.8f), RoundedCornerShape(3.dp)
+                                    if (trackbarFocused) playerAccent else playerAccent.copy(alpha = 0.8f), RoundedCornerShape(8.dp)
                                 ))
                                 }
                                 val knobSize = if (isTouchDevice) 12.dp else 14.dp
@@ -5203,13 +5204,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         modifier = Modifier
                             .width(8.dp)
                             .height(100.dp)
-                            .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                            .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .fillMaxSize((currentVolume.toFloat() / maxVolume).coerceIn(0f, 1f))
-                                .background(playerAccent, RoundedCornerShape(4.dp))
+                                .background(playerAccent, RoundedCornerShape(8.dp))
                                 .align(Alignment.BottomCenter)
                         )
                     }
@@ -5231,7 +5232,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
                         .padding(horizontal = 24.dp, vertical = 14.dp)
                 ) {
                     Text(
@@ -5300,13 +5301,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(5.dp)
-                                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(3.dp))
+                                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(8.dp))
                             )
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(previewProgress)
                                     .height(5.dp)
-                                    .background(Color.White, RoundedCornerShape(3.dp))
+                                    .background(Color.White, RoundedCornerShape(8.dp))
                             )
                             Box(
                                 modifier = Modifier
@@ -5340,7 +5341,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     Column(
                         modifier = Modifier
                             .width(480.dp)
-                            .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp))
+                            .background(BackgroundElevated, RoundedCornerShape(16.dp))
                             .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
                             .padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -6410,7 +6411,7 @@ private fun SubtitleMenu(
                     .fillMaxHeight(0.70f)
                     .align(Alignment.BottomCenter)
                     .background(
-                        Color(0xFF1A1A1A),
+                        BackgroundElevated,
                         RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                     )
                     .clickable(
@@ -6479,10 +6480,10 @@ private fun SubtitleMenu(
                                 }
                                 .background(
                                     if (selected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
-                                    RoundedCornerShape(20.dp)
+                                    RoundedCornerShape(16.dp)
                                 )
                                 .then(
-                                    if (selected) Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                                    if (selected) Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
                                     else Modifier
                                 )
                                 .padding(horizontal = 20.dp, vertical = 8.dp)
@@ -6718,10 +6719,10 @@ private fun TabButton(
             .clickable { onClick() }
             .background(
                 if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent,
-                RoundedCornerShape(20.dp)
+                RoundedCornerShape(16.dp)
             )
             .then(
-                if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(20.dp))
+                if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(16.dp))
                 else Modifier
             )
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -6834,7 +6835,7 @@ private fun LangPanelItem(
                 modifier = Modifier
                     .background(
                         if (isFocused) Color.Black.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.15f),
-                        RoundedCornerShape(10.dp)
+                        RoundedCornerShape(12.dp)
                     )
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
@@ -7803,7 +7804,7 @@ private fun PlayerSubtitleSettingRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(rowBg, RoundedCornerShape(10.dp))
+            .background(rowBg, RoundedCornerShape(12.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -7825,7 +7826,7 @@ private fun PlayerSubtitleSettingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -7847,7 +7848,7 @@ private fun PlayerSubtitleSettingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

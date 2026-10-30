@@ -91,7 +91,7 @@ fun MobileEdgeIndicator(
                 modifier = Modifier
                     .width(4.dp)
                     .height(120.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color.White.copy(alpha = 0.25f)),
                 contentAlignment = Alignment.BottomCenter
             ) {
@@ -102,7 +102,7 @@ fun MobileEdgeIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight(normalFraction)
-                            .background(Color.White, RoundedCornerShape(2.dp))
+                            .background(Color.White, RoundedCornerShape(8.dp))
                     )
 
                     // Orange bar for boost mode (100% .. 200%) filling from bottom on top of white, consuming it
@@ -112,7 +112,7 @@ fun MobileEdgeIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .fillMaxHeight(boostFraction)
-                                .background(boostColor, RoundedCornerShape(2.dp))
+                                .background(boostColor, RoundedCornerShape(8.dp))
                         )
                     }
                 }
@@ -149,8 +149,8 @@ fun MobileAspectIndicator(
     ) {
         Box(
             modifier = Modifier
-                .background(MobilePlayerTokens.PanelBg, RoundedCornerShape(10.dp))
-                .border(1.dp, MobilePlayerTokens.PanelBorder, RoundedCornerShape(10.dp))
+                .background(MobilePlayerTokens.PanelBg, RoundedCornerShape(12.dp))
+                .border(1.dp, MobilePlayerTokens.PanelBorder, RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .zIndex(20f),
             contentAlignment = Alignment.Center

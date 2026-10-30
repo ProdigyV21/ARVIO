@@ -89,7 +89,7 @@ internal fun IptvAccountSubtitle(
     @Composable
     fun Badge() = Box(
         modifier = Modifier
-            .background(color.copy(alpha = 0.18f), RoundedCornerShape(10.dp))
+            .background(color.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
             .padding(horizontal = 8.dp, vertical = 1.dp)
     ) {
         Text(label, style = style.copy(fontWeight = FontWeight.SemiBold), color = color, maxLines = 1)

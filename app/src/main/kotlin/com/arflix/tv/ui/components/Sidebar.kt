@@ -179,7 +179,7 @@ private fun SidebarProfileAvatar(
                     .align(Alignment.CenterStart)
                     .width(3.dp)
                     .height(22.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(CircleShape)
                     .background(ArvioSkin.colors.focusOutline.copy(alpha = indicatorAlpha))
             )
         }
@@ -273,7 +273,7 @@ private fun SidebarIcon(
                     .align(Alignment.CenterStart)
                     .width(3.dp)
                     .height(22.dp)
-                    .clip(RoundedCornerShape(999.dp))
+                    .clip(CircleShape)
                     .background(ArvioSkin.colors.focusOutline.copy(alpha = indicatorAlpha))
             )
         }
@@ -282,7 +282,7 @@ private fun SidebarIcon(
             modifier = Modifier
                 .align(Alignment.Center)
                 .size(30.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(chipBackground),
             contentAlignment = Alignment.Center
         ) {

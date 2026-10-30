@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.animateScrollBy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +37,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.LayoutDirection
 import com.arflix.tv.ui.focus.mirrorHorizontalForRtl
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
@@ -63,6 +66,9 @@ import com.arflix.tv.ui.screens.collections.CollectionBackdrop
 import com.arflix.tv.ui.screens.collections.CollectionSpotlight
 import com.arflix.tv.ui.screens.collections.collectionSpotlightHeight
 import kotlinx.coroutines.delay
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundDark
+import com.arflix.tv.ui.theme.BackgroundElevated
 import java.time.LocalDate
 
 internal enum class LibrarySection(val label: String) { WATCHLISTS("Watchlists"), LISTS("My lists"), SERVERS("Homeserver"), CALENDAR("Calendar") }
@@ -432,11 +438,20 @@ fun WatchlistScreen(
 internal fun OledControl(label: String, modifier: Modifier = Modifier, selected: Boolean = false, compact: Boolean = false, icon: ImageVector? = null, maxLines: Int = 1, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val accent = resolveAccentColor(Color.White)
-    val foreground = if(focused) { if(accent.luminance() > .4f) Color.Black else Color.White } else Color.White
-    val background by animateColorAsState(if(focused) accent else if(selected) Color(0xFF242426) else Color.Transparent, tween(120), label = "library-control")
-    Box(modifier.onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(7.dp))
+    // Phone/tablet (compact): selected tab is a white pill with black text.
+    // TV keeps the elevated dark treatment; focus uses the accent color.
+    val isPhoneSelected = selected && compact
+    val foreground = if(focused) { if(accent.luminance() > .4f) Color.Black else Color.White } else if(isPhoneSelected) Color.Black else Color.White
+    val haptic = LocalHapticFeedback.current
+    val background by animateColorAsState(if(focused) accent else if(isPhoneSelected) Color.White else if(selected) BackgroundElevated else Color.Transparent, tween(120), label = "library-control")
+    Box(modifier.onFocusChanged { focused = it.isFocused }.clip(if(compact) CircleShape else RoundedCornerShape(8.dp))
         .background(background)
-        .clickable(onClick = onClick).padding(horizontal = if(compact) 8.dp else 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
+        .clickable {
+            if (compact && !selected) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+            onClick()
+        }.padding(horizontal = if(compact) 8.dp else 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
         if(label == "⌕") Icon(Icons.Outlined.Search, contentDescription = tr("Search library"), tint = foreground, modifier = Modifier.size(20.dp))
         else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
         if(icon != null) Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(20.dp))
@@ -483,10 +498,10 @@ private fun OledSources(sources: List<WatchlistSourceItem>, selectedId: String, 
 private fun OledCollection(source: WatchlistSourceItem, cover: String?, width: Dp, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val accent = resolveAccentColor(Color.White)
-    Column(Modifier.width(width).onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)) {
+    Column(Modifier.width(width).onFocusChanged { focused = it.isFocused }.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().padding(top = 5.dp)) {
-            Box(Modifier.padding(horizontal = 10.dp).offset(y = (-5).dp).fillMaxWidth().height(8.dp).background(Color(0xFF252528), RoundedCornerShape(5.dp)))
-            AsyncImage(cover, source.title, modifier = Modifier.fillMaxWidth().aspectRatio(2.2f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF101012)), contentScale = ContentScale.Crop)
+            Box(Modifier.padding(horizontal = 10.dp).offset(y = (-5).dp).fillMaxWidth().height(8.dp).background(BackgroundElevated, RoundedCornerShape(8.dp)))
+            AsyncImage(cover, source.title, modifier = Modifier.fillMaxWidth().aspectRatio(2.2f).clip(RoundedCornerShape(8.dp)).background(BackgroundCard), contentScale = ContentScale.Crop)
         }
         Column(Modifier.fillMaxWidth().background(if(focused) accent else Color.Black).padding(10.dp)) {
             val ink = if(focused && accent.luminance() > .4f) Color.Black else Color.White
@@ -509,7 +524,7 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().testTag("library-drawer-root").background(Color.Black.copy(alpha = .55f))) {
             Column(Modifier.align(Alignment.CenterEnd).fillMaxHeight().widthIn(max = 340.dp).fillMaxWidth()
-                .background(Color(0xFF0C0C0E)).padding(24.dp).verticalScroll(rememberScrollState())) {
+                .background(BackgroundDark).padding(24.dp).verticalScroll(rememberScrollState())) {
                 OledControl("${tr("Close")} ×", modifier = Modifier.focusRequester(initial), onClick = close)
                 Text(title, color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(vertical = 12.dp))
                 content()

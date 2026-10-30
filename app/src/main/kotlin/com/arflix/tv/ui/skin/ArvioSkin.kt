@@ -5,6 +5,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.arflix.tv.ui.theme.AccentGreen
+import com.arflix.tv.ui.theme.AccentYellow
+import com.arflix.tv.ui.theme.ErrorRed
+import com.arflix.tv.ui.theme.WarningOrange
 
 val LocalArvioSkinTokens = staticCompositionLocalOf { ArvioSkinTokens.defaults() }
 
@@ -33,10 +37,12 @@ fun resolveAccentColor(fallback: Color): Color {
  * Used by the accent colour setting and the colour picker.
  */
 fun accentColorFromName(name: String): Color = when (name) {
-    "Red" -> Color(0xFFFF4444)
-    "Orange" -> Color(0xFFFF8800)
-    "Yellow" -> Color(0xFFFFDD44)
-    "Green" -> Color(0xFF44CC44)
+    "Red" -> ErrorRed // Unified app red (#E74C3C)
+    "Orange" -> WarningOrange // Palette anchor (#F39C12)
+    "Yellow" -> AccentYellow // Palette anchor — IMDb yellow (#FFCD3C)
+    "Green" -> AccentGreen // Palette anchor (#00D588)
+    // Blue/Indigo/Violet have no Arctic Fuse 2 anchor; kept as explicit
+    // user-chosen hues (a deliberate pick is not palette drift).
     "Blue" -> Color(0xFF4488FF)
     "Indigo" -> Color(0xFF6644CC)
     "Violet" -> Color(0xFFBB44CC)

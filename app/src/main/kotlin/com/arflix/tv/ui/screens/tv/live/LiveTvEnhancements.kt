@@ -62,6 +62,8 @@ import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.repository.IptvConfig
 import com.arflix.tv.data.repository.StalkerPortalSupport
+import com.arflix.tv.ui.theme.ErrorRed
+import com.arflix.tv.ui.theme.WarningOrange
 import com.arflix.tv.ui.focus.mirrorHorizontalForRtl
 
 data class TvProviderFilter(
@@ -319,7 +321,7 @@ fun ProviderSelector(
                 Box(
                     modifier = Modifier
                         .defaultMinSize(minWidth = 110.dp)
-                        .clip(RoundedCornerShape(999.dp))
+                        .clip(CircleShape)
                         .background(
                             when {
                                 selected -> liveAccent().copy(alpha = 0.18f)
@@ -334,7 +336,7 @@ fun ProviderSelector(
                                 selected -> liveAccent()
                                 else -> LiveColors.Divider
                             },
-                            shape = RoundedCornerShape(999.dp),
+                            shape = CircleShape,
                         )
                         .then(if (selected && focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                         .onFocusChanged { if (it.hasFocus) focusedId = provider.id }
@@ -443,7 +445,7 @@ fun EpgStatusStrip(
             Icon(
                 imageVector = Icons.Filled.Info,
                 contentDescription = null,
-                tint = if (warning.isNullOrBlank()) liveAccent() else Color(0xFFFFC04A),
+                tint = if (warning.isNullOrBlank()) liveAccent() else WarningOrange,
                 modifier = Modifier.size(14.dp),
             )
             Text(
@@ -485,7 +487,7 @@ fun ChannelNumberOverlay(
             )
             Text(
                 text = exactChannelName ?: if (matchCount > 0) stringResource(R.string.live_label_matches, matchCount) else stringResource(R.string.live_empty_no_channel),
-                style = LiveType.SectionTag.copy(color = if (matchCount > 0) LiveColors.FgDim else Color(0xFFFF8A9A)),
+                style = LiveType.SectionTag.copy(color = if (matchCount > 0) LiveColors.FgDim else ErrorRed),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -515,8 +517,8 @@ fun PlaybackDiagnosticBanner(
         val current = diagnostic ?: return@AnimatedVisibility
         val tint = when (current.severity) {
             PlaybackDiagnosticSeverity.Info -> liveAccent()
-            PlaybackDiagnosticSeverity.Warning -> Color(0xFFFFC04A)
-            PlaybackDiagnosticSeverity.Error -> Color(0xFFFF6B81)
+            PlaybackDiagnosticSeverity.Warning -> WarningOrange
+            PlaybackDiagnosticSeverity.Error -> ErrorRed
         }
         Row(
             modifier = Modifier
@@ -570,7 +572,7 @@ fun EpgWarningBanner(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.Black.copy(alpha = 0.78f))
-                .border(1.dp, Color(0xFFFFC04A).copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                .border(1.dp, WarningOrange.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
                 .clickable { visible = false }
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -579,7 +581,7 @@ fun EpgWarningBanner(
             Icon(
                 imageVector = Icons.Filled.ErrorOutline,
                 contentDescription = null,
-                tint = Color(0xFFFFC04A),
+                tint = WarningOrange,
                 modifier = Modifier.size(20.dp),
             )
             Text(
@@ -684,12 +686,12 @@ private fun VariantRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(if (focused) LiveColors.Panel else LiveColors.PanelDeep)
             .border(
                 width = if (focused) 2.dp else 1.dp,
                 color = if (focused) LiveColors.FocusRing else LiveColors.Divider,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
             )
             .onFocusChanged { focused = it.hasFocus }
             .focusable()
@@ -734,7 +736,7 @@ private fun VariantRow(
             text = channel.quality.label,
             style = LiveType.Badge.copy(color = LiveColors.Fg),
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(LiveColors.PanelRaised)
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )
@@ -742,7 +744,7 @@ private fun VariantRow(
             text = channel.lang,
             style = LiveType.Badge.copy(color = LiveColors.FgMute),
             modifier = Modifier
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(LiveColors.PanelRaised)
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )

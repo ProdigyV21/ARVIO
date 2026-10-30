@@ -92,7 +92,7 @@ fun TvSkipIntroButton(
         }
     }
 
-    val shape = RoundedCornerShape(20.dp) // match PlayerTextButtonFocusable
+    val shape = RoundedCornerShape(16.dp) // match PlayerTextButtonFocusable
     val scale by animateFloatAsState(if (isFocused) 1.08f else 1f, label = "skip_scale")
 
     AnimatedVisibility(

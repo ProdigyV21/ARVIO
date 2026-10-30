@@ -44,6 +44,8 @@ import coil.request.ImageRequest
 import coil.size.Precision
 import coil.size.Scale
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.data.model.CollectionGroupKind
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
@@ -69,8 +71,8 @@ import androidx.compose.ui.platform.testTag
 
 private val missingArtworkBrush = Brush.linearGradient(
     colors = listOf(
-        Color(0xFF1F2333),
-        Color(0xFF0D0D14)
+        BackgroundElevated,
+        BackgroundCard
     )
 )
 
@@ -394,7 +396,7 @@ fun MediaCard(
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                             .height(5.dp)
-                            .clip(RoundedCornerShape(999.dp))
+                            .clip(CircleShape)
                             .background(Color.Black.copy(alpha = 0.48f))
                     ) {
                         Box(
@@ -528,22 +530,21 @@ fun MediaCard(
             )
 
             if (showSubtitle) {
-                // Prefer release date (or year) under the title. Fall back to the
-                // explicit subtitle or media-type label only when neither is set.
+                // Standardized metadata format: "{type} · {year}" (e.g. "Movie · 2024").
+                // Falls back to explicit subtitle only when type/year are both missing.
                 val tvSeriesLabel = stringResource(R.string.component_label_tv_series)
                 val movieLabel = stringResource(R.string.movie)
                 val mediaLabel = stringResource(R.string.component_label_media)
                 val subtitle = remember(item.subtitle, item.releaseDate, item.year, item.mediaType, tvSeriesLabel, movieLabel, mediaLabel) {
-                    val release = item.releaseDate?.takeIf { it.isNotBlank() }
+                    val typeLabel = when (item.mediaType) {
+                        MediaType.TV -> tvSeriesLabel
+                        MediaType.MOVIE -> movieLabel
+                        else -> mediaLabel
+                    }
+                    val year = item.releaseDate?.takeIf { it.isNotBlank() }
                         ?: item.year.takeIf { it.isNotBlank() }
-                    release
-                        ?: item.subtitle.ifBlank {
-                            when (item.mediaType) {
-                                MediaType.TV -> tvSeriesLabel
-                                MediaType.MOVIE -> movieLabel
-                                else -> mediaLabel
-                            }
-                        }
+                    if (year != null) "$typeLabel · $year"
+                    else item.subtitle.ifBlank { typeLabel }
                 }
                 Text(
                     text = subtitle,
@@ -823,7 +824,7 @@ fun FeaturedMediaCard(
     ArvioFocusableSurface(
         modifier = Modifier.size(width, height).testTag("home_trailer_card_${item.mediaType}_${item.id}"),
         shape = shape,
-        backgroundColor = Color(0xFF1A1A1A),
+        backgroundColor = BackgroundElevated,
         outlineColor = ArvioSkin.colors.focusOutline,
         outlineWidth = 2.5.dp,
         focusedScale = 1f,

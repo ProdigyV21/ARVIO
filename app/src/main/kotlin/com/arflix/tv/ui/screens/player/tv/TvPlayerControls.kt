@@ -397,7 +397,7 @@ fun TvPlayerControls(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(barHeight)
-                                .background(Color.White.copy(alpha = if (trackbarFocused) 0.25f else 0.15f), RoundedCornerShape(3.dp))
+                                .background(Color.White.copy(alpha = if (trackbarFocused) 0.25f else 0.15f), RoundedCornerShape(8.dp))
                         )
                         val frac = if (durationMs > 0) ((if (isScrubbing) scrubPreviewPositionMs else currentPositionMs).toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else progress
                         Box(
@@ -413,7 +413,7 @@ fun TvPlayerControls(
                                     .fillMaxHeight()
                                     .background(
                                         if (trackbarFocused) playerAccent else playerAccent.copy(alpha = 0.8f),
-                                        RoundedCornerShape(3.dp)
+                                        RoundedCornerShape(8.dp)
                                     )
                             )
                         }

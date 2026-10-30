@@ -74,6 +74,7 @@ import com.arflix.tv.data.model.PersonDetails
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.Pink
+import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 import java.text.SimpleDateFormat
@@ -255,7 +256,7 @@ fun PersonModal(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color(0xFF1a1a1a)),
+                                        .background(BackgroundElevated),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -443,7 +444,7 @@ private fun MobilePersonContent(
                     )
                 } else {
                     Box(
-                        modifier = Modifier.fillMaxSize().background(Color(0xFF1a1a1a)),
+                        modifier = Modifier.fillMaxSize().background(BackgroundElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -529,7 +530,7 @@ private fun MobilePersonContent(
                                 .fillMaxWidth()
                                 .aspectRatio(2f / 3f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1a1a1a))
+                                .background(BackgroundElevated)
                         ) {
                             AsyncImage(
                                 model = item.image,
@@ -583,7 +584,7 @@ private fun HorizontalKnownForCard(
                     color = if (isFocused) focusRingColor else Color.Transparent,
                     shape = RoundedCornerShape(12.dp)
                 )
-                .background(Color(0xFF1a1a1a))
+                .background(BackgroundElevated)
         ) {
             // Use backdrop if available, otherwise poster
             val imageUrl = item.backdrop?.takeIf { it.isNotEmpty() } ?: item.image

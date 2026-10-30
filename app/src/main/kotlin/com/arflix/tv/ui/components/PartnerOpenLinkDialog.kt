@@ -24,13 +24,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.BackgroundElevated
 
 /** Keyboard/D-pad and touch accessible; Back cancels the pending destination, not playback. */
 @Composable
 internal fun PartnerOpenLinkDialog(failed: Boolean, onRetry: () -> Unit, onCancel: () -> Unit) {
     val actionFocus = remember { FocusRequester() }
     Dialog(onDismissRequest = onCancel) {
-        Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFF181818), contentColor = Color.White) {
+        Surface(shape = RoundedCornerShape(16.dp), color = BackgroundElevated, contentColor = Color.White) {
             Column(
                 Modifier.fillMaxWidth().padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)

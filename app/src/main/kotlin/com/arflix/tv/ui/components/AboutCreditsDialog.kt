@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
@@ -28,13 +29,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.BackgroundElevated
 
 @Composable
 fun AboutCreditsDialog(onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     val closeFocus = remember { FocusRequester() }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(color = Color(0xFF181818), contentColor = Color.White) {
+        Surface(shape = RoundedCornerShape(16.dp), color = BackgroundElevated, contentColor = Color.White) {
             Column(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)
                     .verticalScroll(rememberScrollState()).padding(24.dp),

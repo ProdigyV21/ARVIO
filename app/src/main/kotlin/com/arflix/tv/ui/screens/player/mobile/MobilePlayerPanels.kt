@@ -1395,7 +1395,7 @@ private fun SubtitleSettingsContent(
                         val isSelected = valKey.equals(subtitleStyle, ignoreCase = true)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) Color.White.copy(alpha = 0.22f) else Color.Transparent)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
@@ -1464,7 +1464,7 @@ private fun SubtitleSettingsContent(
 private fun SubtitleBadge(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = 0.10f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
@@ -2204,7 +2204,7 @@ private fun SheetTabSelector(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -2280,7 +2280,7 @@ private fun MobileBottomSheetBase(
                         .padding(top = 10.dp, bottom = 4.dp)
                         .width(34.dp)
                         .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.2f))
                         .align(Alignment.CenterHorizontally)
                 )
@@ -2460,9 +2460,9 @@ fun MobileSubtitleRepositionOverlay(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 20.dp, vertical = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFF12141A).copy(alpha = 0.92f))
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -2581,7 +2581,7 @@ fun MobileSubtitleRepositionOverlay(
                         },
                         modifier = if (isBackground) {
                             Modifier
-                                .background(Color(0xB4000000), RoundedCornerShape(4.dp))
+                                .background(Color(0xB4000000), RoundedCornerShape(8.dp))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         } else {
                             Modifier

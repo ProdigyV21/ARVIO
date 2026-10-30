@@ -221,13 +221,13 @@ private fun decodeLegacyLogoUrl(value: String): String? {
 fun SmallTag(text: String, color: Color = LiveColors.FgDim) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(LiveColors.Panel),
     ) {
         Text(
             text = text,
             style = LiveType.Badge.copy(color = color),
-            modifier = Modifier.clip(RoundedCornerShape(3.dp)),
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)),
         )
     }
 }

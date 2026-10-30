@@ -955,7 +955,7 @@ private fun CollectionTabChip(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(8.dp)
     val bg = when {
         isSelected -> Color.White
         isFocused -> Color.Transparent

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -151,7 +152,7 @@ internal fun CommunityAddonsBrowser(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .clickable(onClick = onDismiss),
                             contentAlignment = Alignment.Center
                         ) {
@@ -399,7 +400,7 @@ private fun CommunityFilterChip(label: String, selected: Boolean, onClick: () ->
     Box(
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(999.dp))
+            .clip(CircleShape)
             .background(
                 when {
                     selected -> Color.White
@@ -410,7 +411,7 @@ private fun CommunityFilterChip(label: String, selected: Boolean, onClick: () ->
             .border(
                 width = if (focused) 2.dp else 0.dp,
                 color = if (focused) accent else Color.Transparent,
-                shape = RoundedCornerShape(999.dp)
+                shape = CircleShape
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -430,7 +431,7 @@ private fun CommunityFilterChip(label: String, selected: Boolean, onClick: () ->
 private fun CommunityChip(text: String, background: Color, textColor: Color) {
     Box(
         modifier = Modifier
-            .background(background, RoundedCornerShape(999.dp))
+            .background(background, CircleShape)
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(
@@ -476,7 +477,7 @@ private fun CommunityAddonRow(
         Box(
             modifier = Modifier
                 .size(48.dp)
-                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(10.dp)),
+                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             AddonLogo(logoUrl = addon.logo, size = 40.dp, fallbackTint = TextSecondary)

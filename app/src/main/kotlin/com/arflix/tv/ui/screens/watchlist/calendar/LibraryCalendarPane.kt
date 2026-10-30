@@ -51,9 +51,13 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundElevated
+import com.arflix.tv.ui.theme.BorderLight
+import com.arflix.tv.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
-private val CalendarSecondary = Color(0xFFACC5D8)
+private val CalendarSecondary = TextSecondary
 
 @Composable
 internal fun LibraryCalendarRoute(
@@ -252,7 +256,7 @@ fun LibraryCalendarPane(
     if (showSources) Dialog(onDismissRequest = { showSources = false }) {
         val selectedSourceFocus = remember { FocusRequester() }
         LaunchedEffect(Unit) { selectedSourceFocus.requestFocus() }
-        Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF141619))
+        Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(8.dp)).background(BackgroundCard)
             .padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(tr("Watchlists"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
@@ -335,7 +339,7 @@ private fun CalendarButton(label: String, modifier: Modifier = Modifier, selecte
     val active = selected || focused
     val shape = RoundedCornerShape(if (dropdown) 6.dp else 30.dp)
     Row(modifier.heightIn(min = if (touch) 44.dp else 0.dp).onFocusChanged { focused = it.isFocused }.clip(shape)
-        .background(if (active) Color.White else Color.Transparent).border(.6.dp, if (active) Color.White else Color(0xFF53616D), shape)
+        .background(if (active) Color.White else Color.Transparent).border(.6.dp, if (active) Color.White else BorderLight, shape)
         .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(label, color = if (active) Color.Black else Color.White, fontSize = if (touch || dropdown) 12.sp else 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -413,7 +417,7 @@ private fun CalendarDay(date: LocalDate, month: YearMonth, releases: List<Calend
                     horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
                     shown.forEachIndexed { index, release ->
                         Box(Modifier.size(posterHeight / 1.5f, posterHeight).clip(RoundedCornerShape(3.dp))
-                            .background(if (selected) Color(0xFFE3E6E8) else Color(0xFF171B20))
+                            .background(if (selected) Color(0xFFE3E6E8) else BackgroundElevated)
                             .testTag("calendar-poster-$date-$index"), contentAlignment = Alignment.Center) {
                             Text(release.media.title.take(1), color = secondary, fontSize = 10.sp)
                             AsyncImage(release.media.image.takeIf { it.isNotBlank() } ?: release.artwork(), null,

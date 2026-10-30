@@ -691,7 +691,7 @@ fun EpgGrid(
                                     }
                                 }
                             }
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(liveAccent())
                             .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {

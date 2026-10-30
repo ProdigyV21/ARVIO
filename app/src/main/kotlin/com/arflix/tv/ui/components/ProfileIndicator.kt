@@ -81,7 +81,7 @@ fun ProfileIndicator(
             Box(
                 modifier = Modifier
                     .size(28.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {

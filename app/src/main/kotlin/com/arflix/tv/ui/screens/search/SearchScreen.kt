@@ -1167,7 +1167,7 @@ private fun SearchInputBar(
                 focusedIndicatorColor = Color.White,
                 unfocusedIndicatorColor = Color.White.copy(alpha = 0.18f)
             ),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("search-input")

@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
@@ -953,9 +954,9 @@ private fun SearchEntry(
             .border(
                 width = 1.dp,
                 color = if (focused) LiveColors.FocusRing else LiveColors.Divider,
-                shape = RoundedCornerShape(5.dp),
+                shape = RoundedCornerShape(8.dp),
             )
-            .clip(RoundedCornerShape(5.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (focused) Color.White else LiveColors.Panel)
             // Search is the first focusable row in the sidebar, so while the
             // categories are still loading Compose parks the D-pad selector
@@ -1081,12 +1082,14 @@ private fun SidebarRow(
     var longPressTriggered by remember { mutableStateOf(false) }
     var longPressJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
+    val isTouch = LocalDeviceType.current.isTouchDevice()
     val bg = when {
         focused -> Color.White
+        active && isTouch -> Color.White
         active -> LiveColors.FocusBg
         else -> Color.Transparent
     }
-    val foreground = if (focused) Color.Black else if (active) LiveColors.Fg else LiveColors.FgDim
+    val foreground = if (focused) Color.Black else if (active && isTouch) Color.Black else if (active) LiveColors.Fg else LiveColors.FgDim
     val secondary = if (focused) Color.Black.copy(alpha = .7f) else LiveColors.FgDim
     Box(
         modifier = Modifier
@@ -1104,7 +1107,7 @@ private fun SidebarRow(
                     if (it.isFocused) onFocused?.invoke()
                 }
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .clip(RoundedCornerShape(6.dp))
+                .clip(if (active && isTouch) CircleShape else RoundedCornerShape(8.dp))
                 .drawBehind { drawRect(bg) }
                 .onPreviewKeyEvent { ev ->
                     val isSelect = ev.key == Key.DirectionCenter || ev.key == Key.Enter
@@ -1252,8 +1255,8 @@ private fun CategoryContextMenu(
         Column(
             modifier = Modifier
                 .width(184.dp)
-                .background(LiveColors.PanelRaised, RoundedCornerShape(10.dp))
-                .border(1.dp, LiveColors.FocusRing.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                .background(LiveColors.PanelRaised, RoundedCornerShape(12.dp))
+                .border(1.dp, LiveColors.FocusRing.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                 .padding(4.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {

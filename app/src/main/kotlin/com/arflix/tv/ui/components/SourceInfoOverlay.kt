@@ -34,6 +34,7 @@ import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.ui.theme.ArflixTypography
+import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.SuccessGreen
 import com.arflix.tv.ui.theme.TextPrimary
@@ -175,7 +176,7 @@ fun PlayerInfoBar(
         if (isLive) {
             Row(
                 modifier = Modifier
-                    .background(Color(0xFFEF4444), RoundedCornerShape(4.dp))
+                    .background(ErrorRed, RoundedCornerShape(8.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {

@@ -212,7 +212,10 @@ fun SearchOverlay(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(LiveColors.Panel)
+                    .border(1.dp, LiveColors.Divider, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
@@ -359,12 +362,12 @@ private fun SearchResultRow(
         modifier = modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(if (focused) LiveColors.Panel else Color.Transparent)
             .border(
                 width = if (focused) 3.dp else 0.dp,
                 color = if (focused) LiveColors.FocusRing else Color.Transparent,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
             )
             .onFocusChanged { focused = it.hasFocus }
             .onPreviewKeyEvent { ev ->
@@ -410,7 +413,7 @@ private fun SearchResultRow(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (channel.quality != Quality.UNKNOWN) Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(LiveColors.Panel)
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {
@@ -418,7 +421,7 @@ private fun SearchResultRow(
             }
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(LiveColors.Panel)
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {

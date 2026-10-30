@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.exoplayer.ExoPlayer
 import com.arflix.tv.R
 import com.arflix.tv.data.model.IptvNowNext
+import com.arflix.tv.ui.theme.AccentGreen
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.TextPrimary
 
@@ -280,7 +281,7 @@ private fun QuickAccessGrid(
                 title = stringResource(R.string.live_quick_sports),
                 subtitle = if (sportsCount > 0) stringResource(R.string.live_channels_count, sportsCount) else stringResource(R.string.live_sports_live_and_upcoming),
                 icon = Icons.Default.SportsSoccer,
-                iconTint = Color(0xFF4ADE80),
+                iconTint = AccentGreen,
                 onClick = onOpenSports,
                 modifier = Modifier.weight(1f),
             )
@@ -415,14 +416,14 @@ private fun PlaylistSubwayTile(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(58.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(LiveColors.Panel)
                 .border(
                     BorderStroke(
                         1.dp,
                         if (expanded) liveAccent() else LiveColors.Divider,
                     ),
-                    RoundedCornerShape(10.dp),
+                    RoundedCornerShape(12.dp),
                 )
                 .clickable { expanded = true }
                 .semantics {
@@ -501,9 +502,9 @@ private fun PlaylistSubwayTile(
                         modifier = Modifier
                             .fillMaxWidth(0.9f)
                             .widthIn(max = 400.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .background(LiveColors.Panel)
-                            .border(BorderStroke(1.dp, LiveColors.Divider), RoundedCornerShape(20.dp))
+                            .border(BorderStroke(1.dp, LiveColors.Divider), RoundedCornerShape(16.dp))
                             .clickable(
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                                 indication = null,
@@ -620,9 +621,9 @@ private fun GroupPlankTile(
     Row(
         modifier = modifier
             .height(58.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(LiveColors.Panel)
-            .border(BorderStroke(0.5.dp, LiveColors.Divider), RoundedCornerShape(10.dp))
+            .border(BorderStroke(0.5.dp, LiveColors.Divider), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .semantics {
                 role = Role.Button

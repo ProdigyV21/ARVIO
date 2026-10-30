@@ -35,13 +35,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arflix.tv.R
+import com.arflix.tv.ui.skin.ArvioSkin
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BorderLight
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 
-private val BannerShape = RoundedCornerShape(24.dp)
-private val CardBorder = Color(0xFF2B2B2B)
-private val ImdbYellow = Color(0xFFF5C518)
+private val BannerShape = RoundedCornerShape(16.dp)
+private val CardBorder = BorderLight
 private val BottomScrim = Brush.verticalGradient(
     colorStops = arrayOf(
         0.00f to Color.Transparent,
@@ -130,7 +132,7 @@ fun MobileHeroBanner(
         modifier = modifier
             .shadow(elevation = 8.dp, shape = BannerShape, clip = false)
             .clip(BannerShape)
-            .background(Color(0xFF141419))
+            .background(BackgroundCard)
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
             .border(width = 1.dp, color = CardBorder, shape = BannerShape)
     ) {
@@ -233,7 +235,7 @@ private fun BannerMeta(year: String, rating: String) {
         if (hasYear) {
             Text(
                 text = year,
-                color = Color.White.copy(alpha = 0.55f),
+                color = ArvioSkin.colors.textMuted,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -250,7 +252,7 @@ private fun BannerMeta(year: String, rating: String) {
             )
             Text(
                 text = rating,
-                color = Color.White.copy(alpha = 0.9f),
+                color = ArvioSkin.colors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -263,8 +265,8 @@ private fun BannerMeta(year: String, rating: String) {
 private fun BannerGenres(genres: List<String>, compact: Boolean) {
     if (genres.isEmpty()) return
     Text(
-        text = genres.joinToString("  •  "),
-        color = Color.LightGray,
+        text = genres.joinToString(" · "),
+        color = ArvioSkin.colors.textMuted,
         fontSize = 12.sp,
         fontWeight = FontWeight.Normal,
         textAlign = TextAlign.Center,

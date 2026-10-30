@@ -1900,7 +1900,7 @@ private fun HeroSection(
                 if (showInCinema) {
                     Box(
                         modifier = Modifier
-                            .background(inCinemaColor, RoundedCornerShape(6.dp))
+                            .background(inCinemaColor, RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -1931,7 +1931,7 @@ private fun HeroSection(
                     ) {
                         Box(
                             modifier = Modifier
-                                .background(AccentRed, RoundedCornerShape(4.dp))
+                                .background(AccentRed, RoundedCornerShape(8.dp))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
@@ -2733,7 +2733,7 @@ private fun MobileHeroCarousel(
                         modifier = Modifier
                             .height(4.dp)
                             .width(6.dp + 18.dp * expandFraction)
-                            .clip(RoundedCornerShape(2.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (isSelected) Color.White else Color.White.copy(alpha = 0.30f)
                             )
@@ -3968,7 +3968,7 @@ private fun ArcticFuseRatingBadge(
     ) {
         Box(
             modifier = Modifier
-                .background(backgroundColor, RoundedCornerShape(4.dp))
+                .background(backgroundColor, RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
@@ -4038,7 +4038,7 @@ private fun MetaPill(text: String) {
         modifier = Modifier
             .background(
                 color = Color.White.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(2.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
@@ -4061,7 +4061,7 @@ private fun ImdbBadge(rating: String) {
         modifier = Modifier
             .background(
                 color = Color(0xFFF5C518), // IMDb yellow
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {

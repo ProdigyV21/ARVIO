@@ -46,6 +46,7 @@ import com.arflix.tv.R
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.ui.components.ImdbSvgRatingBadge
 import java.text.NumberFormat
@@ -153,7 +154,7 @@ internal fun CollectionSpotlight(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back), tint = Color.White)
                     }
                 }
-                Text(catalog?.title.orEmpty(), color = Color(0xFFB6BBC2), fontSize = 12.sp,
+                Text(catalog?.title.orEmpty(), color = TextSecondary, fontSize = 12.sp,
                     fontWeight = FontWeight.Medium, letterSpacing = 0.sp,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -171,7 +172,7 @@ internal fun CollectionSpotlight(
                 item?.contentRating?.takeIf(String::isNotBlank)
             ).joinToString("  ·  ")
             Text(facts, modifier = Modifier.fillMaxWidth(textWidth).testTag("collection_spotlight_facts"),
-                color = Color(0xFFD7DBDF), fontSize = 12.sp, letterSpacing = 0.sp,
+                color = TextSecondary, fontSize = 12.sp, letterSpacing = 0.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             val rating = collectionRating(item)
             val budget = remember(item?.budget, item?.mediaType) { collectionCompactBudget(item) }
@@ -200,14 +201,14 @@ internal fun CollectionSpotlight(
                 if (budget != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (rating != null || !providerLogoUrl.isNullOrBlank()) MetadataDivider()
-                        Text("${stringResource(R.string.budget)} $budget", color = Color(0xFFB6BBC2),
+                        Text("${stringResource(R.string.budget)} $budget", color = TextSecondary,
                             fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
             Text(item?.overview?.takeIf(String::isNotBlank) ?: catalog?.collectionDescription.orEmpty(),
                 modifier = Modifier.fillMaxWidth(textWidth).testTag("collection_spotlight_overview"),
-                color = Color(0xFFC4C8CE), fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = 0.sp,
+                color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp, letterSpacing = 0.sp,
                 maxLines = if (isMobile && !compact) 3 else 2, overflow = TextOverflow.Ellipsis)
         }
     }
