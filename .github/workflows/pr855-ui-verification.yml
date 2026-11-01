@@ -18,7 +18,6 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-      - uses: android-actions/setup-android@v3
       - name: Prepare placeholder configuration
         run: cp secrets.defaults.properties secrets.properties
       - name: Compile both variants and prepare instrumentation APKs
