@@ -1,0 +1,58 @@
+name: PR855 UI Verification
+
+on:
+  push:
+    branches: [codex/pr855-ui-verification]
+
+permissions:
+  contents: read
+
+jobs:
+  device-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Prepare placeholder configuration
+        run: cp secrets.defaults.properties secrets.properties
+      - name: Compile both variants and prepare instrumentation APKs
+        run: >-
+          ./gradlew :app:compilePlayDebugKotlin :app:assembleSideloadDebug
+          :app:assembleSideloadDebugAndroidTest -PincludeX86Abis=true
+          -Pkotlin.compiler.execution.strategy=in-process --no-daemon --max-workers=2
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run targeted Compose device regressions
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          ram-size: 1536M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb shell wm size 1920x1200
+            adb shell wm density 160
+            ./gradlew :app:connectedSideloadDebugAndroidTest -PincludeX86Abis=true -Pkotlin.compiler.execution.strategy=in-process -Pandroid.testInstrumentationRunnerArguments.class=com.arflix.tv.ui.components.StackedMovieDeckDeviceTest,com.arflix.tv.ui.screens.home.HomeOrientationStateDeviceTest,com.arflix.tv.ui.components.BottomBarAppearanceDeviceTest,com.arflix.tv.navigation.NavigationRailScreenDeviceTest --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx2048m -Dfile.encoding=UTF-8"
+            mkdir -p artifacts/pr855-screenshots
+            adb pull /sdcard/Android/data/com.arvio.tv/files/pr855-compact-phone.png artifacts/pr855-screenshots/
+            adb pull /sdcard/Android/data/com.arvio.tv/files/pr855-tablet.png artifacts/pr855-screenshots/
+      - name: Upload verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr855-device-verification
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            artifacts/pr855-screenshots/
