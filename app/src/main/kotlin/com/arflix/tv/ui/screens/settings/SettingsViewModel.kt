@@ -2628,6 +2628,9 @@ class SettingsViewModel @Inject constructor(
                 val currentAddons = streamRepository.installedAddons.first()
                 val importedCatalogs = addon.manifest?.catalogs?.size ?: 0
                 runCatching {
+                    // Installing is a request to see the addon's rows, including any the
+                    // user deleted under an earlier install of it.
+                    catalogRepository.restoreHiddenAddonCatalogs(addon)
                     catalogRepository.syncAddonCatalogs(currentAddons)
                 }
                 _uiState.value = _uiState.value.copy(
