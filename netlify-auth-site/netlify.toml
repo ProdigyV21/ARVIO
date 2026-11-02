@@ -1,5 +1,9 @@
 [build]
-  publish = "."
+  command = "npm --prefix ../web ci --include=dev && node scripts/build-partner-pilot.mjs --site"
+  publish = "public-build"
+
+[build.environment]
+  NODE_VERSION = "22"
 
 [functions."retention-cleanup"]
   schedule = "@daily"
