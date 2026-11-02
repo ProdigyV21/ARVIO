@@ -1723,7 +1723,8 @@ class MediaRepository @Inject constructor(
      * Streaming-service trending via `with_watch_providers`. Used for services
      * that don't have a dedicated addon catalog (Apple TV+, Paramount+, Hulu,
      * Peacock). Region defaults to US if not provided — TMDB requires a region
-     * for watch-provider queries.
+     * for watch-provider queries. [CollectionSourceConfig.tmdbGenreId], set by
+     * a service page's genre filter, narrows it to one genre of that media type.
      */
     private suspend fun loadCollectionWatchProviderRefs(
         source: CollectionSourceConfig,
@@ -1732,6 +1733,7 @@ class MediaRepository @Inject constructor(
         val providerId = source.tmdbWatchProviderId ?: return emptyList()
         val region = source.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
         val sortBy = source.sortBy ?: "popularity.desc"
+        val genres = source.tmdbGenreId?.toString()
         return when (source.mediaType?.lowercase(Locale.US)) {
             "movie" -> loadPagedTmdbDiscoverRefs(
                 mediaType = MediaType.MOVIE,
@@ -1739,6 +1741,7 @@ class MediaRepository @Inject constructor(
             ) { page ->
                 tmdbApi.discoverMovies(
                     apiKey,
+                    genres = genres,
                     watchProviders = providerId,
                     watchRegion = region,
                     sortBy = sortBy,
@@ -1754,6 +1757,7 @@ class MediaRepository @Inject constructor(
                     apiKey,
                     watchProviders = providerId,
                     watchRegion = region,
+                    genres = genres,
                     sortBy = sortBy,
                     language = contentLanguage,
                     page = page
