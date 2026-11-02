@@ -13,6 +13,32 @@ import io.mockk.verify
 import org.junit.Test
 
 class AudioDecoderFallbackTest {
+    @Test fun failedTrueHdPassthroughRetriesPcmOnceWithoutDisablingOtherCodecs() {
+        val trueHd = Format.Builder().setSampleMimeType(MimeTypes.AUDIO_TRUEHD).setChannelCount(8).setSampleRate(48000).build()
+        val pcm = trueHd.buildUpon().setSampleMimeType(MimeTypes.AUDIO_RAW).setPcmEncoding(C.ENCODING_PCM_16BIT).build()
+        val delegate = mockk<androidx.media3.exoplayer.audio.AudioSink> {
+            every { supportsFormat(any()) } returns true
+            every { getFormatSupport(any()) } returns androidx.media3.exoplayer.audio.AudioSink.SINK_FORMAT_SUPPORTED_DIRECTLY
+        }
+        val fallback = AudioDecoderFallback().apply { softwareCapabilities = listOf(capabilities(C.FORMAT_HANDLED)) }
+        val sink = fallback.wrapSink(delegate)
+        assertThat(sink.supportsFormat(trueHd)).isTrue()
+        assertThat(fallback.blockPassthroughIfSupported(trueHd)).isTrue()
+        assertThat(fallback.blockPassthroughIfSupported(trueHd)).isFalse()
+        assertThat(sink.supportsFormat(trueHd)).isFalse()
+        assertThat(sink.getFormatSupport(trueHd)).isEqualTo(androidx.media3.exoplayer.audio.AudioSink.SINK_FORMAT_UNSUPPORTED)
+        assertThat(sink.supportsFormat(pcm)).isTrue()
+        assertThat(sink.supportsFormat(audio)).isTrue()
+        assertThat(sink.supportsFormat(Format.Builder().build())).isTrue()
+        assertThat(fallback.blockPassthroughIfSupported(pcm)).isFalse()
+    }
+
+    @Test fun unavailableSoftwareAndEncryptedAudioNeverDisablePassthrough() {
+        val fallback = AudioDecoderFallback()
+        assertThat(fallback.blockPassthroughIfSupported(audio)).isFalse()
+        fallback.softwareCapabilities = listOf(capabilities(C.FORMAT_HANDLED))
+        assertThat(fallback.blockPassthroughIfSupported(audio.buildUpon().setCryptoType(C.CRYPTO_TYPE_FRAMEWORK).build())).isFalse()
+    }
     private val audio = Format.Builder()
         .setSampleMimeType(MimeTypes.AUDIO_E_AC3)
         .setChannelCount(6)

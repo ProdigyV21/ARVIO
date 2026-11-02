@@ -1620,6 +1620,22 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 return
                             }
 
+                            // An encoded AudioTrack can fail without any MediaCodec crashing.
+                            // Retry through software PCM before constraining or disabling audio.
+                            val outputFailure = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
+                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+                            val failedFormat = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat
+                            if (outputFailure && aiRenderersFactory.blockAudioPassthrough(failedFormat)) {
+                                playbackStartupDiag("audio recovery: PCM after failed passthrough ${failedFormat?.sampleMimeType}")
+                                val resumeAt = this@apply.currentPosition.coerceAtLeast(0L)
+                                val keepPlaying = this@apply.playWhenReady
+                                this@apply.stop()
+                                this@apply.prepare()
+                                this@apply.seekTo(resumeAt)
+                                this@apply.playWhenReady = keepPlaying
+                                return
+                            }
+
                             // Audio recovery ladder — try to save the SAME source
                             // before skipping. An audio-track init/write failure (e.g. TrueHD/DTS
                             // the device can't render, or a channel layout it rejects) shouldn't
