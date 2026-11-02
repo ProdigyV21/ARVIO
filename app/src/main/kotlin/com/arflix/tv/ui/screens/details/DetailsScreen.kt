@@ -593,8 +593,9 @@ fun DetailsScreen(
 
     var autoPlayPending by rememberSaveable(mediaType, mediaId) { mutableStateOf(autoPlay) }
 
-    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, kidsGatePending) {
-        if (autoPlayPending && !uiState.isLoading && uiState.item != null && !kidsGatePending) {
+    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, uiState.isPlaybackTargetReady, kidsGatePending) {
+        if (autoPlayPending && !uiState.isLoading && uiState.item != null &&
+            uiState.isPlaybackTargetReady && !kidsGatePending) {
             autoPlayPending = false
             onAutoPlayHandled()
             onButtonClickRemembered(0)
