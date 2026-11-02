@@ -29,7 +29,10 @@ jobs:
           cache-dependency-path: ${{ matrix.directory }}/package-lock.json
       - name: Install backend dependencies
         if: matrix.directory == 'netlify-auth-site'
-        run: npm ci --omit=dev --ignore-scripts
+        run: npm ci --ignore-scripts
+      - name: Install Partner dashboard build test dependencies
+        if: matrix.directory == 'netlify-auth-site'
+        run: npm ci --ignore-scripts --prefix ../web
       - name: Install web dependencies
         if: matrix.directory == 'web'
         run: npm ci --ignore-scripts
