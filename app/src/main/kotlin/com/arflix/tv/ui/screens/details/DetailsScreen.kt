@@ -250,6 +250,8 @@ fun DetailsScreen(
     mediaId: Int,
     initialSeason: Int? = null,
     initialEpisode: Int? = null,
+    autoPlay: Boolean = false,
+    onAutoPlayHandled: () -> Unit = {},
     viewModel: DetailsViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
     onNavigateToPlayer: (MediaType, Int, EpisodeIdentity?, String?, String?, String?, String?, Long?) -> Unit,
@@ -586,6 +588,16 @@ fun DetailsScreen(
                     collectionIndex = 0
                 }
             }
+        }
+    }
+
+    var autoPlayPending by rememberSaveable(mediaType, mediaId) { mutableStateOf(autoPlay) }
+
+    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, kidsGatePending) {
+        if (autoPlayPending && !uiState.isLoading && uiState.item != null && !kidsGatePending) {
+            autoPlayPending = false
+            onAutoPlayHandled()
+            onButtonClickRemembered(0)
         }
     }
 

@@ -120,17 +120,19 @@ sealed class Screen(val route: String) {
     data object TelegramSettings : Screen("telegram_settings")
     data object ProfileSelection : Screen("profile_selection")
 
-    data object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}") {
+    data object Details : Screen("details/{mediaType}/{mediaId}?initialSeason={initialSeason}&initialEpisode={initialEpisode}&autoPlay={autoPlay}") {
         fun createRoute(
             mediaType: MediaType,
             mediaId: Int,
             initialSeason: Int? = null,
-            initialEpisode: Int? = null
+            initialEpisode: Int? = null,
+            autoPlay: Boolean = false
         ): String {
             val base = "details/${mediaType.name.lowercase()}/$mediaId"
             val params = mutableListOf<String>()
             initialSeason?.let { params.add("initialSeason=$it") }
             initialEpisode?.let { params.add("initialEpisode=$it") }
+            if (autoPlay) params.add("autoPlay=true")
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
@@ -293,8 +295,8 @@ fun AppNavigation(
                     preloadedHeroLogoUrl = preloadedHeroLogoUrl,
                     preloadedLogoCache = preloadedLogoCache,
                     currentProfile = currentProfile,
-                    onNavigateToDetails = { mediaType, mediaId, initialSeason, initialEpisode ->
-                        navController.navigate(Screen.Details.createRoute(mediaType, mediaId, initialSeason, initialEpisode))
+                    onNavigateToDetails = { mediaType, mediaId, initialSeason, initialEpisode, autoPlay ->
+                        navController.navigate(Screen.Details.createRoute(mediaType, mediaId, initialSeason, initialEpisode, autoPlay))
                     },
                     onNavigateToCollection = { catalogId ->
                         navController.navigate(Screen.CollectionDetails.createRoute(catalogId))
@@ -584,6 +586,10 @@ fun AppNavigation(
                 navArgument("initialEpisode") {
                     type = NavType.IntType
                     defaultValue = -1
+                },
+                navArgument("autoPlay") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { backStackEntry ->
@@ -596,6 +602,9 @@ fun AppNavigation(
             }
             val initialSeason = backStackEntry.arguments?.getInt("initialSeason")?.takeIf { it >= 0 }
             val initialEpisode = backStackEntry.arguments?.getInt("initialEpisode")?.takeIf { it >= 0 }
+            val autoPlayArg = backStackEntry.arguments?.getBoolean("autoPlay") ?: false
+            val autoPlayHandled = backStackEntry.savedStateHandle.get<Boolean>("autoPlayHandled") ?: false
+            val autoPlay = autoPlayArg && !autoPlayHandled
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
 
             DetailsScreen(
@@ -604,6 +613,10 @@ fun AppNavigation(
                 mediaId = mediaId,
                 initialSeason = initialSeason,
                 initialEpisode = initialEpisode,
+                autoPlay = autoPlay,
+                onAutoPlayHandled = {
+                    backStackEntry.savedStateHandle["autoPlayHandled"] = true
+                },
                 currentProfile = currentProfile,
                 onNavigateToPlayer = { type, id, identity, imdbId, url, preferredAddonId, preferredSourceName, startPositionMs ->
                     navController.navigate(
@@ -622,7 +635,11 @@ fun AppNavigation(
                             preferredSourceName = preferredSourceName,
                             startPositionMs = startPositionMs
                         )
-                    )
+                    ) {
+                        if (autoPlayArg) {
+                            popUpTo(Screen.Details.route) { inclusive = true }
+                        }
+                    }
                 },
                 onNavigateToDetails = { type, id ->
                     navController.navigate(Screen.Details.createRoute(type, id))
