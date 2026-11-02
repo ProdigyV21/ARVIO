@@ -13,6 +13,7 @@ const {
 } = require("./_entitlements");
 const { recordPremiumEvent } = require("./_premium-funnel");
 const { rewardReferralIfDue } = require("./_referrals");
+const { partnerEntitlement } = require("./_partner-entitlement");
 
 function requestAction(event) {
   let raw = event.body;
@@ -126,6 +127,7 @@ exports.handler = async (event) => {
       await recordPremiumEvent(event, { email, eventName: "paid_access_observed", metadata: { source: state.source || "unknown" } })
         .catch(() => console.error("Paid access analytics temporarily unavailable"));
     }
+    if (!state.entitled) state = await partnerEntitlement(identity) || state;
     return json(200, state);
   } catch (error) {
     console.error("entitlement-status failed", error);

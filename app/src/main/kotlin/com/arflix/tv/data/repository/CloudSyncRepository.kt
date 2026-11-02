@@ -956,12 +956,12 @@ class CloudSyncRepository @Inject constructor(
 
         // Backward compatibility fields (legacy single-profile clients)
         root.put("addons", JSONArray(gson.toJson(sharedAddons)))
-        root.put("catalogs", JSONArray(gson.toJson(catalogRepository.getCatalogs())))
+        root.put("catalogs", JSONArray(gson.toJson(catalogRepository.getPersonalCatalogs())))
         root.put(
             "hiddenPreinstalledCatalogs",
             JSONArray(gson.toJson(catalogRepository.getHiddenPreinstalledCatalogIdsForActiveProfile()))
         )
-        val iptvConfig = iptvRepository.observeConfig().first()
+        val iptvConfig = iptvRepository.observePersonalConfig().first()
         root.put("iptvM3uUrl", iptvConfig.m3uUrl)
         root.put("iptvEpgUrl", iptvConfig.epgUrl)
         root.put("iptvFavoriteGroups", JSONArray(gson.toJson(iptvRepository.observeFavoriteGroups().first())))
@@ -1988,7 +1988,7 @@ class CloudSyncRepository @Inject constructor(
                     gson.fromJson<List<String>>(j, type) ?: emptyList()
                 }
             }
-            val localIptv = iptvRepository.observeConfig().first()
+            val localIptv = iptvRepository.observePersonalConfig().first()
             val cloudHasIptvData = m3u.isNotBlank() || epg.isNotBlank() || favorites.isNotEmpty() || favoriteChannels.isNotEmpty()
             val localHasIptvData = localIptv.m3uUrl.isNotBlank() || localIptv.epgUrl.isNotBlank()
             var importedLegacyIptv = false

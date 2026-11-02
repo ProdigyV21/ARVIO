@@ -2,6 +2,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./load.cjs');
 const setup = load('lib/sourceSetup.ts');
+
+test('VOD-only IPTV packages count as on-demand sources, not live TV playlists', () => {
+  const playlist = { enabled: true, m3uUrl: 'https://provider.invalid/get.php?username=qa&password=fixture', importLiveTv: false, importVod: true, importSeries: false };
+  const state = setup.sourceSetupState([], { homeServers: [], iptvPlaylists: [playlist] });
+  assert.equal(state.liveTvPlaylists, 0);
+  assert.equal(state.hasOnDemand, true);
+  assert.equal(state.hasAny, true);
+  const disabled = setup.sourceSetupState([], { homeServers: [], iptvPlaylists: [{ ...playlist, importVod: false }] });
+  assert.equal(disabled.hasAny, false);
+});
 const empty = { homeServers: [], iptvPlaylists: [] };
 
 test('catalog, metadata, subtitle and disabled addons do not count as playback setup', () => {

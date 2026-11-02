@@ -57,7 +57,7 @@ import com.arflix.tv.util.ForcedSubtitles
 import com.arflix.tv.util.normalizeLanguageCode
 import com.arflix.tv.util.fallbackAdjacentEpisodeIdentity
 import com.arflix.tv.util.adjacentTmdbEpisodeIdentity
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.weightedSubtitleScore
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey as globalStringPreferencesKey

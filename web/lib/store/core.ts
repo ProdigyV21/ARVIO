@@ -1,7 +1,8 @@
 // App store (lib/store.tsx): All store state (useState/useRef) and the small effects that keep refs, catalogs and
 // Telegram in sync. Every other store hook receives this object.
 import { applyPendingWatchlist } from "../watchlistOutbox";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useManagedConfiguration } from "./managed";
 import { config } from "../config";
 import { mergeCatalogs } from "../catalogs";
 import { saveCloudTrackingSelection } from "../cloud";
@@ -59,14 +60,14 @@ export function useStoreCore(initialView?: AppView) {
   const [activeChannel, setActiveChannel] = useState<IptvChannel | null>(null);
   const playingRef = useRef(false);
   playingRef.current = Boolean(activeStream || activeChannel);
-  const [addons, setAddons] = useState<InstalledAddon[]>([]);
+  const [personalAddons, setAddons] = useState<InstalledAddon[]>([]);
   const [addonsReady, setAddonsReady] = useState(false);
   const [iptvSnapshot, setIptvSnapshot] = useState<IptvSnapshot>(emptyIptv);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
   const [searchState, setSearchState] = useState<"idle" | "loading" | "error">("idle");
   const [settingsSyncState, setSettingsSyncState] = useState<"local" | "saved" | "pending" | "error">("local");
-  const [settings, setSettings] = useState<AppSettings>(() => {
+  const [personalSettings, setSettings] = useState<AppSettings>(() => {
     const stored = loadStored<AppSettings>(settingsKey, defaultSettings);
     return {
       ...defaultSettings,
@@ -141,6 +142,18 @@ export function useStoreCore(initialView?: AppView) {
   // Read inside callbacks (openDetails, playChannel) so a gate always sees the profile in use.
   const activeProfileRef = useRef(activeProfile);
   activeProfileRef.current = activeProfile;
+
+  const managed = useManagedConfiguration(auth?.userId, activeProfileId, playingRef);
+  const settings = useMemo(() => managed.applySettings(personalSettings), [personalSettings, managed.resources?.catalogs, managed.resources?.homeServers, managed.resources?.playlists, managed.overrides]);
+  const addons = useMemo(() => {
+    const assigned = managed.resources?.addons || [];
+    const ids = new Set(assigned.map(addon => addon.id));
+    return assigned.length ? [...assigned, ...personalAddons.filter(addon => !ids.has(addon.id))] : personalAddons;
+  }, [personalAddons, managed.resources?.addons]);
+  const personalSettingsRef = useRef(personalSettings);
+  personalSettingsRef.current = personalSettings;
+  const personalAddonsRef = useRef(personalAddons);
+  personalAddonsRef.current = personalAddons;
 
   // The Home billboard's preview lives in HomeScreen (lib/homeHero): as store
   // state, every 8 s rotation and card hover re-rendered almost the whole app.
@@ -224,7 +237,7 @@ export function useStoreCore(initialView?: AppView) {
     };
     return () => { mdblistClient.onTokenRefreshed = undefined; };
   }, []);
-  return { section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef };
+  return { managed, personalSettings, personalSettingsRef, personalAddons, personalAddonsRef, section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef };
 }
 
 export type StoreCore = ReturnType<typeof useStoreCore>;

@@ -15,11 +15,12 @@ export interface EntitlementState {
   entitled: boolean;
   // "grace": the paid end has passed but a late renewal is still expected;
   // access continues until graceEndsAt.
-  reason: "subscription" | "grace" | "trial" | "expired" | "none" | "unknown";
+  reason: "subscription" | "grace" | "partner" | "trial" | "expired" | "none" | "unknown";
   status: string;
   source: string | null;
   tier?: string | null;
-  plan?: "monthly" | "yearly" | null;
+  plan?: "monthly" | "yearly" | "partner" | null;
+  organizationName?: string;
   expiresAt: string | null;
   graceEndsAt?: string | null;
   // Paid at least once: tells a lapsed member apart from someone who never paid.

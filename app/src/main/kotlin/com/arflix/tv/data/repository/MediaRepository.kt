@@ -995,6 +995,11 @@ class MediaRepository @Inject constructor(
     }
 
     suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 40): Category? = coroutineScope {
+        if (catalog.sourceType == CatalogSourceType.PREINSTALLED && catalog.kind == CatalogKind.STANDARD &&
+            PartnerCatalogs.isManaged(catalog.id)) {
+            val page = loadManagedBuiltInPage(catalog, 0, maxItems)
+            return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+        }
         if (catalog.kind == CatalogKind.COLLECTION) {
             val page = loadCollectionCatalogPage(catalog = catalog, offset = 0, limit = maxItems)
             return@coroutineScope if (page.items.isEmpty()) null else Category(catalog.id, catalog.title, page.items)
@@ -1046,6 +1051,9 @@ class MediaRepository @Inject constructor(
             return@coroutineScope loadCollectionCatalogPage(catalog, offset, limit)
         }
         if (limit <= 0 || offset < 0) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        if (catalog.sourceType == CatalogSourceType.PREINSTALLED && PartnerCatalogs.isManaged(catalog.id)) {
+            return@coroutineScope loadManagedBuiltInPage(catalog, offset, limit)
+        }
         val rankedCatalogLimit = if (catalog.isTop10Catalog()) 10 else Int.MAX_VALUE
         if (offset >= rankedCatalogLimit) {
             return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
@@ -1109,6 +1117,26 @@ class MediaRepository @Inject constructor(
             hasMore = hasMore,
             nextOffset = sourceNextOffset ?: (offset + pageRefs.size)
         )
+    }
+
+    private suspend fun loadManagedBuiltInPage(catalog: CatalogConfig, offset: Int, limit: Int): CategoryPageResult {
+        val source = catalog.sourceRef ?: return CategoryPageResult(emptyList(), false)
+        if (source !in setOf("trending_movies", "trending_tv", "trending_anime") || offset < 0 || limit <= 0) {
+            return CategoryPageResult(emptyList(), false)
+        }
+        val items = mutableListOf<MediaItem>()
+        var position = offset
+        var more = true
+        while (items.size < limit.coerceAtMost(200) && more) {
+            val page = loadHomeCategoryPage(source, position / 20 + 1)
+            val skip = position % 20
+            val selected = page.items.drop(skip).take(limit.coerceAtMost(200) - items.size)
+            items += selected
+            position += selected.size
+            more = skip + selected.size < page.items.size || page.hasMore
+            if (selected.isEmpty()) break
+        }
+        return CategoryPageResult(items, more, nextOffset = position)
     }
 
     /** The videos of the user's YouTube row (see [YouTubeCollection]), as native addon items, in the user's order. */

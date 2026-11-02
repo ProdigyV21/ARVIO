@@ -18,6 +18,25 @@ class IptvCatchupAvailabilityTest {
     private val channel = IptvChannel("one:1", "News", "https://example.invalid/channel.m3u8", "News", catchupDays = 3)
     private val programme = IptvProgram("Aired", startUtcMillis = 1_000, endUtcMillis = 60_000)
 
+    @Test fun disabledCatchupOverridesProviderArchiveAndForcedHistory() = runTest {
+        val disabled = channel.copy(catchupType = "none", xtreamStreamId = 1)
+        val advertised = programme.copy(catchupAvailable = true)
+        assertFalse(com.arflix.tv.data.model.IptvGuideHistory.canReplay(disabled, advertised, 120_000))
+        assertEquals(0, com.arflix.tv.data.model.IptvGuideHistory.days(disabled, force = true))
+        assertTrue(repository.getCatchupUrlCandidates(disabled, advertised).isEmpty())
+        assertTrue(runCatching { repository.resolvePlayableCatchupUrl(disabled, advertised) }.exceptionOrNull() is IOException)
+        verify(exactly = 0) { client.newCall(any()) }
+    }
+
+    @Test fun disabledGuideCannotFallBackToAnotherPlaylistsCredentials() {
+        val config = IptvConfig(playlists = listOf(
+            IptvPlaylistEntry("one", "Off", "https://a.test/list.m3u", epgEnabled = false),
+            IptvPlaylistEntry("two", "On", "https://b.test/list.m3u")))
+        assertFalse(repository.isGuideAllowed(config, channel))
+        assertTrue(repository.isGuideAllowed(config, channel.copy(id = "two:1")))
+        assertFalse(repository.isGuideAllowed(config, channel.copy(id = "partner-revoked:1")))
+    }
+
     @Test fun unavailableArchiveNeverProbesProvider() = runTest {
         val unavailable = programme.copy(catchupAvailable = false)
         assertTrue(repository.getCatchupUrlCandidates(channel, unavailable).isEmpty())

@@ -2,7 +2,7 @@ package com.arflix.tv.ui.screens.home
 
 import android.app.ActivityManager
 import android.content.Context
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.traktDataStore
 import com.arflix.tv.util.IPTV_FAVORITES_ON_HOME
 import com.arflix.tv.util.WATCHLIST_ON_HOME

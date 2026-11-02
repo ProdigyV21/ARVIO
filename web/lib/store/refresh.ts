@@ -25,7 +25,7 @@ import { filterWatchedContinueWatching, hydrateContinueWatchingItems, isPausedPl
 import type { StoreCore } from "./core";
 
 export function useRefreshData(store: StoreCore) {
-  const { activeProfileId, activeProfileIdRef, addonsRef, cwSourceRef, lastRefreshStartedRef, lastSyncedSettingsRef, refreshGenerationRef, refreshInFlightRef, refreshKeyRef, setAddons, setAddonsReady, setBusy, setCatalogConfigs, setCategories, setContinueWatching, setMdblistConnected, setSettings, setSettingsSyncState, setSimklConnected, setToast, setTrackingPreferences, setTraktConnected, setWatchedKeys, setWatchlist, settingsRef, traktActivityRef, watchedKeys } = store;
+  const { activeProfileId, activeProfileIdRef, personalAddonsRef: addonsRef, cwSourceRef, lastRefreshStartedRef, lastSyncedSettingsRef, refreshGenerationRef, refreshInFlightRef, refreshKeyRef, setAddons, setAddonsReady, setBusy, setCatalogConfigs, setCategories, setContinueWatching, setMdblistConnected, setSettings, setSettingsSyncState, setSimklConnected, setToast, setTrackingPreferences, setTraktConnected, setWatchedKeys, setWatchlist, personalSettingsRef: settingsRef, managed, traktActivityRef, watchedKeys } = store;
   const refreshData = useCallback((profileIdOverride?: string | null, background = false) => {
     const profileId = profileIdOverride ?? activeProfileId;
     const accountId = authClient.session?.userId;
@@ -190,6 +190,7 @@ export function useRefreshData(store: StoreCore) {
         void saveCloudAddons(authClient, source, profileId).catch(() => undefined);
       }
 
+      effectiveSettings = managed.applySettings(effectiveSettings);
       const effectiveCatalogs = mergeCatalogs(effectiveSettings.catalogs, effectiveSettings.hiddenCatalogIds, effectiveSettings.hiddenAddonCatalogIds);
       setCatalogConfigs(effectiveCatalogs.filter((catalog) => catalog.enabled && catalog.sourceType !== "home-server"));
 

@@ -208,6 +208,7 @@ test('server paid-access observation cannot be manufactured by browser events', 
   const handler = fixtureModule('entitlement-status', {
     './_backend': { json: (statusCode, body) => ({ statusCode, body }), options: () => null, resolveIdentity: async () => ({ email: 'customer@example.test' }), normalizeEmail: value => value, sha256: value => value },
     './_entitlements': { entitlementsStore: () => ({}), readEntitlement: async () => ({}), evaluateEntitlement: () => entitlement },
+    './_partner-entitlement': { partnerEntitlement: async () => null },
     './_premium-funnel': { recordPremiumEvent: async (_event, body) => { assert.equal(body.eventName, 'paid_access_observed'); recorded++; throw Error('analytics offline'); } },
     './_trial-emails': { queueTrialEmails: async () => {} },
     './_referrals': { rewardReferralIfDue: async () => ({ rewarded: false }) }

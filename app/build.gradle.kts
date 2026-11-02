@@ -78,6 +78,7 @@ android {
         buildConfigField("String", "GITHUB_OWNER", "\"ProdigyV21\"")
         buildConfigField("String", "GITHUB_REPO", "\"ARVIO\"")
         buildConfigField("Boolean", "FEATURE_PLUGINS_ENABLED", "false")
+        buildConfigField("Boolean", "PARTNER_MANAGEMENT_ENABLED", (providers.gradleProperty("partnerManagement").orNull == "true").toString())
         // Use the same resolution for generated values and release validation.
         buildConfigField("String", "TELEGRAM_API_ID", "\"${escapeBuildConfigString(localSecretValue("TELEGRAM_API_ID"))}\"")
         buildConfigField("String", "TELEGRAM_API_HASH", "\"${escapeBuildConfigString(localSecretValue("TELEGRAM_API_HASH"))}\"")
@@ -543,6 +544,7 @@ ksp {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.2.0")
     androidTestImplementation("io.mockk:mockk-android:1.13.8")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:5.3.2")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 }
 

@@ -25,7 +25,7 @@ import com.arflix.tv.ui.screens.tv.live.selectConfidentEpgVodMatch
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.IPTV_EPG_VOD_ACTIONS_ENABLED_KEY
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -441,13 +441,19 @@ class TvViewModel @Inject constructor(
                     config.stalkerPortals.any { it.enabled && it.portalUrl.isNotBlank() } ||
                     config.playlists.any { it.enabled && it.m3uUrl.isNotBlank() }
 
-                // Auto-heal cases where the app has IPTV config but an empty in-memory snapshot.
-                if (hasAnyIptvConfig && snapshot.channels.isEmpty() && initialCacheLoadComplete && refreshJob?.isActive != true) {
-                    refresh(force = false, showLoading = false)
-                } else if (configChanged && refreshJob?.isActive != true) {
+                if (configChanged) {
+                    // A published package or revoked source must not get lost while an old
+                    // playlist request is running, or leave the old channels on screen.
+                    pendingForcedReload = false
+                    refreshJob?.cancel()
+                    refreshJob?.join()
+                    epgRefreshJob?.cancel()
+                    setUiState(_uiState.value.copy(snapshot = IptvSnapshot(), isLoading = false))
                     cachedEnrichedChannels = null
                     cachedChannelsSignature = null
                     refresh(force = true, showLoading = false, forceEpg = false)
+                } else if (hasAnyIptvConfig && snapshot.channels.isEmpty() && initialCacheLoadComplete && refreshJob?.isActive != true) {
+                    refresh(force = false, showLoading = false)
                 }
             }
         }

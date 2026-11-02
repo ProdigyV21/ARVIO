@@ -10,13 +10,18 @@ import type { useUpdateSettings } from "./settingsSync";
 import type { StoreCore } from "./core";
 
 export function useAddonActions(store: StoreCore & Pick<ReturnType<typeof useUpdateSettings>, "updateSettings">) {
-  const { activeProfileId, addonsRef, setAddons, settings, settingsRef, updateSettings } = store;
+  const { activeProfileId, addonsRef, personalAddonsRef, managed, setAddons, settings, settingsRef, updateSettings } = store;
   const persistAddons = useCallback(async (next: InstalledAddon[], options: { removedIds?: string[]; addedIds?: string[]; onLocalSave?: () => void } = {}) => {
-    const normalized = normalizeAddons(next);
+    const delivery = managed.ref.current.delivery;
+    if (delivery?.active && !delivery.permissions?.addConnections) throw new Error("Connections are managed by your administrator.");
+    const assigned = managed.ref.current.resources?.addons || [];
+    if (options.removedIds?.some(id => assigned.some(addon => addon.id === id))) throw new Error("This connection is managed by your administrator.");
+    const normalized = normalizeAddons(next.filter(addon => !addon.managedOrganizationId));
     queueAddons(authClient, normalized, activeProfileId, options.removedIds, options.addedIds);
     saveLocalAddons(normalized);
     if (!authClient.session && JSON.stringify(loadLocalAddons()) !== JSON.stringify(normalized)) throw new Error("Device storage is full. Keep this page open and retry saving.");
-    addonsRef.current = normalized;
+    personalAddonsRef.current = normalized;
+    addonsRef.current = [...assigned, ...normalized.filter(addon => !assigned.some(value => value.id === addon.id))];
     setAddons(normalized);
     options.onLocalSave?.();
     // Cloud writes are union-based; a removal must be an explicit id list so the
@@ -32,7 +37,8 @@ export function useAddonActions(store: StoreCore & Pick<ReturnType<typeof useUpd
   // and the Addons screen asks "Replace / Keep both" (Android parity).
   const installAddon = useCallback(async (source: string | InstalledAddon, options: { mode?: AddonInstallMode } = {}) => {
     const fetched = typeof source === "string" ? await installAddonManifest(source) : source;
-    const current = addonsRef.current;
+    const current = personalAddonsRef.current;
+    if (managed.ref.current.resources?.addons.some(addon => addon.id === fetched.id)) throw new Error("This connection is managed by your administrator.");
     const existing = duplicateAddons(current, fetched);
     if (existing.length && !options.mode) throw new AddonAlreadyInstalledError(fetched, existing);
     let candidate = fetched;
@@ -52,7 +58,7 @@ export function useAddonActions(store: StoreCore & Pick<ReturnType<typeof useUpd
 
   const setAddonsState = useCallback(async (next: InstalledAddon[]) => {
     await persistAddons(next, { onLocalSave: () => updateSettings({
-      disabledAddonIds: next.filter((addon) => addon.enabled === false).map((addon) => addon.id)
+      disabledAddonIds: next.filter((addon) => !addon.managedOrganizationId && addon.enabled === false).map((addon) => addon.id)
     }) });
   }, [persistAddons, updateSettings]);
   return { persistAddons, loadCatalogRow, installAddon, removeAddon, setAddonsState };

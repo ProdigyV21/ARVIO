@@ -174,7 +174,7 @@ import com.arflix.tv.ui.components.PlaybackQualityBadgeRow
 import com.arflix.tv.ui.components.buildPlaybackBadges
 import androidx.compose.ui.text.style.TextOverflow
 import com.arflix.tv.util.LocalDeviceType
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.weightedSubtitleScore
 import com.arflix.tv.ui.screens.player.tv.TvSkipIntroButton as SkipIntroButton
 import com.arflix.tv.ui.screens.player.engine.exoplayer.FullViewportSubtitlePlayerView

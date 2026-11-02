@@ -349,7 +349,8 @@ class StreamRepository @Inject constructor(
     private val invalidationBus: CloudSyncInvalidationBus,
     private val telegramSourceResolver: TelegramSourceResolver,
     private val streamIntegrationRepository: StreamIntegrationRepository,
-    private val youTubeExtractor: InAppYouTubeExtractor = InAppYouTubeExtractor()
+    private val youTubeExtractor: InAppYouTubeExtractor = InAppYouTubeExtractor(),
+    private val partnerDelivery: dagger.Lazy<PartnerDeliveryRepository>? = null
 ) {
     private val gson = Gson()
     private val TAG = "StreamRepository"
@@ -641,11 +642,17 @@ class StreamRepository @Inject constructor(
 
     // ========== Addon Management ==========
 
-    val installedAddons: Flow<List<Addon>> =
+    val personalAddons: Flow<List<Addon>> =
         context.streamDataStore.data.map { prefs ->
             val addons = readSharedOrLegacyAddons(prefs) ?: getDefaultAddonList()
             enforceOpenSubtitles(addons).map { sanitizeAddonDisplayName(it) }
         }
+
+    val installedAddons: Flow<List<Addon>> = if (!com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED || partnerDelivery == null) {
+        personalAddons
+    } else kotlinx.coroutines.flow.combine(personalAddons, partnerDelivery.get().deliveries) { personal, delivery ->
+        personal.filterNot { PartnerCatalogs.isManaged(it.id) } + delivery?.addons.orEmpty()
+    }
 
     private fun readSharedOrLegacyAddons(prefs: Preferences): List<Addon>? {
         parseAddons(prefs[sharedAddonsKey])?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -1254,11 +1261,13 @@ class StreamRepository @Inject constructor(
         addedIds: Set<String> = emptySet(),
         transform: (List<Addon>) -> List<Addon>
     ) {
+        if (stampChange && com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED &&
+            partnerDelivery?.get()?.activeDelivery()?.permissions?.addConnections == false) return
         // Save locally to the shared account-level addon list. Mirror to the
         // active profile key so older builds/cloud payloads can still recover it.
         context.streamDataStore.edit { prefs ->
             val previous = addonCloudState(prefs)
-            val addons = transform(previous.addons)
+            val addons = transform(previous.addons).filterNot { PartnerCatalogs.isManaged(it.id) }
             if (stampChange && addons == previous.addons && addedIds.isEmpty() && removedIds.isEmpty()) return@edit
             if (stampChange) {
                 val timestamp = maxOf(System.currentTimeMillis(), previous.updatedAt + 1)

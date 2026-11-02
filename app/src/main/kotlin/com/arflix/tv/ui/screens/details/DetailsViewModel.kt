@@ -55,7 +55,7 @@ import com.arflix.tv.util.AnimeMapper
 import com.arflix.tv.util.AnimeSeasonStructure
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.EpisodeAvailability
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException

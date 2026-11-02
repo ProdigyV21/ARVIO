@@ -12,14 +12,23 @@ export function addonProvidesStreams(addon: Pick<InstalledAddon, "enabled" | "re
 export function sourceSetupState(addons: InstalledAddon[], settings: Pick<AppSettings, "homeServers" | "iptvPlaylists"> & Partial<Pick<AppSettings, "iptvStalkerUrl" | "iptvStalkerMac" | "iptvStalkerPortals">>) {
   const streamAddons = addons.filter(addonProvidesStreams).length;
   const homeServers = settings.homeServers.filter(server => server.enabled && server.url.trim()).length;
-  const liveTvPlaylists = settings.iptvPlaylists.filter(playlist => playlist.enabled && playlist.m3uUrl.trim()).length
+  const enabledPlaylists = settings.iptvPlaylists.filter(playlist => playlist.enabled && playlist.m3uUrl.trim());
+  const liveTvPlaylists = enabledPlaylists.filter(playlist => playlist.importLiveTv !== false).length
     + liveTvStalkerPortals({ iptvStalkerUrl: settings.iptvStalkerUrl ?? "", iptvStalkerMac: settings.iptvStalkerMac ?? "", iptvStalkerPortals: settings.iptvStalkerPortals }).length;
+  const hasIptvVod = enabledPlaylists.some(playlist =>
+    (playlist.importVod !== false || playlist.importSeries !== false) && [playlist.m3uUrl, playlist.epgUrl].some(value => {
+      try {
+        const url = new URL(value || "");
+        return /^https?:$/.test(url.protocol) && !!url.searchParams.get("username") && !!url.searchParams.get("password");
+      } catch { return false; }
+    })
+  );
   return {
     streamAddons,
     homeServers,
     liveTvPlaylists,
-    hasOnDemand: streamAddons + homeServers > 0,
-    hasAny: streamAddons + homeServers + liveTvPlaylists > 0,
+    hasOnDemand: streamAddons + homeServers > 0 || hasIptvVod,
+    hasAny: streamAddons + homeServers + liveTvPlaylists > 0 || hasIptvVod,
     catalogOnly: addons.some(addon => addon.enabled !== false) && streamAddons === 0
   };
 }

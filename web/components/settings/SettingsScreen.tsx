@@ -103,7 +103,7 @@ function useSummaries(): Partial<Record<SectionId, string>> {
 
 export function SettingsScreen() {
   const translateUi = useTranslation();
-  const { settingsSyncState, auth } = useAppPick("settingsSyncState", "auth");
+  const { settingsSyncState, auth, managedStatus } = useAppPick("settingsSyncState", "auth", "managedStatus");
   const requested = requestedSourceSettings();
   const [section, setSectionState] = useState<SectionId>(() => requested ?? "account");
   // Phones show the list of sections first; a deep link opens its section.
@@ -189,6 +189,7 @@ export function SettingsScreen() {
     <div className={`st-shell ${detail ? "is-detail" : ""} ${results ? "is-searching" : ""}`}>
       <aside className="st-aside" aria-label={translateUi("Settings sections")}>
         <h1 className="st-title">{translateUi("Settings")}</h1>
+        {managedStatus?.managed && <a className="st-btn" href="/partner/account">{managedStatus.name || "Managed account"}</a>}
         <p className={`st-sync ${sync.tone}`} role="status" aria-live="polite"><span className="st-sync-dot" aria-hidden="true" />{translateUi(sync.text)}</p>
         <div className="st-search">
           <Search size={16} aria-hidden="true" />

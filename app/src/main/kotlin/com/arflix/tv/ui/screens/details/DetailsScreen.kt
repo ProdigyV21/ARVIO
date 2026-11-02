@@ -74,7 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.runtime.mutableStateMapOf
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.Icons

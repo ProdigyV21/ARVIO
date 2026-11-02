@@ -107,6 +107,7 @@ import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.metrics.performance.JankStats
 import androidx.metrics.performance.PerformanceMetricsState
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -175,6 +176,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var authRepository: Lazy<AuthRepository>
+
+    @Inject
+    lateinit var partnerDeliveryRepository: Lazy<com.arflix.tv.data.repository.PartnerDeliveryRepository>
 
     @Inject
     lateinit var profileRepository: Lazy<ProfileRepository>
@@ -247,6 +251,13 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        if (BuildConfig.PARTNER_MANAGEMENT_ENABLED) {
+            lifecycleScope.launch {
+                repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    partnerDeliveryRepository.get().runForegroundSession()
+                }
+            }
+        }
         window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.BLACK))
         window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
         @Suppress("DEPRECATION")

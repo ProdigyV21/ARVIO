@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import com.arflix.tv.BuildConfig
 import kotlinx.coroutines.withContext
 import com.arflix.tv.network.OkHttpProvider
 import okhttp3.CacheControl
@@ -72,7 +74,8 @@ class CatalogRepository @Inject constructor(
     private val traktApi: TraktApi,
     private val okHttpClient: OkHttpClient,
     private val invalidationBus: CloudSyncInvalidationBus,
-    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null
+    private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null,
+    private val partnerDelivery: dagger.Lazy<PartnerDeliveryRepository>? = null
 ) {
     private val bundledPreinstalledCatalogsById by lazy {
         // Imported collections change at runtime, so they must not be frozen into
@@ -185,6 +188,13 @@ class CatalogRepository @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observeCatalogs(): Flow<List<CatalogConfig>> {
+        val personal = observePersonalCatalogs()
+        if (!BuildConfig.PARTNER_MANAGEMENT_ENABLED || partnerDelivery == null) return personal
+        return combine(personal, partnerDelivery.get().deliveries, PartnerCatalogs::overlay).distinctUntilChanged()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observePersonalCatalogs(): Flow<List<CatalogConfig>> {
         return profileManager.activeProfileId
             .flatMapLatest { profileId ->
                 context.settingsDataStore.data
@@ -225,8 +235,13 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun getCatalogs(): List<CatalogConfig> {
-        return readCatalogsForActiveProfile()
+        return PartnerCatalogs.overlay(getPersonalCatalogs(), managedDelivery())
     }
+
+    suspend fun getPersonalCatalogs(): List<CatalogConfig> = readCatalogsForActiveProfile()
+
+    private fun managedDelivery(): PartnerIptvDelivery? =
+        if (BuildConfig.PARTNER_MANAGEMENT_ENABLED) partnerDelivery?.get()?.activeDelivery() else null
 
     suspend fun getCatalogsForProfile(profileId: String): List<CatalogConfig> {
         val safeProfileId = profileId.trim().ifBlank { "default" }
@@ -337,8 +352,9 @@ class CatalogRepository @Inject constructor(
     }
 
     private suspend fun saveCatalogs(catalogs: List<CatalogConfig>, expected: Preferences? = null, targetProfileId: String? = null): Boolean {
+        if (expected == null && managedDelivery()?.permissions?.editCatalogs == false) return false
         val profileId = targetProfileId ?: activeProfileId()
-        val sanitized = catalogs
+        val sanitized = catalogs.filterNot { PartnerCatalogs.isManaged(it.id) }
             .distinctBy { it.id }
             .mapNotNull { normalizeCatalogConfig(it) }
         var saved = false
@@ -358,8 +374,9 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun replaceCatalogsForProfile(profileId: String, catalogs: List<CatalogConfig>) {
+        if (managedDelivery()?.permissions?.editCatalogs == false) return
         val safeProfileId = profileId.trim().ifBlank { "default" }
-        val sanitized = catalogs
+        val sanitized = catalogs.filterNot { PartnerCatalogs.isManaged(it.id) }
             .distinctBy { it.id }
             .mapNotNull { normalizeCatalogConfig(it) }
         context.settingsDataStore.edit { prefs ->
@@ -470,18 +487,19 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun syncAddonCatalogs(addons: List<Addon>): Boolean {
+        val personalAddons = addons.filterNot { PartnerCatalogs.isManaged(it.id) }
         val profileId = activeProfileId()
         // Debounce: skip if addon manifest state hasn't changed since last sync.
         // Includes profile ID + fields that affect the sync outcome so that
         // switching profiles, toggling addon enable-state, or manifest catalog
         // changes always trigger a fresh sync.
-        val fingerprint = buildAddonFingerprint(profileId, addons)
+        val fingerprint = buildAddonFingerprint(profileId, personalAddons)
         if (fingerprint == lastSyncedAddonFingerprint) return false
         lastSyncedAddonFingerprint = fingerprint
 
         val prefs = context.settingsDataStore.data.first()
         val hiddenAddonIds = decodeHiddenAddon(profileId, prefs)
-        val supportedCatalogs = addons
+        val supportedCatalogs = personalAddons
             .asSequence()
             .filter { addon ->
                     addon.isInstalled &&
@@ -588,6 +606,7 @@ class CatalogRepository @Inject constructor(
         val prefs = context.settingsDataStore.data.first()
         val hiddenHomeServerIds = decodeHiddenHomeServer(profileId, prefs)
         val desiredCatalogs = candidates
+            .filterNot { PartnerCatalogs.isManaged(it.connectionId) }
             .filter { it.sourceRef.isNotBlank() && it.title.isNotBlank() }
             .map { candidate ->
                 val stableId = "home_server_${sha256Short(candidate.sourceRef)}"
@@ -789,7 +808,7 @@ class CatalogRepository @Inject constructor(
             manifestResult.getOrThrow()
         }
 
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val addedConfigs = mutableListOf<CatalogConfig>()
 
         val manifestId = finalManifest.id ?: return Result.failure(CatalogException(R.string.catalog_pack_manifest_missing_id))
@@ -1124,7 +1143,7 @@ class CatalogRepository @Inject constructor(
     suspend fun renameCatalog(catalogId: String, newTitle: String): Boolean {
         val trimmed = newTitle.trim()
         if (trimmed.isBlank()) return false
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val index = current.indexOfFirst { it.id == catalogId }
         if (index < 0) return false
         current[index] = current[index].copy(title = trimmed)
@@ -1133,7 +1152,7 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun moveCatalogUp(catalogId: String): Boolean {
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val visible = current.filter { isVisibleCatalogInSettings(it) }
         val visibleIndex = visible.indexOfFirst { it.id == catalogId }
         if (visibleIndex <= 0) return false
@@ -1149,7 +1168,7 @@ class CatalogRepository @Inject constructor(
     }
 
     suspend fun moveCatalogDown(catalogId: String): Boolean {
-        val current = getCatalogs().toMutableList()
+        val current = getPersonalCatalogs().toMutableList()
         val visible = current.filter { isVisibleCatalogInSettings(it) }
         val visibleIndex = visible.indexOfFirst { it.id == catalogId }
         if (visibleIndex < 0 || visibleIndex >= visible.lastIndex) return false

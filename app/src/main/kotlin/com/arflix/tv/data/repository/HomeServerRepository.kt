@@ -263,7 +263,8 @@ internal object HomeServerSourceCacheKey {
 class HomeServerRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val partnerDelivery: dagger.Lazy<PartnerDeliveryRepository>? = null
 ) {
     companion object {
         const val ADDON_ID = "home_server"
@@ -343,7 +344,7 @@ class HomeServerRepository @Inject constructor(
     private val sourceRequests = mutableMapOf<String, Deferred<List<StreamSource>>>()
     private val libraryRecoveryMutex = Mutex()
 
-    val connections: Flow<List<HomeServerConnection>> = combine(
+    val personalConnections: Flow<List<HomeServerConnection>> = combine(
         profileManager.activeProfileId,
         context.settingsDataStore.data
     ) { profileId, prefs ->
@@ -352,6 +353,36 @@ class HomeServerRepository @Inject constructor(
         .map { parseConnections(it) }
         .distinctUntilChanged()
         .flowOn(Dispatchers.IO)
+
+    val connections: Flow<List<HomeServerConnection>> = if (!com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED || partnerDelivery == null) {
+        personalConnections
+    } else combine(personalConnections, partnerDelivery.get().deliveries) { personal, delivery ->
+        personal.filterNot { PartnerCatalogs.isManaged(it.connectionId) } + delivery?.homeServers.orEmpty()
+    }
+
+    internal suspend fun resolveManagedConnection(id: String, service: com.google.gson.JsonObject): HomeServerConnection = withContext(Dispatchers.IO) {
+        val credentials = service.getAsJsonObject("credentials") ?: error("Missing server credentials")
+        fun credential(key: String) = credentials.get(key)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+        val url = normalizeServerUrl(service.get("url").asString)
+        val kind = HomeServerKind.valueOf(service.get("kind").asString.uppercase(java.util.Locale.ROOT))
+        val name = service.get("name")?.asString.orEmpty()
+        val token = credential("token")
+        val connection = if (token.isNotBlank()) {
+            HomeServerConnection(connectionId = id, serverUrl = url, displayName = name, serverName = name,
+                serverKind = kind, userId = credential("userId"), accessToken = token, lastConnectedAt = System.currentTimeMillis())
+        } else if (kind == HomeServerKind.PLEX) {
+            buildPlexConnection(accountToken = credential("password"), preferredServerUrl = url,
+                preferredUsername = credential("username"), preferredInfo = fetchPublicInfo(url), displayName = name).copy(connectionId = id)
+        } else {
+            val result = authenticate(url, credential("username"), credential("password"))
+            HomeServerConnection(connectionId = id, serverUrl = url, displayName = name,
+                serverName = result.serverName.ifBlank { name }, serverKind = kind, serverId = result.serverId,
+                userId = result.userId, userName = result.userName, accessToken = result.accessToken,
+                lastConnectedAt = System.currentTimeMillis())
+        }
+        require(connection.isUsable) { "Server credentials incomplete" }
+        withInitialLibraries(connection)
+    }
 
     val connection: Flow<HomeServerConnection?> = connections
         .map { it.firstOrNull() }
@@ -656,9 +687,11 @@ class HomeServerRepository @Inject constructor(
     }
 
     suspend fun currentConnections(): List<HomeServerConnection> {
-        val profileId = profileManager.getProfileId()
-        val prefs = context.settingsDataStore.data.first()
-        return parseConnections(prefs[connectionKeyFor(profileId)])
+        val personal = currentConnectionsForProfile(profileManager.getProfileId())
+        val managed = if (com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED) {
+            partnerDelivery?.get()?.activeDelivery()?.homeServers.orEmpty()
+        } else emptyList()
+        return personal.filterNot { PartnerCatalogs.isManaged(it.connectionId) } + managed
     }
 
     suspend fun hasUsableConnections(): Boolean = currentConnections().any { it.isUsable }
@@ -896,7 +929,8 @@ class HomeServerRepository @Inject constructor(
         clearSourceCache()
         context.settingsDataStore.edit { prefs ->
             prefs[connectionKeyFor(profileId)] = gson.toJson(
-                HomeServerProfileConfig(connections = connections.map { it.sanitized().encryptedForStorage() })
+                HomeServerProfileConfig(connections = connections.filterNot { PartnerCatalogs.isManaged(it.connectionId) }
+                    .map { it.sanitized().encryptedForStorage() })
             )
         }
     }

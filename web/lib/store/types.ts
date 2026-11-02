@@ -3,6 +3,7 @@ import type { AddonInstallMode } from "../addonInstall";
 import type { TraktDeviceCode } from "../trakt";
 import type { SimklPinCode } from "../simkl";
 import type { TrackingPreferences } from "../sync";
+import type { ManagedDelivery } from "../managedConfiguration";
 import type { AppSettings, AuthSession, Category, InstalledAddon, IptvChannel, IptvProgram, CatalogConfig, IptvSnapshot, MediaItem, NavSection, Profile, StreamSource } from "../types";
 
 export type AppView = "profiles" | "login" | "app";
@@ -11,6 +12,7 @@ export interface AppStore {
   view: AppView;
   partnerLinkReady: boolean;
   cloudLoginRequired: boolean;
+  managedStatus?: Pick<ManagedDelivery, "managed" | "active" | "name" | "permissions" | "reason"> | null;
   profiles: Profile[];
   activeProfile: Profile | null;
   avatarImages: Record<string, string>;

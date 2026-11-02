@@ -1,4 +1,5 @@
 "use client";
+import { isManagedId } from "@/lib/managedConfiguration";
 import { useTranslation } from "@/lib/i18n";
 import { AlertTriangle, CheckCircle2, Eye, Pencil, Plus, RefreshCw, Settings, Trash2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -130,6 +131,7 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
   const testRun = useRef(0);
 
   const open = (id: string) => {
+    if (isManagedId(id)) return;
     const playlist = playlists.find((item) => item.id === id);
     const portal = portals.find((item) => item.id === id);
     setDraft(portal ? { ...emptyDraft, kind: "stalker", name: portal.name, portal: portal.portalUrl, mac: portal.macAddress } : playlist ? draftFor(playlist) : emptyDraft);
@@ -204,17 +206,17 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
         <button type="button" className="livetv-chipbtn" onClick={onClose} aria-label={translateUi("Close playlists")}><X size={17} /></button>
       </header>
       {hiddenGroups.length > 0 && <div className="hidden-groups"><strong>{translateUi("Hidden categories")}</strong>{hiddenGroups.map((group) => <button type="button" key={group} className="secondary" onClick={() => onShowGroup(group)} aria-label={translateUi("Show {value0}", { value0: groupDisplayName(groupNames, group) })}><Eye size={16} />{groupDisplayName(groupNames, group)}</button>)}</div>}
-      {[...playlists.map((playlist) => ({ id: playlist.id, portal: false, name: playlist.name, detail: maskedUrl(playlist.m3uUrl), epg: Boolean(playlist.epgUrl || playlist.epgUrls?.length), enabled: playlist.enabled })),
+      {[...playlists.map((playlist) => ({ id: playlist.id, portal: false, name: playlist.name, detail: isManagedId(playlist.id) ? "Managed connection" : maskedUrl(playlist.m3uUrl), epg: Boolean(playlist.epgUrl || playlist.epgUrls?.length), enabled: playlist.enabled })),
         ...portals.map((portal) => ({ id: portal.id, portal: true, name: portal.name, detail: maskedUrl(portal.portalUrl), epg: true, enabled: portal.enabled !== false }))].map((row) => (
         <div className="livetv-manage-row" key={row.id}>
-          <button type="button" className={`livetv-switch ${row.enabled ? "is-on" : ""}`} role="switch" aria-checked={row.enabled}
+          <button type="button" disabled={isManagedId(row.id)} className={`livetv-switch ${row.enabled ? "is-on" : ""}`} role="switch" aria-checked={row.enabled}
             onClick={() => row.portal ? onSavePortals(portals.map((portal) => portal.id === row.id ? { ...portal, enabled: !row.enabled } : portal), false) : onTogglePlaylist(row.id)}
             aria-label={row.enabled ? translateUi("Disable {value0}", { value0: row.name }) : translateUi("Enable {value0}", { value0: row.name })} />
           <span className="livetv-manage-name">
             <strong>{row.name}</strong>
             <em>{row.detail} · {row.portal ? translateUi("Stalker portal") : row.epg ? translateUi("Playlist + EPG") : translateUi("Playlist")}</em>
           </span>
-          {confirmRemove === row.id ? (
+          {isManagedId(row.id) ? <a href="/partner/account">Managed</a> : confirmRemove === row.id ? (
             <span className="livetv-manage-confirm" role="group" aria-label={translateUi("Remove {value0}?", { value0: row.name })}>
               <span>{translateUi("Remove from all your devices?")}</span>
               <button type="button" className="danger" autoFocus onClick={() => { setConfirmRemove(null); if (row.portal) onSavePortals(portals.filter((portal) => portal.id !== row.id), false); else onRemovePlaylist(row.id); }}>{translateUi("Remove")}</button>

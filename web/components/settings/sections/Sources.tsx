@@ -5,6 +5,8 @@ import { useTranslation } from "@/lib/i18n";
 import { iptvPlaylistSignature } from "@/lib/iptv";
 import { moveIndex } from "@/lib/ordering";
 import { useAppPick } from "@/lib/store";
+import { isManagedId } from "@/lib/managedConfiguration";
+import { ManagedConnections } from "../ManagedConnections";
 import type { IptvPlaylistEntry } from "@/lib/types";
 import { hasStalkerPortals, stalkerPortalsOf, stalkerSourceSignature } from "@/lib/stalkerPortals";
 import { IptvGroupSettings } from "../IptvGroupSettings";
@@ -32,7 +34,7 @@ export function LiveTvSection() {
   const [name, setName] = useState("");
   const [m3uUrl, setM3uUrl] = useState("");
   const [epgUrl, setEpgUrl] = useState("");
-  const playlists = safeArray(settings.iptvPlaylists);
+  const playlists = safeArray(settings.iptvPlaylists).filter(playlist => !isManagedId(playlist.id));
   const updatePlaylists = (next: IptvPlaylistEntry[]) => updateSettings({ iptvPlaylists: next });
   const isLoadingTv = Boolean(busy && busy.toLowerCase().includes("tv"));
   const channelCount = groupsLoaded ? (iptvSnapshot.allChannels ?? iptvSnapshot.channels ?? []).length : 0;
@@ -57,6 +59,7 @@ export function LiveTvSection() {
         </button>
       </SectionHeader>
 
+      <ManagedConnections items={settings.iptvPlaylists.filter(playlist => isManagedId(playlist.id))} />
       <Group title={`${translateUi("Playlists")} · ${playlists.length}`} description={<>
         {groupsLoaded && channelCount ? `${translateUi("{value0} channels loaded.", { value0: channelCount.toLocaleString() })} ` : ""}
         {translateUi("The first playlist is the main one; drag to change the order the playlists are listed in.")} <ScopeBadge scope="all" />
@@ -120,7 +123,7 @@ export function LiveTvSection() {
         </Row>
       </Group>
 
-      {(playlists.length > 0 || stalkerPortalsOf(settings).length > 0) && (
+      {(settings.iptvPlaylists.length > 0 || stalkerPortalsOf(settings).length > 0) && (
         <Group title={translateUi("Layout")} description={translateUi("Arrange categories and channels, hide what you don't watch, and order your favourites. The Live TV page on every ARVIO app follows it.")}>
           <SettingAnchor id="iptv-layout">
             <IptvGroupSettings key={groupScope} settings={settings} updateSettings={updateSettings} notify={setToast} channels={groupsLoaded ? iptvSnapshot.allChannels ?? iptvSnapshot.channels : []} />

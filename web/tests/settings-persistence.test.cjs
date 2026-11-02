@@ -8,7 +8,8 @@ const ts = require('typescript');
 const { load, storage } = require('./load.cjs');
 const { sourceOf, storeSource } = require('./sources.cjs');
 
-function harness() {
+function harness(managedResources = null) {
+  const management = load('lib/managedConfiguration.ts');
   const disk = storage();
   let remote = { accentColor: 'White', profileSettingsById: { p1: { contentLanguage: 'en-US' } } };
   let reject = false;
@@ -34,13 +35,17 @@ function harness() {
     hiddenCatalogIds: [], hiddenHomeServerCatalogIds: [], favoriteChannelIds: [], favoriteGroupIds: [], hiddenGroupIds: [], groupOrder: [],
     subtitleStyle: 'outline', subtitleSize: 100, subtitleOffset: 0, subtitleColorName: 'white', frameRateMatchingMode: 'off', qualityFilters: [] };
   const settingsRef = { current: initial };
+  const personalSettingsRef = { current: initial };
   let state = initial;
   let sync;
   const source = storeSource();
   const start = source.indexOf('  const updateSettings = useCallback(');
   const end = source.indexOf('  return { updateSettings };', start);
   const code = ts.transpileModule(source.slice(start,end) + '\nresult = updateSettings;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const context = { result: null, useCallback: fn => fn, settingsRef, activeProfileIdRef: {current:'p1'}, authClient: auth,
+  const context = { result: null, useCallback: fn => fn, settingsRef, personalSettingsRef, activeProfileIdRef: {current:'p1'}, authClient: auth,
+    personalManagedPatch: management.personalManagedPatch,
+    managed: { recordPreferences: patch => management.assertManagedEdit(patch, managedResources?.delivery),
+      applySettings: value => management.overlayManagedSettings(value, managedResources) },
     queueSettings: outbox.queueSettings, saveStored: disk.saveStored, settingsKey:'settings',
     setSettings: next => { state = typeof next === 'function' ? next(state) : next; },
     setSettingsSyncState: next => {sync = next;}, setToast: () => {} };
@@ -61,6 +66,20 @@ test('an edit before initial cloud hydration is durable immediately and survives
   const restored = await h.cloud.pullCloudPayload(h.auth,'p1');
   assert.equal(restored.settings.language,'nl-NL');
   assert.equal(restored.settings.accentColor,'arctic');
+});
+
+test('managed preferences and credentials never enter settings storage or the cloud outbox', async () => {
+  const managedResources = { delivery: { managed: true, active: true, name: 'Partner', permissions: { addConnections: true, editAppearance: false },
+    config: { settings: { netflixHomeStyle: true }, catalogs: [], collectionUrls: [] } },
+    catalogs: [], addons: [], homeServers: [{ id: 'partner-org-service', token: 'managed-secret' }], playlists: [] };
+  const h = harness(managedResources);
+  h.edit({ language: 'nl-NL', homeServers: managedResources.homeServers });
+  assert.equal(JSON.stringify(h.disk.loadStored('settings', {})).includes('managed-secret'), false);
+  assert.deepEqual(Array.from(h.state().homeServers), []);
+  await h.outbox.flushSettingsOutbox(h.auth);
+  assert.equal(JSON.stringify(h.remote()).includes('managed-secret'), false);
+  h.edit({ netflixHomeStyle: false });
+  assert.equal(h.state().netflixHomeStyle, undefined, 'A locked setting cannot become a personal override');
 });
 
 test('back-to-back edits preserve both changes before React effects run', async () => {

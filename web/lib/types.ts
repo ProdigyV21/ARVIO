@@ -258,6 +258,8 @@ export interface StreamSource {
 }
 
 export interface InstalledAddon {
+  /** Runtime-only managed assignment. Never copied to the personal addon list. */
+  managedOrganizationId?: string;
   id: string;
   name: string;
   version: string;
@@ -371,6 +373,9 @@ export interface IptvPlaylistEntry {
   importLiveTv?: boolean;
   importVod?: boolean;
   importSeries?: boolean;
+  /** Managed IPTV options. Undefined preserves the provider's default behavior. */
+  enableEpg?: boolean;
+  enableCatchup?: boolean;
 }
 
 /**
