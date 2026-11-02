@@ -1551,5 +1551,12 @@
   "{value0}% · watched": "{value0}% · பார்க்கப்பட்டது",
   "· Guide match": "· வழிகாட்டி பொருத்தம்",
   "· Possible broadcast": "· சாத்தியமான ஒளிபரப்பு",
-  "· {value0}d archive": "· {value0}d காப்பகம்"
+  "· {value0}d archive": "· {value0}d காப்பகம்",
+  "View on Trakt": "Trakt இல் பார்க்கவும்",
+  "This file's audio can't play directly in this browser. Converting the audio…": "இந்தக் கோப்பின் ஆடியோவை இந்த உலாவியில் நேரடியாக இயக்க முடியாது. ஆடியோவை மாற்றுகிறது…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "இந்தக் கோப்பின் ஆடியோவை இந்த உலாவியில் இயக்க முடியாது. வழங்குநரிடம் மாற்றத்தைக் கோருகிறது…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "இந்த மூலத்தின் ஆடியோவை இந்த உலாவியில் இயக்க முடியாது. வேறு மூலத்தைத் தேர்வுசெய்யவும் அல்லது வெளிப்புற பிளேயரைப் பயன்படுத்தவும்.",
+  "Converting the audio for your browser…": "உங்கள் உலாவிக்காக ஆடியோவை மாற்றுகிறது…",
+  "Picking the best source…": "சிறந்த மூலத்தைத் தேர்ந்தெடுக்கிறது…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi அமெரிக்க டாலரில் கட்டணம் வசூலிக்கிறது; உங்கள் வங்கி தொகையைத் தானாக மாற்றும்."
 }

@@ -26,7 +26,7 @@ class ContinueWatchingRowReducerTest {
             subtitle = "Continue from 22:00",
             mediaType = MediaType.MOVIE,
             progress = 42,
-            timeRemainingLabel = "48min left"
+            timeRemainingMinutes = 48
         )
 
         val result = ContinueWatchingRowReducer.upsert(
@@ -36,7 +36,7 @@ class ContinueWatchingRowReducerTest {
 
         assertEquals(42, result.progress)
         assertEquals("Continue from 22:00", result.subtitle)
-        assertEquals("48min left", result.timeRemainingLabel)
+        assertEquals(48, result.timeRemainingMinutes)
         assertEquals("poster", result.image)
         assertEquals("8.1", result.imdbRating)
     }

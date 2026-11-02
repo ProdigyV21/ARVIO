@@ -130,7 +130,7 @@ private fun TvSubtitleSettingRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(rowBg, RoundedCornerShape(10.dp))
+            .background(rowBg, RoundedCornerShape(12.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -152,7 +152,7 @@ private fun TvSubtitleSettingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -174,7 +174,7 @@ private fun TvSubtitleSettingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -378,10 +378,10 @@ fun TvTabButton(
             .clickable { onClick() }
             .background(
                 if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent,
-                RoundedCornerShape(20.dp)
+                RoundedCornerShape(16.dp)
             )
             .then(
-                if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(20.dp))
+                if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(16.dp))
                 else Modifier
             )
             .padding(horizontal = 16.dp, vertical = 8.dp)

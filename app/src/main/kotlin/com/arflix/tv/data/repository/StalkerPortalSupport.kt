@@ -11,7 +11,7 @@ import java.util.Locale
 const val STALKER_PLAYLIST_ID = "stalker"
 
 /** Maximum number of Stalker portals a user can configure. */
-const val MAX_STALKER_PORTALS = 3
+const val MAX_STALKER_PORTALS = 10
 
 /**
  * Pure helpers for the Stalker multi-portal model. Kept dependency-free so they

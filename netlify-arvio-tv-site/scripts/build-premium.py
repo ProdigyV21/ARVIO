@@ -115,6 +115,10 @@ feature_copy = {
         'sync': 'Je profielen, bibliotheken en kijkvoortgang blijven verbonden',
     },
 }
+# Per-locale copy written or reviewed by native speakers (scripts/premium-native-copy.json),
+# keyed by the page's language code (de-DE, fr-FR, ...).
+native_path = site / 'scripts/premium-native-copy.json'
+native_copy = json.loads(native_path.read_text(encoding='utf-8')) if native_path.exists() else {}
 data = {}
 for entry in languages:
     code = entry['code']
@@ -146,6 +150,8 @@ for entry in languages:
     offer = offer_copy.get(locale) or offer_copy.get(code) or offer_copy.get(base) or {}
     for key, english in offer_copy['en'].items():
         translations[key] = offer.get(key) or (translations['explore'] if key == 'open' and base != 'en' else english)
+    # Reviewed native copy for the localized Premium pages wins over everything above.
+    translations.update(native_copy.get(code, {}))
     data[code] = {'label': entry['label'], **translations}
 required_copy = set(re.findall(r'data-copy="([A-Za-z]+)"', (out / 'index.html').read_text(encoding='utf-8')))
 for code, copy in data.items():

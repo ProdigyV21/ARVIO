@@ -15,6 +15,7 @@ import { useAppPick } from "@/lib/store";
 import { requestSourceSettings } from "@/lib/sourceSetup";
 import type { HomeServerConfig, MediaItem } from "@/lib/types";
 import "@/app/library.css";
+import { weTrakrClient } from "@/lib/wetrakr";
 
 type WatchlistFilter = "all" | "movie" | "tv";
 type LibraryTab = "watchlist" | HomeServerConfig["type"];
@@ -31,7 +32,7 @@ const PROVIDER_LABELS: Record<HomeServerConfig["type"], string> = {
 };
 const libraryCache = new Map<string, HomeServerLibraryPage>();
 const viewportPositions = new Map<string, number>();
-interface LibraryView { section: "watchlists" | "lists" | "libraries" | "calendar"; openedList: string | null; tab: LibraryTab; trackerTab: "trakt" | "simkl" | null; trackerSource: string; selectedLibrary: string; sort: HomeServerLibrarySort; filter: WatchlistFilter; search: string }
+interface LibraryView { section: "watchlists" | "lists" | "libraries" | "calendar"; openedList: string | null; tab: LibraryTab; trackerTab: "trakt" | "simkl" | "wetrakr" | null; trackerSource: string; selectedLibrary: string; sort: HomeServerLibrarySort; filter: WatchlistFilter; search: string }
 const savedViews = new Map<string, LibraryView>();
 
 function itemKey(item: MediaItem): string {
@@ -64,7 +65,7 @@ export function WatchlistScreen() {
   const [trackerSource, setTrackerSource] = useState(saved?.trackerSource ?? "watchlist");
   const [retry, setRetry] = useState(0);
   const [tab, setTab] = useState<LibraryTab>(saved?.tab ?? "watchlist");
-  const [trackerTab, setTrackerTab] = useState<"trakt" | "simkl" | null>(saved?.trackerTab ?? null);
+  const [trackerTab, setTrackerTab] = useState<"trakt" | "simkl" | "wetrakr" | null>(saved?.trackerTab ?? null);
   const [filter, setFilter] = useState<WatchlistFilter>(saved?.filter ?? "all");
   const [sort, setSort] = useState<HomeServerLibrarySort>(saved?.sort ?? "added");
   const [search, setSearch] = useState(saved?.search ?? "");
@@ -231,13 +232,14 @@ export function WatchlistScreen() {
 
   const collections = section === "lists" && !openedList;
   const trackerSources = [
+    ...(weTrakrClient.isConnected ? ["planning", "watching", "watched", "hold", "dropped"].map((id, index) => ({ provider: "wetrakr" as const, id, name: ["Watchlist", "Watching", "Watched", "On hold", "Dropped"][index] })) : []),
     ...(traktConnected ? [{ provider: "trakt" as const, id: "watchlist", name: "Watchlist" }, { provider: "trakt" as const, id: "collection", name: "Collection" }, { provider: "trakt" as const, id: "watched", name: "Watched" }] : []),
     ...(simklConnected ? ["plantowatch", "watching", "completed", "hold", "dropped"].map((id, index) => ({ provider: "simkl" as const, id, name: ["Plan to watch", "Watching", "Completed", "On hold", "Dropped"][index] })) : [])
   ];
   const sourceValue = tab !== "watchlist" ? selectedLibrary : trackerTab ? `${trackerTab}:${trackerSource}` : "saved";
   const selectSource = (value: string) => {
     if (value === "saved") { setTab("watchlist"); setTrackerTab(null); setWatchlistSource("watchlist"); }
-    else if (value.startsWith("trakt:") || value.startsWith("simkl:")) { const [provider, id] = value.split(":"); setTab("watchlist"); setTrackerTab(provider as "trakt" | "simkl"); setTrackerSource(id); }
+    else if (value.startsWith("trakt:") || value.startsWith("simkl:") || value.startsWith("wetrakr:")) { const [provider, id] = value.split(":"); setTab("watchlist"); setTrackerTab(provider as "trakt" | "simkl" | "wetrakr"); setTrackerSource(id); }
     else { const library = libraries.find((entry) => entry.value === value); if(library) { setTrackerTab(null); setTab(library.serverType); setSelectedLibrary(value); } }
   };
   const changeSection = (value: typeof section) => {
@@ -250,7 +252,7 @@ export function WatchlistScreen() {
   const connectServer = () => { requestSourceSettings("homeserver"); navigate("settings"); };
   const browse = () => navigate("search");
   const sourceOptions = section === "libraries" ? libraries.map((entry) => ({ value: entry.value, name: `${entry.serverName} / ${entry.libraryName}` }))
-    : [{ value: "saved", name: translateUi("My watchlist") }, ...trackerSources.map((entry) => ({ value: `${entry.provider}:${entry.id}`, name: `${entry.provider === "trakt" ? "Trakt" : "Simkl"} / ${translateUi(entry.name)}` }))];
+    : [{ value: "saved", name: translateUi("My watchlist") }, ...trackerSources.map((entry) => ({ value: `${entry.provider}:${entry.id}`, name: `${entry.provider === "trakt" ? "Trakt" : entry.provider === "wetrakr" ? "WeTrakr" : "Simkl"} / ${translateUi(entry.name)}` }))];
   const previewScope = `${viewScope}:${section}:${sourceValue}:${openedList}:${sort}:${searchQuery}:${filter}`;
   const [focusedPreview, setFocusedPreview] = useState<{ scope: string; key: string } | null>(null);
   const preview = focusedPreview?.scope === previewScope
@@ -288,7 +290,7 @@ export function WatchlistScreen() {
         {!collections && !openedList && <aside className="oled-source-nav" aria-label={translateUi("Library sources")}>
           {section === "watchlists" ? <>
             <p>{translateUi("Saved")}</p><button aria-current={sourceValue === "saved" ? "true" : undefined} onClick={() => selectSource("saved")}><Bookmark size={18}/>{translateUi("My watchlist")}</button>
-            {(["trakt", "simkl"] as const).map((provider) => trackerSources.some((source) => source.provider === provider) && <div key={provider}><p>{provider === "trakt" ? translateUi("Trakt") : translateUi("Simkl")}</p>{trackerSources.filter((source) => source.provider === provider).map((source) => <button key={source.id} aria-current={sourceValue === `${provider}:${source.id}` ? "true" : undefined} onClick={() => selectSource(`${provider}:${source.id}`)}>{translateUi(source.name)}</button>)}</div>)}
+            {(["trakt", "simkl", "wetrakr"] as const).map((provider) => trackerSources.some((source) => source.provider === provider) && <div key={provider}><p>{provider === "trakt" ? translateUi("Trakt") : provider === "wetrakr" ? "WeTrakr" : translateUi("Simkl")}</p>{trackerSources.filter((source) => source.provider === provider).map((source) => <button key={source.id} aria-current={sourceValue === `${provider}:${source.id}` ? "true" : undefined} onClick={() => selectSource(`${provider}:${source.id}`)}>{translateUi(source.name)}</button>)}</div>)}
           </> : homeServers.map((server) => <div key={server.id}><p>{server.name}<small>{PROVIDER_LABELS[server.type]}</small></p>{libraries.filter((library) => library.serverId === server.id).map((library) => <button key={library.value} aria-current={selectedLibrary === library.value ? "true" : undefined} onClick={() => selectSource(library.value)}>{library.mediaType === "movie" ? <Film size={18}/> : <Tv size={18}/>}<span>{library.libraryName}</span></button>)}</div>)}
           {section === "libraries" && <button className="oled-connect" onClick={connectServer}>{translateUi("+ Connect server")}</button>}
         </aside>}

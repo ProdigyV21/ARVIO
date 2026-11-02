@@ -170,7 +170,7 @@ private const val LargeListMemoryChannelLimit = 240
 private const val LargeListMemoryGuideLimit = 512
 private const val LargeListMemoryFavoriteGuideLimit = 256
 internal const val IPTV_GROUP_ORDER_SCHEMA = 3
-internal const val MAX_IPTV_PLAYLISTS = 5
+internal const val MAX_IPTV_PLAYLISTS = 10
 
 internal fun normalizeIptvSortOrder(value: String?): String = when (value?.trim()?.lowercase()) {
     "number" -> "number"
@@ -1409,9 +1409,10 @@ class IptvRepository @Inject constructor(
     suspend fun savePlaylists(playlists: List<IptvPlaylistEntry>) {
         val profileId = profileManager.getProfileIdSync()
         val previousConfig = observeConfig().first()
-        val normalized = playlists.filterNot { it.id.startsWith("partner-") }.mapIndexed { index, item ->
+        val normalized = repairIptvPlaylistIds(playlists.filterNot { it.id.startsWith("partner-") }.mapIndexed { index, item ->
             normalizePlaylistEntry(item, index)
-        }.filterNotNull().take(MAX_IPTV_PLAYLISTS)
+        }.filterNotNull())
+        require(normalized.size <= MAX_IPTV_PLAYLISTS) { "Maximum of $MAX_IPTV_PLAYLISTS IPTV playlists reached" }
         val primary = normalized.firstOrNull()
         if (normalized == previousConfig.playlists) return
         val nextConfig = previousConfig.copy(
@@ -4552,12 +4553,12 @@ class IptvRepository @Inject constructor(
         if (raw.isBlank()) return emptyList()
         return runCatching {
             val type = TypeToken.getParameterized(List::class.java, IptvPlaylistEntry::class.java).type
-            gson.fromJson<List<IptvPlaylistEntry>>(raw, type)
+            repairIptvPlaylistIds(gson.fromJson<List<IptvPlaylistEntry>>(raw, type)
                 ?.mapIndexed { index, playlist ->
                     normalizePlaylistEntry(playlist, index)
                 }
                 ?.filterNotNull()
-                ?: emptyList()
+                ?: emptyList())
         }.getOrDefault(emptyList())
     }
 
@@ -4904,9 +4905,9 @@ class IptvRepository @Inject constructor(
             importedStalkerPortals,
             MAX_STALKER_PORTALS,
         )
-        val normalizedPlaylists = state.playlists.mapIndexed { index, playlist ->
+        val normalizedPlaylists = repairIptvPlaylistIds(state.playlists.mapIndexed { index, playlist ->
             normalizePlaylistEntry(playlist, index)
-        }.filterNotNull().take(MAX_IPTV_PLAYLISTS)
+        }.filterNotNull().take(MAX_IPTV_PLAYLISTS))
         val effectivePlaylists = normalizedPlaylists.ifEmpty {
             if (normalizedM3u.isBlank()) emptyList() else listOf(
                 IptvPlaylistEntry(

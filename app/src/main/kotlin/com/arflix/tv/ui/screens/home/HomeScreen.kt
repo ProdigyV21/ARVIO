@@ -109,6 +109,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import android.content.res.Configuration
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -168,8 +169,6 @@ import com.arflix.tv.ui.components.ListPickerMenu
 import com.arflix.tv.ui.components.MediaContextMenu
 import com.arflix.tv.ui.components.rememberCardLayoutMode
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
-import com.arflix.tv.ui.components.Toast
-import com.arflix.tv.ui.components.ToastType as ComponentToastType
 import com.arflix.tv.ui.components.SidebarItem
 import com.arflix.tv.ui.components.topBarFocusedItem
 import com.arflix.tv.ui.components.topBarMaxIndex
@@ -972,6 +971,23 @@ fun HomeScreen(
         billboardItem = selected
         billboardKey = selected?.let(::homeRowItemKey)
     }
+    // Home finished loading and no row offers a billboard title: collapse the billboard
+    // and move focus off it, or Home opens on an empty black box that Up can't return to.
+    // Addon rows (the last billboard fallback) can land after Home reports loaded, so
+    // give them a grace period, and hand focus back if a title arrives before any input.
+    var billboardHidden by remember(currentProfile?.id) { mutableStateOf(false) }
+    val billboardLoading = uiState.isLoading || uiState.isInitialLoad
+    LaunchedEffect(focusState, netflixHome, billboardItem != null, billboardLoading) {
+        updateNetflixBillboardVisibility(
+            enabled = netflixHome,
+            hasCandidate = billboardItem != null,
+            isLoading = billboardLoading,
+            wasHidden = billboardHidden,
+            focusState = focusState,
+            categories = { latestDisplayCategories },
+            onHiddenChanged = { billboardHidden = it }
+        )
+    }
     // While the billboard is focused it is the ViewModel's hero, which loads its
     // details, logo and trailer exactly as for a focused card.
     val vmHeroKey = uiState.heroItem?.let { homeRowItemKey(it) }
@@ -1603,7 +1619,8 @@ fun HomeScreen(
                     trailerVolume = if (uiState.trailerSoundEnabled) 1f else 0f,
                     featuredOverview = displayHeroOverview,
                     channelPreviewPlayer = heroExoPlayer?.takeIf { isHeroIptv },
-                    channelPreviewItem = displayHeroItem?.takeIf { isHeroIptv }
+                    channelPreviewItem = displayHeroItem?.takeIf { isHeroIptv },
+                    billboardHidden = billboardHidden
                 )
             } else null,
             onBillboardOpen = { item, play ->
@@ -1746,21 +1763,22 @@ fun HomeScreen(
         }
 
 
-        // Toast notification
-        uiState.toastMessage?.let { message ->
-            // Above the context menu and list picker, whose results it reports.
-            Box(modifier = Modifier.fillMaxSize().zIndex(122f)) {
-                Toast(
-                    message = message,
-                    type = when (uiState.toastType) {
-                        ToastType.SUCCESS -> ComponentToastType.SUCCESS
-                        ToastType.ERROR -> ComponentToastType.ERROR
-                        ToastType.INFO -> ComponentToastType.INFO
-                    },
-                    isVisible = true,
-                    onDismiss = { viewModel.dismissToast() }
-                )
-            }
+        val quietUpdateNotice by viewModel.quietUpdateNotice.collectAsStateWithLifecycle()
+        HomeToastNotifications(
+            toastMessage = uiState.toastMessage,
+            toastType = uiState.toastType,
+            quietUpdateNotice = quietUpdateNotice,
+            onToastDismiss = viewModel::dismissToast,
+            onQuietUpdateDismiss = viewModel::dismissQuietUpdateNotice
+        )
+
+        // Not compiled with the baseline profile yet: warn that scrolling may be slow.
+        Box(modifier = Modifier.fillMaxSize().zIndex(122f)) {
+            HomeOptimizingNotice(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = com.arflix.tv.ui.components.AppTopBarHeight + 4.dp, end = 48.dp)
+            )
         }
 
         // App Update Modal
@@ -1883,7 +1901,7 @@ private fun HeroSection(
                 if (showInCinema) {
                     Box(
                         modifier = Modifier
-                            .background(inCinemaColor, RoundedCornerShape(6.dp))
+                            .background(inCinemaColor, RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
@@ -1914,7 +1932,7 @@ private fun HeroSection(
                     ) {
                         Box(
                             modifier = Modifier
-                                .background(AccentRed, RoundedCornerShape(4.dp))
+                                .background(AccentRed, RoundedCornerShape(8.dp))
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
@@ -2716,7 +2734,7 @@ private fun MobileHeroCarousel(
                         modifier = Modifier
                             .height(4.dp)
                             .width(6.dp + 18.dp * expandFraction)
-                            .clip(RoundedCornerShape(2.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(
                                 if (isSelected) Color.White else Color.White.copy(alpha = 0.30f)
                             )
@@ -2857,7 +2875,8 @@ internal fun HomeInputLayer(
     LaunchedEffect(categories, categoryHasMoreMap) {
         if (categories.isEmpty()) return@LaunchedEffect
 
-        if (!focusState.userHasNavigated && !focusState.isSidebarFocused) {
+        // The Netflix billboard is itself the start position; the rows below it start at the top.
+        if (!focusState.userHasNavigated && !focusState.isSidebarFocused && !focusState.isHeroFocused) {
             val preferredStartRow = preferredHomeStartRowIndex(categories)
             if (focusState.currentRowIndex != preferredStartRow) {
                 focusState.currentRowIndex = preferredStartRow
@@ -3322,6 +3341,8 @@ private fun HomeRowsLayer(
     onItemClick: (MediaItem) -> Unit,
     onItemLongClick: ((MediaItem, Boolean) -> Unit)? = null
 ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     if (!isMobile && netflix != null) {
         NetflixTvHomeRowsLayer(
             categories = categories,
@@ -3337,34 +3358,62 @@ private fun HomeRowsLayer(
             onItemClick = onItemClick
         )
     } else if (isMobile) {
-        MobileHomeRowsLayer(
-            categories = categories,
-            cardLogoUrls = cardLogoUrls,
-            cardImdbRatings = cardImdbRatings,
-            onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
-            contentStartPadding = contentStartPadding,
-            currentProfile = currentProfile,
-            onNavigateToSearch = onNavigateToSearch,
-            onSwitchProfile = onSwitchProfile,
-            usePosterCards = usePosterCards,
-            categoryHasMoreMap = categoryHasMoreMap,
-            isSlowLoading = isSlowLoading,
-            onRetry = onRetry,
-            onLoadMoreCategory = onLoadMoreCategory,
-            onNavigateToDetails = onNavigateToDetails,
-            onItemClick = onItemClick,
-            onItemLongClick = onItemLongClick,
-            onViewAllCategory = onViewAllCategory,
-            onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
-                onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
-                val rowIndex = categories.indexOfFirst { it.id == categoryId }
-                val visibleItem = categories
-                    .getOrNull(rowIndex)
-                    ?.items
-                    ?.getOrNull(lastVisibleItemIndex)
-                if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+        HomeOrientationState(isLandscape) {
+            if (isLandscape) {
+                LandscapeHomeRowsLayer(
+                    categories = categories,
+                    cardLogoUrls = cardLogoUrls,
+                    cardImdbRatings = cardImdbRatings,
+                    onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
+                    contentStartPadding = contentStartPadding,
+                    onNavigateToDetails = onNavigateToDetails,
+                    onItemClick = onItemClick,
+                    onItemLongClick = onItemLongClick,
+                    onViewAllCategory = onViewAllCategory,
+                    onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
+                        onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
+                        val rowIndex = categories.indexOfFirst { it.id == categoryId }
+                        val visibleItem = categories
+                            .getOrNull(rowIndex)
+                            ?.items
+                            ?.getOrNull(lastVisibleItemIndex)
+                        if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+                    },
+                    categoryHasMoreMap = categoryHasMoreMap,
+                    isSlowLoading = isSlowLoading,
+                    onRetry = onRetry
+                )
+            } else {
+                MobileHomeRowsLayer(
+                    categories = categories,
+                    cardLogoUrls = cardLogoUrls,
+                    cardImdbRatings = cardImdbRatings,
+                    onPreloadHeroImdbRatings = onPreloadHeroImdbRatings,
+                    contentStartPadding = contentStartPadding,
+                    currentProfile = currentProfile,
+                    onNavigateToSearch = onNavigateToSearch,
+                    onSwitchProfile = onSwitchProfile,
+                    usePosterCards = usePosterCards,
+                    categoryHasMoreMap = categoryHasMoreMap,
+                    isSlowLoading = isSlowLoading,
+                    onRetry = onRetry,
+                    onLoadMoreCategory = onLoadMoreCategory,
+                    onNavigateToDetails = onNavigateToDetails,
+                    onItemClick = onItemClick,
+                    onItemLongClick = onItemLongClick,
+                    onViewAllCategory = onViewAllCategory,
+                    onCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
+                        onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
+                        val rowIndex = categories.indexOfFirst { it.id == categoryId }
+                        val visibleItem = categories
+                            .getOrNull(rowIndex)
+                            ?.items
+                            ?.getOrNull(lastVisibleItemIndex)
+                        if (visibleItem != null) onItemFocusedPrefetch(visibleItem)
+                    }
+                )
             }
-        )
+        }
     } else {
         TvHomeRowsLayer(
             categories = categories,
@@ -3950,7 +3999,7 @@ private fun ArcticFuseRatingBadge(
     ) {
         Box(
             modifier = Modifier
-                .background(backgroundColor, RoundedCornerShape(4.dp))
+                .background(backgroundColor, RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
@@ -4020,7 +4069,7 @@ private fun MetaPill(text: String) {
         modifier = Modifier
             .background(
                 color = Color.White.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(2.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
@@ -4043,7 +4092,7 @@ private fun ImdbBadge(rating: String) {
         modifier = Modifier
             .background(
                 color = Color(0xFFF5C518), // IMDb yellow
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {

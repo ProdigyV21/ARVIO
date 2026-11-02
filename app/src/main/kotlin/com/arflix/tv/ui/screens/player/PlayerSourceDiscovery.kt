@@ -20,6 +20,10 @@ internal fun eligiblePlayerAutoplayStreams(
 
 internal enum class PlayerAutoplayAvailability { SEARCHING, READY, NO_MATCH, NO_SOURCES, SELECTED }
 
+internal fun playerSourceLookupActive(
+    primaryFinished: Boolean, homeServerActive: Boolean, iptvActive: Boolean
+): Boolean = !primaryFinished || homeServerActive || iptvActive
+
 internal class SequentialStreamCandidates(private val minimumQuality: Int, private val limits: AutoplayLimits) {
     var streams: List<StreamSource> = emptyList()
         private set

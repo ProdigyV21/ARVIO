@@ -60,7 +60,8 @@ enum class ToastType {
 enum class TrackerLibraryProvider(val displayName: String) {
     TRAKT("Trakt"),
     SIMKL("Simkl"),
-    MDBLIST("MDBList")
+    MDBLIST("MDBList"),
+    WETRAKR("WeTrakr")
 }
 
 sealed interface WatchlistSourceItem {
@@ -215,6 +216,7 @@ class WatchlistViewModel @Inject constructor(
     private val homeServerRepository: HomeServerRepository,
     private val catalogRepository: CatalogRepository,
     private val watchHistoryRepository: WatchHistoryRepository,
+    private val weTrakr: com.arflix.tv.data.repository.wetrakr.WeTrakrRemoteProvider,
     private val simklAuthManager: SimklAuthManager,
     private val simklSyncService: SimklSyncService,
     private val profileManager: ProfileManager,
@@ -373,7 +375,13 @@ class WatchlistViewModel @Inject constructor(
 
     private suspend fun refreshTrackerLibraries(traktConnected: Boolean) {
         val simklConnected = runCatching { simklAuthManager.isConnected() }.getOrDefault(false)
+        val weTrakrConnected = weTrakr.isConnected()
         val trackerLists = buildList {
+            if (weTrakrConnected) {
+                listOf("planning" to "Watchlist", "watching" to "Watching", "watched" to "Watched", "hold" to "On hold", "dropped" to "Dropped").forEach { (key, title) ->
+                    add(WatchlistSourceItem.TrackerList(provider = TrackerLibraryProvider.WETRAKR, listKey = key, title = title))
+                }
+            }
             if (traktConnected) {
                 val personalLists = runCatching { traktRepository.getPersonalLists() }
                     .getOrDefault(emptyList())
@@ -823,6 +831,7 @@ class WatchlistViewModel @Inject constructor(
                             TrackerLibraryProvider.MDBLIST -> activeSource.listKey.toLongOrNull()
                                 ?.let { personalListsRepository.mdbListItems(it) }
                                 .orEmpty()
+                            TrackerLibraryProvider.WETRAKR -> weTrakr.getLibraryItems(activeSource.listKey, forceRefresh)
                             TrackerLibraryProvider.SIMKL -> simklSyncService.getLibraryItems(
                                 status = activeSource.listKey,
                                 forceRefresh = forceRefresh

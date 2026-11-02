@@ -162,6 +162,7 @@ import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.StreamSource
+import com.arflix.tv.ui.screens.details.isAwaitingDebridDownload
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.ui.components.KeepScreenOn
 import com.arflix.tv.ui.components.LoadingIndicator
@@ -169,6 +170,8 @@ import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.ui.components.ToastType
 import com.arflix.tv.ui.components.NextEpisodeOverlay
 import com.arflix.tv.ui.components.StreamSelector
+import com.arflix.tv.data.repository.addonNoticeRow
+import com.arflix.tv.data.repository.isAddonNoticeRow
 import com.arflix.tv.ui.components.WaveLoadingDots
 import com.arflix.tv.ui.components.PlaybackQualityBadgeRow
 import com.arflix.tv.ui.components.buildPlaybackBadges
@@ -189,6 +192,7 @@ import com.arflix.tv.ui.screens.player.common.NextEpisodePromptGate
 import com.arflix.tv.ui.screens.player.common.PlaybackEpisodeKey
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.ArflixTypography
+import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.PurpleDark
 import com.arflix.tv.ui.theme.PurpleLight
@@ -255,10 +259,19 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.content.ContextCompat
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewFrame
+import com.arflix.tv.ui.screens.player.preview.SeekPreviewFilmstrip
+import com.arflix.tv.ui.screens.player.preview.SeekPreviewPlaybackGuard
+import com.arflix.tv.ui.screens.player.preview.seekPreviewWindow
+import com.arflix.tv.ui.screens.player.preview.captureRenderedSeekPreview
+import com.arflix.tv.ui.screens.player.preview.RENDERED_PREVIEW_COPY_TIMEOUT_MS
+import com.arflix.tv.ui.screens.player.preview.renderedPreviewCopyIsCurrent
+import com.arflix.tv.ui.screens.player.preview.supportsNativeKeyframes
+import com.arflix.tv.ui.screens.player.preview.quantizeSeekPreviewPosition
 import com.arflix.tv.ui.screens.player.preview.seekPreviewOverlay
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewFrameProvider
 import com.arflix.tv.ui.screens.player.preview.SeekPreviewSource
 import com.arflix.tv.ui.screens.player.preview.allowSecondarySeekPreviewExtraction
+import com.arflix.tv.ui.screens.player.preview.seekPreviewDecodeFitsMemory
 import com.arflix.tv.ui.screens.player.preview.SeekInteraction
 import com.arflix.tv.ui.screens.player.preview.SeekSurface
 import com.arflix.tv.ui.screens.player.preview.SeekPhase
@@ -294,23 +307,6 @@ private const val QUICK_SEEK_DISMISS_DELAY_MS = 2_200L
 private const val SEEK_PREVIEW_DEBOUNCE_MS = 60L
 private const val MAX_SUBTITLE_OFFSET_MS = 120_000L
 private const val SUBTITLE_OFFSET_STEP_MS = 100L
-
-private fun isSafePlaybackHeader(name: String, value: String): Boolean {
-    return name.isNotBlank() &&
-        value.isNotBlank() &&
-        name.all { ch ->
-            ch.code in 33..126 &&
-                ch !in setOf('(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/', '[', ']', '?', '=', '{', '}')
-        } &&
-        value.all { ch -> ch == '\t' || ch.code in 32..126 }
-}
-
-private fun Map<String, String>.safePlaybackHeaders(): Map<String, String> {
-    if (isEmpty()) return emptyMap()
-    return filter { (name, value) -> isSafePlaybackHeader(name.trim(), value.trim()) }
-        .mapKeys { (name, _) -> name.trim() }
-        .mapValues { (_, value) -> value.trim() }
-}
 
 /**
  * Resolves a [PlayerMessage] against the app language. Nested messages (e.g. the reference-source
@@ -498,6 +494,29 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var currentPlaybackState by remember { mutableIntStateOf(Player.STATE_IDLE) }
     var currentPlaybackSpeed by remember { mutableFloatStateOf(1.0f) }
     var nextEpisodeTransitionInProgress by remember { mutableStateOf(false) }
+    var placeholderCheckedSource by remember { mutableStateOf<String?>(null) }
+    var placeholderHandledSource by remember { mutableStateOf<String?>(null) }
+    // The source and placeholder status last written to the failover log, so each change logs once.
+    var placeholderLoggedCheck by remember { mutableStateOf<String?>(null) }
+    // The placeholder source still waiting for the source search to find something to switch to.
+    var placeholderAwaitingSources by remember { mutableStateOf<String?>(null) }
+    // Provider labels can differ for the same request; different access headers remain eligible.
+    var placeholderRequests by remember { mutableStateOf(emptySet<PlaybackRequestIdentity>()) }
+    var loadedSource by remember { mutableStateOf<String?>(null) }
+    var currentSourceIsLive by remember { mutableStateOf(args.isLiveStream) }
+    var confirmedSource by remember { mutableStateOf<String?>(null) }
+    fun selectedSourceKey(): String? =
+        latestUiState.selectedStreamUrl?.let { "${latestUiState.streamSelectionNonce}|$it" }
+    fun playbackVideoStatus(): PlaybackVideoStatus = classifyPlaybackVideo(
+        durationMs = duration,
+        expectedDurationMs = latestUiState.expectedDurationMs,
+        playbackUrl = latestUiState.selectedStreamUrl,
+        metadataPending = latestUiState.isLoadingPlaybackMetadata,
+        isLive = args.isLiveStream || currentSourceIsLive
+    )
+    fun playingCheckedRealSource(): Boolean = canPersistPlaybackSource(
+        selectedSourceKey(), loadedSource, placeholderCheckedSource, playbackVideoStatus()
+    )
 
     // Direct D-pad seek state, separate from the full controls overlay.
     var seekInteraction by remember { mutableStateOf(SeekInteraction()) }
@@ -537,6 +556,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var showSourceMenu by remember { mutableStateOf(false) }
 
     var seekPreviewFrame by remember { mutableStateOf<SeekPreviewFrame?>(null) }
+    var previewVideoFormat by remember { mutableStateOf<androidx.media3.common.Format?>(null) }
     var trackbarFocused by remember { mutableStateOf(false) }
     var unavailablePreviewTarget by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     // Post-episode "Up Next" prompt (issue #86). Shown on STATE_ENDED for TV shows:
@@ -619,6 +639,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     val playNextEpisode: (EpisodeIdentity, String?, String?, String?) -> Unit =
         { nextIdentity, nextAddonId, nextSourceName, nextBingeGroup ->
             if (!nextEpisodeTransitionInProgress) {
+                val shouldSaveProgress = playingCheckedRealSource()
                 nextEpisodeTransitionInProgress = true
 
                 val positionSnapshot = currentPosition
@@ -634,14 +655,16 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
                 coroutineScope.launch {
                     try {
-                        withTimeoutOrNull(2_000L) {
-                            viewModel.saveProgressAndWait(
-                                position = positionSnapshot,
-                                duration = durationSnapshot,
-                                progressPercent = progressPercentSnapshot,
-                                isPlaying = false,
-                                playbackState = playbackStateSnapshot
-                            )
+                        if (shouldSaveProgress) {
+                            withTimeoutOrNull(2_000L) {
+                                viewModel.saveProgressAndWait(
+                                    position = positionSnapshot,
+                                    duration = durationSnapshot,
+                                    progressPercent = progressPercentSnapshot,
+                                    isPlaying = false,
+                                    playbackState = playbackStateSnapshot
+                                )
+                            }
                         }
                     } catch (cancellation: kotlinx.coroutines.CancellationException) {
                         throw cancellation
@@ -929,6 +952,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         longRebufferCount = 0
         autoAdvanceAttempts = 0
         triedStreamIndexes = emptySet()
+        placeholderRequests = emptySet()
+        placeholderAwaitingSources = null
+        placeholderHandledSource = null
+        placeholderLoggedCheck = null
         isAutoAdvancing = false
         userSelectedSourceManually = false
         readyPlayingSinceMs = null
@@ -959,6 +986,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     ): Boolean {
         val streams = uiState.streams
         return if (streams.size <= 1) {
+            sourceFailoverLog(
+                "no next source after ${uiState.selectedStream.failoverSummary()} reason=$reason " +
+                    "sources=${streams.size} searching=${uiState.sourceSearchActive}"
+            )
             viewModel.onFailoverAttempt(success = false)
             false
         } else {
@@ -969,14 +1000,28 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     candidate.url?.isNotBlank() == true &&
                         viewModel.isEligibleForAutomaticPlayback(candidate) &&
                         idx !in triedStreamIndexes &&
+                        canTryFailoverSource(candidate, uiState.selectedStream, uiState.selectedStreamUrl, placeholderRequests) &&
                         (skipAddonId.isNullOrBlank() || candidate.addonId != skipAddonId) &&
                         !viewModel.isPlaybackHostTemporarilyBad(candidate)
                 } ?: -1
 
             if (nextIndex < 0) {
+                sourceFailoverLog(
+                    "no next source after ${uiState.selectedStream.failoverSummary()} reason=$reason " +
+                        "sources=${streams.size} tried=${triedStreamIndexes.size} " +
+                        "blankUrl=${streams.count { it.url.isNullOrBlank() }} " +
+                        "awaitingDownload=${streams.count(::isAwaitingDebridDownload)} " +
+                        "notAutoplayable=${streams.count { !viewModel.isEligibleForAutomaticPlayback(it) }} " +
+                        "badHost=${streams.count { viewModel.isPlaybackHostTemporarilyBad(it) }} " +
+                        "skipAddon=${skipAddonId ?: "-"}"
+                )
                 viewModel.onFailoverAttempt(success = false)
                 false
             } else {
+                sourceFailoverLog(
+                    "switching source reason=$reason from=${uiState.selectedStream.failoverSummary()} " +
+                        "to=${streams[nextIndex].failoverSummary()} index=$currentStreamIndex->$nextIndex/${streams.size}"
+                )
                 viewModel.onFailoverAttempt(success = true)
                 autoAdvanceAttempts += 1
                 playbackStartupDiag(
@@ -1014,6 +1059,31 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 viewModel.selectStream(streams[nextIndex])
                 true
             }
+        }
+    }
+
+    // A placeholder found while the source search was still running: try the next source each
+    // time more sources arrive, and stop once the search is over or another source is playing.
+    LaunchedEffect(placeholderAwaitingSources, uiState.streams, uiState.sourceSearchActive,
+        uiState.streamSelectionNonce, userSelectedSourceManually) {
+        val waitingSource = placeholderAwaitingSources ?: return@LaunchedEffect
+        // Let the index sync below place the playing source in the new list first; otherwise the
+        // search starts from the old one-entry list's index and skips the new list's first source.
+        kotlinx.coroutines.yield()
+        if (waitingSource != selectedSourceKey() || userSelectedSourceManually) {
+            placeholderAwaitingSources = null
+            return@LaunchedEffect
+        }
+        if (tryAdvanceToNextStream(
+                recordCurrentFailure = false,
+                reason = context.getString(R.string.player_fail_source_not_ready)
+            )
+        ) {
+            placeholderAwaitingSources = null
+            streamSelectedTime = System.currentTimeMillis()
+            startupRecoverAttempted = false
+        } else if (!uiState.sourceSearchActive) {
+            placeholderAwaitingSources = null
         }
     }
 
@@ -1077,11 +1147,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             .cookieJar(playbackCookieJar)
             .build()
     }
-    val seekPreviewProvider = remember(playbackHttpClient, playbackMemoryClassMb) {
+    val mediaCache = remember(context) { PlaybackCacheSingleton.getInstance(context) }
+    val seekPreviewProvider = remember(playbackHttpClient, playbackMemoryClassMb, mediaCache) {
         SeekPreviewFrameProvider(
             context = context,
             playbackClient = playbackHttpClient,
             memoryClassMb = playbackMemoryClassMb,
+            playbackCache = mediaCache,
         )
     }
     DisposableEffect(seekPreviewProvider) {
@@ -1092,7 +1164,6 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             .setUserAgent(OkHttpProvider.userAgent)
             .setDefaultRequestProperties(baseRequestHeaders)
     }
-    val mediaCache = remember(context) { PlaybackCacheSingleton.getInstance(context) }
     // Wrap the OkHttp factory so file:// URIs also work — matched subtitles are served from a
     // local cache file (already downloaded by the scan) instead of re-fetching addon servers.
     // http/https still routes through the same OkHttp client as before.
@@ -1303,6 +1374,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?,
                     ) {
                         playbackFrameRate.onInputFormat(format.frameRate)
+                        previewVideoFormat = format
                     }
                 })
 
@@ -1311,6 +1383,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         currentPlaybackState = playbackState
+                        if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
+                            duration = this@apply.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
+                            currentSourceIsLive = this@apply.isCurrentMediaItemLive
+                        }
                         if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
                             hasActiveSubtitleCues = false
                         }
@@ -1482,6 +1558,19 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 }
                                 return
                             }
+                            // A source reopened after the app was closed can carry a link that has
+                            // since expired (source lists are kept on disk for hours, and a restored
+                            // player screen keeps its old URL). Before giving the source up, fetch a
+                            // fresh source list once and play the SAME source from it.
+                            if (!hasPlaybackStarted && isTransientStartupReadError && !startupSameSourceRefreshAttempted &&
+                                !userSelectedSourceManually && latestUiState.selectedStream != null
+                            ) {
+                                startupSameSourceRefreshAttempted = true
+                                if (viewModel.refetchSameSourceFresh()) {
+                                    playbackStartupDiag("same-source fresh re-fetch code=${error.errorCode}")
+                                    return
+                                }
+                            }
                             if (!hasPlaybackStarted && heavy && isTimeoutError) {
                                 // One-time full re-resolve of same source to refresh debrid URL/headers.
                                 if (!startupSameSourceRefreshAttempted) {
@@ -1528,6 +1617,22 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 player.prepare()
                                 player.seekTo(resumeAt)
                                 player.playWhenReady = keepPlaying
+                                return
+                            }
+
+                            // An encoded AudioTrack can fail without any MediaCodec crashing.
+                            // Retry through software PCM before constraining or disabling audio.
+                            val outputFailure = error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED ||
+                                error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED
+                            val failedFormat = (error as? androidx.media3.exoplayer.ExoPlaybackException)?.rendererFormat
+                            if (outputFailure && aiRenderersFactory.blockAudioPassthrough(failedFormat)) {
+                                playbackStartupDiag("audio recovery: PCM after failed passthrough ${failedFormat?.sampleMimeType}")
+                                val resumeAt = this@apply.currentPosition.coerceAtLeast(0L)
+                                val keepPlaying = this@apply.playWhenReady
+                                this@apply.stop()
+                                this@apply.prepare()
+                                this@apply.seekTo(resumeAt)
+                                this@apply.playWhenReady = keepPlaying
                                 return
                             }
 
@@ -1745,18 +1850,32 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             }
     }
 
+    // Disabled for TV and mobile until seek previews are consistently reliable.
+    val seekThumbnailsEnabled = false
+    val useNativeSeekKeyframes = seekThumbnailsEnabled && uiState.selectedStreamUrl?.let {
+        it.startsWith("https://", ignoreCase = true) || it.startsWith("http://", ignoreCase = true)
+    } == true &&
+        supportsNativeKeyframes(previewVideoFormat?.width ?: 0,
+        previewVideoFormat?.height ?: 0, previewVideoFormat?.sampleMimeType)
     val allowSecondarySeekPreviewDecoder = allowSecondarySeekPreviewExtraction(
         playbackMemoryClassMb, uiState.selectedStream?.addonId
-    )
+    ) && (useNativeSeekKeyframes || seekPreviewDecodeFitsMemory(playbackMemoryClassMb, isLowRamPlaybackDevice,
+        previewVideoFormat?.width ?: 0, previewVideoFormat?.height ?: 0, previewVideoFormat?.sampleMimeType))
     val previewStatus by seekPreviewProvider.status.collectAsState()
+    val previewCacheRevision by seekPreviewProvider.cacheRevision.collectAsState()
     LaunchedEffect(uiState.selectedStreamUrl, uiState.streamSelectionNonce) {
         seekInteraction = SeekInteraction()
         seekPreviewFrame = null
+        previewVideoFormat = null
     }
     LaunchedEffect(
         uiState.selectedStreamUrl, uiState.streamSelectionNonce, duration, args.isLiveStream,
-        uiState.selectedStream?.preview, allowSecondarySeekPreviewDecoder,
+        uiState.selectedStream?.preview, allowSecondarySeekPreviewDecoder, useNativeSeekKeyframes,
     ) {
+        if (!seekThumbnailsEnabled) {
+            seekPreviewProvider.configure(null)
+            return@LaunchedEffect
+        }
         val url = uiState.selectedStreamUrl
         val selected = uiState.selectedStream
         val headers = selected?.behaviorHints?.proxyHeaders?.request.orEmpty().safePlaybackHeaders()
@@ -1777,25 +1896,61 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     allowExtraction = allowSecondarySeekPreviewDecoder,
                     maxWidthPx = if (isConstrainedPlaybackDevice) 480 else 640,
                     preview = selected?.preview,
+                    useNativeKeyframes = useNativeSeekKeyframes,
+                    sizeBytes = selected?.let {
+                        (it.sizeBytes ?: it.behaviorHints?.videoSize ?: parseSizeToBytes(it.size)).takeIf { size -> size > 0 }
+                    },
                 )
             }
         )
     }
 
+    val latestSeekBrowsing by rememberUpdatedState(seekInteraction.browsing)
+    LaunchedEffect(hasPlaybackStarted, isPlaying, isBuffering, previewStatus.sourceGeneration, isCasting) {
+        if (!seekThumbnailsEnabled || !hasPlaybackStarted || !isPlaying || isBuffering || args.isLiveStream || isCasting) return@LaunchedEffect
+        delay(3_000)
+        if (exoPlayer.isPlaying && !latestSeekBrowsing &&
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            // Bind and load native code only: no remote reads or speculative decoding.
+            seekPreviewProvider.prepareWorker()
+        }
+    }
+
     val controlsPreviewPosition = if (isControlScrubbing || seekInteraction.phase == SeekPhase.Exiting) scrubPreviewPosition else currentPosition
     val previewTarget = if (seekInteraction.phase != SeekPhase.Idle) seekInteraction.targetMs else currentPosition
-    val previewRequested = !isCasting && !args.isLiveStream && hasPlaybackStarted && duration > 0L &&
+    val previewRequested = seekThumbnailsEnabled && !isCasting && !args.isLiveStream && hasPlaybackStarted && duration > 0L &&
         seekInteraction.browsing
-    val previewAvailable = previewStatus.capability != SeekPreviewCapability.UNAVAILABLE &&
-        unavailablePreviewTarget != (previewStatus.sourceGeneration to previewTarget)
-    val showQuickSeekPreview = seekInteraction.previewSession &&
-        seekInteraction.surface == SeekSurface.Quick && previewAvailable
     val previewFrameForTarget = seekPreviewFrame?.takeIf {
         seekPreviewProvider.matchesTarget(it, previewTarget)
     }
+    val displayPreviewFrame = seekPreviewFrame?.takeIf {
+        seekPreviewProvider.matchesDisplayTarget(it, previewTarget)
+    }
+    val previewAvailable = seekThumbnailsEnabled && (displayPreviewFrame != null || (previewStatus.capability != SeekPreviewCapability.UNAVAILABLE &&
+        unavailablePreviewTarget != (previewStatus.sourceGeneration to previewTarget)))
+    val showQuickSeekPreview = seekInteraction.previewSession &&
+        seekInteraction.surface == SeekSurface.Quick && previewAvailable
+    var restoredPreviewWindow by remember { mutableStateOf<List<SeekPreviewFrame>>(emptyList()) }
+    // Disk restoration increments cacheRevision itself. Do not cancel this batch
+    // after each restored neighbor; live memory arrivals are observed below.
+    LaunchedEffect(previewRequested, previewTarget, previewStatus.sourceGeneration) {
+        restoredPreviewWindow = if (previewRequested) seekPreviewProvider.cachedWindowAt(previewTarget) else emptyList()
+    }
+    val previewNeighbors = remember(previewTarget, previewCacheRevision, previewStatus.sourceGeneration, previewRequested, restoredPreviewWindow) {
+        if (!previewRequested) emptyList() else seekPreviewWindow(previewTarget, duration)
+            .mapNotNull { at -> seekPreviewProvider.memoryFrameAt(at) ?: restoredPreviewWindow.firstOrNull {
+                seekPreviewProvider.matchesTarget(it, at)
+            } }
+    }
     LaunchedEffect(previewRequested, previewTarget, previewFrameForTarget) {
         if (previewRequested && previewFrameForTarget != null) {
-            android.util.Log.i("SeekPreviewUi", "display target=$previewTarget actual=${previewFrameForTarget.positionMs} origin=${previewFrameForTarget.origin}")
+            android.util.Log.println(android.util.Log.INFO, "SeekPreviewUi", "display target=$previewTarget actual=${previewFrameForTarget.positionMs} origin=${previewFrameForTarget.origin}")
+        }
+    }
+    LaunchedEffect(previewRequested, previewTarget, displayPreviewFrame) {
+        if (previewRequested && displayPreviewFrame?.approximate == true) {
+            android.util.Log.println(android.util.Log.INFO, "SeekPreviewUi",
+                "approximate target=$previewTarget actual=${displayPreviewFrame.positionMs} origin=${displayPreviewFrame.origin}")
         }
     }
 
@@ -1805,31 +1960,137 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         previewRequested, previewTarget, previewStatus.sourceGeneration, previewStatus.capability,
         uiState.selectedStreamUrl, uiState.streamSelectionNonce,
     ) {
-        if (!previewRequested || previewStatus.capability == SeekPreviewCapability.UNAVAILABLE) return@LaunchedEffect
+        if (!previewRequested) {
+            seekPreviewProvider.endSeekGesture()
+            return@LaunchedEffect
+        }
+        seekPreviewProvider.noteSeekTarget(previewTarget, seekInteraction.originMs)
         unavailablePreviewTarget = null
         seekPreviewProvider.memoryFrameAt(previewTarget)?.let { frame ->
             if (seekPreviewProvider.matchesTarget(frame, previewTarget)) seekPreviewFrame = frame
         }
-        if (seekPreviewProvider.matchesTarget(seekPreviewFrame, previewTarget)) return@LaunchedEffect
+        if (seekPreviewProvider.matchesTarget(seekPreviewFrame, previewTarget)) {
+            seekPreviewProvider.warmWindow(previewTarget)
+            return@LaunchedEffect
+        }
+        seekPreviewProvider.cachedDisplayFrameAt(previewTarget)?.let { nearby ->
+            if (seekPreviewProvider.matchesDisplayTarget(nearby, previewTarget)) seekPreviewFrame = nearby
+        }
+        if (previewStatus.capability == SeekPreviewCapability.UNAVAILABLE) return@LaunchedEffect
         delay(SEEK_PREVIEW_DEBOUNCE_MS)
-        val frame = loadSeekPreviewFrame(seekPreviewProvider, previewTarget)
+        val frame = loadSeekPreviewFrame(seekPreviewProvider, previewTarget, playbackPaused = !exoPlayer.playWhenReady)
         if (frame != null && seekPreviewProvider.matchesTarget(frame, previewTarget)) {
             seekPreviewFrame = frame
+            seekPreviewProvider.warmWindow(previewTarget)
         } else {
             unavailablePreviewTarget = previewStatus.sourceGeneration to previewTarget
         }
     }
 
-    // Warm only after playback is stable. Foreground requests preempt this bounded work.
-    LaunchedEffect(hasPlaybackStarted, isBuffering, isPlaying, seekInteraction.phase, previewStatus.sourceGeneration) {
-        if (!hasPlaybackStarted || isBuffering || !isPlaying || seekInteraction.browsing || args.isLiveStream) {
-            return@LaunchedEffect
+    // Monitor continuously: a previously healthy buffer is not permission to keep downloading.
+    // Low-memory TVs and heavy remuxes also accumulate rewind previews, without a second
+    // video connection or decoder. Only cache a copy tied to a renderer timestamp.
+    LaunchedEffect(hasPlaybackStarted, isPlaying, isBuffering, seekInteraction.phase,
+        previewStatus.sourceGeneration, frameRateSurface, isCasting) {
+        val surface = frameRateSurface
+        if (!seekThumbnailsEnabled || Build.VERSION.SDK_INT < 24 || surface == null || !hasPlaybackStarted || !isPlaying ||
+            isBuffering || seekInteraction.browsing || isCasting || args.isLiveStream) return@LaunchedEffect
+        var lastBucket = -1L
+        while (!playerReleased && surface.isValid) {
+            delay(500L)
+            val position = exoPlayer.currentPosition
+            val bucket = quantizeSeekPreviewPosition(position, duration)
+            val format = exoPlayer.videoFormat ?: continue
+            if (bucket == lastBucket || kotlin.math.abs(position - bucket) > 750L || !exoPlayer.isPlaying ||
+                exoPlayer.playbackState != Player.STATE_READY ||
+                !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+                format.width <= 0 || format.height <= 0 || format.rotationDegrees != 0 ||
+                format.pixelWidthHeightRatio != 1f) continue
+            val pts = lastRenderedVideoFrameUs.get() / 1_000L
+            if (com.arflix.tv.BuildConfig.DEBUG) android.util.Log.d("SeekPreviewCapture",
+                "candidate position=$position pts=$pts size=${format.width}x${format.height} sar=${format.pixelWidthHeightRatio} generation=${seekPreviewProvider.sourceGeneration}")
+            if (pts < 0 || kotlin.math.abs(pts - position) > 500L) continue
+            lastBucket = bucket
+            if (seekPreviewProvider.memoryFrameAt(pts) != null) continue
+            val generation = seekPreviewProvider.sourceGeneration
+            val width = 320
+            val height = (width.toLong() * format.height / format.width).toInt().coerceIn(1, 320)
+            val bitmap = kotlinx.coroutines.withTimeoutOrNull(RENDERED_PREVIEW_COPY_TIMEOUT_MS) {
+                captureRenderedSeekPreview(surface, width, height)
+            } ?: continue
+            // Discard copies crossing a seek, surface replacement, or delayed render.
+            val afterPts = lastRenderedVideoFrameUs.get() / 1_000L
+            if (latestSeekBrowsing || generation != seekPreviewProvider.sourceGeneration ||
+                !exoPlayer.isPlaying || !renderedPreviewCopyIsCurrent(pts, afterPts, exoPlayer.currentPosition)) {
+                bitmap.recycle()
+            } else {
+                val retained = seekPreviewProvider.rememberRenderedFrame(pts, bitmap, generation)
+                if (com.arflix.tv.BuildConfig.DEBUG) android.util.Log.d("SeekPreviewCapture", "retained=${retained != null} pts=$pts")
+                if (retained?.bitmap !== bitmap) bitmap.recycle()
+            }
         }
-        if (uiState.selectedStream?.preview == null &&
-            (isConstrainedPlaybackDevice || isLikelyHeavyStream(uiState.selectedStream))) return@LaunchedEffect
-        delay(2_000L)
-        if (!playerReleased && exoPlayer.totalBufferedDuration >= 15_000L) {
-            seekPreviewProvider.warmAround(exoPlayer.currentPosition)
+    }
+    val previewPlaybackGuard = remember(previewStatus.sourceGeneration) { SeekPreviewPlaybackGuard() }
+    LaunchedEffect(hasPlaybackStarted, isBuffering, isPlaying, seekInteraction.phase,
+        previewStatus.sourceGeneration, isCasting) {
+        if (!seekThumbnailsEnabled || !hasPlaybackStarted || isBuffering || !isPlaying || seekInteraction.browsing ||
+            args.isLiveStream || isCasting) return@LaunchedEffect
+        val guard = previewPlaybackGuard
+        val connectivity = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val previewPlaybackListener = object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onDroppedVideoFrames(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                droppedFrames: Int, elapsedMs: Long) {
+                android.util.Log.println(android.util.Log.INFO, "SeekPreviewPlayback", "dropped=$droppedFrames intervalMs=$elapsedMs")
+                if (droppedFrames >= 3) guard.onPlaybackStrain(android.os.SystemClock.elapsedRealtime())
+            }
+            override fun onAudioUnderrun(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                bufferSize: Int, bufferSizeMs: Long, elapsedSinceLastFeedMs: Long) {
+                android.util.Log.println(android.util.Log.INFO, "SeekPreviewPlayback", "audioUnderrun=true")
+                guard.onPlaybackStrain(android.os.SystemClock.elapsedRealtime())
+            }
+        }
+        exoPlayer.addAnalyticsListener(previewPlaybackListener)
+        var warming: Job? = null
+        var nextWarmAt = 0L
+        var nextDiagnosticAt = 0L
+        try {
+            while (!playerReleased) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                val format = exoPlayer.videoFormat
+                val imageOnly = uiState.selectedStream?.preview != null
+                val nativeSafe = useNativeSeekKeyframes && allowSecondarySeekPreviewDecoder && !isLowRamPlaybackDevice
+                val minimumPreviewBufferMs = if (nativeSafe && !imageOnly) 4_000L else 8_000L
+                val resourceSafe = imageOnly || nativeSafe || (!isLowRamPlaybackDevice && !isConstrainedPlaybackDevice && playbackMemoryClassMb >= 256 &&
+                    !isLikelyHeavyStream(uiState.selectedStream) && format != null &&
+                    format.width in 1..1920 && format.height in 1..1080 &&
+                    format.sampleMimeType == MimeTypes.VIDEO_H264)
+                val safe = guard.mayWarm(now, exoPlayer.isPlaying,
+                    exoPlayer.playbackState == Player.STATE_READY && exoPlayer.playerError == null,
+                    exoPlayer.totalBufferedDuration, latestSeekBrowsing,
+                    lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED),
+                    resourceSafe && !connectivity.isActiveNetworkMetered, minimumPreviewBufferMs)
+                if (now >= nextDiagnosticAt) {
+                    nextDiagnosticAt = now + 10_000L
+                    android.util.Log.println(android.util.Log.INFO, "SeekPreviewPlayback",
+                        "preparation safe=$safe bufferedMs=${exoPlayer.totalBufferedDuration} loading=${exoPlayer.isLoading} native=$nativeSafe lowRam=$isLowRamPlaybackDevice metered=${connectivity.isActiveNetworkMetered}")
+                }
+                if (!safe && warming?.isActive == true) {
+                    warming?.cancel()
+                    seekPreviewProvider.cancelPending()
+                } else if (safe && warming?.isActive != true && now >= nextWarmAt &&
+                    (imageOnly || !nativeSafe || !exoPlayer.isLoading)) {
+                    val buffered = exoPlayer.totalBufferedDuration
+                    nextWarmAt = now + if (imageOnly) 1_000L else if (buffered >= 30_000L) 2_000L else 3_000L
+                    warming = launch { seekPreviewProvider.warmPlayback(exoPlayer.currentPosition, buffered, minimumPreviewBufferMs) }
+                }
+                delay(250L)
+            }
+        } finally {
+            warming?.cancel()
+            guard.onPlaybackInterrupted()
+            exoPlayer.removeAnalyticsListener(previewPlaybackListener)
+            // A new foreground request owns cancellation while entering paused browsing.
+            if (!latestSeekBrowsing) seekPreviewProvider.cancelPending()
         }
     }
 
@@ -1952,7 +2213,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             args.tmdbSeasonNumber ?: args.seasonNumber, args.tmdbEpisodeNumber ?: args.episodeNumber,
             args.kitsuId, args.kitsuEpisodeNumber)
     } else null
-    val finishPlayback: () -> Unit = {
+    val finishPlayback: () -> Unit = finishPlayback@{
+        if (!playingCheckedRealSource()) return@finishPlayback
         // Preserve the final watched/progress write, but a slow tracking server must not hold
         // navigation hostage. The save job belongs to the ViewModel, not this waiting coroutine.
         showControls = true
@@ -1975,7 +2237,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         ended = currentPlaybackState == Player.STATE_ENDED,
         enabled = hasPlaybackStarted && !args.isLiveStream && !isCasting,
         blocked = exitTransition.isExiting || nextEpisodeTransitionInProgress ||
-            showNextEpisodePrompt || showSourceMenu || showSubtitleMenu || showSubtitleSettings || uiState.error != null,
+            showNextEpisodePrompt || showSourceMenu || showSubtitleMenu || showSubtitleSettings || uiState.error != null ||
+            !playingCheckedRealSource(),
         waitingForNextEpisode = uiState.autoPlayNext && playbackEpisodeKey != null &&
             (nextEpisodeAirDateSource != playbackEpisodeKey || nextEpisodeAirDateResolution == NextEpisodeAirDateResolution.Pending),
         offerNextEpisode = uiState.autoPlayNext && playbackEpisodeKey != null && nextEpisodeIdentity != null &&
@@ -2046,7 +2309,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     currentPosition = interaction.targetMs
                 }
                 exoPlayer.playWhenReady = interaction.resumeAfterBrowse
-                android.util.Log.i("SeekPreviewUi", "finish commit=$commit target=${interaction.targetMs} resume=${interaction.resumeAfterBrowse}")
+                android.util.Log.println(android.util.Log.INFO, "SeekPreviewUi", "finish commit=$commit target=${interaction.targetMs} resume=${interaction.resumeAfterBrowse}")
             }
         }
         seekInteraction = interaction.finish()
@@ -2072,7 +2335,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         if (next.browsing && !previous.browsing && surface == SeekSurface.Quick) {
             runCatching { containerFocusRequester.requestFocus() }
         }
-        android.util.Log.i("SeekPreviewUi", "input phase=${next.phase} target=${next.targetMs} surface=$surface")
+        android.util.Log.println(android.util.Log.INFO, "SeekPreviewUi", "input phase=${next.phase} target=${next.targetMs} surface=$surface")
         seekPreviewProvider.memoryFrameAt(next.targetMs)?.let { frame ->
             if (seekPreviewProvider.matchesTarget(frame, next.targetMs)) seekPreviewFrame = frame
         }
@@ -2104,11 +2367,27 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     val latestFinishSeek by rememberUpdatedState(finishSeek)
     val latestQuickSeek by rememberUpdatedState(queueQuickSeek)
 
-    LaunchedEffect(seekInteraction.phase, seekInteraction.lastInputMs, seekInteraction.surface) {
+    val waitingForSeekPreview = previewRequested && previewFrameForTarget == null && previewAvailable
+    LaunchedEffect(seekInteraction.phase, seekInteraction.lastInputMs, seekInteraction.surface, waitingForSeekPreview) {
         val pending = seekInteraction
-        val remaining = pending.autoCommitDelayMs(android.os.SystemClock.elapsedRealtime())
+        val remaining = pending.autoCommitDelayMs(android.os.SystemClock.elapsedRealtime(), waitingForSeekPreview)
             ?: return@LaunchedEffect
-        delay(remaining)
+        // Give a newly delivered frame time to be seen before committing.
+        delay(if (!waitingForSeekPreview && previewFrameForTarget != null) remaining.coerceAtLeast(2_000L) else remaining)
+        // On a cold jump the center arrives first. Let its four neighbors finish
+        // while playback is paused, instead of cancelling the second forward
+        // frame every time the center's display timer expires. Remote input,
+        // OK/Back and lifecycle changes still cancel this bounded wait.
+        if (!waitingForSeekPreview && previewFrameForTarget != null) {
+            withTimeoutOrNull(4_000L) {
+                while (seekInteraction === pending &&
+                    com.arflix.tv.ui.screens.player.preview.seekPreviewNeighborTargets(
+                        pending.targetMs, duration,
+                    ).any { seekPreviewProvider.memoryFrameAt(it) == null }) {
+                    delay(100L)
+                }
+            }
+        }
         if (seekInteraction === pending &&
             lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             finishSeek(true)
@@ -2297,9 +2576,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     LaunchedEffect(uiState.selectedStreamUrl, uiState.streams) {
         val currentUrl = uiState.selectedStreamUrl ?: return@LaunchedEffect
         val selected = uiState.selectedStream
-        val idxByUrl = uiState.streams.indexOfFirst { it.url == currentUrl }
-        val idx = if (idxByUrl >= 0) {
-            idxByUrl
+        val idxByRequest = playingRequestIndex(uiState.streams, selected, currentUrl)
+        val idx = if (idxByRequest >= 0) {
+            idxByRequest
         } else {
             uiState.streams.indexOfFirst { candidate ->
                 selected != null &&
@@ -2469,6 +2748,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             }
 
             val resumePosition = uiState.savedPosition
+            placeholderCheckedSource = null
+            currentSourceIsLive = args.isLiveStream
             if (resumePosition > 0L) {
                 exoPlayer.setMediaSource(mediaSource, resumePosition)
             } else {
@@ -2477,6 +2758,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // Let ExoPlayer's RAM-aware LoadControl handle startup buffering.
             // No manual startup gate - trust the CDN/debrid while keeping enough safety margin.
             exoPlayer.playWhenReady = true
+            loadedSource = "${uiState.streamSelectionNonce}|$url"
             exoPlayer.prepare()
             startupPhase = R.string.player_phase_starting_playback
             playbackStartupDiag(
@@ -2822,15 +3104,42 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         showVolumeIndicator = true
     }
 
+    fun selectSourceManually(stream: StreamSource): Boolean {
+        if (isAddonNoticeRow(stream)) {
+            android.widget.Toast.makeText(
+                context,
+                listOf(stream.source, stream.description).filterNot { it.isNullOrBlank() }.joinToString(": "),
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            return false
+        }
+        // Both touch and TV keep the title's saved position when leaving an unverified/stand-in clip.
+        val resumePosition = exoPlayer.currentPosition.takeIf { playingCheckedRealSource() }
+        userSelectedSourceManually = true
+        playbackIssueReported = false
+        startupRecoverAttempted = false
+        startupHardFailureReported = false
+        startupSameSourceRetryCount = 0
+        startupSameSourceRefreshAttempted = false
+        startupUrlLock = null
+        pendingStartupFailover = false
+        pendingStartupFailoverMessage = null
+        pendingStartupFailureRecorded = false
+        rebufferRecoverAttempted = false
+        longRebufferCount = 0
+        viewModel.selectStream(stream, resumePosition)
+        return true
+    }
+
     // Update progress periodically
     LaunchedEffect(exoPlayer, isCasting) {
         while (!playerReleasedAtomic.get()) {
             if (playerReleasedAtomic.get()) break
             if (isCasting) { delay(500); continue }
             currentPosition = runCatching { exoPlayer.currentPosition }.getOrDefault(currentPosition)
-            viewModel.onPlaybackPosition(currentPosition)
             val rawDuration = exoPlayer.duration
             duration = if (rawDuration > 0L && rawDuration != C.TIME_UNSET) rawDuration else 0L
+            currentSourceIsLive = exoPlayer.isCurrentMediaItemLive
             progress = if (duration > 0L) {
                 (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
             } else {
@@ -2868,6 +3177,60 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 }
             } else {
                 readyPlayingSinceMs = null
+            }
+
+            // An addon's stand-in video ("downloading", "not cached yet") plays like the real file.
+            // Recheck as duration/title metadata arrives; READY alone does not mean it is known.
+            // ENDED counts too: resuming past a stand-in clip can jump straight to its end.
+            val checkedSource = selectedSourceKey()
+            if (checkedSource != null &&
+                checkedSource == loadedSource &&
+                (exoPlayer.playbackState == Player.STATE_READY || exoPlayer.playbackState == Player.STATE_ENDED)
+            ) {
+                placeholderCheckedSource = checkedSource
+                val videoStatus = playbackVideoStatus()
+                if ("$checkedSource|$videoStatus" != placeholderLoggedCheck) {
+                    placeholderLoggedCheck = "$checkedSource|$videoStatus"
+                    sourceFailoverLog(
+                        "placeholder check ${latestUiState.selectedStream.failoverSummary()} status=$videoStatus " +
+                            "durationMs=$duration expectedDurationMs=${latestUiState.expectedDurationMs} " +
+                            "metadataPending=${latestUiState.isLoadingPlaybackMetadata} " +
+                            "manual=$userSelectedSourceManually fallbackAllowed=$allowStartupSourceFallback"
+                    )
+                }
+                if (videoStatus == PlaybackVideoStatus.PLACEHOLDER &&
+                    checkedSource != placeholderHandledSource
+                ) {
+                    placeholderHandledSource = checkedSource
+                    playbackRequestIdentity(latestUiState.selectedStream, latestUiState.selectedStreamUrl)?.let {
+                        placeholderRequests = placeholderRequests + it
+                    }
+                    if (!userSelectedSourceManually &&
+                        allowStartupSourceFallback &&
+                        tryAdvanceToNextStream(reason = context.getString(R.string.player_fail_source_not_ready))
+                    ) {
+                        streamSelectedTime = System.currentTimeMillis()
+                        startupRecoverAttempted = false
+                        continue
+                    }
+                    // A source picked on the details screen starts before the player has the
+                    // other sources; switch once they arrive (see the effect on placeholderAwaitingSources).
+                    if (!userSelectedSourceManually && allowStartupSourceFallback && latestUiState.sourceSearchActive) {
+                        placeholderAwaitingSources = checkedSource
+                    }
+                    // Picked by hand, or nothing left to switch to: the clip itself says what is
+                    // going on (often "downloading"), so it keeps playing with the reason on top.
+                    viewModel.onSelectedStreamPlaybackFailure(reportError = false)
+                    android.widget.Toast.makeText(
+                        context, R.string.player_toast_placeholder_video, android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+
+            if (playingCheckedRealSource()) viewModel.onPlaybackPosition(currentPosition)
+            if (hasPlaybackStarted && playingCheckedRealSource() && confirmedSource != checkedSource) {
+                confirmedSource = checkedSource
+                viewModel.onSelectedSourceConfirmed()
             }
 
             // Buffering watchdog - detect long buffering but do not force a source error popup.
@@ -3068,7 +3431,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // Checked before any progress is saved: a live stream's window looks like a duration.
             if (exoPlayer.isCurrentMediaItemLive) viewModel.onLivePlaybackDetected()
 
-            if (currentPosition > 0 && duration > 0) {
+            if (currentPosition > 0 && duration > 0 && playingCheckedRealSource()) {
                 val currentSecond = (currentPosition / 1000L).coerceAtLeast(0L)
                 val shouldReport =
                     (!exoPlayer.isPlaying && currentSecond != lastProgressReportSecond) ||
@@ -3100,7 +3463,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         onDispose {
             playerReleasedAtomic.set(true)
             playerReleased = true
-            if (!nextEpisodeTransitionInProgress) {
+            if (!nextEpisodeTransitionInProgress && playingCheckedRealSource()) {
                 runCatching {
                     if (exoPlayer.isCurrentMediaItemLive) viewModel.onLivePlaybackDetected()
                     val safeDuration = exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
@@ -3856,7 +4219,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 modifier = Modifier
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.65f),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -3890,7 +4253,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     .padding(top = 16.dp, start = 24.dp)
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .zIndex(6f),
@@ -3947,7 +4310,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     .padding(top = if (hasPlaybackStarted && (uiState.isFindingBestMatch || uiState.isHearingSync)) 60.dp else 16.dp)
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.72f),
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .zIndex(6f),
@@ -3978,7 +4341,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 isCasting = isCasting,
                 showCastButton = castAvailable && !streamNeedsHeaders,
                 showPipButton = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O,
-                seekPreviewFrame = previewFrameForTarget,
+                seekPreviewFrame = displayPreviewFrame,
                 onScrubPreviewPosition = { position ->
                     if (position != null) dragSeek(position) else finishSeek(false)
                 },
@@ -4017,7 +4380,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     )
                 },
                 onSelectSource = { stream ->
-                    viewModel.selectStream(stream, exoPlayer.currentPosition)
+                    selectSourceManually(stream)
                 },
                 onSelectAudioTrack = { track ->
                     userPickedAudioForStream = true
@@ -4568,7 +4931,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         Spacer(modifier = Modifier.height(if (isTouchDevice) 4.dp else 6.dp))
 
                         // Preview overlays the controls; entering/exiting seek must not move them.
-                        if (isControlScrubbing && duration > 0L && !isCasting && !args.isLiveStream) {
+                        if (seekThumbnailsEnabled && isControlScrubbing && duration > 0L && !isCasting && !args.isLiveStream) {
                             val previewWidth = if (isTouchDevice) 168.dp else 224.dp
                             val previewHeight = previewWidth * 9f / 16f
                             BoxWithConstraints(
@@ -4579,8 +4942,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 val progress = (controlsPreviewPosition.toFloat() / duration).coerceIn(0f, 1f)
                                 val offset = (maxWidth * progress - previewWidth / 2f)
                                     .coerceIn(0.dp, (maxWidth - previewWidth).coerceAtLeast(0.dp))
-                                com.arflix.tv.ui.screens.player.preview.ReadySeekPreview(
-                                    frame = previewFrameForTarget,
+                                if (!isTouchDevice) SeekPreviewFilmstrip(
+                                    frame = displayPreviewFrame, neighbors = previewNeighbors,
+                                    positionMs = controlsPreviewPosition,
+                                    sourceGeneration = previewStatus.sourceGeneration,
+                                ) else com.arflix.tv.ui.screens.player.preview.ReadySeekPreview(
+                                    frame = displayPreviewFrame,
                                     positionMs = controlsPreviewPosition,
                                     sourceGeneration = previewStatus.sourceGeneration,
                                     modifier = Modifier.offset(x = offset).size(previewWidth, previewHeight),
@@ -4679,11 +5046,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             ) {
                                 // Visible thin bar centered in the larger touch target
                                 val barHeight = if (trackbarFocused) 8.dp else if (isTouchDevice) 6.dp else 4.dp
-                                Box(modifier = Modifier.fillMaxWidth().height(barHeight).background(Color.White.copy(alpha = if (trackbarFocused) 0.25f else 0.15f), RoundedCornerShape(3.dp)))
+                                Box(modifier = Modifier.fillMaxWidth().height(barHeight).background(Color.White.copy(alpha = if (trackbarFocused) 0.25f else 0.15f), RoundedCornerShape(8.dp)))
                                 val frac = if (duration > 0) (controlsPreviewPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else progress
                                 Box(modifier = Modifier.fillMaxWidth().height(barHeight).align(Alignment.Center), contentAlignment = Alignment.CenterStart) {
                                 Box(modifier = Modifier.fillMaxWidth(frac).fillMaxHeight().background(
-                                    if (trackbarFocused) playerAccent else playerAccent.copy(alpha = 0.8f), RoundedCornerShape(3.dp)
+                                    if (trackbarFocused) playerAccent else playerAccent.copy(alpha = 0.8f), RoundedCornerShape(8.dp)
                                 ))
                                 }
                                 val knobSize = if (isTouchDevice) 12.dp else 14.dp
@@ -4802,7 +5169,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
 
             StreamSelector(
                 isVisible = showSourceMenu,
-                streams = uiState.streams,
+                streams = uiState.streams + uiState.addonNotices.mapIndexed(::addonNoticeRow),
                 selectedStream = uiState.selectedStream,
                 recentSource = uiState.recentSource,
                 isLoading = uiState.isLoadingStreams,
@@ -4814,20 +5181,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 } else {
                     ""
                 },
+                preferredAudioLanguage = uiState.sourceBadgeLanguage,
+                mediaTitle = uiState.title,
                 onFocusedStream = { stream ->
-                    viewModel.prewarmStreamsAround(stream, uiState.streams)
+                    if (!isAddonNoticeRow(stream)) viewModel.prewarmStreamsAround(stream, uiState.streams)
                 },
                 onSelect = { stream: StreamSource ->
-                    userSelectedSourceManually = true
-                    playbackIssueReported = false
-                    startupRecoverAttempted = false
-                    startupHardFailureReported = false
-                    startupSameSourceRetryCount = 0
-                    startupSameSourceRefreshAttempted = false
-                    startupUrlLock = null
-                    rebufferRecoverAttempted = false
-                    longRebufferCount = 0
-                    viewModel.selectStream(stream, exoPlayer.currentPosition)
+                    if (!selectSourceManually(stream)) return@StreamSelector
                     showSourceMenu = false
                     showControls = true
                     coroutineScope.launch {
@@ -4879,13 +5239,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         modifier = Modifier
                             .width(8.dp)
                             .height(100.dp)
-                            .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                            .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .fillMaxSize((currentVolume.toFloat() / maxVolume).coerceIn(0f, 1f))
-                                .background(playerAccent, RoundedCornerShape(4.dp))
+                                .background(playerAccent, RoundedCornerShape(8.dp))
                                 .align(Alignment.BottomCenter)
                         )
                     }
@@ -4907,7 +5267,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
                         .padding(horizontal = 24.dp, vertical = 14.dp)
                 ) {
                     Text(
@@ -4954,8 +5314,12 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                           Box(
                             modifier = Modifier.fillMaxWidth().seekPreviewOverlay().height(previewHeight + 2.dp),
                           ) {
-                            com.arflix.tv.ui.screens.player.preview.ReadySeekPreview(
-                                frame = previewFrameForTarget,
+                            if (!isTouchDevice) SeekPreviewFilmstrip(
+                                frame = displayPreviewFrame, neighbors = previewNeighbors,
+                                positionMs = previewPosition,
+                                sourceGeneration = previewStatus.sourceGeneration,
+                            ) else com.arflix.tv.ui.screens.player.preview.ReadySeekPreview(
+                                frame = displayPreviewFrame,
                                 positionMs = previewPosition,
                                 sourceGeneration = previewStatus.sourceGeneration,
                                 modifier = Modifier.offset(x = previewOffset).size(previewWidth, previewHeight),
@@ -4972,13 +5336,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(5.dp)
-                                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(3.dp))
+                                    .background(Color.White.copy(alpha = 0.28f), RoundedCornerShape(8.dp))
                             )
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(previewProgress)
                                     .height(5.dp)
-                                    .background(Color.White, RoundedCornerShape(3.dp))
+                                    .background(Color.White, RoundedCornerShape(8.dp))
                             )
                             Box(
                                 modifier = Modifier
@@ -5012,7 +5376,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                     Column(
                         modifier = Modifier
                             .width(480.dp)
-                            .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp))
+                            .background(BackgroundElevated, RoundedCornerShape(16.dp))
                             .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
                             .padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -6082,7 +6446,7 @@ private fun SubtitleMenu(
                     .fillMaxHeight(0.70f)
                     .align(Alignment.BottomCenter)
                     .background(
-                        Color(0xFF1A1A1A),
+                        BackgroundElevated,
                         RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                     )
                     .clickable(
@@ -6151,10 +6515,10 @@ private fun SubtitleMenu(
                                 }
                                 .background(
                                     if (selected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
-                                    RoundedCornerShape(20.dp)
+                                    RoundedCornerShape(16.dp)
                                 )
                                 .then(
-                                    if (selected) Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                                    if (selected) Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
                                     else Modifier
                                 )
                                 .padding(horizontal = 20.dp, vertical = 8.dp)
@@ -6390,10 +6754,10 @@ private fun TabButton(
             .clickable { onClick() }
             .background(
                 if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent,
-                RoundedCornerShape(20.dp)
+                RoundedCornerShape(16.dp)
             )
             .then(
-                if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(20.dp))
+                if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(16.dp))
                 else Modifier
             )
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -6506,7 +6870,7 @@ private fun LangPanelItem(
                 modifier = Modifier
                     .background(
                         if (isFocused) Color.Black.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.15f),
-                        RoundedCornerShape(10.dp)
+                        RoundedCornerShape(12.dp)
                     )
                     .padding(horizontal = 5.dp, vertical = 1.dp)
             ) {
@@ -7091,6 +7455,23 @@ private fun isLikelyDolbyVisionStream(stream: StreamSource?): Boolean {
 
 private const val PLAYER_SCREEN_DIAGNOSTICS = true
 
+/**
+ * Why a source was skipped, or why none was left to switch to. A started source gets a
+ * "placeholder check" line each time its status changes (pending, real, placeholder); a source
+ * with no such line never reached a playable state. Warning
+ * level because R8 strips Log.i/d/v from release builds. No URLs, only their host.
+ */
+private fun sourceFailoverLog(message: String) {
+    android.util.Log.w("PlayerSourceFailover", message)
+}
+
+private fun StreamSource?.failoverSummary(): String {
+    if (this == null) return "none"
+    val host = runCatching { java.net.URI(url.orEmpty()).host }.getOrNull() ?: "-"
+    val name = source.replace(Regex("""\s+"""), " ").take(60)
+    return "[$addonId/$quality/${size.ifBlank { "-" }}/host=$host/\"$name\"]"
+}
+
 private fun playbackStartupDiag(message: String) {
     if (PLAYER_SCREEN_DIAGNOSTICS) {
         System.err.println("[PlaybackStartup] $message")
@@ -7458,7 +7839,7 @@ private fun PlayerSubtitleSettingRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(rowBg, RoundedCornerShape(10.dp))
+            .background(rowBg, RoundedCornerShape(12.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -7480,7 +7861,7 @@ private fun PlayerSubtitleSettingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -7502,7 +7883,7 @@ private fun PlayerSubtitleSettingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,

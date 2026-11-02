@@ -56,13 +56,13 @@ class TraktSyncService @Inject constructor(
     private val outboxRepository: TraktOutboxRepository,
     private val profileManager: ProfileManager,
     private val mdbListRepository: MdbListRepository,
-    private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore
+    private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore,
+    private val traktSession: TraktSession = TraktSession(context, profileManager, traktApi)
 ) {
     private val TAG = "TraktSyncService"
 
     private val gson = Gson()
     private val clientId = Constants.TRAKT_CLIENT_ID
-    private val clientSecret = Constants.TRAKT_CLIENT_SECRET
 
     // Sync progress state
     private val _syncProgress = MutableStateFlow(SyncProgress())
@@ -76,11 +76,6 @@ class TraktSyncService @Inject constructor(
 
     private val supabaseAuthMutex = Mutex()
 
-    // Profile-scoped DataStore keys (must match TraktRepository for token sharing)
-    private fun accessTokenKey() = profileManager.profileStringKey("trakt_access_token")
-    private fun refreshTokenKey() = profileManager.profileStringKey("trakt_refresh_token")
-    private fun expiresAtKey() = profileManager.profileLongKey("trakt_expires_at")
-    private fun tokenUpdatedAtKey() = profileManager.profileLongKey("trakt_token_updated_at_v3")
     private fun lastSyncTimeKey() = profileManager.profileStringKey("trakt_last_sync_time")
     private fun lastSyncMoviesKey() = profileManager.profileStringKey("trakt_last_sync_movies")
     private fun lastSyncEpisodesKey() = profileManager.profileStringKey("trakt_last_sync_episodes")
@@ -132,6 +127,12 @@ class TraktSyncService @Inject constructor(
         }
 
         _isSyncing.value = true
+        val syncProfileId = activeProfileId()
+        fun checkProfile() {
+            if (activeProfileId() != syncProfileId) {
+                throw kotlinx.coroutines.CancellationException("Profile changed during Trakt sync")
+            }
+        }
         _syncProgress.value = SyncProgress(status = SyncStatus.STARTING, message = "Starting full sync...")
 
         val completionThreshold = Constants.WATCHED_THRESHOLD / 100f
@@ -161,6 +162,7 @@ class TraktSyncService @Inject constructor(
             )
 
             val watchedMovies = fetchAllWatchedMovies()
+            checkProfile()
             val (movieRecords, filteredMovies) = buildWatchedMoviesFromWatchedList(localUserId, watchedMovies)
 
             // Update cache
@@ -196,6 +198,7 @@ class TraktSyncService @Inject constructor(
             )
 
             val watchedShows = fetchAllWatchedShows()
+            checkProfile()
             val totalEpisodeItems = watchedShows.sumOf { show ->
                 show.seasons?.sumOf { it.episodes.size } ?: 0
             }
@@ -248,6 +251,7 @@ class TraktSyncService @Inject constructor(
             )
 
             val playbackItems = fetchAllPlaybackProgress()
+            checkProfile()
             val progressRecords = buildWatchHistoryFromPlayback(
                 localUserId,
                 playbackItems,
@@ -304,6 +308,7 @@ class TraktSyncService @Inject constructor(
             }
 
             val nowIso = Instant.now().toString()
+            checkProfile()
             saveLocalSyncSummary(
                 lastSyncAt = nowIso,
                 moviesSynced = totalMovies,
@@ -342,7 +347,8 @@ class TraktSyncService @Inject constructor(
             } catch (_: Exception) {
             }
 
-            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown))
+            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown),
+                reconnectRequired = (e as? TraktAuthUnavailable)?.reconnectRequired == true)
         } finally {
             _isSyncing.value = false
         }
@@ -539,7 +545,8 @@ class TraktSyncService @Inject constructor(
                 status = SyncStatus.ERROR,
                 message = "Sync failed: ${e.message}"
             )
-            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown))
+            SyncResult.Error(e.message ?: context.getString(R.string.error_unknown),
+                reconnectRequired = (e as? TraktAuthUnavailable)?.reconnectRequired == true)
         } finally {
             _isSyncing.value = false
         }
@@ -2006,19 +2013,7 @@ class TraktSyncService @Inject constructor(
     private suspend fun <T> executeTraktCall(
         operation: String,
         block: suspend (String) -> T
-    ): T {
-        val auth = getAuthHeader() ?: throw IllegalStateException(context.getString(R.string.trakt_not_authenticated))
-        return try {
-            block(auth)
-        } catch (e: HttpException) {
-            if (e.code() == 401) {
-                val refreshed = refreshTokenIfNeeded(force = true) ?: throw e
-                block("Bearer $refreshed")
-            } else {
-                throw e
-            }
-        }
-    }
+    ): T = traktSession.authorized(block)
 
     private suspend fun <T> executeSupabaseCall(
         operation: String,
@@ -2052,7 +2047,7 @@ class TraktSyncService @Inject constructor(
     }
 
     private suspend fun getAuthHeader(): String? {
-        val token = refreshTokenIfNeeded(force = false) ?: return null
+        val token = traktSession.accessToken() ?: return null
         return "Bearer $token"
     }
 
@@ -2068,53 +2063,6 @@ class TraktSyncService @Inject constructor(
         return refreshed?.let { "Bearer $it" }
     }
 
-    private suspend fun refreshTokenIfNeeded(force: Boolean): String? {
-        val prefs = context.traktDataStore.data.first()
-        val accessToken = prefs[accessTokenKey()] ?: return null
-        val refreshToken = prefs[refreshTokenKey()]
-        val expiresAt = prefs[expiresAtKey()]
-
-        if (refreshToken == null || expiresAt == null) {
-            return if (force) null else accessToken
-        }
-
-        val now = System.currentTimeMillis() / 1000
-        if (!force && now < expiresAt - 3600) {
-            return accessToken
-        }
-
-        return try {
-            val newToken = refreshTraktToken(refreshToken)
-            saveToken(newToken)
-            newToken.accessToken
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-
-            null
-        }
-    }
-
-    private suspend fun refreshTraktToken(refreshToken: String): TraktToken {
-        if (clientSecret.isBlank()) {
-            throw IllegalStateException("Trakt credentials missing in this APK")
-        }
-        return traktApi.refreshToken(
-            RefreshTokenRequest(
-                refreshToken = refreshToken,
-                clientId = clientId,
-                clientSecret = clientSecret
-            )
-        )
-    }
-
-    private suspend fun saveToken(token: TraktToken) {
-        context.traktDataStore.edit { prefs ->
-            prefs[accessTokenKey()] = token.accessToken
-            prefs[refreshTokenKey()] = token.refreshToken
-            prefs[expiresAtKey()] = token.createdAt + token.expiresIn
-            prefs[tokenUpdatedAtKey()] = System.currentTimeMillis()
-        }
-    }
 }
 
 // ========== Data Classes ==========
@@ -2146,5 +2094,5 @@ enum class SyncStatus {
 
 sealed class SyncResult {
     data class Success(val moviesSynced: Int, val episodesSynced: Int) : SyncResult()
-    data class Error(val message: String) : SyncResult()
+    data class Error(val message: String, val reconnectRequired: Boolean = false) : SyncResult()
 }

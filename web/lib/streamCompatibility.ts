@@ -87,6 +87,8 @@ function audioReason(stream: CompatStream): string | null {
   if (/\bac-?3\b|dd5\.1/.test(audio)) return caps.ac3 ? null : "Dolby Digital needs audio conversion";
   return null;
 }
+/** <video> itself plays AC-3 and E-AC-3 here (Safari, Edge on some Windows builds). */
+export function browserPlaysDolbyAudio() { const caps = getMediaCapabilities(); return caps.ac3 && caps.eac3; }
 export function canProviderTranscode(stream: CompatStream): boolean {
   const provider = parseDebridStream(stream.originalUrl ?? stream.url)?.provider;
   return !!stream.homeServer || provider === "torbox" || provider === "realdebrid";

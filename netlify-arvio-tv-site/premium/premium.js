@@ -1,6 +1,6 @@
 /* Localized public copy. Campaign measurement is handled by premium-journey.js. */
 (async function () {
-  const response = await fetch('./languages.json');
+  const response = await fetch('/premium/languages.json');
   if (!response.ok) return;
   const languages = await response.json();
   const select = document.getElementById('language');
@@ -29,11 +29,12 @@
     document.documentElement.dir = /^(ar|he|fa|ur)-/.test(code) ? 'rtl' : 'ltr';
     select.value = code;
     select.setAttribute('aria-label', copy.language);
-    for (const element of document.querySelectorAll('[data-copy]')) element.textContent = copy[element.dataset.copy];
+    for (const element of document.querySelectorAll('[data-copy]')) if (copy[element.dataset.copy]) element.textContent = copy[element.dataset.copy];
     for (const [index, key] of ['tv','library','server','sports'].entries()) document.querySelectorAll('.gallery img')[index].alt = 'ARVIO Web — ' + copy[key];
     document.title = 'ARVIO Premium — ' + copy.headline;
   }
-  const initial = match(new URL(location.href).searchParams.get('lang')) || (navigator.languages || [navigator.language]).map(match).find(Boolean) || 'en-US';
+  // A localized page (/de/premium/ ...) opens in its own language; the English page follows the browser.
+  const initial = match(new URL(location.href).searchParams.get('lang')) || match(document.documentElement.dataset?.pageLang) || (navigator.languages || [navigator.language]).map(match).find(Boolean) || 'en-US';
   render(initial);
   select.addEventListener('change', () => {
     render(select.value);

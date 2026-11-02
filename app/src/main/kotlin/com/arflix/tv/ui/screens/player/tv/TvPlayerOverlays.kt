@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import com.arflix.tv.R
 import com.arflix.tv.ui.skin.LocalAccentColorOverride
 import com.arflix.tv.ui.theme.ArflixTypography
+import com.arflix.tv.ui.theme.BackgroundElevated
+import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.ui.theme.TextPrimary
 import com.arflix.tv.ui.theme.TextSecondary
 
@@ -87,14 +89,14 @@ fun TvVolumeIndicator(
                 modifier = Modifier
                     .width(8.dp)
                     .height(100.dp)
-                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                    .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             ) {
                 val volFrac = if (maxVolume > 0) (currentVolume.toFloat() / maxVolume).coerceIn(0f, 1f) else 0f
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(volFrac)
-                        .background(playerAccent, RoundedCornerShape(4.dp))
+                        .background(playerAccent, RoundedCornerShape(8.dp))
                         .align(Alignment.BottomCenter)
                 )
             }
@@ -122,7 +124,7 @@ fun TvAspectIndicator(
     ) {
         Box(
             modifier = Modifier
-                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(10.dp))
+                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
                 .padding(horizontal = 24.dp, vertical = 14.dp)
         ) {
             Text(
@@ -193,13 +195,13 @@ fun TvSkipOverlay(
                         modifier = Modifier
                             .weight(1f)
                             .height(5.dp)
-                            .background(Color.White.copy(alpha = 0.25f), RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(previewProgress)
                                 .height(5.dp)
-                                .background(Color.White, RoundedCornerShape(3.dp))
+                                .background(Color.White, RoundedCornerShape(8.dp))
                         )
                     }
                     Text(
@@ -232,7 +234,7 @@ fun TvErrorOverlay(
         exit = fadeOut(androidx.compose.animation.core.tween(200)),
         modifier = modifier
     ) {
-        val accentColor = if (isSetupError) Color(0xFF3B82F6) else Color(0xFFEF4444)
+        val accentColor = if (isSetupError) Color(0xFF3B82F6) else ErrorRed
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -242,7 +244,7 @@ fun TvErrorOverlay(
             Column(
                 modifier = Modifier
                     .width(480.dp)
-                    .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp))
+                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
                     .border(1.dp, accentColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
                     .padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -336,7 +338,7 @@ fun TvErrorButton(
             .background(
                 color = when {
                     isFocused -> btnAccent
-                    isPrimary -> Color(0xFFE50914)
+                    isPrimary -> ErrorRed
                     else -> Color(0xFF2A2A2A)
                 },
                 shape = RoundedCornerShape(8.dp)

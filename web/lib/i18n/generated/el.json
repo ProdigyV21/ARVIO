@@ -1551,5 +1551,12 @@
   "{value0}% · watched": "{value0}% · παρακολουθήθηκε",
   "· Guide match": "· Ταίριασμα οδηγού",
   "· Possible broadcast": "· Πιθανή μετάδοση",
-  "· {value0}d archive": "· {value0}d αρχείο"
+  "· {value0}d archive": "· {value0}d αρχείο",
+  "View on Trakt": "Προβολή στο Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Ο ήχος αυτού του αρχείου δεν μπορεί να αναπαραχθεί απευθείας σε αυτό το πρόγραμμα περιήγησης. Μετατροπή του ήχου…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Ο ήχος αυτού του αρχείου δεν μπορεί να αναπαραχθεί σε αυτό το πρόγραμμα περιήγησης. Αίτημα μετατροπής από τον πάροχο…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Ο ήχος αυτής της πηγής δεν μπορεί να αναπαραχθεί σε αυτό το πρόγραμμα περιήγησης. Επιλέξτε άλλη πηγή ή χρησιμοποιήστε εξωτερικό πρόγραμμα αναπαραγωγής.",
+  "Converting the audio for your browser…": "Μετατροπή του ήχου για το πρόγραμμα περιήγησής σας…",
+  "Picking the best source…": "Επιλογή της καλύτερης πηγής…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Το Ko-fi χρεώνει σε δολάρια ΗΠΑ· η τράπεζά σας μετατρέπει το ποσό αυτόματα."
 }

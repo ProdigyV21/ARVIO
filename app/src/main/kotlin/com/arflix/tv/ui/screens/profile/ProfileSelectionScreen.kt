@@ -3,6 +3,13 @@ package com.arflix.tv.ui.screens.profile
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,8 +27,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,9 +72,9 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
+import com.arflix.tv.data.model.KidsAgeLevel
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.ui.components.Toast
-import com.arflix.tv.ui.theme.appBackgroundDark
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.PinUtil
 import kotlinx.coroutines.delay
@@ -84,6 +89,72 @@ fun ProfileSelectionScreen(
     isCloudConnected: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    ProfileSelectionContent(uiState, ProfileSelectionActions(
+        createProfile = viewModel::createProfile,
+        deleteProfile = viewModel::deleteProfile,
+        dismissToast = viewModel::dismissToast,
+        hideAddDialog = viewModel::hideAddDialog,
+        hideEditDialog = viewModel::hideEditDialog,
+        hidePinDialog = viewModel::hidePinDialog,
+        preloadForProfile = viewModel::preloadForProfile,
+        removeProfilePin = viewModel::removeProfilePin,
+        removeSelectedAvatarImage = viewModel::removeSelectedAvatarImage,
+        selectProfile = viewModel::selectProfile,
+        selectProfileWithLockCheck = viewModel::selectProfileWithLockCheck,
+        setKidsAgeLevel = viewModel::setKidsAgeLevel,
+        setKidsProfile = viewModel::setKidsProfile,
+        setNewProfileName = viewModel::setNewProfileName,
+        setSelectedAvatarId = viewModel::setSelectedAvatarId,
+        setSelectedAvatarImage = viewModel::setSelectedAvatarImage,
+        setSelectedColorIndex = viewModel::setSelectedColorIndex,
+        setupParentPin = viewModel::setupParentPin,
+        setupProfilePin = viewModel::setupProfilePin,
+        showAddDialog = viewModel::showAddDialog,
+        showEditDialog = viewModel::showEditDialog,
+        showPinSetupDialog = viewModel::showPinSetupDialog,
+        toggleManageMode = viewModel::toggleManageMode,
+        updateProfile = viewModel::updateProfile,
+        verifyPinAndSelectProfile = viewModel::verifyPinAndSelectProfile,
+    ), onProfileSelected, onConnectCloud, isCloudConnected)
+}
+
+internal data class ProfileSelectionActions(
+    val createProfile: () -> Unit = { },
+    val deleteProfile: (Profile) -> Unit = { _ -> },
+    val dismissToast: () -> Unit = { },
+    val hideAddDialog: () -> Unit = { },
+    val hideEditDialog: () -> Unit = { },
+    val hidePinDialog: () -> Unit = { },
+    val preloadForProfile: (Profile) -> Unit = { _ -> },
+    val removeProfilePin: () -> Unit = { },
+    val removeSelectedAvatarImage: () -> Unit = { },
+    val selectProfile: (Profile) -> Unit = { _ -> },
+    val selectProfileWithLockCheck: (Profile) -> Unit = { _ -> },
+    val setKidsAgeLevel: (KidsAgeLevel) -> Unit = { _ -> },
+    val setKidsProfile: (Boolean) -> Unit = { _ -> },
+    val setNewProfileName: (String) -> Unit = { _ -> },
+    val setSelectedAvatarId: (Int) -> Unit = { _ -> },
+    val setSelectedAvatarImage: (String) -> Unit = { _ -> },
+    val setSelectedColorIndex: (Int) -> Unit = { _ -> },
+    val setupParentPin: (String) -> Unit = { _ -> },
+    val setupProfilePin: (String) -> Unit = { _ -> },
+    val showAddDialog: () -> Unit = { },
+    val showEditDialog: (Profile) -> Unit = { _ -> },
+    val showPinSetupDialog: () -> Unit = { },
+    val toggleManageMode: () -> Unit = { },
+    val updateProfile: () -> Unit = { },
+    val verifyPinAndSelectProfile: (String) -> Unit = { _ -> },
+)
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun ProfileSelectionContent(
+    uiState: ProfileUiState,
+    viewModel: ProfileSelectionActions,
+    onProfileSelected: (String) -> Unit,
+    onConnectCloud: () -> Unit = {},
+    isCloudConnected: Boolean = false,
+) {
 
     // Create focus requesters for each profile slot (max 5 profiles + 1 add button)
     val focusRequesters = remember { List(6) { FocusRequester() } }
@@ -92,6 +163,11 @@ fun ProfileSelectionScreen(
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isReadyForInput by remember { mutableStateOf(isTouchDevice) }
 
+
+    val context = LocalContext.current
+    val motionEnabled = remember(context) {
+        android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+    }
 
     // Coordinate tracking & 3-step transition states
     var rootCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -104,7 +180,7 @@ fun ProfileSelectionScreen(
     val transitionProgress by animateFloatAsState(
         targetValue = if (isTransitioning) 1f else 0f,
         animationSpec = tween(
-            durationMillis = 420,
+            durationMillis = if (motionEnabled) 320 else 0,
             easing = FastOutSlowInEasing
         ),
         label = "profile_transition_progress"
@@ -156,7 +232,7 @@ fun ProfileSelectionScreen(
     LaunchedEffect(isTransitioning) {
         if (isTransitioning) {
             minAnimationCompleted = false
-            delay(620)
+            delay(if (motionEnabled) 340L else 0L)
             minAnimationCompleted = true
         }
     }
@@ -210,14 +286,19 @@ fun ProfileSelectionScreen(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(appBackgroundDark())
+            .background(Color.Black)
             .navigationBarsPadding()
             .onGloballyPositioned { rootCoordinates = it },
         contentAlignment = Alignment.Center
     ) {
+        val contentWidth = if (isTouchDevice) (maxWidth - 48.dp).coerceAtMost(560.dp) else maxWidth - 96.dp
+        val columns = if (isTouchDevice && maxWidth >= 600.dp) 3 else 2
+        val avatarSize = if (isTouchDevice) ((contentWidth - 24.dp * (columns - 1)) / columns).coerceAtMost(152.dp)
+            else ((contentWidth - 24.dp * 4) / 5).coerceAtMost(120.dp)
+        val avatarSpacing = 24.dp
         val backgroundAlpha = if (isTransitioning) {
             (1f - transitionProgress * 2.5f).coerceIn(0f, 1f)
         } else 1f
@@ -226,31 +307,32 @@ fun ProfileSelectionScreen(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
+                    .width(contentWidth)
+                    .then(if (isTouchDevice) Modifier.verticalScroll(rememberScrollState()).padding(vertical = 32.dp) else Modifier)
                     .graphicsLayer { alpha = backgroundAlpha }
             ) {
                 // Title
                 Text(
                     text = "ARVIO",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Medium,
                     color = Color.White,
                     letterSpacing = 6.sp
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
 
                 Text(
                     text = if (uiState.isManageMode) stringResource(R.string.manage_profiles) else stringResource(R.string.whos_watching),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.White.copy(alpha = 0.8f)
+                    fontSize = if (isTouchDevice) 32.sp else 40.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = if (isTouchDevice) Modifier.fillMaxWidth() else Modifier
                 )
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(if (isTouchDevice) 32.dp else 24.dp))
 
                 // Profile avatars row
-                val avatarSize = if (isTouchDevice) 90.dp else 120.dp
-                val avatarSpacing = if (isTouchDevice) 16.dp else 24.dp
 
                 if (uiState.isLoading) {
                     Box(
@@ -268,45 +350,33 @@ fun ProfileSelectionScreen(
                         )
                     }
                 } else if (isTouchDevice) {
-                    // Mobile: use LazyRow so profiles scroll horizontally on small screens
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(avatarSpacing, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        itemsIndexed(uiState.profiles) { index, profile ->
-                            ProfileAvatar(
-                                profile = profile,
-                                isManageMode = uiState.isManageMode,
-                                isActiveProfile = uiState.activeProfile?.id == profile.id,
-                                avatarSize = avatarSize,
-                                isTransitionSelected = isTransitioning && transitionProfile?.id == profile.id,
-                                modifier = Modifier.focusRequester(focusRequesters[index]),
-                                onAvatarPositioned = { coords ->
-                                    avatarCoordinatesMap[profile.id] = coords
-                                },
-                                onClick = { handleProfileClick(profile) },
-                                onFocus = { viewModel.preloadForProfile(profile) },
-                                onDelete = { viewModel.deleteProfile(profile) }
-                            )
-                        }
-
-                        // Add profile button (max 5 profiles)
-                        if (uiState.profiles.size < 5) {
-                            item {
-                                AddProfileButton(
-                                    avatarSize = avatarSize,
-                                    modifier = Modifier.focusRequester(focusRequesters[uiState.profiles.size]),
-                                    onClick = { if (!isTransitioning) viewModel.showAddDialog() }
-                                )
+                    // Compact grid; vertical scrolling keeps five profiles and actions reachable.
+                    val slots = uiState.profiles.size + if (uiState.profiles.size < 5) 1 else 0
+                    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                        (0 until slots).toList().chunked(columns).forEach { row ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(avatarSpacing, Alignment.CenterHorizontally)) {
+                                row.forEach { index ->
+                                    val profile = uiState.profiles.getOrNull(index)
+                                    if (profile != null) ProfileAvatar(
+                                        profile = profile, isManageMode = uiState.isManageMode,
+                                        isActiveProfile = uiState.activeProfile?.id == profile.id,
+                                        avatarSize = avatarSize,
+                                        isTransitionSelected = isTransitioning && transitionProfile?.id == profile.id,
+                                        onAvatarPositioned = { avatarCoordinatesMap[profile.id] = it },
+                                        onClick = { handleProfileClick(profile) },
+                                        onFocus = { viewModel.preloadForProfile(profile) },
+                                        onDelete = { viewModel.deleteProfile(profile) }
+                                    ) else AddProfileButton(avatarSize = avatarSize,
+                                        onClick = { if (!isTransitioning) viewModel.showAddDialog() })
+                                }
                             }
                         }
                     }
                 } else {
-                    // TV: original Row layout with fixed spacing
+                    // TV: keep avatar tops aligned even when a profile has a Kids badge.
                     Row(
                         horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Top
                     ) {
                         uiState.profiles.forEachIndexed { index, profile ->
                             ProfileAvatar(
@@ -340,7 +410,7 @@ fun ProfileSelectionScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(if (isTouchDevice) 32.dp else 24.dp))
 
                 // Manage Profiles button
                 ManageProfilesButton(
@@ -353,7 +423,7 @@ fun ProfileSelectionScreen(
                 )
 
                 if (!isCloudConnected) {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
 
                     // Cloud connect button — focusable on TV, tappable on mobile
                     CloudConnectButton(
@@ -369,11 +439,11 @@ fun ProfileSelectionScreen(
 
         // ── 3-Step Profile Selection Transition Overlay ──
         if (transitionProfile != null) {
-            val targetScale = if (isTouchDevice) 1.85f else 1.70f
+            val targetScale = if (motionEnabled) 1.12f else 1f
             val currentScale = lerp(1f, targetScale, transitionProgress)
-            val currentOffsetX = lerp(initialDeltaOffset.x, 0f, transitionProgress)
-            val currentOffsetY = lerp(initialDeltaOffset.y, 0f, transitionProgress)
-            val avatarBaseSize = if (isTouchDevice) 90.dp else 120.dp
+            val currentOffsetX = if (motionEnabled) lerp(initialDeltaOffset.x, 0f, transitionProgress) else 0f
+            val currentOffsetY = if (motionEnabled) lerp(initialDeltaOffset.y, 0f, transitionProgress) else 0f
+            val avatarBaseSize = avatarSize
 
             Box(
                 modifier = Modifier
@@ -391,7 +461,7 @@ fun ProfileSelectionScreen(
                             scaleY = currentScale
                         }
                         .size(avatarBaseSize)
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     ProfileAvatarVisual(
@@ -446,9 +516,9 @@ fun ProfileSelectionScreen(
                 onAvatarImageSelected = { viewModel.setSelectedAvatarImage(it) },
                 onRemoveAvatarImage = { viewModel.removeSelectedAvatarImage() },
                 isKidsProfile = uiState.isKidsProfile,
-                onKidsProfileChange = viewModel::setKidsProfile,
+                onKidsProfileChange = viewModel.setKidsProfile,
                 kidsAgeLevel = uiState.kidsAgeLevel,
-                onKidsAgeLevelChange = viewModel::setKidsAgeLevel,
+                onKidsAgeLevelChange = viewModel.setKidsAgeLevel,
                 onConfirm = { viewModel.createProfile() },
                 onDismiss = { viewModel.hideAddDialog() }
             )
@@ -469,9 +539,9 @@ fun ProfileSelectionScreen(
                 onAvatarImageSelected = { viewModel.setSelectedAvatarImage(it) },
                 onRemoveAvatarImage = { viewModel.removeSelectedAvatarImage() },
                 isKidsProfile = uiState.isKidsProfile,
-                onKidsProfileChange = viewModel::setKidsProfile,
+                onKidsProfileChange = viewModel.setKidsProfile,
                 kidsAgeLevel = uiState.kidsAgeLevel,
-                onKidsAgeLevelChange = viewModel::setKidsAgeLevel,
+                onKidsAgeLevelChange = viewModel.setKidsAgeLevel,
                 onConfirm = { viewModel.updateProfile() },
                 onDelete = { viewModel.deleteProfile(profile); viewModel.hideEditDialog() },
                 onDismiss = { viewModel.hideEditDialog() },
@@ -537,7 +607,7 @@ private fun ProfileAvatar(
 ) {
     var isFocused by remember { mutableIntStateOf(0) }
     val scale by animateFloatAsState(
-        targetValue = if (isFocused > 0) 1.1f else 1f,
+        targetValue = if (isFocused > 0) 1.04f else 1f,
         animationSpec = tween(150),
         label = "scale"
     )
@@ -565,8 +635,9 @@ private fun ProfileAvatar(
                 Box(
                     modifier = Modifier
                         .size(avatarSize)
+                        .semantics { contentDescription = profile.name }
                         .scale(scale)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(18.dp))
                         .clickable { onClick() }
                 ) { avatarContent() }
             } else {
@@ -574,6 +645,7 @@ private fun ProfileAvatar(
                     onClick = onClick,
                     modifier = Modifier
                         .size(avatarSize)
+                        .semantics { contentDescription = profile.name }
                         .scale(scale)
                         .onFocusChanged { focusState ->
                             val wasFocused = isFocused > 0
@@ -582,7 +654,8 @@ private fun ProfileAvatar(
                                 onFocus()
                             }
                         },
-                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                    shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(18.dp)),
                     colors = ClickableSurfaceDefaults.colors(
                         containerColor = Color.Transparent,
                         focusedContainerColor = Color.Transparent
@@ -590,7 +663,7 @@ private fun ProfileAvatar(
                     border = ClickableSurfaceDefaults.border(
                         focusedBorder = androidx.tv.material3.Border(
                             border = androidx.compose.foundation.BorderStroke(3.dp, Color.White),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(18.dp)
                         )
                     )
                 ) { avatarContent() }
@@ -601,7 +674,7 @@ private fun ProfileAvatar(
                 Box(
                     modifier = Modifier
                         .size(avatarSize)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(18.dp))
                         .background(Color.Black.copy(alpha = 0.6f))
                         .then(if (isTouchDevice) Modifier.clickable { onClick() } else Modifier),
                     contentAlignment = Alignment.Center
@@ -622,11 +695,15 @@ private fun ProfileAvatar(
             text = profile.name,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
+            color = if (isFocused > 0) Color.Black else Color.White.copy(alpha = 0.8f),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(avatarSize).clip(RoundedCornerShape(50))
+                .background(if (isFocused > 0) Color.White else Color.Transparent)
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             textAlign = TextAlign.Center
         )
 
-        if (profile.isKidsProfile) {
+        if (profile.isKidsProfile && !profile.name.equals(stringResource(R.string.profile_kids_badge), ignoreCase = true)) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.profile_kids_badge),
@@ -634,7 +711,7 @@ private fun ProfileAvatar(
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(24.dp))
                     .background(Color(0xFF3B82F6))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             )
@@ -651,7 +728,7 @@ private fun AddProfileButton(
 ) {
     var isFocused by remember { mutableIntStateOf(0) }
     val scale by animateFloatAsState(
-        targetValue = if (isFocused > 0) 1.1f else 1f,
+        targetValue = if (isFocused > 0) 1.04f else 1f,
         animationSpec = tween(150),
         label = "scale"
     )
@@ -671,9 +748,9 @@ private fun AddProfileButton(
                 modifier = Modifier
                     .size(avatarSize)
                     .scale(scale)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(Color.White.copy(alpha = 0.1f))
-                    .border(2.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .border(2.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(18.dp))
                     .clickable { onClick() }
             ) { addContent() }
         } else {
@@ -683,7 +760,8 @@ private fun AddProfileButton(
                     .size(avatarSize)
                     .scale(scale)
                     .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(18.dp)),
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = Color.White.copy(alpha = 0.1f),
                     focusedContainerColor = Color.White.copy(alpha = 0.2f)
@@ -691,11 +769,11 @@ private fun AddProfileButton(
                 border = ClickableSurfaceDefaults.border(
                     border = androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(18.dp)
                     ),
                     focusedBorder = androidx.tv.material3.Border(
                         border = androidx.compose.foundation.BorderStroke(3.dp, Color.White),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(18.dp)
                     )
                 )
             ) { addContent() }
@@ -707,7 +785,11 @@ private fun AddProfileButton(
             text = stringResource(R.string.add_profile),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
+            color = if (isFocused > 0) Color.Black else Color.White.copy(alpha = 0.8f),
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(avatarSize).clip(RoundedCornerShape(50))
+                .background(if (isFocused > 0) Color.White else Color.Transparent)
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             textAlign = TextAlign.Center
         )
     }
@@ -726,10 +808,10 @@ private fun ManageProfilesButton(
         onClick = if (isTouchDevice) ({}) else onClick,
         modifier = Modifier
             .then(
-                if (isTouchDevice) Modifier.clickable { onClick() } else Modifier
+                if (isTouchDevice) Modifier.fillMaxWidth().clickable { onClick() } else Modifier
             )
             .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(4.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = Color.White.copy(alpha = 0.1f)
@@ -737,11 +819,11 @@ private fun ManageProfilesButton(
         border = ClickableSurfaceDefaults.border(
             border = androidx.tv.material3.Border(
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(24.dp)
             ),
             focusedBorder = androidx.tv.material3.Border(
                 border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(24.dp)
             )
         )
     ) {
@@ -766,16 +848,16 @@ private fun CloudConnectButton(
     if (isTouchDevice) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0xFF6C63FF).copy(alpha = 0.25f),
-                            Color(0xFF00D4FF).copy(alpha = 0.18f)
+                            Color.White.copy(alpha = 0.04f),
+                            Color.White.copy(alpha = 0.04f)
                         )
                     )
                 )
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
                 .clickable { onClick() }
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -798,7 +880,7 @@ private fun CloudConnectButton(
         Surface(
             onClick = onClick,
             modifier = Modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = Color.White.copy(alpha = 0.06f),
                 focusedContainerColor = Color.White.copy(alpha = 0.18f)
@@ -806,11 +888,11 @@ private fun CloudConnectButton(
             border = ClickableSurfaceDefaults.border(
                 border = androidx.tv.material3.Border(
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ),
                 focusedBorder = androidx.tv.material3.Border(
                     border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = 0.6f)),
-                    shape = RoundedCornerShape(24.dp)
+                    shape = RoundedCornerShape(16.dp)
                 )
             )
         ) {

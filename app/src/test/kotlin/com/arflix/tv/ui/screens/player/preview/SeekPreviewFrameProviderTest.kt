@@ -10,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -207,6 +208,18 @@ class SeekPreviewFrameProviderTest {
         release.complete(Unit)
         runCurrent()
         assertEquals(7, foreground.await())
+        scheduler.close()
+    }
+
+    @Test
+    fun `neighbor queued by completion resumes after active cleanup`() = runTest {
+        val scheduler = SeekPreviewExtractionScheduler<Int>(backgroundScope)
+        val result = async(UnconfinedTestDispatcher(testScheduler)) {
+            assertEquals(7, scheduler.submit { 7 })
+            scheduler.submit(background = true) { 8 }
+        }
+        runCurrent()
+        assertEquals(8, result.await())
         scheduler.close()
     }
 }

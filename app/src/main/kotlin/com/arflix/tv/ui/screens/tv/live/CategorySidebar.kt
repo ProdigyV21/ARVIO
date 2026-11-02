@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
@@ -953,9 +954,9 @@ private fun SearchEntry(
             .border(
                 width = 1.dp,
                 color = if (focused) LiveColors.FocusRing else LiveColors.Divider,
-                shape = RoundedCornerShape(5.dp),
+                shape = RoundedCornerShape(8.dp),
             )
-            .clip(RoundedCornerShape(5.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (focused) Color.White else LiveColors.Panel)
             // Search is the first focusable row in the sidebar, so while the
             // categories are still loading Compose parks the D-pad selector
@@ -1054,6 +1055,23 @@ private fun rememberCategoryRequester(
     return requester
 }
 
+internal data class SidebarRowColors(
+    val background: Color,
+    val foreground: Color,
+    val secondary: Color,
+    val accessory: Color,
+)
+
+internal fun sidebarRowColors(focused: Boolean, active: Boolean, isTouch: Boolean): SidebarRowColors {
+    val lightSurface = focused || (active && isTouch)
+    return SidebarRowColors(
+        background = if (lightSurface) Color.White else if (active) LiveColors.FocusBg else Color.Transparent,
+        foreground = if (lightSurface) Color.Black else if (active) LiveColors.Fg else LiveColors.FgDim,
+        secondary = if (lightSurface) Color.Black.copy(alpha = .7f) else LiveColors.FgDim,
+        accessory = if (lightSurface) Color.Black else LiveColors.FgMute,
+    )
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SidebarRow(
@@ -1081,13 +1099,8 @@ private fun SidebarRow(
     var longPressTriggered by remember { mutableStateOf(false) }
     var longPressJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
-    val bg = when {
-        focused -> Color.White
-        active -> LiveColors.FocusBg
-        else -> Color.Transparent
-    }
-    val foreground = if (focused) Color.Black else if (active) LiveColors.Fg else LiveColors.FgDim
-    val secondary = if (focused) Color.Black.copy(alpha = .7f) else LiveColors.FgDim
+    val isTouch = LocalDeviceType.current.isTouchDevice()
+    val colors = sidebarRowColors(focused, active, isTouch)
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1104,8 +1117,8 @@ private fun SidebarRow(
                     if (it.isFocused) onFocused?.invoke()
                 }
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .clip(RoundedCornerShape(6.dp))
-                .drawBehind { drawRect(bg) }
+                .clip(if (active && isTouch) CircleShape else RoundedCornerShape(8.dp))
+                .drawBehind { drawRect(colors.background) }
                 .onPreviewKeyEvent { ev ->
                     val isSelect = ev.key == Key.DirectionCenter || ev.key == Key.Enter
                     when {
@@ -1173,7 +1186,7 @@ private fun SidebarRow(
                 leadingCode != null -> Text(
                     text = leadingCode,
                     style = LiveType.NumberMono.copy(
-                        color = secondary,
+                        color = colors.secondary,
                     ),
                     modifier = Modifier.width(20.dp),
                 )
@@ -1184,7 +1197,7 @@ private fun SidebarRow(
                 icon != null -> Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = foreground,
+                    tint = colors.foreground,
                     modifier = Modifier.size(17.dp),
                 )
                 else -> Spacer(Modifier.size(14.dp))
@@ -1193,7 +1206,7 @@ private fun SidebarRow(
                 Text(
                     text = label,
                     style = LiveType.CatLabel.copy(
-                        color = foreground,
+                        color = colors.foreground,
                         fontSize = labelSize,
                         lineHeight = 13.sp,
                     ),
@@ -1205,7 +1218,7 @@ private fun SidebarRow(
                 if (count > 0) {
                     Text(
                         text = java.text.NumberFormat.getIntegerInstance().format(count),
-                        style = LiveType.NumberMono.copy(color = secondary, fontSize = 9.sp),
+                        style = LiveType.NumberMono.copy(color = colors.secondary, fontSize = 9.sp),
                     )
                 }
                 if (hasChildren) {
@@ -1213,7 +1226,7 @@ private fun SidebarRow(
                         imageVector = if (isOpenGroup)
                             Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = if (focused) Color.Black else LiveColors.FgMute,
+                        tint = colors.accessory,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -1221,7 +1234,7 @@ private fun SidebarRow(
                     Icon(
                         imageVector = Icons.Filled.Lock,
                         contentDescription = stringResource(R.string.live_menu_unlock_category),
-                        tint = if (focused) Color.Black else LiveColors.FgMute,
+                        tint = colors.accessory,
                         modifier = Modifier.size(14.dp),
                     )
                 }
@@ -1252,8 +1265,8 @@ private fun CategoryContextMenu(
         Column(
             modifier = Modifier
                 .width(184.dp)
-                .background(LiveColors.PanelRaised, RoundedCornerShape(10.dp))
-                .border(1.dp, LiveColors.FocusRing.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                .background(LiveColors.PanelRaised, RoundedCornerShape(12.dp))
+                .border(1.dp, LiveColors.FocusRing.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
                 .padding(4.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {

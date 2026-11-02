@@ -1556,5 +1556,12 @@
   "{value0}% · watched": "{value0}% · vizionat",
   "· Guide match": "· Ghid meci",
   "· Possible broadcast": "· Posibilă difuzare",
-  "· {value0}d archive": "· {value0}d arhivă"
+  "· {value0}d archive": "· {value0}d arhivă",
+  "View on Trakt": "Vizualizare pe Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Sunetul acestui fișier nu poate fi redat direct în acest browser. Se convertește sunetul…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Sunetul acestui fișier nu poate fi redat în acest browser. Se solicită conversia de la furnizor…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Sunetul acestei surse nu poate fi redat în acest browser. Alegeți o altă sursă sau utilizați un player extern.",
+  "Converting the audio for your browser…": "Se convertește sunetul pentru browser…",
+  "Picking the best source…": "Se alege cea mai bună sursă…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi taxează în dolari americani; banca dvs. convertește automat suma."
 }

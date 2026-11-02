@@ -48,7 +48,6 @@
 | Where you watch | How to get it |
 | --- | --- |
 | Android TV, Google TV, Fire TV, Android phones and tablets | **Free app.** Install from Google Play where available, or download the signed APK from [GitHub Releases](https://github.com/ProdigyV21/ARVIO/releases/latest). |
-| Desktop, iPhone, iPad and other browsers | Open [ARVIO Web](https://web.arvio.tv) and sign in with your ARVIO account: your profiles, watchlist and addons are already there. Playback on the official hosted service needs [ARVIO Premium](https://arvio.tv/premium/) ($2.99 a month or $20 for 12 months); you can look around first. |
 | Your own computer or server | **Free self-hosting.** Run the web app with Docker Compose or Node.js and your own integration credentials. [Setup instructions](web/README.md). |
 
 The GitHub APK supports Android 6.0+; the Play build requires Android 7.0+. The standard APK contains ARMv7 and ARM64 builds. Device, codec and service support can vary.
@@ -66,7 +65,7 @@ For GitHub updates through Obtainium, add `https://github.com/ProdigyV21/ARVIO` 
 - **Live TV and catch-up.** Connect supported M3U, Xtream Codes or Stalker sources. Browse categories, favorites, recently watched channels and the programme guide, with a mini-player and fullscreen playback. Guide coverage, catch-up and seeking depend on your provider.
 - **Sports inside Live TV.** Browse live and upcoming events, then choose a matched channel or compatible sports add-on source. Use IPTV, sports add-ons, or both. Coverage and artwork depend on the schedules and sources available to your setup.
 - **Add-ons, debrid and Telegram.** Browse and install compatible community add-ons, configure supported debrid sources, or search video files in your connected Telegram channels and groups. These services need their own configuration and access.
-- **Trakt and SIMKL tracking.** Connect accounts per profile for supported watchlists, history, scrobbling and Continue Watching/next episodes. SIMKL uses AUTH V2 for new connections; its custom lists require SIMKL PRO/VIP, not ARVIO Premium.
+- **Trakt and SIMKL tracking.** Connect accounts per profile for supported watchlists, history, scrobbling and Continue Watching/next episodes. SIMKL uses AUTH V2 for new connections; custom-list availability depends on your SIMKL account's capabilities.
 - **Playback and subtitles.** Media3 playback on Android, episode-aware controls, source selection, audio/subtitle tracks, automatic frame-rate matching on supported hardware, subtitle language preferences and optional AI subtitle tools.
 - **Profiles and optional cloud sync.** Separate viewing state, avatars and PINs, plus age-filtered kids profiles on Android. ARVIO Cloud can sync supported settings, catalogs, playlists and watch state across your devices.
 
@@ -96,11 +95,30 @@ Imported collections do not include streaming access. You still need your own so
 
 ## Self-Host ARVIO Web
 
-Run the web app on your own computer or server **without an ARVIO Premium subscription**. Docker Compose and Node.js are supported; configure your own TMDB key and any optional integration credentials.
+ARVIO Web is the browser version for desktop, iPhone, iPad and TV browsers. **Self-host it on your own computer or server** with Docker Compose or Node.js, using your own TMDB key and optional integration credentials.
 
-The [web README](web/README.md) has the complete quick start, environment setup, configuration checker and update commands. Read the [self-hosting guide](web/docs/SELF-HOSTING.md) before exposing it to your network or the internet.
+For Node.js, install **Node.js 22.19+** and Git, then:
 
-Self-hosted profiles and settings are local to each browser; this mode does **not** provide ARVIO Cloud cross-device sync. Connected Trakt/SIMKL accounts can still synchronize the data those services support. Self-hosting is separate from access to the official paid hosted service.
+```sh
+git clone https://github.com/ProdigyV21/ARVIO.git
+cd ARVIO/web
+npm ci
+npm run setup:selfhost
+```
+
+Edit `.env.local` and set your own TMDB API v3 key as `TMDB_API_KEY`. Keep this file private. Then:
+
+```sh
+npm run check:selfhost
+npm run build
+npm run start -- --hostname 127.0.0.1
+```
+
+Open **http://localhost:3000**, create a local profile and connect your sources in Settings.
+
+For Docker Compose, configuration details and updates, follow the [web README](web/README.md). Read the [self-hosting guide](web/docs/SELF-HOSTING.md) before exposing it to your network or the internet; the commands above bind only to the local computer.
+
+Self-hosted profiles and settings are local to each browser; this mode does **not** provide ARVIO Cloud cross-device sync. Connected Trakt/SIMKL accounts can still synchronize the data those services support. Media and access to third-party services are not included.
 
 ## Help and Support
 
@@ -109,8 +127,6 @@ Self-hosted profiles and settings are local to each browser; this mode does **no
 - **Feature requests:** describe the workflow you want to improve and check [existing issues](https://github.com/ProdigyV21/ARVIO/issues) first.
 
 Never post passwords, API keys, tokens, private playlist URLs or unredacted account information in an issue or screenshot.
-
-ARVIO takes ongoing development, testing, hosting and service costs. [ARVIO Premium](https://arvio.tv/premium/) (hosted ARVIO Web for iPhone, iPad and computers) funds that work, and you can also [support the project on Ko-fi](https://ko-fi.com/arvio). The Android app and self-hosted web app remain free; Premium provides the optional hosted web service, not media subscriptions.
 
 ## Build From Source
 

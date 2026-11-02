@@ -34,6 +34,21 @@ const base = (patch = {}) => ({
 });
 const pulled = async (f, profile = 'p1') => ({ ...base(), ...plain((await f.cloud.pullCloudPayload(auth, profile)).settings) });
 
+test('ten named IPTV playlists survive a cloud save and fresh pull', async () => {
+  const list = Array.from({ length: 10 }, (_, i) => ({ id: `list_${i + 1}`, name: `Playlist ${i + 1}`, m3uUrl: `https://example.invalid/${i + 1}.m3u`, epgUrl: '', enabled: true }));
+  const f = cloudFixture({});
+  await f.cloud.saveCloudSettings(auth, base({ iptvPlaylists: list }), [], 'p1', [], base(), 300);
+  eq((await pulled(f)).iptvPlaylists.map(p => [p.id, p.name, p.m3uUrl]), list.map(p => [p.id, p.name, p.m3uUrl]));
+});
+
+test('cloud restore repairs the old duplicate ID bug without hiding a source', async () => {
+  const list = [1, 3, 4].map((n, i) => ({ id: i ? 'list_3' : 'list_1', name: `P${n}`, m3uUrl: `https://example.invalid/${n}.m3u`, enabled: true }));
+  const f = cloudFixture({ iptvByProfile: { p1: { playlists: list } } });
+  const restored = (await pulled(f)).iptvPlaylists;
+  assert.equal(new Set(restored.map(p => p.id)).size, 3);
+  eq(restored.map(p => p.m3uUrl), list.map(p => p.m3uUrl));
+});
+
 /* ---------- portal list ---------- */
 
 test('the Android portal list is read with every field kept; incomplete entries are dropped like on Android', () => {
@@ -48,18 +63,19 @@ test('the Android portal list is read with every field kept; incomplete entries 
     { id: 'stalker1', name: 'Home', portalUrl: 'http://a.example/c', macAddress: '00:1A:79:00:00:01', enabled: false, importVod: false, androidOnly: { x: 1 } },
     { id: 'stalker2', name: 'Portal 2', portalUrl: 'http://b.example/c', macAddress: '00:1A:79:00:00:02', enabled: true },
     { id: 'stalker4', name: 'Portal 4', portalUrl: 'http://d.example', macAddress: '00:1A:79:00:00:04', enabled: true },
+    { id: 'stalker9', name: 'Portal 5', portalUrl: 'http://e.example', macAddress: '00:1A:79:00:00:05', enabled: true },
   ]);
   // Only enabled portals with live TV import on fill Live TV.
   const settings = { iptvStalkerUrl: '', iptvStalkerMac: '', iptvStalkerPortals: [...list, { ...list[1], id: 'stalker5', importLiveTv: false }] };
-  eq(portals.liveTvStalkerPortals(settings).map((p) => p.id), ['stalker2', 'stalker4']);
+  eq(portals.liveTvStalkerPortals(settings).map((p) => p.id), ['stalker2', 'stalker4', 'stalker9']);
   // Older apps read the single-portal fields: they carry the first enabled portal.
   eq(plain(portals.stalkerPortalsPatch(list)), { iptvStalkerPortals: plain(list), iptvStalkerUrl: 'http://b.example/c', iptvStalkerMac: '00:1A:79:00:00:02' });
 });
 
-test('adding portals uses the next free id and stops at three; editing keeps the other fields', () => {
+test('adding portals uses the next free id and stops at ten; editing keeps the other fields', () => {
   let list = [];
-  for (const n of [1, 2, 3, 4]) list = portals.upsertStalkerPortal(list, { name: n === 2 ? '' : `P${n}`, portalUrl: `http://p${n}.example/c/`, macAddress: `00:1a:79:00:00:0${n}` });
-  eq(list.map((p) => [p.id, p.name, p.portalUrl]), [['stalker1', 'P1', 'http://p1.example/c'], ['stalker2', 'Portal 2', 'http://p2.example/c'], ['stalker3', 'P3', 'http://p3.example/c']]);
+  for (const n of Array.from({ length: 11 }, (_, i) => i + 1)) list = portals.upsertStalkerPortal(list, { name: n === 2 ? '' : `P${n}`, portalUrl: `http://p${n}.example/c/`, macAddress: `00:1a:79:00:00:${String(n).padStart(2, '0')}` });
+  eq(list.map((p) => [p.id, p.name, p.portalUrl]), Array.from({ length: 10 }, (_, i) => [`stalker${i + 1}`, i === 1 ? 'Portal 2' : `P${i + 1}`, `http://p${i + 1}.example/c`]));
   list = [{ ...list[0], importVod: false, extra: 'kept', enabled: false }, ...list.slice(1)];
   const edited = portals.upsertStalkerPortal(list, { id: 'stalker1', name: 'Renamed', portalUrl: 'http://new.example/c', macAddress: '00:1a:79:aa:bb:cc' });
   eq(plain(edited[0]), { id: 'stalker1', name: 'Renamed', portalUrl: 'http://new.example/c', macAddress: '00:1A:79:AA:BB:CC', enabled: false, importVod: false, extra: 'kept' });

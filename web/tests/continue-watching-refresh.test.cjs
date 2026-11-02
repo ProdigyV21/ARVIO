@@ -69,7 +69,7 @@ function harness(options = {}) {
     traktActivityRef: { current: null }, continueWatchingActivitySignature: load('lib/traktActivity.ts').continueWatchingActivitySignature,
     settingsRef: { current: { disabledAddonIds: [], catalogs: [], hiddenCatalogIds: [] } },
     addonsRef: { current: [] }, lastSyncedSettingsRef: { current: null },
-    traktClient: tracker, mdblistClient: tracker, simklClient: tracker,
+    traktClient: tracker, mdblistClient: tracker, simklClient: tracker, weTrakrClient: tracker,
     loadTrackingPreferences: () => ({}), setTrackingPreferences: noop,
     setTraktConnected: noop, setMdblistConnected: noop, setSimklConnected: noop,
     setAddonsReady: value => state.ready.push(value), setBusy: value => state.busy.push(value), setAddons: noop, setCatalogConfigs: noop,

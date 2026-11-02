@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "%{value0} · izlendi",
   "· Guide match": "· Rehber maçı",
   "· Possible broadcast": "· Olası yayın",
-  "· {value0}d archive": "· {value0}d arşivi"
+  "· {value0}d archive": "· {value0}d arşivi",
+  "View on Trakt": "Trakt'de görüntüle",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Bu dosyanın sesi bu tarayıcıda doğrudan oynatılamıyor. Ses dönüştürülüyor…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Bu dosyanın sesi bu tarayıcıda oynatılamıyor. Sağlayıcı dönüşümü isteniyor…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Bu kaynağın sesi bu tarayıcıda oynatılamıyor. Başka bir kaynak seçin veya harici bir oynatıcı kullanın.",
+  "Converting the audio for your browser…": "Ses, tarayıcınız için dönüştürülüyor…",
+  "Picking the best source…": "En iyi kaynak seçiliyor…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi ödemeyi ABD doları olarak alır; bankanız tutarı otomatik olarak dönüştürür."
 }

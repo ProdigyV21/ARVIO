@@ -170,7 +170,7 @@ function extracted(relative, selector, globals) {
   const module = { exports: {} };
   // Player status/hop bookkeeping that these harnesses do not exercise.
   const playerDefaults = { setBootStatus: () => {}, autoSourceHopsRef: { current: 0 }, sourceListRef: { current: [] },
-    browserAutoplayCandidates: () => [], diagnoseSourceFailure: async () => null, setEnded: () => {},
+    needsAudioConversion: () => false, browserAutoplayCandidates: () => [], diagnoseSourceFailure: async () => null, setEnded: () => {},
     onAdvanceRef: { current: async () => false }, upNextShownRef: { current: false } };
   vm.runInNewContext(code, { module, Error, Event, DOMException, AbortController, console, ...playerDefaults, ...globals }, { filename });
   return module.exports;
@@ -640,7 +640,7 @@ function storeHarness(prepare, report = async () => {}, overrides = {}) {
     activeProfileRef: { current: { id: 'profile-a' } }, kidsLevelOf: (profile) => (profile?.isKidsProfile ? 'OLDER_KIDS' : null), premiumAllows: () => true,
     authClient: { session: { userId: 'account-a' } }, selected: { title: 'Fixture' }, activeProfile: { id: 'profile-a' }, selectedEpisode: null,
     prepareBrowserStream: prepare, reportHomeServerPlayback: report,
-    busyRef: { current: "" }, streamsRef: { current: [] }, browserAutoplayCandidates: (streams, excluded = new Set()) => streams.filter(s => s.url && !excluded.has(s.originalUrl ?? s.url)), recordBrowserPlaybackFailure: () => {},
+    busyRef: { current: "" }, streamsRef: { current: [] }, needsAudioConversion: () => false, browserAutoplayCandidates: (streams, excluded = new Set()) => streams.filter(s => s.url && !excluded.has(s.originalUrl ?? s.url)), recordBrowserPlaybackFailure: () => {},
     setActiveChannel: () => {}, setActiveStream: (value) => { state.active = value; state.accepted.push(value); },
     setToast: (value) => state.toasts.push(value),
     openLiveExternally: () => false, recordChannelPlayback: () => {}, buildXtreamCatchupUrl: () => 'https://iptv.example/archive.m3u8',
@@ -1388,7 +1388,7 @@ function advanceHarness(sources, preference) {
     appendHomeServerSources: async () => [], appendVodSources: async () => [], appendTelegramSources: async () => [],
     ...autoplayPreferenceGlobals(preference),
     // Like sourcePickerScore: debrid outranks a free host at equal quality.
-    browserAutoplayCandidates: (streams) => [...new Map(streams.map((s) => [s.url, s])).values()]
+    needsAudioConversion: () => false, browserAutoplayCandidates: (streams) => [...new Map(streams.map((s) => [s.url, s])).values()]
       .sort((a, b) => Number(b.url.includes('/torbox/')) - Number(a.url.includes('/torbox/'))),
     playStream: (stream) => selections.push(stream)
   });

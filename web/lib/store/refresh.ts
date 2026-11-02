@@ -1,3 +1,4 @@
+import { weTrakrClient } from "../wetrakr";
 // App store (lib/store.tsx): refreshData (the cloud + tracker pull behind Continue Watching, the watchlist, addons and
 // settings) and the triggers that run it.
 import { hasPendingAddons, flushAddonOutbox, pendingAddonSnapshot } from "../addonOutbox";
@@ -40,6 +41,7 @@ export function useRefreshData(store: StoreCore) {
     traktClient.setProfile(profileId);
     mdblistClient.setProfile(profileId);
     simklClient.setProfile(profileId);
+    weTrakrClient.setProfile(profileId);
     setTrackingPreferences(loadTrackingPreferences(profileId));
     setTraktConnected(traktClient.isConnected);
     setMdblistConnected(mdblistClient.isConnected);
@@ -78,7 +80,7 @@ export function useRefreshData(store: StoreCore) {
         // Cache read must never block the refresh.
       }
       try {
-      await simklClient.restoreSession().catch(() => undefined);
+      await Promise.all([simklClient.restoreSession().catch(() => undefined), weTrakrClient.restoreSession().catch(() => undefined)]);
       if (!isCurrent()) return;
       setSimklConnected(simklClient.isConnected);
       await flushAddonOutbox(authClient).catch(() => undefined);

@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · ดูแล้ว",
   "· Guide match": "· จับคู่ไกด์",
   "· Possible broadcast": "· ออกอากาศได้",
-  "· {value0}d archive": "· {value0}d เก็บถาวร"
+  "· {value0}d archive": "· {value0}d เก็บถาวร",
+  "View on Trakt": "ดูบน Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "เสียงของไฟล์นี้เล่นในเบราว์เซอร์นี้โดยตรงไม่ได้ กำลังแปลงเสียง…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "เสียงของไฟล์นี้เล่นในเบราว์เซอร์นี้ไม่ได้ กำลังขอให้ผู้ให้บริการแปลง…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "เสียงของแหล่งนี้เล่นในเบราว์เซอร์นี้ไม่ได้ เลือกแหล่งอื่นหรือใช้เครื่องเล่นภายนอก",
+  "Converting the audio for your browser…": "กำลังแปลงเสียงสำหรับเบราว์เซอร์ของคุณ…",
+  "Picking the best source…": "กำลังเลือกแหล่งที่ดีที่สุด…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi เรียกเก็บเงินเป็นดอลลาร์สหรัฐ ธนาคารของคุณจะแปลงยอดเงินให้โดยอัตโนมัติ"
 }

@@ -68,6 +68,10 @@ class TraktDeviceActivationTest {
         assertTrue(isTransientTraktPollFailure(java.net.ConnectException("failed to connect")))
         assertFalse(isTransientTraktPollFailure(failure(404)))
         assertFalse(isTransientTraktPollFailure(failure(410)))
+        assertTrue(isTransientTraktPollFailure(failure(503)))
+        assertTrue(isTransientTraktPollFailure(failure(502)))
+        assertFalse(isTransientTraktPollFailure(failure(401)))
+        assertFalse(isTransientTraktPollFailure(failure(403)))
         assertFalse(isTransientTraktPollFailure(IllegalStateException("Trakt credentials missing in this APK")))
         // A rejected certificate (wrong device clock) will not heal by polling on.
         assertFalse(isTransientTraktPollFailure(

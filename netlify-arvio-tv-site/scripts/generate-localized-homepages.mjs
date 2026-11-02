@@ -432,7 +432,8 @@ function render(localeKey) {
 
   const clientCopy = JSON.stringify(Object.fromEntries(translations)).replaceAll("<", "\\u003c");
   html = html.replace(/(<script type="application\/json" id="home-copy">)[\s\S]*?(<\/script>)/u, (_, start, end) => start + clientCopy + end);
-  html = html.replaceAll('href="/premium/"', `href="/premium/?lang=${locale.lang === "es" ? "es-ES" : locale.lang}"`);
+  // The Premium page in the same language (scripts/build-localized-premium.mjs).
+  html = html.replaceAll('href="/premium/"', `href="/${locale.directory}/premium/"`);
   return html.replace(/[ \t]+$/gmu, "");
 }
 

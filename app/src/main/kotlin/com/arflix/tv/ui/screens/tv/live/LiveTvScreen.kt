@@ -123,6 +123,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.TextSecondary
@@ -5098,7 +5099,7 @@ fun LiveTvScreen(
                         )
                     }
                 },
-                containerColor = Color(0xFF1A1A1A),
+                containerColor = BackgroundElevated,
                 tonalElevation = 8.dp,
             )
         }
@@ -5172,7 +5173,7 @@ fun LiveTvScreen(
                         )
                     }
                 },
-                containerColor = Color(0xFF1A1A1A),
+                containerColor = BackgroundElevated,
             )
             }
         }

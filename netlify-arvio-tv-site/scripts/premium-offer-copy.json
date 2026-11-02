@@ -19,7 +19,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "es": {
     "headline": "ARVIO en tu iPhone, iPad y portátil.",
@@ -41,7 +42,8 @@
     "refund": "¿No funciona en tu dispositivo? Escríbenos en un plazo de 7 días y te devolvemos el importe íntegro.",
     "refundLink": "Escríbenos en Discord",
     "manage": "Gestionar la suscripción en Ko-fi",
-    "supports": "Tu suscripción apoya el desarrollo."
+    "supports": "Tu suscripción apoya el desarrollo.",
+    "checkoutNote": "El pago se hace en Ko-fi en dólares estadounidenses; tu banco hace la conversión automáticamente. Usa el mismo correo que en tu cuenta ARVIO."
   },
   "pt-BR": {
     "headline": "O ARVIO no seu iPhone, iPad e notebook.",
@@ -63,7 +65,8 @@
     "refund": "Não funciona no seu aparelho? Fale com a gente em até 7 dias e devolvemos todo o valor.",
     "refundLink": "Fale com a gente no Discord",
     "manage": "Gerenciar assinatura no Ko-fi",
-    "supports": "Sua assinatura apoia o desenvolvimento."
+    "supports": "Sua assinatura apoia o desenvolvimento.",
+    "checkoutNote": "O pagamento é feito no Ko-fi em dólares americanos; seu banco faz a conversão automaticamente. Use o mesmo e-mail da sua conta ARVIO."
   },
   "pt-PT": {
     "headline": "O ARVIO no teu iPhone, iPad e portátil.",
@@ -85,7 +88,8 @@
     "refund": "Não funciona no teu dispositivo? Fala connosco no prazo de 7 dias e devolvemos o valor total.",
     "refundLink": "Fala connosco no Discord",
     "manage": "Gerir a subscrição no Ko-fi",
-    "supports": "A tua subscrição apoia o desenvolvimento."
+    "supports": "A tua subscrição apoia o desenvolvimento.",
+    "checkoutNote": "O pagamento é feito no Ko-fi em dólares americanos; o seu banco faz a conversão automaticamente. Utilize o mesmo e-mail da sua conta ARVIO."
   },
   "nl": {
     "headline": "ARVIO op je iPhone, iPad en laptop.",
@@ -107,7 +111,8 @@
     "refund": "Werkt het niet op je apparaat? Stuur ons binnen 7 dagen een bericht en je krijgt alles terug.",
     "refundLink": "Stuur ons een bericht op Discord",
     "manage": "Lidmaatschap beheren op Ko-fi",
-    "supports": "Je lidmaatschap steunt de ontwikkeling."
+    "supports": "Je lidmaatschap steunt de ontwikkeling.",
+    "checkoutNote": "Je betaalt via Ko-fi in Amerikaanse dollars; je bank rekent het automatisch om. Gebruik hetzelfde e-mailadres als je ARVIO-account."
   },
   "de": {
     "headline": "ARVIO auf iPhone, iPad und Laptop.",
@@ -129,7 +134,8 @@
     "refund": "Funktioniert es auf deinem Gerät nicht? Schreib uns innerhalb von 7 Tagen und du bekommst den vollen Betrag zurück.",
     "refundLink": "Schreib uns auf Discord",
     "manage": "Mitgliedschaft auf Ko-fi verwalten",
-    "supports": "Deine Mitgliedschaft unterstützt die Entwicklung."
+    "supports": "Deine Mitgliedschaft unterstützt die Entwicklung.",
+    "checkoutNote": "Bezahlt wird über Ko-fi in US-Dollar; deine Bank rechnet den Betrag automatisch um. Nutze dieselbe E-Mail-Adresse wie für dein ARVIO-Konto."
   },
   "fr": {
     "headline": "ARVIO sur votre iPhone, iPad et ordinateur portable.",
@@ -151,7 +157,8 @@
     "refund": "Ça ne fonctionne pas sur votre appareil ? Écrivez-nous dans les 7 jours pour un remboursement intégral.",
     "refundLink": "Écrivez-nous sur Discord",
     "manage": "Gérer l’abonnement sur Ko-fi",
-    "supports": "Votre abonnement soutient le développement."
+    "supports": "Votre abonnement soutient le développement.",
+    "checkoutNote": "Le paiement se fait sur Ko-fi en dollars américains ; votre banque effectue la conversion automatiquement. Utilisez la même adresse e-mail que pour votre compte ARVIO."
   },
   "it": {
     "headline": "ARVIO su iPhone, iPad e portatile.",
@@ -173,7 +180,8 @@
     "refund": "Non funziona sul tuo dispositivo? Scrivici entro 7 giorni per un rimborso completo.",
     "refundLink": "Scrivici su Discord",
     "manage": "Gestisci l’abbonamento su Ko-fi",
-    "supports": "Il tuo abbonamento sostiene lo sviluppo."
+    "supports": "Il tuo abbonamento sostiene lo sviluppo.",
+    "checkoutNote": "Il pagamento avviene su Ko-fi in dollari USA; la tua banca converte l'importo automaticamente. Usa la stessa email del tuo account ARVIO."
   },
   "pl": {
     "headline": "ARVIO na iPhonie, iPadzie i laptopie.",
@@ -195,7 +203,8 @@
     "refund": "Nie działa na Twoim urządzeniu? Napisz do nas w ciągu 7 dni, a zwrócimy całą kwotę.",
     "refundLink": "Napisz do nas na Discordzie",
     "manage": "Zarządzaj członkostwem na Ko-fi",
-    "supports": "Twoje członkostwo wspiera rozwój."
+    "supports": "Twoje członkostwo wspiera rozwój.",
+    "checkoutNote": "Płatność odbywa się przez Ko-fi w dolarach amerykańskich; Twój bank automatycznie przeliczy kwotę. Użyj tego samego adresu e-mail co w koncie ARVIO."
   },
   "tr": {
     "headline": "ARVIO iPhone, iPad ve dizüstü bilgisayarınızda.",
@@ -217,7 +226,8 @@
     "refund": "Cihazınızda çalışmıyor mu? 7 gün içinde bize yazın, ücretin tamamını iade edelim.",
     "refundLink": "Discord’da bize yazın",
     "manage": "Üyeliği Ko-fi’de yönet",
-    "supports": "Üyeliğiniz geliştirmeyi destekler."
+    "supports": "Üyeliğiniz geliştirmeyi destekler.",
+    "checkoutNote": "Ödeme Ko-fi üzerinden ABD doları ile yapılır; bankanız tutarı otomatik olarak çevirir. ARVIO hesabınızdaki e-posta adresini kullanın."
   },
   "ru": {
     "headline": "ARVIO на iPhone, iPad и ноутбуке.",
@@ -239,7 +249,8 @@
     "refund": "Не работает на вашем устройстве? Напишите нам в течение 7 дней, и мы вернём деньги полностью.",
     "refundLink": "Написать нам в Discord",
     "manage": "Управлять подпиской на Ko-fi",
-    "supports": "Ваша подписка поддерживает разработку."
+    "supports": "Ваша подписка поддерживает разработку.",
+    "checkoutNote": "Оплата проходит через Ko-fi в долларах США; ваш банк автоматически пересчитает сумму. Укажите тот же e-mail, что и в аккаунте ARVIO."
   },
   "uk": {
     "headline": "ARVIO на iPhone, iPad і ноутбуці.",
@@ -261,7 +272,8 @@
     "refund": "Не працює на вашому пристрої? Напишіть нам протягом 7 днів, і ми повернемо всю суму.",
     "refundLink": "Написати нам у Discord",
     "manage": "Керувати підпискою на Ko-fi",
-    "supports": "Ваша підписка підтримує розробку."
+    "supports": "Ваша підписка підтримує розробку.",
+    "checkoutNote": "Оплата проходить через Ko-fi у доларах США; ваш банк автоматично перерахує суму. Вкажіть ту саму електронну адресу, що й в акаунті ARVIO."
   },
   "ja": {
     "headline": "iPhone、iPad、ノートPCでARVIOを。",
@@ -283,7 +295,8 @@
     "refund": "お使いの端末で動作しない場合は、7日以内にご連絡いただければ全額返金します。",
     "refundLink": "Discordで連絡する",
     "manage": "Ko-fiでメンバーシップを管理",
-    "supports": "メンバーシップは開発の支えになります。"
+    "supports": "メンバーシップは開発の支えになります。",
+    "checkoutNote": "お支払いは Ko-fi で米ドル建てで行われ、金額はご利用の銀行が自動で換算します。ARVIO アカウントと同じメールアドレスをお使いください。"
   },
   "ko": {
     "headline": "iPhone, iPad, 노트북에서 ARVIO를.",
@@ -305,7 +318,8 @@
     "refund": "기기에서 작동하지 않나요? 7일 이내에 연락하시면 전액 환불해 드립니다.",
     "refundLink": "Discord로 문의하기",
     "manage": "Ko-fi에서 멤버십 관리",
-    "supports": "멤버십은 개발을 지원합니다."
+    "supports": "멤버십은 개발을 지원합니다.",
+    "checkoutNote": "결제는 Ko-fi에서 미국 달러로 진행되며, 금액은 은행에서 자동으로 환산됩니다. ARVIO 계정과 같은 이메일을 사용하세요."
   },
   "zh-CN": {
     "headline": "在 iPhone、iPad 和笔记本电脑上使用 ARVIO。",
@@ -327,7 +341,8 @@
     "refund": "在你的设备上无法使用？7 天内联系我们，全额退款。",
     "refundLink": "在 Discord 上联系我们",
     "manage": "在 Ko-fi 管理会员",
-    "supports": "你的会员费用于支持开发。"
+    "supports": "你的会员费用于支持开发。",
+    "checkoutNote": "通过 Ko-fi 以美元付款，银行会自动换算金额。请使用与 ARVIO 账户相同的电子邮件地址。"
   },
   "zh-TW": {
     "headline": "在 iPhone、iPad 和筆電上使用 ARVIO。",
@@ -349,7 +364,8 @@
     "refund": "在你的裝置上無法使用？7 天內聯絡我們，全額退款。",
     "refundLink": "在 Discord 上聯絡我們",
     "manage": "在 Ko-fi 管理會員",
-    "supports": "你的會員費用於支持開發。"
+    "supports": "你的會員費用於支持開發。",
+    "checkoutNote": "透過 Ko-fi 以美元付款，銀行會自動換算金額。請使用與 ARVIO 帳號相同的電子郵件地址。"
   },
   "id": {
     "headline": "ARVIO di iPhone, iPad, dan laptop Anda.",
@@ -371,7 +387,8 @@
     "refund": "Tidak berfungsi di perangkat Anda? Hubungi kami dalam 7 hari untuk pengembalian dana penuh.",
     "refundLink": "Hubungi kami di Discord",
     "manage": "Kelola keanggotaan di Ko-fi",
-    "supports": "Keanggotaan Anda mendukung pengembangan."
+    "supports": "Keanggotaan Anda mendukung pengembangan.",
+    "checkoutNote": "Pembayaran melalui Ko-fi dalam dolar AS; bank Anda mengonversinya secara otomatis. Gunakan email yang sama dengan akun ARVIO Anda."
   },
   "sv": {
     "headline": "ARVIO på din iPhone, iPad och laptop.",
@@ -393,7 +410,8 @@
     "refund": "Fungerar det inte på din enhet? Skriv till oss inom 7 dagar så får du tillbaka hela beloppet.",
     "refundLink": "Skriv till oss på Discord",
     "manage": "Hantera medlemskap på Ko-fi",
-    "supports": "Ditt medlemskap stöder utvecklingen."
+    "supports": "Ditt medlemskap stöder utvecklingen.",
+    "checkoutNote": "Du betalar via Ko-fi i amerikanska dollar; din bank räknar om beloppet automatiskt. Använd samma e-postadress som för ditt ARVIO-konto."
   },
   "da": {
     "headline": "ARVIO på din iPhone, iPad og bærbare.",
@@ -415,7 +433,8 @@
     "refund": "Virker det ikke på din enhed? Skriv til os inden for 7 dage, så får du hele beløbet tilbage.",
     "refundLink": "Skriv til os på Discord",
     "manage": "Administrer medlemskab på Ko-fi",
-    "supports": "Dit medlemskab støtter udviklingen."
+    "supports": "Dit medlemskab støtter udviklingen.",
+    "checkoutNote": "Du betaler via Ko-fi i amerikanske dollars; din bank omregner beløbet automatisk. Brug den samme e-mailadresse som på din ARVIO-konto."
   },
   "nb": {
     "headline": "ARVIO på iPhone, iPad og bærbar PC.",
@@ -437,7 +456,8 @@
     "refund": "Fungerer det ikke på enheten din? Skriv til oss innen 7 dager, så får du hele beløpet tilbake.",
     "refundLink": "Skriv til oss på Discord",
     "manage": "Administrer medlemskap på Ko-fi",
-    "supports": "Medlemskapet ditt støtter utviklingen."
+    "supports": "Medlemskapet ditt støtter utviklingen.",
+    "checkoutNote": "Du betaler via Ko-fi i amerikanske dollar; banken din regner om beløpet automatisk. Bruk samme e-postadresse som på ARVIO-kontoen din."
   },
   "fi": {
     "headline": "ARVIO iPhonessa, iPadissa ja kannettavassa.",
@@ -459,7 +479,8 @@
     "refund": "Eikö se toimi laitteellasi? Ota yhteyttä 7 päivän kuluessa, niin palautamme koko summan.",
     "refundLink": "Ota yhteyttä Discordissa",
     "manage": "Hallinnoi jäsenyyttä Ko-fissa",
-    "supports": "Jäsenyytesi tukee kehitystä."
+    "supports": "Jäsenyytesi tukee kehitystä.",
+    "checkoutNote": "Maksu tehdään Ko-fissa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti. Käytä samaa sähköpostiosoitetta kuin ARVIO-tililläsi."
   },
   "cs": {
     "headline": "ARVIO na iPhonu, iPadu i notebooku.",
@@ -481,7 +502,8 @@
     "refund": "Nefunguje to na vašem zařízení? Napište nám do 7 dnů a vrátíme vám celou částku.",
     "refundLink": "Napište nám na Discordu",
     "manage": "Spravovat členství na Ko-fi",
-    "supports": "Vaše členství podporuje vývoj."
+    "supports": "Vaše členství podporuje vývoj.",
+    "checkoutNote": "Platba probíhá přes Ko-fi v amerických dolarech; banka částku automaticky přepočítá. Použijte stejný e-mail jako u účtu ARVIO."
   },
   "ro": {
     "headline": "ARVIO pe iPhone, iPad și laptop.",
@@ -503,7 +525,8 @@
     "refund": "Nu funcționează pe dispozitivul tău? Scrie-ne în 7 zile și îți returnăm toți banii.",
     "refundLink": "Scrie-ne pe Discord",
     "manage": "Gestionează abonamentul pe Ko-fi",
-    "supports": "Abonamentul tău susține dezvoltarea."
+    "supports": "Abonamentul tău susține dezvoltarea.",
+    "checkoutNote": "Plata se face prin Ko-fi în dolari americani; banca ta face conversia automat. Folosește același e-mail ca la contul ARVIO."
   },
   "hu": {
     "headline": "ARVIO iPhone-on, iPaden és laptopon.",
@@ -525,7 +548,8 @@
     "refund": "Nem működik az eszközödön? Írj nekünk 7 napon belül, és a teljes összeget visszatérítjük.",
     "refundLink": "Írj nekünk a Discordon",
     "manage": "Tagság kezelése a Ko-fin",
-    "supports": "A tagságod a fejlesztést támogatja."
+    "supports": "A tagságod a fejlesztést támogatja.",
+    "checkoutNote": "A fizetés a Ko-fin keresztül, amerikai dollárban történik; a bankod automatikusan átváltja az összeget. Ugyanazt az e-mail-címet használd, mint az ARVIO-fiókodnál."
   },
   "el": {
     "headline": "Το ARVIO στο iPhone, το iPad και το laptop σας.",
@@ -547,7 +571,8 @@
     "refund": "Δεν λειτουργεί στη συσκευή σας; Στείλτε μας μήνυμα μέσα σε 7 ημέρες για πλήρη επιστροφή χρημάτων.",
     "refundLink": "Στείλτε μας μήνυμα στο Discord",
     "manage": "Διαχείριση συνδρομής στο Ko-fi",
-    "supports": "Η συνδρομή σας στηρίζει την ανάπτυξη."
+    "supports": "Η συνδρομή σας στηρίζει την ανάπτυξη.",
+    "checkoutNote": "Η πληρωμή γίνεται μέσω Ko-fi σε δολάρια ΗΠΑ· η τράπεζά σας κάνει αυτόματα τη μετατροπή. Χρησιμοποιήστε το ίδιο email με τον λογαριασμό σας στο ARVIO."
   },
   "ar": {
     "headline": "ARVIO على iPhone وiPad والكمبيوتر المحمول.",
@@ -569,7 +594,8 @@
     "refund": "لا يعمل على جهازك؟ راسلنا خلال 7 أيام لاسترداد المبلغ كاملًا.",
     "refundLink": "راسلنا على Discord",
     "manage": "إدارة العضوية على Ko-fi",
-    "supports": "عضويتك تدعم التطوير."
+    "supports": "عضويتك تدعم التطوير.",
+    "checkoutNote": "يتم الدفع عبر Ko-fi بالدولار الأمريكي، ويحوّل مصرفك المبلغ تلقائيًا. استخدم البريد الإلكتروني نفسه المسجّل في حساب ARVIO."
   },
   "he": {
     "headline": "ARVIO ב-iPhone, ב-iPad ובמחשב הנייד.",
@@ -591,7 +617,8 @@
     "refund": "לא עובד במכשיר שלכם? כתבו לנו תוך 7 ימים ונחזיר את מלוא הסכום.",
     "refundLink": "כתבו לנו ב-Discord",
     "manage": "ניהול המנוי ב-Ko-fi",
-    "supports": "המנוי שלכם תומך בפיתוח."
+    "supports": "המנוי שלכם תומך בפיתוח.",
+    "checkoutNote": "התשלום מתבצע דרך Ko-fi בדולרים אמריקאיים, והבנק שלך ממיר את הסכום אוטומטית. השתמש באותה כתובת אימייל כמו בחשבון ARVIO שלך."
   },
   "hi": {
     "headline": "आपके iPhone, iPad और लैपटॉप पर ARVIO।",
@@ -613,7 +640,8 @@
     "refund": "आपके डिवाइस पर काम नहीं करता? 7 दिनों के भीतर हमें संदेश भेजें, पूरा पैसा वापस मिलेगा।",
     "refundLink": "Discord पर हमें संदेश भेजें",
     "manage": "Ko-fi पर सदस्यता प्रबंधित करें",
-    "supports": "आपकी सदस्यता विकास में मदद करती है।"
+    "supports": "आपकी सदस्यता विकास में मदद करती है।",
+    "checkoutNote": "भुगतान Ko-fi पर अमेरिकी डॉलर में होता है; आपका बैंक राशि अपने-आप बदल देता है। वही ईमेल इस्तेमाल करें जो आपके ARVIO खाते में है।"
   },
   "vi": {
     "headline": "ARVIO trên iPhone, iPad và laptop của bạn.",
@@ -635,7 +663,8 @@
     "refund": "Không chạy được trên thiết bị của bạn? Nhắn cho chúng tôi trong vòng 7 ngày để được hoàn tiền đầy đủ.",
     "refundLink": "Nhắn cho chúng tôi trên Discord",
     "manage": "Quản lý gói thành viên trên Ko-fi",
-    "supports": "Gói thành viên của bạn hỗ trợ việc phát triển."
+    "supports": "Gói thành viên của bạn hỗ trợ việc phát triển.",
+    "checkoutNote": "Thanh toán qua Ko-fi bằng đô la Mỹ; ngân hàng của bạn sẽ tự động quy đổi. Hãy dùng cùng email với tài khoản ARVIO của bạn."
   },
   "th": {
     "headline": "ใช้ ARVIO บน iPhone, iPad และแล็ปท็อป",
@@ -657,6 +686,7 @@
     "refund": "ใช้งานบนอุปกรณ์ของคุณไม่ได้ใช่ไหม ติดต่อเราภายใน 7 วันเพื่อรับเงินคืนเต็มจำนวน",
     "refundLink": "ติดต่อเราทาง Discord",
     "manage": "จัดการสมาชิกบน Ko-fi",
-    "supports": "การเป็นสมาชิกของคุณช่วยสนับสนุนการพัฒนา"
+    "supports": "การเป็นสมาชิกของคุณช่วยสนับสนุนการพัฒนา",
+    "checkoutNote": "ชำระเงินผ่าน Ko-fi เป็นดอลลาร์สหรัฐ ธนาคารของคุณจะแปลงยอดเงินให้อัตโนมัติ โปรดใช้อีเมลเดียวกับบัญชี ARVIO ของคุณ"
   }
 }

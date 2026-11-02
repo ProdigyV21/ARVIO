@@ -23,6 +23,7 @@ import com.arflix.tv.data.model.IptvVodSourceIds
 import com.arflix.tv.data.model.isDirectStreamUrl
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
+import com.arflix.tv.data.repository.AddonNotice
 import com.arflix.tv.data.repository.YouTubeCollection
 import com.arflix.tv.data.repository.KidsContentFilter
 import com.arflix.tv.data.repository.MediaRepository
@@ -74,6 +75,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -199,7 +201,14 @@ data class PlayerUiState(
     val autoSync: SubtitleAutoSync? = null,
     val autoSyncSubtitleKey: String? = null,
     val savedPosition: Long = 0,
+    val expectedDurationMs: Long = 0,
+    val isLoadingPlaybackMetadata: Boolean = false,
     val preferredAudioLanguage: String = "en",
+    // The language a source's badge puts first: the chosen audio language, or null (the device
+    // language) under "Auto"/"None", the same as the details screen's source list.
+    val sourceBadgeLanguage: String? = null,
+    // Addon messages ("[❌] Comet — invalid API key") listed under the sources in the source menu.
+    val addonNotices: List<AddonNotice> = emptyList(),
     val preferredSubtitleLang: String = "",
     val secondarySubtitleLang: String = "",
     val frameRateMatchingMode: String = "Off",
@@ -365,6 +374,10 @@ class PlayerViewModel @Inject constructor(
     // True only when the user explicitly picked a subtitle track from the menu (not AI/auto-match).
     // A late-arriving embedded preferred-language track overrides auto selections but never this.
     private var userPickedSubtitle: Boolean = false
+    // provider|base-id of the user's menu pick, including while its local copy downloads.
+    // Automatic writers are gated at their entry points, never by rewriting StateFlow emissions.
+    // Explicit AI, Find best match, subtitles off, and media/source changes release the lock.
+    private var userLockedSubtitleKey: String? = null
     private var playbackSessionStartTime: Long = 0L
     private val recentSourcePlayTracker = RecentSourcePlayTracker()
     private var recentSourceLoad: Deferred<RecentPlayedSource?>? = null
@@ -373,6 +386,10 @@ class PlayerViewModel @Inject constructor(
     // The source whose URL the player has loaded. selectStream() names its pick in selectedStream
     // at once, but the old video keeps playing until the new URL is resolved and applied.
     private var preparedStream: StreamSource? = null
+    // The selected source as the addon listed it. Torrentio, Comet … links are swapped for the
+    // debrid server's own URL before playback; failover checks hosts by the listed URL.
+    private var listedSelectedStream: StreamSource? = null
+    private var confirmedStartupMs = 0L
     private var recentSourceClock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
 
     private fun isCurrentAnime(): Boolean =
@@ -475,7 +492,7 @@ class PlayerViewModel @Inject constructor(
     private var aiSourceSubtitle: Subtitle? = null
     // AI sources proven at runtime to carry no text (image tracks whose MIME/label didn't say so).
     // Per-file state: cleared on every new media/stream so it can't leak across sources.
-    private val untranslatableSourceIds = mutableSetOf<String>()
+    private val untranslatableSourceKeys = mutableSetOf<String>()
 
     /** Shared with [translationManager]; also used directly for AI subtitle line-matching. */
     private val translationService = SubtitleTranslationService(
@@ -489,7 +506,19 @@ class PlayerViewModel @Inject constructor(
         scope = viewModelScope
     ).also { mgr ->
         mgr.onTranslatingChanged = { isTranslating -> _isTranslatingLive.value = isTranslating }
-        mgr.onUntranslatableSource = { viewModelScope.launch { onAiSourceUntranslatable() } }
+        mgr.onUntranslatableSource = {
+            // Several renderer callbacks can queue before Main switches to the next source.
+            // A second callback for the old source must not blacklist the new one.
+            // Known boundary: the callback carries no track identity, so a cue still rendering
+            // from the abandoned image track during the switch window is indistinguishable from
+            // a source change. Closing that needs a source id in the renderer contract.
+            val sourceKey = _uiState.value.selectedSubtitle?.let(SubtitleSelectionPolicy::key)
+            viewModelScope.launch {
+                if (sourceKey != null && aiSourceSubtitle?.let(SubtitleSelectionPolicy::key) == sourceKey) {
+                    onAiSourceUntranslatable()
+                }
+            }
+        }
         mgr.onBatchResult = { success, errorMessage ->
             // Content-policy blocks are not actionable (Gemini's non-configurable output filter
             // on raw movie dialogue) and don't stop translation of other windows — the service
@@ -775,6 +804,7 @@ class PlayerViewModel @Inject constructor(
         resetPlaybackClock()
         hasManualSubtitleSelection = false
         userPickedSubtitle = false
+        userLockedSubtitleKey = null
         autoMatchAttempted = false
         aiSourceSubtitle = null
         val cachedItem = mediaRepository.getCachedItem(mediaType, mediaId)
@@ -807,6 +837,8 @@ class PlayerViewModel @Inject constructor(
             episodeTitle = currentEpisodeTitle,
             overview = cachedOverview,
             seasonEpisodes = cachedSeasonEpisodes,
+            expectedDurationMs = (cachedEpisode?.runtime ?: 0).coerceAtLeast(0) * 60_000L,
+            isLoadingPlaybackMetadata = mediaId > 0 && !isLiveStreamPlayback,
             streamProgress = null,
             streamLoadPhase = if (providedStreamUrl.isNullOrBlank()) null else PlayerMessage.Res(R.string.player_phase_preparing_stream),
             sourceSearchActive = false,
@@ -893,7 +925,7 @@ class PlayerViewModel @Inject constructor(
             translationManager.updateService(apiKey = aiApiKey, model = aiModel)
             translationManager.removeHearingImpaired = aiRemoveHearingImpaired
             translationManager.isEnabled = false
-            untranslatableSourceIds.clear()
+            untranslatableSourceKeys.clear()
             translationManager.reset()
 
             val autoSkipIntro = prefs[profileManager.profileBooleanKey("auto_skip_intro")] ?: false
@@ -908,6 +940,8 @@ class PlayerViewModel @Inject constructor(
                 episodeTitle = currentEpisodeTitle,
                 overview = cachedOverview,
                 seasonEpisodes = cachedSeasonEpisodes,
+                expectedDurationMs = (cachedEpisode?.runtime ?: 0).coerceAtLeast(0) * 60_000L,
+                isLoadingPlaybackMetadata = mediaId > 0 && !isLiveStreamPlayback,
                 isLoading = true,
                 isLoadingStreams = true,
                 sourceSearchActive = true,
@@ -918,6 +952,7 @@ class PlayerViewModel @Inject constructor(
                 logoUrl = cachedLogoUrl,
                 addonOrderedIds = orderedAddonIds,
                 preferredAudioLanguage = preferredAudioLanguage,
+                sourceBadgeLanguage = resolveSourceBadgeLanguage(),
                 preferredSubtitleLang = preferredSub,
                 secondarySubtitleLang = secondarySub,
                 frameRateMatchingMode = frameRateMatchingMode,
@@ -1041,6 +1076,7 @@ class PlayerViewModel @Inject constructor(
                     savedPosition = resumeData.positionMs
                 )
                 preparedStream = resolvedProvidedStream
+                listedSelectedStream = null
                 prefetchSubtitleIndex(onlyForAutoScan = true)
                 audioSyncOnStream()
                 // NOTE: these background children share the load job — an uncaught exception in
@@ -1069,29 +1105,41 @@ class PlayerViewModel @Inject constructor(
                 homeServerAppendJob?.cancel()
                 if (!isYouTubeVideo() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.HOME_SERVER)) {
                     homeServerAppendJob = launch {
-                        runCatching {
-                            appendHomeServerSourcesInBackground(
-                                mediaType = mediaType,
-                                imdbId = currentImdbId,
-                                seasonNumber = seasonNumber,
-                                episodeNumber = episodeNumber,
-                                timeoutMs = 20_000L
+                        try {
+                            runCatching {
+                                appendHomeServerSourcesInBackground(
+                                    mediaType = mediaType,
+                                    imdbId = currentImdbId,
+                                    seasonNumber = seasonNumber,
+                                    episodeNumber = episodeNumber,
+                                    timeoutMs = 20_000L
+                                )
+                            }.onFailure(childFailed("homeServerAppend"))
+                        } finally {
+                            if (currentCoroutineContext().isActive) finishSupplementalSourceLookupIfReady(
+                                currentCoroutineContext()[Job], PlayerMessage.Res(R.string.player_error_no_streams_media_servers)
                             )
-                        }.onFailure(childFailed("homeServerAppend"))
+                        }
                     }
                 }
                 vodAppendJob?.cancel()
                 if (!isYouTubeVideo() && streamIntegrationRepository.isIntegrationEnabled(StreamIntegrationType.IPTV_VOD)) {
                     vodAppendJob = launch {
-                        runCatching {
-                            appendVodSourceInBackground(
-                                mediaType = mediaType,
-                                imdbId = currentImdbId,
-                                seasonNumber = seasonNumber,
-                                episodeNumber = episodeNumber,
-                                timeoutMs = 15_000L
+                        try {
+                            runCatching {
+                                appendVodSourceInBackground(
+                                    mediaType = mediaType,
+                                    imdbId = currentImdbId,
+                                    seasonNumber = seasonNumber,
+                                    episodeNumber = episodeNumber,
+                                    timeoutMs = 15_000L
+                                )
+                            }.onFailure(childFailed("vodAppend"))
+                        } finally {
+                            if (currentCoroutineContext().isActive) finishSupplementalSourceLookupIfReady(
+                                currentCoroutineContext()[Job], PlayerMessage.Res(R.string.player_error_no_streams_other_source)
                             )
-                        }.onFailure(childFailed("vodAppend"))
+                        }
                     }
                 }
                 // Fetch metadata in background
@@ -1493,6 +1541,7 @@ class PlayerViewModel @Inject constructor(
                             isLoadingSubtitles = false,
                             sourceSearchActive = false,
                             streams = emptyList(),
+                            addonNotices = emptyList(),
                             streamProgress = null,
                             streamLoadPhase = null,
                             error = PlayerMessage.Res(R.string.player_error_no_streams_from_addons)
@@ -1647,11 +1696,12 @@ class PlayerViewModel @Inject constructor(
                         isLoadingStreams = availability == PlayerAutoplayAvailability.SEARCHING,
                         sourceSearchActive = !progressive.isFinal || supplementalSourcesStillLoading,
                         streams = mergedStreams,
+                        addonNotices = progressive.notices,
                         subtitles = filteredSubtitles,
                         error = errorMessage,
                         isSetupError = availability == PlayerAutoplayAvailability.NO_SOURCES &&
                             streamingAddonCount == 0 && !pluginSearchStarted &&
-                            !hasHomeServerConnections &&
+                            !hasHomeServerConnections && !hasIptvVodProviders &&
                             !supplementalSourcesStillLoading,
                         streamProgress = if (progressive.isFinal) null else progressFraction,
                         streamLoadPhase = phaseLabel
@@ -1873,6 +1923,7 @@ class PlayerViewModel @Inject constructor(
             var overview: String? = null
             var releaseYear: String? = null
             var fetchedSeasonEpisodes = emptyList<com.arflix.tv.data.model.Episode>()
+            var runtimeMinutes = 0
 
             if (mediaType == MediaType.TV) {
                 val tvDetails = details as com.arflix.tv.data.api.TmdbTvDetails
@@ -1893,6 +1944,7 @@ class PlayerViewModel @Inject constructor(
                         emptyList()
                     }
                     val matchingEpisode = currentPlayerEpisode(fetchedSeasonEpisodes, season, episode)
+                    runtimeMinutes = matchingEpisode?.runtime ?: 0
                     var episodeTitle = matchingEpisode?.name?.takeIf { it.isNotBlank() }
                     var episodeOverview = matchingEpisode?.overview?.takeIf { it.isNotBlank() }
                     if (episodeOverview == null || episodeTitle == null) {
@@ -1906,6 +1958,7 @@ class PlayerViewModel @Inject constructor(
                         }
                         episodeTitle = episodeTitle ?: episodeDetails?.name?.takeIf { it.isNotBlank() }
                         episodeOverview = episodeOverview ?: episodeDetails?.overview?.takeIf { it.isNotBlank() }
+                        if (runtimeMinutes <= 0) runtimeMinutes = episodeDetails?.runtime ?: 0
                     }
                     if (playbackSessionStartTime != sessionStart) return
                     currentEpisodeTitle = episodeTitle
@@ -1919,6 +1972,7 @@ class PlayerViewModel @Inject constructor(
                 currentOriginalLanguage = movieDetails.originalLanguage ?: currentOriginalLanguage
                 overview = movieDetails.overview
                 releaseYear = movieDetails.releaseDate?.take(4)
+                runtimeMinutes = movieDetails.runtime ?: 0
             }
 
             // A late response must never replace the next video's episode metadata.
@@ -1943,6 +1997,7 @@ class PlayerViewModel @Inject constructor(
                 episodeTitle = currentEpisodeTitle,
                 overview = overview,
                 releaseYear = releaseYear,
+                expectedDurationMs = runtimeMinutes.coerceAtLeast(0) * 60_000L,
                 seasonEpisodes = if (mediaType == MediaType.TV && fetchedSeasonEpisodes.isNotEmpty()) fetchedSeasonEpisodes else _uiState.value.seasonEpisodes,
                 preferredAudioLanguage = resolvePreferredAudioLanguage()
             )
@@ -1950,6 +2005,12 @@ class PlayerViewModel @Inject constructor(
             if (e is kotlinx.coroutines.CancellationException) throw e
 
             // Failed to fetch metadata
+        } finally {
+            if (playbackSessionStartTime == sessionStart && currentMediaType == mediaType &&
+                currentMediaId == mediaId && currentSeason == season && currentEpisode == episode
+            ) {
+                _uiState.value = _uiState.value.copy(isLoadingPlaybackMetadata = false)
+            }
         }
     }
 
@@ -2045,7 +2106,7 @@ class PlayerViewModel @Inject constructor(
     // Tries primary language first; if nothing matches, tries secondary; falls back to full list.
     private suspend fun filterSubsByPreferredLanguage(subs: List<Subtitle>): List<Subtitle> {
         subs.forEach { subtitle ->
-            subtitleMenuCandidates[subtitle.id.ifBlank { subtitle.url }] = subtitle
+            subtitleMenuCandidates["${subtitle.provider}|${subtitle.id.ifBlank { subtitle.url }}"] = subtitle
         }
         val prefs = runCatching { context.settingsDataStore.data.first() }.getOrNull() ?: return subs
         val enabled = prefs[filterSubtitlesByLanguageKey()] ?: true
@@ -2080,7 +2141,7 @@ class PlayerViewModel @Inject constructor(
         // and represent tracks the device actually has, not fetched addons.
         val combined = subs.filter { sub ->
             sub.isEmbedded || targetLanguages.any { lang -> matchesLang(sub, lang) }
-        }.distinctBy { it.id }
+        }.distinctBy { it.provider to it.id }
         return combined.ifEmpty { subs }
     }
 
@@ -2127,6 +2188,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun applyPreferredSubtitle(preference: String, subtitles: List<Subtitle>, fallbackLanguage: String?) {
+        if (userLockedSubtitleKey != null) return
         val normalizedPref = normalizeLanguage(preference)
         if (normalizedPref.isNotBlank() && !isSubtitleDisabledPreference(preference)) {
             setTargetSubtitleLang(normalizedPref)
@@ -2448,29 +2510,13 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
-    private fun findAiSourceSubtitle(subtitles: List<Subtitle>): Subtitle? {
-        // Some files label forced tracks "SUBFORCED" without setting SELECTION_FLAG_FORCED
-        fun Subtitle.isEffectivelyForced() = isForced || label.contains("forced", ignoreCase = true)
-        // Bitmap subtitles (PGS/VOBSUB) are images with no text — they can't be translated,
-        // so they must never be chosen as the AI source (would render a blank screen).
-        fun Subtitle.isUsableSource() = !isEffectivelyForced() && !isBitmap && id !in untranslatableSourceIds
-        fun List<Subtitle>.bestEmbedded(): Subtitle? {
-            val embedded = filter { it.isEmbedded }
-            // Prefer plain > SDH/CC; never use forced-only or image-based tracks as AI source
-            return embedded.firstOrNull { it.isUsableSource() && !it.label.contains("SDH", ignoreCase = true) && !it.label.contains("CC", ignoreCase = true) }
-                ?: embedded.firstOrNull { it.isUsableSource() }
-        }
-
-        // AI translation only ever translates a BUILT-IN (embedded) track — English first, else any
-        // other embedded foreign-language track. It must NEVER use an EXTERNAL addon sub as source
-        // (unverified timing, and when the user has target-language addon subs the app should
-        // pick/verify one of those or use the hearing scan — not AI-translate an English addon).
-        // So "no embedded source ⇒ no AI translation": the scan then falls to hearing (if a Gemini
-        // key + AI feature are on), then to the top release-name-scored addon sub.
-        return subtitles.filter { normalizeLanguage(it.lang) == "en" }.bestEmbedded()
-            ?: subtitles.filter { it.lang.isNotBlank() }.bestEmbedded()
-            ?: subtitles.bestEmbedded()
-    }
+    private fun findAiSourceSubtitle(subtitles: List<Subtitle>): Subtitle? =
+        SubtitleSelectionPolicy.aiSource(
+            subtitles,
+            targetSubtitleLangCode.ifBlank { _uiState.value.aiTargetLanguageName },
+            untranslatableSourceKeys,
+            ::normalizeLanguage
+        )
 
     private fun languageCodeToName(code: String): String {
         return when (code.lowercase().trim()) {
@@ -2631,9 +2677,7 @@ class PlayerViewModel @Inject constructor(
         val addonId = _uiState.value.selectedStream?.addonId?.trim()
             .takeUnless { it.isNullOrBlank() }
             ?: currentPreferredAddonId.orEmpty()
-        if (addonId.isNotBlank()) {
-            streamRepository.noteAddonPlaybackStarted(addonId, startupMs)
-        }
+        confirmedStartupMs = startupMs
         Log.i(
             TAG,
             "Playback started addonId=${addonId.ifBlank { "unknown" }} " +
@@ -2646,16 +2690,6 @@ class PlayerViewModel @Inject constructor(
             severity = "info"
         )
         viewModelScope.launch {
-            _uiState.value.selectedStream?.let { stream ->
-                streamRepository.notePlaybackHostSuccess(stream)
-                streamRepository.saveLastGoodPlaybackPreference(
-                    mediaType = currentMediaType,
-                    tmdbId = currentMediaId,
-                    season = currentSeason,
-                    episode = currentEpisode,
-                    stream = stream
-                )
-            }
             playbackTelemetryRepository.recordStartup(
                 startupMs = startupMs,
                 retries = startupRetries,
@@ -2664,15 +2698,44 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun onSelectedStreamPlaybackFailure() {
+    /**
+     * The started source is the real video, not an addon's placeholder clip (the player checks
+     * that once its length is known, which can be after the first frame). Only now does it count
+     * as a working source for its addon and host.
+     */
+    fun onSelectedSourceConfirmed() {
+        val stream = _uiState.value.selectedStream ?: return
+        val addonId = stream.addonId.trim().ifBlank { currentPreferredAddonId.orEmpty() }
+        if (addonId.isNotBlank()) {
+            streamRepository.noteAddonPlaybackStarted(addonId, confirmedStartupMs)
+        }
+        val listed = listedSelectedStream
+        viewModelScope.launch {
+            streamRepository.notePlaybackHostSuccess(stream)
+            listed?.takeIf { it.url != stream.url }?.let(streamRepository::notePlaybackHostSuccess)
+            streamRepository.saveLastGoodPlaybackPreference(
+                mediaType = currentMediaType,
+                tmdbId = currentMediaId,
+                season = currentSeason,
+                episode = currentEpisode,
+                stream = stream
+            )
+        }
+    }
+
+    fun onSelectedStreamPlaybackFailure(reportError: Boolean = true) {
         val addonId = _uiState.value.selectedStream?.addonId?.trim()
             .takeUnless { it.isNullOrBlank() }
             ?: currentPreferredAddonId.orEmpty()
         if (addonId.isNotBlank()) {
             streamRepository.noteAddonPlaybackFailure(addonId)
         }
-        streamRepository.notePlaybackHostFailure(_uiState.value.selectedStream, "exo_playback_failure")
-        AppLogger.recordException(
+        val selected = _uiState.value.selectedStream
+        streamRepository.notePlaybackHostFailure(selected, "exo_playback_failure")
+        listedSelectedStream?.takeIf { it.url != selected?.url }?.let {
+            streamRepository.notePlaybackHostFailure(it, "exo_playback_failure_listed")
+        }
+        if (reportError) AppLogger.recordException(
             throwable = IllegalStateException("Selected stream playback failed"),
             context = playbackDiagnosticContext(
                 phase = "selected_stream_playback_failure",
@@ -2699,6 +2762,13 @@ class PlayerViewModel @Inject constructor(
             playbackTelemetryRepository.recordLongRebuffer()
         }
     }
+
+    private suspend fun resolveSourceBadgeLanguage(): String? = runCatching {
+        context.settingsDataStore.data.first()[defaultAudioLanguageKey()]
+    }.getOrNull()
+        ?.trim()
+        ?.takeUnless { it.isBlank() || it.startsWith("Auto", ignoreCase = true) || it.equals("None", ignoreCase = true) }
+        ?.let(::normalizeLanguageCode)
 
     private suspend fun resolvePreferredAudioLanguage(): String {
         val setting = runCatching {
@@ -3064,6 +3134,7 @@ class PlayerViewModel @Inject constructor(
         subtitleMenuCandidates.entries.removeAll { it.value.isEmbedded }
         streamSelectionJob?.cancel()
         playbackErrorReportJob?.cancel()
+        listedSelectedStream = stream
         streamSelectionJob = viewModelScope.launch {
             val selectionStartMs = System.currentTimeMillis()
             val requestedResumePosition = resumePositionMs?.coerceAtLeast(0L)
@@ -3186,9 +3257,10 @@ class PlayerViewModel @Inject constructor(
             resetPlaybackClock()
             hasManualSubtitleSelection = false
             userPickedSubtitle = false
+            userLockedSubtitleKey = null
             autoMatchAttempted = false
             aiSourceSubtitle = null
-            untranslatableSourceIds.clear()
+            untranslatableSourceKeys.clear()
             translationManager.isEnabled = false
 
             // Direct URL - use immediately (ExoPlayer handles redirects)
@@ -3362,11 +3434,11 @@ class PlayerViewModel @Inject constructor(
         playerTextTracksResolved = true
         viewModelScope.launch {
             val current = _uiState.value.subtitles
-            val trackBackedIds = playerTextTracks.map { it.id }.toSet()
+            val trackBackedIds = playerTextTracks.map { it.provider to it.id }.toSet()
 
             // Keep external subtitle entries that haven't been mapped to concrete track indices yet.
             val unresolvedExternal = current.filter { subtitle ->
-                !subtitle.isEmbedded && subtitle.url.isNotBlank() && subtitle.id !in trackBackedIds
+                !subtitle.isEmbedded && subtitle.url.isNotBlank() && (subtitle.provider to subtitle.id) !in trackBackedIds
             }
 
             // Preserve existing embedded subs when playerTextTracks has none — ExoPlayer fires
@@ -3381,8 +3453,7 @@ class PlayerViewModel @Inject constructor(
             val merged = (effectiveEmbedded + playerTextTracks.filter { !it.isEmbedded } + unresolvedExternal)
                 .distinctBy { subtitle ->
                     val normalizedId = subtitle.id.trim()
-                    if (normalizedId.isNotBlank()) normalizedId
-                    else "${subtitle.lang}|${subtitle.label}|${subtitle.url}"
+                    subtitle.provider to normalizedId.ifBlank { "${subtitle.lang}|${subtitle.label}|${subtitle.url}" }
                 }
 
             // Apply the same language filter used for fetched external subs so that
@@ -3392,35 +3463,20 @@ class PlayerViewModel @Inject constructor(
             // Always keep the currently selected subtitle visible even if it doesn't
             // match the preferred language filter so the active selection stays consistent.
             val selected = _uiState.value.selectedSubtitle
-            val finalList = if (selected != null && filtered.none { it.id == selected.id }) {
-                (filtered + selected).distinctBy { s ->
-                    s.id.trim().ifBlank { "${s.lang}|${s.label}|${s.url}" }
-                }
-            } else {
-                filtered
-            }
+            // Resolve against the fresh list BEFORE appending the old selection: otherwise its
+            // stale embedded id matches itself and prevents re-indexing after a MediaItem rebuild.
+            val resolvedSelected = SubtitleSelectionPolicy.resolveSelected(selected, filtered)
+            val finalList = if (resolvedSelected != null && filtered.none {
+                    it.provider == resolvedSelected.provider && it.id == resolvedSelected.id
+                }) filtered + resolvedSelected else filtered
 
-            val resolvedSelected = if (selected != null) {
-                if (!selected.isEmbedded && selected.url.startsWith("file:")) {
-                    // A matched subtitle localized to a cache file — keep it as-is. Remapping to
-                    // the addon-list entry (same id) would swap the URL back to the remote server
-                    // and re-trigger a MediaItem rebuild with the slow remote source.
-                    selected
-                } else {
-                    finalList.firstOrNull { it.id == selected.id }
-                        ?: finalList.firstOrNull { selected.url.isNotBlank() && it.url == selected.url }
-                        // After MediaItem rebuild groupIndex can change, making generated IDs stale.
-                        // Fall back to lang+label match for embedded subs so the nonce-based
-                        // LaunchedEffect fires with the freshly-indexed version.
-                        ?: if (selected.isEmbedded) finalList.firstOrNull {
-                            it.isEmbedded && it.lang == selected.lang && it.label == selected.label
-                        } else null
-                        ?: selected
-                }
-            } else {
-                null
-            }
-
+            // Only the same provider's re-indexed track may carry the user's lock forward.
+            if (selected != null && resolvedSelected != null &&
+                userLockedSubtitleKey == SubtitleSelectionPolicy.key(selected)
+            ) userLockedSubtitleKey = SubtitleSelectionPolicy.key(resolvedSelected)
+            if (selected != null && resolvedSelected != null && _uiState.value.isAiTranslating &&
+                aiSourceSubtitle?.let(SubtitleSelectionPolicy::key) == SubtitleSelectionPolicy.key(selected)
+            ) aiSourceSubtitle = resolvedSelected
             _uiState.value = _uiState.value.copy(
                 subtitles = finalList,
                 selectedSubtitle = resolvedSelected
@@ -3457,7 +3513,7 @@ class PlayerViewModel @Inject constructor(
                 findAiSourceSubtitle(finalList) != null
             ) {
                 Log.i("SubMatch", "late AI interim: embedded source arrived mid-scan, nothing on screen")
-                activateAiTranslation()
+                activateAiTranslation(isUserAction = false)
             }
 
             val currentSel = _uiState.value.selectedSubtitle
@@ -3488,7 +3544,9 @@ class PlayerViewModel @Inject constructor(
                         )
                     }
             }
-            if (shouldReapply) {
+            // A late embedded track must not cancel the user's pending local decode, even if
+            // applyPreferredSubtitle itself would decline to change the locked selection.
+            if (shouldReapply && userLockedSubtitleKey == null) {
                 subtitleSelectionJob?.cancel()
                 cancelSubtitleLocalization()
                 applyPreferredSubtitle(preferred, finalList, currentOriginalLanguage)
@@ -3497,8 +3555,16 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun selectSubtitle(subtitle: Subtitle, isUserAction: Boolean = true) {
+        val locked = userLockedSubtitleKey
+        if (!isUserAction && locked != null &&
+            (SubtitleSelectionPolicy.key(subtitle) != locked || subtitleLocalizeJob?.isActive == true)
+        ) {
+            Log.i("SubMatch", "automatic pick \"${subtitle.label}\" ignored: the user owns this selection")
+            return
+        }
+        if (isUserAction) userLockedSubtitleKey = SubtitleSelectionPolicy.key(subtitle)
         hasManualSubtitleSelection = true
-        userPickedSubtitle = isUserAction
+        userPickedSubtitle = isUserAction || locked != null
         if (isUserAction) {
             // The user's own pick — the ground truth a scan verdict is judged against.
             Log.i(
@@ -3742,7 +3808,7 @@ class PlayerViewModel @Inject constructor(
             val filtered = filterSubsByPreferredLanguage(subtitleMenuCandidates.values.toList())
             val selected = _uiState.value.selectedSubtitle
             _uiState.value = _uiState.value.copy(
-                subtitles = (filtered + listOfNotNull(selected)).distinctBy { it.id }
+                subtitles = (filtered + listOfNotNull(selected)).distinctBy { it.provider to it.id }
             )
         }
     }
@@ -3839,7 +3905,7 @@ class PlayerViewModel @Inject constructor(
         if (aiFindBestMatchFirst) {
             runFindBestMatch(isUserAction = false)
         } else {
-            activateAiTranslation()
+            activateAiTranslation(isUserAction = false)
         }
     }
 
@@ -3848,6 +3914,16 @@ class PlayerViewModel @Inject constructor(
      * found, fall back to the AI translation option when one is available.
      */
     fun runFindBestMatch(isUserAction: Boolean = true) {
+        if (!isUserAction && userLockedSubtitleKey != null) {
+            Log.i("SubMatch", "auto scan skipped: the user chose a subtitle track")
+            return
+        }
+        if (isUserAction) {
+            userLockedSubtitleKey = null
+            userPickedSubtitle = false
+            subtitleSelectionJob?.cancel()
+            cancelSubtitleLocalization()
+        }
         // The timing-based scan is AI-independent — no aiSubtitleEnabled gate. Only the optional
         // AI interim below and the hearing fallback (gated at the scoring dispatch) need AI.
         // A user-triggered rescan means the current (possibly remembered) pick is unwanted —
@@ -3862,12 +3938,12 @@ class PlayerViewModel @Inject constructor(
         // AI translation entirely: the scan runs "silent" (reference cues hidden, zero AI/API
         // usage) and falls back to whatever was selected before.
         val source = if (aiSubtitleEnabled && aiSubtitleAutoSelect) {
-            findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle
+            findAiSourceSubtitle(_uiState.value.subtitles) ?: findAiSourceSubtitle(listOfNotNull(aiSourceSubtitle))
         } else {
             null
         }
         if (source != null) {
-            activateAiTranslation()
+            activateAiTranslation(isUserAction = false)
             findBestSubtitleMatch(
                 onNoMatch = { score ->
                     // Staying on the AI fallback — re-activate to upgrade the translation source:
@@ -3875,7 +3951,7 @@ class PlayerViewModel @Inject constructor(
                     // activation could still be translating an external fallback source. Say so —
                     // otherwise the searching indicator just vanishes with no visible outcome.
                     if (_uiState.value.isAiTranslating) {
-                        activateAiTranslation()
+                        activateAiTranslation(isUserAction = false)
                         showMatchToast(
                             if (score == null) {
                                 PlayerMessage.Res(R.string.player_match_none_keeping_ai)
@@ -3904,9 +3980,9 @@ class PlayerViewModel @Inject constructor(
      * pick. Returns true when AI took over.
      */
     private fun tryAiFallbackAfterScan(): Boolean {
-        if (!aiSubtitleEnabled || aiApiKey.isBlank()) return false
+        if (userLockedSubtitleKey != null || !aiSubtitleEnabled || aiApiKey.isBlank()) return false
         if (findAiSourceSubtitle(_uiState.value.subtitles) == null) return false
-        activateAiTranslation()
+        activateAiTranslation(isUserAction = false)
         showMatchToast(PlayerMessage.Res(R.string.player_match_none_using_ai))
         return true
     }
@@ -3920,11 +3996,11 @@ class PlayerViewModel @Inject constructor(
         if (!_uiState.value.isAiTranslating) return
         val current = aiSourceSubtitle ?: return
         // add() is false when already flagged — keeps this to one pass per source.
-        if (!untranslatableSourceIds.add(current.id)) return
+        if (!untranslatableSourceKeys.add(SubtitleSelectionPolicy.key(current))) return
         val next = findAiSourceSubtitle(_uiState.value.subtitles)
-        if (next != null && next.id != current.id) {
+        if (next != null && SubtitleSelectionPolicy.key(next) != SubtitleSelectionPolicy.key(current)) {
             android.util.Log.i("SubMatch", "AI source '${current.label}' has no text (image track) - switching to '${next.label}'")
-            activateAiTranslation()
+            activateAiTranslation(isUserAction = false)
         } else {
             android.util.Log.i("SubMatch", "AI source '${current.label}' has no text (image track) - no text source available, AI off")
             translationManager.isEnabled = false
@@ -3937,21 +4013,22 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** Existing behavior: translate the built-in/source subtitle to the target language. */
-    fun activateAiTranslation() {
-        // Defense-in-depth: every caller is already gated on the AI master toggle (menu entry via
-        // isAiAvailable, interim via auto-select, fallback via tryAiFallbackAfterScan), but AI
-        // must never activate — and never spend API requests — when the feature is off.
-        if (!aiSubtitleEnabled) return
-        // Re-resolve the source on every activation: an early activation (before embedded tracks
-        // resolve) may have cached an external fallback source, and translation inherits the
-        // source's timing — keep the cached one only when nothing better is available now.
-        val source = findAiSourceSubtitle(_uiState.value.subtitles) ?: aiSourceSubtitle ?: return
+    /** Explicit AI replaces the user's pick; automatic AI must never replace a locked pick. */
+    fun activateAiTranslation(isUserAction: Boolean = true) {
+        if (!aiSubtitleEnabled || (!isUserAction && userLockedSubtitleKey != null)) return
+        // Cached sources obey the same rules as fresh ones: embedded text only, not the target
+        // language, and never a source already observed to contain no text at runtime.
+        val source = findAiSourceSubtitle(_uiState.value.subtitles)
+            ?: findAiSourceSubtitle(listOfNotNull(aiSourceSubtitle)) ?: return
+        if (isUserAction) {
+            userLockedSubtitleKey = null
+            cancelFindBestMatch("user chose AI translation")
+            subtitleSelectionJob?.cancel()
+        }
         aiSourceSubtitle = source
         cancelSubtitleLocalization()
         hasManualSubtitleSelection = true
-        // AI activation is not a specific user track pick — a late embedded preferred-language
-        // track may still displace it.
+        // A late preferred-language embedded track can still displace automatic AI.
         userPickedSubtitle = false
         // The silent-scan path never populates aiTargetLanguageName (it's set only when a source
         // existed at scan start) — resolve from the preferred-language code so a late activation
@@ -4015,7 +4092,7 @@ class PlayerViewModel @Inject constructor(
      * on-screen cue matches what was spoken at that moment (see [SubtitleSyncMatcher]).
      */
     fun findBestSubtitleMatch(onNoMatch: ((Double?) -> Unit)? = null, useCache: Boolean = true) {
-        if (_uiState.value.isFindingBestMatch) return
+        if (userLockedSubtitleKey != null || _uiState.value.isFindingBestMatch) return
         val previousSubtitle = _uiState.value.selectedSubtitle
         findMatchJob?.cancel()
         findMatchJob = viewModelScope.launch {
@@ -4154,7 +4231,7 @@ class PlayerViewModel @Inject constructor(
                 aiInterim = true
                 applyAutoSync(null, null)
                 // Re-activating re-resolves the source (an embedded track may have appeared since).
-                activateAiTranslation()
+                activateAiTranslation(isUserAction = false)
                 Log.i("SubMatch", "interim: AI already on screen — scanning as on first load (source=\"${aiSourceSubtitle?.label}\")")
                 matchStep("1· translating with AI while checking subtitles…")
             } else {
@@ -4228,7 +4305,7 @@ class PlayerViewModel @Inject constructor(
                 if (aiInterimSource != null) {
                     aiInterim = true
                     applyAutoSync(null, null)
-                    activateAiTranslation()
+                    activateAiTranslation(isUserAction = false)
                     Log.i("SubMatch", "interim: AI translation while scanning (source=\"${aiInterimSource.label}\")")
                     matchStep("1· translating with AI while checking subtitles…")
                 } else {
@@ -6346,7 +6423,7 @@ class PlayerViewModel @Inject constructor(
             // a badly timed subtitle while the audio listened, then AI anyway.
             val behindAi = aiCanTakeOver()
             if (behindAi) {
-                if (!_uiState.value.isAiTranslating) activateAiTranslation()
+                if (!_uiState.value.isAiTranslating) activateAiTranslation(isUserAction = false)
             } else {
                 val shown = _uiState.value.selectedSubtitle
                 val showing = !_uiState.value.isAiTranslating && shown != null && !shown.isEmbedded &&
@@ -6869,6 +6946,7 @@ class PlayerViewModel @Inject constructor(
         @StringRes sourceLabelRes: Int,
         previousSubtitle: Subtitle?
     ): List<ScoredCandidate>? {
+        if (userLockedSubtitleKey != null) return null
         synchronized(referenceIntervals) { referenceIntervals.clear() }
         refIntervalStart = -1L
         // If AI translation is already showing (it has the source/English track selected under the
@@ -7165,6 +7243,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun startMatchListening() {
+        if (userLockedSubtitleKey != null) return
         hasManualSubtitleSelection = true
         subtitleSelectionJob?.cancel()
         cancelSubtitleLocalization()
@@ -7189,6 +7268,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun restoreSubtitle(subtitle: Subtitle?) {
+        if (userLockedSubtitleKey != null) return
         _uiState.value = _uiState.value.copy(
             selectedSubtitle = subtitle,
             subtitleSelectionNonce = _uiState.value.subtitleSelectionNonce + 1
@@ -7409,6 +7489,7 @@ class PlayerViewModel @Inject constructor(
         // hearing scan (it also disconnects the Gemini Live audio stream). Without this, the scan
         // kept running with no way to cancel it. Mirrors selectSubtitle()'s user-action path.
         userPickedSubtitle = true
+        userLockedSubtitleKey = null
         cancelFindBestMatch("subtitles disabled")
         subtitleSelectionJob?.cancel()
         cancelSubtitleLocalization()
@@ -7465,6 +7546,7 @@ class PlayerViewModel @Inject constructor(
             isLoadingStreams = true,
             sourceSearchActive = true,
             streams = emptyList(),
+            addonNotices = emptyList(),
             selectedStream = null,
             selectedStreamUrl = null,
             streamProgress = 0f,
@@ -7696,10 +7778,41 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    /** Set by [refetchSameSourceFresh]: the source to pick again from a freshly fetched list. */
+    private var refetchRecent: RecentPlayedSource? = null
+    private var refetchedSourceKey: String? = null
+
+    /**
+     * The selected source failed before its first frame with a network / HTTP error — typically an
+     * expired link from a source list saved before the app was closed. Re-fetches the source list
+     * (bypassing the resolved-link cache) and autoplays the same source, matched by torrent hash /
+     * file name / title and never by the stale URL, resuming at the same position. Once per source.
+     */
+    fun refetchSameSourceFresh(): Boolean {
+        val stream = _uiState.value.selectedStream ?: return false
+        val key = "$currentMediaType:$currentMediaId:$currentSeason:$currentEpisode:${stream.addonId}:${stream.infoHash ?: stream.source}"
+        if (key == refetchedSourceKey) return false // already re-fetched once: let failover proceed
+        refetchedSourceKey = key
+        streamRepository.forgetResolvedStream(stream)
+        refetchRecent = RecentPlayedSource.of(
+            currentMediaType, currentMediaId, currentSeason, currentEpisode, stream, System.currentTimeMillis()
+        ).copy(url = null)
+        Log.i("PlayerViewModel", "re-fetching sources to replay \"${stream.source.take(60)}\" with a fresh link")
+        reloadStreams()
+        return true
+    }
+
     private fun loadRecentSource(mediaType: MediaType, mediaId: Int, season: Int?, episode: Int?) {
         recentSourcePlayTracker.reset()
         recentSourceGate.disarm()
         preparedStream = null
+        listedSelectedStream = null
+        val forced = refetchRecent?.takeIf { it.appliesTo(mediaType, mediaId, season, episode) }
+        refetchRecent = null
+        if (forced != null) {
+            recentSourceLoad = kotlinx.coroutines.CompletableDeferred(forced)
+            return
+        }
         recentSourceLoad = viewModelScope.async {
             val recent = recentPlayedSourceRepository.get(mediaType, mediaId, season, episode)
             val stillCurrent = currentMediaType == mediaType && currentMediaId == mediaId &&
@@ -8112,10 +8225,11 @@ class PlayerViewModel @Inject constructor(
         _uiState.value.selectedStreamUrl.isNullOrBlank() && streamSelectionJob?.isActive != true
 
     private fun sourceLookupStillActive(currentJob: Job? = null): Boolean {
-        val supplementalStillLoading =
-            (homeServerAppendJob != null && homeServerAppendJob !== currentJob && homeServerAppendJob?.isActive == true) ||
-                (vodAppendJob != null && vodAppendJob !== currentJob && vodAppendJob?.isActive == true)
-        return !primaryStreamResolutionFinal || supplementalStillLoading
+        return playerSourceLookupActive(
+            primaryFinished = primaryStreamResolutionFinal,
+            homeServerActive = homeServerAppendJob !== currentJob && homeServerAppendJob?.isActive == true,
+            iptvActive = vodAppendJob !== currentJob && vodAppendJob?.isActive == true
+        )
     }
 
     private fun finishSupplementalSourceLookupIfReady(currentJob: Job?, errorMessage: PlayerMessage) {
@@ -8123,7 +8237,7 @@ class PlayerViewModel @Inject constructor(
         val stillActive = sourceLookupStillActive(currentJob)
         if (state.streams.isNotEmpty() || !state.selectedStreamUrl.isNullOrBlank()) {
             _uiState.value = state.copy(
-                isLoading = false,
+                isLoading = state.isLoading && streamSelectionJob?.isActive == true,
                 isLoadingStreams = false,
                 sourceSearchActive = stillActive,
                 streamProgress = null,
@@ -8179,6 +8293,7 @@ class PlayerViewModel @Inject constructor(
             )
         }
 
+        currentCoroutineContext().ensureActive()
         val validSources = sources.filter { !it.url.isNullOrBlank() }
         if (validSources.isEmpty()) {
             finishSupplementalSourceLookupIfReady(
@@ -8190,7 +8305,7 @@ class PlayerViewModel @Inject constructor(
         val latest = _uiState.value.streams
 
         val updated = (latest + validSources)
-            .distinctBy(::providerScopedStreamIdentity)
+            .distinctBy { providerScopedStreamIdentity(it) to playbackRequestIdentity(it) }
         val preferredLanguage = _uiState.value.preferredAudioLanguage.ifBlank { "en" }
         val sortedStreams = sortStreamsByQualityAndSize(updated, preferredLanguage)
         val shouldAutoplayHomeServer = _uiState.value.selectedStreamUrl.isNullOrBlank()
@@ -8247,6 +8362,7 @@ class PlayerViewModel @Inject constructor(
             )
         }
 
+        currentCoroutineContext().ensureActive()
         val validVodSources = vodSources.filter { !it.url.isNullOrBlank() }
         if (validVodSources.isEmpty()) {
             finishSupplementalSourceLookupIfReady(
@@ -8258,7 +8374,7 @@ class PlayerViewModel @Inject constructor(
         val latest = _uiState.value.streams
 
         val updated = (latest + validVodSources)
-            .distinctBy(::providerScopedStreamIdentity)
+            .distinctBy { providerScopedStreamIdentity(it) to playbackRequestIdentity(it) }
         val preferredLanguage = _uiState.value.preferredAudioLanguage.ifBlank { "en" }
         val sortedStreams = sortStreamsByQualityAndSize(updated, preferredLanguage)
         val shouldAutoplayVod = _uiState.value.selectedStreamUrl.isNullOrBlank()
@@ -8297,8 +8413,7 @@ class PlayerViewModel @Inject constructor(
 
             if (imdbId.isNullOrBlank()) {
                 _uiState.value = _uiState.value.copy(
-                    isLoadingStreams = false,
-                    sourceSearchActive = false
+                    isLoadingStreams = false
                 )
                 return
             }
@@ -8334,6 +8449,7 @@ class PlayerViewModel @Inject constructor(
                 )
             }
 
+            currentCoroutineContext().ensureActive()
             val allStreams = result.streams
                 .filter { stream ->
                     val u = stream.url?.trim().orEmpty()
@@ -8346,15 +8462,18 @@ class PlayerViewModel @Inject constructor(
                 if (playbackUrl.isNotBlank()) StreamSource(source = "Direct", addonName = "Direct", quality = "Direct", size = "", url = playbackUrl) else null
             )
             val mergedStreams = (allStreams + existingVod + activeStreamList)
-                .distinctBy(::providerScopedStreamIdentity)
+                .distinctBy { providerScopedStreamIdentity(it) to playbackRequestIdentity(it) }
 
             val preferredLanguage = _uiState.value.preferredAudioLanguage.ifBlank { "en" }
             val sortedStreams = sortStreamsByQualityAndSize(mergedStreams, preferredLanguage)
-            val selectedMatch = findProvidedSelectedStreamMatch(sortedStreams, playbackUrl)
+            val playingUrl = _uiState.value.selectedStreamUrl ?: playbackUrl
+            val playingIndex = playingRequestIndex(sortedStreams, _uiState.value.selectedStream, playingUrl)
+            val selectedMatch = sortedStreams.getOrNull(playingIndex)
+                ?: findProvidedSelectedStreamMatch(sortedStreams, playingUrl)
 
             val shouldAutoplay = _uiState.value.selectedStreamUrl.isNullOrBlank()
             val prevSource = _uiState.value.selectedStream?.source.orEmpty()
-            val selectedForState = if (shouldAutoplay) {
+            val selectedForState = if (shouldAutoplay || streamSelectionJob?.isActive == true) {
                 _uiState.value.selectedStream
             } else {
                 selectedMatch ?: _uiState.value.selectedStream
@@ -8364,7 +8483,7 @@ class PlayerViewModel @Inject constructor(
                 streams = sortedStreams,
                 selectedStream = selectedForState,
                 isLoadingStreams = false,
-                sourceSearchActive = false,
+                sourceSearchActive = sourceLookupStillActive(),
                 streamProgress = null,
                 streamLoadPhase = null
             )
@@ -8379,11 +8498,18 @@ class PlayerViewModel @Inject constructor(
             if (prevSource.isBlank() && newSource.isNotBlank()) {
                 scheduleSubtitleSelection(currentOriginalLanguage)
             }
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
             _uiState.value = _uiState.value.copy(
-                isLoadingStreams = false,
-                sourceSearchActive = false
+                isLoadingStreams = false
             )
+        } finally {
+            if (currentCoroutineContext().isActive) {
+                primaryStreamResolutionFinal = true
+                finishSupplementalSourceLookupIfReady(
+                    currentCoroutineContext()[Job], PlayerMessage.Res(R.string.player_error_no_streams_other_source)
+                )
+            }
         }
     }
 

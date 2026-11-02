@@ -1553,5 +1553,12 @@
   "{value0}% · watched": "{value0} % · zhlédnuto",
   "· Guide match": "· Průvodcovský zápas",
   "· Possible broadcast": "· Možné vysílání",
-  "· {value0}d archive": "· {value0}d archiv"
+  "· {value0}d archive": "· {value0}d archiv",
+  "View on Trakt": "Zobrazit na Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Zvuk tohoto souboru nelze v tomto prohlížeči přehrát přímo. Převádíme zvuk…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Zvuk tohoto souboru nelze v tomto prohlížeči přehrát. Žádáme poskytovatele o konverzi…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Zvuk tohoto zdroje nelze v tomto prohlížeči přehrát. Vyberte jiný zdroj nebo použijte externí přehrávač.",
+  "Converting the audio for your browser…": "Převádíme zvuk pro váš prohlížeč…",
+  "Picking the best source…": "Vybíráme nejlepší zdroj…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi účtuje v amerických dolarech; vaše banka částku automaticky převede."
 }

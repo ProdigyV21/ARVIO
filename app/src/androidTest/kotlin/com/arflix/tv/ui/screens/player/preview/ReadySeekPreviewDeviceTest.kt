@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arflix.tv.ui.screens.player.mobile.MobilePlayerBottomSection
@@ -24,6 +25,28 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ReadySeekPreviewDeviceTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun tvFilmstripKeepsFiveReadyFramesWithinBoundsAndRejectsStaleNeighbors() {
+        val current = frame(android.graphics.Color.BLUE, 30_000L)
+        val adjacent = mutableStateOf(listOf(10_000L, 20_000L, 40_000L, 50_000L)
+            .map { frame(android.graphics.Color.GREEN, it) })
+        compose.setContent {
+            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                SeekPreviewFilmstrip(current, adjacent.value, 30_000L, 7L, Modifier.size(800.dp, 126.dp))
+            }
+        }
+        val strip = compose.onNodeWithTag("seek_preview_filmstrip").fetchSemanticsNode().boundsInRoot
+        val cards = compose.onAllNodesWithTag(READY).fetchSemanticsNodes().map { it.boundsInRoot }
+        assertEquals(if (strip.width / compose.density.density >= 496f) 5 else 1, cards.size)
+        cards.forEach { bounds ->
+            org.junit.Assert.assertTrue(bounds.left >= strip.left && bounds.right <= strip.right)
+            org.junit.Assert.assertTrue(bounds.top >= strip.top && bounds.bottom <= strip.bottom)
+        }
+        if (cards.size > 1) org.junit.Assert.assertTrue(cards.last().width > cards.first().width)
+        compose.runOnIdle { adjacent.value = adjacent.value.map { it.copy(sourceGeneration = 6L) } }
+        assertEquals(1, compose.onAllNodesWithTag(READY).fetchSemanticsNodes().size)
+        assertEquals(strip, compose.onNodeWithTag("seek_preview_filmstrip").fetchSemanticsNode().boundsInRoot)
+    }
 
     @Test fun missingStaleAndUnverifiedFramesHaveNoPreviewIncludingExitAnimation() {
         val blue = frame(android.graphics.Color.BLUE, 10_000L)

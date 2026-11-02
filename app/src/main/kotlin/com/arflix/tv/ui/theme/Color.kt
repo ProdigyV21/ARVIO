@@ -61,14 +61,10 @@ val Pink = AccentWhite
 val PinkDark = ArcticGray
 val PinkGlow = Color(0x33FFFFFF)
 
-// Gradient combinations (minimal)
-val GradientStart = Color(0xFF08090A)
-val GradientMiddle = Color(0xFF08090A)
-val GradientEnd = Color(0xFF08090A)
-
 // ============================================
 // BACKGROUND COLORS (App Background)
 // ============================================
+// Keep the normal background distinct from the optional pure-black OLED mode.
 val BackgroundDark = Color(0xFF08090A)        // #08090A
 val BackgroundCard = Color(0xFF0D0D0D)        // Slightly elevated
 val BackgroundElevated = Color(0xFF1A1A1A)    // Elevated surfaces
@@ -113,10 +109,16 @@ val InfoBlue = ArcticWhite
 val OngoingBlue = ArcticWhite
 
 // ============================================
+// BADGE & FORMAT ACCENTS
+// ============================================
+val FormatCyan = Color(0xFF06B6D4)             // 720p, IMAX badges
+val FormatDolbyVision = Color(0xFFEC4899)      // Dolby Vision badge
+
+// ============================================
 // SPECIAL COLORS
 // ============================================
 val ImdbYellow = AccentYellow                 // Star ratings
-val AccentRed = Color(0xFFE53935)
+val AccentRed = ErrorRed  // Unified red: single red for the app (was #E53935)
 
 // ============================================
 // FOCUS & GLOW STATES (Kodi Inspired)

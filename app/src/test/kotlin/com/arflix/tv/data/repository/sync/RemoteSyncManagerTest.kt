@@ -19,6 +19,51 @@ class RemoteSyncManagerTest {
     private val simkl = mockk<SimklRemoteProvider>()
     private lateinit var manager: RemoteSyncManager
 
+    @Test fun disabledTrackerWritesAllowLocalWatchlistChanges() = runBlocking {
+        coEvery { store.readProviders(TrackingFeature.WATCHLIST) } returns setOf(SyncProvider.TRAKT, SyncProvider.SIMKL)
+        coEvery { store.writeProviders() } returns emptySet()
+        assertTrue(manager.isRemoteConnected())
+        assertTrue(manager.addToWatchlist(MediaType.MOVIE, 603))
+        assertTrue(manager.removeFromWatchlist(MediaType.TV, 1399))
+        coVerify(exactly = 0) { trakt.addToWatchlist(any(), any(), any()) }
+        coVerify(exactly = 0) { simkl.removeFromWatchlist(any(), any(), any()) }
+    }
+
+    @Test fun failingSimklTokenRefreshCannotBlockTraktWatchlistWrite() = runBlocking {
+        coEvery { store.readProviders(TrackingFeature.WATCHLIST) } returns setOf(SyncProvider.SIMKL, SyncProvider.TRAKT)
+        coEvery { store.writeProviders() } returns setOf(SyncProvider.SIMKL, SyncProvider.TRAKT)
+        coEvery { simkl.isConnected() } throws java.io.IOException("Token refresh unavailable")
+        coEvery { trakt.addToWatchlist(any(), any(), any()) } returns true
+        coEvery { trakt.removeFromWatchlist(any(), any(), any()) } returns true
+        assertTrue(manager.isRemoteConnected())
+        assertTrue(manager.addToWatchlist(MediaType.TV, 1399))
+        assertTrue(manager.removeFromWatchlist(MediaType.MOVIE, 603))
+        coVerify(exactly = 1) { trakt.addToWatchlist(MediaType.TV, 1399, false) }
+        coVerify(exactly = 1) { trakt.removeFromWatchlist(MediaType.MOVIE, 603, false) }
+    }
+
+    @Test fun disconnectedWriteTargetDoesNotPretendTheRemoteSaveSucceeded() = runBlocking {
+        coEvery { store.writeProviders() } returns setOf(SyncProvider.SIMKL)
+        coEvery { simkl.isConnected() } returns false
+        org.junit.Assert.assertFalse(manager.addToWatchlist(MediaType.MOVIE, 603))
+        coVerify(exactly = 0) { simkl.addToWatchlist(any(), any(), any()) }
+    }
+
+    @Test fun allConfiguredWritesFailingIsStillAnError() = runBlocking {
+        coEvery { store.writeProviders() } returns setOf(SyncProvider.TRAKT, SyncProvider.SIMKL)
+        coEvery { trakt.addToWatchlist(any(), any(), any()) } returns false
+        coEvery { simkl.isConnected() } throws java.io.IOException("Offline")
+        org.junit.Assert.assertFalse(manager.addToWatchlist(MediaType.MOVIE, 603))
+    }
+
+    @Test(expected = kotlinx.coroutines.CancellationException::class)
+    fun cancellationDuringConnectionCheckIsNotSwallowed(): Unit = runBlocking {
+        coEvery { store.writeProviders() } returns setOf(SyncProvider.SIMKL)
+        coEvery { simkl.isConnected() } throws kotlinx.coroutines.CancellationException("Profile changed")
+        manager.addToWatchlist(MediaType.MOVIE, 603)
+        Unit
+    }
+
     @Before
     fun setUp() {
         manager = RemoteSyncManager(store, trakt, mdbList, simkl)

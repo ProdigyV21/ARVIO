@@ -61,6 +61,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import com.arflix.tv.ui.components.WatchedBadge
 import com.arflix.tv.ui.components.LocalBottomBarInset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -164,6 +165,8 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.Review
 import com.arflix.tv.data.model.StreamSource
+import com.arflix.tv.data.repository.addonNoticeRow
+import com.arflix.tv.data.repository.isAddonNoticeRow
 import com.arflix.tv.data.repository.MdbExternalRating
 import com.arflix.tv.data.repository.YouTubeCollection
 import com.arflix.tv.network.OkHttpProvider
@@ -298,7 +301,8 @@ fun DetailsScreen(
     val isMobile = LocalDeviceType.current.isTouchDevice()
 
     // Start on buttons for both TV and movies (buttons are now shown for both)
-    var focusedSection by remember { mutableStateOf(FocusSection.BUTTONS) }
+    var focusedSection by rememberSaveable(mediaType, mediaId) { mutableStateOf(FocusSection.BUTTONS) }
+    var hasEnteredDetails by rememberSaveable(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(false) }
     var buttonIndex by remember { mutableIntStateOf(0) }
     var episodeIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedEpisodeIdentity by rememberSaveable { mutableStateOf<EpisodeIdentity?>(null) }
@@ -352,6 +356,7 @@ fun DetailsScreen(
             tmdbEpisode = tmdbEpisode
         )
         viewModel.recordPlayedEpisode(mediaId, identity)
+        if (identity != null) focusedSection = FocusSection.EPISODES
         // Let the player resolve this identity. The current Details snapshot may still
         // contain another episode's sources, and starting both resolvers duplicates requests.
         onNavigateToPlayer(
@@ -383,21 +388,24 @@ fun DetailsScreen(
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(mediaType, mediaId, initialSeason, initialEpisode) {
-        focusedSection = FocusSection.BUTTONS
-        buttonIndex = 0
-        episodeIndex = 0
-        selectedEpisodeIdentity = null
-        ratingsIndex = 0
-        seasonIndex = 0
-        castIndex = 0
-        reviewIndex = 0
-        similarIndex = 0
-        isSidebarFocused = false
+        if (!hasEnteredDetails) {
+            focusedSection = FocusSection.BUTTONS
+            buttonIndex = 0
+            episodeIndex = 0
+            selectedEpisodeIdentity = null
+            ratingsIndex = 0
+            seasonIndex = 0
+            castIndex = 0
+            reviewIndex = 0
+            similarIndex = 0
+            isSidebarFocused = false
+            hasEnteredDetails = true
+        }
         viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
     }
 
     LaunchedEffect(uiState.episodes.size, uiState.totalSeasons, uiState.cast.size, uiState.reviews.size, uiState.similar.size) {
-        if (episodeIndex >= uiState.episodes.size) {
+        if (uiState.episodes.isNotEmpty() && episodeIndex >= uiState.episodes.size) {
             episodeIndex = (uiState.episodes.size - 1).coerceAtLeast(0)
         }
         if (seasonIndex >= uiState.totalSeasons) {
@@ -487,14 +495,22 @@ fun DetailsScreen(
     val currentUiState = rememberUpdatedState(uiState)
     val currentEpisodeIndex = rememberUpdatedState(episodeIndex)
     val currentSelectedEpisodeIdentity = rememberUpdatedState(selectedEpisodeIdentity)
+    // The episode card the user tapped, kept as an object. The phone layout
+    // draws a season from its own per-season cache while uiState.episodes may still hold another
+    // season (e.g. season 1 right after reopening the page), so an index or identity lookup in
+    // uiState.episodes alone resolved taps to the wrong episode — usually S1E1.
+    var tappedEpisode by remember { mutableStateOf<Episode?>(null) }
+    val currentTappedEpisode = rememberUpdatedState(tappedEpisode)
+    fun selectedEpisodeIn(state: DetailsUiState, identity: EpisodeIdentity?): Episode? =
+        if (identity == null) null
+        else state.episodes.firstOrNull { it.identity == identity }
+            ?: currentTappedEpisode.value?.takeIf { it.identity == identity }
 
     val onButtonClickRemembered = remember(isMobile, mediaType, mediaId) {
         { idx: Int ->
             val state = currentUiState.value
             val currentEpIdx = currentEpisodeIndex.value
-            val selectedEp = state.episodes.firstOrNull {
-                it.identity == currentSelectedEpisodeIdentity.value
-            }
+            val selectedEp = selectedEpisodeIn(state, currentSelectedEpisodeIdentity.value)
             if (idx == currentListButtonIndex.value) viewModel.openListPicker() else when (idx) {
                 0 -> { // Play
                     val season = if (mediaType == MediaType.TV) {
@@ -590,12 +606,13 @@ fun DetailsScreen(
         }
     }
 
-    val onEpisodeClickRemembered = remember(isMobile, mediaType, mediaId) {
-        { idx: Int ->
+    val onEpisodeItemClickRemembered: (Episode) -> Unit = remember(isMobile, mediaType, mediaId) {
+        { ep: Episode ->
             val state = currentUiState.value
-            val ep = state.episodes.getOrNull(idx)
-            if (ep != null) {
-                episodeIndex = idx
+            tappedEpisode = ep
+            val idx = state.episodes.indexOfFirst { it.identity == ep.identity }
+            run {
+                if (idx >= 0) episodeIndex = idx
                 if (isMobile && currentSelectedEpisodeIdentity.value != ep.identity) {
                     selectedEpisodeIdentity = ep.identity
                 } else if (isMobile || !state.autoPlaySingleSource) {
@@ -610,6 +627,12 @@ fun DetailsScreen(
                     )
                 }
             }
+        }
+    }
+    val onEpisodeClickRemembered: (Int) -> Unit = remember(onEpisodeItemClickRemembered) {
+        { idx: Int ->
+            currentUiState.value.episodes.getOrNull(idx)?.let { onEpisodeItemClickRemembered(it) }
+            Unit
         }
     }
 
@@ -933,9 +956,7 @@ fun DetailsScreen(
                 )
             } else {
                 uiState.item?.let { item ->
-                    val selectedEpisode = uiState.episodes.firstOrNull {
-                        it.identity == selectedEpisodeIdentity
-                    }
+                    val selectedEpisode = selectedEpisodeIn(uiState, selectedEpisodeIdentity)
                     val selectedProgress = selectedEpisode?.let {
                         uiState.episodePlaybackProgress[it.identity]
                     }
@@ -994,6 +1015,7 @@ fun DetailsScreen(
                         onSeasonClick = onSeasonClickRemembered,
                         onSeasonLongClick = onSeasonLongClickRemembered,
                         onEpisodeClick = onEpisodeClickRemembered,
+                        onEpisodeItemClick = onEpisodeItemClickRemembered,
                         onCastClick = onCastClickRemembered,
                         onSimilarClick = onSimilarClickRemembered,
                         onCollectionClick = onCollectionClickRemembered
@@ -1043,9 +1065,11 @@ fun DetailsScreen(
             TelegramSearchRow.SEARCHING -> stringResource(R.string.telegram_search_row_searching)
             TelegramSearchRow.NONE -> stringResource(R.string.telegram_search_row_none)
         }
-        val selectorStreams = remember(uiState.streams, telegramRowLabel) {
-            if (telegramRowLabel == null) uiState.streams
-            else uiState.streams + TELEGRAM_SEARCH_ROW.copy(source = telegramRowLabel)
+        // Addon messages (AIOStreams "[❌] Comet …") are display-only rows like the Telegram row.
+        val selectorStreams = remember(uiState.streams, uiState.addonNotices, telegramRowLabel) {
+            val withNotices = uiState.streams + uiState.addonNotices.mapIndexed(::addonNoticeRow)
+            if (telegramRowLabel == null) withNotices
+            else withNotices + TELEGRAM_SEARCH_ROW.copy(source = telegramRowLabel)
         }
         StreamSelector(
             isVisible = showStreamSelector,
@@ -1060,12 +1084,23 @@ fun DetailsScreen(
             streamSearchStartTime = uiState.streamSearchStartTime,
             pluginScrapersLoading = uiState.pluginScrapersLoading,
             loadingPluginNames = uiState.loadingPluginNames,
+            preferredAudioLanguage = uiState.preferredAudioLanguage,
+            mediaTitle = uiState.item?.title.orEmpty(),
             onFocusedStream = { stream ->
-                if (!isTelegramSearchRow(stream)) viewModel.prewarmStreamsAround(stream, uiState.streams)
+                if (!isTelegramSearchRow(stream) && !isAddonNoticeRow(stream)) {
+                    viewModel.prewarmStreamsAround(stream, uiState.streams)
+                }
             },
             onSelect = { stream ->
                 if (isTelegramSearchRow(stream)) {
                     viewModel.searchTelegramNow()
+                    return@StreamSelector
+                }
+                if (isAddonNoticeRow(stream)) {
+                    viewModel.showToast(
+                        listOf(stream.source, stream.description).filterNot { it.isNullOrBlank() }.joinToString(": "),
+                        ToastType.ERROR
+                    )
                     return@StreamSelector
                 }
                 if (isPendingDebridStream(stream)) {
@@ -1089,6 +1124,7 @@ fun DetailsScreen(
                         ) uiState.playPositionMs else null
                 }
                 viewModel.recordPlayedEpisode(mediaId, identity)
+                if (identity != null) focusedSection = FocusSection.EPISODES
                 onNavigateToPlayer(
                     mediaType, mediaId,
                     identity,
@@ -1237,6 +1273,7 @@ private fun DetailsContent(
     onSeasonClick: (Int) -> Unit = {},
     onSeasonLongClick: ((Int) -> Unit)? = null,
     onEpisodeClick: (Int) -> Unit = {},
+    onEpisodeItemClick: ((Episode) -> Unit)? = null,
     onCastClick: (Int) -> Unit = {},
     spoilerBlurEnabled: Boolean = false,
     onSimilarClick: (Int) -> Unit = {},
@@ -1775,7 +1812,9 @@ private fun DetailsContent(
                                                 isSelected = episode.identity == selectedEpisodeIdentity,
                                                 isFocused = false,
                                                 spoilerBlurEnabled = spoilerBlurEnabled,
-                                                onClick = { onEpisodeClick(index) }
+                                                onClick = {
+                                                    onEpisodeItemClick?.invoke(episode) ?: onEpisodeClick(index)
+                                                }
                                             )
                                         }
                                     }
@@ -2044,11 +2083,11 @@ private fun DetailsContent(
 
         // Unified hero metadata and action buttons positioned safely below the top bar
         val heroStartPadding = 36.dp
-        val heroEndPadding = 400.dp
         val configuration = LocalConfiguration.current
         val isCompactHeight = configuration.screenHeightDp < 720
         val hasEpisodeRail = item.mediaType == MediaType.TV && (episodes.isNotEmpty() || isSeasonLoading)
         val compactEpisodeHero = isCompactHeight && hasEpisodeRail
+        val heroEndPadding = if (compactEpisodeHero) 240.dp else 400.dp
         val heroTopPadding = if (compactEpisodeHero) AppTopBarHeight else
             AppTopBarContentTopInset + if (isCompactHeight) 10.dp else 16.dp
 
@@ -2066,8 +2105,8 @@ private fun DetailsContent(
         )
         val heroAlpha = 1f - 0.65f * railExpansionProgress
 
-        val minRestingRowHeight = if (hasEpisodeRail) 240.dp else if (hasPosterDetailRails) 226.dp else 210.dp
-        val maxRestingRowHeight = if (hasEpisodeRail) 260.dp else if (hasPosterDetailRails) 246.dp else 226.dp
+        val minRestingRowHeight = if (hasEpisodeRail) 252.dp else if (hasPosterDetailRails) 226.dp else 210.dp
+        val maxRestingRowHeight = if (hasEpisodeRail) 272.dp else if (hasPosterDetailRails) 246.dp else 226.dp
         val restingRowHeight = if (isCompactHeight) {
             minRestingRowHeight
         } else {
@@ -2078,12 +2117,13 @@ private fun DetailsContent(
         }
         val expandedRowHeight = restingRowHeight + shiftAmount
 
-        val contentRowBottomPadding = 0.dp
+        val contentRowBottomPadding = if (hasEpisodeRail) 12.dp else 0.dp
 
         DetailsTvHeroLayout(
             restingRowsHeight = restingRowHeight,
             expandedRowsHeight = expandedRowHeight,
             expansionProgress = railExpansionProgress,
+            heroGap = if (compactEpisodeHero) 8.dp else 12.dp,
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(
@@ -2143,7 +2183,7 @@ private fun DetailsContent(
                     if (showInCinema) {
                         Box(
                             modifier = Modifier
-                                .background(inCinemaColor, RoundedCornerShape(6.dp))
+                                .background(inCinemaColor, RoundedCornerShape(8.dp))
                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
@@ -2176,7 +2216,7 @@ private fun DetailsContent(
                 val hasSecondaryMetadata = primaryNetworkLogo != null ||
                     hasRatingMetadata ||
                     hasBudgetMetadata
-                val overviewMaxHeight = if (isCompactHeight) 78.dp else 88.dp
+                val overviewMaxHeight = if (compactEpisodeHero) 60.dp else if (isCompactHeight) 78.dp else 88.dp
 
                 val separatorStyle = ArflixTypography.caption.copy(
                     fontSize = 13.sp,
@@ -2340,8 +2380,8 @@ private fun DetailsContent(
                             shadow = textShadow
                         ),
                         color = Color.White,
-                        // Four lines at this width; still fits overviewMaxHeight.
-                        maxLines = 4,
+                        // Reserve a complete season/episode rail on compact-height TVs.
+                        maxLines = if (compactEpisodeHero) 3 else 4,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -3740,9 +3780,9 @@ internal fun MdbExternalRatingsRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black.copy(alpha = 0.62f))
-                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 7.dp, vertical = 4.dp)
             ) {
                 Text(
@@ -3782,7 +3822,7 @@ private fun MobileScoreBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
-            .background(backgroundColor, RoundedCornerShape(3.dp))
+            .background(backgroundColor, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
@@ -3888,7 +3928,7 @@ private fun MobileIconActionButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = RoundedCornerShape(16.dp)
     val targetBackgroundColor = when {
         !enabled -> Color.White.copy(alpha = 0.04f)
         isActive -> Color.White.copy(alpha = 0.18f)
@@ -4196,7 +4236,7 @@ internal fun EpisodeCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
                     Text(
@@ -4220,7 +4260,7 @@ internal fun EpisodeCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(horizontal = 8.dp, vertical = 8.dp)
-                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 ) {
                     DetailsImdbSvgRatingBadge(
@@ -4295,13 +4335,13 @@ internal fun EpisodeCard(
                         .fillMaxWidth()
                         .padding(horizontal = 10.dp, vertical = 7.dp)
                         .height(4.dp)
-                        .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(2.dp))
+                        .background(Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(playbackProgress.percent / 100f)
                             .height(4.dp)
-                            .background(Pink, RoundedCornerShape(2.dp))
+                            .background(Pink, RoundedCornerShape(8.dp))
                     )
                 }
             }
@@ -4347,7 +4387,7 @@ internal fun SeasonButton(
     onClick: () -> Unit = {},
     onLongClick: (() -> Unit)? = null
 ) {
-    val shape = RoundedCornerShape(6.dp)
+    val shape = CircleShape
     val targetBackgroundColor = when {
         isFocused -> Color.White
         else -> Color.Transparent
@@ -4400,27 +4440,7 @@ internal fun SeasonButton(
         )
 
         if (isFullyWatched) {
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .background(
-                        color = ArvioSkin.colors.watchedGreen.copy(alpha = 0.2f),
-                        shape = CircleShape
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = ArvioSkin.colors.watchedGreen,
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = ArvioSkin.colors.watchedGreen,
-                    modifier = Modifier.size(8.dp)
-                )
-            }
+            WatchedBadge()
         }
         }
         Box(Modifier.fillMaxWidth().height(2.dp).background(if (isSelected) targetTextColor else Color.Transparent))
@@ -4762,8 +4782,8 @@ private fun ReviewCard(
 private fun MetaPill(text: String) {
     Box(
         modifier = Modifier
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(
@@ -4779,7 +4799,7 @@ private fun MetaPill(text: String) {
 private fun ImdbBadge(rating: String) {
     Box(
         modifier = Modifier
-            .background(Color(0xFFF5C518), RoundedCornerShape(6.dp))
+            .background(Color(0xFFF5C518), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Row(
@@ -4808,8 +4828,8 @@ private fun OngoingBadge() {
 
     Row(
         modifier = Modifier
-            .background(cyanColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-            .border(1.dp, cyanColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .background(cyanColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .border(1.dp, cyanColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -4833,8 +4853,8 @@ private fun OngoingBadge() {
 private fun GenreBadge(genre: String) {
     Box(
         modifier = Modifier
-            .background(Pink.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-            .border(1.dp, Pink.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .background(Pink.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .border(1.dp, Pink.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(
@@ -4853,8 +4873,8 @@ private fun LanguageBadge(language: String) {
 
     Box(
         modifier = Modifier
-            .background(purpleColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-            .border(1.dp, purpleColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .background(purpleColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .border(1.dp, purpleColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(
@@ -4873,8 +4893,8 @@ private fun BudgetBadge(budget: String) {
 
     Box(
         modifier = Modifier
-            .background(greenColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-            .border(1.dp, greenColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .background(greenColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .border(1.dp, greenColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(
@@ -4898,8 +4918,8 @@ private fun StatusBadge(status: String) {
 
     Box(
         modifier = Modifier
-            .background(bgColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
-            .border(1.dp, bgColor.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+            .background(bgColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .border(1.dp, bgColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(

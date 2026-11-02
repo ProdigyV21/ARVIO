@@ -55,6 +55,9 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.BackgroundElevated
+import com.arflix.tv.ui.theme.ErrorRed
+import com.arflix.tv.ui.theme.TextSecondary
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.PinUtil
 import kotlinx.coroutines.delay
@@ -143,7 +146,7 @@ fun PinEntryDialog(
                     .padding(horizontal = 24.dp)
                     .widthIn(min = 320.dp, max = 360.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF161616))
+                    .background(BackgroundElevated)
                     .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                     .padding(horizontal = 24.dp, vertical = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -176,7 +179,7 @@ fun PinEntryDialog(
                         else -> stringResource(R.string.enter_pin_to_unlock)
                     },
                     fontSize = 13.sp,
-                    color = Color(0xFFB0B0B0),
+                    color = TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -234,16 +237,16 @@ fun PinEntryDialog(
                             Box(
                                 modifier = Modifier
                                     .size(46.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF222222))
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(BackgroundElevated)
                                     .border(
                                         width = if (isFilled || isCurrentSlot) 2.dp else 1.dp,
                                         color = when {
-                                            isFilled -> Color(0xFFE50914)
+                                            isFilled -> ErrorRed
                                             isCurrentSlot -> Color.White.copy(alpha = 0.85f)
                                             else -> Color.White.copy(alpha = 0.2f)
                                         },
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(12.dp)
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -364,7 +367,7 @@ fun PinEntryDialog(
                     Text(
                         text = errorMessage,
                         fontSize = 12.sp,
-                        color = Color(0xFFFF6B6B),
+                        color = ErrorRed,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -414,13 +417,13 @@ private fun PinActionButton(
     var isFocused by remember { mutableIntStateOf(0) }
 
     val containerColor = when {
-        isPrimary && enabled -> Color(0xFFE50914)
-        isPrimary && !enabled -> Color(0xFFE50914).copy(alpha = 0.35f)
+        isPrimary && enabled -> ErrorRed
+        isPrimary && !enabled -> ErrorRed.copy(alpha = 0.35f)
         else -> Color.Transparent
     }
     val focusedContainerColor = when {
-        isPrimary && enabled -> Color(0xFFFF1A1A)
-        isPrimary && !enabled -> Color(0xFFE50914).copy(alpha = 0.35f)
+        isPrimary && enabled -> ErrorRed
+        isPrimary && !enabled -> ErrorRed.copy(alpha = 0.35f)
         else -> Color.White.copy(alpha = 0.12f)
     }
 
@@ -520,7 +523,7 @@ private fun PinKeyButton(
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF222222))
+                .background(BackgroundElevated)
                 .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
                 .clickable { onClick() }
         ) {
@@ -532,7 +535,7 @@ private fun PinKeyButton(
             modifier = modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = Color(0xFF222222),
+                containerColor = BackgroundElevated,
                 focusedContainerColor = Color(0xFF333333)
             ),
             border = ClickableSurfaceDefaults.border(

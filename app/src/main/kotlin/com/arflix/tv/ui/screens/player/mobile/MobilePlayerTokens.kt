@@ -26,14 +26,14 @@ object MobilePlayerTokens {
 
     val ScrimColor = Color(0x40000000)     // 25%
 
-    val ShapeScreen = RoundedCornerShape(26.dp)
+    val ShapeScreen = RoundedCornerShape(16.dp)
     val ShapeDrawer = RoundedCornerShape(0.dp)
     val ShapeSheet = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
-    val ShapePrompt = RoundedCornerShape(9.dp)
-    val ShapeCard = RoundedCornerShape(10.dp)
-    val ShapeThumb = RoundedCornerShape(7.dp)
+    val ShapePrompt = RoundedCornerShape(12.dp)
+    val ShapeCard = RoundedCornerShape(12.dp)
+    val ShapeThumb = RoundedCornerShape(8.dp)
     val ShapeBtn = RoundedCornerShape(8.dp)
-    val ShapePill = RoundedCornerShape(20.dp)
+    val ShapePill = RoundedCornerShape(16.dp)
 
     val TextShadow = Shadow(
         color = Color(0x99000000),

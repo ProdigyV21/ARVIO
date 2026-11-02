@@ -524,14 +524,13 @@
     <string name="settings_test">Tester</string>
     <string name="settings_cd_qr_code">QR code</string>
     <string name="settings_cd_drag_reorder">Glisser pour réordonner</string>
-    <string name="settings_cd_manage_categories">Gérer les catégories</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Actualisation des chaînes et de l’EPG…</string>
     <string name="settings_reload_playlists_now">Recharger les playlists maintenant</string>
     <string name="settings_reload_playlist_epg_now">Recharger la playlist et l’EPG maintenant</string>
     <string name="settings_no_playlists_configured">Aucune playlist configurée</string>
     <string name="settings_remove_playlists_epg">Retirez les playlists, l’EPG et les favoris</string>
-    <string name="settings_add_iptv_lists_hint">Ajoutez jusqu’à 3 listes IPTV M3U / Xtream avec des noms</string>
+    <string name="settings_add_iptv_lists_hint">Ajoutez jusqu’à 10 listes IPTV M3U / Xtream avec des noms</string>
     <string name="settings_create_another_iptv">Créer une autre liste IPTV</string>
     <string name="settings_badge_full">PLEIN</string>
     <string name="settings_badge_add">AJOUTER</string>
@@ -541,7 +540,7 @@
     <string name="settings_badge_delete">SUPPRIMER</string>
     <string name="settings_n_selected">%1$d sélectionné(s)</string>
     <string name="settings_section_playlists">PLAYLISTS</string>
-    <string name="settings_add_tv_lists_hint">Ajoutez jusqu’à 3 listes TV M3U / Xtream</string>
+    <string name="settings_add_tv_lists_hint">Ajoutez jusqu’à 10 listes TV M3U / Xtream</string>
     <string name="settings_create_another_tv">Créer une autre liste TV</string>
     <string name="settings_badge_full_short">Plein</string>
     <string name="settings_search_lists">Rechercher des listes</string>
@@ -829,6 +828,7 @@
     <string name="component_label_media">Média</string>
     <string name="component_media_logo">Logo %1$s</string>
     <string name="component_badge_new_episode">Nouvel épisode</string>
+    <string name="component_badge_new_episode_short">Nouveau</string>
     <string name="component_ep_left_one">1 ép restant</string>
     <string name="component_eps_left">%1$d ép restants</string>
     <string name="component_season_episode_marker">S%1$d • E%2$d</string>

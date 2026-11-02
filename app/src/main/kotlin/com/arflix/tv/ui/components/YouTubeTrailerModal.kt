@@ -736,7 +736,7 @@ private fun YouTubeStripButton(
 ) {
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 if (isFocused) ArvioSkin.colors.focusOutline else Color.White.copy(alpha = 0.12f)
             )

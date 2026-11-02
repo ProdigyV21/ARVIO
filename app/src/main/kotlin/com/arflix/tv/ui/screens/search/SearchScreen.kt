@@ -9,6 +9,10 @@ import android.content.res.Configuration
 import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -49,6 +53,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -215,6 +220,18 @@ fun SearchScreen(
     // The search bar's clear button: a second stop inside the search bar, reached with the
     // D-pad toward its end while there is a query to clear.
     var isClearQueryFocused by remember { mutableStateOf(false) }
+    // The mic button: the last stop inside the search bar, after the clear button. It is only
+    // there when the device has a speech recognizer (see VoiceSearch).
+    var isMicFocused by remember { mutableStateOf(false) }
+    val voiceSearch = rememberVoiceSearch(
+        // The words show in the bar while they are spoken; the final phrase is searched at once.
+        onPartial = { viewModel.updateQuery(it) },
+        onResult = { spoken ->
+            isMicFocused = false
+            viewModel.searchRecent(spoken)
+            enterResultsOnLoad = !isTouchDevice
+        }
+    )
     // The filtered grid is driven the same way the rows are: one remembered index, one white
     // focus ring, no second native focus target (see RowsLayer).
     var gridFocusIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -425,6 +442,18 @@ fun SearchScreen(
     }
     LaunchedEffect(uiState.query.isEmpty(), focusZone, isSearchEditing) {
         if (uiState.query.isEmpty() || focusZone != FocusZone.SEARCH_INPUT || isSearchEditing) isClearQueryFocused = false
+        if (focusZone != FocusZone.SEARCH_INPUT || isSearchEditing) isMicFocused = false
+    }
+    // Text → clear → mic. The keys reaching here are already mirrored for RTL (effectiveKey).
+    fun moveSearchBarStop(towardEnd: Boolean): Boolean = if (towardEnd) when {
+        isMicFocused -> false
+        !isClearQueryFocused && uiState.query.isNotEmpty() -> { isClearQueryFocused = true; true }
+        voiceSearch.isAvailable -> { isClearQueryFocused = false; isMicFocused = true; true }
+        else -> false
+    } else when {
+        isMicFocused -> { isMicFocused = false; isClearQueryFocused = uiState.query.isNotEmpty(); true }
+        isClearQueryFocused -> { isClearQueryFocused = false; true }
+        else -> false
     }
     LaunchedEffect(recentSearches.size) {
         focusedRecentIndex = focusedRecentIndex.coerceIn(0, (recentSearchSlotCount(recentSearches) - 1).coerceAtLeast(0))
@@ -471,7 +500,9 @@ fun SearchScreen(
     }
 
     BackHandler {
-        if (isSearchEditing) {
+        if (voiceSearch.cancelIfListening()) {
+            Unit
+        } else if (isSearchEditing) {
             isSearchEditing = false
             keyboardController?.hide()
             try { searchFocusRequester.requestFocus() } catch (_: Exception) {}
@@ -519,6 +550,10 @@ fun SearchScreen(
                 return@onPreviewKeyEvent true
             }
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            if ((event.key == Key.Back || event.key == Key.Escape) && voiceSearch.cancelIfListening()) {
+                consumedDpadKey = event.key
+                return@onPreviewKeyEvent true
+            }
             if (isSearchEditing && (event.key == Key.Back || event.key == Key.Escape)) {
                 isSearchEditing = false
                 keyboardController?.hide()
@@ -732,9 +767,7 @@ fun SearchScreen(
                         if (focusedRecentIndex > 0) focusedRecentIndex--
                         true
                     }
-                    FocusZone.SEARCH_INPUT -> {
-                        if (isClearQueryFocused) { isClearQueryFocused = false; true } else false
-                    }
+                    FocusZone.SEARCH_INPUT -> moveSearchBarStop(towardEnd = false)
                     else -> false
                 }
                 Key.DirectionRight -> when (focusZone) {
@@ -767,9 +800,7 @@ fun SearchScreen(
                         if (focusedRecentIndex < recentSearchSlotCount(recentSearches) - 1) focusedRecentIndex++
                         true
                     }
-                    FocusZone.SEARCH_INPUT -> {
-                        if (uiState.query.isNotEmpty() && !isClearQueryFocused) { isClearQueryFocused = true; true } else false
-                    }
+                    FocusZone.SEARCH_INPUT -> moveSearchBarStop(towardEnd = true)
                     else -> false
                 }
                 Key.Enter, Key.DirectionCenter -> {
@@ -782,7 +813,9 @@ fun SearchScreen(
                             true
                         }
                         FocusZone.SEARCH_INPUT -> {
-                            if (isClearQueryFocused) {
+                            if (isMicFocused) {
+                                voiceSearch.toggle()
+                            } else if (isClearQueryFocused) {
                                 isClearQueryFocused = false
                                 enterResultsOnLoad = false
                                 viewModel.updateQuery("")
@@ -870,6 +903,10 @@ fun SearchScreen(
                     isEditing = isSearchEditing,
                     isClearFocused = isClearQueryFocused && focusZone == FocusZone.SEARCH_INPUT,
                     onClear = { enterResultsOnLoad = false; viewModel.updateQuery("") },
+                    showMic = voiceSearch.isAvailable,
+                    isMicFocused = isMicFocused && focusZone == FocusZone.SEARCH_INPUT,
+                    isListening = voiceSearch.isListening,
+                    onMic = voiceSearch::toggle,
                     searchFocusRequester = searchFocusRequester,
                     textInputFocusRequester = textInputFocusRequester,
                     onQueryChange = { enterResultsOnLoad = false; viewModel.updateQuery(it) },
@@ -1082,6 +1119,10 @@ private fun SearchInputBar(
     isEditing: Boolean,
     isClearFocused: Boolean,
     onClear: () -> Unit,
+    showMic: Boolean,
+    isMicFocused: Boolean,
+    isListening: Boolean,
+    onMic: () -> Unit,
     searchFocusRequester: FocusRequester,
     textInputFocusRequester: FocusRequester,
     onQueryChange: (String) -> Unit,
@@ -1126,7 +1167,7 @@ private fun SearchInputBar(
                 focusedIndicatorColor = Color.White,
                 unfocusedIndicatorColor = Color.White.copy(alpha = 0.18f)
             ),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("search-input")
@@ -1191,9 +1232,9 @@ private fun SearchInputBar(
                 decorationBox = { inner ->
                     if (query.isEmpty()) {
                         Text(
-                            stringResource(R.string.search),
+                            stringResource(if (isListening) R.string.search_voice_listening else R.string.search),
                             style = ArflixTypography.body.copy(fontSize = 17.sp),
-                            color = Color.White.copy(alpha = 0.32f)
+                            color = Color.White.copy(alpha = if (isListening) 0.7f else 0.32f)
                         )
                     }
                     inner()
@@ -1215,6 +1256,45 @@ private fun SearchInputBar(
                         Icons.Default.Close,
                         contentDescription = stringResource(R.string.search_clear_query),
                         tint = if (isClearFocused) Color.Black else TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            if (showMic) {
+                Spacer(Modifier.width(8.dp))
+                // Painted, not focusable, like the clear button (see isMicFocused). Pink while it
+                // listens, pulsing so it reads as live.
+                val pulse = if (isListening) {
+                    rememberInfiniteTransition(label = "voice").animateFloat(
+                        initialValue = 1f, targetValue = 1.18f,
+                        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+                        label = "voicePulse"
+                    ).value
+                } else 1f
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isListening -> Pink
+                                isMicFocused -> Color.White
+                                else -> Color.White.copy(alpha = 0.08f)
+                            }
+                        )
+                        .semantics { onClick { onMic(); true } }
+                        .testTag("search-voice")
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = stringResource(R.string.search_voice),
+                        tint = when {
+                            isListening -> Color.White
+                            isMicFocused -> Color.Black
+                            else -> TextSecondary
+                        },
                         modifier = Modifier.size(18.dp)
                     )
                 }

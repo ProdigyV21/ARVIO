@@ -74,6 +74,9 @@ class TraktLocalWatchedSnapshotTest {
             every { profileStringKey(any()) } answers { stringPreferencesKey(firstArg()) }
             every { profileLongKey(any()) } answers { longPreferencesKey(firstArg()) }
             every { profileBooleanKey(any()) } answers { booleanPreferencesKey(firstArg()) }
+            every { profileStringKeyFor(any(), any()) } answers { stringPreferencesKey(secondArg()) }
+            every { profileLongKeyFor(any(), any()) } answers { longPreferencesKey(secondArg()) }
+            every { profileBooleanKeyFor(any(), any()) } answers { booleanPreferencesKey(secondArg()) }
         }
         val providers = mockk<SyncProviderStore>(relaxed = true) {
             coEvery { readProviders(any()) } returns emptySet()
@@ -85,7 +88,7 @@ class TraktLocalWatchedSnapshotTest {
         }
         repository = TraktRepository(RuntimeEnvironment.getApplication(), mockk(relaxed = true), mockk(),
             OkHttpClient(), Provider { syncService }, profiles, mockk(relaxed = true), providers,
-            mockk(relaxed = true), ContinueWatchingUpdates())
+            mockk(relaxed = true), mockk(relaxed = true), ContinueWatchingUpdates())
     }
 
     @After fun tearDown() {

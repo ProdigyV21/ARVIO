@@ -1524,17 +1524,22 @@ async function handleTraktProxy(event) {
     const headers = {
       "content-type": "application/json",
       "trakt-api-key": clientId,
-      "trakt-api-version": "2"
+      "trakt-api-version": "2",
+      // Trakt requires an application User-Agent. Generic Node/undici requests
+      // can be denied at the edge before OAuth is evaluated.
+      "user-agent": "ARVIO/2.2 (+https://arvio.tv)",
+      "accept": "application/json"
     };
     const userToken = event.headers["x-user-token"] || event.headers["X-User-Token"];
     if (userToken) headers.authorization = `Bearer ${userToken}`;
 
     const response = await fetch(traktUrl, { method, headers, body: requestBody });
     const text = await response.text();
-    if (response.status === 403 && /<html|<!doctype html/i.test(text)) {
+    if ([401, 403].includes(response.status) &&
+        (/text\/html/i.test(response.headers.get("content-type") || "") || /<html|<!doctype\s+html/i.test(text))) {
       return json(503, {
         error: "trakt_upstream_blocked",
-        message: "Trakt is temporarily rejecting requests from our server. Your account is still connected; please try again later."
+        message: "Trakt is temporarily blocking this connection. Please try again later."
       });
     }
     let data;
@@ -1548,6 +1553,7 @@ async function handleTraktProxy(event) {
       headers: {
         ...JSON_HEADERS,
         "cache-control": "no-store",
+        ...(response.headers.get("retry-after") ? { "retry-after": response.headers.get("retry-after") } : {}),
         "x-pagination-page": response.headers.get("x-pagination-page") || "",
         "x-pagination-limit": response.headers.get("x-pagination-limit") || "",
         "x-pagination-page-count": response.headers.get("x-pagination-page-count") || "",

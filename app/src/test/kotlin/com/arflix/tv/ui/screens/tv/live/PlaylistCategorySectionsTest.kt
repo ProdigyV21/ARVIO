@@ -8,6 +8,28 @@ import org.junit.Test
 
 class PlaylistCategorySectionsTest {
 
+    @Test fun configuredSourcesRemainVisibleWhileOnlySomeHaveLoaded() {
+        val config = IptvConfig(playlists = (1..10).map {
+            IptvPlaylistEntry("list_$it", "Playlist $it", "https://example.invalid/$it.m3u")
+        })
+        val channels = listOf(IptvChannel("list_2:1", "Second", "https://example.invalid/2", "News").enrich(1))
+        val filters = buildTvProviderFilters(config, channels, listOf(Triple("list_1", "News", 20)))
+        assertThat(filters.map { it.id }).containsExactlyElementsIn(listOf("all") + config.playlists.map { it.id }).inOrder()
+        assertThat(filters[0].count).isEqualTo(21)
+        assertThat(filters[2].count).isEqualTo(1)
+        assertThat(filters[10].count).isEqualTo(0)
+        assertThat(buildTvProviderFilters(config, emptyList())).hasSize(11)
+    }
+
+    @Test fun disabledAndVodOnlySourcesStayOutOfLivePicker() {
+        val config = IptvConfig(playlists = (1..4).map {
+            IptvPlaylistEntry("list_$it", "Playlist $it", "https://example.invalid/$it.m3u",
+                enabled = it != 3, importLiveTv = it != 4)
+        })
+        assertThat(buildTvProviderFilters(config, emptyList()).map { it.id })
+            .containsExactly("all", "list_1", "list_2").inOrder()
+    }
+
     @Test
     fun sectionsFollowPlaylistOrderAndDoNotMixCategories() {
         val config = IptvConfig(

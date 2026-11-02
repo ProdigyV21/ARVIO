@@ -11,7 +11,7 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class SeekPreviewCacheWriterTest {
-    @Test fun `offers never wait for disk and rapid requests retain only newest pending entry`() = runTest {
+    @Test fun `offers never wait for disk and rapid requests retain only the newest bounded strip`() = runTest {
         val release = CompletableDeferred<Unit>()
         val written = mutableListOf<Int>()
         val writer = SeekPreviewCacheWriter<Int>(backgroundScope) {
@@ -25,7 +25,7 @@ class SeekPreviewCacheWriterTest {
         assertEquals(listOf(1), written)
         release.complete(Unit)
         runCurrent()
-        assertEquals(listOf(1, 100), written)
+        assertEquals(listOf(1, 96, 97, 98, 99, 100), written)
         writer.close()
     }
 

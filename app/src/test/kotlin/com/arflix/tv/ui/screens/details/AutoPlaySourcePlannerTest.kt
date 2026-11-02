@@ -178,4 +178,24 @@ class AutoPlaySourcePlannerTest {
 
         assertFalse(isAutoPlayableStream(magnet))
     }
+
+    @Test
+    fun `sources a debrid service is still downloading are never picked automatically`() {
+        val uncached = StreamSource(
+            source = "Movie 2160p",
+            addonName = "AIOStreams",
+            addonId = "aiostreams",
+            quality = "4K",
+            size = "20 GB",
+            url = "https://aiostreams.example/api/v1/debrid/playback/abc",
+            rawLabel = "[RD⏳] AIOStreams 2160p"
+        )
+        val cached = uncached.copy(rawLabel = "[RD⚡] AIOStreams 1080p", quality = "1080p", size = "8 GB")
+
+        assertTrue(isAwaitingDebridDownload(uncached))
+        assertFalse(isAwaitingDebridDownload(cached))
+        assertFalse(matchesAutoplayLimits(uncached, minimumQuality = 0, limits = com.arflix.tv.data.model.AutoplayLimits()))
+        assertEquals(cached, bestAutoPlayStream(listOf(uncached, cached), minQualityScore = 0))
+        assertEquals(listOf(cached), eligiblePlayerAutoplayStreams(listOf(uncached, cached), minimumQuality = 0))
+    }
 }

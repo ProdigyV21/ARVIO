@@ -30,6 +30,10 @@ import org.junit.Test
  * five browse rows are replaced by one endlessly paging grid.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+// Each wait ends as soon as the expected state arrives; the bound only matters when a test fails.
+// Kept generous because the shared CI runners can be slow enough to blow a 5 s budget.
+private const val STATE_TIMEOUT_MS = 30_000L
+
 class DiscoverGridTest {
     @Test fun fullyWatchedBatchOffersExplicitContinuationInsteadOfFalseEnd() = runBlocking {
         every { trakt.getWatchedMoviesFromCache() } returns setOf(1)
@@ -41,14 +45,14 @@ class DiscoverGridTest {
             if (arg<Int>(3) <= 5) listOf(movie(1)) else listOf(movie(2))
         }
         model.setHideWatched(true)
-        val paused = withTimeout(5_000) { model.uiState.first { it.gridScanPaused } }
+        val paused = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.gridScanPaused } }
         assertTrue(paused.discoverGridItems.isEmpty())
         assertFalse(paused.gridEndReached)
         val before = calls
         model.loadMoreDiscoverGrid()
         assertEquals(before, calls)
         model.retryDiscoverGrid()
-        val continued = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val continued = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
         assertEquals(listOf(2), continued.discoverGridItems.map { it.id })
         assertFalse(continued.gridScanPaused)
     }
@@ -63,15 +67,15 @@ class DiscoverGridTest {
             else listOf(movie(2), movie(2))
         }
         model.toggleGenre(action)
-        withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 1 } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 1 } }
         model.loadMoreDiscoverGrid()
-        val failed = withTimeout(5_000) { model.uiState.first { it.gridLoadFailed } }
+        val failed = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.gridLoadFailed } }
         assertFalse(failed.gridEndReached)
         assertEquals(listOf(1), failed.discoverGridItems.map { it.id })
         model.loadMoreDiscoverGrid()
         assertEquals(1, attempts)
         model.retryDiscoverGrid()
-        val retried = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 2 } }
+        val retried = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 2 } }
         assertEquals(listOf(1, 2), retried.discoverGridItems.map { it.id })
         assertFalse(retried.gridLoadFailed)
         assertEquals(2, attempts)
@@ -90,13 +94,13 @@ class DiscoverGridTest {
             }
         }
         model.toggleGenre(action)
-        withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 1 } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 1 } }
         model.loadMoreDiscoverGrid()
-        withTimeout(5_000) { started.await() }
+        withTimeout(STATE_TIMEOUT_MS) { started.await() }
         model.clearDiscoverFilters()
         model.toggleGenre(action)
-        withTimeout(5_000) { cancelled.await() }
-        val refreshed = withTimeout(5_000) { model.uiState.first { !it.isGridLoading && it.discoverGridItems.isNotEmpty() } }
+        withTimeout(STATE_TIMEOUT_MS) { cancelled.await() }
+        val refreshed = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { !it.isGridLoading && it.discoverGridItems.isNotEmpty() } }
         assertEquals(listOf(1), refreshed.discoverGridItems.map { it.id })
     }
 
@@ -123,7 +127,7 @@ class DiscoverGridTest {
         try {
             store.clear()
             // IO children must finish cancellation before Main is removed.
-            runBlocking { withTimeout(5_000) { job?.join() } }
+            runBlocking { withTimeout(STATE_TIMEOUT_MS) { job?.join() } }
         } finally {
             Dispatchers.resetMain()
         }
@@ -140,7 +144,7 @@ class DiscoverGridTest {
         } returns listOf(movie(1), movie(2))
 
         model.toggleGenre(action)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 2 } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 2 } }
 
         assertTrue(state.hasDiscoverFilters)
         assertTrue(state.discoverCategories.isEmpty())
@@ -157,9 +161,9 @@ class DiscoverGridTest {
         } returns listOf(movie(2), movie(3))
 
         model.toggleGenre(action)
-        withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 2 } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 2 } }
         model.loadMoreDiscoverGrid()
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 3 } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 3 } }
 
         assertEquals(listOf(1, 2, 3), state.discoverGridItems.map { it.id })
         assertFalse(state.isGridLoadingMore)
@@ -171,7 +175,7 @@ class DiscoverGridTest {
         } returns emptyList()
 
         model.toggleGenre(action)
-        withTimeout(5_000) { model.uiState.first { it.gridEndReached } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.gridEndReached } }
         model.loadMoreDiscoverGrid()
         model.loadMoreDiscoverGrid()
 
@@ -189,9 +193,9 @@ class DiscoverGridTest {
         } returns listOf(movie(9))
 
         model.toggleGenre(action)
-        withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
         model.toggleGenre(action)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverCategories.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverCategories.isNotEmpty() } }
 
         assertFalse(state.hasDiscoverFilters)
         assertTrue(state.discoverGridItems.isEmpty())
@@ -204,7 +208,7 @@ class DiscoverGridTest {
 
         model.selectType(DiscoverType.TV_SHOWS)
         model.toggleGenre(action)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(5), state.discoverGridItems.map { it.id })
     }
@@ -219,7 +223,7 @@ class DiscoverGridTest {
 
         model.toggleGenre(action)
         model.toggleGenre(sciFi)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(28, 878), state.selectedGenres.map { it.id })
         assertTrue(state.matchAllGenres)
@@ -232,7 +236,7 @@ class DiscoverGridTest {
 
         model.toggleGenre(action)
         model.selectSort(SortOption.TOP_RATED)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.map { item -> item.id } == listOf(7) } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.map { item -> item.id } == listOf(7) } }
 
         assertEquals(SortOption.TOP_RATED, state.sortOption)
     }
@@ -243,7 +247,7 @@ class DiscoverGridTest {
         } returns listOf(movie(8))
 
         model.setRating(RatingFilter(min = 7.0, max = 9.0, minVotes = 500))
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertTrue(state.hasDiscoverFilters)
         assertEquals(listOf(8), state.discoverGridItems.map { it.id })
@@ -261,7 +265,7 @@ class DiscoverGridTest {
         } returns listOf(movie(11))
 
         model.selectYear(1999)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(11), state.discoverGridItems.map { it.id })
     }
@@ -278,7 +282,7 @@ class DiscoverGridTest {
         } returns listOf(movie(90))
 
         model.selectDecade(Decade(1990, 1999))
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(90), state.discoverGridItems.map { it.id })
     }
@@ -291,7 +295,7 @@ class DiscoverGridTest {
 
         model.selectType(DiscoverType.TV_SHOWS)
         model.selectDecade(Decade(1990, 1999))
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(91), state.discoverGridItems.map { it.id })
     }
@@ -321,7 +325,7 @@ class DiscoverGridTest {
         } returns listOf(movie(21))
 
         model.selectLanguage("ja")
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(21), state.discoverGridItems.map { it.id })
         assertTrue(state.hasDiscoverFilters)
@@ -335,7 +339,7 @@ class DiscoverGridTest {
 
         model.selectType(DiscoverType.TV_SHOWS)
         model.selectLanguage("ko")
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         assertEquals(listOf(22), state.discoverGridItems.map { it.id })
     }
@@ -360,7 +364,7 @@ class DiscoverGridTest {
         } returns listOf(movie(3))
 
         model.setHideWatched(true)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.isNotEmpty() } }
 
         // Page 1 held nothing but watched films, so a page of only-watched results must not be
         // mistaken for the end of the list.
@@ -376,10 +380,10 @@ class DiscoverGridTest {
 
         model.toggleGenre(action)
         model.setHideWatched(true)
-        withTimeout(5_000) { model.uiState.first { showsClearChip(it) } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { showsClearChip(it) } }
 
         model.clearDiscoverFilters()
-        val state = withTimeout(5_000) { model.uiState.first { !showsClearChip(it) } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { !showsClearChip(it) } }
 
         assertFalse(state.hasDiscoverFilters)
         assertTrue(state.selectedGenres.isEmpty())
@@ -395,10 +399,10 @@ class DiscoverGridTest {
         model.setRating(RatingFilter(min = 7.0))
         model.selectLanguage("ja")
         model.setHideWatched(true)
-        withTimeout(5_000) { model.uiState.first { it.hasDiscoverFilters } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.hasDiscoverFilters } }
 
         model.clearDiscoverFilters()
-        val state = withTimeout(5_000) { model.uiState.first { !it.hasDiscoverFilters } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { !it.hasDiscoverFilters } }
 
         assertTrue(state.selectedGenres.isEmpty())
         assertNull(state.decade)
@@ -416,7 +420,7 @@ class DiscoverGridTest {
         } returns listOf(movie(1), movie(2))
 
         model.toggleGenre(action)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 2 } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 2 } }
 
         // TMDB never sends the flag; without it every card here looked unwatched.
         assertEquals(listOf(true, false), state.discoverGridItems.map { it.isWatched })
@@ -431,7 +435,7 @@ class DiscoverGridTest {
         // On and off again: the rows reload with the stubs above in place.
         model.toggleGenre(action)
         model.toggleGenre(action)
-        val state = withTimeout(5_000) { model.uiState.first { it.discoverCategories.isNotEmpty() } }
+        val state = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverCategories.isNotEmpty() } }
 
         state.discoverCategories.forEach { row ->
             assertEquals(listOf(true, false), row.items.map { it.isWatched })
@@ -443,19 +447,19 @@ class DiscoverGridTest {
             repository.discoverMovies(genres = "28", page = 1, sortBy = any(), minVoteCount = any(), language = any(), year = any(), keywords = any(), releaseDateLte = any(), releaseDateGte = any(), minVoteAverage = any(), maxVoteAverage = any(), certificationCountry = any(), certificationLte = any(), primaryReleaseDateLte = any(), primaryReleaseDateGte = any())
         } returns listOf(movie(1), movie(2))
         model.toggleGenre(action)
-        val before = withTimeout(5_000) { model.uiState.first { it.discoverGridItems.size == 2 } }
+        val before = withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.size == 2 } }
         assertEquals(listOf(false, false), before.discoverGridItems.map { it.isWatched })
 
         // Film 2 opened from the grid and watched: the grid is kept for the session (E5), so
         // only the refresh on the way back can give it its tick.
         every { trakt.getWatchedMoviesFromCache() } returns setOf(2)
         model.refreshWatchedMarks()
-        withTimeout(5_000) { model.uiState.first { it.discoverGridItems.map { item -> item.isWatched } == listOf(false, true) } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.map { item -> item.isWatched } == listOf(false, true) } }
 
         // Marked unwatched again: the tick goes as well.
         every { trakt.getWatchedMoviesFromCache() } returns emptySet()
         model.refreshWatchedMarks()
-        withTimeout(5_000) { model.uiState.first { it.discoverGridItems.none { item -> item.isWatched } } }
+        withTimeout(STATE_TIMEOUT_MS) { model.uiState.first { it.discoverGridItems.none { item -> item.isWatched } } }
         coVerify(atLeast = 1) { trakt.initializeWatchedCache() }
     }
 }

@@ -1553,5 +1553,12 @@
   "{value0}% · watched": "{value0} % · peržiūrėta",
   "· Guide match": "· Vadovo rungtynės",
   "· Possible broadcast": "· Galima transliacija",
-  "· {value0}d archive": "· {value0}d archyvas"
+  "· {value0}d archive": "· {value0}d archyvas",
+  "View on Trakt": "Žiūrėti Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Šio failo garso negalima tiesiogiai atkurti šioje naršyklėje. Konvertuojamas garsas…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Šio failo garso negalima atkurti šioje naršyklėje. Prašoma teikėjo konvertavimo…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Šio šaltinio garso negalima atkurti šioje naršyklėje. Pasirinkite kitą šaltinį arba naudokite išorinį grotuvą.",
+  "Converting the audio for your browser…": "Garsas konvertuojamas jūsų naršyklei…",
+  "Picking the best source…": "Renkamas geriausias šaltinis…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi apmokestina JAV doleriais; jūsų bankas sumą konvertuoja automatiškai."
 }

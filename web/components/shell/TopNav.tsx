@@ -3,7 +3,7 @@ import { useTranslation } from "@/lib/i18n";
 
 
 import { BadgeCheck, Bookmark, Home, Search, Settings, Tv } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppPick } from "@/lib/store";
 import { kidsLevelOf } from "@/lib/kids";
 import { ProfileAvatarVisual } from "@/components/profile/ProfileAvatar";
@@ -37,6 +37,7 @@ export function TopNav() {
     target.focus();
   };
   const [scrolled, setScrolled] = useState(false);
+  const barRef = useRef<HTMLElement>(null);
   // Live TV carries no age ratings: a kids profile loses the tab (Android KidsNavigation).
   const visibleNav = kidsLevelOf(activeProfile) ? nav.filter((item) => item.id !== "tv") : nav;
   const entitlement = useEntitlement();
@@ -52,6 +53,28 @@ export function TopNav() {
     return () => clearInterval(timer);
   }, [entitlement?.entitled, entitlement?.reason, entitlement?.expiresAt]);
 
+  // Publish where the bar's controls end (--topnav-bottom), so pages that put
+  // their own controls under it (the details Back button and title) never
+  // collide with the profile or the tabs, whatever the window size or zoom.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const root = document.documentElement;
+    const measure = () => {
+      if (getComputedStyle(bar).display === "none") { root.style.removeProperty("--topnav-bottom"); return; }
+      const top = bar.getBoundingClientRect().top;
+      let bottom = 0;
+      for (const child of Array.from(bar.children)) bottom = Math.max(bottom, child.getBoundingClientRect().bottom - top);
+      if (bottom > 0) root.style.setProperty("--topnav-bottom", `${Math.round(bottom)}px`);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(bar);
+    for (const child of Array.from(bar.children)) observer?.observe(child);
+    window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); root.style.removeProperty("--topnav-bottom"); };
+  }, []);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -64,7 +87,7 @@ export function TopNav() {
     <>
       <a className="skip-link" href="#main-content" onClick={skipToContent}>{translateUi("Skip to content")}</a>
       {/* Desktop/Tablet top bar: a banner landmark with the main navigation. */}
-      <header className={`sidebar ${scrolled ? "is-scrolled" : ""}`}>
+      <header ref={barRef} className={`sidebar ${scrolled ? "is-scrolled" : ""}`}>
         <div className="profile-cluster">
           <button type="button" className="brand" onClick={switchProfile} aria-label={translateUi("Switch profile")}>
             {activeProfile ? <ProfileAvatarVisual profile={activeProfile} avatarImages={avatarImages} /> : <img src="/arvio-logo.svg" alt="" />}

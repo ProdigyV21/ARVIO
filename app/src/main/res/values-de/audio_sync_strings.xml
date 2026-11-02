@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="player_subtitle_hearing_sync">Untertitel werden per Mithören synchronisiert …</string>
+    <string name="player_audio_sync_listening">Kein geprüfter Untertitel — wird an den Ton angepasst …</string>
+    <string name="player_audio_sync_model_downloading">Spracherkennungsmodell (%1$s MB) wird für schnellere Untertitel-Synchronisierung heruntergeladen …</string>
+    <string name="player_audio_sync_live_only">Kein Vorauslesen für %1$s-Ton auf diesem Gerät, Synchronisierung über den laufenden Ton (langsamer)</string>
+    <string name="player_audio_sync_withdrawn">Untertitel-Synchronisierung nicht bestätigt, ursprüngliches Timing wiederhergestellt</string>
+    <string name="player_audio_sync_estimated">Untertitel werden an den Ton angepasst (%1$s), Feinabstimmung …</string>
+    <string name="player_audio_sync_synced">Untertitel-Synchronisierung bestätigt (%1$s)</string>
+    <string name="player_audio_sync_synced_rate">Untertitel-Synchronisierung bestätigt (%1$s, Bildrate korrigiert)</string>
+    <string name="player_audio_sync_adjusted">Untertitel-Timing geändert, neu synchronisiert (%1$s)</string>
+    <string name="player_audio_sync_unsteady">Ton-Synchronisierung unsicher — aktuelles Untertitel-Timing bleibt</string>
+</resources>

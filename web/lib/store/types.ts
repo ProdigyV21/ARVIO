@@ -93,7 +93,7 @@ export interface AppStore {
   // Watchlist list-source switcher (Trakt custom lists / collection).
   loadTraktLists: () => Promise<Array<{ id: string; name: string }>>;
   loadTraktListItems: (source: string) => Promise<MediaItem[]>;
-  loadTrackerLibrary: (provider: "trakt" | "simkl", source: string) => Promise<MediaItem[]>;
+  loadTrackerLibrary: (provider: "trakt" | "simkl" | "wetrakr", source: string) => Promise<MediaItem[]>;
   settingsSyncState: "local" | "saved" | "pending" | "error";
   searchState: "idle" | "loading" | "error";
 

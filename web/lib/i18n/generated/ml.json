@@ -1591,5 +1591,12 @@
   "{value0}% · watched": "{value0}% · കണ്ടു",
   "· Guide match": "· ഗൈഡ് പൊരുത്തം",
   "· Possible broadcast": "· സാധ്യമായ പ്രക്ഷേപണം",
-  "· {value0}d archive": "· {value0}d ആർക്കൈവ്"
+  "· {value0}d archive": "· {value0}d ആർക്കൈവ്",
+  "View on Trakt": "Trakt-ൽ കാണുക",
+  "This file's audio can't play directly in this browser. Converting the audio…": "ഈ ഫയലിന്റെ ഓഡിയോ ഈ ബ്രൗസറിൽ നേരിട്ട് പ്ലേ ചെയ്യാനാകില്ല. ഓഡിയോ പരിവർത്തനം ചെയ്യുന്നു…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "ഈ ഫയലിന്റെ ഓഡിയോ ഈ ബ്രൗസറിൽ പ്ലേ ചെയ്യാനാകില്ല. ദാതാവിന്റെ പരിവർത്തനം അഭ്യർത്ഥിക്കുന്നു…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "ഈ ഉറവിടത്തിന്റെ ഓഡിയോ ഈ ബ്രൗസറിൽ പ്ലേ ചെയ്യാനാകില്ല. മറ്റൊരു ഉറവിടം തിരഞ്ഞെടുക്കുക അല്ലെങ്കിൽ ഒരു എക്സ്റ്റേണൽ പ്ലേയർ ഉപയോഗിക്കുക.",
+  "Converting the audio for your browser…": "നിങ്ങളുടെ ബ്രൗസറിനായി ഓഡിയോ പരിവർത്തനം ചെയ്യുന്നു…",
+  "Picking the best source…": "മികച്ച ഉറവിടം തിരഞ്ഞെടുക്കുന്നു…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi യുഎസ് ഡോളറിലാണ് തുക ഈടാക്കുന്നത്; നിങ്ങളുടെ ബാങ്ക് തുക സ്വയമേവ മാറ്റും."
 }

@@ -71,9 +71,11 @@ class IptvVodProviderPresentationTest {
 
     private fun presentationField(source: StreamSource, field: String): Any? {
         val presenter = Class.forName("com.arflix.tv.ui.components.StreamSelectorKt")
-            .getDeclaredMethod("presentSource", StreamSource::class.java, String::class.java)
+            .getDeclaredMethod(
+                "presentSource", StreamSource::class.java, String::class.java, String::class.java, String::class.java
+            )
             .apply { isAccessible = true }
-        val result = presenter.invoke(null, source, "Unknown")!!
+        val result = presenter.invoke(null, source, "Unknown", null, "")!!
         return result.javaClass.getDeclaredField(field).apply { isAccessible = true }.get(result)
     }
 

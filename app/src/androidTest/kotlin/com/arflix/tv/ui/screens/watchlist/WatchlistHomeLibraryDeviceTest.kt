@@ -126,7 +126,7 @@ class WatchlistHomeLibraryDeviceTest {
         val started = SystemClock.elapsedRealtime()
         compose.runOnUiThread {
             model = WatchlistViewModel(compose.activity.applicationContext, watchlist, cloud, trakt,
-                remote, media, homes, catalogs, history, simkl, mockk(relaxed = true), profiles,
+                remote, media, homes, catalogs, history, mockk(relaxed = true), simkl, mockk(relaxed = true), profiles,
                 personalLists(), mockk(relaxed = true))
             store.put("library", model)
         }

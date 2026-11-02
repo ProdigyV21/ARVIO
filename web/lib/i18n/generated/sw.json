@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · imetazamwa",
   "· Guide match": "· Mechi ya mwongozo",
   "· Possible broadcast": "· Matangazo yanayowezekana",
-  "· {value0}d archive": "· {value0}d kumbukumbu"
+  "· {value0}d archive": "· {value0}d kumbukumbu",
+  "View on Trakt": "Tazama kwenye Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Sauti ya faili hili haiwezi kuchezwa moja kwa moja katika kivinjari hiki. Inabadilisha sauti…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Sauti ya faili hili haiwezi kuchezwa katika kivinjari hiki. Inaomba ubadilishaji wa mtoa huduma…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Sauti ya chanzo hiki haiwezi kuchezwa katika kivinjari hiki. Chagua chanzo kingine au tumia kichezaji cha nje.",
+  "Converting the audio for your browser…": "Inabadilisha sauti kwa ajili ya kivinjari chako…",
+  "Picking the best source…": "Inachagua chanzo bora…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi hutoza kwa dola za Marekani; benki yako hubadilisha kiasi hicho kiotomatiki."
 }

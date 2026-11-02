@@ -289,7 +289,16 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         cleanup.push(() => clearTimeout(retryTimer));
         instance.on(Hls.Events.ERROR, (_event, data) => {
-          if (!active() || !data.fatal) return;
+          if (!active()) return;
+          // Report every failing request (hls.js retries segments quietly, so a
+          // startup timeout may be the only fatal outcome): the player then
+          // knows WHICH server refused, e.g. an http:// IP the page blocks.
+          const failedUrl = (data as { frag?: { url?: string }; url?: string; context?: { url?: string } }).frag?.url
+            ?? (data as { url?: string }).url ?? (data as { context?: { url?: string } }).context?.url;
+          if (failedUrl && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            try { video.dispatchEvent(new CustomEvent("arvio-resource-error", { detail: { url: failedUrl, status: data.response?.code } })); } catch { /* no CustomEvent */ }
+          }
+          if (!data.fatal) return;
           const network = data.type === Hls.ErrorTypes.NETWORK_ERROR;
           const media = data.type === Hls.ErrorTypes.MEDIA_ERROR;
           const status = data.response?.code;

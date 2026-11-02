@@ -404,6 +404,9 @@
     <string name="settings_section_languages">IDIOMAS</string>
     <string name="settings_section_user_account">INFO DE USUARIO Y CUENTA</string>
     <string name="settings_force_sync">Forzar sincronización</string>
+    <string name="settings_force_trakt_sync">Forzar sincronización de Trakt</string>
+    <string name="settings_force_trakt_sync_desc">Descarga el historial de visionado, progreso de reproducción y continuar viendo desde Trakt.tv</string>
+    <string name="settings_syncing_trakt_now">Sincronizando datos de Trakt ahora…</string>
     <string name="settings_disconnect">Desconectar</string>
     <string name="settings_cloud_disconnect_confirm_title">¿Desconectar ARVIO Cloud?</string>
     <string name="settings_cloud_disconnect_confirm_desc">Tendrás que volver a iniciar sesión para sincronizar tus ajustes.</string>
@@ -615,14 +618,13 @@
     <string name="settings_test">Probar</string>
     <string name="settings_cd_qr_code">Código QR</string>
     <string name="settings_cd_drag_reorder">Arrastra para reordenar</string>
-    <string name="settings_cd_manage_categories">Gestionar Categorías</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Actualizando canales y EPG...</string>
     <string name="settings_reload_playlists_now">Recargar listas ahora</string>
     <string name="settings_reload_playlist_epg_now">Recargar lista y EPG ahora</string>
     <string name="settings_no_playlists_configured">No hay listas configuradas</string>
     <string name="settings_remove_playlists_epg">Eliminar listas, EPG y favoritos</string>
-    <string name="settings_add_iptv_lists_hint">Añade hasta 3 listas M3U / Xtream IPTV con nombres</string>
+    <string name="settings_add_iptv_lists_hint">Añade hasta 10 listas M3U / Xtream IPTV con nombres</string>
     <string name="settings_create_another_iptv">Crear otra lista IPTV</string>
     <string name="settings_badge_full">COMPLETA</string>
     <string name="settings_badge_add">AÑADIR</string>
@@ -661,7 +663,7 @@
     <string name="settings_iptv_order_provider">Orden del proveedor</string>
     <string name="settings_iptv_order_number">Número de canal</string>
     <string name="settings_iptv_order_name">Alfabético (A-Z)</string>
-    <string name="settings_add_tv_lists_hint">Añade hasta 3 listas de TV M3U / Xtream</string>
+    <string name="settings_add_tv_lists_hint">Añade hasta 10 listas de TV M3U / Xtream</string>
     <string name="settings_create_another_tv">Crear otra lista de TV</string>
     <string name="settings_badge_full_short">COMPLETA</string>
     <string name="settings_search_lists">Buscar listas</string>
@@ -812,11 +814,10 @@
     <string name="settings_stalker_configured">Configurado</string>
     <string name="settings_stalker_not_configured">No configurado</string>
     <string name="settings_stalker_remove">Eliminar portal</string>
-    <string name="settings_cd_manage_stalker_categories">Gestionar categorías Stalker</string>
     <string name="settings_cd_edit_stalker_config">Editar portal Stalker</string>
     <string name="settings_section_stalker_portals">PORTALES STALKER</string>
     <string name="settings_add_stalker_portal_button">Añadir portal Stalker</string>
-    <string name="settings_stalker_add_hint">Añade hasta 3 portales Stalker / Ministra</string>
+    <string name="settings_stalker_add_hint">Añade hasta 10 portales Stalker / Ministra</string>
     <string name="settings_stalker_create_another">Añadir otro portal Stalker</string>
     <string name="settings_stalker_portal_name_label">Nombre del portal</string>
     <string name="settings_stalker_portal_name_placeholder">ej. Portal 1</string>
@@ -825,7 +826,7 @@
     <string name="settings_cd_move_stalker_down">Bajar portal Stalker</string>
     <string name="settings_cd_remove_stalker_portal">Eliminar portal Stalker</string>
     <string name="settings_stalker_rename_title">Renombrar portal</string>
-    <string name="settings_stalker_max_reached">Número máximo de 3 portales Stalker alcanzado</string>
+    <string name="settings_stalker_max_reached">Número máximo de 10 portales Stalker alcanzado</string>
     <string name="settings_ua_default">Por defecto</string>
     <string name="settings_enter_field">Introduce %1$s...</string>
     <string name="settings_clock_12h">12 horas</string>
@@ -1148,6 +1149,7 @@
     <string name="component_label_media">Medios</string>
     <string name="component_media_logo">Logo de %1$s</string>
     <string name="component_badge_new_episode">Nuevo Episodio</string>
+    <string name="component_badge_new_episode_short">Nuevo</string>
     <string name="component_ep_left_one">Queda 1 ep</string>
     <string name="component_eps_left">Quedan %1$d eps</string>
     <string name="component_season_episode_marker">T%1$d • E%2$d</string>
@@ -1441,6 +1443,8 @@
     <string name="auth_unexpected_credential">Tipo de credencial inesperado</string>
     <string name="auth_failed_parse_google">Error al analizar las credenciales de Google</string>
     <string name="trakt_not_authenticated">No autenticado con Trakt</string>
+    <string name="trakt_reconnect_required">Tu autorización de Trakt ha caducado o fue revocada. Vuelve a conectar Trakt para reanudar la sincronización.</string>
+    <string name="trakt_sync_refresh_failed">Se importó el historial, pero no se pudo actualizar completamente Continuar viendo. Se conservaron los elementos guardados; inténtalo más tarde.</string>
     <string name="sync_supabase_auth_failed">Error en la autorización de Supabase</string>
     <string name="launcher_continue_dash">%1$s - %2$s</string>
     <string name="telegram_search_timed_out">La búsqueda en Telegram agotó el tiempo de espera</string>

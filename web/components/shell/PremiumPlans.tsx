@@ -71,6 +71,7 @@ export function PayOnPhone({ email }: { email?: string | null }) {
       <p className="premium-pay-title"><Smartphone size={17} /> {translateUi("Pay on your phone")}</p>
       <p>{translateUi("Scan with your phone camera to open Ko-fi. This TV unlocks by itself after you pay.")}</p>
       {email && <p className="premium-pay-email">{translateUi("Use this email at checkout")} <strong>{email}</strong></p>}
+      <p className="premium-pay-currency">{translateUi("Ko-fi charges in US dollars; your bank converts the amount automatically.")}</p>
       {yearly && <div className="premium-pay-plans" role="group" aria-label={translateUi("Plan")}>
         <button type="button" aria-pressed={plan === "yearly"} onClick={() => setPlan("yearly")}>{translateUi("12-month pass · $20")}</button>
         <button type="button" aria-pressed={plan === "monthly"} onClick={() => setPlan("monthly")}>{translateUi("Monthly · $2.99")}</button>

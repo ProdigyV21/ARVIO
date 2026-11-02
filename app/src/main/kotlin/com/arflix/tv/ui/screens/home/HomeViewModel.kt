@@ -148,6 +148,9 @@ data class HomeCollectionRow(
     val items: List<CatalogConfig>
 )
 
+// Quiet update notifications show their notice once per process, i.e. once per cold start.
+private var quietUpdateNoticeShown = false
+
 internal fun compactHomeCategoriesForCache(
     categories: List<Category>,
     maxItemsPerCategory: Int
@@ -1645,6 +1648,15 @@ class HomeViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    // Kept out of uiState: Home rewrites that state from many coroutines, which would cut the
+    // notice short. Null when nothing is shown.
+    private val _quietUpdateNotice = MutableStateFlow<String?>(null)
+    val quietUpdateNotice: StateFlow<String?> = _quietUpdateNotice.asStateFlow()
+
+    fun dismissQuietUpdateNotice() {
+        _quietUpdateNotice.value = null
+    }
     val cardLogoUrls = mutableStateMapOf<String, String>()
     val cardImdbRatings = mutableStateMapOf<String, String>()
 
@@ -2580,10 +2592,23 @@ class HomeViewModel @Inject constructor(
                     }
                 }
 
-                // Auto-open only when we first discover a new unignored update
+                // Auto-open only when we first discover a new unignored update. In quiet mode a
+                // small notice replaces the popup; the update stays available in Settings.
+                var quietNotice: String? = null
                 if (status is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && previousStatus !is com.arflix.tv.updater.UpdateStatus.UpdateAvailable && !isIgnored) {
-                    shouldAutoOpen = true
+                    if (updatePreferences.quietNotifications.first()) {
+                        if (!quietUpdateNoticeShown) {
+                            quietUpdateNoticeShown = true
+                            quietNotice = context.getString(
+                                R.string.home_update_available_quiet,
+                                status.update.title.ifBlank { status.update.tag }
+                            )
+                        }
+                    } else {
+                        shouldAutoOpen = true
+                    }
                 }
+                if (quietNotice != null) _quietUpdateNotice.value = quietNotice
 
                 _uiState.value = _uiState.value.copy(
                     updateStatus = status,
@@ -3668,6 +3693,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun preloadImdbRatingsForHeroItems(items: List<MediaItem>) {
+        preloadLogosForCategoryItems(items)
         viewModelScope.launch(networkDispatcher) {
             items.filter { isActionableMediaItem(it) && !isIptvItem(it) }.forEach { item ->
                 val key = "${item.mediaType}_${item.id}"

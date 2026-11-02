@@ -11,7 +11,8 @@ enum class TrackingReadMode {
     TRAKT,
     SIMKL,
     BOTH,
-    MDBLIST;
+    MDBLIST,
+    WETRAKR;
 
     companion object {
         fun fromStorage(value: String?): TrackingReadMode = entries.firstOrNull {
@@ -27,5 +28,6 @@ data class TrackingPreferences(
     val continueWatchingReadMode: TrackingReadMode = TrackingReadMode.AUTO,
     val watchedReadMode: TrackingReadMode = TrackingReadMode.AUTO,
     val writeToTrakt: Boolean? = null,
-    val writeToSimkl: Boolean? = null
+    val writeToSimkl: Boolean? = null,
+    val writeToWeTrakr: Boolean? = null
 )

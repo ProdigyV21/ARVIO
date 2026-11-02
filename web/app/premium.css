@@ -296,3 +296,4 @@
   .st-title { font-size: 30px; margin-top: 6px; }
 }
 .paywall-primary:disabled { opacity: .6; cursor: wait; }
+.membership-inline-hint .membership-currency-note { margin-top: 0; color: #8f8f8f; }

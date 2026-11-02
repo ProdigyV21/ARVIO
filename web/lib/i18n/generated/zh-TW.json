@@ -1550,5 +1550,12 @@
   "{value0}% · watched": "{value0}% · 已觀看",
   "· Guide match": "·指导比赛",
   "· Possible broadcast": "·可能播出",
-  "· {value0}d archive": "· {value0}d 存檔"
+  "· {value0}d archive": "· {value0}d 存檔",
+  "View on Trakt": "查看Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "此檔案的音訊無法在此瀏覽器中直接播放。正在轉換音訊…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "此檔案的音訊無法在此瀏覽器中播放。正在請求提供者轉換…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "此來源的音訊無法在此瀏覽器中播放。請選擇其他來源或使用外部播放器。",
+  "Converting the audio for your browser…": "正在為您的瀏覽器轉換音訊…",
+  "Picking the best source…": "正在挑選最佳來源…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi 以美元收費，您的銀行會自動換算金額。"
 }

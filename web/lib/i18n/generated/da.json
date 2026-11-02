@@ -1556,5 +1556,12 @@
   "{value0}% · watched": "{value0} % · set",
   "· Guide match": "· Match i guiden",
   "· Possible broadcast": "· Mulig udsendelse",
-  "· {value0}d archive": "· {value0}d arkiv"
+  "· {value0}d archive": "· {value0}d arkiv",
+  "View on Trakt": "Se på Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Lyden i denne fil kan ikke afspilles direkte i denne browser. Konverterer lyden…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Lyden i denne fil kan ikke afspilles i denne browser. Anmoder om udbyderkonvertering…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Lyden fra denne kilde kan ikke afspilles i denne browser. Vælg en anden kilde, eller brug en ekstern afspiller.",
+  "Converting the audio for your browser…": "Konverterer lyden til din browser…",
+  "Picking the best source…": "Vælger den bedste kilde…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi opkræver i amerikanske dollars; din bank omregner beløbet automatisk."
 }

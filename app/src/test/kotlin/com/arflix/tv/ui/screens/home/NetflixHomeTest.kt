@@ -30,7 +30,17 @@ class NetflixHomeTest {
         val otherTopTen = listOf(row("addon_catalog", 5, title = "Top 10 in Israel"), row("trending_tv", 6))
         assertEquals(listOf(5), candidateIds(otherTopTen))
         assertEquals(listOf(6), candidateIds(listOf(row("popular", 7), row("trending_tv", 6))))
-        assertTrue(candidateIds(listOf(row("popular", 7))).isEmpty())
+    }
+
+    @Test fun homeWithoutTopTenOrTrendingFallsBackToAnyRegularRow() {
+        val rows = listOf(
+            row("continue_watching", 1),
+            Category("collection_row_featured", "Featured", listOf(item(2).copy(status = "collection:featured"))),
+            row("addon_catalog", 3, 4),
+        )
+        val ids = netflixBillboardCandidates(rows) { it.status?.startsWith("collection:") == true }.map { it.id }
+        assertEquals(listOf(3, 4), ids)
+        assertTrue(candidateIds(listOf(row("continue_watching", 1))).isEmpty())
     }
 
     @Test fun kidsProfileBillboardFallsBackToKidsRows() {

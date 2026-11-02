@@ -25,6 +25,7 @@ internal fun traktRetryDelayMs(header: String?, fallbackMs: Long, nowMs: Long = 
  * A rejected certificate (wrong device clock, intercepting network) will not heal by waiting.
  */
 internal fun isTransientTraktPollFailure(error: Throwable): Boolean =
+    (error is HttpException && error.code() in 500..599) ||
     error is java.io.IOException &&
         generateSequence<Throwable>(error) { it.cause }.take(8).none { it is java.security.cert.CertificateException }
 

@@ -19,7 +19,8 @@ const TRACKING_V2_FIELDS = [
   "continueWatchingReadMode",
   "watchedReadMode",
   "writeToTrakt",
-  "writeToSimkl"
+  "writeToSimkl",
+  "writeToWeTrakr"
 ];
 
 function timestampOf(value, field) {

@@ -1592,5 +1592,11 @@
   "{value0}% · watched": "{value0}% · ਦੇਖਿਆ",
   "· Guide match": "· ਗਾਈਡ ਮੈਚ",
   "· Possible broadcast": "· ਸੰਭਾਵੀ ਪ੍ਰਸਾਰਣ",
-  "· {value0}d archive": "· {value0}d ਪੁਰਾਲੇਖ"
+  "· {value0}d archive": "· {value0}d ਪੁਰਾਲੇਖ",
+  "This file's audio can't play directly in this browser. Converting the audio…": "ਇਸ ਫ਼ਾਈਲ ਦਾ ਆਡੀਓ ਇਸ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਸਿੱਧਾ ਨਹੀਂ ਚੱਲ ਸਕਦਾ। ਆਡੀਓ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "ਇਸ ਫ਼ਾਈਲ ਦਾ ਆਡੀਓ ਇਸ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਨਹੀਂ ਚੱਲ ਸਕਦਾ। ਪ੍ਰਦਾਤਾ ਰੂਪਾਂਤਰਨ ਦੀ ਬੇਨਤੀ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "ਇਸ ਸਰੋਤ ਦਾ ਆਡੀਓ ਇਸ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਨਹੀਂ ਚੱਲ ਸਕਦਾ। ਕੋਈ ਹੋਰ ਸਰੋਤ ਚੁਣੋ ਜਾਂ ਬਾਹਰੀ ਪਲੇਅਰ ਵਰਤੋ।",
+  "Converting the audio for your browser…": "ਤੁਹਾਡੇ ਬ੍ਰਾਊਜ਼ਰ ਲਈ ਆਡੀਓ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ…",
+  "Picking the best source…": "ਸਭ ਤੋਂ ਵਧੀਆ ਸਰੋਤ ਚੁਣਿਆ ਜਾ ਰਿਹਾ ਹੈ…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi ਅਮਰੀਕੀ ਡਾਲਰਾਂ ਵਿੱਚ ਚਾਰਜ ਕਰਦਾ ਹੈ; ਤੁਹਾਡਾ ਬੈਂਕ ਰਕਮ ਨੂੰ ਆਪਣੇ-ਆਪ ਬਦਲ ਦਿੰਦਾ ਹੈ।"
 }

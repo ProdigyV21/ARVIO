@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · vaadatud",
   "· Guide match": "· Juhtmatš",
   "· Possible broadcast": "· Võimalik ülekanne",
-  "· {value0}d archive": "· {value0}d arhiiv"
+  "· {value0}d archive": "· {value0}d arhiiv",
+  "View on Trakt": "Vaata saidil Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Selle faili heli ei saa selles brauseris otse esitada. Heli teisendamine…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Selle faili heli ei saa selles brauseris esitada. Pakkujalt teisendamise taotlemine…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Selle allika heli ei saa selles brauseris esitada. Valige mõni muu allikas või kasutage välist pleierit.",
+  "Converting the audio for your browser…": "Heli teisendamine teie brauseri jaoks…",
+  "Picking the best source…": "Parima allika valimine…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi võtab tasu USA dollarites; teie pank konverteerib summa automaatselt."
 }

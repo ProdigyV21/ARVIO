@@ -62,8 +62,9 @@ data class MediaItem(
     val sourceOrder: Int = Int.MAX_VALUE,
     // Placeholder card - shows skeleton loading animation
     val isPlaceholder: Boolean = false,
-    // Continue Watching: formatted time remaining (e.g., "23min left", "1hr 15min left")
-    val timeRemainingLabel: String? = null,
+    // Continue Watching: whole minutes left in the current movie/episode; null under a minute.
+    // The card words it in the user's language, long or short for its width.
+    val timeRemainingMinutes: Int? = null,
     // Continue Watching: true only when progress represents current movie/episode playback.
     val showPlaybackProgress: Boolean = true,
     // Native home-server identity. The TMDB id remains `id` when available;
@@ -103,7 +104,10 @@ data class NextEpisode(
     val seasonNumber: Int,
     val episodeNumber: Int,
     val name: String,
-    val overview: String = ""
+    val overview: String = "",
+    // Presentation numbers can differ from the canonical episode used for playback (anime).
+    val displaySeason: Int? = null,
+    val displayEpisode: Int? = null
 ) : Serializable
 
 /**

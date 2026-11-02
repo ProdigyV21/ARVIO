@@ -1554,5 +1554,12 @@
   "{value0}% · watched": "{value0}% · gekyk",
   "· Guide match": "· Gids wedstryd",
   "· Possible broadcast": "· Moontlike uitsending",
-  "· {value0}d archive": "· {value0}d argief"
+  "· {value0}d archive": "· {value0}d argief",
+  "View on Trakt": "Kyk op Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Hierdie lêer se oudio kan nie direk in hierdie blaaier speel nie. Skakel die oudio om…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Hierdie lêer se oudio kan nie in hierdie blaaier speel nie. Versoek tans verskaffer-omskakeling…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Hierdie bron se oudio kan nie in hierdie blaaier speel nie. Kies 'n ander bron of gebruik 'n eksterne speler.",
+  "Converting the audio for your browser…": "Skakel die oudio vir jou blaaier om…",
+  "Picking the best source…": "Kies die beste bron…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi hef die bedrag in Amerikaanse dollar; jou bank skakel dit outomaties om."
 }

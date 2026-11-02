@@ -356,7 +356,7 @@ fun GlassmorphicCard(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             .then(
                 if (hasBorder) {
                     if (borderGradient) {
@@ -364,15 +364,15 @@ fun GlassmorphicCard(
                             Brush.linearGradient(
                                 colors = listOf(PurpleDark.copy(alpha = 0.3f), Purple.copy(alpha = 0.3f), PurpleLight.copy(alpha = 0.3f))
                             ),
-                            RoundedCornerShape(20.dp)
+                            RoundedCornerShape(16.dp)
                         )
                     } else {
-                        Modifier.background(BorderLight, RoundedCornerShape(20.dp))
+                        Modifier.background(BorderLight, RoundedCornerShape(16.dp))
                     }
                 } else Modifier
             )
             .padding(1.dp)
-            .clip(RoundedCornerShape(19.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(BackgroundGlass)
             .blur(0.5.dp)
     ) {

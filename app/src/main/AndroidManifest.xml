@@ -12,10 +12,14 @@
     <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_ADSERVICES_TOPICS" tools:node="remove" />
 
+    <!-- Voice search in Search (asked for on first use of the mic button). A TV without a
+         microphone stays supported: the mic button is hidden there. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+
     <!-- ARVIO only uses Discord Rich Presence, not the SDK's voice stack. -->
-    <uses-permission
-        android:name="android.permission.RECORD_AUDIO"
-        tools:node="remove" />
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"
         tools:node="remove" />
@@ -49,6 +53,10 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" android:host="discord.com" />
+        </intent>
+        <!-- Search's mic button binds the device's speech recognizer. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 
@@ -217,6 +225,11 @@
             </intent-filter>
         </receiver>
 
+        <service
+            android:name=".ui.screens.player.preview.KeyframeWorkerService"
+            android:process=":seek_preview"
+            android:exported="false"
+            android:stopWithTask="true" />
     </application>
 
 </manifest>

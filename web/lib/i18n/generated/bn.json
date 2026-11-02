@@ -1550,5 +1550,12 @@
   "{value0}% · watched": "{value0}% · দেখা হয়েছে",
   "· Guide match": "· গাইড ম্যাচ",
   "· Possible broadcast": "· সম্ভাব্য সম্প্রচার",
-  "· {value0}d archive": "· {value0}d আর্কাইভ"
+  "· {value0}d archive": "· {value0}d আর্কাইভ",
+  "View on Trakt": "Trakt এ দেখুন",
+  "This file's audio can't play directly in this browser. Converting the audio…": "এই ফাইলের অডিও সরাসরি এই ব্রাউজারে চলতে পারে না। অডিও রূপান্তর করা হচ্ছে…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "এই ফাইলের অডিও এই ব্রাউজারে চলতে পারে না। প্রদানকারীর রূপান্তরের অনুরোধ করা হচ্ছে…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "এই উৎসের অডিও এই ব্রাউজারে চলতে পারে না। অন্য উৎস বেছে নিন বা একটি বাহ্যিক প্লেয়ার ব্যবহার করুন।",
+  "Converting the audio for your browser…": "আপনার ব্রাউজারের জন্য অডিও রূপান্তর করা হচ্ছে…",
+  "Picking the best source…": "সেরা উৎস বাছাই করা হচ্ছে…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi মার্কিন ডলারে চার্জ করে; আপনার ব্যাংক স্বয়ংক্রিয়ভাবে পরিমাণটি রূপান্তর করে।"
 }

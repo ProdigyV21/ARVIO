@@ -1550,5 +1550,12 @@
   "{value0}% · watched": "{value0}٪ · تماشا شده",
   "· Guide match": "· مسابقه راهنما",
   "· Possible broadcast": "· پخش احتمالی",
-  "· {value0}d archive": "· {value0}d آرشیو"
+  "· {value0}d archive": "· {value0}d آرشیو",
+  "View on Trakt": "مشاهده در Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "صدای این فایل مستقیماً در این مرورگر پخش نمی‌شود. در حال تبدیل صدا…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "صدای این فایل در این مرورگر پخش نمی‌شود. در حال درخواست تبدیل از ارائه‌دهنده…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "صدای این منبع در این مرورگر پخش نمی‌شود. منبع دیگری انتخاب کنید یا از پخش‌کننده خارجی استفاده کنید.",
+  "Converting the audio for your browser…": "در حال تبدیل صدا برای مرورگر شما…",
+  "Picking the best source…": "در حال انتخاب بهترین منبع…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi مبلغ را به دلار آمریکا دریافت می‌کند؛ بانک شما آن را به‌طور خودکار تبدیل می‌کند."
 }

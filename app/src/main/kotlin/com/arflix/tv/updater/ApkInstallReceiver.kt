@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.Toast
 import com.arflix.tv.R
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 import javax.inject.Inject
 
 /**
@@ -81,6 +82,9 @@ class ApkInstallReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE_INVALID,
             PackageInstaller.STATUS_FAILURE_STORAGE -> {
                 Log.e(TAG, "Update install failed: status=$status message=$message")
+                if (retryWithoutDexMetadata(context, intent)) {
+                    return
+                }
                 val userMessage = when (status) {
                     PackageInstaller.STATUS_FAILURE_ABORTED -> context.getString(R.string.update_install_cancelled)
                     PackageInstaller.STATUS_FAILURE_BLOCKED -> context.getString(R.string.update_install_blocked)
@@ -98,6 +102,21 @@ class ApkInstallReceiver : BroadcastReceiver() {
                 Log.w(TAG, "Unexpected PackageInstaller status=$status message=$message")
             }
         }
+    }
+
+    /**
+     * The system can accept a session and still reject its base.dm at install time (e.g.
+     * INSTALL_FAILED_BAD_DEX_METADATA on some Android 10/11 devices). Retry the same APK once
+     * without it; the retry carries no dex-metadata extra, so it can't loop.
+     */
+    internal fun retryWithoutDexMetadata(context: Context, intent: Intent): Boolean {
+        if (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999) == PackageInstaller.STATUS_FAILURE_ABORTED) return false
+        if (!intent.getBooleanExtra(ApkInstaller.EXTRA_WITH_DEX_METADATA, false)) return false
+        val apkFile = intent.getStringExtra(ApkInstaller.EXTRA_APK_PATH)?.let(::File) ?: return false
+        if (!apkFile.exists()) return false
+        Log.w(TAG, "Install with dex metadata failed; retrying without it.")
+        ApkInstaller.launchInstall(context, apkFile, withDexMetadata = false)
+        return true
     }
 
     private fun showToast(context: Context, text: String) {

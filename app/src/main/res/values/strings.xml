@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="settings_preference_save_failed">Could not save this setting. Please try again.</string>
     <string name="stream_source_cached">Cached</string>
     <string name="live_sports_source_count">Sources: %1$d</string>
@@ -481,6 +481,9 @@
     <string name="settings_section_languages">LANGUAGES</string>
     <string name="settings_section_user_account">USER INFO &amp; ACCOUNT</string>
     <string name="settings_force_sync">Force Sync</string>
+    <string name="settings_force_trakt_sync" tools:ignore="MissingTranslation">Force Trakt Sync</string>
+    <string name="settings_force_trakt_sync_desc" tools:ignore="MissingTranslation">Download full watch history, playback progress and continue watching from Trakt.tv</string>
+    <string name="settings_syncing_trakt_now" tools:ignore="MissingTranslation">Syncing Trakt data now…</string>
     <string name="settings_disconnect">Disconnect</string>
     <string name="settings_cloud_disconnect_confirm_title">Disconnect ARVIO Cloud?</string>
     <string name="settings_cloud_disconnect_confirm_desc">You\'ll need to sign in again to sync your settings.</string>
@@ -696,14 +699,18 @@
     <string name="settings_test">Test</string>
     <string name="settings_cd_qr_code">QR Code</string>
     <string name="settings_cd_drag_reorder">Drag to reorder</string>
-    <string name="settings_cd_manage_categories">Manage Categories</string>
+    <string name="settings_source_menu_categories">Categories</string>
+    <string name="settings_source_menu_edit">Edit</string>
+    <string name="settings_source_menu_delete_confirm">Tap again to delete</string>
+    <string name="settings_source_menu_open">open menu</string>
+    <string name="settings_source_menu_select">select</string>
     <string name="settings_progress_format">%1$s (%2$d%%)</string>
     <string name="settings_refreshing_channels_epg">Refreshing channels and EPG...</string>
     <string name="settings_reload_playlists_now">Reload playlists now</string>
     <string name="settings_reload_playlist_epg_now">Reload playlist and EPG now</string>
     <string name="settings_no_playlists_configured">No playlists configured</string>
     <string name="settings_remove_playlists_epg">Remove playlists, EPG and favorites</string>
-    <string name="settings_add_iptv_lists_hint">Add up to 5 M3U / Xtream IPTV lists with names</string>
+    <string name="settings_add_iptv_lists_hint">Add up to 10 M3U / Xtream IPTV lists with names</string>
     <string name="settings_create_another_iptv">Create another IPTV list</string>
     <string name="settings_badge_full">FULL</string>
     <string name="settings_badge_add">ADD</string>
@@ -742,7 +749,7 @@
     <string name="settings_iptv_order_provider">Provider order</string>
     <string name="settings_iptv_order_number">Channel number</string>
     <string name="settings_iptv_order_name">Alphabetical (A-Z)</string>
-    <string name="settings_add_tv_lists_hint">Add up to 5 M3U / Xtream TV lists</string>
+    <string name="settings_add_tv_lists_hint">Add up to 10 M3U / Xtream TV lists</string>
     <string name="settings_create_another_tv">Create another TV list</string>
     <string name="settings_badge_full_short">Full</string>
     <string name="settings_search_lists">Search Lists</string>
@@ -806,6 +813,10 @@
     <string name="settings_update_ready_install">Latest update downloaded and ready to install</string>
     <string name="settings_update_checking">Checking GitHub Releases for a newer APK</string>
     <string name="settings_update_available_format">Update available: %1$s</string>
+    <string name="settings_quiet_update_notifications">Quiet update notifications</string>
+    <string name="settings_quiet_update_notifications_desc">Show a small notice at startup instead of the update popup. Install from App Update.</string>
+    <string name="settings_sidebar_update_available">Update %1$s available. Install it from Accounts → App Update.</string>
+    <string name="home_update_available_quiet">Update %1$s is available. Install it from Settings → Accounts → App Update.</string>
     <string name="settings_update_latest">You already have the latest ARVIO version</string>
     <string name="settings_update_check_releases">Check GitHub Releases for the latest ARVIO APK</string>
     <string name="settings_badge_play">PLAY</string>
@@ -906,7 +917,6 @@
     <string name="settings_stalker_configured">Configured</string>
     <string name="settings_stalker_not_configured">Not configured</string>
     <string name="settings_stalker_remove">Remove portal</string>
-    <string name="settings_cd_manage_stalker_categories">Manage Stalker categories</string>
     <!-- IPTV account details: subscription end and stream limit -->
     <string name="iptv_account_days_left">%1$d days left</string>
     <string name="iptv_account_one_day_left">1 day left</string>
@@ -925,7 +935,7 @@
     <string name="settings_cd_edit_stalker_config">Edit Stalker portal</string>
     <string name="settings_section_stalker_portals">STALKER PORTALS</string>
     <string name="settings_add_stalker_portal_button">Add Stalker portal</string>
-    <string name="settings_stalker_add_hint">Add up to 3 Stalker / Ministra portals</string>
+    <string name="settings_stalker_add_hint">Add up to 10 Stalker / Ministra portals</string>
     <string name="settings_stalker_create_another">Add another Stalker portal</string>
     <string name="settings_stalker_portal_name_label">Portal name</string>
     <string name="settings_stalker_portal_name_placeholder">e.g. Portal 1</string>
@@ -934,7 +944,7 @@
     <string name="settings_cd_move_stalker_down">Move Stalker portal down</string>
     <string name="settings_cd_remove_stalker_portal">Remove Stalker portal</string>
     <string name="settings_stalker_rename_title">Rename portal</string>
-    <string name="settings_stalker_max_reached">Maximum of 3 Stalker portals reached</string>
+    <string name="settings_stalker_max_reached">Maximum of 10 Stalker portals reached</string>
     <string name="settings_ua_default">Default</string>
     <string name="settings_enter_field">Enter %1$s...</string>
     <string name="settings_clock_12h">12-hour</string>
@@ -1085,6 +1095,8 @@
     <string name="home_sports_opening">Opening live event...</string>
     <string name="home_sports_playback_failed">Could not play this live event</string>
     <string name="home_sports_event_not_live">This event is not live yet</string>
+    <string name="home_optimizing_notice">Still optimizing ARVIO for this device. Scrolling may be slow for now.</string>
+    <string name="settings_optimizing_notice">Still optimizing for this device. Scrolling may be slow for now.</string>
     <string name="home_cd_primary_provider">Primary streaming provider</string>
     <string name="home_cd_rank">Rank #%1$d</string>
     <string name="search_filter_all">All</string>
@@ -1113,6 +1125,11 @@
     <string name="search_recent">Recent</string>
     <string name="search_recent_clear">Clear</string>
     <string name="search_clear_query">Clear search</string>
+    <string name="search_voice">Search by voice</string>
+    <string name="search_voice_listening">Listening…</string>
+    <string name="search_voice_no_match">Didn\'t catch that. Try again.</string>
+    <string name="search_voice_network">Voice search needs an internet connection.</string>
+    <string name="search_voice_permission">Allow the microphone to search by voice.</string>
     <string name="search_filter_panel_hint">The grid updates as you tick · BACK closes the panel</string>
     <string name="search_filter_age_movies_only">Movies only — TMDB has no age filter for series</string>
     <string name="search_filter_language_hint">The language a title was made in — not the language of the app</string>
@@ -1149,6 +1166,85 @@
     <string name="player_muted">Muted</string>
     <string name="player_cd_setup">Setup</string>
     <string name="player_cd_error">Error</string>
+    <!-- Mobile player -->
+    <string name="mplayer_audio_track_number">Audio %1$d</string>
+    <string name="mplayer_cd_unlock">Unlock</string>
+    <string name="mplayer_tap_to_unlock">Tap to unlock</string>
+    <string name="mplayer_error_no_streams_title">No Playable Streams</string>
+    <string name="mplayer_error_playback_failed_title">Playback Failed</string>
+    <string name="mplayer_error_no_streams_message">No playable streams found for this content. Try reloading streams or checking addon settings.</string>
+    <string name="mplayer_error_playback_failed_message">The connection was interrupted, or this stream format could not be played.</string>
+    <string name="mplayer_reload_streams">Reload Streams</string>
+    <string name="mplayer_cd_lock_controls">Lock Controls</string>
+    <string name="mplayer_more_settings">More Settings</string>
+    <string name="mplayer_playing_next_in">PLAYING NEXT IN %1$dS</string>
+    <string name="mplayer_up_next">UP NEXT</string>
+    <string name="mplayer_subtitles_off">Subtitles Off</string>
+    <string name="mplayer_subtitles_track">Subtitles: %1$s</string>
+    <string name="mplayer_this_season">This Season</string>
+    <string name="mplayer_source">Source</string>
+    <string name="mplayer_no_sources">No sources available</string>
+    <string name="mplayer_audio_delay">Audio Delay</string>
+    <string name="mplayer_audio_settings">Audio Settings</string>
+    <string name="mplayer_audio_settings_meta">Enhancements &amp; sync</string>
+    <string name="mplayer_section_enhancements">ENHANCEMENTS</string>
+    <string name="mplayer_section_tracks">TRACKS</string>
+    <string name="mplayer_section_settings">SETTINGS</string>
+    <string name="mplayer_volume_normalization">Volume Normalization</string>
+    <string name="mplayer_gemini_live_translation">Gemini Live Voice Translation</string>
+    <string name="mplayer_default_audio_track">Default Audio Track</string>
+    <string name="mplayer_subtitle_delay">Subtitle Delay</string>
+    <string name="mplayer_language_subtitles">%1$s Subtitles</string>
+    <string name="mplayer_language_track">%1$s Track %2$d</string>
+    <string name="mplayer_badge_embedded">Embedded</string>
+    <string name="mplayer_find_best_match_language">Find Best Match (%1$s)</string>
+    <string name="mplayer_find_best_match_auto">Find Best Match (Auto)</string>
+    <string name="mplayer_scanning_best_match">Scanning Best Match…</string>
+    <string name="mplayer_find_best_match_desc">Auto-sync and pick best timing match</string>
+    <string name="mplayer_badge_scanning">Scanning</string>
+    <string name="mplayer_badge_auto_sync">Auto Sync</string>
+    <string name="mplayer_ai_translation_language">AI Translation (%1$s)</string>
+    <string name="mplayer_ai_translation">AI Translation</string>
+    <string name="mplayer_no_subtitles">No subtitles found</string>
+    <string name="mplayer_track_active">Track active</string>
+    <string name="mplayer_subtitle_settings_meta">Size, style, font &amp; more</string>
+    <string name="mplayer_section_preview">PREVIEW</string>
+    <string name="mplayer_subtitle_preview_sample">Hello, how are you?</string>
+    <string name="mplayer_section_size">SIZE</string>
+    <string name="mplayer_text_size">Text size</string>
+    <string name="mplayer_section_color">COLOR</string>
+    <string name="mplayer_section_position">POSITION</string>
+    <string name="mplayer_percent_from_bottom">%1$d%% from bottom</string>
+    <string name="mplayer_adjust_on_screen">Adjust on Screen</string>
+    <string name="mplayer_section_style_font">STYLE &amp; FONT</string>
+    <string name="mplayer_font_weight">Font Weight</string>
+    <string name="mplayer_font_family">Font Family</string>
+    <string name="mplayer_stylized_subtitles">Stylized Subtitles (ASS / SSA)</string>
+    <string name="mplayer_section_general">GENERAL</string>
+    <string name="mplayer_filter_by_app_language">Filter by App Language</string>
+    <string name="mplayer_remove_sdh">Remove Hearing Impaired (SDH)</string>
+    <string name="mplayer_playback_speed">Playback Speed</string>
+    <string name="mplayer_aspect_ratio">Aspect Ratio</string>
+    <string name="mplayer_aspect_fit_screen">Fit to Screen</string>
+    <string name="mplayer_aspect_stretch">Stretch</string>
+    <string name="mplayer_aspect_crop">Crop</string>
+    <string name="mplayer_autoplay_next_episode">Autoplay next episode</string>
+    <string name="mplayer_auto_skip_intro">Automatically skip intro</string>
+    <string name="mplayer_auto_skip_outro">Automatically skip outro</string>
+    <string name="mplayer_section_video">VIDEO</string>
+    <string name="mplayer_delay_dialog_hint">Enter offset in milliseconds (negative = advance, positive = delay):</string>
+    <string name="mplayer_apply">Apply</string>
+    <string name="mplayer_reset_zero">Reset (0 ms)</string>
+    <string name="mplayer_delay_synchronized">Synchronized • Tap to type number</string>
+    <string name="mplayer_delay_delayed">Delayed (+) • Tap to type number</string>
+    <string name="mplayer_delay_advanced">Advanced (–) • Tap to type number</string>
+    <string name="mplayer_reset_to_zero">Reset to 0 ms</string>
+    <string name="mplayer_adjust_subtitle_position">Adjust Subtitle Position</string>
+    <string name="mplayer_drag_subtitle_hint">Drag up/down anywhere to move • %1$d%% from bottom</string>
+    <string name="mplayer_reset">Reset</string>
+    <string name="mplayer_sample_subtitle">Sample Subtitle</string>
+    <string name="mplayer_unknown_language">Unknown</string>
+    <string name="mplayer_speed_chip">%1$s Speed</string>
     <string name="player_addon_setup_required">Addon Setup Required</string>
     <string name="player_addon_setup_hint">Configure and install video addons in Settings to stream content</string>
     <string name="player_season_episode_short">S%1$d E%2$d</string>
@@ -1164,6 +1260,8 @@
     <string name="player_fail_startup_generic">Source failed during startup. Try another source.</string>
     <string name="player_fail_buffering_slow">Buffering too slow</string>
     <string name="player_fail_device_cannot_play">Video can\'t play on this device</string>
+    <string name="player_fail_source_not_ready">Source not ready yet</string>
+    <string name="player_toast_placeholder_video">This source isn\'t ready yet: the addon is only showing a placeholder video. Try another source or try again later.</string>
     <string name="player_fail_source_too_slow">Source too slow to load</string>
     <string name="player_fail_no_start_after_retries">Source did not start after retries. Try another source.</string>
     <string name="player_fail_no_start_in_time">Source did not start in time. Try another source.</string>
@@ -1337,6 +1435,14 @@
     <string name="component_label_media">Media</string>
     <string name="component_media_logo">%1$s logo</string>
     <string name="component_badge_new_episode">New Episode</string>
+    <string name="component_badge_new_episode_short">New</string>
+    <string name="component_next_season_episode">Next: S%1$dE%2$d</string>
+    <string name="component_time_left_minutes">%1$dmin left</string>
+    <string name="component_time_left_hours">%1$dhr left</string>
+    <string name="component_time_left_hours_minutes">%1$dhr %2$dmin left</string>
+    <string name="component_time_left_minutes_short">%1$dm</string>
+    <string name="component_time_left_hours_short">%1$dh</string>
+    <string name="component_time_left_hours_minutes_short">%1$dh %2$dm</string>
     <string name="component_ep_left_one">1 ep left</string>
     <string name="component_eps_left">%1$d eps left</string>
     <string name="component_season_episode_marker">S%1$d • E%2$d</string>
@@ -1582,6 +1688,7 @@
     <!-- SettingsViewModel messages: Trakt, Simkl and sign-out -->
     <string name="settings_trakt_activation_failed_code">Trakt activation failed (%1$d)</string>
     <string name="settings_trakt_activation_failed">Trakt activation failed</string>
+    <string name="settings_trakt_unavailable">Trakt is temporarily unavailable. Please try again later.</string>
     <string name="settings_trakt_connected_toast">Trakt connected successfully</string>
     <string name="settings_trakt_code_invalid">Trakt activation code is invalid</string>
     <string name="settings_trakt_code_used">Trakt activation code was already used</string>
@@ -1669,6 +1776,8 @@
     <string name="auth_unexpected_credential">Unexpected credential type</string>
     <string name="auth_failed_parse_google">Failed to parse Google credentials</string>
     <string name="trakt_not_authenticated">Not authenticated with Trakt</string>
+    <string name="trakt_reconnect_required">Your Trakt authorization expired or was revoked. Connect Trakt again to resume syncing.</string>
+    <string name="trakt_sync_refresh_failed">History was imported, but Continue Watching could not be fully refreshed. Saved items have been kept; try again later.</string>
     <string name="sync_supabase_auth_failed">Supabase auth failed</string>
     <string name="launcher_continue_dash">%1$s - %2$s</string>
     <string name="telegram_search_timed_out">Telegram search timed out</string>
@@ -1939,5 +2048,11 @@
     <string name="youtube_collection_full">This collection has reached the limit of %1$d videos. Remove a video before adding another.</string>
     <string name="youtube_parent_approval_required">A correct parent PIN is required to add videos to this kids profile. Set a parent PIN in Manage Profiles if needed.</string>
     <string name="youtube_profile_changed">The profile changed. Please add the video again.</string>
+    <string name="settings_wetrakr_tagline">Watchlists, watched history and playback progress. Connect separately on each device.</string>
+    <string name="settings_wetrakr_device">Connection for this device and profile</string>
+    <string name="settings_wetrakr_update">Update WeTrakr while watching</string>
+    <string name="settings_connect_wetrakr">Connect WeTrakr</string>
+    <string name="settings_wetrakr_copy_open">Copy code and open WeTrakr</string>
+    <string name="settings_iptv_max_reached">Maximum of 10 IPTV playlists reached</string>
 </resources>
 

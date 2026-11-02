@@ -1563,5 +1563,12 @@
   "{value0}% · watched": "{value0}% · napanood",
   "· Guide match": "· Gabay na tugma",
   "· Possible broadcast": "· Posibleng broadcast",
-  "· {value0}d archive": "· {value0}d archive"
+  "· {value0}d archive": "· {value0}d archive",
+  "View on Trakt": "Tingnan sa Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Hindi direktang mape-play sa browser na ito ang audio ng file na ito. Kino-convert ang audio…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Hindi mape-play sa browser na ito ang audio ng file na ito. Humihiling ng conversion ng provider…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Hindi mape-play sa browser na ito ang audio ng source na ito. Pumili ng ibang source o gumamit ng external na player.",
+  "Converting the audio for your browser…": "Kino-convert ang audio para sa iyong browser…",
+  "Picking the best source…": "Pinipili ang pinakamahusay na source…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Naniningil ang Ko-fi sa US dollar; awtomatikong kino-convert ng iyong bangko ang halaga."
 }

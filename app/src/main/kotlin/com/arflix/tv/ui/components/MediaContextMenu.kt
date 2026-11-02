@@ -274,7 +274,7 @@ fun MediaContextMenu(
                                 .height(4.dp)
                                 .background(
                                     Color.White.copy(alpha = 0.2f),
-                                    RoundedCornerShape(2.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                         )
 

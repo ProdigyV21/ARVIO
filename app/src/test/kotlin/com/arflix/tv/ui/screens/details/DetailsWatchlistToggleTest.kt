@@ -149,6 +149,32 @@ class DetailsWatchlistToggleTest {
     }
 
     @Test
+    fun `connected read only trackers still save the bookmark and cloud`() = runTest {
+        val routing = mockk<com.arflix.tv.data.repository.sync.SyncProviderStore>()
+        val trakt = mockk<com.arflix.tv.data.repository.sync.TraktRemoteProvider>()
+        val simkl = mockk<com.arflix.tv.data.repository.sync.SimklRemoteProvider>()
+        coEvery { routing.readProviders(any()) } returns setOf(
+            com.arflix.tv.data.repository.sync.SyncProvider.TRAKT,
+            com.arflix.tv.data.repository.sync.SyncProvider.SIMKL
+        )
+        coEvery { routing.writeProviders() } returns emptySet()
+        coEvery { trakt.isConnected() } returns true
+        coEvery { simkl.isConnected() } returns true
+        remote = RemoteSyncManager(routing, trakt, mockk(), simkl)
+        val model = openDetails()
+
+        model.toggleWatchlist()
+        runCurrent()
+
+        assertTrue(model.uiState.value.isInWatchlist)
+        assertEquals(ToastType.SUCCESS, model.uiState.value.toastType)
+        coVerify(exactly = 1) { watchlist.addToWatchlist(MediaType.MOVIE, movie.id, movie) }
+        coVerify(exactly = 1) { cloud.pushToCloud(any()) }
+        coVerify(exactly = 0) { trakt.addToWatchlist(any(), any(), any()) }
+        coVerify(exactly = 0) { simkl.addToWatchlist(any(), any(), any()) }
+    }
+
+    @Test
     fun `trakt failure puts the bookmark back and shows an error`() = runTest {
         coEvery { remote.addToWatchlist(any(), any(), any()) } returns false
         val model = openDetails()

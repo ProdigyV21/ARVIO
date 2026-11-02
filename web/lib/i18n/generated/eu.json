@@ -1553,5 +1553,12 @@
   "{value0}% · watched": "% {value0} · ikusita",
   "· Guide match": "· Gida partida",
   "· Possible broadcast": "· Igorpen posiblea",
-  "· {value0}d archive": "· {value0}d artxiboa"
+  "· {value0}d archive": "· {value0}d artxiboa",
+  "View on Trakt": "Ikusi Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Fitxategi honen audioa ezin da zuzenean erreproduzitu arakatzaile honetan. Audioa bihurtzen…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Fitxategi honen audioa ezin da erreproduzitu arakatzaile honetan. Hornitzailearen bihurketa eskatzen…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Iturri honen audioa ezin da erreproduzitu arakatzaile honetan. Aukeratu beste iturri bat edo erabili kanpoko erreproduzitzaile bat.",
+  "Converting the audio for your browser…": "Audioa zure arakatzailerako bihurtzen…",
+  "Picking the best source…": "Iturri onena aukeratzen…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi-k AEBetako dolarretan kobratzen du; zure bankuak automatikoki bihurtzen du zenbatekoa."
 }

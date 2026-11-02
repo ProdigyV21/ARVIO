@@ -15,10 +15,10 @@ import { parseDebridStream, cachedDebridDirectUrl, resolveDebridDirectUrl, isUnc
 import { type SubtitleLoadState, groupSubtitles, positionSubtitleCues } from "@/lib/playerSubtitles";
 import type { RemuxAudioTrack } from "@/lib/remux";
 import { reportHomeServerPlayback, updateHomeServerPlaybackPosition } from "@/lib/homeServerPlayback";
-import { canTryRemux, recordBrowserPlaybackFailure, canProviderTranscode, streamPlayability } from "@/lib/streamCompatibility";
+import { canTryRemux, recordBrowserPlaybackFailure, canProviderTranscode, streamPlayability, streamTransport } from "@/lib/streamCompatibility";
 import { rememberSuccessfulSource } from "@/lib/autoplaySelection";
 import { markHomeScreenTipEligible } from "@/lib/homeScreenTip";
-import { isAudioOnlySource, monitorVideoFrames, monitorPlaybackStall, bufferedEndAt, bufferedAhead } from "@/lib/playerRecovery";
+import { isAudioOnlySource, monitorAudioDecode, monitorVideoFrames, monitorPlaybackStall, bufferedEndAt, bufferedAhead } from "@/lib/playerRecovery";
 import { streamSizeBytes, groupSourcesForPlayback } from "@/lib/sourceRank";
 import { getLogoUrl } from "@/lib/tmdb";
 import { browserAutoplayCandidates } from "@/lib/browserAutoplay";
@@ -376,6 +376,36 @@ export function VideoPlayer({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booted, stream.url, remuxRestartKey, liveTv]);
+
+  // Video but no sound: Chromium dropped an audio track it cannot decode
+  // (typically E-AC-3 / DTS in a file whose name does not say so). Keep the
+  // position and switch to in-browser audio conversion (the remux path decodes
+  // AC-3/E-AC-3/DTS and re-encodes AAC); otherwise the provider's conversion,
+  // the next source, or a clear message — never silent playback.
+  useEffect(() => {
+    if (!booted || liveTv || stream.remux || stream.transcoded || isAudioOnlySource(stream.url) || streamTransport(stream) !== "file") return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+    return monitorAudioDecode(video, () => {
+      const playhead = video.currentTime;
+      if (playhead > 5) resumeAtRef.current = playhead;
+      if (canTryRemux(stream)) {
+        onToast("This file's audio can't play directly in this browser. Converting the audio…");
+        onSelectStream({ ...stream, convertAudio: true }, { forceRemux: true, forceBrowser: true });
+        return;
+      }
+      if (canProviderTranscode(stream)) {
+        onToast("This file's audio can't play in this browser. Requesting provider conversion…");
+        onSelectStream(stream, { forceTranscode: true, forceBrowser: true });
+        return;
+      }
+      video.pause();
+      failureDiagnosticRef.current = { failure_kind: "format", phase: "playback" };
+      if (tryNextSource()) return;
+      onToast("This source's audio can't play in this browser. Choose another source or use an external player.");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booted, stream.url, stream.remux, remuxRestartKey, liveTv]);
 
   useAiSubtitleTranslation({ activeSubtitle, aiAvailable, aiSubsActive, aiTargetName, onToast, setAiError, setAiTranslating, settings, stream, subtitleState, translatorRef, videoRef });
 

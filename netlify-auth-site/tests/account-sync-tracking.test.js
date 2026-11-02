@@ -2,6 +2,17 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { _test } = require("../netlify/functions/account-sync-push");
 
+test("stale and equal-time device snapshots preserve WeTrakr routing preferences", () => {
+  const selection = { provider: "WETRAKR", watchlistReadMode: "WETRAKR", writeToWeTrakr: true, updatedAt: 200 };
+  const existing = { payload: { mdbListSyncByProfile: { profile: selection } } };
+  for (const updatedAt of [100, 200]) {
+    const incoming = { mdbListSyncByProfile: { profile: { provider: "TRAKT", writeToWeTrakr: false, updatedAt } } };
+    assert.deepEqual(_test.preserveTrackingRouting(existing, incoming).mdbListSyncByProfile.profile, selection);
+  }
+  const newer = { mdbListSyncByProfile: { profile: { ...selection, writeToWeTrakr: false, updatedAt: 300 } } };
+  assert.equal(_test.preserveTrackingRouting(existing, newer).mdbListSyncByProfile.profile.writeToWeTrakr, false);
+});
+
 test("newer tracking routing survives a stale device push", () => {
   const existing = {
     payload: {

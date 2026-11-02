@@ -43,7 +43,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "sq-AL": {
     "label": "Albanian (Shqip)",
@@ -89,7 +90,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "ar-SA": {
     "label": "Arabic",
@@ -135,7 +137,8 @@
     "refund": "لا يعمل على جهازك؟ راسلنا خلال 7 أيام لاسترداد المبلغ كاملًا.",
     "refundLink": "راسلنا على Discord",
     "manage": "إدارة العضوية على Ko-fi",
-    "supports": "عضويتك تدعم التطوير."
+    "supports": "عضويتك تدعم التطوير.",
+    "checkoutNote": "يتم الدفع عبر Ko-fi بالدولار الأمريكي، ويحوّل مصرفك المبلغ تلقائيًا. استخدم البريد الإلكتروني نفسه المسجّل في حساب ARVIO."
   },
   "eu-ES": {
     "label": "Basque (Euskara)",
@@ -181,7 +184,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "bn-BD": {
     "label": "Bengali",
@@ -227,7 +231,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "bg-BG": {
     "label": "Bulgarian",
@@ -273,7 +278,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "ca-ES": {
     "label": "Catalan",
@@ -319,7 +325,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "zh-CN": {
     "label": "Chinese (Simplified)",
@@ -365,7 +372,8 @@
     "refund": "在你的设备上无法使用？7 天内联系我们，全额退款。",
     "refundLink": "在 Discord 上联系我们",
     "manage": "在 Ko-fi 管理会员",
-    "supports": "你的会员费用于支持开发。"
+    "supports": "你的会员费用于支持开发。",
+    "checkoutNote": "通过 Ko-fi 以美元付款，银行会自动换算金额。请使用与 ARVIO 账户相同的电子邮件地址。"
   },
   "zh-TW": {
     "label": "Chinese (Traditional)",
@@ -411,7 +419,8 @@
     "refund": "在你的裝置上無法使用？7 天內聯絡我們，全額退款。",
     "refundLink": "在 Discord 上聯絡我們",
     "manage": "在 Ko-fi 管理會員",
-    "supports": "你的會員費用於支持開發。"
+    "supports": "你的會員費用於支持開發。",
+    "checkoutNote": "透過 Ko-fi 以美元付款，銀行會自動換算金額。請使用與 ARVIO 帳號相同的電子郵件地址。"
   },
   "hr-HR": {
     "label": "Croatian (Hrvatski)",
@@ -457,7 +466,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "cs-CZ": {
     "label": "Czech (Cesky)",
@@ -503,33 +513,34 @@
     "refund": "Nefunguje to na vašem zařízení? Napište nám do 7 dnů a vrátíme vám celou částku.",
     "refundLink": "Napište nám na Discordu",
     "manage": "Spravovat členství na Ko-fi",
-    "supports": "Vaše členství podporuje vývoj."
+    "supports": "Vaše členství podporuje vývoj.",
+    "checkoutNote": "Platba probíhá přes Ko-fi v amerických dolarech; banka částku automaticky přepočítá. Použijte stejný e-mail jako u účtu ARVIO."
   },
   "da-DK": {
     "label": "Danish (Dansk)",
-    "download": "Download denne kilde",
-    "downloadBody": "Se eller download direkte på Windows, Mac og mobil",
+    "download": "Dine kilder. Klar til download.",
+    "downloadBody": "Gem understøttede kilder fra kildevælgeren. Download på computeren, eller send videre til VLC på iPhone og iPad.",
     "sources": "Kilder",
-    "intro": "Tag din eksisterende ARVIO-opsætning til Windows, Mac, iPhone, iPad og smart-tv-browsere. Dine profiler, biblioteker, tilføjelser og fremskridt forbliver forbundet gennem ARVIO Cloud.",
-    "sync": "Samme profiler, biblioteker og se fremskridt",
-    "play": "Browserafspilning og et-klik VLC",
-    "free": "Android og tv-app forbliver helt gratis",
-    "explore": "Opdag ARVIO Web",
+    "intro": "Tag din nuværende ARVIO-opsætning med til Windows, Mac, iPhone, iPad og browsere på smart-tv. Dine profiler, biblioteker, tilføjelser og din seerhistorik følger med via ARVIO Cloud.",
+    "sync": "Samme profiler, biblioteker og seerhistorik",
+    "play": "Afspilning i browseren og VLC med ét klik",
+    "free": "Appen til Android og tv er stadig gratis – og det samme er selvhosting.",
+    "explore": "Udforsk ARVIO Web",
     "period": "/ måned",
-    "notice": "ARVIO er en mediehub for kilder, du konfigurerer. Katalogposter giver ikke visningsrettigheder. Tilslut kun tjenester og medier, du har tilladelse til at bruge.",
+    "notice": "ARVIO er en mediehub til kilder, du selv konfigurerer. Katalogopslag giver ikke ret til at se indholdet. Tilslut kun tjenester og medier, du har tilladelse til at bruge.",
     "language": "Appsprog",
     "home": "Hjem",
     "library": "Bibliotek",
     "server": "Hjemmeserver",
-    "tv": "Live-tv",
+    "tv": "Live-tv i din browser",
     "sports": "Sport",
     "selfHost": "Host ARVIO Web selv gratis.",
     "hosting": "Din browser. Dit ARVIO. Vi tager os af hosting. Premium hjælper med at finansiere ARVIOs hosting og udvikling. Appen er gratis og open source; du kan også selv hoste webappen gratis.",
     "membershipTerms": "Månedligt medlemskab. Opsig når som helst via Ko-fi.",
-    "tvBody": "Browserafspilning og et-klik VLC",
-    "libraryBody": "Samme profiler, biblioteker og se fremskridt",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "Live-tv",
+    "tvBody": "Brug din egen IPTV-tjeneste. Gennemse programoversigten, og afspil understøttede kanaler direkte i ARVIO Web.",
+    "libraryBody": "Dine huskelister, egne lister og seerhistorik – forbundet via ARVIO Cloud.",
+    "serverBody": "Få dit Jellyfin-, Plex-, Emby- eller Silo-bibliotek ind i den samme velkendte brugerflade.",
+    "sportsBody": "Udforsk sportsbegivenheder, og find kilder fra dine tilsluttede tjenester.",
     "headline": "ARVIO på din iPhone, iPad og bærbare.",
     "headlineSub": "Ingen server at drive.",
     "lead": "Hostet ARVIO Web. Log ind med din ARVIO-konto, og fortsæt, hvor du slap.",
@@ -549,7 +560,8 @@
     "refund": "Virker det ikke på din enhed? Skriv til os inden for 7 dage, så får du hele beløbet tilbage.",
     "refundLink": "Skriv til os på Discord",
     "manage": "Administrer medlemskab på Ko-fi",
-    "supports": "Dit medlemskab støtter udviklingen."
+    "supports": "Dit medlemskab støtter udviklingen.",
+    "checkoutNote": "Du betaler via Ko-fi i amerikanske dollars; din bank omregner beløbet automatisk. Brug den samme e-mailadresse som på din ARVIO-konto."
   },
   "nl-NL": {
     "label": "Dutch (Nederlands)",
@@ -595,7 +607,8 @@
     "refund": "Werkt het niet op je apparaat? Stuur ons binnen 7 dagen een bericht en je krijgt alles terug.",
     "refundLink": "Stuur ons een bericht op Discord",
     "manage": "Lidmaatschap beheren op Ko-fi",
-    "supports": "Je lidmaatschap steunt de ontwikkeling."
+    "supports": "Je lidmaatschap steunt de ontwikkeling.",
+    "checkoutNote": "Je betaalt via Ko-fi in Amerikaanse dollars; je bank rekent het automatisch om. Gebruik hetzelfde e-mailadres als je ARVIO-account."
   },
   "en-US": {
     "label": "English",
@@ -641,7 +654,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "et-EE": {
     "label": "Estonian",
@@ -687,7 +701,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "tl-PH": {
     "label": "Filipino/Tagalog",
@@ -733,33 +748,34 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "fi-FI": {
     "label": "Finnish (Suomi)",
-    "download": "Lataa tämä lähde",
-    "downloadBody": "Katso tai lataa suoraan Windows-, Mac- ja mobiililaitteilla",
+    "download": "Lähteesi. Valmiina ladattavaksi.",
+    "downloadBody": "Tallenna tuetut lähteet lähdevalitsimesta. Lataa tietokoneelle tai siirrä toisto VLC:hen iPhonella ja iPadilla.",
     "sources": "Lähteet",
-    "intro": "Ota nykyiset ARVIO-asetukset Windows-, Mac-, iPhone-, iPad- ja älytelevisioselaimiin. Profiilisi, kirjastosi, lisäosasi ja edistymisesi pysyvät yhteydessä ARVIO Cloud-sovelluksen kautta.",
-    "sync": "Samat profiilit, kirjastot ja katsella edistymistä",
-    "play": "Toisto selaimella ja yhdellä napsautuksella VLC",
-    "free": "Android ja TV-sovellus ovat täysin ilmaisia",
-    "explore": "Tutustu ARVIO Web",
+    "intro": "Vie nykyinen ARVIO-kokoonpanosi Windowsiin, Maciin, iPhoneen, iPadiin ja älytelevisioiden selaimiin. Profiilisi, kirjastosi, lisäosasi ja katseluhistoriasi pysyvät mukana ARVIO Cloudin kautta.",
+    "sync": "Samat profiilit, kirjastot ja katselukohdat",
+    "play": "Toisto selaimessa ja VLC yhdellä klikkauksella",
+    "free": "Android- ja TV-sovellus pysyy ilmaisena. Myös omalla palvelimella ajaminen pysyy ilmaisena.",
+    "explore": "Tutustu ARVIO Webiin",
     "period": "/ kk",
-    "notice": "ARVIO on mediakeskus määrittämillesi lähteille. Luettelomerkinnät eivät myönnä katseluoikeuksia. Yhdistä vain palvelut ja mediat, joihin sinulla on lupa käyttää.",
+    "notice": "ARVIO on mediakeskus itse määrittämillesi lähteille. Luettelon kohteet eivät anna oikeutta katsoa sisältöä. Yhdistä vain palveluita ja mediaa, joiden käyttöön sinulla on lupa.",
     "language": "Sovelluksen kieli",
-    "home": "Koti",
+    "home": "Etusivu",
     "library": "Kirjasto",
     "server": "Kotipalvelin",
-    "tv": "Live-TV",
+    "tv": "Live-TV selaimessa",
     "sports": "Urheilu",
     "selfHost": "Ylläpidä ARVIO Webiä itse ilmaiseksi.",
     "hosting": "Sinun selaimesi. Sinun ARVIOsi. Me huolehdimme ylläpidosta. Premium auttaa rahoittamaan ARVIOn palvelimia ja kehitystä. Sovellus on ilmainen ja avointa lähdekoodia; voit myös ylläpitää verkkosovellusta itse ilmaiseksi.",
     "membershipTerms": "Kuukausijäsenyys. Peru milloin tahansa Ko-fin kautta.",
-    "tvBody": "Toisto selaimella ja yhdellä napsautuksella VLC",
-    "libraryBody": "Samat profiilit, kirjastot ja katsella edistymistä",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "Live-TV",
+    "tvBody": "Käytä omaa IPTV-palveluasi. Selaa ohjelmaopasta ja katso tuettuja kanavia suoraan ARVIO Webissä.",
+    "libraryBody": "Katselulistasi, omat listasi ja katselukohtasi pysyvät ajan tasalla ARVIO Cloudin kautta.",
+    "serverBody": "Tuo Jellyfin-, Plex-, Emby- tai Silo-kirjastosi samaan tuttuun käyttöliittymään.",
+    "sportsBody": "Selaa urheilutapahtumia ja löydä lähteitä yhdistämistäsi palveluista.",
     "headline": "ARVIO iPhonessa, iPadissa ja kannettavassa.",
     "headlineSub": "Ei omaa palvelinta.",
     "lead": "Ylläpidetty ARVIO Web. Kirjaudu ARVIO-tililläsi ja jatka siitä, mihin jäit.",
@@ -779,53 +795,55 @@
     "refund": "Eikö se toimi laitteellasi? Ota yhteyttä 7 päivän kuluessa, niin palautamme koko summan.",
     "refundLink": "Ota yhteyttä Discordissa",
     "manage": "Hallinnoi jäsenyyttä Ko-fissa",
-    "supports": "Jäsenyytesi tukee kehitystä."
+    "supports": "Jäsenyytesi tukee kehitystä.",
+    "checkoutNote": "Maksu tehdään Ko-fissa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti. Käytä samaa sähköpostiosoitetta kuin ARVIO-tililläsi."
   },
   "fr-FR": {
-    "label": "French (Francais)",
-    "download": "Téléchargez cette source",
-    "downloadBody": "Regardez ou téléchargez directement sur Windows, Mac et mobile",
+    "label": "French (Français)",
+    "download": "Vos sources, prêtes à télécharger.",
+    "downloadBody": "Enregistrez les sources compatibles depuis le sélecteur de sources. Téléchargez-les sur ordinateur ou ouvrez-les dans VLC sur iPhone et iPad.",
     "sources": "Sources",
-    "intro": "Transférez votre configuration ARVIO existante vers les navigateurs Windows, Mac, iPhone, iPad et Smart-TV. Vos profils, bibliothèques, modules complémentaires et progrès restent connectés via ARVIO Cloud.\nLa configuration du bot",
-    "sync": "Mêmes profils, bibliothèques et surveillance de la progression",
-    "play": "Lecture du navigateur et un clic VLC",
-    "free": "Android et l'application TV reste totalement gratuite",
+    "intro": "Emportez votre configuration ARVIO sur les navigateurs Windows, Mac, iPhone, iPad et Smart TV. Vos profils, bibliothèques, addons et votre progression restent connectés via ARVIO Cloud.",
+    "sync": "Les mêmes profils, bibliothèques et progression de visionnage",
+    "play": "Lecture dans le navigateur et ouverture dans VLC en un clic",
+    "free": "L’application Android et TV reste gratuite, tout comme l’auto-hébergement.",
     "explore": "Découvrez ARVIO Web",
     "period": "/ mois",
-    "notice": "ARVIO est un hub multimédia pour les sources que vous configurez. Les entrées du catalogue n'accordent pas de droits de visualisation. Connectez uniquement les services et médias que vous êtes autorisé à utiliser.",
+    "notice": "ARVIO est un centre multimédia pour les sources que vous configurez. La présence d’un titre dans le catalogue ne confère aucun droit de visionnage. Connectez uniquement les services et médias que vous êtes autorisé à utiliser.",
     "language": "Langue de l’app",
     "home": "Accueil",
     "library": "Bibliothèque",
-    "server": "Serveur personnel",
-    "tv": "Télévision en direct",
-    "sports": "Sportif",
+    "server": "Serveur domestique",
+    "tv": "TV en direct dans votre navigateur",
+    "sports": "Sport",
     "selfHost": "Hébergez ARVIO Web vous-même gratuitement.",
-    "hosting": "Votre navigateur. Votre ARVIO. Nous nous occupons de l’hébergement. Premium contribue au financement de l’hébergement et du développement d’ARVIO. L’application est gratuite et open source ; vous pouvez aussi héberger gratuitement la version web vous-même.",
+    "hosting": "Votre navigateur. Votre ARVIO. Nous nous occupons de l’hébergement. Premium contribue au financement de l’hébergement et du développement d’ARVIO. L’application est gratuite et open source ; vous pouvez aussi héberger gratuitement la version web vous-même.",
     "membershipTerms": "Abonnement mensuel. Résiliable à tout moment via Ko-fi.",
-    "tvBody": "Lecture du navigateur et un clic VLC",
-    "libraryBody": "Mêmes profils, bibliothèques et surveillance de la progression",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "Télévision en direct",
+    "tvBody": "Utilisez votre propre service IPTV. Parcourez le guide des programmes et lisez les chaînes compatibles directement dans ARVIO Web.",
+    "libraryBody": "Votre liste à regarder, vos listes personnelles et votre progression de visionnage, connectées via ARVIO Cloud.",
+    "serverBody": "Retrouvez votre bibliothèque Jellyfin, Plex, Emby ou Silo dans la même interface familière.",
+    "sportsBody": "Explorez les événements sportifs et trouvez des sources parmi vos services connectés.",
     "headline": "ARVIO sur votre iPhone, iPad et ordinateur portable.",
     "headlineSub": "Aucun serveur à gérer.",
-    "lead": "ARVIO Web hébergé. Connectez-vous avec votre compte ARVIO et reprenez là où vous en étiez.",
-    "benefitSync": "Profils, liste et progression synchronisés via ARVIO Cloud",
-    "benefitLive": "Télévision en direct avec le guide des programmes",
+    "lead": "ARVIO Web, hébergé pour vous. Connectez-vous avec votre compte ARVIO et reprenez là où vous en étiez.",
+    "benefitSync": "Profils, liste à regarder et progression synchronisés via ARVIO Cloud",
+    "benefitLive": "TV en direct avec le guide des programmes",
     "benefitDownloads": "Téléchargements sur ordinateur",
     "benefitExplore": "Explorez d’abord. Vous ne payez qu’au moment d’appuyer sur Play.",
     "open": "Ouvrir ARVIO Web",
     "comparePlans": "Comparer les formules",
-    "fromPrice": "2,99 $ par mois, ou 20 $ pour 12 mois.",
+    "fromPrice": "2,99 $ par mois ou 20 $ pour 12 mois.",
     "plansTitle": "Deux formules. Le même ARVIO Web.",
     "monthly": "Mensuel",
     "yearly": "Pass 12 mois",
-    "yearlyBadge": "Meilleur prix · 44 % d’économie",
-    "once": "une fois",
+    "yearlyBadge": "Le plus avantageux · 44 % d’économie",
+    "once": "en une fois",
     "yearlyNote": "Un seul paiement, sans renouvellement automatique",
-    "refund": "Ça ne fonctionne pas sur votre appareil ? Écrivez-nous dans les 7 jours pour un remboursement intégral.",
+    "refund": "Ça ne fonctionne pas sur votre appareil ? Écrivez-nous dans les 7 jours pour un remboursement intégral.",
     "refundLink": "Écrivez-nous sur Discord",
     "manage": "Gérer l’abonnement sur Ko-fi",
-    "supports": "Votre abonnement soutient le développement."
+    "supports": "Votre abonnement soutient le développement.",
+    "checkoutNote": "Le paiement se fait sur Ko-fi en dollars américains ; votre banque effectue la conversion automatiquement. Utilisez la même adresse e-mail que pour votre compte ARVIO."
   },
   "gl-ES": {
     "label": "Galician (Galego)",
@@ -871,40 +889,41 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "de-DE": {
     "label": "German (Deutsch)",
-    "download": "Laden Sie diese Quelle herunter",
-    "downloadBody": "Direkt ansehen oder herunterladen auf Windows, Mac und Handy",
+    "download": "Deine Quellen. Bereit zum Download.",
+    "downloadBody": "Speichere unterstützte Quellen direkt aus der Quellenauswahl. Lade sie am Computer herunter oder übergib sie auf iPhone und iPad an VLC.",
     "sources": "Quellen",
-    "intro": "Übertragen Sie Ihr bestehendes ARVIO-Setup auf Windows, Mac, iPhone, iPad und Smart-TV-Browser. Ihre Profile, Bibliotheken, Add-ons und Fortschritte bleiben über ARVIO Cloud verbunden.",
-    "sync": "Gleiche Profile, gleiche Bibliotheken und gleicher Beobachtungsfortschritt",
-    "play": "Browser-Wiedergabe und Ein-Klick VLC",
-    "free": "Android und TV-App bleibt völlig kostenlos",
-    "explore": "Entdecken ARVIO Web",
+    "intro": "Nimm dein bestehendes ARVIO-Setup mit auf Windows, Mac, iPhone, iPad und in Smart-TV-Browser. Deine Profile, Mediatheken, Addons und dein Fortschritt bleiben über ARVIO Cloud verbunden.",
+    "sync": "Dieselben Profile, Mediatheken und derselbe Fortschritt",
+    "play": "Wiedergabe im Browser und VLC mit einem Klick",
+    "free": "Die Android- und TV-App bleibt kostenlos – Self-Hosting ebenso.",
+    "explore": "ARVIO Web entdecken",
     "period": "/ Monat",
-    "notice": "ARVIO ist ein Medien-Hub für von Ihnen konfigurierte Quellen. Katalogeinträge gewähren kein Einsichtsrecht. Verbinden Sie nur Dienste und Medien, zu deren Nutzung Sie berechtigt sind.",
+    "notice": "ARVIO ist ein Media-Hub für Quellen, die du selbst einrichtest. Katalogeinträge verleihen keine Rechte zum Ansehen. Verbinde nur Dienste und Medien, die du nutzen darfst.",
     "language": "App-Sprache",
     "home": "Start",
     "library": "Bibliothek",
-    "server": "Home Server",
-    "tv": "Live TV",
+    "server": "Heimserver",
+    "tv": "Live-TV im Browser",
     "sports": "Sport",
     "selfHost": "ARVIO Web kostenlos selbst hosten.",
     "hosting": "Dein Browser. Dein ARVIO. Wir kümmern uns um das Hosting. Premium unterstützt das Hosting und die Entwicklung von ARVIO. Die App ist kostenlos und quelloffen; auch die Web-App kannst du kostenlos selbst hosten.",
     "membershipTerms": "Monatliche Mitgliedschaft. Jederzeit über Ko-fi kündbar.",
-    "tvBody": "Browser-Wiedergabe und Ein-Klick VLC",
-    "libraryBody": "Gleiche Profile, gleiche Bibliotheken und gleicher Beobachtungsfortschritt",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "Live TV",
+    "tvBody": "Nutze deinen eigenen IPTV-Dienst. Durchsuche den Programmführer und spiele unterstützte Sender direkt in ARVIO Web ab.",
+    "libraryBody": "Deine Merklisten, persönlichen Listen und dein Fortschritt – verbunden über ARVIO Cloud.",
+    "serverBody": "Hol deine Jellyfin-, Plex-, Emby- oder Silo-Mediathek in dieselbe vertraute Oberfläche.",
+    "sportsBody": "Entdecke Sportereignisse und finde passende Quellen in deinen verbundenen Diensten.",
     "headline": "ARVIO auf iPhone, iPad und Laptop.",
     "headlineSub": "Ohne eigenen Server.",
     "lead": "Gehostetes ARVIO Web. Melde dich mit deinem ARVIO-Konto an und mach dort weiter, wo du aufgehört hast.",
     "benefitSync": "Profile, Merkliste und Fortschritt über ARVIO Cloud synchronisiert",
     "benefitLive": "Live-TV mit Programmführer",
     "benefitDownloads": "Downloads am Computer",
-    "benefitExplore": "Erst umsehen. Du zahlst erst, wenn du auf Abspielen tippst.",
+    "benefitExplore": "Sieh dich in Ruhe um. Du zahlst erst, wenn du auf Play drückst.",
     "open": "ARVIO Web öffnen",
     "comparePlans": "Tarife vergleichen",
     "fromPrice": "2,99 $ pro Monat oder 20 $ für 12 Monate.",
@@ -917,7 +936,8 @@
     "refund": "Funktioniert es auf deinem Gerät nicht? Schreib uns innerhalb von 7 Tagen und du bekommst den vollen Betrag zurück.",
     "refundLink": "Schreib uns auf Discord",
     "manage": "Mitgliedschaft auf Ko-fi verwalten",
-    "supports": "Deine Mitgliedschaft unterstützt die Entwicklung."
+    "supports": "Deine Mitgliedschaft unterstützt die Entwicklung.",
+    "checkoutNote": "Bezahlt wird über Ko-fi in US-Dollar; deine Bank rechnet den Betrag automatisch um. Nutze dieselbe E-Mail-Adresse wie für dein ARVIO-Konto."
   },
   "el-GR": {
     "label": "Greek",
@@ -963,7 +983,8 @@
     "refund": "Δεν λειτουργεί στη συσκευή σας; Στείλτε μας μήνυμα μέσα σε 7 ημέρες για πλήρη επιστροφή χρημάτων.",
     "refundLink": "Στείλτε μας μήνυμα στο Discord",
     "manage": "Διαχείριση συνδρομής στο Ko-fi",
-    "supports": "Η συνδρομή σας στηρίζει την ανάπτυξη."
+    "supports": "Η συνδρομή σας στηρίζει την ανάπτυξη.",
+    "checkoutNote": "Η πληρωμή γίνεται μέσω Ko-fi σε δολάρια ΗΠΑ· η τράπεζά σας κάνει αυτόματα τη μετατροπή. Χρησιμοποιήστε το ίδιο email με τον λογαριασμό σας στο ARVIO."
   },
   "gu-IN": {
     "label": "Gujarati",
@@ -977,7 +998,7 @@
     "explore": "શોધો ARVIO Web",
     "period": "/ મહિનો",
     "notice": "ARVIO એ તમે ગોઠવેલા સ્ત્રોતો માટે મીડિયા હબ છે. કેટલોગ એન્ટ્રીઓ જોવાના અધિકારો આપતી નથી. તમે ઉપયોગ કરવા માટે અધિકૃત છો તે જ સેવાઓ અને મીડિયાને કનેક્ટ કરો.",
-    "language": "App Language",
+    "language": "ઍપની ભાષા",
     "home": "ઘર",
     "library": "પુસ્તકાલય",
     "server": "હોમ સર્વર",
@@ -1009,7 +1030,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "he-IL": {
     "label": "Hebrew",
@@ -1055,33 +1077,34 @@
     "refund": "לא עובד במכשיר שלכם? כתבו לנו תוך 7 ימים ונחזיר את מלוא הסכום.",
     "refundLink": "כתבו לנו ב-Discord",
     "manage": "ניהול המנוי ב-Ko-fi",
-    "supports": "המנוי שלכם תומך בפיתוח."
+    "supports": "המנוי שלכם תומך בפיתוח.",
+    "checkoutNote": "התשלום מתבצע דרך Ko-fi בדולרים אמריקאיים, והבנק שלך ממיר את הסכום אוטומטית. השתמש באותה כתובת אימייל כמו בחשבון ARVIO שלך."
   },
   "hi-IN": {
     "label": "Hindi",
-    "download": "इस स्रोत को डाउनलोड करें",
-    "downloadBody": "सीधे Windows, मैक और मोबाइल पर देखें या डाउनलोड करें",
+    "download": "आपके स्रोत, डाउनलोड के लिए तैयार।",
+    "downloadBody": "स्रोत सूची से समर्थित स्रोत सेव करें। डेस्कटॉप पर डाउनलोड करें, या iPhone और iPad पर VLC में खोलें।",
     "sources": "स्रोत",
-    "intro": "अपने मौजूदा ARVIO सेटअप को Windows, Mac, iPhone, iPad और स्मार्ट-टीवी ब्राउज़र पर ले जाएं। आपकी प्रोफ़ाइल, लाइब्रेरी, ऐडऑन और प्रगति ARVIO Cloud के माध्यम से जुड़े रहते हैं।",
-    "sync": "समान प्रोफाइल, लाइब्रेरी और प्रगति देखें",
-    "play": "ब्राउज़र प्लेबैक और एक-क्लिक VLC",
-    "free": "Android और टीवी ऐप पूरी तरह से फ्री रहता है",
-    "explore": "खोजें ARVIO Web",
+    "intro": "अपना मौजूदा ARVIO सेटअप Windows, Mac, iPhone, iPad और स्मार्ट टीवी ब्राउज़र पर ले जाएँ। आपकी प्रोफ़ाइलें, लाइब्रेरी, ऐडऑन और देखने की प्रगति ARVIO Cloud के ज़रिए जुड़ी रहती हैं।",
+    "sync": "वही प्रोफ़ाइलें, लाइब्रेरी और देखने की प्रगति",
+    "play": "ब्राउज़र में प्लेबैक और एक क्लिक में VLC",
+    "free": "Android और टीवी ऐप मुफ़्त रहेगा, और सेल्फ़-होस्टिंग भी मुफ़्त रहेगी।",
+    "explore": "ARVIO Web एक्सप्लोर करें",
     "period": "/माह",
     "notice": "ARVIO आपके द्वारा कॉन्फ़िगर किए गए स्रोतों के लिए एक मीडिया हब है। कैटलॉग प्रविष्टियाँ देखने का अधिकार नहीं देतीं। केवल उन सेवाओं और मीडिया को कनेक्ट करें जिनके उपयोग के लिए आप अधिकृत हैं।",
-    "language": "ऐप भाषा",
+    "language": "ऐप की भाषा",
     "home": "होम",
-    "library": "पुस्तकालय",
+    "library": "लाइब्रेरी",
     "server": "होम सर्वर",
-    "tv": "लाइव टीवी",
+    "tv": "आपके ब्राउज़र में लाइव टीवी",
     "sports": "खेल",
     "selfHost": "ARVIO Web को स्वयं मुफ़्त में होस्ट करें।",
     "hosting": "आपका ब्राउज़र। आपका ARVIO। होस्टिंग हम संभालते हैं। Premium ARVIO की होस्टिंग और विकास का खर्च पूरा करने में मदद करता है। ऐप मुफ़्त और ओपन सोर्स है; वेब ऐप भी आप खुद मुफ़्त में होस्ट कर सकते हैं।",
     "membershipTerms": "मासिक सदस्यता। Ko-fi के ज़रिए कभी भी रद्द करें।",
-    "tvBody": "ब्राउज़र प्लेबैक और एक-क्लिक VLC",
-    "libraryBody": "समान प्रोफाइल, लाइब्रेरी और प्रगति देखें",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "लाइव टीवी",
+    "tvBody": "अपनी IPTV सेवा इस्तेमाल करें। प्रोग्राम गाइड देखें और समर्थित चैनल सीधे ARVIO Web में चलाएँ।",
+    "libraryBody": "आपकी वॉचलिस्ट, निजी सूचियाँ और देखने की प्रगति — ARVIO Cloud के ज़रिए जुड़ी हुई।",
+    "serverBody": "अपनी Jellyfin, Plex, Emby या Silo लाइब्रेरी को उसी जाने-पहचाने इंटरफ़ेस में लाएँ।",
+    "sportsBody": "खेल इवेंट ब्राउज़ करें और अपनी कनेक्ट की गई सेवाओं में स्रोत ढूँढें।",
     "headline": "आपके iPhone, iPad और लैपटॉप पर ARVIO।",
     "headlineSub": "कोई सर्वर चलाने की ज़रूरत नहीं।",
     "lead": "होस्ट किया गया ARVIO Web। अपने ARVIO खाते से साइन इन करें और जहाँ छोड़ा था वहीं से जारी रखें।",
@@ -1101,7 +1124,8 @@
     "refund": "आपके डिवाइस पर काम नहीं करता? 7 दिनों के भीतर हमें संदेश भेजें, पूरा पैसा वापस मिलेगा।",
     "refundLink": "Discord पर हमें संदेश भेजें",
     "manage": "Ko-fi पर सदस्यता प्रबंधित करें",
-    "supports": "आपकी सदस्यता विकास में मदद करती है।"
+    "supports": "आपकी सदस्यता विकास में मदद करती है।",
+    "checkoutNote": "भुगतान Ko-fi पर अमेरिकी डॉलर में होता है; आपका बैंक राशि अपने-आप बदल देता है। वही ईमेल इस्तेमाल करें जो आपके ARVIO खाते में है।"
   },
   "hu-HU": {
     "label": "Hungarian (Magyar)",
@@ -1147,7 +1171,8 @@
     "refund": "Nem működik az eszközödön? Írj nekünk 7 napon belül, és a teljes összeget visszatérítjük.",
     "refundLink": "Írj nekünk a Discordon",
     "manage": "Tagság kezelése a Ko-fin",
-    "supports": "A tagságod a fejlesztést támogatja."
+    "supports": "A tagságod a fejlesztést támogatja.",
+    "checkoutNote": "A fizetés a Ko-fin keresztül, amerikai dollárban történik; a bankod automatikusan átváltja az összeget. Ugyanazt az e-mail-címet használd, mint az ARVIO-fiókodnál."
   },
   "id-ID": {
     "label": "Indonesian",
@@ -1193,33 +1218,34 @@
     "refund": "Tidak berfungsi di perangkat Anda? Hubungi kami dalam 7 hari untuk pengembalian dana penuh.",
     "refundLink": "Hubungi kami di Discord",
     "manage": "Kelola keanggotaan di Ko-fi",
-    "supports": "Keanggotaan Anda mendukung pengembangan."
+    "supports": "Keanggotaan Anda mendukung pengembangan.",
+    "checkoutNote": "Pembayaran melalui Ko-fi dalam dolar AS; bank Anda mengonversinya secara otomatis. Gunakan email yang sama dengan akun ARVIO Anda."
   },
   "it-IT": {
     "label": "Italian (Italiano)",
-    "download": "Scarica questa fonte",
-    "downloadBody": "Guarda o scarica direttamente su Windows, Mac e dispositivi mobili",
+    "download": "Le tue fonti, pronte da scaricare.",
+    "downloadBody": "Salva le fonti supportate dal selettore delle fonti. Scaricale sul computer oppure aprile in VLC su iPhone e iPad.",
     "sources": "Fonti",
-    "intro": "Trasferisci la configurazione ARVIO esistente sui browser Windows, Mac, iPhone, iPad e smart TV. I tuoi profili, librerie, componenti aggiuntivi e progressi rimangono connessi tramite ARVIO Cloud.",
-    "sync": "Stessi profili, biblioteche e guarda i progressi",
-    "play": "Riproduzione dal browser e clic con un solo clic VLC",
-    "free": "Android e l'app TV rimangono completamente gratuite",
-    "explore": "Scopri ARVIO Web",
+    "intro": "Porta la tua configurazione ARVIO su Windows, Mac, iPhone, iPad e sui browser delle smart TV. Profili, librerie, addon e progressi di visione restano collegati tramite ARVIO Cloud.",
+    "sync": "Stessi profili, librerie e progressi di visione",
+    "play": "Riproduzione nel browser e VLC con un clic",
+    "free": "L'app per Android e TV resta gratuita. Anche il self-hosting resta gratuito.",
+    "explore": "Esplora ARVIO Web",
     "period": "/mese",
-    "notice": "ARVIO è un hub multimediale per le fonti configurate. Le voci del catalogo non concedono diritti di visualizzazione. Connetti solo i servizi e i media che sei autorizzato a utilizzare.",
-    "language": "Lingua app",
+    "notice": "ARVIO è un hub multimediale per le fonti che configuri tu. Le voci del catalogo non conferiscono alcun diritto di visione. Collega solo servizi e contenuti che sei autorizzato a usare.",
+    "language": "Lingua dell'app",
     "home": "Home",
-    "library": "Biblioteca",
+    "library": "Libreria",
     "server": "Server domestico",
-    "tv": "TV in diretta",
+    "tv": "TV in diretta nel browser",
     "sports": "Sport",
     "selfHost": "Ospita ARVIO Web gratuitamente sul tuo server.",
     "hosting": "Il tuo browser. Il tuo ARVIO. All’hosting pensiamo noi. Premium contribuisce a finanziare l’hosting e lo sviluppo di ARVIO. L’app è gratuita e open source; puoi anche ospitare gratuitamente la versione web sul tuo server.",
     "membershipTerms": "Abbonamento mensile. Annulla quando vuoi tramite Ko-fi.",
-    "tvBody": "Riproduzione dal browser e clic con un solo clic VLC",
-    "libraryBody": "Stessi profili, biblioteche e guarda i progressi",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "TV in diretta",
+    "tvBody": "Usa il tuo servizio IPTV. Sfoglia la guida TV e guarda i canali supportati direttamente in ARVIO Web.",
+    "libraryBody": "Le tue watchlist, le liste personali e i progressi di visione, collegati tramite ARVIO Cloud.",
+    "serverBody": "Porta la tua libreria Jellyfin, Plex, Emby o Silo nella stessa interfaccia che già conosci.",
+    "sportsBody": "Esplora gli eventi sportivi e trova fonti dai servizi che hai collegato.",
     "headline": "ARVIO su iPhone, iPad e portatile.",
     "headlineSub": "Nessun server da gestire.",
     "lead": "ARVIO Web in hosting. Accedi con il tuo account ARVIO e riprendi da dove avevi lasciato.",
@@ -1239,7 +1265,8 @@
     "refund": "Non funziona sul tuo dispositivo? Scrivici entro 7 giorni per un rimborso completo.",
     "refundLink": "Scrivici su Discord",
     "manage": "Gestisci l’abbonamento su Ko-fi",
-    "supports": "Il tuo abbonamento sostiene lo sviluppo."
+    "supports": "Il tuo abbonamento sostiene lo sviluppo.",
+    "checkoutNote": "Il pagamento avviene su Ko-fi in dollari USA; la tua banca converte l'importo automaticamente. Usa la stessa email del tuo account ARVIO."
   },
   "ja-JP": {
     "label": "Japanese",
@@ -1285,7 +1312,8 @@
     "refund": "お使いの端末で動作しない場合は、7日以内にご連絡いただければ全額返金します。",
     "refundLink": "Discordで連絡する",
     "manage": "Ko-fiでメンバーシップを管理",
-    "supports": "メンバーシップは開発の支えになります。"
+    "supports": "メンバーシップは開発の支えになります。",
+    "checkoutNote": "お支払いは Ko-fi で米ドル建てで行われ、金額はご利用の銀行が自動で換算します。ARVIO アカウントと同じメールアドレスをお使いください。"
   },
   "kn-IN": {
     "label": "Kannada",
@@ -1299,7 +1327,7 @@
     "explore": "ಅನ್ವೇಷಿಸಿ ARVIO Web",
     "period": "/ ತಿಂಗಳು",
     "notice": "ARVIO ನೀವು ಕಾನ್ಫಿಗರ್ ಮಾಡುವ ಮೂಲಗಳಿಗೆ ಮಾಧ್ಯಮ ಕೇಂದ್ರವಾಗಿದೆ. ಕ್ಯಾಟಲಾಗ್ ನಮೂದುಗಳು ವೀಕ್ಷಣೆಯ ಹಕ್ಕುಗಳನ್ನು ನೀಡುವುದಿಲ್ಲ. ನೀವು ಬಳಸಲು ಅಧಿಕಾರ ಹೊಂದಿರುವ ಸೇವೆಗಳು ಮತ್ತು ಮಾಧ್ಯಮವನ್ನು ಮಾತ್ರ ಸಂಪರ್ಕಿಸಿ.",
-    "language": "App Language",
+    "language": "ಆ್ಯಪ್ ಭಾಷೆ",
     "home": "ಮುಖಪುಟ",
     "library": "ಲೈಬ್ರರಿ",
     "server": "ಹೋಮ್ ಸರ್ವರ್",
@@ -1331,7 +1359,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "ko-KR": {
     "label": "Korean",
@@ -1377,7 +1406,8 @@
     "refund": "기기에서 작동하지 않나요? 7일 이내에 연락하시면 전액 환불해 드립니다.",
     "refundLink": "Discord로 문의하기",
     "manage": "Ko-fi에서 멤버십 관리",
-    "supports": "멤버십은 개발을 지원합니다."
+    "supports": "멤버십은 개발을 지원합니다.",
+    "checkoutNote": "결제는 Ko-fi에서 미국 달러로 진행되며, 금액은 은행에서 자동으로 환산됩니다. ARVIO 계정과 같은 이메일을 사용하세요."
   },
   "lv-LV": {
     "label": "Latvian",
@@ -1423,7 +1453,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "lt-LT": {
     "label": "Lithuanian",
@@ -1469,7 +1500,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "ms-MY": {
     "label": "Malay",
@@ -1515,7 +1547,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "ml-IN": {
     "label": "Malayalam",
@@ -1529,7 +1562,7 @@
     "explore": "കണ്ടെത്തുക ARVIO Web",
     "period": "/ മാസം",
     "notice": "ARVIO. കാറ്റലോഗ് എൻട്രികൾ കാണാനുള്ള അവകാശം നൽകുന്നില്ല. നിങ്ങൾക്ക് ഉപയോഗിക്കാൻ അനുമതിയുള്ള സേവനങ്ങളും മീഡിയയും മാത്രം ബന്ധിപ്പിക്കുക.",
-    "language": "App Language",
+    "language": "ആപ്പ് ഭാഷ",
     "home": "ഹോം",
     "library": "ലൈബ്രറി",
     "server": "ഹോം സെർവർ",
@@ -1561,7 +1594,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "mr-IN": {
     "label": "Marathi",
@@ -1575,7 +1609,7 @@
     "explore": "शोधा ARVIO Web",
     "period": "/ महिना",
     "notice": "ARVIO तुम्ही कॉन्फिगर करता त्या स्त्रोतांसाठी मीडिया हब आहे. कॅटलॉग नोंदी पाहण्याचे अधिकार देत नाहीत. तुम्ही वापरण्यासाठी अधिकृत असलेल्या सेवा आणि मीडिया कनेक्ट करा.",
-    "language": "App Language",
+    "language": "ॲप भाषा",
     "home": "घर",
     "library": "लायब्ररी",
     "server": "होम सर्व्हर",
@@ -1607,33 +1641,34 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "no-NO": {
     "label": "Norwegian (Norsk)",
-    "download": "Last ned denne kilden",
-    "downloadBody": "Se eller last ned direkte på Windows, Mac og mobil",
+    "download": "Kildene dine. Klare til nedlasting.",
+    "downloadBody": "Lagre støttede kilder fra kildevelgeren. Last ned på datamaskinen, eller send videre til VLC på iPhone og iPad.",
     "sources": "Kilder",
-    "intro": "Ta ditt eksisterende ARVIO-oppsett til Windows, Mac, iPhone, iPad og smart-TV-nettlesere. Dine profiler, biblioteker, tillegg og fremdrift forblir tilkoblet gjennom ARVIO Cloud.",
-    "sync": "Samme profiler, biblioteker og se fremgang",
-    "play": "Nettleseravspilling og ett-klikk VLC",
-    "free": "Android og TV-appen forblir helt gratis",
-    "explore": "Oppdag ARVIO Web",
+    "intro": "Ta med det eksisterende ARVIO-oppsettet ditt til Windows, Mac, iPhone, iPad og nettlesere på smart-TV. Profilene, bibliotekene, tilleggene og seerhistorikken din følger med via ARVIO Cloud.",
+    "sync": "Samme profiler, biblioteker og seerhistorikk",
+    "play": "Avspilling i nettleseren og VLC med ett klikk",
+    "free": "Appen for Android og TV er fortsatt gratis – og det samme er selvhosting.",
+    "explore": "Utforsk ARVIO Web",
     "period": "/ måned",
-    "notice": "ARVIO er en mediehub for kilder du konfigurerer. Katalogoppføringer gir ikke visningsrettigheter. Koble kun til tjenester og medier du er autorisert til å bruke.",
+    "notice": "ARVIO er en mediehub for kilder du selv konfigurerer. Katalogoppføringer gir ingen rett til å se innholdet. Koble bare til tjenester og medier du har tillatelse til å bruke.",
     "language": "Appspråk",
     "home": "Hjem",
     "library": "Bibliotek",
     "server": "Hjemmeserver",
-    "tv": "Direkte TV",
+    "tv": "Direkte-TV i nettleseren",
     "sports": "Sport",
     "selfHost": "Host ARVIO Web selv gratis.",
     "hosting": "Din nettleser. Ditt ARVIO. Vi tar oss av hostingen. Premium bidrar til å finansiere ARVIOs hosting og utvikling. Appen er gratis og har åpen kildekode; du kan også drifte nettappen selv gratis.",
     "membershipTerms": "Månedlig medlemskap. Avslutt når som helst via Ko-fi.",
-    "tvBody": "Nettleseravspilling og ett-klikk VLC",
-    "libraryBody": "Samme profiler, biblioteker og se fremgang",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "Direkte TV",
+    "tvBody": "Bruk din egen IPTV-tjeneste. Bla gjennom programguiden og spill av støttede kanaler rett i ARVIO Web.",
+    "libraryBody": "Ønskelistene dine, egne lister og seerhistorikk – koblet sammen via ARVIO Cloud.",
+    "serverBody": "Hent Jellyfin-, Plex-, Emby- eller Silo-biblioteket ditt inn i det samme kjente grensesnittet.",
+    "sportsBody": "Utforsk sportsarrangementer og finn kilder fra tjenestene du har koblet til.",
     "headline": "ARVIO på iPhone, iPad og bærbar PC.",
     "headlineSub": "Ingen egen server.",
     "lead": "Hostet ARVIO Web. Logg inn med ARVIO-kontoen din og fortsett der du slapp.",
@@ -1653,7 +1688,8 @@
     "refund": "Fungerer det ikke på enheten din? Skriv til oss innen 7 dager, så får du hele beløpet tilbake.",
     "refundLink": "Skriv til oss på Discord",
     "manage": "Administrer medlemskap på Ko-fi",
-    "supports": "Medlemskapet ditt støtter utviklingen."
+    "supports": "Medlemskapet ditt støtter utviklingen.",
+    "checkoutNote": "Du betaler via Ko-fi i amerikanske dollar; banken din regner om beløpet automatisk. Bruk samme e-postadresse som på ARVIO-kontoen din."
   },
   "fa-IR": {
     "label": "Persian (Farsi)",
@@ -1699,7 +1735,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "pl-PL": {
     "label": "Polish (Polski)",
@@ -1745,7 +1782,8 @@
     "refund": "Nie działa na Twoim urządzeniu? Napisz do nas w ciągu 7 dni, a zwrócimy całą kwotę.",
     "refundLink": "Napisz do nas na Discordzie",
     "manage": "Zarządzaj członkostwem na Ko-fi",
-    "supports": "Twoje członkostwo wspiera rozwój."
+    "supports": "Twoje członkostwo wspiera rozwój.",
+    "checkoutNote": "Płatność odbywa się przez Ko-fi w dolarach amerykańskich; Twój bank automatycznie przeliczy kwotę. Użyj tego samego adresu e-mail co w koncie ARVIO."
   },
   "pt-PT": {
     "label": "Portuguese (Portugues)",
@@ -1791,33 +1829,34 @@
     "refund": "Não funciona no teu dispositivo? Fala connosco no prazo de 7 dias e devolvemos o valor total.",
     "refundLink": "Fala connosco no Discord",
     "manage": "Gerir a subscrição no Ko-fi",
-    "supports": "A tua subscrição apoia o desenvolvimento."
+    "supports": "A tua subscrição apoia o desenvolvimento.",
+    "checkoutNote": "O pagamento é feito no Ko-fi em dólares americanos; o seu banco faz a conversão automaticamente. Utilize o mesmo e-mail da sua conta ARVIO."
   },
   "pt-BR": {
     "label": "Português (Brasil)",
-    "download": "Baixe esta fonte",
-    "downloadBody": "Assista ou baixe diretamente em Windows, Mac e celular",
+    "download": "Suas fontes, prontas para baixar.",
+    "downloadBody": "Salve as fontes compatíveis pelo seletor de fontes. Baixe no computador ou envie para o VLC no iPhone e no iPad.",
     "sources": "Fontes",
-    "intro": "Leve sua configuração ARVIO existente para navegadores Windows, Mac, iPhone, iPad e smart-TV. Seus perfis, bibliotecas, complementos e progresso permanecem conectados através do ARVIO Cloud.\nA configuração do bot",
-    "sync": "Mesmos perfis, bibliotecas e assistir ao progresso",
-    "play": "Reprodução no navegador e um clique VLC",
-    "free": "Android e o aplicativo de TV permanecem totalmente gratuitos",
-    "explore": "Descubra ARVIO Web",
+    "intro": "Leve sua configuração atual do ARVIO para Windows, Mac, iPhone, iPad e navegadores de smart TV. Seus perfis, bibliotecas, complementos e progresso continuam conectados pelo ARVIO Cloud.",
+    "sync": "Os mesmos perfis, bibliotecas e progresso de visualização",
+    "play": "Reprodução no navegador e VLC com um clique",
+    "free": "O app para Android e TV continua gratuito. A auto-hospedagem também continua gratuita.",
+    "explore": "Explore o ARVIO Web",
     "period": "/mês",
-    "notice": "ARVIO é um hub de mídia para fontes que você configura. As entradas do catálogo não concedem direitos de visualização. Conecte apenas serviços e mídias que você está autorizado a usar.",
+    "notice": "O ARVIO é um hub de mídia para as fontes que você configura. Os itens do catálogo não concedem direitos de exibição. Conecte apenas serviços e mídias que você tem autorização para usar.",
     "language": "Idioma do app",
     "home": "Início",
     "library": "Biblioteca",
-    "server": "Servidor local (Home Server)",
-    "tv": "TV ao vivo",
+    "server": "Servidor local",
+    "tv": "TV ao vivo no seu navegador",
     "sports": "Esportes",
     "selfHost": "Hospede o ARVIO Web gratuitamente no seu servidor.",
     "hosting": "Seu navegador. Seu ARVIO. Nós cuidamos da hospedagem. O Premium ajuda a financiar a hospedagem e o desenvolvimento do ARVIO. O app é gratuito e de código aberto; você também pode hospedar a versão web gratuitamente.",
     "membershipTerms": "Assinatura mensal. Cancele a qualquer momento pelo Ko-fi.",
-    "tvBody": "Reprodução no navegador e um clique VLC",
-    "libraryBody": "Mesmos perfis, bibliotecas e assistir ao progresso",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "TV ao vivo",
+    "tvBody": "Use seu próprio serviço de IPTV. Navegue pelo guia de programação e assista aos canais compatíveis direto no ARVIO Web.",
+    "libraryBody": "Suas watchlists, listas pessoais e progresso de visualização, conectados pelo ARVIO Cloud.",
+    "serverBody": "Traga sua biblioteca do Jellyfin, Plex, Emby ou Silo para a mesma interface que você já conhece.",
+    "sportsBody": "Explore eventos esportivos e encontre fontes nos serviços que você conectou.",
     "headline": "O ARVIO no seu iPhone, iPad e notebook.",
     "headlineSub": "Sem servidor para manter.",
     "lead": "ARVIO Web hospedado. Entre com sua conta ARVIO e continue de onde parou.",
@@ -1837,7 +1876,8 @@
     "refund": "Não funciona no seu aparelho? Fale com a gente em até 7 dias e devolvemos todo o valor.",
     "refundLink": "Fale com a gente no Discord",
     "manage": "Gerenciar assinatura no Ko-fi",
-    "supports": "Sua assinatura apoia o desenvolvimento."
+    "supports": "Sua assinatura apoia o desenvolvimento.",
+    "checkoutNote": "O pagamento é feito no Ko-fi em dólares americanos; seu banco faz a conversão automaticamente. Use o mesmo e-mail da sua conta ARVIO."
   },
   "pa-IN": {
     "label": "Punjabi",
@@ -1851,7 +1891,7 @@
     "explore": "ਖੋਜੋ ARVIO Web",
     "period": "/ ਮਹੀਨਾ",
     "notice": "ARVIO ਤੁਹਾਡੇ ਦੁਆਰਾ ਕੌਂਫਿਗਰ ਕੀਤੇ ਸਰੋਤਾਂ ਲਈ ਇੱਕ ਮੀਡੀਆ ਹੱਬ ਹੈ। ਕੈਟਾਲਾਗ ਐਂਟਰੀਆਂ ਦੇਖਣ ਦੇ ਅਧਿਕਾਰ ਨਹੀਂ ਦਿੰਦੀਆਂ। ਸਿਰਫ਼ ਸੇਵਾਵਾਂ ਅਤੇ ਮੀਡੀਆ ਨੂੰ ਕਨੈਕਟ ਕਰੋ ਜੋ ਤੁਸੀਂ ਵਰਤਣ ਲਈ ਅਧਿਕਾਰਤ ਹੋ।",
-    "language": "App Language",
+    "language": "ਐਪ ਦੀ ਭਾਸ਼ਾ",
     "home": "ਘਰ",
     "library": "ਲਾਇਬ੍ਰੇਰੀ",
     "server": "ਹੋਮ ਸਰਵਰ",
@@ -1883,7 +1923,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "ro-RO": {
     "label": "Romanian (Romana)",
@@ -1900,7 +1941,7 @@
     "language": "Limba aplicației",
     "home": "Acasă",
     "library": "Biblioteca",
-    "server": "Home Server",
+    "server": "Server de acasă",
     "tv": "TV în direct",
     "sports": "Sport",
     "selfHost": "Găzduiește ARVIO Web gratuit pe propriul server.",
@@ -1929,7 +1970,8 @@
     "refund": "Nu funcționează pe dispozitivul tău? Scrie-ne în 7 zile și îți returnăm toți banii.",
     "refundLink": "Scrie-ne pe Discord",
     "manage": "Gestionează abonamentul pe Ko-fi",
-    "supports": "Abonamentul tău susține dezvoltarea."
+    "supports": "Abonamentul tău susține dezvoltarea.",
+    "checkoutNote": "Plata se face prin Ko-fi în dolari americani; banca ta face conversia automat. Folosește același e-mail ca la contul ARVIO."
   },
   "ru-RU": {
     "label": "Russian",
@@ -1975,7 +2017,8 @@
     "refund": "Не работает на вашем устройстве? Напишите нам в течение 7 дней, и мы вернём деньги полностью.",
     "refundLink": "Написать нам в Discord",
     "manage": "Управлять подпиской на Ko-fi",
-    "supports": "Ваша подписка поддерживает разработку."
+    "supports": "Ваша подписка поддерживает разработку.",
+    "checkoutNote": "Оплата проходит через Ko-fi в долларах США; ваш банк автоматически пересчитает сумму. Укажите тот же e-mail, что и в аккаунте ARVIO."
   },
   "sr-RS": {
     "label": "Serbian (Srpski)",
@@ -2021,7 +2064,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "sk-SK": {
     "label": "Slovak (Slovensky)",
@@ -2067,7 +2111,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "sl-SI": {
     "label": "Slovenian (Slovenscina)",
@@ -2113,33 +2158,34 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "es-ES": {
     "label": "Spanish (Espanol)",
-    "download": "Descargar esta fuente",
-    "downloadBody": "Reproduce o descarga directamente en Windows, Mac y móvil",
-    "sources": "fuentes",
-    "intro": "Lleva tu configuración de ARVIO a Windows, Mac, iPhone, iPad y navegadores de Smart TV. Tus perfiles, bibliotecas, complementos y progreso se mantienen conectados mediante ARVIO Cloud.",
-    "sync": "Los mismos perfiles, bibliotecas y progreso",
+    "download": "Tus fuentes, listas para descargar.",
+    "downloadBody": "Guarda las fuentes compatibles desde el selector de fuentes. Descárgalas en el ordenador o pásalas a VLC en iPhone y iPad.",
+    "sources": "Fuentes",
+    "intro": "Lleva tu configuración actual de ARVIO a Windows, Mac, iPhone, iPad y navegadores de smart TV. Tus perfiles, bibliotecas, complementos y progreso siguen conectados a través de ARVIO Cloud.",
+    "sync": "Los mismos perfiles, bibliotecas y progreso de visualización",
     "play": "Reproducción en el navegador y VLC con un clic",
-    "free": "La aplicación para Android y TV sigue siendo totalmente gratuita",
-    "explore": "Descubrir ARVIO Web",
+    "free": "La app para Android y TV sigue siendo gratuita, y el autoalojamiento también.",
+    "explore": "Explora ARVIO Web",
     "period": "/ mes",
     "notice": "ARVIO es un centro multimedia para las fuentes que configures. Las entradas del catálogo no otorgan derechos de visualización. Conecta solo servicios y contenidos que tengas autorización para usar.",
     "language": "Idioma de la app",
     "home": "Inicio",
     "library": "Biblioteca",
     "server": "Servidor local",
-    "tv": "TV en directo",
+    "tv": "TV en directo en tu navegador",
     "sports": "Deportes",
     "selfHost": "Aloja ARVIO Web gratis en tu propio servidor.",
     "hosting": "Tu navegador. Tu ARVIO. Nosotros nos encargamos del alojamiento. Premium ayuda a financiar el alojamiento y el desarrollo de ARVIO. La app es gratuita y de código abierto; también puedes alojar la versión web gratis.",
     "membershipTerms": "Suscripción mensual. Cancela cuando quieras a través de Ko-fi.",
-    "tvBody": "Reproducción en el navegador y VLC con un clic",
-    "libraryBody": "Los mismos perfiles, bibliotecas y progreso",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "TV en directo",
+    "tvBody": "Usa tu propio servicio de IPTV. Consulta la guía de programación y reproduce los canales compatibles directamente en ARVIO Web.",
+    "libraryBody": "Tus listas de seguimiento, listas personales y progreso de visualización, conectados a través de ARVIO Cloud.",
+    "serverBody": "Lleva tu biblioteca de Jellyfin, Plex, Emby o Silo a la misma interfaz que ya conoces.",
+    "sportsBody": "Explora eventos deportivos y encuentra fuentes en tus servicios conectados.",
     "headline": "ARVIO en tu iPhone, iPad y portátil.",
     "headlineSub": "Sin servidor que mantener.",
     "lead": "ARVIO Web alojado. Inicia sesión con tu cuenta ARVIO y sigue donde lo dejaste.",
@@ -2159,7 +2205,8 @@
     "refund": "¿No funciona en tu dispositivo? Escríbenos en un plazo de 7 días y te devolvemos el importe íntegro.",
     "refundLink": "Escríbenos en Discord",
     "manage": "Gestionar la suscripción en Ko-fi",
-    "supports": "Tu suscripción apoya el desarrollo."
+    "supports": "Tu suscripción apoya el desarrollo.",
+    "checkoutNote": "El pago se hace en Ko-fi en dólares estadounidenses; tu banco hace la conversión automáticamente. Usa el mismo correo que en tu cuenta ARVIO."
   },
   "sw-KE": {
     "label": "Swahili",
@@ -2205,33 +2252,34 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "sv-SE": {
     "label": "Swedish (Svenska)",
-    "download": "Ladda ner den här källan",
-    "downloadBody": "Se eller ladda ner direkt på Windows, Mac och mobil",
+    "download": "Dina källor. Redo att laddas ner.",
+    "downloadBody": "Spara källor som stöds direkt från källväljaren. Ladda ner på datorn, eller skicka vidare till VLC på iPhone och iPad.",
     "sources": "Källor",
-    "intro": "Ta din befintliga ARVIO-inställning till Windows, Mac, iPhone, iPad och smart-TV-webbläsare. Dina profiler, bibliotek, tillägg och framsteg förblir uppkopplade via ARVIO Cloud.",
-    "sync": "Samma profiler, bibliotek och titta på framsteg",
-    "play": "Webbläsaruppspelning och ett klick VLC",
-    "free": "Android och TV-appen förblir helt gratis",
-    "explore": "Upptäck ARVIO Web",
+    "intro": "Ta med din befintliga ARVIO-uppsättning till Windows, Mac, iPhone, iPad och webbläsare på smart-tv. Dina profiler, bibliotek, tillägg och din tittarhistorik följer med via ARVIO Cloud.",
+    "sync": "Samma profiler, bibliotek och var du slutade titta",
+    "play": "Uppspelning i webbläsaren och VLC med ett klick",
+    "free": "Appen för Android och tv är fortfarande gratis – och det är självhosting också.",
+    "explore": "Utforska ARVIO Web",
     "period": "/ månad",
-    "notice": "ARVIO är ett medianav för källor du konfigurerar. Katalogposter ger inte visningsrättigheter. Anslut endast tjänster och media som du är behörig att använda.",
+    "notice": "ARVIO är en mediehubb för källor som du själv konfigurerar. Katalogposter ger ingen rätt att titta på innehållet. Anslut bara tjänster och media som du har behörighet att använda.",
     "language": "Appspråk",
     "home": "Hem",
     "library": "Bibliotek",
     "server": "Hemmaserver",
-    "tv": "Live-TV",
+    "tv": "Live-tv i webbläsaren",
     "sports": "Sport",
     "selfHost": "Hosta ARVIO Web själv gratis.",
     "hosting": "Din webbläsare. Ditt ARVIO. Vi sköter hostingen. Premium hjälper till att finansiera ARVIOs hosting och utveckling. Appen är gratis och har öppen källkod; du kan också drifta webbappen själv gratis.",
     "membershipTerms": "Månadsmedlemskap. Avsluta när som helst via Ko-fi.",
-    "tvBody": "Webbläsaruppspelning och ett klick VLC",
-    "libraryBody": "Samma profiler, bibliotek och titta på framsteg",
-    "serverBody": "Jellyfin · Plex · Emby · Silo",
-    "sportsBody": "Live-TV",
+    "tvBody": "Använd din egen IPTV-tjänst. Bläddra i tv-tablån och spela upp kanaler som stöds direkt i ARVIO Web.",
+    "libraryBody": "Dina bevakningslistor, egna listor och var du slutade titta – kopplat via ARVIO Cloud.",
+    "serverBody": "Ta in ditt Jellyfin-, Plex-, Emby- eller Silo-bibliotek i samma välbekanta gränssnitt.",
+    "sportsBody": "Utforska sportevenemang och hitta källor från dina anslutna tjänster.",
     "headline": "ARVIO på din iPhone, iPad och laptop.",
     "headlineSub": "Ingen egen server.",
     "lead": "Hostad ARVIO Web. Logga in med ditt ARVIO-konto och fortsätt där du slutade.",
@@ -2251,7 +2299,8 @@
     "refund": "Fungerar det inte på din enhet? Skriv till oss inom 7 dagar så får du tillbaka hela beloppet.",
     "refundLink": "Skriv till oss på Discord",
     "manage": "Hantera medlemskap på Ko-fi",
-    "supports": "Ditt medlemskap stöder utvecklingen."
+    "supports": "Ditt medlemskap stöder utvecklingen.",
+    "checkoutNote": "Du betalar via Ko-fi i amerikanska dollar; din bank räknar om beloppet automatiskt. Använd samma e-postadress som för ditt ARVIO-konto."
   },
   "ta-IN": {
     "label": "Tamil",
@@ -2297,7 +2346,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "te-IN": {
     "label": "Telugu",
@@ -2343,7 +2393,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "th-TH": {
     "label": "Thai",
@@ -2389,7 +2440,8 @@
     "refund": "ใช้งานบนอุปกรณ์ของคุณไม่ได้ใช่ไหม ติดต่อเราภายใน 7 วันเพื่อรับเงินคืนเต็มจำนวน",
     "refundLink": "ติดต่อเราทาง Discord",
     "manage": "จัดการสมาชิกบน Ko-fi",
-    "supports": "การเป็นสมาชิกของคุณช่วยสนับสนุนการพัฒนา"
+    "supports": "การเป็นสมาชิกของคุณช่วยสนับสนุนการพัฒนา",
+    "checkoutNote": "ชำระเงินผ่าน Ko-fi เป็นดอลลาร์สหรัฐ ธนาคารของคุณจะแปลงยอดเงินให้อัตโนมัติ โปรดใช้อีเมลเดียวกับบัญชี ARVIO ของคุณ"
   },
   "tr-TR": {
     "label": "Turkish (Turkce)",
@@ -2435,7 +2487,8 @@
     "refund": "Cihazınızda çalışmıyor mu? 7 gün içinde bize yazın, ücretin tamamını iade edelim.",
     "refundLink": "Discord’da bize yazın",
     "manage": "Üyeliği Ko-fi’de yönet",
-    "supports": "Üyeliğiniz geliştirmeyi destekler."
+    "supports": "Üyeliğiniz geliştirmeyi destekler.",
+    "checkoutNote": "Ödeme Ko-fi üzerinden ABD doları ile yapılır; bankanız tutarı otomatik olarak çevirir. ARVIO hesabınızdaki e-posta adresini kullanın."
   },
   "uk-UA": {
     "label": "Ukrainian",
@@ -2481,7 +2534,8 @@
     "refund": "Не працює на вашому пристрої? Напишіть нам протягом 7 днів, і ми повернемо всю суму.",
     "refundLink": "Написати нам у Discord",
     "manage": "Керувати підпискою на Ko-fi",
-    "supports": "Ваша підписка підтримує розробку."
+    "supports": "Ваша підписка підтримує розробку.",
+    "checkoutNote": "Оплата проходить через Ko-fi у доларах США; ваш банк автоматично перерахує суму. Вкажіть ту саму електронну адресу, що й в акаунті ARVIO."
   },
   "ur-PK": {
     "label": "Urdu",
@@ -2527,7 +2581,8 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   },
   "vi-VN": {
     "label": "Vietnamese",
@@ -2573,7 +2628,8 @@
     "refund": "Không chạy được trên thiết bị của bạn? Nhắn cho chúng tôi trong vòng 7 ngày để được hoàn tiền đầy đủ.",
     "refundLink": "Nhắn cho chúng tôi trên Discord",
     "manage": "Quản lý gói thành viên trên Ko-fi",
-    "supports": "Gói thành viên của bạn hỗ trợ việc phát triển."
+    "supports": "Gói thành viên của bạn hỗ trợ việc phát triển.",
+    "checkoutNote": "Thanh toán qua Ko-fi bằng đô la Mỹ; ngân hàng của bạn sẽ tự động quy đổi. Hãy dùng cùng email với tài khoản ARVIO của bạn."
   },
   "en-GB": {
     "label": "English (UK)",
@@ -2619,6 +2675,7 @@
     "refund": "Doesn't work on your device? Message us within 7 days for a full refund.",
     "refundLink": "Message us on Discord",
     "manage": "Manage membership on Ko-fi",
-    "supports": "Your membership supports development."
+    "supports": "Your membership supports development.",
+    "checkoutNote": "Payment runs through Ko-fi in US dollars; your bank converts it automatically. Use the same email as your ARVIO account."
   }
 }

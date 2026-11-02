@@ -160,6 +160,7 @@ function MembershipCheckoutSession({ children, className, entry, title, onEntitl
       </a>}
     {showEmailHint && auth && <div className="membership-inline-hint" id={`${id}-hint`}>
       <p>{translateUi("Use this email at checkout")} <strong>{auth.email}</strong></p>
+      <p className="membership-currency-note">{translateUi("Ko-fi charges in US dollars; your bank converts the amount automatically.")}</p>
       <button type="button" className="paywall-link-toggle" onClick={() => setOpen(true)}>{translateUi("Already paid? Check access")}</button>
     </div>}
     {open && auth && <dialog ref={dialog} className="membership-checkout" aria-labelledby={`${id}-title`} onCancel={(event) => { event.preventDefault(); close(); }}

@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundDark
+import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.BackgroundOverlay
 import com.arflix.tv.ui.theme.Cyan
 import com.arflix.tv.ui.theme.ParticleCyan
@@ -73,7 +76,7 @@ fun ArvioLoadingScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0F))  // Static dark background - no gradient animation
+            .background(BackgroundDark)  // Static dark background - no gradient animation
     ) {
         // Center content - no particles for performance
         Column(
@@ -214,8 +217,8 @@ fun LoadingOverlay(
             modifier = Modifier
                 .padding(48.dp)
                 .background(
-                    Color(0xFF1A1A2E),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                    BackgroundElevated,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
                 )
                 .padding(1.dp)
         ) {

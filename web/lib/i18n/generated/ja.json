@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · 視聴済み",
   "· Guide match": "· ガイドマッチ",
   "· Possible broadcast": "· 放送の可能性あり",
-  "· {value0}d archive": "· {value0}d アーカイブ"
+  "· {value0}d archive": "· {value0}d アーカイブ",
+  "View on Trakt": "Trakt で見る",
+  "This file's audio can't play directly in this browser. Converting the audio…": "このファイルの音声はこのブラウザで直接再生できません。音声を変換しています…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "このファイルの音声はこのブラウザで再生できません。プロバイダーに変換をリクエストしています…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "このソースの音声はこのブラウザで再生できません。別のソースを選ぶか、外部プレーヤーを使用してください。",
+  "Converting the audio for your browser…": "ブラウザ用に音声を変換しています…",
+  "Picking the best source…": "最適なソースを選んでいます…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi では米ドルで請求され、金額は銀行で自動的に換算されます。"
 }

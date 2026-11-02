@@ -1558,5 +1558,12 @@
   "{value0}% · watched": "{value0}% · visto",
   "· Guide match": "· Partita guida",
   "· Possible broadcast": "· Possibile trasmissione",
-  "· {value0}d archive": "· {value0}d archivio"
+  "· {value0}d archive": "· {value0}d archivio",
+  "View on Trakt": "Visualizza su Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "L'audio di questo file non può essere riprodotto direttamente in questo browser. Conversione dell'audio…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "L'audio di questo file non può essere riprodotto in questo browser. Richiesta di conversione al provider…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "L'audio di questa sorgente non può essere riprodotto in questo browser. Scegli un'altra sorgente o usa un lettore esterno.",
+  "Converting the audio for your browser…": "Conversione dell'audio per il tuo browser…",
+  "Picking the best source…": "Scelta della sorgente migliore…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi addebita in dollari statunitensi; la tua banca converte l'importo automaticamente."
 }

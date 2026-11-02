@@ -1592,5 +1592,12 @@
   "{value0}% · watched": "{value0}% · ವೀಕ್ಷಿಸಲಾಗಿದೆ",
   "· Guide match": "· ಮಾರ್ಗದರ್ಶಿ ಹೊಂದಾಣಿಕೆ",
   "· Possible broadcast": "· ಸಂಭಾವ್ಯ ಪ್ರಸಾರ",
-  "· {value0}d archive": "· {value0}d ಆರ್ಕೈವ್"
+  "· {value0}d archive": "· {value0}d ಆರ್ಕೈವ್",
+  "View on Trakt": "Trakt ನಲ್ಲಿ ವೀಕ್ಷಿಸಿ",
+  "This file's audio can't play directly in this browser. Converting the audio…": "ಈ ಫೈಲ್‌ನ ಆಡಿಯೋ ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ನೇರವಾಗಿ ಪ್ಲೇ ಆಗುವುದಿಲ್ಲ. ಆಡಿಯೋವನ್ನು ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "ಈ ಫೈಲ್‌ನ ಆಡಿಯೋ ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಪ್ಲೇ ಆಗುವುದಿಲ್ಲ. ಪೂರೈಕೆದಾರರ ಪರಿವರ್ತನೆಗೆ ವಿನಂತಿಸಲಾಗುತ್ತಿದೆ…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "ಈ ಮೂಲದ ಆಡಿಯೋ ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಪ್ಲೇ ಆಗುವುದಿಲ್ಲ. ಇನ್ನೊಂದು ಮೂಲವನ್ನು ಆಯ್ಕೆಮಾಡಿ ಅಥವಾ ಬಾಹ್ಯ ಪ್ಲೇಯರ್ ಬಳಸಿ.",
+  "Converting the audio for your browser…": "ನಿಮ್ಮ ಬ್ರೌಸರ್‌ಗಾಗಿ ಆಡಿಯೋವನ್ನು ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ…",
+  "Picking the best source…": "ಉತ್ತಮ ಮೂಲವನ್ನು ಆಯ್ಕೆಮಾಡಲಾಗುತ್ತಿದೆ…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi ಯುಎಸ್ ಡಾಲರ್‌ಗಳಲ್ಲಿ ಶುಲ್ಕ ವಿಧಿಸುತ್ತದೆ; ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಮೊತ್ತವನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪರಿವರ್ತಿಸುತ್ತದೆ."
 }

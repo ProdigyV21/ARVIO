@@ -112,9 +112,9 @@ test('a new portal does not take over the id of a removed portal that settings s
   eq(portals.referencedStalkerPortalIds(left).sort(), ['stalker1', 'stalker2']);
   eq(portals.nextStalkerPortalId([], portals.referencedStalkerPortalIds(left)), 'stalker3');
   eq(portals.upsertStalkerPortal([], { name: 'New', portalUrl: 'http://new.example', macAddress: '00:1A:79:00:00:04' }, ['stalker1'])[0].id, 'stalker2');
-  // Reserved ids do not count towards the three-portal limit.
+  // Reserved ids do not count towards the ten-portal limit.
   eq(portals.nextStalkerPortalId(['stalker4', 'stalker5'], ['stalker1', 'stalker2', 'stalker3']), 'stalker6');
-  eq(portals.nextStalkerPortalId(['stalker1', 'stalker2', 'stalker3'], []), null);
+  eq(portals.nextStalkerPortalId(Array.from({ length: 10 }, (_, i) => `stalker${i + 1}`), []), null);
   // Android keeps ids above three as they are.
   eq(portals.normalizeStalkerPortals([{ ...portal1, id: 'stalker6' }]).map((p) => p.id), ['stalker6']);
 });

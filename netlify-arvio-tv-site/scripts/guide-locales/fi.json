@@ -1,0 +1,821 @@
+{
+ "locale": {
+  "htmlLang": "fi",
+  "hreflang": "fi",
+  "home": "Etusivu",
+  "guides": "Oppaat",
+  "skip": "Siirry sisältöön",
+  "mainNav": "Päävalikko",
+  "breadcrumb": "Murupolku",
+  "footerNav": "Alatunnisteen valikko",
+  "install": "Asenna ARVIO",
+  "play": "Google Play",
+  "source": "Näytä lähdekoodi",
+  "browser": "Tutustu ARVIO Webiin",
+  "questions": "Usein kysytyt kysymykset",
+  "related": "Aiheeseen liittyvät oppaat",
+  "softwareBoundaryTitle": "Ohjelmisto, ei sisältöä",
+  "softwareBoundary": "ARVIO ei isännöi, tarjoa, myy, sisällä eikä jaa elokuvia, sarjoja, kanavia, soittolistoja tai lähetyksiä. Yhdistät vain palvelimia, palveluita, tiedostoja ja integraatioita, joiden käyttöön sinulla on oikeus.",
+  "footerDescription": "Avoimen lähdekoodin mediankäsittely Android TV:lle, Google TV:lle ja Androidille.",
+  "footerBoundary": "ARVIO tarjoaa ohjelmiston, ei mediaa.",
+  "languageLabel": "Kieli",
+  "languageLink": "English",
+  "languageHref": "/",
+  "pageData": {
+   "hub": {
+    "title": "Mediakeskus Android TV:lle, puhelimelle ja selaimelle - ARVIO",
+    "description": "Kokoa palvelimet, palvelut, suora TV, Trakt, Simkl ja toisto ARVIOon Android TV:llä, Androidilla, iPhonella, iPadilla, Windowsilla ja Macilla.",
+    "crumb": "Mediakeskus",
+    "eyebrow": "Ilmainen Android-sovellus",
+    "h1": "Mediapalvelusi, järjestettynä televisiolle.",
+    "hero": "ARVIO on ilmainen avoimen lähdekoodin mediakeskus Android TV:lle, Google TV:lle ja Androidille. Valinnainen ARVIO Web tuo tuetut ominaisuudet iPhoneen, iPadiin, Windowsiin, Maciin, Chromebookiin, Apple TV:hen ja älytelevisioiden selaimiin.",
+    "sectionEyebrow": "Yksi käyttöliittymä",
+    "sectionTitle": "Yhdistä se, mitä jo käytät.",
+    "sectionCopy": "ARVIO ei korvaa palvelintasi tai palveluntarjoajaasi. Se näyttää tuetut palvelut yhtenäisessä kirjastossa, jossa profiilit, sisällön löytäminen ja toisto on suunniteltu kaukosäätimelle.",
+    "features": [
+     [
+      "Jellyfin, Plex ja Emby",
+      "Selaa sallittuja kirjastoja, uusimpia lisäyksiä ja saatavilla olevia mediaversioita tuetuilla kotipalvelimilla."
+     ],
+     [
+      "Trakt ja Simkl",
+      "Käytä listoja, edistymistä, katseluhistoriaa ja scrobblausta ja valitse, mikä palvelu vastaa mistäkin ominaisuudesta."
+     ],
+     [
+      "Suora TV ja ohjelmaopas",
+      "Yhdistä oma palveluntarjoajasi tai soittolistasi kategorioineen, suosikkeineen, EPG:ineen ja catch-up-tietoineen, kun niitä tuetaan."
+     ],
+     [
+      "Profiilit ja pilvi",
+      "Pidä profiilit erillään ja synkronoi tuetut asetukset laitteiden välillä ARVIO-tilillä."
+     ],
+     [
+      "Tekstitykset ja toisto",
+      "Valitse tekstityslähteet, soittimen asetukset ja valinnaiset tekoälytyökalut omilla tunnuksillasi."
+     ],
+     [
+      "TV, puhelin ja selain",
+      "Käytä ilmaista sovellusta Androidilla ja lisää halutessasi maksullinen selainkäyttö Apple-laitteille ja tietokoneille."
+     ]
+    ],
+    "stepsTitle": "Aloita niistä osista, joita tarvitset.",
+    "steps": [
+     [
+      "Asenna ARVIO",
+      "Asenna Google Playsta Android TV:lle, Google TV:lle tai Android-puhelimeen, tai lataa virallinen allekirjoitettu APK GitHubista."
+     ],
+     [
+      "Luo profiili",
+      "Valitse kieli, ulkoasu ja toistoasetukset jokaiselle käyttäjälle tai yhteiskäyttöön."
+     ],
+     [
+      "Yhdistä sallitut palvelut",
+      "Lisää vain palvelimia, tilejä, soittolistoja ja integraatioita, joihin sinulla on käyttöoikeus."
+     ]
+    ],
+    "faq": [
+     [
+      "Onko ARVIO ilmainen Android TV:llä?",
+      "Kyllä. Android-sovellus on ilmainen ja avointa lähdekoodia. ARVIO Web on valinnainen maksullinen selainlisä."
+     ],
+     [
+      "Sisältääkö ARVIO elokuvia, sarjoja tai kanavia?",
+      "Ei. ARVIO on hallinta- ja toisto-ohjelmisto. Sinä tuot sallitut lähteet ja palvelut."
+     ],
+     [
+      "Mitä palveluita ARVIO kokoaa yhteen?",
+      "Se tukee Jellyfin-, Plex- ja Emby-palvelimia, suoraa TV:tä, Traktia, Simkliä, tekstityksiä ja yhteensopivia henkilökohtaisia integraatioita."
+     ]
+    ],
+    "noteTitle": "Sisällön rajaus",
+    "note": "ARVIO tarjoaa käyttöliittymän ja soittimen. Saatavuus ja laatu riippuvat yhdistetystä lähteestä, verkosta ja laitteen ominaisuuksista.",
+    "ctaTitle": "Avoin mediakeskus omiin tarpeisiisi.",
+    "ctaCopy": "Asenna ilmaiseksi Androidille tai tutustu koko projektiin GitHubissa.",
+    "related": [
+     "servers",
+     "tracking",
+     "live"
+    ]
+   },
+   "jellyfin": {
+    "title": "Jellyfin Android TV:lle, iPadille, Windowsille ja Macille - ARVIO",
+    "description": "Yhdistä Jellyfin-palvelimesi ARVIOon ja selaa kirjastoja, versioita ja edistymistä Android TV:llä, puhelimella ja selaimessa.",
+    "crumb": "Jellyfin eri laitteilla",
+    "eyebrow": "Kotipalvelinintegraatio",
+    "h1": "Tuo Jellyfin-kirjastosi ARVIOon.",
+    "hero": "Yhdistä Jellyfin-palvelin, jonka käyttöön sinulla on oikeus, ja selaa kirjastoja ja mediaversioita ilmaisessa Android-sovelluksessa tai valinnaisessa ARVIO Webissä iPhonella, iPadilla, Windowsilla, Macilla ja muissa tuetuissa selaimissa.",
+    "sectionEyebrow": "Yhdistetty, ei kopioitu",
+    "sectionTitle": "Palvelimesi pysyy päätösvallassa.",
+    "sectionCopy": "ARVIO lukee sallitut kirjastotiedot ja toistettavan median. Käyttösäännöt, käyttäjät, oikeudet ja saatavuus pysyvät Jellyfinin hallinnassa.",
+    "features": [
+     [
+      "Kirjastot eri laitteilla",
+      "Avaa palvelimen kirjastot ARVIOn Kirjasto-sivulla ilman, että Jellyfinin järjestystä tarvitsee rakentaa uudelleen."
+     ],
+     [
+      "Viimeksi lisätyt",
+      "Näe uusimmat lisäykset nopeassa näkymässä samoilla ARVIOn korteilla ja tiedoilla."
+     ],
+     [
+      "Mediaversiot",
+      "Kun Jellyfin ilmoittaa useita tiedostoja, ARVIO voi näyttää ne erillisinä toistovaihtoehtoina."
+     ],
+     [
+      "Edistyminen ja katselutila",
+      "Toisto päivittää palvelimen, kun se on tuettua, ja Trakt tai Simkl voi säilyttää laajempaa katseluhistoriaa."
+     ],
+     [
+      "Suojatut tunnukset",
+      "Käyttötunnukset (tokenit) tallennetaan salattuun tunnistetietojen säilöön tuetuilla Android-laitteilla."
+     ],
+     [
+      "Laitteen mukainen toisto",
+      "ARVIO yrittää yhteensopivaa toistoa, ja Jellyfin voi transkoodata muodot, joita laite ei toista suoraan."
+     ]
+    ],
+    "stepsTitle": "Kolme vaihetta kirjastosi avaamiseen.",
+    "steps": [
+     [
+      "Valmistele Jellyfin",
+      "Varmista, että palvelin on tavoitettavissa ja että käyttäjä pääsee haluttuihin kirjastoihin."
+     ],
+     [
+      "Yhdistä asetuksissa",
+      "Lisää Jellyfin kotipalvelimeksi ja viimeistele kirjautuminen tai koodilla yhdistäminen."
+     ],
+     [
+      "Avaa Kirjasto",
+      "Valitse Jellyfin, valitse kirjasto ja selaa tälle käyttäjälle sallittuja nimikkeitä."
+     ]
+    ],
+    "faq": [
+     [
+      "Korvaako ARVIO Jellyfin-palvelimen?",
+      "Ei. Jellyfin vastaa edelleen kirjastosta, käyttäjistä ja käyttöoikeuksista. ARVIO toimii asiakassovelluksena ja hallintakäyttöliittymänä."
+     ],
+     [
+      "Näyttääkö ARVIO tiedoston eri versiot?",
+      "Kyllä, kun palvelin ilmoittaa versiot ja kirjautuneella käyttäjällä on niihin käyttöoikeus."
+     ],
+     [
+      "Toistuuko jokainen tiedosto suoraan?",
+      "Ei välttämättä. Säiliömuoto, koodekit, ääni, tekstitykset, verkko, laite ja transkoodausasetukset vaikuttavat toistoon."
+     ]
+    ],
+    "noteTitle": "Toisto riippuu koko ketjusta",
+    "note": "Toimiva yhteys ei takaa jokaisen tiedoston suoraa toistoa. Palvelimen voi olla tarpeen transkoodata muodot, joita laite tai selain ei tue.",
+    "ctaTitle": "Käytä Jellyfin-palvelintasi omalla tavallasi.",
+    "ctaCopy": "ARVIO on ilmainen ja avointa lähdekoodia Androidilla.",
+    "related": [
+     "servers",
+     "tracking",
+     "web"
+    ]
+   },
+   "servers": {
+    "title": "Plex, Emby ja Jellyfin TV:llä, iPadilla, Windowsilla ja Macilla",
+    "description": "Selaa Plexiä, Embyä ja Jellyfiniä yhdessä käyttöliittymässä Android TV:llä, Androidilla ja ARVIOn valinnaisessa selainversiossa.",
+    "crumb": "Plex, Emby ja Jellyfin",
+    "eyebrow": "Usean palvelimen kirjasto",
+    "h1": "Plex, Emby ja Jellyfin samassa käyttöliittymässä.",
+    "hero": "Avaa sallitut kotipalvelimet ilmaisessa sovelluksessa Android TV:llä ja puhelimella tai käytä valinnaista ARVIO Webiä iPhonella, iPadilla, Windowsilla, Macilla, Apple TV:llä ja tuetuissa selaimissa.",
+    "sectionEyebrow": "Vaihda palvelinta, älä käyttöliittymää",
+    "sectionTitle": "Yksi Kirjasto-sivu, erilliset lähteet.",
+    "sectionCopy": "Jokainen palvelin pysyy omana, luotettavana lähteenään. Liikut kirjastojen välillä samalla korttiasettelulla, samoilla tiedoilla ja samalla kaukosäädinohjauksella.",
+    "features": [
+     [
+      "Palvelinkohtainen erottelu",
+      "Plex, Emby ja Jellyfin pysyvät erillään, jolloin kunkin kirjaston oikeudet ja rakenne säilyvät."
+     ],
+     [
+      "Kirjastojen sivupalkki",
+      "Valitse yhdistetty palvelu ja avaa sen tarjoamat kirjastot ilman ylimääräisiä suodattimia."
+     ],
+     [
+      "Uusimmat nimikkeet",
+      "Näe kunkin palvelimen sallimat uusimmat nimikkeet nopeaan silmäilyyn tehdyssä näkymässä."
+     ],
+     [
+      "Useita mediaversioita",
+      "4K-, 1080p-, remux- ja muut vaihtoehtoiset versiot voivat näkyä erillisinä vaihtoehtoina."
+     ],
+     [
+      "Yhtenäinen kokemus",
+      "Käytä tuttuja tietoja, kuvituksia, metatietoja ja ohjaimia palvelimesta riippumatta."
+     ],
+     [
+      "Profiilikohtaiset asetukset",
+      "Määritä, mitkä palvelimet ja katalogit näkyvät kussakin profiilissa, myös perhekäytössä."
+     ]
+    ],
+    "stepsTitle": "Pidä hallinta oikeassa paikassa.",
+    "steps": [
+     [
+      "Yhdistä palvelin",
+      "Käytä Plexin, Embyn tai Jellyfinin tuettua kirjautumista tai yhdistämistapaa."
+     ],
+     [
+      "Valitse kirjastot",
+      "ARVIO lukee vain kirjautuneen käyttäjän käytettävissä olevat kirjastot."
+     ],
+     [
+      "Valitse versio",
+      "Avaa nimike ja valitse palvelimen ilmoittamista mediaversioista."
+     ]
+    ],
+    "faq": [
+     [
+      "Voinko yhdistää Plexin, Embyn ja Jellyfinin samanaikaisesti?",
+      "Kyllä. Ne voidaan yhdistää samaan profiiliin ja avata erillisinä kirjastolähteinä."
+     ],
+     [
+      "Muuttaako tai yhdistääkö ARVIO kirjastoja?",
+      "Ei. Jokainen palvelin pysyy virallisena lähteenä. ARVIO ei siirrä eikä muokkaa mediaa."
+     ],
+     [
+      "Miksi nimikkeellä voi olla useita lähteitä?",
+      "Palvelin voi tarjota useita tiedostoja tai versioita, ja ARVIO näyttää ne, jotta voit valita resoluution ja koodauksen."
+     ]
+    ],
+    "noteTitle": "Ei kirjaston siirtoa",
+    "note": "Palvelimen lisääminen ei kopioi tiedostoja eikä ohita oikeuksia. Alkuperäisen Plexin, Embyn tai Jellyfinin on oltava tavoitettavissa selaamista ja toistoa varten.",
+    "ctaTitle": "Omat palvelimesi. Yksi rauhallinen käyttöliittymä.",
+    "ctaCopy": "Android-sovellus on edelleen ilmainen ja avointa lähdekoodia.",
+    "related": [
+     "jellyfin",
+     "tracking",
+     "sources"
+    ]
+   },
+   "sources": {
+    "title": "Debrid ja Usenet TV:llä, iPadilla, Windowsilla ja Macilla",
+    "description": "Järjestä tuetut debrid- ja Usenet-lähteet ARVIOssa niin, että laatu, koko, kieli ja lisäosan tiedot näkyvät.",
+    "crumb": "Debrid- ja Usenet-lähteet",
+    "eyebrow": "Tuetut henkilökohtaiset integraatiot",
+    "h1": "Debrid- ja Usenet-lähteet selkeästi järjestettynä.",
+    "hero": "Käytä yhteensopivien lisäosien tarjoamia lähteitä ilmaisessa Android-sovelluksessa tai valinnaisessa ARVIO Webissä. ARVIO säilyttää lähteen tiedot ja toistaa ratkaistun HTTP-median tuetulla laitteella.",
+    "sectionEyebrow": "Läpinäkyvä valinta",
+    "sectionTitle": "Näe, mitä lisäosa palautti, ennen toistoa.",
+    "sectionCopy": "Yhteensopiva lisäosa voi antaa paljon muutakin kuin URL-osoitteen. ARVIO pitää hyödylliset tiedot näkyvillä, jotta voit valita tietoon perustuen.",
+    "features": [
+     [
+      "Laatu ja resoluutio",
+      "Tunnista 4K, 1080p, 720p ja muut ilmoitetut tiedot yhtenäisistä merkinnöistä."
+     ],
+     [
+      "Koko ja tiedostonimi",
+      "Vertaa ilmoitettua kokoa ja lue koko tiedostonimi, kun lisäosa antaa nämä tiedot."
+     ],
+     [
+      "Lisäosa ja palveluntarjoaja",
+      "Säilytä merkinnät kuten debrid, Usenet, vault, index tai host sen sijaan, että kaikki näkyisi yleisenä lähteenä."
+     ],
+     [
+      "Kieli ja tekniset tiedot",
+      "Näe kieli, julkaisu, koodekki ja muut saatavilla olevat metatiedot ilman turhaa toistoa."
+     ],
+     [
+      "Hyödyllinen järjestys",
+      "Kunnioita lisäosien järjestystä ja vertaa kokoa ja laatua löytääksesi suosikkivaihtoehdot nopeasti."
+     ],
+     [
+      "Android ja selain",
+      "Käytä natiivisoitinta tai tuettuja selain-, VLC- ja Infuse-vaihtoehtoja palvelun, muodon ja laitteen mukaan."
+     ]
+    ],
+    "stepsTitle": "Lisäosa ratkaisee, ARVIO näyttää ja toistaa.",
+    "steps": [
+     [
+      "Määritä integraatio",
+      "Käytä erikseen yhteensopivaa lisäosaa tai palvelua ja tiliä, jonka käyttöön sinulla on oikeus."
+     ],
+     [
+      "Vastaanota ratkaistut lähteet",
+      "Integraatio palauttaa metatiedot ja toistettavan HTTP-osoitteen. ARVIO ei hae Usenet- tai debrid-infrastruktuurista."
+     ],
+     [
+      "Valitse tai käytä automaattista toistoa",
+      "Valitse tietty tulos tai anna automaattisen toiston käyttää parasta saatavilla olevaa vaihtoehtoa asetustesi mukaan."
+     ]
+    ],
+    "faq": [
+     [
+      "Sisältääkö ARVIO debrid- tai Usenet-tilin?",
+      "Ei. ARVIO ei sisällä, myy eikä jaa palveluntarjoajien tilejä."
+     ],
+     [
+      "Toistaako ARVIO torrent- tai magnet-linkkejä suoraan?",
+      "Ei. Integraation on palautettava ratkaistu HTTP-medialähde, johon laite pääsee käsiksi."
+     ],
+     [
+      "Mitä lähdetietoja voi näkyä?",
+      "Laatu, koko, tiedostonimi, kieli, lisäosa, palveluntarjoaja ja muut integraation lähettämät tiedot."
+     ]
+    ],
+    "noteTitle": "Tilit, lisäosat tai media eivät sisälly",
+    "note": "ARVIO ei tarjoa tilauksia, indeksejä, tunnuksia, tiedostoja tai lähetyksiä eikä suoraa P2P-toistoa. Käytä vain palveluita ja sisältöä, joihin sinulla on oikeus.",
+    "ctaTitle": "Omat integraatiosi, tiedot tallessa.",
+    "ctaCopy": "ARVIO on ilmainen ja avointa lähdekoodia Androidilla.",
+    "related": [
+     "hub",
+     "tracking",
+     "subtitles"
+    ]
+   },
+   "tracking": {
+    "title": "Trakt- ja Simkl-synkronointi TV:llä, iPadilla ja Macilla - ARVIO",
+    "description": "Yhdistä Trakt ja Simkl ARVIOon: listat, katseluhistoria, edistyminen ja scrobblaus Android TV:llä, puhelimella ja selaimessa.",
+    "crumb": "Trakt- ja Simkl-synkronointi",
+    "eyebrow": "Seurantaintegraatiot",
+    "h1": "Pidä Trakt ja Simkl yhdistettyinä kaikilla laitteilla.",
+    "hero": "Lataa listat, edistyminen ja katseluhistoria ilmaisessa Android-sovelluksessa tai valinnaisessa ARVIO Webissä. Valitse, mikä seurantapalvelu vastaa mistäkin ominaisuudesta, ilman että toisesta tarvitsee luopua.",
+    "sectionEyebrow": "Ominaisuuskohtainen hallinta",
+    "sectionTitle": "Käytä molempia palveluita selkein vastuin.",
+    "sectionCopy": "ARVIO voi yhdistää Traktin ja Simklin samaan profiiliin, ja voit valita listojen, edistymisen ja historian lähteen, kun ominaisuus tarjoaa valinnan.",
+    "features": [
+     [
+      "Jatka katsomista",
+      "Jatka seuraavasta jaksosta tai tuetusta kohdasta edistymiselle valitun seurantapalvelun avulla."
+     ],
+     [
+      "Listat ja kirjasto",
+      "Avaa omat listasi ja tuetut kokoelmat Kirjasto-sivulla samalla korttinäkymällä."
+     ],
+     [
+      "Katseluhistoria",
+      "Kun merkitset jotain katsotuksi, yhdistetyt seurantapalvelut voivat päivittyä synkronointiasetusten mukaan."
+     ],
+     [
+      "Scrobblaus",
+      "Lähetä toiston edistyminen käytössä oleviin palveluihin tokenien ja API-rajoitusten puitteissa."
+     ],
+     [
+      "Erilliset profiilit",
+      "Jokaisella profiililla voi olla omat yhteytensä ja seuranta-asetuksensa."
+     ],
+     [
+      "Synkronointi laitteiden välillä",
+      "Tuetut valinnat voivat seurata ARVIO-tiliä Androidilla ja valinnaisessa selainversiossa."
+     ]
+    ],
+    "stepsTitle": "Yhdistä, valitse ja seuraa.",
+    "steps": [
+     [
+      "Valtuuta palvelut",
+      "Yhdistä Trakt ja Simkl niiden virallisten valtuutusprosessien kautta."
+     ],
+     [
+      "Valitse lähde",
+      "Määritä, mikä palvelu tarjoaa listat, edistymisen ja muut määritettävät tiedot."
+     ],
+     [
+      "Katso normaalisti",
+      "ARVIO päivittää tilan käytössä oleviin palveluihin, kun toiminto on tuettu."
+     ]
+    ],
+    "faq": [
+     [
+      "Voinko yhdistää Traktin ja Simklin yhtä aikaa?",
+      "Kyllä. Molemmat voivat olla yhdistettyinä, ja tuetuille ominaisuuksille voi tehdä erilliset valinnat."
+     ],
+     [
+      "Kopioiko ARVIO salasanani?",
+      "Ei. Yhteys käyttää palveluiden tarjoamia valtuutusprosesseja ja tokeneita."
+     ],
+     [
+      "Näkyvätkö muutokset muilla laitteilla?",
+      "Kun palvelu hyväksyy päivityksen, uusi tila on muiden samaan tiliin yhdistettyjen sovellusten käytettävissä."
+     ]
+    ],
+    "noteTitle": "Palvelut pysyvät tietojen lähteenä",
+    "note": "Saatavuus, päivitysten ajoitus ja rajoitukset riippuvat Traktin ja Simklin rajapinnoista. ARVIO ei hallitse näiden palveluiden katkoja tai rajoituksia.",
+    "ctaTitle": "Listasi ja edistymisesi, yhdistettyinä.",
+    "ctaCopy": "Käytä ARVIOssa Traktia, Simkliä tai molempia.",
+    "related": [
+     "hub",
+     "servers",
+     "web"
+    ]
+   },
+   "live": {
+    "title": "Suora TV ja EPG Android TV:llä, iPadilla, Windowsilla - ARVIO",
+    "description": "Käytä sallittua IPTV- tai suoran TV:n palveluntarjoajaasi ARVIOssa: alkuperäinen järjestys, suosikit, EPG, haku ja tuettu catch-up.",
+    "crumb": "Suora TV ja EPG",
+    "eyebrow": "Tuki sallituille palveluntarjoajille",
+    "h1": "Suoran TV:n ohjelmaopas kaikille laitteillesi.",
+    "hero": "Selaa palveluntarjoajaasi Android TV:llä ja puhelimella tai käytä valinnaista ARVIO Webiä iPhonella, iPadilla, Windowsilla, Macilla ja tuetuissa selaimissa. Toiston tuki riippuu palveluntarjoajasta ja laitteesta.",
+    "sectionEyebrow": "Suunniteltu suurille listoille",
+    "sectionTitle": "Kanavat, ryhmät ja ohjelmaopas sujuvasti yhdessä.",
+    "sectionCopy": "ARVIO säilyttää palveluntarjoajan alkuperäisen järjestyksen, lataa tiedot vaiheittain ja asettaa suosikit etusijalle, jotta suuret listat ovat nopeasti käyttövalmiita.",
+    "features": [
+     [
+      "Palveluntarjoajan järjestys",
+      "Ryhmät ja kanavat noudattavat palveluntarjoajan järjestystä, ellet järjestä niitä itse uudelleen."
+     ],
+     [
+      "Vaiheittain latautuva EPG",
+      "Välimuistissa olevat tiedot näkyvät ensin, ja uudet osumat täydentyvät estämättä selaamista."
+     ],
+     [
+      "Suosikit ensin",
+      "Suosikkikanavat ja niiden ohjelmat saavat etusijan, kun ohjelmaopas avataan ensimmäistä kertaa."
+     ],
+     [
+      "Haku ja kategoriat",
+      "Etsi kanavia ja ohjelmia sekä piilota tai järjestä ryhmiä profiilikohtaisesti."
+     ],
+     [
+      "Tuettu catch-up",
+      "Selaa menneitä ohjelmia ja toista catch-up-tallenteita, kun palveluntarjoaja antaa toimivat osoitteet."
+     ],
+     [
+      "Kaukosäädin ja kosketus",
+      "Käyttöliittymä mukautuu television kohdistusnavigointiin ja mobiililaitteiden kosketusohjaukseen."
+     ]
+    ],
+    "stepsTitle": "Palveluntarjoajalta ohjelmaoppaaseen.",
+    "steps": [
+     [
+      "Lisää soittolista tai tili",
+      "Käytä sellaisen palvelun antamia tietoja, johon sinulla on käyttöoikeus."
+     ],
+     [
+      "Lataa EPG",
+      "ARVIO lukee määritetyt lähteet ja yhdistää ohjelmat tunnisteen ja vastaavan nimen perusteella."
+     ],
+     [
+      "Valitse kanava",
+      "Avaa suora lähetys tai mennyt ohjelma, kun catch-up on saatavilla."
+     ]
+    ],
+    "faq": [
+     [
+      "Tarjoaako ARVIO kanavia tai soittolistoja?",
+      "Ei. Sinun on yhdistettävä palveluntarjoaja tai soittolista, jonka käyttöön sinulla on oikeus."
+     ],
+     [
+      "Miksi joillakin kanavilla ei ole ohjelmaopasta?",
+      "Palveluntarjoaja ei ehkä tarjoa EPG:tä, tai tunnisteet ja nimet eivät vastaa kanavia."
+     ],
+     [
+      "Toimiiko catch-up kaikilla kanavilla?",
+      "Ei. Se riippuu palveluntarjoajan antamasta saatavuudesta, muodosta ja tallenteiden osoitteista."
+     ]
+    ],
+    "noteTitle": "Laatu riippuu palveluntarjoajasta",
+    "note": "EPG, historian pituus, catch-up ja lähetyksen vakaus tulevat yhdistetystä palvelusta. ARVIO järjestää ja toistaa vastaanottamansa tiedot.",
+    "ctaTitle": "Palveluntarjoajasi, järjestettynä kaukosäätimelle.",
+    "ctaCopy": "Käytä ARVIOta ilmaiseksi Android TV:llä ja Androidilla.",
+    "related": [
+     "hub",
+     "web",
+     "tracking"
+    ]
+   },
+   "subtitles": {
+    "title": "Tekoälytekstitykset Android TV:llä, iPadilla ja Macilla - ARVIO",
+    "description": "Hae, muokkaa ja käännä tekstityksiä ARVIOssa valinnaisilla tekoälytyökaluilla ja omilla yhteensopivilla tunnuksillasi.",
+    "crumb": "Tekoälytekstitykset",
+    "eyebrow": "Valinnaiset saavutettavuustyökalut",
+    "h1": "Tekstitysten hallinta TV:llä, puhelimella ja selaimessa.",
+    "hero": "Käytä tekstitysten hakua ja tyylittelyä ilmaisessa Android-sovelluksessa sekä valinnaisia tekoälykäännöstyökaluja omalla yhteensopivalla tililläsi. Saatavilla olevat ominaisuudet riippuvat soittimesta ja lähteestä.",
+    "sectionEyebrow": "Mukautuvat tekstitykset",
+    "sectionTitle": "Luettavuutta peittämättä kuvaa.",
+    "sectionCopy": "ARVIO kokoaa tekstitysten haun, valinnan, tyylin ja sijoittelun ohjaimiin, jotka sopivat sekä televisioon että puhelimeen.",
+    "features": [
+     [
+      "Tekstitysten haku",
+      "Hae tuetuista palveluista ja valitse tiedostoon sopiva kieli ja versio."
+     ],
+     [
+      "Muokattava tyyli",
+      "Säädä kokoa, väriä, taustaa ja sijaintia eri näytöille ja mieltymyksille."
+     ],
+     [
+      "Mustat palkit ja rajaus",
+      "Kun soitin sallii, sijoita tekstitys suhteessa näyttöön eikä vain videokuvaan."
+     ],
+     [
+      "Valinnainen tekoälykäännös",
+      "Käytä omaa yhteensopivaa tiliäsi tekstin kääntämiseen; ARVIO ei sisällä tekoälytilausta."
+     ],
+     [
+      "TV:lle sopivat ohjaimet",
+      "Vaihda raitaa ja asetuksia ilman valikoita, joita on hankala käyttää kaukosäätimellä."
+     ],
+     [
+      "Muotokohtainen yhteensopivuus",
+      "SRT, WebVTT, upotetut tekstitykset ja muut muodot riippuvat soittimesta ja lähteestä."
+     ]
+    ],
+    "stepsTitle": "Löydä ja säädä oikea raita.",
+    "steps": [
+     [
+      "Avaa tekstitykset",
+      "Avaa toiston aikana valitsin ja katso saatavilla olevat raidat."
+     ],
+     [
+      "Valitse kieli ja tyyli",
+      "Valitse raita ja käytä profiilin ulkoasuasetuksia."
+     ],
+     [
+      "Käytä tekoälyä tarvittaessa",
+      "Määritä oma yhteensopiva tunnuksesi ja käännä vain silloin, kun siitä on hyötyä."
+     ]
+    ],
+    "faq": [
+     [
+      "Sisältääkö ARVIO maksullisen tekoälypalvelun?",
+      "Ei. Tekoälytyökalut ovat valinnaisia ja vaativat oman yhteensopivan tilisi."
+     ],
+     [
+      "Tarjoavatko kaikki lähteet tekstityksiä?",
+      "Eivät. Saatavuus riippuu mediasta, lisäosasta, palvelimesta ja määritetyistä tekstityspalveluista."
+     ],
+     [
+      "Voinko muuttaa tekstitysten sijaintia?",
+      "Kyllä, tuetuissa soittimissa ja muodoissa, samoin kuin kokoa, väriä ja taustaa."
+     ]
+    ],
+    "noteTitle": "Tarkkuus vaihtelee",
+    "note": "Konekäännöksissä voi olla virheitä. Tarkista tulos, kun tarkkuudella on merkitystä, ja noudata käyttämäsi tekoälypalvelun käyttöehtoja.",
+    "ctaTitle": "Selkeät tekstitykset jokaisella näytöllä.",
+    "ctaCopy": "ARVIOn Android-soitin on edelleen ilmainen ja avointa lähdekoodia.",
+    "related": [
+     "hub",
+     "sources",
+     "web"
+    ]
+   },
+   "firetv": {
+    "title": "ARVIO Fire TV:llä - asennus ja yhteensopivuus",
+    "description": "Asenna ARVIOn virallinen APK yhteensopiviin Fire TV -laitteisiin ja käytä kaukosäätimelle suunniteltua käyttöliittymää.",
+    "crumb": "ARVIO Fire TV:llä",
+    "eyebrow": "Yhteensopivat Fire OS -laitteet",
+    "h1": "Käytä ARVIOta Fire TV:llä.",
+    "hero": "Android TV -sovelluksen voi asentaa käsin yhteensopiviin Fire TV -laitteisiin, jolloin ARVIOn kirjastot, seuranta, suora TV ja soitin toimivat myös Fire OS:ssä.",
+    "sectionEyebrow": "Sama virallinen APK",
+    "sectionTitle": "TV-kokemus ilman erillistä versiota.",
+    "sectionCopy": "Fire TV käyttää GitHubissa julkaistua allekirjoitettua Android-versiota. Yhteensopivuus vaihtelee Fire OS -version, laitteiston ja asennettujen palveluiden mukaan.",
+    "features": [
+     [
+      "Kaukosäätimelle tehty käyttöliittymä",
+      "Kortit, valikot ja soitin on suunniteltu kohdistusnavigointiin televisiossa."
+     ],
+     [
+      "Virallinen allekirjoitettu APK",
+      "Käytä vain virallisessa repositoriossa julkaistua versiota, jotta allekirjoitus säilyy ja päivitykset toimivat."
+     ],
+     [
+      "Kotipalvelimet",
+      "Yhdistä sallitut Jellyfin-, Plex- ja Emby-palvelimet kuten muillakin yhteensopivilla Android-laitteilla."
+     ],
+     [
+      "Seuranta",
+      "Käytä Traktia ja Simkliä listoihin, edistymiseen ja historiaan, kun tilit on yhdistetty."
+     ],
+     [
+      "Suora TV",
+      "Avaa sallittu palveluntarjoajasi tai soittolistasi EPG:n ja tuettujen ominaisuuksien kanssa."
+     ],
+     [
+      "Alustan rajoitukset",
+      "Google Play, koodekit, muisti ja taustatoiminta voivat poiketa tavallisesta Android TV:stä."
+     ]
+    ],
+    "stepsTitle": "Asenna harkiten.",
+    "steps": [
+     [
+      "Lataa GitHubista",
+      "Hae julkaisun APK projektin virallisilta sivuilta."
+     ],
+     [
+      "Salli asennus",
+      "Salli väliaikaisesti sovellusten asennus siitä lähteestä, jota käytät Fire TV:llä."
+     ],
+     [
+      "Avaa ja määritä",
+      "Yhdistä vain tilejä, palvelimia ja lähteitä, joiden käyttöön sinulla on oikeus."
+     ]
+    ],
+    "faq": [
+     [
+      "Onko ARVIO Amazon Appstoressa?",
+      "Saatavuus voi vaihdella. Ohjeistettu tapa on asentaa virallinen APK GitHubista yhteensopivaan laitteeseen."
+     ],
+     [
+      "Toimiiko sama APK kaikissa Fire TV -laitteissa?",
+      "Kaikkia malleja ei voida taata. Suorituskyky ja koodekit vaihtelevat laitteiston ja Fire OS -version mukaan."
+     ],
+     [
+      "Voinko päivittää menettämättä tietoja?",
+      "Kyllä, kun uusi APK käyttää samaa pakettia ja virallista allekirjoitusta. Älä poista sovellusta, jos haluat säilyttää paikalliset tiedot."
+     ]
+    ],
+    "noteTitle": "Käsin asentaminen vaatii huolellisuutta",
+    "note": "Tarkista aina virallinen repositorio ja allekirjoitus. Kolmansien osapuolten versiot eivät välttämättä päivity oikein ja voivat vaarantaa tietosi.",
+    "ctaTitle": "ARVIO Fire TV -näytöllesi.",
+    "ctaCopy": "Lataa virallinen allekirjoitettu APK GitHubista.",
+    "ctaPrimary": "GitHub Releases",
+    "ctaPrimaryHref": "https://github.com/ProdigyV21/ARVIO/releases",
+    "related": [
+     "hub",
+     "live",
+     "servers"
+    ]
+   },
+   "web": {
+    "title": "ARVIO Web iPhonelle, iPadille, Windowsille, Macille ja Apple TV:lle",
+    "description": "Käytä maksullista ARVIO Web -lisää iPhonella, iPadilla, Windowsilla, Macilla, Apple TV:llä ja tuetuissa selaimissa.",
+    "crumb": "ARVIO Web",
+    "eyebrow": "Valinnainen maksullinen selainkäyttö",
+    "h1": "ARVIO-asetuksesi iPhonella, iPadilla, Windowsilla ja Macilla.",
+    "hero": "ARVIO Web tuo profiilit, kirjastot, seurannan ja sallitut palvelut nykyaikaisiin selaimiin Apple-laitteilla, Windowsilla, macOS:llä, ChromeOS:llä ja yhteensopivilla älytelevisioilla.",
+    "sectionEyebrow": "Lisä, ei korvaaja",
+    "sectionTitle": "Vie kirjastosi selaimeen.",
+    "sectionCopy": "Android-sovellus pysyy ilmaisena ja avoimena lähdekoodina. ARVIO Web on lisätilaus niille, jotka tarvitsevat selainkäyttöä, latauksia ja tuettuja integraatioita muilla alustoilla.",
+    "features": [
+     [
+      "iPhone ja iPad",
+      "Avaa profiilit ja kirjastot nykyaikaisissa selaimissa ilman erillistä iOS-sovellusta."
+     ],
+     [
+      "Windows ja Mac",
+      "Käytä ARVIOn käyttöliittymää tietokoneella ja lähetä tuettu media tarvittaessa VLC:hen."
+     ],
+     [
+      "Apple TV ja älytelevisiot",
+      "Käytä tuettujen selainten kautta; toiston tuki vaihtelee järjestelmän mukaan."
+     ],
+     [
+      "Asetukset pilvessä",
+      "Käytä samaan ARVIO-tiliin liitettyjä tuettuja profiileja ja asetuksia."
+     ],
+     [
+      "Kotikirjastot",
+      "Selaa yhdistettyjä Jellyfin-, Plex- ja Emby-palvelimia, kun verkko ja palvelin sallivat yhteyden."
+     ],
+     [
+      "Tuetut lataukset",
+      "Lataa sallittuja lähteitä, kun integraatio, lähde ja selain tukevat sitä."
+     ]
+    ],
+    "stepsTitle": "Aloita selaimesta.",
+    "steps": [
+     [
+      "Yhdistä tilisi",
+      "Kirjaudu samalla ARVIO-tilillä, jota käytät Android-laitteilla."
+     ],
+     [
+      "Valitse tilaus, kun painat Play",
+      "Selaa ja määritä ilmaiseksi. Kun painat Play, valitset tilauksen: 2,99 dollaria kuukaudessa tai 20 dollaria 12 kuukaudelta."
+     ],
+     [
+      "Avaa palvelusi",
+      "Selaa synkronoituja profiileja, kirjastoja ja sallittuja integraatioita."
+     ]
+    ],
+    "faq": [
+     [
+      "Muuttuuko Android-sovellus maksulliseksi?",
+      "Ei. Android-sovellus on edelleen ilmainen ja avointa lähdekoodia."
+     ],
+     [
+      "Toimiiko ARVIO Web kaikissa selaimissa?",
+      "Ei välttämättä. Toisto, koodekit ja ulkoiset integraatiot riippuvat selaimesta ja järjestelmästä."
+     ],
+     [
+      "Voinko käyttää sitä iPhonella ja iPadilla?",
+      "Kyllä, tuetuissa selaimissa niillä ominaisuuksilla, jotka ARVIO Webissä on saatavilla."
+     ]
+    ],
+    "noteTitle": "Selaimen yhteensopivuudella on väliä",
+    "note": "Selaimet eivät tarjoa samoja koodekkeja ja ohjaimia kuin Android-soitin. Jotkin muodot vaativat transkoodausta tai avaamista yhteensopivassa ulkoisessa sovelluksessa.",
+    "ctaTitle": "Tutustu ARVIOon selaimessa.",
+    "ctaCopy": "Premium lisää selainkäytön; Android-sovellus pysyy ilmaisena.",
+    "ctaPrimary": "Tutustu ARVIO Webiin",
+    "ctaPrimaryHref": "https://web.arvio.tv/",
+    "related": [
+     "hub",
+     "servers",
+     "tracking"
+    ]
+   }
+  }
+ },
+ "directoryLabels": {
+  "hub": [
+   "Aloita tästä",
+   "Mediakeskus kaikille laitteille",
+   "Profiilit, palvelimet, seuranta, suora TV, tekstitykset ja toisto Androidilla ja selaimessa."
+  ],
+  "jellyfin": [
+   "Kotipalvelimet",
+   "Jellyfin TV:llä ja selaimessa",
+   "Selaa Jellyfin-kirjastoja korvaamatta palvelintasi."
+  ],
+  "servers": [
+   "Kotipalvelimet",
+   "Plex, Emby ja Jellyfin yhdessä",
+   "Kokoa useat sallitut palvelimet yhteen kirjastonäkymään."
+  ],
+  "sources": [
+   "Lähteet ja toisto",
+   "Debrid- ja Usenet-lähteet",
+   "Pidä laatu, koko, kieli ja alkuperä näkyvillä."
+  ],
+  "tracking": [
+   "Seuranta",
+   "Trakt- ja Simkl-synkronointi",
+   "Yhdistä listat, edistyminen, historia ja scrobblaus."
+  ],
+  "live": [
+   "Suora TV",
+   "Suora TV ja EPG",
+   "Käytä sallittua palveluntarjoajaasi ohjelmaoppaan, suosikkien ja tuetun catch-upin kanssa."
+  ],
+  "subtitles": [
+   "Saavutettavuus",
+   "Tekoälytekstitykset",
+   "Hae, säädä ja käännä tekstityksiä valinnaisilla työkaluilla."
+  ],
+  "firetv": [
+   "Laitteet",
+   "ARVIO Fire TV:llä",
+   "Asenna virallinen APK yhteensopivaan Fire TV -laitteeseen."
+  ],
+  "web": [
+   "Valitse ylläpito",
+   "ARVIO Web: ilmainen tai hallinnoitu",
+   "Vertaa ilmaista omaa ylläpitoa, valinnaista Premiumia, profiileja ja selainyhteensopivuutta."
+  ]
+ },
+ "entryCopy": {
+  "title": "ARVIO suomeksi - ilmainen mediakeskus Android TV:lle",
+  "description": "ARVIO suomeksi: ilmainen avoimen lähdekoodin mediakeskus Android TV:lle, kotipalvelimille, suoralle TV:lle, Traktille, Simklille ja tekstityksille.",
+  "eyebrow": "ARVIO suomeksi",
+  "h1": "Kaikki mitä katsot. Yksi selkeä käyttöliittymä.",
+  "lead": "ARVIO kokoaa jo käyttämäsi palvelimet, palvelut ja toistotyökalut nopeaksi kokonaisuudeksi Android TV:lle, Google TV:lle ja Androidille. Valinnainen ARVIO Web laajentaa käytön iPhoneen, iPadiin, Windowsiin, Maciin ja muihin tuettuihin selaimiin.",
+  "sectionTitle": "Tutustu tärkeimpiin ominaisuuksiin.",
+  "sectionCopy": "Aloita yleiskatsauksesta tai avaa opas omalle palvelimellesi, seurantapalvelullesi, palveluntarjoajallesi tai laitteellesi.",
+  "guidesButton": "Avaa kaikki oppaat",
+  "freeTitle": "Ilmainen ja avointa lähdekoodia Androidilla.",
+  "freeCopy": "Premium on valinnainen selainlisä; Android-sovellus pysyy ilmaisena."
+ },
+ "guideCopy": {
+  "title": "ARVIO-oppaat - Android TV, palvelimet, seuranta ja suora TV",
+  "description": "ARVIOn suomenkieliset oppaat: Android TV, Jellyfin, Plex, Emby, Trakt, Simkl, suora TV, tekstitykset, debrid, Usenet ja selainkäyttö.",
+  "eyebrow": "Tuoteoppaat",
+  "h1": "Rakenna oma yhdistetty mediakeskuksesi.",
+  "lead": "Aloita ilmaisesta Android-sovelluksesta, ylläpidä ARVIO Webiä omalla palvelimellasi tai valitse hallinnoitu ylläpito. Näiden oppaiden avulla yhdistät lähteesi ja testaat käyttämäsi laitteen.",
+  "noteTitle": "Ohjelmisto, ei sisältöä",
+  "ctaTitle": "Ilmainen ja avointa lähdekoodia Androidilla.",
+  "ctaCopy": "Asenna Google Playsta tai tutustu koko projektiin GitHubissa."
+ },
+ "slugs": {
+  "home": "/fi/",
+  "guides": "/fi/oppaat/",
+  "hub": "/fi/mediakeskus-android-tv/",
+  "jellyfin": "/fi/jellyfin-android-tv/",
+  "servers": "/fi/plex-emby-jellyfin/",
+  "sources": "/fi/debrid-usenet-android-tv/",
+  "tracking": "/fi/trakt-simkl-synkronointi/",
+  "live": "/fi/suora-tv-epg/",
+  "subtitles": "/fi/tekoaly-tekstitykset-android-tv/",
+  "firetv": "/fi/arvio-fire-tv/",
+  "web": "/fi/arvio-web/"
+ },
+ "standaloneLabels": {
+  "/arvio-iphone-ipad/": [
+   "iPhone ja iPad · Englanniksi",
+   "ARVIO iPhonella ja iPadilla",
+   "Avaa ARVIO Web Safarissa, kirjaudu ARVIO-tililläsi, lisää Koti-valikkoon ja tutustu ennen maksamista."
+  ],
+  "/stremio-addons-android-tv/": [
+   "Lisäosien määritys · Englanniksi",
+   "Stremio-yhteensopivat lisäosat ARVIOssa",
+   "Asenna manifestin URL-osoite, määritä puhelimella ja tarkista yhteensopivuuden rajat Android TV:llä."
+  ],
+  "/collections-catalogs/": [
+   "Mukauttaminen · Englanniksi",
+   "Luo kokoelmia ja lisää katalogeja",
+   "JSON-mallit, ilmainen ylläpito ja URL-tuonti aloitusnäkymän mukauttamiseen."
+  ],
+  "/collection-studio/": [
+   "Kokoelmatyökalu · Englanniksi",
+   "Collection Studio",
+   "Luo aloitusnäkymään rivi, jossa on enintään kahdeksan kansiota, kopioi JSON ARVIOon ja jaa julkinen esikatselu."
+  ],
+  "/self-host-arvio-web/": [
+   "Ilmainen selainversio · Englanniksi",
+   "Ylläpidä Dockerilla tai Node.js:llä",
+   "Asennuskomennot, omat API-avaimesi, paikalliset profiilit, verkkokäyttö ja päivitykset."
+  ],
+  "/browser-playback-guide/": [
+   "Selaintoisto · Englanniksi",
+   "Testaa ensimmäinen lähteesi",
+   "Tunnista käyttöoikeus- ja muoto-ongelmat ja testaa suoraa TV:tä tai palvelimia laitteellasi."
+  ]
+ },
+ "ogLocale": "fi_FI"
+}

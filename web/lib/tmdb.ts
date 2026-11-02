@@ -153,6 +153,33 @@ export function mapTmdbItem(item: TmdbItem, fallbackType: MediaType): MediaItem 
 let tmdbCooldownUntil = 0;
 const TMDB_COOLDOWN_MS = 30_000;
 
+// Titles TMDB does not have (removed, or ids from another catalog) answer 404
+// every time. Remember them for a day so rows and Continue Watching do not ask
+// again on every visit.
+const MISSING_KEY = "arvio-tmdb-missing-v1";
+const MISSING_TTL_MS = 24 * 60 * 60 * 1000;
+let missing: Map<string, number> | null = null;
+function missingPaths(): Map<string, number> {
+  if (missing) return missing;
+  missing = new Map();
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(MISSING_KEY) ?? "{}") as Record<string, number>;
+    const now = Date.now();
+    for (const [key, at] of Object.entries(raw)) if (now - at < MISSING_TTL_MS) missing.set(key, at);
+  } catch { /* storage unavailable */ }
+  return missing;
+}
+function rememberMissing(path: string) {
+  const paths = missingPaths();
+  paths.set(path, Date.now());
+  while (paths.size > 500) paths.delete(paths.keys().next().value!);
+  try { window.localStorage.setItem(MISSING_KEY, JSON.stringify(Object.fromEntries(paths))); } catch { /* storage unavailable */ }
+}
+function knownMissing(path: string) {
+  const at = missingPaths().get(path);
+  return at !== undefined && Date.now() - at < MISSING_TTL_MS;
+}
+
 export async function tmdb<T>(path: string, params: Record<string, string | number | undefined> = {}, customKey?: string) {
   const url = new URL(`/api/tmdb/${path.replace(/^\/+/, "")}`, window.location.origin);
   // Never surface adult titles anywhere in the app (discover/search/trending).
@@ -162,6 +189,11 @@ export async function tmdb<T>(path: string, params: Record<string, string | numb
   });
   if (Date.now() < tmdbCooldownUntil) {
     throw new Error("Rate limited — TMDB requests are pausing briefly.");
+  }
+  // Only a title's own record is remembered as missing, not searches or lists.
+  const recordPath = /^(movie|tv)\/\d+$/.test(path.replace(/^\/+/, "")) ? path.replace(/^\/+/, "") : null;
+  if (recordPath && knownMissing(recordPath)) {
+    throw Object.assign(new Error("Not found on TMDB"), { status: 404 });
   }
   const headers: Record<string, string> = {};
   if (customKey?.trim()) {
@@ -180,8 +212,14 @@ export async function tmdb<T>(path: string, params: Record<string, string | numb
       });
     } catch (error) {
       lastError = error;
-      if ((error as { status?: number }).status === 429) {
+      const status = (error as { status?: number }).status;
+      if (status === 429) {
         tmdbCooldownUntil = Date.now() + TMDB_COOLDOWN_MS;
+        break;
+      }
+      // A 404/401/400 will not change on a retry.
+      if (status !== undefined && status >= 400 && status < 500 && status !== 408) {
+        if (status === 404 && recordPath) rememberMissing(recordPath);
         break;
       }
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));

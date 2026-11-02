@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · просмотрено",
   "· Guide match": "· Ведущий матч",
   "· Possible broadcast": "· Возможна трансляция",
-  "· {value0}d archive": "· {value0}d архив"
+  "· {value0}d archive": "· {value0}d архив",
+  "View on Trakt": "Посмотреть на Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Звук этого файла нельзя воспроизвести в этом браузере напрямую. Конвертируем звук…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Звук этого файла нельзя воспроизвести в этом браузере. Запрашиваем конвертацию у провайдера…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Звук этого источника нельзя воспроизвести в этом браузере. Выберите другой источник или используйте внешний плеер.",
+  "Converting the audio for your browser…": "Конвертируем звук для вашего браузера…",
+  "Picking the best source…": "Выбираем лучший источник…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi списывает оплату в долларах США; ваш банк автоматически конвертирует сумму."
 }

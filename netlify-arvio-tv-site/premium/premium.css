@@ -37,6 +37,7 @@ h1 .headline{display:block;color:#f7f7f7}h1 .headline-accent{display:block;margi
 .plan-badge{position:absolute;top:-13px;inset-inline-start:22px;max-width:calc(100% - 44px);margin:0;padding:5px 12px;border-radius:20px;background:#b8f5d9;color:#0a2116;font-size:12px;font-weight:700;line-height:1.4}
 .plan-button{width:100%;text-align:center;line-height:1.4}.plan .membership-button{display:flex}
 .refund{max-width:640px;margin:32px auto 8px;font-size:15px;line-height:1.6;color:#d7dce5}
+.checkout-note{max-width:640px;margin:24px auto 0;font-size:14px;line-height:1.55;color:#aeb6c2}
 .refund a,.manage a,.plans-section .free-note a{color:#b8f5d9;text-decoration:underline;text-underline-offset:4px}
 .manage{margin:0 0 18px;font-size:13px}.plans-section .free-note{max-width:640px;margin:0 auto 10px;line-height:1.6}
 .supports{margin:0;font-size:13px;color:#aeb4be}

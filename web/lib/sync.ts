@@ -1,10 +1,11 @@
+import { weTrakrClient } from "./wetrakr";
 import { mdblistClient } from "./mdblist";
 import { simklClient } from "./simkl";
 import { loadStored, saveStored } from "./storage";
 import { traktClient } from "./store";
 
-export type SyncProvider = "trakt" | "mdblist" | "simkl" | "none";
-export type TrackingReadMode = "auto" | "trakt" | "simkl" | "both" | "mdblist";
+export type SyncProvider = "trakt" | "mdblist" | "simkl" | "wetrakr" | "none";
+export type TrackingReadMode = "auto" | "trakt" | "simkl" | "both" | "mdblist" | "wetrakr";
 export type TrackingFeature = "watchlist" | "continueWatching" | "watched";
 
 export interface TrackingPreferences {
@@ -13,6 +14,7 @@ export interface TrackingPreferences {
   watchedReadMode: TrackingReadMode;
   writeToTrakt: boolean;
   writeToSimkl: boolean;
+  writeToWeTrakr?: boolean;
 }
 
 export interface SyncMediaRef {
@@ -47,12 +49,13 @@ export function defaultTrackingPreferences(): TrackingPreferences {
   // follows this rule; defaulting the web client to "both" made a fresh
   // profile show a mixed Continue Watching rail even though the user expected
   // the Trakt list. Users can still explicitly select "both" in settings.
-  const mode: TrackingReadMode = trakt ? "trakt" : simkl ? "simkl" : mdb ? "mdblist" : "auto";
+  const mode: TrackingReadMode = trakt ? "trakt" : simkl ? "simkl" : mdb ? "mdblist" : weTrakrClient.isConnected ? "wetrakr" : "auto";
   return {
     watchlistReadMode: mode,
     continueWatchingReadMode: mode,
     watchedReadMode: mode,
     writeToTrakt: trakt,
+    writeToWeTrakr: weTrakrClient.isConnected,
     writeToSimkl: simkl
   };
 }
@@ -86,8 +89,10 @@ function readClients(feature: TrackingFeature): SyncClient[] {
     if (traktClient.isConnected) result.push(traktClient as unknown as SyncClient);
     else if (simklClient.isConnected) result.push(simklClient as unknown as SyncClient);
     else if (mdblistClient.isConnected) result.push(mdblistClient as unknown as SyncClient);
+    else if (weTrakrClient.isConnected) result.push(weTrakrClient);
     return result;
   }
+  if (mode === "wetrakr" && weTrakrClient.isConnected) result.push(weTrakrClient);
   if (mode === "mdblist" && mdblistClient.isConnected) result.push(mdblistClient as unknown as SyncClient);
   if ((mode === "trakt" || mode === "both") && traktClient.isConnected) result.push(traktClient as unknown as SyncClient);
   if ((mode === "simkl" || mode === "both") && simklClient.isConnected) result.push(simklClient as unknown as SyncClient);
@@ -97,14 +102,15 @@ function readClients(feature: TrackingFeature): SyncClient[] {
 function writeClients(profileId = simklClient.currentProfileId ?? traktClient.currentProfileId): SyncClient[] {
   const preferences = loadTrackingPreferences(profileId);
   const result: SyncClient[] = [];
+  if (preferences.writeToWeTrakr && weTrakrClient.isConnected) result.push(weTrakrClient);
   if (preferences.writeToTrakt && traktClient.isConnected) result.push(traktClient as unknown as SyncClient);
   if (preferences.writeToSimkl && simklClient.isConnected) result.push(simklClient as unknown as SyncClient);
   if (mdblistClient.isConnected) result.push(mdblistClient as unknown as SyncClient);
   return result;
 }
 
-export function readsFrom(feature: TrackingFeature, provider: "trakt" | "simkl" | "mdblist"): boolean {
-  return readClients(feature).includes(({ trakt: traktClient, simkl: simklClient, mdblist: mdblistClient })[provider] as unknown as SyncClient);
+export function readsFrom(feature: TrackingFeature, provider: "trakt" | "simkl" | "mdblist" | "wetrakr"): boolean {
+  return readClients(feature).includes(({ trakt: traktClient, simkl: simklClient, mdblist: mdblistClient, wetrakr: weTrakrClient })[provider] as unknown as SyncClient);
 }
 
 export function sameTrackingSources(a: TrackingFeature, b: TrackingFeature): boolean {
@@ -178,6 +184,7 @@ export function activeSyncProvider(): SyncProvider {
   if (traktClient.isConnected) return "trakt";
   if (simklClient.isConnected) return "simkl";
   if (mdblistClient.isConnected) return "mdblist";
+  if (weTrakrClient.isConnected) return "wetrakr";
   return "none";
 }
 

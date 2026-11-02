@@ -59,6 +59,9 @@ class TraktContinueWatchingRefreshTest {
             every { profileStringKey(any()) } answers { stringPreferencesKey(firstArg()) }
             every { profileLongKey(any()) } answers { longPreferencesKey(firstArg()) }
             every { profileBooleanKey(any()) } answers { booleanPreferencesKey(firstArg()) }
+            every { profileStringKeyFor(any(), any()) } answers { stringPreferencesKey(secondArg()) }
+            every { profileLongKeyFor(any(), any()) } answers { longPreferencesKey(secondArg()) }
+            every { profileBooleanKeyFor(any(), any()) } answers { booleanPreferencesKey(secondArg()) }
         }
         val providers = mockk<SyncProviderStore>(relaxed = true) {
             coEvery { readProviders(any()) } returns emptySet()
@@ -67,7 +70,7 @@ class TraktContinueWatchingRefreshTest {
         coEvery { tmdb.getTvDetails(any(), any(), any(), any()) } throws IllegalStateException("No artwork in fixture")
         repository = TraktRepository(RuntimeEnvironment.getApplication(), api, tmdb, OkHttpClient(),
             Provider { mockk(relaxed = true) }, profiles, mockk(relaxed = true), providers,
-            mockk(relaxed = true), ContinueWatchingUpdates())
+            mockk(relaxed = true), mockk(relaxed = true), ContinueWatchingUpdates())
         coEvery { api.getLastActivities(any(), any(), any()) } returns mockk<TraktLastActivities>(relaxed = true) {
             every { episodes } returns TraktActivityTimestamps(watchedAt = stamp)
             every { shows } returns null
@@ -108,6 +111,21 @@ class TraktContinueWatchingRefreshTest {
         assertEquals(3, repository.getContinueWatching(true).single().episode)
         coVerify(exactly = 2) { api.getWatchingNow(any(), any(), any(), any()) }
         coVerify(exactly = 1) { api.getShowProgress(any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test fun explicitFreshSyncDoesNotAcceptAPartiallyCachedSnapshot() = runBlocking {
+        val saved = repository.getContinueWatching(true)
+        coEvery { api.getPlaybackProgress(any(), any(), any(), any(), any(), any(), any()) } throws java.io.IOException("offline")
+        try {
+            repository.getContinueWatching(forceRefresh = true, requireFreshTrakt = true)
+            fail("A partial cached response is not a successful manual refresh")
+        } catch (_: IllegalStateException) { }
+        assertEquals(saved, repository.getCachedContinueWatching())
+        assertTrue(repository.getContinueWatching(forceRefresh = true).isNotEmpty())
+    }
+
+    @Test fun explicitFreshSyncAcceptsACompleteResponse() = runBlocking {
+        assertEquals(2, repository.getContinueWatching(forceRefresh = true, requireFreshTrakt = true).single().episode)
     }
 
     @Test fun pausedShowReturnsToUpNextWithoutAnotherShowProgressRead() = runBlocking {

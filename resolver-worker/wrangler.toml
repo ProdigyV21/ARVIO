@@ -14,6 +14,8 @@ ALLOWED_ORIGINS = "https://web.arvio.tv,http://localhost:3000,http://localhost:3
 SOURCE_CACHE_TTL_SECONDS = "180"
 ADDON_TIMEOUT_MS = "15000"
 ADDON_EXTENDED_TIMEOUT_MS = "35000"
+# Premium-only relay: /media serves only valid ARVIO Premium stream tickets.
+STREAM_TICKET_MODE = "required"
 
 [[kv_namespaces]]
 binding = "RESOLVER_KV"

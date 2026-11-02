@@ -36,3 +36,4 @@
   .premium-pay-on-phone { flex-direction: column; align-items: flex-start; }
 }
 .web-preview-hero .premium-android-note { margin: 0 0 22px; }
+.premium-pay-currency { margin-top: 6px; color: rgba(255, 255, 255, 0.62); font-size: 12px; line-height: 1.45; }

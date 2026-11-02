@@ -1554,5 +1554,12 @@
   "{value0}% · watched": "{value0}% · ditonton",
   "· Guide match": "· Panduan pertandingan",
   "· Possible broadcast": "· Kemungkinan siaran",
-  "· {value0}d archive": "· {value0}d arsip"
+  "· {value0}d archive": "· {value0}d arsip",
+  "View on Trakt": "Lihat di Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Audio file ini tidak dapat diputar langsung di browser ini. Mengonversi audio…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Audio file ini tidak dapat diputar di browser ini. Meminta konversi penyedia…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Audio sumber ini tidak dapat diputar di browser ini. Pilih sumber lain atau gunakan pemutar eksternal.",
+  "Converting the audio for your browser…": "Mengonversi audio untuk browser Anda…",
+  "Picking the best source…": "Memilih sumber terbaik…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi menagih dalam dolar AS; bank Anda mengonversi jumlahnya secara otomatis."
 }

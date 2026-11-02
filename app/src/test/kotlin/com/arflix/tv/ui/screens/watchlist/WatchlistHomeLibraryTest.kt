@@ -74,7 +74,7 @@ class WatchlistHomeLibraryTest {
         val remote = mockk<RemoteSyncManager>(relaxed = true)
         coEvery { remote.isRemoteConnected(any()) } returns false
         model = WatchlistViewModel(mockk<Context>(relaxed = true), watchlist, cloud, trakt,
-            remote, media, homes, catalogs, history, simkl, mockk(relaxed = true), profiles,
+            remote, media, homes, catalogs, history, mockk(relaxed = true), simkl, mockk(relaxed = true), profiles,
             personalLists(), mockk(relaxed = true))
         store.put("library", model)
     }

@@ -78,7 +78,9 @@ object AppModule {
     fun provideTraktApi(okHttpClient: OkHttpClient): TraktApi {
         return Retrofit.Builder()
             .baseUrl(Constants.TRAKT_API_URL)
-            .client(okHttpClient)
+            .client(okHttpClient.newBuilder()
+                .addInterceptor(com.arflix.tv.network.TraktAvailabilityInterceptor())
+                .build())
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(TraktApi::class.java)
@@ -92,6 +94,7 @@ object AppModule {
         val client = okHttpClient.newBuilder()
             .dispatcher(okhttp3.Dispatcher())
             .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .addInterceptor(com.arflix.tv.network.TraktAvailabilityInterceptor())
             .build()
         return Retrofit.Builder()
             .baseUrl(Constants.TRAKT_API_URL)

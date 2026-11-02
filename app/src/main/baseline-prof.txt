@@ -33337,3 +33337,7 @@ Lretrofit2/http/Url;
 HSPLcom/arflix/tv/ui/screens/tv/live/LiveTvScreenKt;->**(**)**
 HSPLcom/arflix/tv/ui/screens/tv/live/EpgGridKt;->**(**)**
 HSPLcom/arflix/tv/ui/screens/tv/live/CategorySidebarKt;->**(**)**
+HSPLcom/arflix/tv/ui/screens/home/**->**(**)**
+Lcom/arflix/tv/ui/screens/home/**;
+HSPLcom/arflix/tv/ui/components/**->**(**)**
+Lcom/arflix/tv/ui/components/**;

@@ -856,7 +856,7 @@ internal fun HudSeekBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(if (isFocused) 6.dp else 4.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(if (isFocused) Color.White.copy(alpha = 0.35f) else LiveColors.Panel),
             )
 
@@ -865,7 +865,7 @@ internal fun HudSeekBar(
                 modifier = Modifier
                     .fillMaxWidth(clampedProgress)
                     .height(if (isFocused) 6.dp else 4.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(liveAccent()),
             )
 
@@ -966,7 +966,7 @@ private fun HudActionButton(
     Box(
         modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clip(RoundedCornerShape(999.dp))
+            .clip(CircleShape)
             .onFocusChanged { isFocused = it.isFocused }
             .background(if (isFocused) Color.White else liveAccent())
             .liveFocusOutline(isFocused, 999.dp)
@@ -998,7 +998,7 @@ private fun StreamTechBadge(
 
     androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Color.Black.copy(alpha = 0.45f))
             .padding(horizontal = 6.dp, vertical = 2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

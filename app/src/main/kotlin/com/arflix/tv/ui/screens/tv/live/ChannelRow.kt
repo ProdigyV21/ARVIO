@@ -312,7 +312,7 @@ fun ChannelRow(
 private fun SmallPillBadge(text: String, focused: Boolean) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(3.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (focused) Color.Black.copy(alpha = 0.08f) else LiveColors.Panel)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {

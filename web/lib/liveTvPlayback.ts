@@ -312,10 +312,11 @@ export function relayDenied(faults: LiveFault[], context: RelayContext) {
  * through the relay): 429 = connection limit, 401/403 = subscription, account
  * or token. Pressing on from there risks the subscriber's account.
  */
-export function providerRefusal(faults: LiveFault[], context: RelayContext): 401 | 403 | 429 | null {
+export function providerRefusal(faults: LiveFault[], context: RelayContext, routes?: LiveRoute[]): 401 | 403 | 429 | null {
   // An http:// IP-address segment the relay could not fetch (Cloudflare 1003)
   // is not the provider refusing anything.
-  const refused = faults.filter((fault) => fault.attempt.variant === "original" && !isRelayDenial(fault, context) && !isInsecureIpMedia(fault.fault?.resourceUrl))
+  const refused = faults.filter((fault) => fault.attempt.variant === "original" && !isRelayDenial(fault, context) && !isInsecureIpMedia(fault.fault?.resourceUrl)
+    && (!routes || routes.includes(fault.attempt.route)))
     .map(statusOf).filter((status) => status === 401 || status === 403 || status === 429);
   return refused.includes(429) ? 429 : (refused[0] as 401 | 403 | undefined) ?? null;
 }
@@ -331,8 +332,15 @@ export function attemptAllowed(attempt: LiveAttempt, faults: LiveFault[], contex
   if (throughRelay(attempt) && relayDenied(faults, context)) return false;
   const refusal = providerRefusal(faults, context);
   if (refusal === 429) return false;
-  if (refusal) return attempt.variant === "twin" && (attempt.route === "direct" || attempt.route === "relay")
-    && !faults.some((fault) => fault.attempt.variant === "twin");
+  if (refusal) {
+    // A 401/403 seen only through ARVIO's servers (the relay or the app
+    // backend) is often the provider's anti-bot wall refusing a datacenter
+    // address, not the subscription: the viewer's own connection still gets
+    // its one try (it then explains itself, e.g. an http:// video server).
+    if (attempt.route === "direct" && !providerRefusal(faults, context, ["direct"])) return true;
+    return attempt.variant === "twin" && (attempt.route === "direct" || attempt.route === "relay")
+      && !faults.some((fault) => fault.attempt.variant === "twin");
+  }
   return true;
 }
 
@@ -470,7 +478,13 @@ export function classifyLiveFailure(faults: LiveFault[], context: LiveFailureCon
         ? translateUi("This channel's video comes from an insecure http:// server. Safari and the browsers on iPhone and iPad block that inside a secure page, and there is no setting to allow it. Watch it in Chrome or Edge on a computer, in the ARVIO app, or in VLC.")
         : translateUi("This channel's video comes from an insecure http:// server, which browsers block inside a secure page. Allow insecure content for web.arvio.tv and the video comes straight from your provider to your computer, for free. Chrome or Edge: click the icon left of the address, then Site settings, set Insecure content to Allow, then reload. Firefox: click the shield or lock icon in the address bar and turn off protection for this site. Then press Retry.") };
   }
-  const statuses = faults.flatMap((entry) => statusOf(entry) ? [{ status: statusOf(entry), attempt: entry.attempt }] : []);
+  // A 401/403 from ARVIO's own backend hop is usually the provider's anti-bot
+  // wall refusing a datacenter address. When the viewer's own connection got
+  // through without an HTTP refusal, it says nothing about the subscription.
+  const backendHop = (attempt: LiveAttempt) => attempt.route === "manifest-relay" || attempt.route === "manifest-direct" || attempt.route === "app-proxy";
+  const directReached = faults.some((entry) => entry.attempt.route === "direct" && !statusOf(entry));
+  const statuses = faults.flatMap((entry) => statusOf(entry) ? [{ status: statusOf(entry), attempt: entry.attempt }] : [])
+    .filter(({ status, attempt }) => !(directReached && backendHop(attempt) && (status === 401 || status === 403)));
   // The relay refusing the session itself (402, or a ticketless 403 from a
   // relay that requires tickets): never blame the subscription for it.
   if (relayDenied(faults, context)) {

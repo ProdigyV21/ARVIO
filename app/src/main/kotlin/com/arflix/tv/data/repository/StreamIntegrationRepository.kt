@@ -386,6 +386,11 @@ class StreamIntegrationRepository @Inject constructor(
         return moveProviderItem(id, direction = 1)
     }
 
+    /** Moves a source several places at once, in one write - for a row dragged on the phone. */
+    suspend fun moveProviderItemBy(id: String, steps: Int): Boolean {
+        return moveProviderItem(id, direction = steps)
+    }
+
     private suspend fun moveProviderItem(id: String, direction: Int): Boolean {
         if (direction == 0) return false
         val profileId = profileManager.getProfileId()

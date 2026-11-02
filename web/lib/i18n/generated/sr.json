@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · одгледано",
   "· Guide match": "· Водич меч",
   "· Possible broadcast": "· Могуће емитовање",
-  "· {value0}d archive": "· {value0}д архива"
+  "· {value0}d archive": "· {value0}д архива",
+  "View on Trakt": "Погледај на Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Звук ове датотеке не може да се репродукује директно у овом прегледачу. Конвертујемо звук…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Звук ове датотеке не може да се репродукује у овом прегледачу. Тражимо конверзију од добављача…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Звук овог извора не може да се репродукује у овом прегледачу. Изаберите други извор или користите спољни плејер.",
+  "Converting the audio for your browser…": "Конвертујемо звук за ваш прегледач…",
+  "Picking the best source…": "Бирамо најбољи извор…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi наплаћује у америчким доларима; ваша банка аутоматски конвертује износ."
 }

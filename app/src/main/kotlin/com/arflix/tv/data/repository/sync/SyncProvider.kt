@@ -8,13 +8,15 @@ enum class SyncProvider {
     NONE,
     TRAKT,
     MDBLIST,
-    SIMKL;
+    SIMKL,
+    WETRAKR;
 
     companion object {
         fun fromStorage(value: String?): SyncProvider = when (value?.lowercase()) {
             "trakt" -> TRAKT
             "mdblist" -> MDBLIST
             "simkl" -> SIMKL
+            "wetrakr" -> WETRAKR
             else -> NONE
         }
     }

@@ -1,0 +1,821 @@
+{
+ "locale": {
+  "htmlLang": "nl",
+  "hreflang": "nl",
+  "home": "Home",
+  "guides": "Handleidingen",
+  "skip": "Naar de inhoud",
+  "mainNav": "Hoofdnavigatie",
+  "breadcrumb": "Kruimelpad",
+  "footerNav": "Footernavigatie",
+  "install": "ARVIO installeren",
+  "play": "Google Play",
+  "source": "Broncode bekijken",
+  "browser": "Bekijk ARVIO Web",
+  "questions": "Veelgestelde vragen",
+  "related": "Gerelateerde handleidingen",
+  "softwareBoundaryTitle": "Software, geen content",
+  "softwareBoundary": "ARVIO host, levert, verkoopt, bevat en verspreidt geen films, series, zenders, lijsten of streams. Je koppelt alleen servers, diensten, bestanden en integraties die je mag gebruiken.",
+  "footerDescription": "Open-source mediabeheer voor Android TV, Google TV en Android.",
+  "footerBoundary": "ARVIO levert software, geen media.",
+  "languageLabel": "Taal",
+  "languageLink": "English",
+  "languageHref": "/",
+  "pageData": {
+   "hub": {
+    "title": "Mediacentrum voor Android TV, mobiel en browser - ARVIO",
+    "description": "Beheer servers, diensten, live tv, Trakt, Simkl en afspelen in ARVIO voor Android TV, Android, iPhone, iPad, Windows en Mac.",
+    "crumb": "Mediacentrum",
+    "eyebrow": "Gratis Android-app",
+    "h1": "Je mediadiensten, overzichtelijk op je tv.",
+    "hero": "ARVIO is een gratis, open-source app voor mediabeheer op Android TV, Google TV en Android. Met het optionele ARVIO Web gebruik je ondersteunde functies ook op iPhone, iPad, Windows, Mac, Chromebook, Apple TV en in browsers van smart-tv's.",
+    "sectionEyebrow": "Eén interface",
+    "sectionTitle": "Koppel wat je al gebruikt.",
+    "sectionCopy": "ARVIO vervangt je server of provider niet. Het toont ondersteunde diensten in één consistente bibliotheek, met profielen, ontdekken en afspelen die zijn ontworpen voor de afstandsbediening.",
+    "features": [
+     [
+      "Jellyfin, Plex en Emby",
+      "Blader door bibliotheken waartoe je toegang hebt, recent toegevoegde titels en beschikbare mediaversies op ondersteunde thuisservers."
+     ],
+     [
+      "Trakt en Simkl",
+      "Gebruik lijsten, voortgang, kijkgeschiedenis en scrobbling, en kies per functie welke tracker de gegevens levert."
+     ],
+     [
+      "Live tv en gids",
+      "Koppel je eigen provider of lijst met categorieën, favorieten, EPG en terugkijkgegevens waar dat wordt ondersteund."
+     ],
+     [
+      "Profielen en cloud",
+      "Houd profielen gescheiden en synchroniseer ondersteunde instellingen tussen apparaten met een ARVIO-account."
+     ],
+     [
+      "Ondertitels en afspelen",
+      "Kies ondertitelbronnen, spelerinstellingen en optionele AI-tools met je eigen inloggegevens."
+     ],
+     [
+      "Tv, mobiel en browser",
+      "Gebruik de gratis app op Android en voeg optioneel premiumtoegang via de browser toe op Apple-apparaten en computers."
+     ]
+    ],
+    "stepsTitle": "Begin met wat je nodig hebt.",
+    "steps": [
+     [
+      "Installeer ARVIO",
+      "Gebruik Google Play op Android TV, Google TV of een Android-telefoon, of installeer de officiële ondertekende APK via GitHub."
+     ],
+     [
+      "Maak een profiel",
+      "Kies taal, weergave en afspeelgedrag per persoon of voor gedeeld gebruik."
+     ],
+     [
+      "Koppel toegestane diensten",
+      "Voeg alleen servers, accounts, lijsten en integraties toe waartoe je toegang mag hebben."
+     ]
+    ],
+    "faq": [
+     [
+      "Is ARVIO gratis op Android TV?",
+      "Ja. De Android-app is gratis en open source. ARVIO Web is een optionele premium-aanvulling voor de browser."
+     ],
+     [
+      "Bevat ARVIO films, series of zenders?",
+      "Nee. ARVIO is software voor beheer en afspelen. Jij levert de bronnen en diensten die je mag gebruiken."
+     ],
+     [
+      "Welke diensten brengt ARVIO samen?",
+      "ARVIO ondersteunt Jellyfin-, Plex- en Emby-servers, live tv, Trakt, Simkl, ondertitels en compatibele persoonlijke integraties."
+     ]
+    ],
+    "noteTitle": "Grens van de content",
+    "note": "ARVIO levert de interface en de speler. Beschikbaarheid en kwaliteit hangen af van de gekoppelde bron, het netwerk en de mogelijkheden van het apparaat.",
+    "ctaTitle": "Een open mediacentrum voor jouw set-up.",
+    "ctaCopy": "Installeer het gratis op Android of bekijk het volledige project op GitHub.",
+    "related": [
+     "servers",
+     "tracking",
+     "live"
+    ]
+   },
+   "jellyfin": {
+    "title": "Jellyfin op Android TV, iPad, Windows en Mac - ARVIO",
+    "description": "Koppel je Jellyfin-server aan ARVIO en blader door bibliotheken, versies en voortgang op Android TV, mobiel en in de browser.",
+    "crumb": "Jellyfin op al je apparaten",
+    "eyebrow": "Integratie met thuisserver",
+    "h1": "Haal je Jellyfin-bibliotheek naar ARVIO.",
+    "hero": "Koppel een Jellyfin-server die je mag gebruiken en blader door bibliotheken en mediaversies in de gratis Android-app of in het optionele ARVIO Web voor iPhone, iPad, Windows, Mac en andere ondersteunde browsers.",
+    "sectionEyebrow": "Gekoppeld, niet gekopieerd",
+    "sectionTitle": "Je server houdt de regie.",
+    "sectionCopy": "ARVIO leest toegestane bibliotheekgegevens en afspeelbare media. Toegangsregels, gebruikers, rechten en beschikbaarheid blijven door Jellyfin geregeld.",
+    "features": [
+     [
+      "Bibliotheken op al je apparaten",
+      "Open de bibliotheken van je server op de pagina Bibliotheek in ARVIO, zonder de indeling van Jellyfin opnieuw op te bouwen."
+     ],
+     [
+      "Recent toegevoegd",
+      "Bekijk de nieuwste toevoegingen in een snel overzicht met dezelfde kaarten en details als in de rest van ARVIO."
+     ],
+     [
+      "Mediaversies",
+      "Als Jellyfin meerdere bestanden meldt, kan ARVIO die als aparte afspeelopties tonen."
+     ],
+     [
+      "Voortgang en kijkstatus",
+      "Afspelen werkt de server bij waar dat wordt ondersteund, terwijl Trakt of Simkl een bredere kijkgeschiedenis kunnen bijhouden."
+     ],
+     [
+      "Beveiligde tokens",
+      "Toegangstokens worden op ondersteunde Android-apparaten in versleutelde opslag voor inloggegevens bewaard."
+     ],
+     [
+      "Afspelen per apparaat",
+      "ARVIO probeert compatibel af te spelen en Jellyfin kan formaten transcoderen die het apparaat niet direct afspeelt."
+     ]
+    ],
+    "stepsTitle": "In drie stappen naar je bibliotheek.",
+    "steps": [
+     [
+      "Bereid Jellyfin voor",
+      "Controleer of de server bereikbaar is en of de gebruiker de gewenste bibliotheken kan openen."
+     ],
+     [
+      "Koppel via Instellingen",
+      "Voeg Jellyfin toe als thuisserver en rond het inloggen of de koppelcode af."
+     ],
+     [
+      "Open de Bibliotheek",
+      "Selecteer Jellyfin, kies een bibliotheek en blader door de titels die deze gebruiker mag zien."
+     ]
+    ],
+    "faq": [
+     [
+      "Vervangt ARVIO de Jellyfin-server?",
+      "Nee. Jellyfin blijft verantwoordelijk voor de bibliotheek, gebruikers en toegang. ARVIO werkt als client en beheerinterface."
+     ],
+     [
+      "Toont ARVIO verschillende versies van een bestand?",
+      "Ja, als de server die versies meldt en de gekoppelde gebruiker er toegang toe heeft."
+     ],
+     [
+      "Wordt elk bestand direct afgespeeld?",
+      "Niet per se. Container, codecs, audio, ondertitels, netwerk, apparaat en transcodeerinstellingen bepalen samen of afspelen lukt."
+     ]
+    ],
+    "noteTitle": "Afspelen hangt af van de hele keten",
+    "note": "Een werkende verbinding garandeert niet dat elk bestand direct wordt afgespeeld. De server moet mogelijk formaten transcoderen die het apparaat of de browser niet ondersteunt.",
+    "ctaTitle": "Gebruik je Jellyfin-server op jouw manier.",
+    "ctaCopy": "ARVIO is gratis en open source op Android.",
+    "related": [
+     "servers",
+     "tracking",
+     "web"
+    ]
+   },
+   "servers": {
+    "title": "Plex, Emby en Jellyfin op tv, iPad, Windows en Mac - ARVIO",
+    "description": "Blader door Plex, Emby en Jellyfin in één interface op Android TV, Android en in de optionele browserversie van ARVIO.",
+    "crumb": "Plex, Emby en Jellyfin",
+    "eyebrow": "Bibliotheek met meerdere servers",
+    "h1": "Plex, Emby en Jellyfin in één gekoppelde interface.",
+    "hero": "Open thuisservers waartoe je toegang hebt in de gratis app voor Android TV en mobiel, of gebruik het optionele ARVIO Web op iPhone, iPad, Windows, Mac, Apple TV en ondersteunde browsers.",
+    "sectionEyebrow": "Wissel van server, niet van interface",
+    "sectionTitle": "Eén Bibliotheek-pagina, aparte bronnen.",
+    "sectionCopy": "Elke server blijft een zelfstandige, betrouwbare bron. Je bladert tussen bibliotheken met hetzelfde ontwerp voor kaarten, details en bediening met de afstandsbediening.",
+    "features": [
+     [
+      "Gescheiden per server",
+      "Plex, Emby en Jellyfin blijven apart, zodat de rechten en indeling van elke bibliotheek behouden blijven."
+     ],
+     [
+      "Zijbalk met bibliotheken",
+      "Selecteer een gekoppelde dienst en open de bibliotheken die deze beschikbaar stelt, zonder overdaad aan filters."
+     ],
+     [
+      "Recente titels",
+      "Bekijk de nieuwste titels die elke server toestaat in een overzicht dat snel scant."
+     ],
+     [
+      "Meerdere mediaversies",
+      "4K-, 1080p-, remux- of alternatieve versies kunnen als aparte opties verschijnen."
+     ],
+     [
+      "Consistente ervaring",
+      "Gebruik vertrouwde details, artwork, metadata en bediening, ongeacht de server waar de titel vandaan komt."
+     ],
+     [
+      "Instellingen per profiel",
+      "Bepaal welke servers en catalogi per profiel zichtbaar zijn, ook in een gezinssituatie."
+     ]
+    ],
+    "stepsTitle": "Houd de controle waar die hoort.",
+    "steps": [
+     [
+      "Koppel een server",
+      "Gebruik de ondersteunde inlog- of koppelmethode voor Plex, Emby of Jellyfin."
+     ],
+     [
+      "Kies bibliotheken",
+      "ARVIO leest alleen de bibliotheken die beschikbaar zijn voor de ingelogde gebruiker."
+     ],
+     [
+      "Selecteer een versie",
+      "Open een titel en kies uit de mediaversies die de server meldt."
+     ]
+    ],
+    "faq": [
+     [
+      "Kan ik Plex, Emby en Jellyfin tegelijk koppelen?",
+      "Ja. Je kunt ze aan hetzelfde profiel koppelen en als aparte bibliotheekbronnen openen."
+     ],
+     [
+      "Wijzigt of combineert ARVIO de bibliotheken?",
+      "Nee. Elke server blijft de officiële bron. ARVIO verplaatst of wijzigt geen media."
+     ],
+     [
+      "Waarom heeft een titel soms meerdere bronnen?",
+      "De server kan meerdere bestanden of versies aanbieden, en ARVIO toont ze zodat je zelf resolutie en codering kiest."
+     ]
+    ],
+    "noteTitle": "Geen migratie van je bibliotheek",
+    "note": "Een server toevoegen kopieert geen bestanden en omzeilt geen rechten. De oorspronkelijke Plex-, Emby- of Jellyfin-server moet bereikbaar zijn om te bladeren en af te spelen.",
+    "ctaTitle": "Jouw servers. Eén rustige interface.",
+    "ctaCopy": "De Android-app blijft gratis en open source.",
+    "related": [
+     "jellyfin",
+     "tracking",
+     "sources"
+    ]
+   },
+   "sources": {
+    "title": "Debrid en Usenet op tv, iPad, Windows en Mac - ARVIO",
+    "description": "Orden compatibele debrid- en Usenet-bronnen in ARVIO, met kwaliteit, bestandsgrootte, taal en addon-informatie zichtbaar.",
+    "crumb": "Debrid- en Usenet-bronnen",
+    "eyebrow": "Compatibele persoonlijke integraties",
+    "h1": "Debrid- en Usenet-bronnen, helder geordend.",
+    "hero": "Gebruik bronnen van compatibele addons in de gratis Android-app of in het optionele ARVIO Web. ARVIO behoudt de brondetails en speelt opgeloste HTTP-media af op een ondersteund apparaat.",
+    "sectionEyebrow": "Transparant kiezen",
+    "sectionTitle": "Zie wat de addon teruggeeft voordat je afspeelt.",
+    "sectionCopy": "Een compatibele addon kan veel meer leveren dan een URL. ARVIO houdt de nuttige gegevens zichtbaar, zodat je een bewuste keuze maakt.",
+    "features": [
+     [
+      "Kwaliteit en resolutie",
+      "Herken 4K, 1080p, 720p en andere opgegeven informatie aan consistente labels."
+     ],
+     [
+      "Bestandsgrootte en -naam",
+      "Vergelijk de opgegeven grootte en lees de volledige bestandsnaam als de addon die waarden levert."
+     ],
+     [
+      "Herkomst van addon en provider",
+      "Behoud labels als debrid, Usenet, vault, index of host in plaats van alles samen te vatten als één algemene bron."
+     ],
+     [
+      "Taal en technische details",
+      "Zie taal, release, codec en andere beschikbare metadata zonder onnodige herhaling."
+     ],
+     [
+      "Handige sortering",
+      "Respecteer de volgorde van de addons en vergelijk grootte en kwaliteit om snel je voorkeursopties te vinden."
+     ],
+     [
+      "Android en browser",
+      "Gebruik de ingebouwde speler of compatibele opties in de browser, VLC en Infuse, afhankelijk van dienst, formaat en apparaat."
+     ]
+    ],
+    "stepsTitle": "De addon zoekt de bron op; ARVIO toont en speelt af.",
+    "steps": [
+     [
+      "Stel een integratie in",
+      "Gebruik los van ARVIO een compatibele addon of dienst en een account dat je mag gebruiken."
+     ],
+     [
+      "Ontvang opgeloste bronnen",
+      "De integratie geeft metadata en een afspeelbare HTTP-URL terug. ARVIO doorzoekt zelf geen Usenet- of debrid-infrastructuur."
+     ],
+     [
+      "Kies zelf of gebruik autoplay",
+      "Selecteer een specifiek resultaat of laat autoplay de beste beschikbare kandidaat kiezen op basis van je voorkeuren."
+     ]
+    ],
+    "faq": [
+     [
+      "Wordt ARVIO geleverd met een debrid- of Usenet-account?",
+      "Nee. ARVIO levert, verkoopt en deelt geen accounts van providers."
+     ],
+     [
+      "Speelt ARVIO torrents of magnetlinks direct af?",
+      "Nee. De integratie moet een opgeloste HTTP-mediabron teruggeven die het apparaat kan bereiken."
+     ],
+     [
+      "Welke broninformatie kan ik zien?",
+      "Kwaliteit, grootte, bestandsnaam, taal, addon, provider en andere details die de integratie meestuurt."
+     ]
+    ],
+    "noteTitle": "Geen account, addon of media inbegrepen",
+    "note": "ARVIO levert geen abonnementen, indexen, inloggegevens, bestanden of streams en ondersteunt geen direct P2P-afspelen. Gebruik alleen diensten en content waarvoor je toestemming hebt.",
+    "ctaTitle": "Jouw integraties, met alle details behouden.",
+    "ctaCopy": "ARVIO is gratis en open source op Android.",
+    "related": [
+     "hub",
+     "tracking",
+     "subtitles"
+    ]
+   },
+   "tracking": {
+    "title": "Trakt- en Simkl-synchronisatie op tv, iPad en Mac - ARVIO",
+    "description": "Koppel Trakt en Simkl aan ARVIO voor lijsten, kijkgeschiedenis, voortgang en scrobbling op Android TV, mobiel en in de browser.",
+    "crumb": "Trakt- en Simkl-synchronisatie",
+    "eyebrow": "Integraties voor het bijhouden",
+    "h1": "Houd Trakt en Simkl gekoppeld op al je apparaten.",
+    "hero": "Laad lijsten, voortgang en kijkgeschiedenis in de gratis Android-app of in het optionele ARVIO Web. Kies per functie welke tracker de gegevens levert, zonder de andere te hoeven opgeven.",
+    "sectionEyebrow": "Keuze per functie",
+    "sectionTitle": "Gebruik beide diensten met duidelijke taken.",
+    "sectionCopy": "ARVIO kan Trakt en Simkl aan hetzelfde profiel koppelen en laat je de bron van lijsten, voortgang en kijkgeschiedenis kiezen waar de functie die keuze biedt.",
+    "features": [
+     [
+      "Verder kijken",
+      "Ga verder met de volgende aflevering of de ondersteunde positie via de tracker die je voor voortgang hebt gekozen."
+     ],
+     [
+      "Lijsten en bibliotheek",
+      "Open persoonlijke lijsten en ondersteunde collecties op de pagina Bibliotheek, met dezelfde kaartweergave."
+     ],
+     [
+      "Kijkgeschiedenis",
+      "Iets als bekeken markeren kan de gekoppelde trackers bijwerken, afhankelijk van je synchronisatie-instellingen."
+     ],
+     [
+      "Scrobbling",
+      "Stuur tijdens het afspelen je voortgang naar de ingeschakelde diensten, met respect voor tokens en API-limieten."
+     ],
+     [
+      "Zelfstandige profielen",
+      "Elk profiel kan eigen koppelingen en trackinginstellingen gebruiken."
+     ],
+     [
+      "Synchronisatie tussen apparaten",
+      "Ondersteunde keuzes kunnen met je ARVIO-account meegaan naar Android en de optionele browserversie."
+     ]
+    ],
+    "stepsTitle": "Koppelen, kiezen en bijhouden.",
+    "steps": [
+     [
+      "Geef de diensten toegang",
+      "Koppel Trakt en Simkl via hun officiële autorisatieprocedures."
+     ],
+     [
+      "Kies de bron",
+      "Bepaal welke dienst lijsten, voortgang en andere instelbare gegevens levert."
+     ],
+     [
+      "Speel gewoon af",
+      "ARVIO werkt de status bij in de ingeschakelde diensten als die bewerking wordt ondersteund."
+     ]
+    ],
+    "faq": [
+     [
+      "Kan ik Trakt en Simkl samen koppelen?",
+      "Ja. Beide kunnen gekoppeld blijven, met aparte keuzes voor ondersteunde functies."
+     ],
+     [
+      "Slaat ARVIO mijn wachtwoorden op?",
+      "Nee. De koppeling gebruikt de autorisatieprocedures en tokens van de diensten zelf."
+     ],
+     [
+      "Zie ik wijzigingen ook op andere apparaten?",
+      "Als de dienst de update accepteert, is de nieuwe status beschikbaar voor andere clients die aan hetzelfde account zijn gekoppeld."
+     ]
+    ],
+    "noteTitle": "De diensten blijven de bron van de gegevens",
+    "note": "Beschikbaarheid, verwerkingstijd en limieten hangen af van de API's van Trakt en Simkl. ARVIO heeft geen invloed op storingen of limieten van die platforms.",
+    "ctaTitle": "Je lijsten en voortgang, gekoppeld.",
+    "ctaCopy": "Gebruik Trakt, Simkl of allebei in ARVIO.",
+    "related": [
+     "hub",
+     "servers",
+     "web"
+    ]
+   },
+   "live": {
+    "title": "Live tv en EPG op Android TV, iPad, Windows en Mac - ARVIO",
+    "description": "Gebruik je eigen IPTV- of live-tv-provider in ARVIO met zendervolgorde, favorieten, EPG, zoeken en ondersteund terugkijken.",
+    "crumb": "Live tv en EPG",
+    "eyebrow": "Voor je eigen toegestane provider",
+    "h1": "Een live-tv-gids voor al je apparaten.",
+    "hero": "Blader door het aanbod van je provider op Android TV en mobiel, of gebruik het optionele ARVIO Web op iPhone, iPad, Windows, Mac en ondersteunde browsers. Of afspelen lukt, hangt af van de provider en het apparaat.",
+    "sectionEyebrow": "Gemaakt voor grote lijsten",
+    "sectionTitle": "Zenders, groepen en gids in één vloeiende ervaring.",
+    "sectionCopy": "ARVIO behoudt de oorspronkelijke volgorde van de provider, laadt gegevens stapsgewijs en geeft voorrang aan favorieten, zodat ook grote lijsten snel bruikbaar zijn.",
+    "features": [
+     [
+      "Volgorde van de provider",
+      "Groepen en zenders volgen de volgorde die de provider aanlevert, tenzij je ze zelf herschikt."
+     ],
+     [
+      "EPG die stap voor stap laadt",
+      "Gegevens uit de cache verschijnen eerst en nieuwe koppelingen worden aangevuld zonder dat het bladeren blokkeert."
+     ],
+     [
+      "Favorieten eerst",
+      "Favoriete zenders en hun programma's krijgen voorrang wanneer je de gids voor het eerst opent."
+     ],
+     [
+      "Zoeken en categorieën",
+      "Vind zenders en programma's, en verberg of herschik groepen per profiel."
+     ],
+     [
+      "Ondersteund terugkijken",
+      "Bekijk eerdere programma's en speel terugkijkopnamen af als de provider geldige URL's aanbiedt."
+     ],
+     [
+      "Afstandsbediening en touch",
+      "De interface past zich aan focusnavigatie op de tv en aan bediening op mobiel aan."
+     ]
+    ],
+    "stepsTitle": "Van provider naar gids.",
+    "steps": [
+     [
+      "Voeg je lijst of account toe",
+      "Gebruik de gegevens van een dienst waartoe je toegang mag hebben."
+     ],
+     [
+      "Laad de EPG",
+      "ARVIO leest de ingestelde bronnen en koppelt programma's op basis van ID en overeenkomende naam."
+     ],
+     [
+      "Kies een zender",
+      "Open de livestream of een eerder programma als terugkijken beschikbaar is."
+     ]
+    ],
+    "faq": [
+     [
+      "Levert ARVIO zenders of lijsten?",
+      "Nee. Je moet een provider of lijst koppelen die je mag gebruiken."
+     ],
+     [
+      "Waarom hebben sommige zenders geen gids?",
+      "De provider levert mogelijk geen EPG, of de ID's en namen komen niet overeen met de zenders."
+     ],
+     [
+      "Werkt terugkijken op alle zenders?",
+      "Nee. Dat hangt af van de beschikbaarheid, het formaat en de archief-URL's van de provider."
+     ]
+    ],
+    "noteTitle": "Kwaliteit hangt af van de provider",
+    "note": "EPG, archiefduur, terugkijken en de stabiliteit van de stream komen van de gekoppelde dienst. ARVIO ordent en speelt de ontvangen gegevens af.",
+    "ctaTitle": "Je provider, geordend voor de afstandsbediening.",
+    "ctaCopy": "Gebruik ARVIO gratis op Android TV en Android.",
+    "related": [
+     "hub",
+     "web",
+     "tracking"
+    ]
+   },
+   "subtitles": {
+    "title": "AI-ondertitels op Android TV, iPad, Windows en Mac - ARVIO",
+    "description": "Zoek, pas aan en vertaal ondertitels in ARVIO met optionele AI-tools en je eigen compatibele inloggegevens.",
+    "crumb": "AI-ondertitels",
+    "eyebrow": "Optionele toegankelijkheidstools",
+    "h1": "Grip op ondertitels op tv, mobiel en in de browser.",
+    "hero": "Zoek en stijl ondertitels in de gratis Android-app en gebruik optioneel AI-vertaling met je eigen compatibele account. Welke functies beschikbaar zijn, hangt af van de speler en de bron.",
+    "sectionEyebrow": "Ondertitels die zich aanpassen",
+    "sectionTitle": "Goed leesbaar zonder het beeld te bedekken.",
+    "sectionCopy": "ARVIO brengt zoeken, kiezen, stijl en positie van ondertitels samen in bediening die geschikt is voor tv en mobiel.",
+    "features": [
+     [
+      "Ondertitels zoeken",
+      "Raadpleeg ondersteunde providers en kies een taal en versie die bij het bestand passen."
+     ],
+     [
+      "Aanpasbare stijl",
+      "Stel grootte, kleur, achtergrond en positie in voor verschillende schermen en voorkeuren."
+     ],
+     [
+      "Zwarte balken en beeldkader",
+      "Plaats de ondertitel ten opzichte van het scherm in plaats van alleen het videobeeld, als de speler dat toestaat."
+     ],
+     [
+      "Optionele AI-vertaling",
+      "Gebruik je eigen compatibele account om tekst te vertalen; ARVIO bevat zelf geen AI-abonnement."
+     ],
+     [
+      "Bediening voor tv",
+      "Wissel van spoor en pas voorkeuren aan zonder menu's die lastig zijn met de afstandsbediening."
+     ],
+     [
+      "Ondersteuning per formaat",
+      "SRT, WebVTT, ingebedde ondertitels en andere formaten hangen af van de speler en de bron."
+     ]
+    ],
+    "stepsTitle": "Vind en stel het juiste spoor in.",
+    "steps": [
+     [
+      "Open de ondertitels",
+      "Open tijdens het afspelen de keuzelijst en bekijk de beschikbare sporen."
+     ],
+     [
+      "Kies taal en stijl",
+      "Selecteer het spoor en pas de weergave-instellingen van het profiel toe."
+     ],
+     [
+      "Gebruik AI als het nodig is",
+      "Stel je eigen compatibele inloggegevens in en vertaal alleen wanneer die functie echt helpt."
+     ]
+    ],
+    "faq": [
+     [
+      "Zit er een betaalde AI-dienst in ARVIO?",
+      "Nee. De AI-tools zijn optioneel en vereisen je eigen compatibele account."
+     ],
+     [
+      "Hebben alle bronnen ondertitels?",
+      "Nee. Beschikbaarheid hangt af van de media, de addon, de server en de ingestelde ondertitelproviders."
+     ],
+     [
+      "Kan ik de positie van ondertitels aanpassen?",
+      "Ja, in ondersteunde spelers en formaten, samen met grootte, kleur en achtergrond."
+     ]
+    ],
+    "noteTitle": "Nauwkeurigheid verschilt",
+    "note": "Automatische vertalingen kunnen fouten bevatten. Controleer het resultaat als nauwkeurigheid belangrijk is en houd je aan de voorwaarden van de AI-dienst die je gebruikt.",
+    "ctaTitle": "Duidelijke ondertitels op elk scherm.",
+    "ctaCopy": "De Android-speler van ARVIO blijft gratis en open source.",
+    "related": [
+     "hub",
+     "sources",
+     "web"
+    ]
+   },
+   "firetv": {
+    "title": "ARVIO op Fire TV - installatie en compatibiliteit",
+    "description": "Installeer de officiële ARVIO-APK op compatibele Fire TV-apparaten en gebruik de interface die is gemaakt voor de afstandsbediening.",
+    "crumb": "ARVIO op Fire TV",
+    "eyebrow": "Compatibele Fire OS-apparaten",
+    "h1": "Gebruik ARVIO op Fire TV.",
+    "hero": "De Android TV-app kun je handmatig installeren op compatibele Fire TV-apparaten. Zo heb je ook op Fire OS de bibliotheken, tracking, live tv en speler van ARVIO.",
+    "sectionEyebrow": "Dezelfde officiële APK",
+    "sectionTitle": "Eén tv-ervaring, geen aparte versie.",
+    "sectionCopy": "Fire TV draait de ondertekende Android-build die op GitHub wordt gepubliceerd. Compatibiliteit verschilt per Fire OS-versie, hardware en geïnstalleerde diensten.",
+    "features": [
+     [
+      "Interface voor de afstandsbediening",
+      "Kaarten, menu's en speler zijn ontworpen voor focusnavigatie op een televisie."
+     ],
+     [
+      "Officiële ondertekende APK",
+      "Gebruik alleen de versie uit de officiële repository, zodat de handtekening klopt en compatibele updates mogelijk blijven."
+     ],
+     [
+      "Thuisservers",
+      "Koppel Jellyfin, Plex en Emby waartoe je toegang hebt, net als op andere compatibele Android-apparaten."
+     ],
+     [
+      "Tracking",
+      "Gebruik Trakt en Simkl voor lijsten, voortgang en kijkgeschiedenis zodra je accounts zijn gekoppeld."
+     ],
+     [
+      "Live tv",
+      "Open je eigen toegestane provider of lijst met EPG en ondersteunde functies."
+     ],
+     [
+      "Beperkingen van het platform",
+      "Google Play, codecs, geheugen en gedrag op de achtergrond kunnen afwijken van een standaard Android TV."
+     ]
+    ],
+    "stepsTitle": "Zorgvuldig installeren.",
+    "steps": [
+     [
+      "Download via GitHub",
+      "Haal de release-APK op van de officiële projectpagina."
+     ],
+     [
+      "Sta de installatie toe",
+      "Geef de app waarmee je installeert op de Fire TV tijdelijk toestemming om apps te installeren."
+     ],
+     [
+      "Open en stel in",
+      "Koppel alleen accounts, servers en bronnen die je mag gebruiken."
+     ]
+    ],
+    "faq": [
+     [
+      "Staat ARVIO in de Amazon Appstore?",
+      "Dat kan verschillen. De beschreven methode is de officiële APK van GitHub installeren op compatibele hardware."
+     ],
+     [
+      "Werkt dezelfde APK op elke Fire TV?",
+      "Dat is niet voor elk model gegarandeerd. Prestaties en codecs verschillen per hardware en Fire OS-versie."
+     ],
+     [
+      "Kan ik updaten zonder gegevens te verliezen?",
+      "Ja, als de nieuwe APK hetzelfde pakket en dezelfde officiële handtekening gebruikt. Verwijder de app niet als je je lokale gegevens wilt houden."
+     ]
+    ],
+    "noteTitle": "Handmatig installeren vraagt om zorgvuldigheid",
+    "note": "Controleer altijd de officiële repository en de handtekening. Builds van derden worden mogelijk niet goed bijgewerkt en kunnen een risico vormen voor je gegevens.",
+    "ctaTitle": "ARVIO op je Fire TV-scherm.",
+    "ctaCopy": "Download de officiële ondertekende APK via GitHub.",
+    "ctaPrimary": "GitHub Releases",
+    "ctaPrimaryHref": "https://github.com/ProdigyV21/ARVIO/releases",
+    "related": [
+     "hub",
+     "live",
+     "servers"
+    ]
+   },
+   "web": {
+    "title": "ARVIO Web voor iPhone, iPad, Windows, Mac en Apple TV",
+    "description": "Gebruik de premium-aanvulling ARVIO Web op iPhone, iPad, Windows, Mac, Apple TV en ondersteunde browsers.",
+    "crumb": "ARVIO Web",
+    "eyebrow": "Optionele premiumtoegang via de browser",
+    "h1": "Je ARVIO-set-up op iPhone, iPad, Windows en Mac.",
+    "hero": "ARVIO Web brengt profielen, bibliotheken, tracking en toegestane diensten naar moderne browsers op Apple-apparaten, Windows, macOS, ChromeOS en ondersteunde smart-tv's.",
+    "sectionEyebrow": "Een aanvulling, geen vervanging",
+    "sectionTitle": "Neem je bibliotheek mee naar de browser.",
+    "sectionCopy": "De Android-app blijft gratis en open source. ARVIO Web is een extra abonnement voor wie toegang via de browser, downloads en compatibele integraties op andere platforms wil.",
+    "features": [
+     [
+      "iPhone en iPad",
+      "Open profielen en bibliotheken in moderne browsers zonder een aparte iOS-app te installeren."
+     ],
+     [
+      "Windows en Mac",
+      "Gebruik de ARVIO-interface op je computer en stuur compatibele media zo nodig door naar VLC."
+     ],
+     [
+      "Apple TV en smart-tv's",
+      "Gebruik ondersteunde browsers; of afspelen werkt, verschilt per systeem."
+     ],
+     [
+      "Instellingen in de cloud",
+      "Gebruik ondersteunde profielen en instellingen die aan hetzelfde ARVIO-account zijn gekoppeld."
+     ],
+     [
+      "Thuisbibliotheken",
+      "Blader door gekoppelde Jellyfin-, Plex- en Emby-servers als het netwerk en de server toegang toestaan."
+     ],
+     [
+      "Ondersteunde downloads",
+      "Download toegestane bronnen als de integratie, de bron en de browser dat ondersteunen."
+     ]
+    ],
+    "stepsTitle": "Begin in de browser.",
+    "steps": [
+     [
+      "Log in met je account",
+      "Log in met hetzelfde ARVIO-account dat je op je Android-apparaten gebruikt."
+     ],
+     [
+      "Kies een abonnement bij Play",
+      "Rondkijken en instellen is gratis. Druk je op Play, dan kies je een abonnement: $ 2,99 per maand of $ 20 voor 12 maanden."
+     ],
+     [
+      "Open je diensten",
+      "Blader door je gesynchroniseerde profielen, bibliotheken en toegestane integraties."
+     ]
+    ],
+    "faq": [
+     [
+      "Blijft de Android-app gratis?",
+      "Ja. De Android-app blijft gratis en open source."
+     ],
+     [
+      "Werkt ARVIO Web in elke browser?",
+      "Niet per se. Afspelen, codecs en externe integraties hangen af van de browser en het systeem."
+     ],
+     [
+      "Kan ik het op iPhone en iPad gebruiken?",
+      "Ja, in ondersteunde browsers, met de functies die ARVIO Web biedt."
+     ]
+    ],
+    "noteTitle": "De browser maakt verschil",
+    "note": "Browsers bieden niet dezelfde codecs en bediening als de Android-speler. Sommige formaten moeten worden getranscodeerd of in een compatibele externe app worden geopend.",
+    "ctaTitle": "Ontdek ARVIO in de browser.",
+    "ctaCopy": "Premium voegt toegang via de browser toe; de Android-app blijft gratis.",
+    "ctaPrimary": "Bekijk ARVIO Web",
+    "ctaPrimaryHref": "https://web.arvio.tv/",
+    "related": [
+     "hub",
+     "servers",
+     "tracking"
+    ]
+   }
+  }
+ },
+ "directoryLabels": {
+  "hub": [
+   "Begin hier",
+   "Mediacentrum voor al je apparaten",
+   "Profielen, servers, tracking, live tv, ondertitels en afspelen op Android en in de browser."
+  ],
+  "jellyfin": [
+   "Thuisservers",
+   "Jellyfin op tv en in de browser",
+   "Blader door Jellyfin-bibliotheken zonder je server te vervangen."
+  ],
+  "servers": [
+   "Thuisservers",
+   "Plex, Emby en Jellyfin samen",
+   "Breng meerdere toegestane servers samen in één bibliotheekervaring."
+  ],
+  "sources": [
+   "Bronnen en afspelen",
+   "Debrid- en Usenet-bronnen",
+   "Houd kwaliteit, grootte, taal en herkomst zichtbaar."
+  ],
+  "tracking": [
+   "Bijhouden",
+   "Trakt- en Simkl-synchronisatie",
+   "Koppel lijsten, voortgang, kijkgeschiedenis en scrobbling."
+  ],
+  "live": [
+   "Live tv",
+   "Live tv en EPG",
+   "Gebruik je eigen toegestane provider met gids, favorieten en ondersteund terugkijken."
+  ],
+  "subtitles": [
+   "Toegankelijkheid",
+   "AI-ondertitels",
+   "Zoek, pas aan en vertaal ondertitels met optionele tools."
+  ],
+  "firetv": [
+   "Apparaten",
+   "ARVIO op Fire TV",
+   "Installeer de officiële APK op compatibele Fire TV-hardware."
+  ],
+  "web": [
+   "Kies je hosting",
+   "ARVIO Web: gratis of beheerd",
+   "Vergelijk gratis zelf hosten, het optionele Premium, profielen en browserondersteuning."
+  ]
+ },
+ "entryCopy": {
+  "title": "ARVIO in het Nederlands - gratis mediacentrum voor Android TV",
+  "description": "ARVIO in het Nederlands: een gratis, open-source mediacentrum voor Android TV, thuisservers, live tv, Trakt, Simkl en ondertitels.",
+  "eyebrow": "ARVIO in het Nederlands",
+  "h1": "Alles wat je kijkt. Eén overzichtelijke interface.",
+  "lead": "ARVIO brengt de servers, diensten en afspeeltools die je al gebruikt samen in één snelle ervaring voor Android TV, Google TV en Android. Het optionele ARVIO Web breidt de toegang uit naar iPhone, iPad, Windows, Mac en andere ondersteunde browsers.",
+  "sectionTitle": "Ontdek de belangrijkste functies.",
+  "sectionCopy": "Begin met het overzicht of open een handleiding voor je server, tracker, provider of apparaat.",
+  "guidesButton": "Alle handleidingen bekijken",
+  "freeTitle": "Gratis en open source op Android.",
+  "freeCopy": "Premium is een optionele aanvulling voor de browser; de Android-app blijft gratis."
+ },
+ "guideCopy": {
+  "title": "ARVIO-handleidingen - Android TV, servers, tracking, live tv",
+  "description": "Nederlandstalige ARVIO-handleidingen voor Android TV, Jellyfin, Plex, Emby, Trakt, Simkl, live tv, ondertitels, debrid, Usenet en de browser.",
+  "eyebrow": "Producthandleidingen",
+  "h1": "Bouw je eigen gekoppelde mediacentrum.",
+  "lead": "Begin met de gratis Android-app, host ARVIO Web op je eigen server of kies voor beheerde hosting. Deze handleidingen helpen je je bronnen te koppelen en te testen op het apparaat dat je gebruikt.",
+  "noteTitle": "Software, geen content",
+  "ctaTitle": "Gratis en open source op Android.",
+  "ctaCopy": "Installeer via Google Play of bekijk het volledige project op GitHub."
+ },
+ "slugs": {
+  "home": "/nl/",
+  "guides": "/nl/handleidingen/",
+  "hub": "/nl/mediacentrum-android-tv/",
+  "jellyfin": "/nl/jellyfin-android-tv/",
+  "servers": "/nl/plex-emby-jellyfin/",
+  "sources": "/nl/debrid-usenet-android-tv/",
+  "tracking": "/nl/trakt-simkl-synchronisatie/",
+  "live": "/nl/live-tv-epg/",
+  "subtitles": "/nl/ai-ondertitels-android-tv/",
+  "firetv": "/nl/arvio-fire-tv/",
+  "web": "/nl/arvio-web/"
+ },
+ "standaloneLabels": {
+  "/arvio-iphone-ipad/": [
+   "iPhone en iPad · In het Engels",
+   "ARVIO op iPhone en iPad",
+   "Open ARVIO Web in Safari, log in met je ARVIO-account, zet het op je beginscherm en kijk rond voordat je betaalt."
+  ],
+  "/stremio-addons-android-tv/": [
+   "Addons instellen · In het Engels",
+   "Stremio-compatibele addons in ARVIO",
+   "Installeer een manifest-URL, stel in via je telefoon en bekijk de compatibiliteitsgrenzen op Android TV."
+  ],
+  "/collections-catalogs/": [
+   "Personaliseren · In het Engels",
+   "Collecties maken en catalogi toevoegen",
+   "JSON-sjablonen, gratis hosting en importeren via URL om je startpagina aan te passen."
+  ],
+  "/collection-studio/": [
+   "Collecties maken · In het Engels",
+   "Collection Studio",
+   "Maak een rij voor de startpagina met maximaal acht mappen, kopieer de JSON naar ARVIO en deel een openbare preview."
+  ],
+  "/self-host-arvio-web/": [
+   "Gratis in de browser · In het Engels",
+   "Zelf hosten met Docker of Node.js",
+   "Installatiecommando's, je eigen API-sleutels, lokale profielen, toegang via het netwerk en updates."
+  ],
+  "/browser-playback-guide/": [
+   "Afspelen in de browser · In het Engels",
+   "Test je eerste bron",
+   "Spoor toegangs- en formaatproblemen op en test live tv of servers op je apparaat."
+  ]
+ },
+ "ogLocale": "nl_NL"
+}

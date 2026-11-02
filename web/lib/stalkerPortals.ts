@@ -1,12 +1,12 @@
 // Stalker/Ministra portals in the Android app's multi-portal shape
 // (iptvByProfile.<id>.stalkerPortals, see StalkerPortalSupport.kt):
-//   - up to three portals, ids "stalker1".."stalker3";
+//   - up to ten portals with stable IDs;
 //   - channel ids `stalker:<portalId>:<channelId>`, category keys `<portalId>|<group>`;
 //   - the old single-portal fields (stalkerPortalUrl / stalkerMacAddress) become
 //     "Portal 1", and old `stalker|<group>` keys become `stalker1|<group>`.
 import type { AppSettings, StalkerPortalEntry } from "./types";
 
-export const MAX_STALKER_PORTALS = 3;
+export const MAX_STALKER_PORTALS = 10;
 /** Playlist id the single-portal builds used for every Stalker channel and category key. */
 export const LEGACY_STALKER_ID = "stalker";
 

@@ -80,9 +80,11 @@ class TraktRepository @Inject constructor(
     private val profileManager: ProfileManager,
     private val mdbListRepository: MdbListRepository,
     private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore,
+    private val weTrakrProvider: com.arflix.tv.data.repository.wetrakr.WeTrakrRemoteProvider,
     private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService,
     private val continueWatchingUpdates: ContinueWatchingUpdates,
-    @javax.inject.Named("traktAuth") private val traktAuthApi: TraktApi = traktApi
+    @javax.inject.Named("traktAuth") private val traktAuthApi: TraktApi = traktApi,
+    private val traktSession: TraktSession = TraktSession(context, profileManager, traktAuthApi)
 ) {
     private val gson = Gson()
     private val watchlistHttpClient by lazy { okHttpClient }
@@ -139,9 +141,6 @@ class TraktRepository @Inject constructor(
     // is paginated, so a small client-side cap silently made Android disagree
     // with Trakt and web for users with larger histories.
     private val TRAKT_UP_NEXT_SHOW_LIMIT = 300
-    @Volatile private var tokenRefreshBackoffUntilMs: Long = 0L
-    private val TOKEN_REFRESH_RETRY_BACKOFF_MS = 5 * 60 * 1000L
-    private val tokenRefreshMutex = Mutex()
 
     private fun currentProfileId(): String = profileManager.getProfileIdSync().ifBlank { "default" }
 
@@ -191,6 +190,8 @@ class TraktRepository @Inject constructor(
         }
         .distinctUntilChanged()
 
+    val connection = traktSession.connection
+
     /**
      * Get token expiration timestamp (seconds since epoch) for current profile
      */
@@ -219,6 +220,7 @@ class TraktRepository @Inject constructor(
     }
 
     suspend fun pollForToken(deviceCode: String): TraktToken {
+        val profileId = currentProfileId()
         val token = requestTraktToken(
             directFallback = {
                 traktAuthApi.pollToken(
@@ -230,7 +232,7 @@ class TraktRepository @Inject constructor(
                 )
             }
         )
-        saveToken(token)
+        traktSession.save(token, profileId)
         return token
     }
 
@@ -243,115 +245,8 @@ class TraktRepository @Inject constructor(
         return directFallback()
     }
 
-    private suspend fun refreshTraktToken(refreshToken: String): TraktToken {
-        return requestTraktToken(
-            directFallback = {
-                traktAuthApi.refreshToken(
-                    RefreshTokenRequest(
-                        refreshToken = refreshToken,
-                        clientId = clientId,
-                        clientSecret = clientSecret
-                    )
-                )
-            }
-        )
-    }
-
-    suspend fun refreshTokenIfNeeded(): String? {
-        ensureProfileCacheScope()
-        val prefs = context.traktDataStore.data.first()
-        val accessToken = prefs[accessTokenKey()] ?: return null
-        val refreshToken = prefs[refreshTokenKey()]
-        val expiresAt = prefs[expiresAtKey()]
-
-        // If we don't have refresh metadata (older tokens), use the existing access token
-        if (refreshToken == null || expiresAt == null) {
-            return accessToken
-        }
-
-        return tokenRefreshMutex.withLock {
-            val lockedPrefs = context.traktDataStore.data.first()
-            val lockedAccessToken = lockedPrefs[accessTokenKey()] ?: return@withLock null
-            val lockedRefreshToken = lockedPrefs[refreshTokenKey()] ?: return@withLock lockedAccessToken
-            val lockedExpiresAt = lockedPrefs[expiresAtKey()] ?: return@withLock lockedAccessToken
-            val nowSeconds = System.currentTimeMillis() / 1000
-
-            if (nowSeconds < lockedExpiresAt - 3600) {
-                return@withLock lockedAccessToken
-            }
-
-            fun usableExistingToken(): String? {
-                return if (nowSeconds < lockedExpiresAt) lockedAccessToken else null
-            }
-
-            val nowMs = System.currentTimeMillis()
-            if (nowMs < tokenRefreshBackoffUntilMs) {
-                return@withLock usableExistingToken()
-            }
-
-            try {
-                val newToken = refreshTraktToken(lockedRefreshToken)
-                saveToken(newToken)
-                tokenRefreshBackoffUntilMs = 0L
-                newToken.accessToken
-            } catch (e: HttpException) {
-                val code = e.code()
-                if (code == 401 || code == 403) {
-                    // A rejected refresh token cannot recover automatically.
-                    // Keeping it made the UI report Trakt as connected while
-                    // Continue Watching silently fell back to an old snapshot.
-                    invalidateStoredTraktSession()
-                    return@withLock null
-                }
-                val retryAfterMs = e.response()
-                    ?.headers()
-                    ?.get("Retry-After")
-                    ?.toLongOrNull()
-                    ?.times(1000L)
-                    ?.coerceAtLeast(30_000L)
-                    ?: TOKEN_REFRESH_RETRY_BACKOFF_MS
-                tokenRefreshBackoffUntilMs = System.currentTimeMillis() + retryAfterMs
-                // A refresh response can fail because of a temporary proxy, client,
-                // rate-limit or Trakt-side problem. Never turn that network response
-                // into a local logout; only an explicit user disconnect removes tokens.
-                System.err.println("TraktRepo: token refresh deferred after HTTP $code")
-                usableExistingToken()
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-
-                System.err.println("TraktRepo: token refresh failed: ${e.message}")
-                tokenRefreshBackoffUntilMs = System.currentTimeMillis() + TOKEN_REFRESH_RETRY_BACKOFF_MS
-                usableExistingToken()
-            }
-        }
-    }
-
-    private suspend fun saveToken(token: TraktToken) {
-        ensureProfileCacheScope()
-        context.traktDataStore.edit { prefs ->
-            prefs[accessTokenKey()] = token.accessToken
-            prefs[refreshTokenKey()] = token.refreshToken
-            prefs[expiresAtKey()] = token.createdAt + token.expiresIn
-            prefs[tokenUpdatedAtKey()] = System.currentTimeMillis()
-        }
-    }
-
-    private suspend fun invalidateStoredTraktSession() {
-        ensureProfileCacheScope()
-        context.traktDataStore.edit { prefs ->
-            prefs.remove(accessTokenKey())
-            prefs.remove(refreshTokenKey())
-            prefs.remove(expiresAtKey())
-            prefs[tokenUpdatedAtKey()] = System.currentTimeMillis()
-        }
-        tokenRefreshBackoffUntilMs = 0L
-        clearProfileScopedMemoryCaches(clearPreloaded = false)
-        AppLogger.breadcrumb(
-            tag = "Trakt",
-            message = "trakt_session_invalidated",
-            severity = "warning"
-        )
-    }
+    suspend fun refreshTokenIfNeeded(force: Boolean = false, rejectedAccessToken: String? = null): String? =
+        traktSession.accessToken(force = force, rejectedAccessToken = rejectedAccessToken)
 
     /**
      * Set the user ID for Supabase sync (called after login)
@@ -372,12 +267,7 @@ class TraktRepository @Inject constructor(
 
     suspend fun logout() {
         ensureProfileCacheScope()
-        context.traktDataStore.edit { prefs ->
-            prefs.remove(accessTokenKey())
-            prefs.remove(refreshTokenKey())
-            prefs.remove(expiresAtKey())
-            prefs[tokenUpdatedAtKey()] = System.currentTimeMillis()
-        }
+        traktSession.disconnect()
         clearProfileScopedMemoryCaches(clearPreloaded = false)
     }
 
@@ -390,6 +280,8 @@ class TraktRepository @Inject constructor(
         val migratedProfiles = mutableListOf<String>()
         val migrationUpdatedAt = System.currentTimeMillis()
         profileIds.forEach { profileId ->
+            // Do not broadcast local OAuth rejection as a disconnect on other devices.
+            if (prefs[profileManager.profileBooleanKeyFor(profileId, "trakt_reconnect_required")] == true) return@forEach
             val access = prefs[profileManager.profileStringKeyFor(profileId, "trakt_access_token")]
             val refresh = prefs[profileManager.profileStringKeyFor(profileId, "trakt_refresh_token")]
             val expiresAt = prefs[profileManager.profileLongKeyFor(profileId, "trakt_expires_at")]
@@ -424,25 +316,19 @@ class TraktRepository @Inject constructor(
      */
     suspend fun importTokensForProfiles(tokens: Map<String, CloudTraktToken>) {
         if (tokens.isEmpty()) return
-        val local = context.traktDataStore.data.first()
-        val tokensToApply = tokens.filter { (profileId, token) ->
-            shouldApplyCloudCredential(
-                incomingUpdatedAt = token.updatedAt,
-                localUpdatedAt = local[profileManager.profileLongKeyFor(profileId, "trakt_token_updated_at_v3")],
-                incomingHasCredential = !token.accessToken.isNullOrBlank(),
-                localHasCredential = !local[
-                    profileManager.profileStringKeyFor(profileId, "trakt_access_token")
-                ].isNullOrBlank()
-            )
-        }
-        if (tokensToApply.isEmpty()) return
+        var changed = false
         context.traktDataStore.edit { prefs ->
-            tokensToApply.forEach { (profileId, token) ->
+            tokens.forEach { (profileId, token) ->
                 val accessKey = profileManager.profileStringKeyFor(profileId, "trakt_access_token")
                 val refreshKey = profileManager.profileStringKeyFor(profileId, "trakt_refresh_token")
                 val expiresKey = profileManager.profileLongKeyFor(profileId, "trakt_expires_at")
                 val updatedAtKey = profileManager.profileLongKeyFor(profileId, "trakt_token_updated_at_v3")
+                // Compare inside the transaction, after any queued refresh/login has saved.
+                if (!shouldApplyCloudCredential(token.updatedAt, prefs[updatedAtKey],
+                        !token.accessToken.isNullOrBlank(), !prefs[accessKey].isNullOrBlank())) return@forEach
+                changed = true
                 val accessToken = token.accessToken?.trim().orEmpty()
+                prefs.remove(profileManager.profileBooleanKeyFor(profileId, "trakt_reconnect_required"))
                 if (accessToken.isEmpty()) {
                     prefs.remove(accessKey)
                     prefs.remove(refreshKey)
@@ -455,7 +341,7 @@ class TraktRepository @Inject constructor(
                 token.updatedAt?.takeIf { it > 0L }?.let { prefs[updatedAtKey] = it }
             }
         }
-        clearProfileScopedMemoryCaches(clearPreloaded = false)
+        if (changed) clearProfileScopedMemoryCaches(clearPreloaded = false)
     }
 
     suspend fun exportDismissedContinueWatchingForProfiles(profileIds: List<String>): Map<String, String> {
@@ -623,8 +509,7 @@ class TraktRepository @Inject constructor(
      */
     suspend fun fetchUsername(): String? = withContext(Dispatchers.IO) {
         try {
-            val auth = getAuthHeader() ?: return@withContext null
-            traktApi.getMe(auth = auth, clientId = clientId).username
+            traktSession.authorized { auth -> traktApi.getMe(auth = auth, clientId = clientId).username }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -763,6 +648,13 @@ class TraktRepository @Inject constructor(
                 if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
+        if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in syncProviderStore.writeProviders()) {
+            try {
+                weTrakrProvider.markWatched(com.arflix.tv.data.model.MediaType.MOVIE, tmdbId)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
+        }
     }
 
     /**
@@ -783,6 +675,13 @@ class TraktRepository @Inject constructor(
         if (com.arflix.tv.data.repository.sync.SyncProvider.SIMKL in syncProviderStore.writeProviders()) {
             try {
                 simklSyncService.markUnwatched(com.arflix.tv.data.model.MediaType.MOVIE, tmdbId)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
+        }
+        if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in syncProviderStore.writeProviders()) {
+            try {
+                weTrakrProvider.markWatched(com.arflix.tv.data.model.MediaType.MOVIE, tmdbId, watched = false)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
             }
@@ -811,6 +710,14 @@ class TraktRepository @Inject constructor(
         if (com.arflix.tv.data.repository.sync.SyncProvider.SIMKL in syncProviderStore.writeProviders()) {
             try {
                 simklSyncService.markWatched(com.arflix.tv.data.model.MediaType.TV, showTmdbId, season, episode, isAnime = isAnime)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                AppLogger.e("TraktRepository", "Failed to mirror episode watched state to Simkl", e)
+            }
+        }
+        if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in syncProviderStore.writeProviders()) {
+            try {
+                weTrakrProvider.markWatched(com.arflix.tv.data.model.MediaType.TV, showTmdbId, season, episode)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 AppLogger.e("TraktRepository", "Failed to mirror episode watched state to Simkl", e)
@@ -863,6 +770,13 @@ class TraktRepository @Inject constructor(
                     if (e is kotlinx.coroutines.CancellationException) throw e
                 }
             }
+        if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in syncProviderStore.writeProviders()) {
+                try {
+                    weTrakrProvider.markWatched(com.arflix.tv.data.model.MediaType.TV, showTmdbId, season, episode, watched = false)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                }
+            }
         }
     }
 
@@ -888,7 +802,8 @@ class TraktRepository @Inject constructor(
                 val code = e.code()
                 val shouldRetry = code == 429 || code >= 500 || code == 401
                 if (code == 401) {
-                    refreshTokenIfNeeded()
+                    val rejected = e.response()?.raw()?.request?.header("Authorization")?.removePrefix("Bearer ")
+                    refreshTokenIfNeeded(force = true, rejectedAccessToken = rejected)
                 }
                 if (!shouldRetry || attempt == maxAttempts) {
                     return null
@@ -1635,9 +1550,13 @@ class TraktRepository @Inject constructor(
         )
 
     suspend fun isAlternativeRemoteActive(): Boolean =
-        isMdbListActive() || isSimklActive()
+        isMdbListActive() || isSimklActive() || (weTrakrProvider.isConnected() &&
+            com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in syncProviderStore.readProviders(com.arflix.tv.data.repository.sync.TrackingFeature.CONTINUE_WATCHING))
 
-    suspend fun getContinueWatching(forceRefresh: Boolean = false): List<ContinueWatchingItem> = coroutineScope {
+    suspend fun getContinueWatching(
+        forceRefresh: Boolean = false,
+        requireFreshTrakt: Boolean = false
+    ): List<ContinueWatchingItem> = coroutineScope {
         ensureProfileCacheScope()
         val requestProfileId = currentProfileId()
 
@@ -1653,6 +1572,7 @@ class TraktRepository @Inject constructor(
         // (rate limit/offline), keep the Trakt cache instead of falling back to
         // local non-Trakt progress and polluting the row.
         if (auth == null) {
+            if (requireFreshTrakt) throw traktSession.unavailable(requestProfileId)
             if (hasStoredTraktTokenForCurrentProfile()) {
                 val cached = loadContinueWatchingCache()
                 AppLogger.breadcrumb(
@@ -1674,7 +1594,7 @@ class TraktRepository @Inject constructor(
         // Return cached data if still fresh (unless forced)
         val now = System.currentTimeMillis()
         if (
-            !forceRefresh &&
+            !forceRefresh && !requireFreshTrakt &&
             cachedContinueWatchingProfileId == requestProfileId &&
             cachedContinueWatching.isNotEmpty() &&
             now - lastContinueWatchingFetch < CONTINUE_WATCHING_CACHE_MS
@@ -1686,6 +1606,7 @@ class TraktRepository @Inject constructor(
         // confirming it. The window doubles per consecutive refusal, so this
         // clears itself without ever hammering.
         if (isTraktCircuitOpen()) {
+            check(!requireFreshTrakt) { "Trakt Continue Watching is cooling down; try again later" }
             val held = if (
                 cachedContinueWatchingProfileId == requestProfileId && cachedContinueWatching.isNotEmpty()
             ) {
@@ -1702,7 +1623,7 @@ class TraktRepository @Inject constructor(
         // Prevent duplicate fetches
         if (continueWatchingFetching && continueWatchingFetchingProfileId == requestProfileId) {
             while (continueWatchingFetching && continueWatchingFetchingProfileId == requestProfileId) { delay(50) }
-            if (cachedContinueWatchingProfileId == requestProfileId && cachedContinueWatching.isNotEmpty()) {
+            if (!requireFreshTrakt && cachedContinueWatchingProfileId == requestProfileId && cachedContinueWatching.isNotEmpty()) {
                 return@coroutineScope cachedContinueWatching
             }
         }
@@ -1724,13 +1645,11 @@ class TraktRepository @Inject constructor(
             // the breaker instead of the next one retrying straight into it.
             val rateLimited = java.util.concurrent.atomic.AtomicBoolean(false)
 
-            // Helper: detect HTTP 401/403 from Retrofit exceptions
+            // A forbidden request (403) does not prove the token was revoked.
             fun isAuthError(e: Exception): Boolean {
                 val httpEx = e as? retrofit2.HttpException ?: return false
-                return httpEx.code() in setOf(401, 403)
+                return httpEx.code() == 401
             }
-            // Re-acquire auth if the original token was stale
-            val authHolder = arrayOf(auth)
             suspend fun <T> traktCallWithAuthRetry(
                 label: String,
                 block: suspend (String) -> T
@@ -1739,7 +1658,7 @@ class TraktRepository @Inject constructor(
                 repeat(3) { attempt ->
                     if (isTraktCircuitOpen()) throw TraktCooldownException()
                     try {
-                        return block(authHolder[0])
+                        return traktSession.authorized(block)
                     } catch (e: Exception) {
                         if (e is kotlinx.coroutines.CancellationException) throw e
 
@@ -1753,20 +1672,12 @@ class TraktRepository @Inject constructor(
                         }
                         val retryable = isAuthError(e) || httpEx?.code() in 500..599
                         if (attempt < 2 && retryable) {
-                            // Token may be expired – force-refresh and retry
-                            if (isAuthError(e)) {
-                                val refreshed = refreshTokenIfNeeded()
-                                if (refreshed != null) authHolder[0] = "Bearer $refreshed"
-                            }
                             val retryAfterMs = httpEx?.response()?.headers()?.get("Retry-After")
                                 ?.toLongOrNull()
                                 ?.times(1000L)
                             delay(retryAfterMs?.coerceIn(200L, 5_000L) ?: (400L * (attempt + 1)))
                         }
                     }
-                }
-                if (lastErr != null && isAuthError(lastErr!!)) {
-                    invalidateStoredTraktSession()
                 }
                 throw lastErr ?: IllegalStateException("$label failed")
             }
@@ -2107,6 +2018,9 @@ class TraktRepository @Inject constructor(
             }
 
             val snapshotComplete = playbackFetched && watchedProgressFetched && !snapshotIncomplete.get()
+            check(!requireFreshTrakt || snapshotComplete) {
+                "Trakt Continue Watching could not be fully refreshed; saved items have been kept"
+            }
             // Publish successful updates even if an unrelated show failed. Preserve
             // saved rows only for the failed reads, never a completed/hidden show or
             // an old pause that a successful playback read has already removed.
@@ -4269,37 +4183,42 @@ class TraktRepository @Inject constructor(
     }
 
     suspend fun addToWatchlist(mediaType: MediaType, tmdbId: Int): Boolean {
-        val auth = getAuthHeader() ?: return false
         return try {
             val body = if (mediaType == MediaType.MOVIE) {
                 TraktWatchlistBody(movies = listOf(TraktMovieId(TraktIds(tmdb = tmdbId))))
             } else {
                 TraktWatchlistBody(shows = listOf(TraktShowId(TraktIds(tmdb = tmdbId))))
             }
-            traktApi.addToWatchlist(auth, clientId, "2", body)
+            traktSession.authorized { auth -> traktApi.addToWatchlist(auth, clientId, "2", body) }
             true
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-
+            AppLogger.w("TraktRepository", "Watchlist add failed: ${watchlistFailureKind(e)}")
             false
         }
     }
 
     suspend fun removeFromWatchlist(mediaType: MediaType, tmdbId: Int): Boolean {
-        val auth = getAuthHeader() ?: return false
         return try {
             val body = if (mediaType == MediaType.MOVIE) {
                 TraktWatchlistBody(movies = listOf(TraktMovieId(TraktIds(tmdb = tmdbId))))
             } else {
                 TraktWatchlistBody(shows = listOf(TraktShowId(TraktIds(tmdb = tmdbId))))
             }
-            traktApi.removeFromWatchlist(auth, clientId, "2", body)
+            traktSession.authorized { auth -> traktApi.removeFromWatchlist(auth, clientId, "2", body) }
             true
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-
+            AppLogger.w("TraktRepository", "Watchlist remove failed: ${watchlistFailureKind(e)}")
             false
         }
+    }
+
+    // Diagnostic categories only: never log tokens, request URLs or response bodies.
+    private fun watchlistFailureKind(error: Exception): String = when (error) {
+        is HttpException -> "http_${error.code()}"
+        is TraktAuthUnavailable -> if (error.reconnectRequired) "reconnect_required" else "auth_unavailable"
+        else -> error.javaClass.simpleName
     }
 
     suspend fun checkInWatchlist(mediaType: MediaType, tmdbId: Int): Boolean {
@@ -4754,6 +4673,9 @@ class TraktRepository @Inject constructor(
         if (com.arflix.tv.data.repository.sync.SyncProvider.SIMKL in providers) {
             synced = simklSyncService.markSeasonWatched(showTmdbId, seasonNumber, episodes, watched = true, isAnime = isAnime) || synced
         }
+        if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in providers) {
+            for (episode in episodes) synced = weTrakrProvider.markWatched(MediaType.TV, showTmdbId, seasonNumber, episode, watched = true) || synced
+        }
 
         loadWatchedCacheBeforeWrite()
         episodes.forEach { ep ->
@@ -4861,6 +4783,9 @@ class TraktRepository @Inject constructor(
 
         if (com.arflix.tv.data.repository.sync.SyncProvider.SIMKL in providers) {
             synced = simklSyncService.markSeasonWatched(showTmdbId, seasonNumber, episodes, watched = false, isAnime = isAnime) || synced
+        }
+        if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in providers) {
+            for (episode in episodes) synced = weTrakrProvider.markWatched(MediaType.TV, showTmdbId, seasonNumber, episode, watched = false) || synced
         }
 
         loadWatchedCacheBeforeWrite()
@@ -5037,6 +4962,7 @@ class TraktRepository @Inject constructor(
                 if (useMdbList) addHistory({ mdbListRepository.getWatchedMovies() }, { mdbListRepository.getWatchedEpisodes() })
                 val useSimkl = com.arflix.tv.data.repository.sync.SyncProvider.SIMKL in readProviders
                 if (useSimkl) addHistory({ simklSyncService.getWatchedMovies() }, { simklSyncService.getWatchedEpisodes() })
+                if (com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR in readProviders) addHistory({ weTrakrProvider.getWatchedMovies() }, { weTrakrProvider.getWatchedEpisodes() })
 
                 // Always read Trakt when it is connected. Without a Supabase account the sync service
                 // only returns what the last full sync kept in memory, and that expands just the 15
@@ -5252,7 +5178,9 @@ data class ContinueWatchingItem(
                 id = 0,
                 seasonNumber = season,
                 episodeNumber = episode,
-                name = episodeTitle ?: "Episode $episode"
+                name = episodeTitle ?: "Episode $episode",
+                displaySeason = displaySeason,
+                displayEpisode = displayEpisode
             )
         } else null
 
@@ -5264,8 +5192,8 @@ data class ContinueWatchingItem(
                 (effectiveDurationSeconds * (100L - progress) / 100L).coerceAtLeast(0L)
             else -> 0L
         }
-        val timeRemainingLabel = if (showPlaybackProgress) {
-            formatTimeRemainingCompact(timeRemainingSeconds)
+        val timeRemainingMinutes = if (showPlaybackProgress) {
+            wholeMinutesRemaining(timeRemainingSeconds)
         } else {
             null
         }
@@ -5295,7 +5223,7 @@ data class ContinueWatchingItem(
             nextEpisode = nextEp,
             totalEpisodes = totalEpisodeCount,
             watchedEpisodes = watchedEpisodeCount,
-            timeRemainingLabel = timeRemainingLabel,
+            timeRemainingMinutes = timeRemainingMinutes,
             showPlaybackProgress = showPlaybackProgress,
             addonNativeId = addonNativeId,
             addonNativeAddonId = addonNativeAddonId,
@@ -5369,20 +5297,11 @@ private fun formatResumeClock(totalSeconds: Long): String {
         "%d:%02d".format(minutes, seconds)
     }
 }
-/**
- * Format seconds to a compact human-readable time remaining string.
- * e.g., "45min left", "1hr 15min left", "2hr left"
- */
-private fun formatTimeRemainingCompact(totalSeconds: Long): String? {
+/** Whole minutes left for the Continue Watching badge; null under a minute. */
+private fun wholeMinutesRemaining(totalSeconds: Long): Int? {
     val safe = totalSeconds.coerceAtLeast(0L)
     if (safe < 60) return null // Less than a minute
-    val hours = safe / 3600
-    val minutes = (safe % 3600) / 60
-    return when {
-        hours > 0 && minutes > 0 -> "${hours}hr ${minutes}min left"
-        hours > 0 -> "${hours}hr left"
-        else -> "${minutes}min left"
-    }
+    return (safe / 60).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 }
 
 private fun parseRuntimeLabelSeconds(label: String): Long {

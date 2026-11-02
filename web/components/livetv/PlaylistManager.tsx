@@ -1,5 +1,6 @@
 "use client";
 import { isManagedId } from "@/lib/managedConfiguration";
+import { MAX_IPTV_PLAYLISTS } from "@/lib/iptvPlaylistIdentity";
 import { useTranslation } from "@/lib/i18n";
 import { AlertTriangle, CheckCircle2, Eye, Pencil, Plus, RefreshCw, Settings, Trash2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -180,6 +181,10 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
       if (!entry) return;
       if (typeof entry === "string") { setFormError(problemText(entry)); return; }
       const existing = playlists.find((item) => item.id === entry.id);
+      if (!existing && playlists.length >= MAX_IPTV_PLAYLISTS) {
+        setFormError(translateUi("Maximum of 10 IPTV playlists reached"));
+        return;
+      }
       onSavePlaylist(existing ? { ...existing, ...entry, enabled: existing.enabled } : entry);
     }
     testRun.current++;

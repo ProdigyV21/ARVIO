@@ -63,7 +63,10 @@ export function PlayerOverlay() {
     const info = playlist ? xtreamInfoFromUrl(playlist.m3uUrl) : null;
     try { return info ? new URL(info.baseUrl).origin : null; } catch { return null; }
   }, [activeChannel?.id, settings.iptvPlaylists]);
-  const enrichment = streams.find((candidate) => activeStream && (isSameStream(candidate, activeStream) || (candidate.url && candidate.url === activeStream.url)));
+  // The playing copy may carry a prepared URL (relay, resolved debrid link):
+  // match the list row by its original URL too, so later-arriving subtitles reach it.
+  const enrichment = streams.find((candidate) => activeStream && (isSameStream(candidate, activeStream)
+    || (candidate.url && (candidate.url === activeStream.url || candidate.url === activeStream.originalUrl))));
   const enrichedStream = useMemo(() => activeStream ? mergeSubtitleTracks(activeStream, enrichment) : null, [activeStream, enrichment]);
   // The one-time iOS "Add to Home Screen" tip lives here because this
   // component is always mounted; it waits until the player is closed.

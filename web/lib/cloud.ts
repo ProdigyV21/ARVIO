@@ -1,3 +1,4 @@
+import { repairIptvPlaylistIds } from "./iptvPlaylistIdentity";
 import type { AuthClient } from "./auth";
 import { mergeAddonChanges, recordAddonChanges, type AddonChanges } from "./addonChanges";
 import { mergeWatchlistChanges, mergeWatchlistItems, watchlistChangesStorageKey, watchlistKey, type CloudWatchlistItem as AndroidWatchlistItem, type WatchlistChanges } from "./watchlistChanges";
@@ -269,11 +270,11 @@ export function normalizeChannelOrder(value: unknown): Record<string, string[]> 
 
 function normalizeIptvPlaylists(value: unknown, fallbackPrefix: string): IptvPlaylistEntry[] {
   const values = arrayValue(value);
-  return values.length
+  return repairIptvPlaylistIds(values.length
     ? values
         .map((playlist, index) => normalizeIptvPlaylist(playlist, `${fallbackPrefix}-${index + 1}`))
         .filter((playlist): playlist is IptvPlaylistEntry => Boolean(playlist))
-    : [];
+    : []);
 }
 
 function dedupeIptvPlaylists(playlists: IptvPlaylistEntry[]) {
@@ -1340,7 +1341,7 @@ export async function pullCloudProfiles(auth: AuthClient): Promise<CloudProfiles
   };
 }
 
-export type CloudTrackingProvider = "NONE" | "TRAKT" | "MDBLIST" | "SIMKL";
+export type CloudTrackingProvider = "NONE" | "TRAKT" | "MDBLIST" | "SIMKL" | "WETRAKR";
 export type CloudTrackingDomain = "routing" | "trakt" | "simkl" | "mdblist";
 
 export interface CloudTrackingSelection {
@@ -1362,7 +1363,7 @@ export interface CloudTrackingSnapshot extends CloudTrackingSelection {
 
 function normalizeCloudTrackingProvider(value: unknown): CloudTrackingProvider | null {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return normalized === "NONE" || normalized === "TRAKT" || normalized === "MDBLIST" || normalized === "SIMKL"
+  return normalized === "NONE" || normalized === "TRAKT" || normalized === "MDBLIST" || normalized === "SIMKL" || normalized === "WETRAKR"
     ? normalized
     : null;
 }
@@ -1370,7 +1371,7 @@ function normalizeCloudTrackingProvider(value: unknown): CloudTrackingProvider |
 function normalizeTrackingReadMode(value: unknown, fallback: TrackingReadMode): TrackingReadMode {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   return normalized === "auto" || normalized === "trakt" || normalized === "simkl" ||
-    normalized === "both" || normalized === "mdblist" ? normalized : fallback;
+    normalized === "both" || normalized === "wetrakr" || normalized === "mdblist" ? normalized : fallback;
 }
 
 function readCloudTraktToken(root: RawPayload, profileId: string): TraktToken | null {
@@ -1460,7 +1461,7 @@ export async function pullCloudTrackingSelection(
         ? "MDBLIST"
         : "NONE";
   const requestedProvider = explicitProvider ?? inferredProvider;
-  const provider: CloudTrackingProvider = requestedProvider === "TRAKT" && traktToken
+  const provider: CloudTrackingProvider = requestedProvider === "WETRAKR" ? "WETRAKR" : requestedProvider === "TRAKT" && traktToken
     ? "TRAKT"
     : requestedProvider === "SIMKL" && simklToken
       ? "SIMKL"
@@ -1468,7 +1469,7 @@ export async function pullCloudTrackingSelection(
         ? "MDBLIST"
         : "NONE";
   const storedProviderCount = Number(Boolean(traktToken)) + Number(Boolean(simklToken)) + Number(Boolean(hasMdbList));
-  const defaultMode: TrackingReadMode = provider === "TRAKT"
+  const defaultMode: TrackingReadMode = provider === "WETRAKR" ? "wetrakr" : provider === "TRAKT"
       ? "trakt"
       : provider === "SIMKL"
         ? "simkl"
@@ -1486,6 +1487,7 @@ export async function pullCloudTrackingSelection(
     continueWatchingReadMode: normalizeTrackingReadMode(selection.continueWatchingReadMode, defaultMode),
     watchedReadMode: normalizeTrackingReadMode(selection.watchedReadMode, defaultMode),
     writeToTrakt: typeof selection.writeToTrakt === "boolean" ? selection.writeToTrakt : Boolean(traktToken),
+    writeToWeTrakr: typeof selection.writeToWeTrakr === "boolean" ? selection.writeToWeTrakr : undefined,
     writeToSimkl: typeof selection.writeToSimkl === "boolean" ? selection.writeToSimkl : Boolean(simklToken)
   };
   const hasCloudState = explicitProvider !== null || storedProviderCount > 0;
@@ -1590,6 +1592,7 @@ export async function saveCloudTrackingSelection(
         watchedReadMode: preferences.watchedReadMode.toUpperCase(),
         writeToTrakt: preferences.writeToTrakt,
         writeToSimkl: preferences.writeToSimkl,
+        writeToWeTrakr: preferences.writeToWeTrakr,
         updatedAt
       });
     }

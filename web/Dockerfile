@@ -76,7 +76,7 @@ COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/LICENSE ./licenses/ARVIO-LICENSE
 COPY --from=builder --chown=node:node /app/.next/third-party-notices ./licenses/third-party
-RUN mkdir -p /app/.data/simkl-sessions && chown -R node:node /app/.data && chmod 700 /app/.data
+RUN mkdir -p /app/.data/simkl-sessions /app/.data/wetrakr-sessions && chown -R node:node /app/.data && chmod 700 /app/.data
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \

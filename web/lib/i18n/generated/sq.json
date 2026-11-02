@@ -1555,5 +1555,12 @@
   "{value0}% · watched": "{value0}% · e parë",
   "· Guide match": "· Ndeshje udhërrëfyese",
   "· Possible broadcast": "· Transmetim i mundshëm",
-  "· {value0}d archive": "· {value0}d arkiv"
+  "· {value0}d archive": "· {value0}d arkiv",
+  "View on Trakt": "Shiko në Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Audioja e këtij skedari nuk mund të luhet drejtpërdrejt në këtë shfletues. Po konvertohet audioja…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Audioja e këtij skedari nuk mund të luhet në këtë shfletues. Po kërkohet konvertimi nga ofruesi…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Audioja e këtij burimi nuk mund të luhet në këtë shfletues. Zgjidhni një burim tjetër ose përdorni një luajtës të jashtëm.",
+  "Converting the audio for your browser…": "Po konvertohet audioja për shfletuesin tuaj…",
+  "Picking the best source…": "Po zgjidhet burimi më i mirë…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi tarifon në dollarë amerikanë; banka juaj e konverton shumën automatikisht."
 }

@@ -11,6 +11,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -35,6 +37,72 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PlayerSeekPreviewVisualDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+
+    @Test fun watchedFramesProvideRewindPreviewsWithoutAnotherDecode() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val isTv = context.packageManager.hasSystemFeature("android.software.leanback")
+        val file = File(context.cacheDir, "rendered-preview-three-scenes.mp4")
+        instrumentation.context.assets.open("seek_preview_device_test.mp4").use { input -> file.outputStream().use(input::copyTo) }
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                CompositionLocalProvider(LocalDeviceType provides if (isTv) DeviceType.TV else DeviceType.PHONE) {
+                    ArflixTvTheme {
+                        PlayerScreen(mediaType = MediaType.MOVIE, mediaId = 0,
+                            streamUrl = Uri.fromFile(file).toString(), preferredSourceName = "Rendered preview verification",
+                            startPositionMs = 8_000L)
+                    }
+                }
+            }
+        }
+        var player: Player? = null
+        compose.waitUntil(50_000) {
+            compose.activityRule.scenario.onActivity { player = findPlayer(it.window.decorView) }
+            var reached = false
+            instrumentation.runOnMainSync { reached = player?.let { it.isPlaying && it.currentPosition >= 28_000L } == true }
+            reached
+        }
+        var rewindTarget = 0L
+        instrumentation.runOnMainSync { player!!.pause(); rewindTarget = player!!.currentPosition - 20_000L }
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_MEDIA_PAUSE)
+        advanceUi()
+        if (isTv) {
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            advanceUi()
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT)
+            advanceUi()
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT)
+            advanceUi()
+            // This is cached renderer output; it must appear inside the two-second idle window.
+            org.junit.Assert.assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasTestTag("seek_preview_ready"))
+                .fetchSemanticsNodes().isNotEmpty())
+            saveScreenshot("tv-rendered-rewind-filmstrip")
+            // Screenshot capture consumes part of the idle timeout. The separate interaction
+            // test measures the full delay directly from the key press.
+            compose.waitUntil(6_000) {
+                var committed = false
+                instrumentation.runOnMainSync {
+                    committed = player!!.currentPosition in (rewindTarget - 500)..(rewindTarget + 2_500) && !player!!.playWhenReady
+                }
+                committed
+            }
+        } else {
+            // Playback has run long enough to auto-hide controls. Reveal them as a user would.
+            compose.onRoot().performTouchInput { click(center) }
+            // The player distinguishes single from double taps over 300ms.
+            compose.waitUntil(3_000) {
+                compose.onAllNodes(androidx.compose.ui.test.hasTestTag("mobile_player_scrubber"))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            val scrubber = compose.onNodeWithTag("mobile_player_scrubber")
+            scrubber.performTouchInput { down(Offset(width * 0.4f, height / 2f)) }
+            try {
+                advanceUi()
+                compose.onNodeWithTag("seek_preview_ready").assertExists()
+                saveScreenshot("phone-rendered-rewind-preview")
+            } finally { scrubber.performTouchInput { cancel() } }
+        }
+    }
 
     @Test fun actualPlayerPreviewsOnTouchAndAutomaticallyCommitsRemoteSeeking() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

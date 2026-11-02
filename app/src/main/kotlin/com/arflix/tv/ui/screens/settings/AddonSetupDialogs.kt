@@ -109,7 +109,7 @@ internal fun AddonLogo(logoUrl: String?, size: Dp, fallbackTint: Color, modifier
 internal fun AddonSetupRequiredChip() {
     Box(
         modifier = Modifier
-            .background(AddonSetupRequiredColor, RoundedCornerShape(6.dp))
+            .background(AddonSetupRequiredColor, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
@@ -179,7 +179,7 @@ internal fun AddonInstallDialog(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -237,7 +237,7 @@ internal fun AddonConfigureQrDialog(addonName: String, url: String, onDismiss: (
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .size(160.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color.White)
                 .padding(10.dp),
             contentAlignment = Alignment.Center
@@ -334,12 +334,12 @@ internal fun AddonDialogFrame(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(if (filled) Color.White else Color.Black.copy(alpha = 0.82f))
                                     .border(
                                         width = 1.dp,
                                         color = if (filled) Color.White else Color.White.copy(alpha = 0.14f),
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(12.dp)
                                     )
                                     .clickable { option.onClick() }
                                     .padding(vertical = 12.dp),

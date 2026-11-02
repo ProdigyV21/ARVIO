@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · изгледано",
   "· Guide match": "· Насочващо съвпадение",
   "· Possible broadcast": "· Възможно излъчване",
-  "· {value0}d archive": "· {value0}d архив"
+  "· {value0}d archive": "· {value0}d архив",
+  "View on Trakt": "Вижте на Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Звукът на този файл не може да се възпроизведе директно в този браузър. Преобразуваме звука…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Звукът на този файл не може да се възпроизведе в този браузър. Иска се преобразуване от доставчика…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Звукът на този източник не може да се възпроизведе в този браузър. Изберете друг източник или използвайте външен плейър.",
+  "Converting the audio for your browser…": "Преобразуваме звука за браузъра ви…",
+  "Picking the best source…": "Избираме най-добрия източник…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi таксува в щатски долари; вашата банка превалутира сумата автоматично."
 }

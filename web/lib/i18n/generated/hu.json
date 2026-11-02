@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · megnézve",
   "· Guide match": "· Útmutató mérkőzés",
   "· Possible broadcast": "· Lehetséges adás",
-  "· {value0}d archive": "· {value0}d archívum"
+  "· {value0}d archive": "· {value0}d archívum",
+  "View on Trakt": "Megtekintés itt: Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "A fájl hangja nem játszható le közvetlenül ebben a böngészőben. A hang átalakítása…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "A fájl hangja nem játszható le ebben a böngészőben. Szolgáltatói átalakítás kérése…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "A forrás hangja nem játszható le ebben a böngészőben. Válasszon másik forrást, vagy használjon külső lejátszót.",
+  "Converting the audio for your browser…": "A hang átalakítása a böngészőhöz…",
+  "Picking the best source…": "A legjobb forrás kiválasztása…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "A Ko-fi amerikai dollárban terhel; a bankja automatikusan átváltja az összeget."
 }

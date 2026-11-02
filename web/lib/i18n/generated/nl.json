@@ -1508,5 +1508,12 @@
   "{value0}% · watched": "{value0}% · gekeken",
   "· Guide match": "· Gidsmatch",
   "· Possible broadcast": "· Mogelijke uitzending",
-  "· {value0}d archive": "· {value0}d archief"
+  "· {value0}d archive": "· {value0}d archief",
+  "View on Trakt": "Bekijk op Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "De audio van dit bestand kan niet rechtstreeks in deze browser worden afgespeeld. Audio omzetten…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "De audio van dit bestand kan niet in deze browser worden afgespeeld. Providerconversie aanvragen…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "De audio van deze bron kan niet in deze browser worden afgespeeld. Kies een andere bron of gebruik een externe speler.",
+  "Converting the audio for your browser…": "Audio omzetten voor je browser…",
+  "Picking the best source…": "Beste bron kiezen…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi rekent af in Amerikaanse dollars; je bank rekent het bedrag automatisch om."
 }

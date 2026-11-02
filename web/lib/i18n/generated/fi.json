@@ -1554,5 +1554,12 @@
   "{value0}% · watched": "{value0} % · katsottu",
   "· Guide match": "· Opasottelu",
   "· Possible broadcast": "· Mahdollinen lähetys",
-  "· {value0}d archive": "· {value0}d arkisto"
+  "· {value0}d archive": "· {value0}d arkisto",
+  "View on Trakt": "Näytä Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Tämän tiedoston ääntä ei voi toistaa suoraan tässä selaimessa. Muunnetaan ääntä…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Tämän tiedoston ääntä ei voi toistaa tässä selaimessa. Pyydetään muuntamista palveluntarjoajalta…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Tämän lähteen ääntä ei voi toistaa tässä selaimessa. Valitse toinen lähde tai käytä ulkoista soitinta.",
+  "Converting the audio for your browser…": "Muunnetaan ääntä selaimellesi…",
+  "Picking the best source…": "Valitaan paras lähde…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi veloittaa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti."
 }

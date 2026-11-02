@@ -1,4 +1,5 @@
 "use client";
+import { MAX_IPTV_PLAYLISTS } from "@/lib/iptvPlaylistIdentity";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "@/lib/i18n";
@@ -40,6 +41,7 @@ export function LiveTvSection() {
   const channelCount = groupsLoaded ? (iptvSnapshot.allChannels ?? iptvSnapshot.channels ?? []).length : 0;
 
   const addPlaylist = () => {
+    if (playlists.length >= MAX_IPTV_PLAYLISTS) { setToast("Maximum of 10 IPTV playlists reached"); return; }
     const trimmedM3u = m3uUrl.trim();
     const trimmedEpg = epgUrl.trim();
     if (!trimmedM3u) { setToast("Enter an M3U playlist URL first."); return; }

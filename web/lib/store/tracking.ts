@@ -1,3 +1,4 @@
+import { weTrakrClient } from "../wetrakr";
 // App store (lib/store.tsx): Trakt, Simkl and MDBList: connect and disconnect, read routing, lists and libraries.
 import { useCallback } from "react";
 import { saveCloudTrackingSelection } from "../cloud";
@@ -35,6 +36,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     const upgradeMode = (current: TrackingPreferences["watchlistReadMode"]) =>
       current === "auto" ? "trakt" as const : current;
     const nextPreferences: TrackingPreferences = {
+      ...previousPreferences,
       watchlistReadMode: upgradeMode(previousPreferences.watchlistReadMode),
       continueWatchingReadMode: upgradeMode(previousPreferences.continueWatchingReadMode),
       watchedReadMode: upgradeMode(previousPreferences.watchedReadMode),
@@ -71,6 +73,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     const replaceTrakt = (mode: typeof current.watchlistReadMode) =>
       mode === "trakt" || mode === "both" ? fallback : mode;
     const nextPreferences: TrackingPreferences = {
+      ...current,
       watchlistReadMode: replaceTrakt(current.watchlistReadMode),
       continueWatchingReadMode: replaceTrakt(current.continueWatchingReadMode),
       watchedReadMode: replaceTrakt(current.watchedReadMode),
@@ -149,6 +152,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
           : "auto" as const;
     const replaceMdbList = (mode: TrackingPreferences["watchlistReadMode"]) => mode === "mdblist" ? fallback : mode;
     const nextPreferences: TrackingPreferences = {
+      ...current,
       watchlistReadMode: replaceMdbList(current.watchlistReadMode),
       continueWatchingReadMode: replaceMdbList(current.continueWatchingReadMode),
       watchedReadMode: replaceMdbList(current.watchedReadMode),
@@ -200,6 +204,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     const upgradeMode = (current: TrackingPreferences["watchlistReadMode"]) =>
       current === "auto" ? mode : current;
     const nextPreferences: TrackingPreferences = {
+      ...previousPreferences,
       watchlistReadMode: upgradeMode(previousPreferences.watchlistReadMode),
       continueWatchingReadMode: upgradeMode(previousPreferences.continueWatchingReadMode),
       watchedReadMode: upgradeMode(previousPreferences.watchedReadMode),
@@ -238,6 +243,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     const replaceSimkl = (mode: typeof current.watchlistReadMode) =>
       mode === "simkl" || mode === "both" ? fallback : mode;
     const nextPreferences: TrackingPreferences = {
+      ...current,
       watchlistReadMode: replaceSimkl(current.watchlistReadMode),
       continueWatchingReadMode: replaceSimkl(current.continueWatchingReadMode),
       watchedReadMode: replaceSimkl(current.watchedReadMode),
@@ -279,7 +285,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
           ? "SIMKL"
           : mdblistClient.isConnected
             ? "MDBLIST"
-            : "NONE",
+            : weTrakrClient.isConnected ? "WETRAKR" : "NONE",
       traktToken: traktClient.token,
       mdbListApiKey: mdblistClient.key,
       mdbListAccessToken: mdblistClient.token?.accessToken ?? null,
@@ -344,7 +350,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     return fetchTraktListItems(source, cacheKey);
   }, [fetchTraktListItems]);
 
-  const loadTrackerLibrary = useCallback(async (provider: "trakt" | "simkl", source: string): Promise<MediaItem[]> => {
+  const loadTrackerLibrary = useCallback(async (provider: "trakt" | "simkl" | "wetrakr", source: string): Promise<MediaItem[]> => {
     if (provider === "trakt") {
       if (!traktClient.isConnected) throw new Error("Connect Trakt in Settings.");
       if (source === "watched") {
@@ -352,6 +358,10 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
         return hydrateTraktItems(dedupeMedia([...(movies as unknown[]), ...(shows as unknown[])].map(traktItemToMedia)));
       }
       return fetchTraktListItems(source, `arvio.web.traktlist.v2:${authClient.session?.userId ?? "local"}:${traktClient.currentProfileId}:${source}`);
+    }
+    if (provider === "wetrakr") {
+      if (!weTrakrClient.isConnected) throw new Error("Connect WeTrakr in Settings.");
+      return hydrateTraktItems(dedupeMedia((await weTrakrClient.library(source)).map(traktItemToMedia)));
     }
     if (!simklClient.isConnected) throw new Error("Connect Simkl in Settings.");
     if (!["plantowatch", "watching", "completed", "hold", "dropped"].includes(source)) throw new Error("Unknown Simkl library");

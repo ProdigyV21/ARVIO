@@ -1555,5 +1555,12 @@
   "{value0}% · watched": "{value0}% · pogledano",
   "· Guide match": "· Uparivanje vodiča",
   "· Possible broadcast": "· Moguće emitiranje",
-  "· {value0}d archive": "· {value0}d arhiva"
+  "· {value0}d archive": "· {value0}d arhiva",
+  "View on Trakt": "Pogledaj na Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Zvuk ove datoteke ne može se reproducirati izravno u ovom pregledniku. Pretvaramo zvuk…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Zvuk ove datoteke ne može se reproducirati u ovom pregledniku. Tražimo konverziju od pružatelja…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Zvuk ovog izvora ne može se reproducirati u ovom pregledniku. Odaberite drugi izvor ili koristite vanjski player.",
+  "Converting the audio for your browser…": "Pretvaramo zvuk za vaš preglednik…",
+  "Picking the best source…": "Odabiremo najbolji izvor…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi naplaćuje u američkim dolarima; vaša banka automatski preračunava iznos."
 }

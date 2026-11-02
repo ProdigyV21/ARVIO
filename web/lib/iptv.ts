@@ -1,3 +1,4 @@
+import { repairIptvPlaylistIds } from "./iptvPlaylistIdentity";
 import { loadStalkerChannels, loadStalkerGuide } from "./stalker";
 import { proxiedUrl, textRequest } from "./http";
 import { loadStored, saveStored } from "./storage";
@@ -451,9 +452,9 @@ async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
 }
 
 export function normalizeIptvPlaylists(playlists: IptvPlaylistEntry[]) {
-  return playlists
+  return repairIptvPlaylistIds(playlists
     .map((playlist, index) => normalizeIptvPlaylist(playlist, index))
-    .filter((playlist): playlist is IptvPlaylistEntry => Boolean(playlist));
+    .filter((playlist): playlist is IptvPlaylistEntry => Boolean(playlist)));
 }
 
 export function accessibleChannels(channels: IptvChannel[], hiddenGroups: string[]) {

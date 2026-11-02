@@ -1516,5 +1516,12 @@
   "{value0}% · watched": "{value0}% · נצפה",
   "· Guide match": "· התאמה של מדריך",
   "· Possible broadcast": "· שידור אפשרי",
-  "· {value0}d archive": "· {value0}d ארכיון"
+  "· {value0}d archive": "· {value0}d ארכיון",
+  "View on Trakt": "הצג בTrakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "לא ניתן להפעיל את השמע של קובץ זה ישירות בדפדפן זה. ממיר את השמע…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "לא ניתן להפעיל את השמע של קובץ זה בדפדפן זה. מבקש המרה מהספק…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "לא ניתן להפעיל את השמע של מקור זה בדפדפן זה. בחר מקור אחר או השתמש בנגן חיצוני.",
+  "Converting the audio for your browser…": "ממיר את השמע לדפדפן שלך…",
+  "Picking the best source…": "בוחר את המקור הטוב ביותר…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi גובה תשלום בדולרים אמריקאיים; הבנק שלך ממיר את הסכום אוטומטית."
 }

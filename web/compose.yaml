@@ -13,6 +13,7 @@ services:
     init: true
     volumes:
       - simkl-sessions:/app/.data/simkl-sessions
+      - wetrakr-sessions:/app/.data/wetrakr-sessions
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -21,3 +22,4 @@ services:
 
 volumes:
   simkl-sessions:
+  wetrakr-sessions:

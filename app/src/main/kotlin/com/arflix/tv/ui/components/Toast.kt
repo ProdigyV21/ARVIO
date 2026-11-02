@@ -36,7 +36,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.arflix.tv.ui.theme.AccentGreen
+import com.arflix.tv.ui.theme.ArcticWhite
 import com.arflix.tv.ui.theme.ArflixTypography
+import com.arflix.tv.ui.theme.ErrorRed
 import kotlinx.coroutines.delay
 
 enum class ToastType {
@@ -77,19 +80,19 @@ fun Toast(
         ) {
             val (accentColor, icon, iconBgColor) = when (type) {
                 ToastType.SUCCESS -> Triple(
-                    Color(0xFF34D399),
+                    AccentGreen,
                     Icons.Default.Check,
-                    Color(0x2234D399)
+                    AccentGreen.copy(alpha = 0.13f)
                 )
                 ToastType.ERROR -> Triple(
-                    Color(0xFFF87171),
+                    ErrorRed,
                     Icons.Default.Close,
-                    Color(0x22F87171)
+                    ErrorRed.copy(alpha = 0.13f)
                 )
                 ToastType.INFO -> Triple(
-                    Color(0xFF60A5FA),
+                    ArcticWhite,
                     Icons.Default.Info,
-                    Color(0x2260A5FA)
+                    ArcticWhite.copy(alpha = 0.13f)
                 )
             }
 
@@ -98,16 +101,16 @@ fun Toast(
                     .padding(bottom = 48.dp)
                     .shadow(
                         elevation = 18.dp,
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(16.dp),
                         ambientColor = Color.Black.copy(alpha = 0.32f),
                         spotColor = Color.Black.copy(alpha = 0.32f)
                     )
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(Color(0xE61A1E28))
                     .border(
                         width = 1.dp,
                         color = accentColor.copy(alpha = 0.55f),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(16.dp)
                     )
                     .widthIn(max = 560.dp)
                     .padding(horizontal = 18.dp, vertical = 13.dp),

@@ -1,6 +1,7 @@
 // App store (lib/store.tsx): Starting playback: browser or external player, the next episode, trailers, Live TV and catch-up.
 import { resolveStalkerChannel } from "../stalker";
 import { browserAutoplayCandidates } from "../browserAutoplay";
+import { needsAudioConversion } from "../autoplayVerify";
 import { isPreferredAutoplaySource, loadAutoplayPreference, orderByPreference } from "../autoplaySelection";
 import { recordBrowserPlaybackFailure, playbackPlan } from "../streamCompatibility";
 import { useCallback } from "react";
@@ -103,7 +104,13 @@ export function usePlaybackActions(store: StoreCore & Pick<ReturnType<typeof use
         let timer: number | undefined;
         try {
           const prepared = await Promise.race([
-            prepareBrowserStream(candidate, settingsRef.current, { ...options, signal: attempt.signal }).then(result => {
+            prepareBrowserStream(...(() => {
+              // A probe already showed this file's audio would be dropped here
+              // (E-AC-3/DTS on Chromium): start in the audio-converting path.
+              const next = options.forceTranscode || candidate.convertAudio || candidate.homeServer || candidate.transcoded || !needsAudioConversion(candidate)
+                ? candidate : { ...candidate, convertAudio: true };
+              return [next, settingsRef.current, { ...options, ...(next.convertAudio ? { forceRemux: true } : {}), signal: attempt.signal }] as const;
+            })()).then(result => {
               if (attempt.signal.aborted) {
                 void reportHomeServerPlayback(result, settingsRef.current, "stop").catch(() => undefined);
                 throw new Error("Playback cancelled");

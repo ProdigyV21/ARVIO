@@ -430,10 +430,10 @@ internal fun SportsGuidePane(
                                 }
                                 .padding(2.dp)) {
                                 if (scheduleOnly) Row(Modifier.fillMaxWidth().height(36.dp)
-                                    .border(2.dp, if (focused) Color.White else LiveColors.DividerStrong, RoundedCornerShape(4.dp))
+                                    .border(2.dp, if (focused) Color.White else LiveColors.DividerStrong, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(eventTime(event), color = LiveColors.Fg, fontSize = 11.sp)
-                                } else Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).testTag("sports-event-art").clip(RoundedCornerShape(4.dp))) {
+                                } else Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).testTag("sports-event-art").clip(RoundedCornerShape(8.dp))) {
                                     if (event.id !in failedArtwork) {
                                         EventArtwork(event, Modifier.fillMaxSize()) { failedArtwork = failedArtwork + event.id }
                                     } else {
@@ -443,7 +443,7 @@ internal fun SportsGuidePane(
                                                 overflow = TextOverflow.Ellipsis, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
                                         }
                                     }
-                                    Row(Modifier.padding(6.dp).background(Color.Black.copy(alpha = .85f), RoundedCornerShape(3.dp))
+                                    Row(Modifier.padding(6.dp).background(Color.Black.copy(alpha = .85f), RoundedCornerShape(8.dp))
                                         .padding(horizontal = 5.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                                         if (event.isOnAir(now)) Box(Modifier.padding(end = 4.dp).size(7.dp).background(LiveColors.LiveRed, RoundedCornerShape(50)))
                                         Text(eventTime(event), color = Color.White, fontSize = 10.sp, lineHeight = 12.sp)
@@ -496,11 +496,11 @@ internal fun SportsGuidePane(
             runCatching { initialFocus.requestFocus() }
         }
         Column(Modifier.widthIn(max = 586.dp).fillMaxWidth().heightIn(max = configuration.screenHeightDp.dp * .82f)
-            .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(5.dp))
-            .clip(RoundedCornerShape(5.dp)).background(LiveColors.Panel).padding(18.dp)) {
+            .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp)).background(LiveColors.Panel).padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if ((event ?: selection).hasEventArtwork && (event ?: selection).id !in failedArtwork)
-                    EventArtwork(event ?: selection, Modifier.width(if (narrow) 84.dp else 132.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(3.dp)))
+                    EventArtwork(event ?: selection, Modifier.width(if (narrow) 84.dp else 132.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)))
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(listOfNotNull(event?.let(::eventTime), event?.sport?.title).joinToString("  ·  "),
                         color = LiveColors.FgDim, fontSize = 11.sp)
@@ -535,9 +535,9 @@ internal fun SportsGuidePane(
             LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = configuration.screenHeightDp.dp * .55f)) {
                 itemsIndexed(sourceChannels, key = { index, _ -> channelKeys[index] }) { index, channel ->
                     var focused by remember { mutableStateOf(false) }
-                    Row(Modifier.fillMaxWidth().heightIn(min = if (narrow) 48.dp else 40.dp).clip(RoundedCornerShape(4.dp))
+                    Row(Modifier.fillMaxWidth().heightIn(min = if (narrow) 48.dp else 40.dp).clip(RoundedCornerShape(8.dp))
                         .then(if (index == 0) Modifier.focusRequester(initialFocus) else Modifier)
-                        .border(1.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(4.dp))
+                        .border(1.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(8.dp))
                         .background(if (focused) LiveColors.FocusBg else Color.Transparent)
                         .onFocusChanged { focused = it.isFocused }
                         // Scheduled channels are browsable with a remote, but cannot play early.
@@ -730,6 +730,6 @@ private fun EventArtwork(event: SportsGuideEvent, modifier: Modifier = Modifier,
 @Composable
 private fun PickerBadge(label: String) {
     Text(label, color = LiveColors.Fg, fontSize = 10.sp, lineHeight = 12.sp, modifier = Modifier.padding(start = 8.dp)
-        .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(3.dp)).background(LiveColors.Bg)
+        .border(1.dp, LiveColors.DividerStrong, RoundedCornerShape(8.dp)).background(LiveColors.Bg)
         .padding(horizontal = 7.dp, vertical = 3.dp))
 }

@@ -27,6 +27,215 @@ import java.util.UUID
 // Sideload's Android Conscrypt JNI is unavailable on the host JVM.
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class SeekPreviewFrameProviderIntegrationTest {
+    @Test fun `healthy buffering prepares two sequential frames and follows rewind intent`() = runBlocking {
+        val targets = mutableListOf<Long>()
+        var running = 0
+        provider(decode = { _, target ->
+            assertEquals(0, running++)
+            targets += target
+            delay(5)
+            running--
+            SeekPreviewImage(bitmap(), actualPositionMs = target)
+        }).use { provider ->
+            provider.configure(source())
+            provider.noteSeekTarget(90_000)
+            provider.noteSeekTarget(60_000)
+            provider.warmPlayback(60_000, 30_000)
+            assertEquals(listOf(50_000L, 40_000L), targets)
+            provider.warmPlayback(60_000, 9_000)
+            assertEquals(3, targets.size)
+        }
+    }
+
+    @Test fun `provider images prepare a complete cached window without a video decoder`() = runBlocking {
+        val images = object : SeekPreviewImageLoader {
+            override suspend fun load(positionMs: Long) = SeekPreviewImage(bitmap(),
+                cueStartMs = positionMs, cueEndMs = positionMs + 10_000)
+        }
+        provider(images).use { provider ->
+            provider.configure(source(false))
+            provider.warmPlayback(60_000, 9_000)
+            val frames = provider.cachedWindowAt(60_000)
+            assertEquals(5, frames.size)
+            assertTrue(frames.all { it.validity == SeekPreviewValidity.CUE })
+        }
+    }
+
+    @Test fun `cancelling a preparation batch leaves foreground seeking responsive`() = runBlocking {
+        val began = CompletableDeferred<Unit>()
+        val targets = mutableListOf<Long>()
+        provider(decode = { _, target ->
+            targets += target
+            if (target == 70_000L) { began.complete(Unit); awaitCancellation() }
+            SeekPreviewImage(bitmap(), actualPositionMs = target)
+        }).use { provider ->
+            provider.configure(source())
+            val preparing = async { provider.warmPlayback(60_000, 30_000) }
+            began.await()
+            preparing.cancel()
+            preparing.join()
+            provider.cancelPending()
+            assertEquals(listOf(70_000L), targets)
+            assertNotNull(withTimeout(3_000) { provider.frameAt(90_000) })
+        }
+    }
+
+    @Test fun `rendered rewind frames remain available without secondary extraction`() = runBlocking {
+        provider().use { provider ->
+            provider.configure(source(allowExtraction = false))
+            assertEquals(SeekPreviewCapability.UNAVAILABLE, provider.status.value.capability)
+            assertNull(provider.rememberRenderedFrame(10_000, bitmap(), provider.sourceGeneration - 1))
+            assertNotNull(provider.rememberRenderedFrame(10_000, bitmap(), provider.sourceGeneration))
+            assertEquals(SeekPreviewCapability.AVAILABLE, provider.status.value.capability)
+            assertNotNull(provider.memoryFrameAt(12_000))
+            assertNull(provider.memoryFrameAt(30_000))
+            assertTrue(provider.cacheRevision.value > 0)
+        }
+    }
+
+    @Test fun `bounded warming caches one new frame per turn and notifies the strip`() = runBlocking {
+        val decoded = mutableListOf<Long>()
+        provider(decode = { _, target ->
+            decoded += target
+            SeekPreviewImage(bitmap(), actualPositionMs = target)
+        }).use { provider ->
+            provider.configure(source())
+            provider.warmNext(1_000)
+            assertEquals(listOf(10_000L), decoded)
+            assertNotNull(provider.memoryFrameAt(10_000))
+            val revision = provider.cacheRevision.value
+            // The scheduler marks itself idle just after the caller has the first frame, and a
+            // background warm skips while it's still busy. Retry until it takes the next target,
+            // so a slow CI runner doesn't turn that hand-off into a failure.
+            withTimeout(10_000) {
+                while (decoded.size < 2) {
+                    provider.warmNext(1_000)
+                    if (decoded.size < 2) delay(10)
+                }
+            }
+            assertEquals(listOf(10_000L, 60_000L), decoded)
+            assertTrue(provider.cacheRevision.value > revision)
+        }
+    }
+
+    @Test fun `nearby display sample is labelled and cannot satisfy precise request`() = runBlocking {
+        val decoded = mutableListOf<Long>()
+        provider(decode = { _, target -> decoded += target; SeekPreviewImage(bitmap(), actualPositionMs = target) }).use { provider ->
+            provider.configure(source())
+            provider.frameAt(60_000)
+            val nearby = provider.cachedDisplayFrameAt(75_000)!!
+            assertTrue(nearby.approximate)
+            assertTrue(provider.matchesDisplayTarget(nearby, 75_000))
+            assertFalse(provider.matchesTarget(nearby, 75_000))
+            assertFalse(provider.matchesDisplayTarget(nearby, 85_000))
+            assertNull(provider.cachedDisplayFrameAt(90_000))
+            assertEquals(60_000L, nearby.actualPositionMs)
+            assertNotNull(provider.frameAt(75_000))
+            assertEquals(listOf(60_000L, 75_000L), decoded)
+            provider.configure(source())
+            assertFalse(provider.matchesDisplayTarget(nearby, 75_000))
+            assertNull(provider.cachedDisplayFrameAt(75_000))
+        }
+    }
+
+    @Test fun `disk index restores nearby preview without decoder or network`() = runBlocking {
+        val source = source()
+        provider(decode = { _, at -> SeekPreviewImage(bitmap(), actualPositionMs = at) }).use { writer ->
+            writer.configure(source)
+            writer.frameAt(60_000)
+            withTimeout(3_000) {
+                while (true) {
+                    val found = provider().use { reader ->
+                        reader.configure(source)
+                        reader.cachedDisplayFrameAt(75_000)
+                    }
+                    if (found != null) {
+                        assertTrue(found.approximate)
+                        assertEquals(SeekPreviewOrigin.DISK, found.origin)
+                        break
+                    }
+                    delay(20)
+                }
+            }
+        }
+    }
+
+    @Test fun `saved strip restores all five frames without extraction`() = runBlocking {
+        val source = source()
+        provider(decode = { _, at -> SeekPreviewImage(bitmap(), actualPositionMs = at) }).use { writer ->
+            writer.configure(source)
+            for (at in listOf(40_000L, 50_000L, 60_000L, 70_000L, 80_000L)) writer.frameAt(at)
+            withTimeout(3_000) {
+                while (true) {
+                    val frames = provider(decode = { _, _ -> error("Saved frames must not decode") }).use { reader ->
+                        reader.configure(source)
+                        reader.cachedWindowAt(60_000)
+                    }
+                    if (frames.size == 5) {
+                        assertEquals(setOf(40_000L, 50_000L, 60_000L, 70_000L, 80_000L), frames.map { it.positionMs }.toSet())
+                        assertTrue(frames.all { it.origin == SeekPreviewOrigin.DISK })
+                        break
+                    }
+                    delay(20)
+                }
+            }
+        }
+    }
+
+    @Test fun `cached display never waits behind an active decoder`() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        provider(decode = { _, target ->
+            if (target == 90_000L) { started.complete(Unit); awaitCancellation() }
+            SeekPreviewImage(bitmap(), actualPositionMs = target)
+        }).use { provider ->
+            provider.configure(source())
+            provider.frameAt(60_000)
+            val pending = async { provider.frameAt(90_000) }
+            started.await()
+            try {
+                val cached = withTimeout(1_000) { provider.cachedDisplayFrameAt(75_000) }
+                assertNotNull(cached)
+                assertTrue(cached!!.approximate)
+                assertFalse(pending.isCompleted)
+            } finally { pending.cancel(); pending.join() }
+        }
+    }
+
+    @Test fun `speculative failure does not block a subsequent foreground preview`() = runBlocking {
+        var first = true
+        provider(decode = { _, target ->
+            if (first) { first = false; throw UnsupportedPreviewException("Preview network budget exceeded") }
+            SeekPreviewImage(bitmap(), actualPositionMs = target)
+        }).use { provider ->
+            provider.configure(source())
+            provider.warmNext(0)
+            assertEquals(SeekPreviewCapability.AVAILABLE, provider.status.value.capability)
+            assertNotNull(provider.frameAt(30_000))
+        }
+    }
+
+    @Test fun `verified frames remain reusable across neighboring cache buckets`() = runBlocking {
+        provider(decode = { _, _ -> SeekPreviewImage(bitmap(), actualPositionMs = 36_000) }).use { provider ->
+            provider.configure(source())
+            assertNotNull(provider.frameAt(40_000))
+            // 34 seconds rounds to bucket 30, but the real frame at 36 is valid.
+            assertNotNull(provider.memoryFrameAt(34_000))
+            assertNotNull(provider.cachedFrameAt(34_000))
+            assertNull(provider.memoryFrameAt(30_000))
+        }
+    }
+
+    @Test fun `paused strip loads both forward and backward neighbors after foreground completes`() = runBlocking {
+        val decoded = mutableListOf<Long>()
+        provider(decode = { _, target -> decoded += target; SeekPreviewImage(bitmap(), actualPositionMs = target) }).use { provider ->
+            provider.configure(source())
+            assertNotNull(provider.frameAt(60_000))
+            provider.warmWindow(60_000)
+            assertEquals(listOf(60_000L, 70_000L, 80_000L, 50_000L, 40_000L), decoded)
+            for (target in listOf(40_000L, 50_000L, 60_000L, 70_000L, 80_000L)) assertNotNull(provider.memoryFrameAt(target))
+        }
+    }
+
     private val context: Context get() = RuntimeEnvironment.getApplication()
     private fun source(allowExtraction: Boolean = true) = SeekPreviewSource(
         "https://example.test/video.mp4?version=1", emptyMap(), UUID.randomUUID().toString(), 120_000, false, false,
@@ -262,6 +471,35 @@ class SeekPreviewFrameProviderIntegrationTest {
             assertEquals(29_999L, decodeTarget)
             assertEquals(30_000L, frame.requestedPositionMs)
             assertEquals(29_000L, frame.actualPositionMs)
+        }
+    }
+
+    @Test
+    fun `cache reads do not queue behind writer compression or pruning`() {
+        val directory = File(context.cacheDir, "provider-read-lock-${UUID.randomUUID()}")
+        val cache = SeekPreviewDiskCache(directory, 1_000_000)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val locked = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        try {
+            cache.write("ready", CachedPreview(bitmap(), PreviewMetadata("source", 10_000, 10_000, null, null,
+                SeekPreviewOrigin.DECODER, SeekPreviewValidity.TIMESTAMP)))
+            val writer = pool.submit {
+                synchronized(cache) { locked.countDown(); release.await() }
+            }
+            assertTrue(locked.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            // The writer holds its monitor until we release it. Neither a hit nor
+            // a miss may wait for that unrelated compression/pruning operation.
+            pool.submit {
+                assertNull(cache.read("missing", "source"))
+                assertEquals(10_000L, cache.read("ready", "source")!!.metadata.actualMs)
+            }.get(2, java.util.concurrent.TimeUnit.SECONDS)
+            release.countDown()
+            writer.get(2, java.util.concurrent.TimeUnit.SECONDS)
+        } finally {
+            release.countDown()
+            pool.shutdownNow()
+            directory.deleteRecursively()
         }
     }
 

@@ -1552,5 +1552,12 @@
   "{value0}% · watched": "{value0}% · 시청함",
   "· Guide match": "· 가이드 매치",
   "· Possible broadcast": "· 방송가능",
-  "· {value0}d archive": "· {value0}d 아카이브"
+  "· {value0}d archive": "· {value0}d 아카이브",
+  "View on Trakt": "Trakt에서 보기",
+  "This file's audio can't play directly in this browser. Converting the audio…": "이 파일의 오디오는 이 브라우저에서 바로 재생할 수 없습니다. 오디오를 변환하는 중…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "이 파일의 오디오는 이 브라우저에서 재생할 수 없습니다. 제공업체에 변환을 요청하는 중…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "이 소스의 오디오는 이 브라우저에서 재생할 수 없습니다. 다른 소스를 선택하거나 외부 플레이어를 사용하세요.",
+  "Converting the audio for your browser…": "브라우저용으로 오디오를 변환하는 중…",
+  "Picking the best source…": "최적의 소스를 선택하는 중…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi는 미국 달러로 결제되며, 금액은 은행에서 자동으로 환전됩니다."
 }

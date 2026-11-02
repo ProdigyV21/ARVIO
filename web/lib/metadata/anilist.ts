@@ -3,6 +3,49 @@ import type { MetadataMediaType, MetadataResolver } from "./types";
 
 const ANILIST_GRAPHQL_ENDPOINT = "https://graphql.anilist.co";
 
+// AniList allows ~90 requests a minute and answers a burst with 429 without
+// CORS headers (the browser reports a CORS error). Home rows full of anime
+// used to fire dozens at once. Requests are now cached, deduplicated, sent
+// one after another with a small gap, and paused for a minute after a refusal.
+const MIN_GAP_MS = 700;
+const COOLDOWN_MS = 60_000;
+const responses = new Map<string, Promise<any | null>>();
+let queue: Promise<unknown> = Promise.resolve();
+let lastSent = 0;
+let pausedUntil = 0;
+
+function anilistQuery(query: string, variables: Record<string, unknown>): Promise<any | null> {
+  const key = JSON.stringify([query, variables]);
+  const cached = responses.get(key);
+  if (cached) return cached;
+  if (Date.now() < pausedUntil) return Promise.resolve(null);
+  const run = queue.then(async () => {
+    if (Date.now() < pausedUntil) return null;
+    const wait = lastSent + MIN_GAP_MS - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastSent = Date.now();
+    try {
+      const res = await fetch(ANILIST_GRAPHQL_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query, variables })
+      });
+      if (res.status === 429 || res.status >= 500) { pausedUntil = Date.now() + COOLDOWN_MS; return null; }
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      // A rate-limit refusal surfaces as a CORS/network error.
+      pausedUntil = Date.now() + COOLDOWN_MS;
+      return null;
+    }
+  });
+  queue = run.catch(() => null);
+  const result = run.then((json) => { if (json === null) responses.delete(key); return json; });
+  responses.set(key, result);
+  if (responses.size > 400) responses.delete(responses.keys().next().value!);
+  return result;
+}
+
 const MEDIA_QUERY = `
 query ($id: Int, $search: String) {
   Media(id: $id, search: $search, type: ANIME) {
@@ -100,15 +143,8 @@ export const aniListResolver: MetadataResolver = {
       const isNumeric = !isNaN(Number(id));
       const variables = isNumeric ? { id: Number(id) } : { search: String(id) };
 
-      const res = await fetch(ANILIST_GRAPHQL_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ query: MEDIA_QUERY, variables })
-      });
-
-      if (!res.ok) return null;
-      const json = await res.json();
-      if (!json.data?.Media) return null;
+      const json = await anilistQuery(MEDIA_QUERY, variables);
+      if (!json?.data?.Media) return null;
 
       return mapAniListToMediaItem(json.data.Media);
     } catch {
@@ -118,15 +154,8 @@ export const aniListResolver: MetadataResolver = {
 
   async search(query: string, _mediaType?: MetadataMediaType): Promise<MediaItem[]> {
     try {
-      const res = await fetch(ANILIST_GRAPHQL_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ query: SEARCH_QUERY, variables: { search: query } })
-      });
-
-      if (!res.ok) return [];
-      const json = await res.json();
-      const items = json.data?.Page?.media ?? [];
+      const json = await anilistQuery(SEARCH_QUERY, { search: query });
+      const items = json?.data?.Page?.media ?? [];
       return items.map(mapAniListToMediaItem);
     } catch {
       return [];

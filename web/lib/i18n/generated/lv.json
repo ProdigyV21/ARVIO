@@ -1554,5 +1554,12 @@
   "{value0}% · watched": "{value0}% · noskatīts",
   "· Guide match": "· Vadlīnijas spēle",
   "· Possible broadcast": "· Iespējama pārraide",
-  "· {value0}d archive": "· {value0}d arhīvs"
+  "· {value0}d archive": "· {value0}d arhīvs",
+  "View on Trakt": "Skatīt vietnē Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "Šī faila audio nevar atskaņot tieši šajā pārlūkprogrammā. Audio tiek konvertēts…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "Šī faila audio nevar atskaņot šajā pārlūkprogrammā. Tiek pieprasīta pakalpojumu sniedzēja konvertēšana…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "Šī avota audio nevar atskaņot šajā pārlūkprogrammā. Izvēlieties citu avotu vai izmantojiet ārēju atskaņotāju.",
+  "Converting the audio for your browser…": "Audio tiek konvertēts jūsu pārlūkprogrammai…",
+  "Picking the best source…": "Tiek izvēlēts labākais avots…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi iekasē maksu ASV dolāros; jūsu banka summu konvertē automātiski."
 }

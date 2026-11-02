@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.arflix.tv.R
+import com.arflix.tv.ui.theme.AccentGreen
 import com.arflix.tv.ui.theme.ArflixTypography
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.Pink
@@ -84,12 +85,12 @@ data class ContextAction(
 object ContextActions {
     val play = ContextAction("play", R.string.play, Icons.Default.PlayArrow, Pink)
     val selectSource = ContextAction("sources", R.string.stream_title_select_source, Icons.Default.Info, TextPrimary)
-    val markWatched = ContextAction("mark_watched", R.string.component_ctx_mark_watched, Icons.Default.Visibility, Color(0xFF22C55E))
+    val markWatched = ContextAction("mark_watched", R.string.component_ctx_mark_watched, Icons.Default.Visibility, AccentGreen)
     val markUnwatched = ContextAction("mark_unwatched", R.string.component_ctx_mark_unwatched, Icons.Default.VisibilityOff, TextSecondary)
     val addWatchlist = ContextAction("add_watchlist", R.string.add_to_watchlist, Icons.Default.BookmarkBorder, Pink)
     val removeWatchlist = ContextAction("remove_watchlist", R.string.remove_from_watchlist, Icons.Default.Bookmark, TextSecondary)
     val viewDetails = ContextAction("view_details", R.string.component_ctx_view_details, Icons.Default.Info, TextPrimary)
-    val markSeasonWatched = ContextAction("mark_season_watched", R.string.component_ctx_mark_season_watched, Icons.Default.Check, Color(0xFF22C55E))
+    val markSeasonWatched = ContextAction("mark_season_watched", R.string.component_ctx_mark_season_watched, Icons.Default.Check, AccentGreen)
     val markSeasonUnwatched = ContextAction("mark_season_unwatched", R.string.component_ctx_mark_season_unwatched, Icons.Default.Clear, TextSecondary)
 }
 
@@ -266,7 +267,7 @@ fun ContextMenu(
                                 .height(4.dp)
                                 .background(
                                     Color.White.copy(alpha = 0.2f),
-                                    RoundedCornerShape(2.dp)
+                                    RoundedCornerShape(8.dp)
                                 )
                         )
 

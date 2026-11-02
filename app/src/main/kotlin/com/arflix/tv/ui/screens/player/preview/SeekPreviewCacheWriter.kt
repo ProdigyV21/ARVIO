@@ -3,15 +3,18 @@ package com.arflix.tv.ui.screens.player.preview
 import java.io.Closeable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 
-/** Best-effort persistence: at most one item writing and one newer item waiting. */
+/** Non-blocking persistence: one writing plus at most a five-frame strip waiting. */
 internal class SeekPreviewCacheWriter<T>(
     scope: CoroutineScope,
     write: suspend (T) -> Unit,
 ) : Closeable {
-    private val pending = Channel<T>(Channel.CONFLATED)
+    // Keep a complete newly decoded strip even when compression is slower than
+    // extraction. Beyond that, prefer recent frames without growing memory.
+    private val pending = Channel<T>(5, BufferOverflow.DROP_OLDEST)
     private val worker = scope.launch {
         for (entry in pending) {
             try {

@@ -223,7 +223,8 @@ function rewritePlaylist(text: string, baseUrl: URL, request: NextRequest) {
 function rewritePlaylistToWorker(text: string, baseUrl: URL, headersParam: string | null, streamTicket: string | null = null) {
   // The Premium stream ticket (see resolver-worker STREAM_TICKET_SECRET) rides
   // along to child playlists and every segment URL.
-  const ticket = streamTicket && /^v1\.[\w.-]{10,200}$/.test(streamTicket) ? streamTicket : null;
+  // v1 (HMAC) and v2 (ECDSA, the default) tickets; anything else is dropped.
+  const ticket = streamTicket && /^v[12]\.[\w.-]{10,400}$/.test(streamTicket) ? streamTicket : null;
   // Hybrid hop for providers that block Cloudflare-originated fetches (e.g. CF
   // error 1003 on the playlist host): this Netlify function fetches the small
   // manifest, while heavy segment traffic is rewritten to the resolver worker.

@@ -1183,6 +1183,32 @@ class CatalogRepository @Inject constructor(
         return true
     }
 
+    /**
+     * Moves a catalog [steps] places among the catalogs the settings list shows, in one write - for
+     * a row dragged on the phone. Catalogs the list hides keep their place relative to their
+     * neighbours, exactly as they do with [moveCatalogUp] and [moveCatalogDown] repeated.
+     */
+    suspend fun moveCatalogBy(catalogId: String, steps: Int): Boolean {
+        if (steps == 0) return false
+        val current = getCatalogs().toMutableList()
+        val visible = current.filter { isVisibleCatalogInSettings(it) }
+        val visibleIndex = visible.indexOfFirst { it.id == catalogId }
+        if (visibleIndex < 0) return false
+        val targetVisibleIndex = (visibleIndex + steps).coerceIn(0, visible.lastIndex)
+        if (targetVisibleIndex == visibleIndex) return false
+        val anchorId = visible[targetVisibleIndex].id
+        val currentIndex = current.indexOfFirst { it.id == catalogId }
+        if (currentIndex < 0) return false
+        val moved = current.removeAt(currentIndex)
+        val anchorIndex = current.indexOfFirst { it.id == anchorId }
+        if (anchorIndex < 0) return false
+        // Moving up lands in front of the catalog that held the target place, moving down behind it.
+        val insertAt = if (steps < 0) anchorIndex else anchorIndex + 1
+        current.add(insertAt.coerceIn(0, current.size), moved)
+        saveCatalogs(current)
+        return true
+    }
+
     suspend fun replaceCatalogsForActiveProfile(catalogs: List<CatalogConfig>) {
         val sanitized = catalogs
             .distinctBy { it.id }

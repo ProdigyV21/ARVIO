@@ -2138,3 +2138,101 @@
   }
   .details-drawer .detail-actions .secondary span { white-space: normal; }
 }
+
+/* Episode cards: the card wrapper (card + options button) is the grid item, so
+   the card itself must fill it. A legacy `.episode-row { width: auto
+   !important }` shrank the button to its (all absolutely positioned) content:
+   0px wide, so no episode showed. */
+.episode-card-wrap > .episode-row { width: 100% !important; }
+
+/* Back button and title sit under the top bar's controls, never on them.
+   TopNav publishes --topnav-bottom (where its profile and tabs end). */
+@media (min-width: 681px) {
+  .details-drawer .detail-back {
+    top: calc(var(--topnav-bottom, 84px) + 14px);
+    /* Line up with the page's left edge (.detail-body's inline padding). */
+    left: clamp(22px, 4vw, 68px);
+  }
+  [dir="rtl"] .details-drawer .detail-back { left: auto; right: clamp(22px, 4vw, 68px); }
+  /* Room for the Back button (46px) between the bar and the title. */
+  .details-drawer .detail-body {
+    padding-top: calc(var(--topnav-bottom, 84px) + 52px);
+  }
+  @media (max-width: 980px) {
+    .details-drawer .detail-back { left: clamp(18px, 4vw, 32px); }
+    [dir="rtl"] .details-drawer .detail-back { left: auto; right: clamp(18px, 4vw, 32px); }
+  }
+  /* Scrolled: a soft fade behind the bar so the profile and tabs stay
+     readable over the page, without a solid band (the bar stays immersive). */
+  /* !important: the immersive pass turns every .sidebar pseudo off with !important. */
+  .app-shell:has(.details-drawer) .sidebar.is-scrolled::before {
+    content: "" !important;
+    display: block !important;
+    position: absolute;
+    inset: 0 0 -28px;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.86) 0%, rgba(0, 0, 0, 0.62) 62%, transparent 100%);
+  }
+}
+
+/* Cast: the round photo is the card. Hover and focus act on the photo, like
+   a title card acts on its poster, instead of lifting a square box that does
+   not match the circle. */
+.details-drawer .mini-card.cast-card,
+.details-drawer .mini-card.cast-card:focus-visible,
+.details-drawer .mini-card.cast-card:focus {
+  transform: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  filter: none !important;
+  outline: none !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .details-drawer .mini-card.cast-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    filter: none !important;
+  }
+}
+.details-drawer .mini-strip:has(.cast-card) { padding-block: 12px 10px; }
+.details-drawer .cast-card img,
+.details-drawer .cast-card > svg {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms ease, filter 220ms ease;
+}
+.details-drawer .cast-card strong,
+.details-drawer .cast-card span { transition: color 160ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  .details-drawer .cast-card:hover img,
+  .details-drawer .cast-card:hover > svg {
+    transform: translateY(-4px) scale(1.03);
+    filter: brightness(1.05);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #fff) 76%, transparent), 0 18px 52px rgba(0, 0, 0, 0.58);
+  }
+  .details-drawer .cast-card:hover strong { color: #fff; }
+  .details-drawer .cast-card:hover span { color: rgba(255, 255, 255, 0.82); }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: reduce) {
+  .details-drawer .cast-card:hover img,
+  .details-drawer .cast-card:hover > svg { transform: none; }
+}
+.details-drawer .cast-card:focus-visible img,
+.details-drawer .cast-card:focus-visible > svg,
+html.kbd-nav .details-drawer .cast-card:focus img,
+html.kbd-nav .details-drawer .cast-card:focus > svg {
+  transform: scale(1.04);
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(0, 0, 0, 0.6), 0 18px 52px rgba(0, 0, 0, 0.58);
+}
+.details-drawer .cast-card:focus-visible strong,
+html.kbd-nav .details-drawer .cast-card:focus strong { color: #fff; }
+@media (prefers-reduced-motion: reduce) {
+  .details-drawer .cast-card img,
+  .details-drawer .cast-card > svg { transition: none; }
+  .details-drawer .cast-card:focus-visible img,
+  .details-drawer .cast-card:focus-visible > svg { transform: none; }
+}

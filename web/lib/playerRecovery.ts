@@ -183,6 +183,40 @@ export function isAudioOnlySource(url: string | undefined | null) {
   }
 }
 
+type DecodeCounters = { webkitAudioDecodedByteCount?: number; webkitVideoDecodedByteCount?: number };
+
+/**
+ * Chromium plays a file's video while silently dropping an audio track it
+ * cannot decode (E-AC-3/DTS/TrueHD in an MKV with no telling extension). Its
+ * decode counters show it: video bytes climb, audio stays at 0. Calls
+ * `onSilent` after ~5 s of real playback like that. Browsers without the
+ * counters, and files that already decoded audio, are left alone.
+ */
+export function monitorAudioDecode(video: HTMLVideoElement, onSilent: () => void, graceMs = 5000): () => void {
+  const counters = video as HTMLVideoElement & DecodeCounters;
+  if (typeof counters.webkitAudioDecodedByteCount !== "number" || typeof counters.webkitVideoDecodedByteCount !== "number") return () => {};
+  let stopped = false;
+  let lastTime = video.currentTime;
+  let lastCheck = Date.now();
+  let silentPlayingMs = 0;
+  const timer = setInterval(() => {
+    if (stopped) return;
+    if ((counters.webkitAudioDecodedByteCount ?? 0) > 0) { stop(); return; }
+    const now = Date.now();
+    const advancing = video.currentTime > lastTime;
+    const elapsed = Math.min(2000, Math.max(0, now - lastCheck));
+    lastCheck = now;
+    lastTime = video.currentTime;
+    // Muted playback still decodes audio; pauses, seeks and buffering do not count.
+    if (document.visibilityState === "hidden" || video.paused || video.seeking || video.ended || !advancing
+      || (counters.webkitVideoDecodedByteCount ?? 0) <= 0) return;
+    silentPlayingMs += elapsed;
+    if (silentPlayingMs >= graceMs) { stop(); onSilent(); }
+  }, 1000);
+  function stop() { stopped = true; clearInterval(timer); }
+  return stop;
+}
+
 export function monitorVideoFrames(video: HTMLVideoElement, onMissing: () => void): () => void {
   let stopped = false;
   let frame: number | undefined;

@@ -119,8 +119,9 @@ test('English, Spanish and Portuguese homepages send Premium CTAs to ARVIO Web a
     assert.deepEqual(kofiLinks.map(anchor => anchor.placement), ['manage-membership'], file);
     assert.ok(!kofiLinks[0].classes.includes('button'), file);
     const details = anchors.find(anchor => anchor.placement === 'hero-details');
-    assert.match(details?.href, /^\/premium\//u);
-    if (file !== 'index.html') assert.ok(details.href.includes('lang='));
+    // English links /premium/; the localized homepages link their own-language Premium page.
+    if (file === 'index.html') assert.match(details?.href, /^\/premium\//u);
+    else assert.equal(details?.href, `/${file.split('/')[0]}/premium/`, file);
     assert.equal((html.match(/class="plan(?: plan-best)?"/gu) || []).length, 2, file);
     assert.match(html, /class="plan plan-best"/u);
     assert.match(html, /href="https:\/\/discord\.gg\/UavuEYMfQ4">[^<]+<\/a> [^<]*7/u, file);

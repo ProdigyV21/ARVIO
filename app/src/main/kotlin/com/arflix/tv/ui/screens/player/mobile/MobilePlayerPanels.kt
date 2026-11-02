@@ -65,9 +65,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import com.arflix.tv.R
 import com.arflix.tv.data.model.Episode
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
+import com.arflix.tv.ui.screens.player.AspectRatioMode
 import com.arflix.tv.ui.screens.player.AudioTrackInfo
 import com.arflix.tv.ui.screens.player.SubtitleFontOption
 import com.arflix.tv.ui.screens.player.resolveSubtitleTypeface
@@ -89,6 +91,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.gestures.detectDragGestures
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -167,14 +170,14 @@ fun MobileEpisodesDrawer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "This Season",
+                        text = stringResource(R.string.mplayer_this_season),
                         color = MobilePlayerTokens.InkPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
                     MobileIconButton(
                         icon = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = stringResource(R.string.close),
                         onClick = onClose
                     )
                 }
@@ -329,14 +332,14 @@ fun MobileSourcesDrawer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Source",
+                        text = stringResource(R.string.mplayer_source),
                         color = MobilePlayerTokens.InkPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
                     MobileIconButton(
                         icon = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = stringResource(R.string.close),
                         onClick = onClose
                     )
                 }
@@ -354,7 +357,7 @@ fun MobileSourcesDrawer(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No sources available",
+                            text = stringResource(R.string.mplayer_no_sources),
                             color = MobilePlayerTokens.InkTertiary,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
@@ -392,7 +395,7 @@ private fun SourceRow(
     isActive: Boolean,
     onClick: () -> Unit
 ) {
-    val qualityLabel = stream.quality.ifBlank { stream.source.ifBlank { "Source" } }
+    val qualityLabel = stream.quality.ifBlank { stream.source.ifBlank { stringResource(R.string.mplayer_source) } }
     val metaLabel = listOfNotNull(
         stream.addonName.takeIf { it.isNotBlank() },
         stream.size.takeIf { it.isNotBlank() } ?: stream.sizeBytes?.let { formatBytes(it) }
@@ -500,9 +503,9 @@ fun MobileAudioTrackSheet(
 
     val currentView = viewStack.lastOrNull() ?: "root"
     val title = when (currentView) {
-        "audiodelay" -> "Audio Delay"
-        "audiosettings" -> "Audio Settings"
-        else -> "Audio"
+        "audiodelay" -> stringResource(R.string.mplayer_audio_delay)
+        "audiosettings" -> stringResource(R.string.mplayer_audio_settings)
+        else -> stringResource(R.string.audio)
     }
 
     MobileBottomSheetBase(
@@ -517,7 +520,7 @@ fun MobileAudioTrackSheet(
         when (currentView) {
             "audiodelay" -> {
                 DelayAdjusterContent(
-                    title = "Audio Delay",
+                    title = stringResource(R.string.mplayer_audio_delay),
                     delayMs = audioDelayMs,
                     minMs = -5000L,
                     maxMs = 5000L,
@@ -531,15 +534,15 @@ fun MobileAudioTrackSheet(
                         .padding(horizontal = 10.dp, vertical = 2.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    SectionHeader("ENHANCEMENTS")
+                    SectionHeader(stringResource(R.string.mplayer_section_enhancements))
                     ToggleRow(
-                        label = "Volume Normalization",
+                        label = stringResource(R.string.mplayer_volume_normalization),
                         checked = volumeNormalization,
                         onToggle = { onToggleVolumeNorm(!volumeNormalization) }
                     )
 
                     ToggleRow(
-                        label = "Gemini Live Voice Translation",
+                        label = stringResource(R.string.mplayer_gemini_live_translation),
                         checked = isLiveAudioTranslating,
                         onToggle = onToggleLiveAudioTranslation
                     )
@@ -552,11 +555,11 @@ fun MobileAudioTrackSheet(
                         .padding(horizontal = 10.dp, vertical = 2.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    item { SectionHeader("TRACKS") }
+                    item { SectionHeader(stringResource(R.string.mplayer_section_tracks)) }
                     if (audioTracks.isEmpty()) {
                         item {
                             Text(
-                                text = "Default Audio Track",
+                                text = stringResource(R.string.mplayer_default_audio_track),
                                 color = MobilePlayerTokens.InkSecondary,
                                 fontSize = 13.5.sp,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -567,7 +570,7 @@ fun MobileAudioTrackSheet(
                             val isActive = index == selectedAudioIndex
                             val trackTitle = track.label?.takeIf { it.isNotBlank() }
                                 ?: track.language?.takeIf { it.isNotBlank() }
-                                ?: "Audio ${index + 1}"
+                                ?: stringResource(R.string.mplayer_audio_track_number, index + 1)
                             val codecDetail = formatAudioCodecDisplayName(track.codec)
                             val channelDetail = when (track.channelCount) {
                                 1 -> "Mono"
@@ -632,18 +635,18 @@ fun MobileAudioTrackSheet(
                     // Settings Section at the bottom
                     item {
                         Spacer(modifier = Modifier.height(6.dp))
-                        SectionHeader("SETTINGS")
+                        SectionHeader(stringResource(R.string.mplayer_section_settings))
                     }
                     item {
                         NavRow(
-                            label = "Audio Settings",
-                            meta = "Enhancements & sync",
+                            label = stringResource(R.string.mplayer_audio_settings),
+                            meta = stringResource(R.string.mplayer_audio_settings_meta),
                             onClick = { viewStack.add("audiosettings") }
                         )
                     }
                     item {
                         NavRow(
-                            label = "Audio Delay",
+                            label = stringResource(R.string.mplayer_audio_delay),
                             meta = if (audioDelayMs != 0L) (if (audioDelayMs > 0) "+$audioDelayMs ms" else "$audioDelayMs ms") else "0 ms",
                             onClick = { viewStack.add("audiodelay") }
                         )
@@ -741,11 +744,12 @@ fun MobileSubtitlesSheet(
 
     val currentView = viewStack.lastOrNull() ?: "root"
     val title = when {
-        currentView == "subdelay" -> "Subtitle Delay"
-        currentView == "fonts" -> "Subtitle Font"
-        currentView == "tracks" -> "${selectedLanguageName ?: "Track"} Subtitles"
-        currentView == "substyle" -> "Subtitle Settings"
-        else -> "Subtitles"
+        currentView == "subdelay" -> stringResource(R.string.mplayer_subtitle_delay)
+        currentView == "fonts" -> stringResource(R.string.subtitle_font)
+        currentView == "tracks" -> selectedLanguageName?.let { stringResource(R.string.mplayer_language_subtitles, subtitleLanguageDisplayName(it)) }
+            ?: stringResource(R.string.subtitles)
+        currentView == "substyle" -> stringResource(R.string.subtitle_settings_title)
+        else -> stringResource(R.string.subtitles)
     }
     val showBack = viewStack.size > 1
     val MAX_SUBTITLE_OFFSET_MS = 120_000L
@@ -768,7 +772,7 @@ fun MobileSubtitlesSheet(
         when {
             currentView == "subdelay" -> {
                 DelayAdjusterContent(
-                    title = "Subtitle Delay",
+                    title = stringResource(R.string.mplayer_subtitle_delay),
                     delayMs = subtitleDelayMs,
                     minMs = -MAX_SUBTITLE_OFFSET_MS,
                     maxMs = MAX_SUBTITLE_OFFSET_MS,
@@ -854,7 +858,7 @@ fun MobileSubtitlesSheet(
                 ) {
                     itemsIndexed(tracksForLang, key = { index, sub -> "${index}_${sub.id}_${sub.url}" }) { index, sub ->
                         val isActive = selectedSubtitle?.id == sub.id
-                        val trackTitle = sub.label.ifBlank { "$currentLang Track ${index + 1}" }
+                        val trackTitle = sub.label.ifBlank { stringResource(R.string.mplayer_language_track, subtitleLanguageDisplayName(currentLang.orEmpty()), index + 1) }
                         val isSdh = trackTitle.contains("sdh", ignoreCase = true) ||
                             trackTitle.contains("cc", ignoreCase = true) ||
                             trackTitle.contains("hearing", ignoreCase = true)
@@ -904,7 +908,7 @@ fun MobileSubtitlesSheet(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         if (sub.isEmbedded) {
-                                            SubtitleBadge(text = "Embedded")
+                                            SubtitleBadge(text = stringResource(R.string.mplayer_badge_embedded))
                                         } else if (sub.provider.isNotBlank()) {
                                             SubtitleBadge(text = sub.provider)
                                         }
@@ -912,7 +916,7 @@ fun MobileSubtitlesSheet(
                                             SubtitleBadge(text = "SDH")
                                         }
                                         if (sub.isForced) {
-                                            SubtitleBadge(text = "Forced")
+                                            SubtitleBadge(text = stringResource(R.string.settings_value_forced))
                                         }
                                     }
                                 }
@@ -929,7 +933,11 @@ fun MobileSubtitlesSheet(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     item {
-                        val matchTitle = if (matchLanguageName.isNotBlank()) "Find Best Match ($matchLanguageName)" else "Find Best Match (Auto)"
+                        val matchTitle = if (matchLanguageName.isNotBlank()) {
+                            stringResource(R.string.mplayer_find_best_match_language, matchLanguageName)
+                        } else {
+                            stringResource(R.string.mplayer_find_best_match_auto)
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -948,24 +956,28 @@ fun MobileSubtitlesSheet(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (isFindingBestMatch) "Scanning Best Match…" else matchTitle,
+                                    text = if (isFindingBestMatch) stringResource(R.string.mplayer_scanning_best_match) else matchTitle,
                                     color = MobilePlayerTokens.InkPrimary,
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "Auto-sync and pick best timing match",
+                                    text = stringResource(R.string.mplayer_find_best_match_desc),
                                     color = MobilePlayerTokens.InkTertiary,
                                     fontSize = 11.sp
                                 )
                             }
-                            SubtitleBadge(text = if (isFindingBestMatch) "Scanning" else "Auto Sync")
+                            SubtitleBadge(text = if (isFindingBestMatch) stringResource(R.string.mplayer_badge_scanning) else stringResource(R.string.mplayer_badge_auto_sync))
                         }
                     }
 
                     if (isAiAvailable || isAiTranslating) {
                         item {
-                            val aiTitle = if (aiTargetLanguageName.isNotBlank()) "AI Translation ($aiTargetLanguageName)" else "AI Translation"
+                            val aiTitle = if (aiTargetLanguageName.isNotBlank()) {
+                                stringResource(R.string.mplayer_ai_translation_language, aiTargetLanguageName)
+                            } else {
+                                stringResource(R.string.mplayer_ai_translation)
+                            }
                             ToggleRow(
                                 label = aiTitle,
                                 checked = isAiTranslating,
@@ -1008,7 +1020,7 @@ fun MobileSubtitlesSheet(
                                     Spacer(modifier = Modifier.size(16.dp))
                                 }
                                 Text(
-                                    text = "Off",
+                                    text = stringResource(R.string.off),
                                     color = if (isOffSelected) MobilePlayerTokens.InkPrimary else MobilePlayerTokens.InkSecondary,
                                     fontSize = 13.5.sp,
                                     fontWeight = if (isOffSelected) FontWeight.SemiBold else FontWeight.Normal
@@ -1019,13 +1031,13 @@ fun MobileSubtitlesSheet(
 
                     item {
                         Spacer(modifier = Modifier.height(6.dp))
-                        SectionHeader("LANGUAGES")
+                        SectionHeader(stringResource(R.string.settings_section_languages))
                     }
 
                     if (subtitleGroups.isEmpty()) {
                         item {
                             Text(
-                                text = "No subtitles found",
+                                text = stringResource(R.string.mplayer_no_subtitles),
                                 color = MobilePlayerTokens.InkSecondary,
                                 fontSize = 13.5.sp,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
@@ -1067,13 +1079,13 @@ fun MobileSubtitlesSheet(
                                     }
                                     Column {
                                         Text(
-                                            text = langName,
+                                            text = subtitleLanguageDisplayName(langName),
                                             color = if (isLangActive) MobilePlayerTokens.InkPrimary else MobilePlayerTokens.InkSecondary,
                                             fontSize = 13.5.sp,
                                             fontWeight = if (isLangActive) FontWeight.SemiBold else FontWeight.Normal
                                         )
                                         if (isLangActive && selectedSubtitle != null) {
-                                            val label = selectedSubtitle.label.ifBlank { "Track active" }
+                                            val label = selectedSubtitle.label.ifBlank { stringResource(R.string.mplayer_track_active) }
                                             Text(
                                                 text = label,
                                                 color = MobilePlayerTokens.InkTertiary,
@@ -1109,19 +1121,19 @@ fun MobileSubtitlesSheet(
                     // Settings Section at the bottom
                     item {
                         Spacer(modifier = Modifier.height(6.dp))
-                        SectionHeader("SETTINGS")
+                        SectionHeader(stringResource(R.string.mplayer_section_settings))
                     }
                     item {
                         NavRow(
-                            label = "Subtitle Settings",
-                            meta = "Size, style, font & more",
+                            label = stringResource(R.string.subtitle_settings_title),
+                            meta = stringResource(R.string.mplayer_subtitle_settings_meta),
                             onClick = { viewStack.add("substyle") }
                         )
                     }
                     item {
                         val delayMeta = if (subtitleDelayMs != 0L) (if (subtitleDelayMs > 0) "+$subtitleDelayMs ms" else "$subtitleDelayMs ms") else "0 ms"
                         NavRow(
-                            label = "Subtitle Delay",
+                            label = stringResource(R.string.mplayer_subtitle_delay),
                             meta = delayMeta,
                             onClick = { viewStack.add("subdelay") }
                         )
@@ -1182,7 +1194,7 @@ private fun SubtitleSettingsContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            SectionHeader("PREVIEW")
+            SectionHeader(stringResource(R.string.mplayer_section_preview))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1194,7 +1206,7 @@ private fun SubtitleSettingsContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Hello, how are you?",
+                    text = stringResource(R.string.mplayer_subtitle_preview_sample),
                     color = previewColor,
                     fontSize = previewFontSize,
                     fontFamily = previewFontFamily,
@@ -1212,7 +1224,7 @@ private fun SubtitleSettingsContent(
         }
 
         item {
-            SectionHeader("SIZE")
+            SectionHeader(stringResource(R.string.mplayer_section_size))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1222,7 +1234,7 @@ private fun SubtitleSettingsContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Text size",
+                    text = stringResource(R.string.mplayer_text_size),
                     color = MobilePlayerTokens.InkPrimary,
                     fontSize = 13.5.sp
                 )
@@ -1270,7 +1282,7 @@ private fun SubtitleSettingsContent(
 
         // Color
         item {
-            SectionHeader("COLOR")
+            SectionHeader(stringResource(R.string.mplayer_section_color))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1309,7 +1321,7 @@ private fun SubtitleSettingsContent(
 
         // Position (No fixed Bottom/Top presets, dedicated on-screen repositioning)
         item {
-            SectionHeader("POSITION")
+            SectionHeader(stringResource(R.string.mplayer_section_position))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1325,13 +1337,13 @@ private fun SubtitleSettingsContent(
             ) {
                 Column {
                     Text(
-                        text = "Subtitle Position",
+                        text = stringResource(R.string.subtitle_offset),
                         color = MobilePlayerTokens.InkPrimary,
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "$subtitleVerticalPct% from bottom",
+                        text = stringResource(R.string.mplayer_percent_from_bottom, subtitleVerticalPct),
                         color = MobilePlayerTokens.InkTertiary,
                         fontSize = 11.sp
                     )
@@ -1341,7 +1353,7 @@ private fun SubtitleSettingsContent(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "Adjust on Screen",
+                        text = stringResource(R.string.mplayer_adjust_on_screen),
                         color = Color(0xFFFFB300),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold
@@ -1358,7 +1370,7 @@ private fun SubtitleSettingsContent(
 
         // Style & Font
         item {
-            SectionHeader("STYLE & FONT")
+            SectionHeader(stringResource(R.string.mplayer_section_style_font))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1368,7 +1380,7 @@ private fun SubtitleSettingsContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Font Weight",
+                    text = stringResource(R.string.mplayer_font_weight),
                     color = MobilePlayerTokens.InkPrimary,
                     fontSize = 13.5.sp
                 )
@@ -1379,11 +1391,11 @@ private fun SubtitleSettingsContent(
                         .padding(2.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    listOf("Bold" to "Bold", "Normal" to "Normal").forEach { (valKey, label) ->
+                    listOf("Bold" to stringResource(R.string.settings_value_bold), "Normal" to stringResource(R.string.settings_value_normal)).forEach { (valKey, label) ->
                         val isSelected = valKey.equals(subtitleStyle, ignoreCase = true)
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) Color.White.copy(alpha = 0.22f) else Color.Transparent)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
@@ -1407,7 +1419,7 @@ private fun SubtitleSettingsContent(
 
         item {
             NavRow(
-                label = "Font Family",
+                label = stringResource(R.string.mplayer_font_family),
                 meta = subtitleFont,
                 onClick = onOpenFonts
             )
@@ -1415,16 +1427,16 @@ private fun SubtitleSettingsContent(
 
         item {
             ToggleRow(
-                label = "Stylized Subtitles (ASS / SSA)",
+                label = stringResource(R.string.mplayer_stylized_subtitles),
                 checked = subtitleStylized,
                 onToggle = { onUpdateSubtitleStylized(!subtitleStylized) }
             )
         }
 
         item {
-            SectionHeader("GENERAL")
+            SectionHeader(stringResource(R.string.mplayer_section_general))
             ToggleRow(
-                label = "Preload Subtitles",
+                label = stringResource(R.string.subtitle_preload_title),
                 checked = subtitlePreloadEnabled,
                 onToggle = { onToggleSubtitlePreload(!subtitlePreloadEnabled) }
             )
@@ -1432,7 +1444,7 @@ private fun SubtitleSettingsContent(
 
         item {
             ToggleRow(
-                label = "Filter by App Language",
+                label = stringResource(R.string.mplayer_filter_by_app_language),
                 checked = filterSubtitlesByLanguage,
                 onToggle = { onToggleFilterSubtitlesByLanguage(!filterSubtitlesByLanguage) }
             )
@@ -1440,7 +1452,7 @@ private fun SubtitleSettingsContent(
 
         item {
             ToggleRow(
-                label = "Remove Hearing Impaired (SDH)",
+                label = stringResource(R.string.mplayer_remove_sdh),
                 checked = subtitleRemoveHearingImpaired,
                 onToggle = { onToggleSubtitleRemoveHearingImpaired(!subtitleRemoveHearingImpaired) }
             )
@@ -1452,7 +1464,7 @@ private fun SubtitleSettingsContent(
 private fun SubtitleBadge(text: String) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = 0.10f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
@@ -1587,7 +1599,7 @@ fun MobilePlaybackSpeedSheet(
     val speeds = listOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f)
     MobileBottomSheetBase(
         visible = visible,
-        title = "Playback Speed",
+        title = stringResource(R.string.mplayer_playback_speed),
         onClose = onClose,
         modifier = modifier
     ) {
@@ -1670,8 +1682,8 @@ fun MobileMoreSettingsSheet(
 
     val currentView = viewStack.lastOrNull() ?: "root"
     val title = when (currentView) {
-        "aspect" -> "Aspect Ratio"
-        else -> "More Settings"
+        "aspect" -> stringResource(R.string.mplayer_aspect_ratio)
+        else -> stringResource(R.string.mplayer_more_settings)
     }
 
     MobileBottomSheetBase(
@@ -1691,35 +1703,35 @@ fun MobileMoreSettingsSheet(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     // Playback Section
-                    item { SectionHeader("PLAYBACK") }
+                    item { SectionHeader(stringResource(R.string.settings_section_playback)) }
                     item {
                         ToggleRow(
-                            label = "Autoplay next episode",
+                            label = stringResource(R.string.mplayer_autoplay_next_episode),
                             checked = autoplayNext,
                             onToggle = { onToggleAutoplay(!autoplayNext) }
                         )
                     }
                     item {
                         ToggleRow(
-                            label = "Automatically skip intro",
+                            label = stringResource(R.string.mplayer_auto_skip_intro),
                             checked = autoSkipIntro,
                             onToggle = { onToggleAutoSkipIntro(!autoSkipIntro) }
                         )
                     }
                     item {
                         ToggleRow(
-                            label = "Automatically skip outro",
+                            label = stringResource(R.string.mplayer_auto_skip_outro),
                             checked = autoSkipOutro,
                             onToggle = { onToggleAutoSkipOutro(!autoSkipOutro) }
                         )
                     }
 
                     // Video Section
-                    item { SectionHeader("VIDEO") }
+                    item { SectionHeader(stringResource(R.string.mplayer_section_video)) }
                     item {
                         NavRow(
-                            label = "Aspect Ratio",
-                            meta = aspectRatio,
+                            label = stringResource(R.string.mplayer_aspect_ratio),
+                            meta = aspectModeDisplayLabel(aspectRatio),
                             onClick = { viewStack.add("aspect") }
                         )
                     }
@@ -1751,7 +1763,7 @@ fun MobileMoreSettingsSheet(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = mode,
+                                text = aspectModeDisplayLabel(mode),
                                 color = if (isActive) MobilePlayerTokens.InkPrimary else MobilePlayerTokens.InkSecondary,
                                 fontSize = 13.5.sp,
                                 fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
@@ -1946,7 +1958,7 @@ private fun ExactDelayInputDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Enter offset in milliseconds (negative = advance, positive = delay):",
+                    text = stringResource(R.string.mplayer_delay_dialog_hint),
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 13.sp
                 )
@@ -1973,16 +1985,16 @@ private fun ExactDelayInputDialog(
                     onApply(parsed)
                 }
             ) {
-                Text("Apply", color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.mplayer_apply), color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             Row {
                 TextButton(onClick = { onApply(0L) }) {
-                    Text("Reset (0 ms)", color = Color.White.copy(alpha = 0.65f))
+                    Text(stringResource(R.string.mplayer_reset_zero), color = Color.White.copy(alpha = 0.65f))
                 }
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = Color.White.copy(alpha = 0.65f))
+                    Text(stringResource(R.string.cancel), color = Color.White.copy(alpha = 0.65f))
                 }
             }
         }
@@ -2026,7 +2038,13 @@ private fun DelayAdjusterContent(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = if (delayMs == 0L) "Synchronized • Tap to type number" else if (delayMs > 0) "Delayed (+) • Tap to type number" else "Advanced (–) • Tap to type number",
+                text = stringResource(
+                    when {
+                        delayMs == 0L -> R.string.mplayer_delay_synchronized
+                        delayMs > 0 -> R.string.mplayer_delay_delayed
+                        else -> R.string.mplayer_delay_advanced
+                    }
+                ),
                 color = MobilePlayerTokens.InkTertiary,
                 fontSize = 11.5.sp
             )
@@ -2091,7 +2109,7 @@ private fun DelayAdjusterContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Reset to 0 ms",
+                    text = stringResource(R.string.mplayer_reset_to_zero),
                     color = MobilePlayerTokens.InkSecondary,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Medium
@@ -2186,7 +2204,7 @@ private fun SheetTabSelector(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -2262,7 +2280,7 @@ private fun MobileBottomSheetBase(
                         .padding(top = 10.dp, bottom = 4.dp)
                         .width(34.dp)
                         .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color.White.copy(alpha = 0.2f))
                         .align(Alignment.CenterHorizontally)
                 )
@@ -2282,7 +2300,7 @@ private fun MobileBottomSheetBase(
                         if (showBackButton) {
                             MobileIconButton(
                                 icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
+                                contentDescription = stringResource(R.string.back),
                                 onClick = onBack
                             )
                         }
@@ -2295,7 +2313,7 @@ private fun MobileBottomSheetBase(
                     }
                     MobileIconButton(
                         icon = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = stringResource(R.string.close),
                         onClick = onClose
                     )
                 }
@@ -2324,6 +2342,20 @@ private fun formatBytes(bytes: Long): String {
 }
 
 internal fun formatLanguageDisplayName(code: String?): String = getFullLanguageName(code)
+
+/** "Unknown" stays the grouping key; only the shown label is translated. */
+@Composable
+private fun subtitleLanguageDisplayName(name: String): String =
+    if (name == "Unknown") stringResource(R.string.mplayer_unknown_language) else name
+
+/** Aspect labels stay English as stored keys; this only translates what is shown. */
+@Composable
+internal fun aspectModeDisplayLabel(label: String): String = when (AspectRatioMode.fromLabel(label)) {
+    AspectRatioMode.AUTO -> stringResource(R.string.auto)
+    AspectRatioMode.FIT -> stringResource(R.string.mplayer_aspect_fit_screen)
+    AspectRatioMode.STRETCH -> stringResource(R.string.mplayer_aspect_stretch)
+    AspectRatioMode.CROP -> stringResource(R.string.mplayer_aspect_crop)
+}
 
 internal fun formatAudioCodecDisplayName(codec: String?): String? {
     if (codec.isNullOrBlank()) return null
@@ -2428,22 +2460,22 @@ fun MobileSubtitleRepositionOverlay(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 20.dp, vertical = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFF12141A).copy(alpha = 0.92f))
-                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Text(
-                    text = "Adjust Subtitle Position",
+                    text = stringResource(R.string.mplayer_adjust_subtitle_position),
                     color = Color.White,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Drag up/down anywhere to move • ${currentPercent.roundToInt()}% from bottom",
+                    text = stringResource(R.string.mplayer_drag_subtitle_hint, currentPercent.roundToInt()),
                     color = Color(0xFFFFB300),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium
@@ -2466,7 +2498,7 @@ fun MobileSubtitleRepositionOverlay(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "Reset",
+                        text = stringResource(R.string.mplayer_reset),
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
@@ -2485,7 +2517,7 @@ fun MobileSubtitleRepositionOverlay(
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "Done",
+                        text = stringResource(R.string.done),
                         color = Color.Black,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -2513,7 +2545,7 @@ fun MobileSubtitleRepositionOverlay(
                     // Outline stroke layer (matches CaptionStyleCompat.EDGE_TYPE_OUTLINE)
                     if (!subtitleStyle.equals("Normal", ignoreCase = true) && !isBackground) {
                         Text(
-                            text = "Sample Subtitle",
+                            text = stringResource(R.string.mplayer_sample_subtitle),
                             fontSize = computedSizeSp,
                             fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
                             fontFamily = fontFamily,
@@ -2530,7 +2562,7 @@ fun MobileSubtitleRepositionOverlay(
 
                     // Main subtitle text
                     Text(
-                        text = "Sample Subtitle",
+                        text = stringResource(R.string.mplayer_sample_subtitle),
                         color = parsedColor,
                         fontSize = computedSizeSp,
                         fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
@@ -2549,7 +2581,7 @@ fun MobileSubtitleRepositionOverlay(
                         },
                         modifier = if (isBackground) {
                             Modifier
-                                .background(Color(0xB4000000), RoundedCornerShape(4.dp))
+                                .background(Color(0xB4000000), RoundedCornerShape(8.dp))
                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                         } else {
                             Modifier

@@ -255,6 +255,8 @@ export interface StreamSource {
   remux?: boolean;
   // Preserve an explicit audio choice while preparing/remounting this source.
   remuxAudioIndex?: number;
+  /** Remux was chosen because this browser cannot play the file's audio (shown while it starts). */
+  convertAudio?: boolean;
 }
 
 export interface InstalledAddon {

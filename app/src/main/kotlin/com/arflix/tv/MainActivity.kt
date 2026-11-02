@@ -34,10 +34,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -49,7 +52,12 @@ import dev.chrisbanes.haze.haze
 import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.components.LocalBottomBarHeight
 import com.arflix.tv.ui.components.mobileContentInsets
+import com.arflix.tv.ui.components.AppBottomBarMode
+import com.arflix.tv.ui.components.currentAppBottomBarMode
 import com.arflix.tv.ui.components.currentBottomBarSpec
+import com.arflix.tv.ui.components.appBottomBarClearance
+import com.arflix.tv.ui.components.navigationRailCutoutInsetPx
+import com.arflix.tv.ui.components.LANDSCAPE_RAIL_WIDTH_DP
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
@@ -132,6 +140,7 @@ import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.toLauncherContinueWatchingRequest
 import com.arflix.tv.navigation.AppNavigation
 import com.arflix.tv.navigation.Screen
+import com.arflix.tv.navigation.navigateToProfileSelection
 import com.arflix.tv.navigation.ProfileSessionGate
 import com.arflix.tv.navigation.PartnerOpenLinkParser
 import com.arflix.tv.navigation.PartnerOpenLinkResolver
@@ -819,7 +828,32 @@ fun ArflixApp(
         }
     }
 
+    val switchProfile: () -> Unit = {
+        selectedSessionProfileId = null
+        appCoroutineScope.launch {
+            traktRepository.clearAllProfileCaches()
+            watchHistoryRepository.clearProfileCaches()
+            watchlistRepository.clearWatchlistCache()
+            iptvRepository.invalidateCache()
+            profileManager.setCurrentProfileId("default")
+            profileManager.setCurrentProfileName("default")
+            profileRepository.clearActiveProfile()
+        }
+    }
+
     val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val barMode = currentAppBottomBarMode()
+    val isLandscapeRail = barMode == AppBottomBarMode.LANDSCAPE_RAIL
+    val railCutoutInset = with(density) {
+        navigationRailCutoutInsetPx(
+            systemLeftInsetPx = WindowInsets.systemBars.getLeft(this, layoutDirection),
+            cutoutLeftInsetPx = WindowInsets.displayCutout.getLeft(this, layoutDirection),
+            systemRightInsetPx = WindowInsets.systemBars.getRight(this, layoutDirection),
+            cutoutRightInsetPx = WindowInsets.displayCutout.getRight(this, layoutDirection),
+            layoutDirection = layoutDirection,
+        ).toDp()
+    }
     val barSpec = currentBottomBarSpec()
     val navigationInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
     var measuredBarHeight by remember(barSpec, density.fontScale) { mutableStateOf(0.dp) }
@@ -828,7 +862,7 @@ fun ArflixApp(
     var settleJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val hazeState = remember { HazeState() }
 
-    val isScrollAwayRoute = isMobile && showBottomBar
+    val isScrollAwayRoute = isMobile && showBottomBar && !isLandscapeRail
 
     val mainScreenBottomBarOffsets = remember { mutableMapOf<String, Float>() }
     val currentMainRoute = remember(currentRoute) {
@@ -852,10 +886,15 @@ fun ArflixApp(
         }
     }
 
-    val barInset = if (showBottomBar) navigationInset else 0.dp
-    val fullBarHeight = if (showBottomBar) {
-        maxOf(measuredBarHeight, (barSpec.itemHeightDp ?: 52).dp + navigationInset)
-    } else 0.dp
+    val barClearance = appBottomBarClearance(
+        mode = barMode,
+        showBottomBar = showBottomBar,
+        screenHeightDp = LocalConfiguration.current.screenHeightDp,
+        measuredHeightDp = measuredBarHeight.value,
+        navigationInsetDp = navigationInset.value,
+    )
+    val barInset = barClearance.scrollInsetDp.dp
+    val fullBarHeight = barClearance.fullHeightDp.dp
 
     val nestedScrollConnection = remember(measuredBarHeightPx, currentMainRoute, showBottomBar) {
         object : NestedScrollConnection {
@@ -983,6 +1022,8 @@ fun ArflixApp(
                 AppNavigation(
                     navController = navController,
                     startDestination = startDestination,
+                    navigationRailInset = if (isLandscapeRail) LANDSCAPE_RAIL_WIDTH_DP.dp + railCutoutInset else 0.dp,
+                    navigationRailBottomInset = navigationInset,
                     preloadedCategories = preloadedCategories,
                     preloadedHeroItem = preloadedHeroItem,
                     preloadedHeroLogoUrl = preloadedHeroLogoUrl,
@@ -990,18 +1031,7 @@ fun ArflixApp(
                     currentProfile = activeProfile,
                     isCloudConnected = authState is AuthState.Authenticated,
                     onProfileSelected = { profileId -> selectedSessionProfileId = profileId },
-                    onSwitchProfile = {
-                        selectedSessionProfileId = null
-                        appCoroutineScope.launch {
-                            traktRepository.clearAllProfileCaches()
-                            watchHistoryRepository.clearProfileCaches()
-                            watchlistRepository.clearWatchlistCache()
-                            iptvRepository.invalidateCache()
-                            profileManager.setCurrentProfileId("default")
-                            profileManager.setCurrentProfileName("default")
-                            profileRepository.clearActiveProfile()
-                        }
-                    },
+                    onSwitchProfile = switchProfile,
                     onTvFullscreenChanged = { fullscreen ->
                         iptvFullscreen = fullscreen
                     },
@@ -1028,7 +1058,9 @@ fun ArflixApp(
             exit = androidx.compose.animation.slideOutVertically(
                 animationSpec = androidx.compose.animation.core.tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
             ) { it },
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(if (isLandscapeRail) Alignment.CenterStart else Alignment.BottomCenter)
+                .then(if (isLandscapeRail) Modifier.padding(start = railCutoutInset) else Modifier)
         ) {
             AppBottomBar(
                 currentRoute = currentRoute,
@@ -1047,14 +1079,19 @@ fun ArflixApp(
                     }
                 },
                 hazeState = hazeState,
+                currentProfile = activeProfile,
+                onSwitchProfile = {
+                    switchProfile()
+                    navController.navigateToProfileSelection()
+                },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .then(if (!isLandscapeRail) Modifier.fillMaxWidth() else Modifier)
                     .onSizeChanged {
                         measuredBarHeight = with(density) { it.height.toDp() }
                         measuredBarHeightPx = it.height.toFloat()
                     }
                     .graphicsLayer {
-                        translationY = bottomBarOffsetPx
+                        if (!isLandscapeRail) translationY = bottomBarOffsetPx
                     }
             )
         }

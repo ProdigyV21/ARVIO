@@ -1,0 +1,821 @@
+{
+ "locale": {
+  "htmlLang": "fr",
+  "hreflang": "fr",
+  "home": "Accueil",
+  "guides": "Guides",
+  "skip": "Aller au contenu",
+  "mainNav": "Navigation principale",
+  "breadcrumb": "Fil d'Ariane",
+  "footerNav": "Navigation du pied de page",
+  "install": "Installer ARVIO",
+  "play": "Google Play",
+  "source": "Voir le code source",
+  "browser": "Découvrir ARVIO Web",
+  "questions": "Questions fréquentes",
+  "related": "Guides associés",
+  "softwareBoundaryTitle": "Un logiciel, pas du contenu",
+  "softwareBoundary": "ARVIO n'héberge, ne fournit, ne vend, n'inclut ni ne redistribue aucun film, série, chaîne, playlist ou flux. Vous connectez uniquement les serveurs, services, fichiers et intégrations que vous êtes autorisé à utiliser.",
+  "footerDescription": "Gestion multimédia open source pour Android TV, Google TV et Android.",
+  "footerBoundary": "ARVIO fournit un logiciel, pas des médias.",
+  "languageLabel": "Langue",
+  "languageLink": "English",
+  "languageHref": "/",
+  "pageData": {
+   "hub": {
+    "title": "Centre multimédia Android TV, mobile et navigateur - ARVIO",
+    "description": "Regroupez serveurs, services, TV en direct, Trakt, Simkl et lecture dans ARVIO sur Android TV, Android, iPhone, iPad, Windows et Mac.",
+    "crumb": "Centre multimédia",
+    "eyebrow": "Application Android gratuite",
+    "h1": "Vos services multimédias, organisés pour la TV.",
+    "hero": "ARVIO est un centre de gestion multimédia gratuit et open source pour Android TV, Google TV et Android. ARVIO Web, en option, apporte les fonctions compatibles sur iPhone, iPad, Windows, Mac, Chromebook, Apple TV et les navigateurs de Smart TV.",
+    "sectionEyebrow": "Une seule interface",
+    "sectionTitle": "Connectez ce que vous utilisez déjà.",
+    "sectionCopy": "ARVIO ne remplace ni votre serveur ni votre fournisseur. Il présente les services compatibles dans une bibliothèque cohérente, avec des profils, de la découverte et une lecture pensés pour la télécommande.",
+    "features": [
+     [
+      "Jellyfin, Plex et Emby",
+      "Parcourez les bibliothèques autorisées, les ajouts récents et les versions de médias disponibles sur les serveurs domestiques compatibles."
+     ],
+     [
+      "Trakt et Simkl",
+      "Utilisez listes, progression, historique et scrobbling, en choisissant le service de suivi qui alimente chaque fonction."
+     ],
+     [
+      "TV en direct et guide",
+      "Connectez votre propre fournisseur ou playlist avec catégories, favoris, EPG et replay (catch-up) lorsqu'ils sont pris en charge."
+     ],
+     [
+      "Profils et cloud",
+      "Gardez des profils séparés et synchronisez les réglages compatibles entre appareils avec un compte ARVIO."
+     ],
+     [
+      "Sous-titres et lecture",
+      "Choisissez les sources de sous-titres, les préférences du lecteur et des outils d'IA facultatifs avec vos propres identifiants."
+     ],
+     [
+      "TV, mobile et navigateur",
+      "Utilisez l'application gratuite sur Android et ajoutez, si vous le souhaitez, l'accès Premium par navigateur sur les appareils Apple et les ordinateurs."
+     ]
+    ],
+    "stepsTitle": "Commencez par ce dont vous avez besoin.",
+    "steps": [
+     [
+      "Installez ARVIO",
+      "Passez par Google Play sur Android TV, Google TV ou un smartphone Android, ou installez l'APK officiel signé depuis GitHub."
+     ],
+     [
+      "Créez un profil",
+      "Choisissez la langue, l'apparence et le comportement de lecture pour chaque personne ou pour un usage partagé."
+     ],
+     [
+      "Connectez des services autorisés",
+      "Ajoutez uniquement les serveurs, comptes, playlists et intégrations auxquels vous avez le droit d'accéder."
+     ]
+    ],
+    "faq": [
+     [
+      "ARVIO est-il gratuit sur Android TV ?",
+      "Oui. L'application Android est gratuite et open source. ARVIO Web est un complément Premium facultatif pour navigateur."
+     ],
+     [
+      "ARVIO inclut-il des films, des séries ou des chaînes ?",
+      "Non. ARVIO est un logiciel de gestion et de lecture. C'est vous qui fournissez les sources et les services autorisés."
+     ],
+     [
+      "Quels services ARVIO organise-t-il ?",
+      "Il prend en charge les serveurs Jellyfin, Plex et Emby, la TV en direct, Trakt, Simkl, les sous-titres et les intégrations personnelles compatibles."
+     ]
+    ],
+    "noteTitle": "Ce qu'ARVIO fournit",
+    "note": "ARVIO fournit l'interface et le lecteur. La disponibilité et la qualité dépendent de la source connectée, du réseau et des capacités de l'appareil.",
+    "ctaTitle": "Un centre ouvert pour votre configuration.",
+    "ctaCopy": "Installez-le gratuitement sur Android ou consultez l'intégralité du projet sur GitHub.",
+    "related": [
+     "servers",
+     "tracking",
+     "live"
+    ]
+   },
+   "jellyfin": {
+    "title": "Jellyfin sur Android TV, iPad, Windows et Mac - ARVIO",
+    "description": "Connectez votre serveur Jellyfin à ARVIO et parcourez bibliothèques, versions et progression sur Android TV, mobile et navigateur.",
+    "crumb": "Jellyfin sur tous vos appareils",
+    "eyebrow": "Intégration serveur domestique",
+    "h1": "Retrouvez votre bibliothèque Jellyfin dans ARVIO.",
+    "hero": "Connectez un serveur Jellyfin que vous êtes autorisé à utiliser et parcourez bibliothèques et versions de médias dans l'application Android gratuite ou dans ARVIO Web, en option, sur iPhone, iPad, Windows, Mac et d'autres navigateurs compatibles.",
+    "sectionEyebrow": "Connecté, pas copié",
+    "sectionTitle": "Votre serveur garde la main.",
+    "sectionCopy": "ARVIO lit les informations de bibliothèque autorisées et les médias lisibles. Les règles d'accès, les utilisateurs, les permissions et la disponibilité restent gérés par Jellyfin.",
+    "features": [
+     [
+      "Bibliothèques sur tous vos appareils",
+      "Ouvrez les bibliothèques du serveur dans la page Bibliothèque d'ARVIO sans refaire l'organisation de Jellyfin."
+     ],
+     [
+      "Ajouts récents",
+      "Consultez les derniers ajouts dans une vue rapide, avec les mêmes fiches et détails qu'ailleurs dans ARVIO."
+     ],
+     [
+      "Versions de médias",
+      "Lorsque Jellyfin signale plusieurs fichiers, ARVIO peut les présenter comme des options de lecture distinctes."
+     ],
+     [
+      "Progression et statut vu",
+      "La lecture met à jour le serveur lorsque c'est pris en charge, tandis que Trakt ou Simkl peuvent conserver un historique plus large."
+     ],
+     [
+      "Jetons protégés",
+      "Les jetons d'accès sont conservés dans le stockage chiffré des identifiants sur les appareils Android compatibles."
+     ],
+     [
+      "Lecture adaptée à l'appareil",
+      "ARVIO choisit un mode de lecture compatible, et Jellyfin peut transcoder les formats que l'appareil ne lit pas directement."
+     ]
+    ],
+    "stepsTitle": "Trois étapes pour ouvrir votre bibliothèque.",
+    "steps": [
+     [
+      "Préparez Jellyfin",
+      "Vérifiez que le serveur est joignable et que l'utilisateur peut ouvrir les bibliothèques souhaitées."
+     ],
+     [
+      "Connectez-le dans les réglages",
+      "Ajoutez Jellyfin comme serveur domestique et terminez la connexion par identifiants ou par code."
+     ],
+     [
+      "Ouvrez la Bibliothèque",
+      "Sélectionnez Jellyfin, choisissez une bibliothèque et parcourez les titres autorisés pour cet utilisateur."
+     ]
+    ],
+    "faq": [
+     [
+      "ARVIO remplace-t-il le serveur Jellyfin ?",
+      "Non. Jellyfin reste responsable de la bibliothèque, des utilisateurs et des accès. ARVIO sert de client et d'interface de gestion."
+     ],
+     [
+      "ARVIO affiche-t-il les différentes versions d'un fichier ?",
+      "Oui, lorsque le serveur signale ces versions et que l'utilisateur connecté est autorisé à y accéder."
+     ],
+     [
+      "Tous les fichiers seront-ils lus directement ?",
+      "Pas forcément. Le conteneur, les codecs, l'audio, les sous-titres, le réseau, l'appareil et les réglages de transcodage influent sur la lecture."
+     ]
+    ],
+    "noteTitle": "La lecture dépend de toute la chaîne",
+    "note": "Une connexion valide ne garantit pas la lecture directe de tous les fichiers. Le serveur peut devoir transcoder les formats non pris en charge par l'appareil ou le navigateur.",
+    "ctaTitle": "Utilisez votre serveur Jellyfin à votre façon.",
+    "ctaCopy": "ARVIO est gratuit et open source sur Android.",
+    "related": [
+     "servers",
+     "tracking",
+     "web"
+    ]
+   },
+   "servers": {
+    "title": "Plex, Emby et Jellyfin sur TV, iPad, Windows et Mac - ARVIO",
+    "description": "Parcourez Plex, Emby et Jellyfin dans une seule interface sur Android TV, Android et dans le navigateur avec ARVIO Web en option.",
+    "crumb": "Plex, Emby et Jellyfin",
+    "eyebrow": "Bibliothèque multiserveur",
+    "h1": "Plex, Emby et Jellyfin dans une seule interface.",
+    "hero": "Ouvrez vos serveurs domestiques autorisés dans l'application gratuite pour Android TV et smartphone, ou utilisez ARVIO Web, en option, sur iPhone, iPad, Windows, Mac, Apple TV et les navigateurs compatibles.",
+    "sectionEyebrow": "Changez de serveur, pas d'interface",
+    "sectionTitle": "Une page Bibliothèque, des sources séparées.",
+    "sectionCopy": "Chaque serveur reste une source indépendante et fiable. Vous passez d'une bibliothèque à l'autre en gardant les mêmes fiches, les mêmes détails et le même comportement à la télécommande.",
+    "features": [
+     [
+      "Séparation par serveur",
+      "Plex, Emby et Jellyfin restent distincts, avec les permissions et la structure de chaque bibliothèque."
+     ],
+     [
+      "Barre latérale des bibliothèques",
+      "Sélectionnez un service connecté et ouvrez les bibliothèques qu'il propose, sans multiplier les filtres."
+     ],
+     [
+      "Ajouts récents",
+      "Consultez les titres les plus récents autorisés par chaque serveur dans une vue conçue pour une lecture rapide."
+     ],
+     [
+      "Plusieurs versions de médias",
+      "Les fichiers 4K, 1080p, remux ou les versions alternatives peuvent apparaître comme des options distinctes."
+     ],
+     [
+      "Expérience cohérente",
+      "Retrouvez des détails, visuels, métadonnées et commandes familiers, quel que soit le serveur d'origine."
+     ],
+     [
+      "Réglages par profil",
+      "Définissez les serveurs et catalogues visibles dans chaque profil, y compris pour un usage familial."
+     ]
+    ],
+    "stepsTitle": "Gardez le contrôle au bon endroit.",
+    "steps": [
+     [
+      "Connectez un serveur",
+      "Utilisez la connexion ou la procédure d'association prise en charge pour Plex, Emby ou Jellyfin."
+     ],
+     [
+      "Choisissez les bibliothèques",
+      "ARVIO lit uniquement les bibliothèques accessibles à l'utilisateur authentifié."
+     ],
+     [
+      "Sélectionnez une version",
+      "Ouvrez un titre et choisissez parmi les versions de médias signalées par le serveur."
+     ]
+    ],
+    "faq": [
+     [
+      "Puis-je connecter Plex, Emby et Jellyfin en même temps ?",
+      "Oui. Ils peuvent être connectés au même profil et ouverts comme des sources de bibliothèque distinctes."
+     ],
+     [
+      "ARVIO modifie-t-il ou fusionne-t-il les bibliothèques ?",
+      "Non. Chaque serveur reste la source de référence. ARVIO ne déplace ni ne modifie les médias."
+     ],
+     [
+      "Pourquoi un titre peut-il avoir plusieurs sources ?",
+      "Le serveur peut proposer plusieurs fichiers ou versions, et ARVIO vous les présente pour choisir la résolution et l'encodage."
+     ]
+    ],
+    "noteTitle": "Aucune migration de bibliothèque",
+    "note": "Ajouter un serveur ne copie aucun fichier et ne contourne aucune permission. Le serveur Plex, Emby ou Jellyfin d'origine doit rester accessible pour la navigation et la lecture.",
+    "ctaTitle": "Vos serveurs. Une interface sereine.",
+    "ctaCopy": "L'application Android reste gratuite et open source.",
+    "related": [
+     "jellyfin",
+     "tracking",
+     "sources"
+    ]
+   },
+   "sources": {
+    "title": "Debrid et Usenet sur TV, iPad, Windows et Mac - ARVIO",
+    "description": "Organisez les sources debrid et Usenet compatibles dans ARVIO avec qualité, taille, langue et informations de l'addon bien visibles.",
+    "crumb": "Sources debrid et Usenet",
+    "eyebrow": "Intégrations personnelles compatibles",
+    "h1": "Des sources debrid et Usenet clairement organisées.",
+    "hero": "Utilisez les sources fournies par des addons compatibles dans l'application Android gratuite ou dans ARVIO Web, en option. ARVIO conserve les détails de chaque source et lit le média HTTP résolu sur l'appareil compatible.",
+    "sectionEyebrow": "Sélection transparente",
+    "sectionTitle": "Voyez ce que l'addon a renvoyé avant de lancer la lecture.",
+    "sectionCopy": "Un addon compatible peut fournir bien plus qu'une URL. ARVIO garde les informations utiles visibles pour un choix éclairé.",
+    "features": [
+     [
+      "Qualité et résolution",
+      "Repérez 4K, 1080p, 720p et les autres informations déclarées grâce à des badges cohérents."
+     ],
+     [
+      "Taille et nom de fichier",
+      "Comparez la taille indiquée et lisez le nom complet du fichier lorsque l'addon fournit ces valeurs."
+     ],
+     [
+      "Origine de l'addon et fournisseur",
+      "Conservez les libellés comme debrid, Usenet, vault, index ou host au lieu de tout réduire à une source générique."
+     ],
+     [
+      "Langue et détails techniques",
+      "Consultez la langue, la release, le codec et les autres métadonnées disponibles, sans doublons inutiles."
+     ],
+     [
+      "Tri utile",
+      "ARVIO conserve l'ordre des addons et vous permet de comparer taille et qualité pour trouver rapidement vos options préférées."
+     ],
+     [
+      "Android et navigateur",
+      "Utilisez le lecteur natif ou, selon le service, le format et l'appareil, les options compatibles du navigateur, de VLC et d'Infuse."
+     ]
+    ],
+    "stepsTitle": "L'addon résout ; ARVIO affiche et lit.",
+    "steps": [
+     [
+      "Configurez une intégration",
+      "Utilisez un addon ou service compatible, configuré séparément, avec un compte que vous êtes autorisé à utiliser."
+     ],
+     [
+      "Recevez les sources résolues",
+      "L'intégration renvoie des métadonnées et une URL HTTP lisible. ARVIO n'effectue aucune recherche dans les infrastructures Usenet ou debrid."
+     ],
+     [
+      "Choisissez une source ou passez en lecture automatique",
+      "Sélectionnez un résultat précis ou laissez la lecture automatique choisir la meilleure option disponible selon vos préférences."
+     ]
+    ],
+    "faq": [
+     [
+      "ARVIO inclut-il un compte debrid ou Usenet ?",
+      "Non. ARVIO n'inclut, ne vend et ne partage aucun compte de fournisseur."
+     ],
+     [
+      "ARVIO lit-il directement les torrents ou liens magnet ?",
+      "Non. L'intégration doit renvoyer une source média HTTP résolue à laquelle l'appareil peut accéder."
+     ],
+     [
+      "Quelles informations de source peuvent s'afficher ?",
+      "Qualité, taille, nom du fichier, langue, addon, fournisseur et autres détails transmis par l'intégration."
+     ]
+    ],
+    "noteTitle": "Aucun compte, addon ou média inclus",
+    "note": "ARVIO ne fournit ni abonnements, ni index, ni identifiants, ni fichiers, ni flux, et ne propose pas de lecture P2P directe. Utilisez uniquement des services et contenus autorisés.",
+    "ctaTitle": "Vos intégrations, avec tous les détails.",
+    "ctaCopy": "ARVIO est gratuit et open source sur Android.",
+    "related": [
+     "hub",
+     "tracking",
+     "subtitles"
+    ]
+   },
+   "tracking": {
+    "title": "Synchro Trakt et Simkl sur TV, iPad, Windows et Mac - ARVIO",
+    "description": "Connectez Trakt et Simkl à ARVIO pour vos listes, historique, progression et scrobbling sur Android TV, mobile et navigateur.",
+    "crumb": "Synchronisation Trakt et Simkl",
+    "eyebrow": "Intégrations de suivi",
+    "h1": "Gardez Trakt et Simkl connectés sur tous vos appareils.",
+    "hero": "Chargez listes, progression et historique dans l'application Android gratuite ou dans ARVIO Web, en option. Choisissez le service de suivi qui alimente chaque fonction, sans renoncer à l'autre.",
+    "sectionEyebrow": "Contrôle par fonction",
+    "sectionTitle": "Utilisez les deux services, chacun avec son rôle.",
+    "sectionCopy": "ARVIO peut connecter Trakt et Simkl au même profil et vous laisse choisir la source des listes, de la progression et de l'historique lorsque la fonction le permet.",
+    "features": [
+     [
+      "Reprendre la lecture",
+      "Retrouvez l'épisode suivant ou la position compatible grâce au service de suivi choisi pour la progression."
+     ],
+     [
+      "Listes et bibliothèque",
+      "Ouvrez vos listes personnelles et collections compatibles dans la page Bibliothèque, avec les mêmes fiches."
+     ],
+     [
+      "Historique de visionnage",
+      "Marquer un titre comme vu peut mettre à jour les services de suivi connectés selon vos préférences de synchronisation."
+     ],
+     [
+      "Scrobbling",
+      "Envoyez la progression pendant la lecture aux services activés, dans le respect des jetons et des limites de l'API."
+     ],
+     [
+      "Profils indépendants",
+      "Chaque profil peut utiliser ses propres connexions et préférences de suivi."
+     ],
+     [
+      "Synchronisation entre appareils",
+      "Les réglages compatibles suivent votre compte ARVIO, sur Android comme dans ARVIO Web (en option)."
+     ]
+    ],
+    "stepsTitle": "Connectez, choisissez, suivez.",
+    "steps": [
+     [
+      "Autorisez les services",
+      "Connectez Trakt et Simkl via leurs procédures d'autorisation officielles."
+     ],
+     [
+      "Choisissez la source",
+      "Définissez le service qui fournit les listes, la progression et les autres données configurables."
+     ],
+     [
+      "Lancez la lecture normalement",
+      "ARVIO met à jour le statut sur les services activés lorsque l'opération est prise en charge."
+     ]
+    ],
+    "faq": [
+     [
+      "Puis-je connecter Trakt et Simkl ensemble ?",
+      "Oui. Les deux peuvent rester connectés, avec des choix distincts pour les fonctions compatibles."
+     ],
+     [
+      "ARVIO copie-t-il mes mots de passe ?",
+      "Non. La connexion utilise les procédures d'autorisation et les jetons fournis par les services."
+     ],
+     [
+      "Les modifications apparaissent-elles sur mes autres appareils ?",
+      "Lorsque le service accepte la mise à jour, le nouveau statut est disponible pour les autres clients connectés au même compte."
+     ]
+    ],
+    "noteTitle": "Les services restent la source des données",
+    "note": "La disponibilité, les délais de mise à jour et les limites dépendent des API de Trakt et de Simkl. ARVIO ne maîtrise pas les pannes ni les limites de ces plateformes.",
+    "ctaTitle": "Vos listes et votre progression, connectées.",
+    "ctaCopy": "Utilisez Trakt, Simkl ou les deux dans ARVIO.",
+    "related": [
+     "hub",
+     "servers",
+     "web"
+    ]
+   },
+   "live": {
+    "title": "TV en direct et EPG sur Android TV, iPad, Windows, Mac - ARVIO",
+    "description": "Utilisez votre fournisseur IPTV autorisé dans ARVIO : ordre du fournisseur, favoris, EPG, recherche et replay compatible.",
+    "crumb": "TV en direct et EPG",
+    "eyebrow": "Pour votre fournisseur autorisé",
+    "h1": "Un guide TV en direct pensé pour tous vos appareils.",
+    "hero": "Parcourez votre fournisseur sur Android TV et smartphone, ou utilisez ARVIO Web, en option, sur iPhone, iPad, Windows, Mac et les navigateurs compatibles. La prise en charge de la lecture dépend du fournisseur et de l'appareil.",
+    "sectionEyebrow": "Conçu pour les grandes listes",
+    "sectionTitle": "Chaînes, groupes et guide dans une expérience fluide.",
+    "sectionCopy": "ARVIO conserve l'ordre d'origine du fournisseur, charge les données par étapes et donne la priorité aux favoris pour que les grandes listes soient vite utilisables.",
+    "features": [
+     [
+      "Ordre du fournisseur",
+      "Groupes et chaînes suivent l'ordre transmis par le fournisseur, sauf si vous les réorganisez."
+     ],
+     [
+      "EPG progressif",
+      "Les données en cache s'affichent d'abord et les nouvelles correspondances se remplissent sans bloquer la navigation."
+     ],
+     [
+      "Favoris en priorité",
+      "Les chaînes favorites et leurs programmes sont chargés en priorité à la première ouverture du guide."
+     ],
+     [
+      "Recherche et catégories",
+      "Trouvez chaînes et programmes, et masquez ou réorganisez les groupes par profil."
+     ],
+     [
+      "Replay compatible",
+      "Consultez les programmes passés et lisez les archives de replay lorsque le fournisseur propose des URL valides."
+     ],
+     [
+      "Télécommande et tactile",
+      "L'interface s'adapte à la navigation par focus sur la TV et aux commandes tactiles sur mobile."
+     ]
+    ],
+    "stepsTitle": "Du fournisseur au guide.",
+    "steps": [
+     [
+      "Ajoutez votre playlist ou votre compte",
+      "Utilisez les informations fournies par un service auquel vous êtes autorisé à accéder."
+     ],
+     [
+      "Chargez l'EPG",
+      "ARVIO lit les sources configurées et associe les programmes par identifiant et par nom correspondant."
+     ],
+     [
+      "Choisissez une chaîne",
+      "Ouvrez le direct ou un programme passé lorsque le replay est disponible."
+     ]
+    ],
+    "faq": [
+     [
+      "ARVIO fournit-il des chaînes ou des playlists ?",
+      "Non. Vous devez connecter un fournisseur ou une playlist que vous êtes autorisé à utiliser."
+     ],
+     [
+      "Pourquoi certaines chaînes n'ont-elles pas de guide ?",
+      "Le fournisseur ne fournit peut-être pas d'EPG, ou les identifiants et noms ne correspondent pas aux chaînes."
+     ],
+     [
+      "Le replay fonctionne-t-il sur toutes les chaînes ?",
+      "Non. Il dépend de la disponibilité, du format et des URL d'archive fournis par le fournisseur."
+     ]
+    ],
+    "noteTitle": "La qualité dépend du fournisseur",
+    "note": "L'EPG, la durée d'archive, le replay et la stabilité des flux proviennent du service connecté. ARVIO organise et lit les données reçues.",
+    "ctaTitle": "Votre fournisseur, organisé pour la télécommande.",
+    "ctaCopy": "Utilisez ARVIO gratuitement sur Android TV et Android.",
+    "related": [
+     "hub",
+     "web",
+     "tracking"
+    ]
+   },
+   "subtitles": {
+    "title": "Sous-titres IA sur Android TV, iPad, Windows et Mac - ARVIO",
+    "description": "Recherchez, ajustez et traduisez des sous-titres dans ARVIO avec des outils d'IA facultatifs et vos propres identifiants compatibles.",
+    "crumb": "Sous-titres par IA",
+    "eyebrow": "Outils d'accessibilité facultatifs",
+    "h1": "Maîtrisez les sous-titres sur TV, mobile et navigateur.",
+    "hero": "Utilisez la recherche et la mise en forme des sous-titres dans l'application Android gratuite, ainsi que des outils de traduction par IA facultatifs avec votre propre compte compatible. Les fonctions disponibles dépendent du lecteur et de la source.",
+    "sectionEyebrow": "Des sous-titres qui s'adaptent",
+    "sectionTitle": "Lisibles, sans masquer l'image.",
+    "sectionCopy": "ARVIO réunit la recherche, la sélection, le style et le positionnement des sous-titres dans des commandes adaptées à la TV et au mobile.",
+    "features": [
+     [
+      "Recherche de sous-titres",
+      "Interrogez les fournisseurs compatibles et choisissez la langue et la version adaptées au fichier."
+     ],
+     [
+      "Style personnalisable",
+      "Réglez la taille, la couleur, le fond et la position selon l'écran et vos préférences."
+     ],
+     [
+      "Bandes noires et cadrage",
+      "Lorsque le lecteur le permet, placez les sous-titres par rapport à l'écran et pas seulement à l'image vidéo."
+     ],
+     [
+      "Traduction par IA facultative",
+      "Utilisez votre propre compte compatible pour traduire le texte, sans abonnement IA inclus dans ARVIO."
+     ],
+     [
+      "Commandes pour la TV",
+      "Changez de piste et de préférences sans menus pénibles à parcourir à la télécommande."
+     ],
+     [
+      "Compatibilité selon le format",
+      "SRT, WebVTT, sous-titres intégrés et autres formats dépendent du lecteur et de la source."
+     ]
+    ],
+    "stepsTitle": "Trouvez et réglez la bonne piste.",
+    "steps": [
+     [
+      "Ouvrez les sous-titres",
+      "Pendant la lecture, ouvrez le sélecteur pour voir les pistes disponibles."
+     ],
+     [
+      "Choisissez langue et style",
+      "Sélectionnez la piste et appliquez les préférences d'affichage du profil."
+     ],
+     [
+      "Utilisez l'IA si besoin",
+      "Configurez votre propre identifiant compatible et ne traduisez que lorsque cette fonction est utile."
+     ]
+    ],
+    "faq": [
+     [
+      "ARVIO inclut-il un service d'IA payant ?",
+      "Non. Les outils d'IA sont facultatifs et nécessitent votre propre compte compatible."
+     ],
+     [
+      "Toutes les sources proposent-elles des sous-titres ?",
+      "Non. La disponibilité dépend du média, de l'addon, du serveur et des fournisseurs de sous-titres configurés."
+     ],
+     [
+      "Puis-je changer la position des sous-titres ?",
+      "Oui, avec les lecteurs et formats compatibles, tout comme la taille, la couleur et le fond."
+     ]
+    ],
+    "noteTitle": "La précision varie",
+    "note": "Les traductions automatiques peuvent contenir des erreurs. Relisez le résultat lorsque la précision compte et respectez les conditions d'utilisation du service d'IA choisi.",
+    "ctaTitle": "Des sous-titres clairs sur tous les écrans.",
+    "ctaCopy": "Le lecteur Android d'ARVIO reste gratuit et open source.",
+    "related": [
+     "hub",
+     "sources",
+     "web"
+    ]
+   },
+   "firetv": {
+    "title": "ARVIO sur Fire TV - installation et compatibilité",
+    "description": "Installez l'APK officiel d'ARVIO sur les appareils Fire TV compatibles et profitez d'une interface pensée pour la télécommande.",
+    "crumb": "ARVIO sur Fire TV",
+    "eyebrow": "Appareils Fire OS compatibles",
+    "h1": "Utilisez ARVIO sur Fire TV.",
+    "hero": "L'application Android TV peut être installée manuellement sur les appareils Fire TV compatibles et apporte sur Fire OS les bibliothèques, le suivi, la TV en direct et le lecteur d'ARVIO.",
+    "sectionEyebrow": "Le même APK officiel",
+    "sectionTitle": "Une expérience TV, sans version parallèle.",
+    "sectionCopy": "Fire TV exécute la version Android signée publiée sur GitHub. La compatibilité varie selon la version de Fire OS, le matériel et les services installés.",
+    "features": [
+     [
+      "Interface pour télécommande",
+      "Fiches, menus et lecteur sont conçus pour la navigation par focus sur un téléviseur."
+     ],
+     [
+      "APK officiel signé",
+      "Utilisez uniquement la version publiée sur le dépôt officiel pour conserver la signature et permettre les mises à jour."
+     ],
+     [
+      "Serveurs domestiques",
+      "Connectez vos serveurs Jellyfin, Plex et Emby autorisés comme sur les autres appareils Android compatibles."
+     ],
+     [
+      "Suivi",
+      "Utilisez Trakt et Simkl pour les listes, la progression et l'historique une fois les comptes connectés."
+     ],
+     [
+      "TV en direct",
+      "Ouvrez votre fournisseur ou votre playlist autorisée avec EPG et fonctions compatibles."
+     ],
+     [
+      "Limites de la plateforme",
+      "Google Play, codecs, mémoire et fonctionnement en arrière-plan peuvent différer d'un appareil Android TV classique."
+     ]
+    ],
+    "stepsTitle": "Une installation en connaissance de cause.",
+    "steps": [
+     [
+      "Téléchargez depuis GitHub",
+      "Récupérez l'APK de la dernière version sur la page officielle du projet."
+     ],
+     [
+      "Autorisez l'installation",
+      "Activez temporairement l'installation d'applications depuis la source utilisée sur le Fire TV."
+     ],
+     [
+      "Ouvrez et configurez",
+      "Connectez uniquement les comptes, serveurs et sources que vous êtes autorisé à utiliser."
+     ]
+    ],
+    "faq": [
+     [
+      "ARVIO est-il disponible sur l'Amazon Appstore ?",
+      "La disponibilité peut varier. La méthode documentée consiste à installer l'APK officiel depuis GitHub sur un matériel compatible."
+     ],
+     [
+      "Le même APK fonctionne-t-il sur tous les Fire TV ?",
+      "Ce n'est pas garanti pour tous les modèles. Les performances et les codecs varient selon le matériel et la version de Fire OS."
+     ],
+     [
+      "Puis-je mettre à jour sans perdre mes données ?",
+      "Oui, si le nouvel APK utilise le même paquet et la même signature officielle. Ne désinstallez pas l'application si vous voulez conserver les données locales."
+     ]
+    ],
+    "noteTitle": "L'installation manuelle demande de la prudence",
+    "note": "Vérifiez toujours le dépôt officiel et la signature. Les versions tierces peuvent mal se mettre à jour et présenter un risque pour vos données.",
+    "ctaTitle": "ARVIO sur votre écran Fire TV.",
+    "ctaCopy": "Téléchargez l'APK officiel signé depuis GitHub.",
+    "ctaPrimary": "Releases GitHub",
+    "ctaPrimaryHref": "https://github.com/ProdigyV21/ARVIO/releases",
+    "related": [
+     "hub",
+     "live",
+     "servers"
+    ]
+   },
+   "web": {
+    "title": "ARVIO Web pour iPhone, iPad, Windows, Mac et Apple TV",
+    "description": "Utilisez le complément Premium ARVIO Web sur iPhone, iPad, Windows, Mac, Apple TV et les navigateurs compatibles.",
+    "crumb": "ARVIO Web",
+    "eyebrow": "Accès Premium facultatif par navigateur",
+    "h1": "Votre configuration ARVIO sur iPhone, iPad, Windows et Mac.",
+    "hero": "ARVIO Web étend profils, bibliothèques, suivi et services autorisés aux navigateurs modernes sur appareils Apple, Windows, macOS, ChromeOS et Smart TV compatibles.",
+    "sectionEyebrow": "Un complément, pas un remplacement",
+    "sectionTitle": "Emportez votre bibliothèque dans le navigateur.",
+    "sectionCopy": "L'application Android reste gratuite et open source. ARVIO Web est un abonnement complémentaire pour ceux qui ont besoin d'un accès par navigateur, de téléchargements et d'intégrations compatibles sur d'autres plateformes.",
+    "features": [
+     [
+      "iPhone et iPad",
+      "Ouvrez profils et bibliothèques dans un navigateur moderne, sans installer d'application iOS distincte."
+     ],
+     [
+      "Windows et Mac",
+      "Utilisez l'interface ARVIO sur ordinateur et envoyez les médias compatibles vers VLC si besoin."
+     ],
+     [
+      "Apple TV et Smart TV",
+      "Accédez-y via les navigateurs compatibles ; la prise en charge de la lecture varie selon le système."
+     ],
+     [
+      "Réglages dans le cloud",
+      "Retrouvez les profils et réglages compatibles liés au même compte ARVIO."
+     ],
+     [
+      "Bibliothèques domestiques",
+      "Parcourez Jellyfin, Plex et Emby connectés lorsque le réseau et le serveur autorisent l'accès."
+     ],
+     [
+      "Téléchargements compatibles",
+      "Téléchargez les sources autorisées lorsque l'intégration, l'origine et le navigateur le permettent."
+     ]
+    ],
+    "stepsTitle": "Commencez dans le navigateur.",
+    "steps": [
+     [
+      "Connectez votre compte",
+      "Connectez-vous avec le même compte ARVIO que sur vos appareils Android."
+     ],
+     [
+      "Choisissez une formule en appuyant sur Play",
+      "Explorez et configurez gratuitement. En appuyant sur Play, vous choisissez une formule : 2,99 $ US/mois ou 20 $ US pour 12 mois."
+     ],
+     [
+      "Ouvrez vos services",
+      "Retrouvez vos profils, bibliothèques et intégrations autorisées, synchronisés."
+     ]
+    ],
+    "faq": [
+     [
+      "L'application Android va-t-elle devenir payante ?",
+      "Non. L'application Android reste gratuite et open source."
+     ],
+     [
+      "ARVIO Web fonctionne-t-il dans tous les navigateurs ?",
+      "Pas forcément. La lecture, les codecs et les intégrations externes dépendent du navigateur et du système."
+     ],
+     [
+      "Puis-je l'utiliser sur iPhone et iPad ?",
+      "Oui, dans les navigateurs compatibles, avec les fonctions disponibles dans ARVIO Web."
+     ]
+    ],
+    "noteTitle": "La compatibilité du navigateur compte",
+    "note": "Les navigateurs n'offrent pas les mêmes codecs ni les mêmes commandes que le lecteur Android. Certains formats nécessitent un transcodage ou l'ouverture dans une application externe compatible.",
+    "ctaTitle": "Découvrez ARVIO dans le navigateur.",
+    "ctaCopy": "Premium ajoute l'accès par navigateur ; l'application Android reste gratuite.",
+    "ctaPrimary": "Découvrir ARVIO Web",
+    "ctaPrimaryHref": "https://web.arvio.tv/",
+    "related": [
+     "hub",
+     "servers",
+     "tracking"
+    ]
+   }
+  }
+ },
+ "directoryLabels": {
+  "hub": [
+   "Commencer ici",
+   "Centre multimédia multi-appareils",
+   "Profils, serveurs, suivi, TV en direct, sous-titres et lecture sur Android et dans le navigateur."
+  ],
+  "jellyfin": [
+   "Serveurs domestiques",
+   "Jellyfin sur TV et navigateur",
+   "Parcourez vos bibliothèques Jellyfin sans remplacer votre serveur."
+  ],
+  "servers": [
+   "Serveurs domestiques",
+   "Plex, Emby et Jellyfin réunis",
+   "Organisez plusieurs serveurs autorisés dans une seule bibliothèque."
+  ],
+  "sources": [
+   "Sources et lecture",
+   "Sources debrid et Usenet",
+   "Gardez qualité, taille, langue et origine bien visibles."
+  ],
+  "tracking": [
+   "Suivi",
+   "Synchronisation Trakt et Simkl",
+   "Connectez listes, progression, historique et scrobbling."
+  ],
+  "live": [
+   "TV en direct",
+   "TV en direct et EPG",
+   "Utilisez votre fournisseur autorisé avec guide, favoris et replay compatible."
+  ],
+  "subtitles": [
+   "Accessibilité",
+   "Sous-titres par IA",
+   "Recherchez, ajustez et traduisez des sous-titres avec des outils facultatifs."
+  ],
+  "firetv": [
+   "Appareils",
+   "ARVIO sur Fire TV",
+   "Installez l'APK officiel sur un matériel Fire TV compatible."
+  ],
+  "web": [
+   "Choisir l'hébergement",
+   "ARVIO Web : gratuit ou géré",
+   "Comparez l'auto-hébergement gratuit, Premium en option, les profils et la compatibilité du navigateur."
+  ]
+ },
+ "entryCopy": {
+  "title": "ARVIO en français - Centre multimédia gratuit pour Android TV",
+  "description": "Découvrez ARVIO en français : un centre multimédia gratuit et open source pour Android TV, serveurs domestiques, TV en direct, Trakt, Simkl et sous-titres.",
+  "eyebrow": "ARVIO en français",
+  "h1": "Vos médias, élégamment réunis.",
+  "lead": "ARVIO réunit les serveurs, services et outils de lecture que vous utilisez déjà dans une expérience rapide pour Android TV, Google TV et Android. ARVIO Web, en option, étend l'accès à l'iPhone, l'iPad, Windows, Mac et d'autres navigateurs compatibles.",
+  "sectionTitle": "Découvrez les principales fonctions.",
+  "sectionCopy": "Commencez par la présentation générale ou ouvrez un guide dédié à votre serveur, service de suivi, fournisseur ou appareil.",
+  "guidesButton": "Voir tous les guides",
+  "freeTitle": "Gratuit et open source sur Android.",
+  "freeCopy": "Premium est un complément facultatif pour navigateur ; l'application Android reste gratuite."
+ },
+ "guideCopy": {
+  "title": "Guides ARVIO - Android TV, serveurs, suivi et TV en direct",
+  "description": "Guides ARVIO en français pour Android TV, Jellyfin, Plex, Emby, Trakt, Simkl, TV en direct, sous-titres, debrid, Usenet et accès par navigateur.",
+  "eyebrow": "Guides produit",
+  "h1": "Créez votre propre centre multimédia connecté.",
+  "lead": "Commencez avec l'application Android gratuite, hébergez ARVIO Web sur votre propre serveur ou choisissez l'hébergement géré. Ces guides vous aident à connecter vos sources et à tester l'appareil que vous utilisez.",
+  "noteTitle": "Un logiciel, pas du contenu",
+  "ctaTitle": "Gratuit et open source sur Android.",
+  "ctaCopy": "Installez-le depuis Google Play ou consultez l'intégralité du projet sur GitHub."
+ },
+ "slugs": {
+  "home": "/fr/",
+  "guides": "/fr/guides/",
+  "hub": "/fr/centre-multimedia-android-tv/",
+  "jellyfin": "/fr/jellyfin-android-tv/",
+  "servers": "/fr/plex-emby-jellyfin/",
+  "sources": "/fr/debrid-usenet-android-tv/",
+  "tracking": "/fr/synchronisation-trakt-simkl/",
+  "live": "/fr/tv-en-direct-epg/",
+  "subtitles": "/fr/sous-titres-ia-android-tv/",
+  "firetv": "/fr/arvio-fire-tv/",
+  "web": "/fr/arvio-web/"
+ },
+ "standaloneLabels": {
+  "/arvio-iphone-ipad/": [
+   "iPhone et iPad · En anglais",
+   "ARVIO sur iPhone et iPad",
+   "Ouvrez ARVIO Web dans Safari, connectez-vous avec votre compte ARVIO, ajoutez-le à l'écran d'accueil et explorez avant de payer."
+  ],
+  "/stremio-addons-android-tv/": [
+   "Configuration des addons · En anglais",
+   "Addons compatibles Stremio dans ARVIO",
+   "Installez une URL de manifeste, configurez depuis le smartphone et vérifiez les limites de compatibilité sur Android TV."
+  ],
+  "/collections-catalogs/": [
+   "Personnalisation · En anglais",
+   "Créer des collections et ajouter des catalogues",
+   "Modèles JSON, hébergement gratuit et import par URL pour personnaliser la page d'accueil."
+  ],
+  "/collection-studio/": [
+   "Créateur de collections · En anglais",
+   "Collection Studio",
+   "Créez une rangée d'accueil avec jusqu'à huit dossiers, copiez le JSON dans ARVIO et partagez un aperçu public."
+  ],
+  "/self-host-arvio-web/": [
+   "Version web gratuite · En anglais",
+   "Auto-hébergement avec Docker ou Node.js",
+   "Commandes d'installation, vos clés API, profils locaux, accès réseau et mises à jour."
+  ],
+  "/browser-playback-guide/": [
+   "Lecture dans le navigateur · En anglais",
+   "Testez votre première source",
+   "Identifiez les problèmes d'accès et de format, et testez la TV en direct ou vos serveurs sur votre appareil."
+  ]
+ },
+ "ogLocale": "fr_FR"
+}

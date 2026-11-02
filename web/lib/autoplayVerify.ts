@@ -1,5 +1,5 @@
 import { cachedDebridDirectUrl, parseDebridStream } from "./debrid";
-import { playbackPlan, streamTransport } from "./streamCompatibility";
+import { browserPlaysDolbyAudio, canTryRemux, playbackPlan, streamTransport } from "./streamCompatibility";
 import { cachedVerdict, verifyStream } from "./streamVerify";
 import type { StreamSource } from "./types";
 
@@ -25,6 +25,19 @@ export function probeUrlFor(stream: StreamSource): string | null {
   if (playbackPlan(stream).method !== "direct") return null;
   if (parseDebridStream(stream.originalUrl ?? stream.url)) return cachedDebridDirectUrl(stream.originalUrl ?? stream.url);
   return /^https?:\/\//i.test(stream.url) ? stream.url : null;
+}
+
+/**
+ * True when the probe showed this file's video plays here but none of its
+ * audio tracks does, on a browser whose <video> cannot play Dolby audio
+ * natively either (Chromium): played directly it would be silent. The remux
+ * path converts that audio in the browser, so start there instead.
+ */
+export function needsAudioConversion(stream: StreamSource): boolean {
+  const url = probeUrlFor(stream);
+  const verdict = url ? cachedVerdict(url) : undefined;
+  if (!verdict || verdict.playable || !verdict.videoOk || verdict.audioOk || !verdict.audioTrackCount) return false;
+  return !browserPlaysDolbyAudio() && canTryRemux(stream);
 }
 
 /** Probing is only meaningful where the browser exposes WebCodecs decoders. */

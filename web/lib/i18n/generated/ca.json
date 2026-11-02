@@ -1553,5 +1553,12 @@
   "{value0}% · watched": "{value0}% · vist",
   "· Guide match": "· Partit de guia",
   "· Possible broadcast": "· Possible emissió",
-  "· {value0}d archive": "· {value0}d arxiu"
+  "· {value0}d archive": "· {value0}d arxiu",
+  "View on Trakt": "Veure a Trakt",
+  "This file's audio can't play directly in this browser. Converting the audio…": "L'àudio d'aquest fitxer no es pot reproduir directament en aquest navegador. S'està convertint l'àudio…",
+  "This file's audio can't play in this browser. Requesting provider conversion…": "L'àudio d'aquest fitxer no es pot reproduir en aquest navegador. S'està sol·licitant la conversió al proveïdor…",
+  "This source's audio can't play in this browser. Choose another source or use an external player.": "L'àudio d'aquesta font no es pot reproduir en aquest navegador. Trieu una altra font o utilitzeu un reproductor extern.",
+  "Converting the audio for your browser…": "S'està convertint l'àudio per al vostre navegador…",
+  "Picking the best source…": "S'està triant la millor font…",
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi cobra en dòlars nord-americans; el vostre banc converteix l'import automàticament."
 }

@@ -95,6 +95,7 @@ import com.arflix.tv.util.IPTV_EPG_VOD_ACTIONS_ENABLED_KEY
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
 import com.arflix.tv.util.IPTV_FALLBACK_LOGOS_ENABLED_KEY
 import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
+import com.arflix.tv.util.withItemMoved
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -264,6 +265,7 @@ data class SettingsUiState(
     val historyCount: Int = 0,
     // Trakt
     val isTraktAuthenticated: Boolean = false,
+    val traktReconnectRequired: Boolean = false,
     val traktCode: TraktDeviceCode? = null,
     /** Wall clock time the current activation code dies, so the dialog can count down. */
     val traktCodeExpiresAtMillis: Long? = null,
@@ -283,6 +285,10 @@ data class SettingsUiState(
     val showMdbListApiKeyDialog: Boolean = false,
     val mdbListConnecting: Boolean = false,
     // Simkl (alternative remote sync provider)
+    val isWeTrakrConnected: Boolean = false,
+    val weTrakrBusy: Boolean = false,
+    val weTrakrCode: com.arflix.tv.data.repository.wetrakr.WeTrakrDeviceCode? = null,
+    val trackingWriteToWeTrakr: Boolean = false,
     val isSimklConnected: Boolean = false,
     val isSimklAuthStarting: Boolean = false,
     val isSimklPolling: Boolean = false,
@@ -346,6 +352,7 @@ data class SettingsUiState(
     val fallbackChannelLogosEnabled: Boolean = false,
     // App updates
     val isSelfUpdateSupported: Boolean = true,
+    val quietUpdateNotifications: Boolean = false,
     val updateStatus: com.arflix.tv.updater.UpdateStatus = com.arflix.tv.updater.UpdateStatus.Idle,
     val showAppUpdateDialog: Boolean = false,
     val showUnknownSourcesDialog: Boolean = false,
@@ -447,12 +454,14 @@ class SettingsViewModel @Inject constructor(
     private val mdbListRepository: com.arflix.tv.data.repository.MdbListRepository,
     private val syncProviderStore: com.arflix.tv.data.repository.sync.SyncProviderStore,
     private val watchHistoryRepository: com.arflix.tv.data.repository.WatchHistoryRepository,
+    private val weTrakr: com.arflix.tv.data.repository.wetrakr.WeTrakrRepository,
     private val simklAuthManager: com.arflix.tv.data.repository.simkl.SimklAuthManager,
     private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val pluginManager: PluginManager,
     private val telegramRepository: TelegramRepository,
     private val communityAddonRepository: CommunityAddonRepository,
+    private val traktManualSync: com.arflix.tv.data.repository.TraktManualSync,
     private val partnerDelivery: dagger.Lazy<com.arflix.tv.data.repository.PartnerDeliveryRepository>? = null
 ) : ViewModel() {
     private fun visibleCatalogs(catalogs: List<CatalogConfig>): List<CatalogConfig> {
@@ -646,6 +655,7 @@ class SettingsViewModel @Inject constructor(
         observeTorrServer()
         observeHomeServer()
         observeSyncState()
+        observeTraktConnection()
         observeAuthState()
         observeIptvConfig()
         observeIptvGroupPrefs()
@@ -712,6 +722,16 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+
+        viewModelScope.launch {
+            updatePreferences.quietNotifications.collect { quiet ->
+                _uiState.value = _uiState.value.copy(quietUpdateNotifications = quiet)
+            }
+        }
+    }
+
+    fun setQuietUpdateNotifications(enabled: Boolean) {
+        viewModelScope.launch { updatePreferences.setQuietNotifications(enabled) }
     }
 
     fun setDiagnosticsSharingEnabled(enabled: Boolean) {
@@ -864,6 +884,8 @@ class SettingsViewModel @Inject constructor(
             }
 
             if (profileManager.getProfileIdSync() != loadProfileId) return@launch
+            val traktConnection = traktRepository.connection.first()
+            if (traktConnection.profileId != loadProfileId) return@launch
             val currentState = _uiState.value
             _uiState.value = currentState.copy(
                 defaultSubtitle = defaultSub,
@@ -906,7 +928,8 @@ class SettingsViewModel @Inject constructor(
                 spoilerBlurEnabled = spoilerBlurEnabled,
                 isLoggedIn = isLoggedIn,
                 accountEmail = accountEmail,
-                isTraktAuthenticated = isTrakt,
+                isTraktAuthenticated = traktConnection.connected,
+                traktReconnectRequired = traktConnection.reconnectRequired,
                 traktExpiration = traktExpiration,
                 watchlistCount = watchlistCount,
                 historyCount = historyCount,
@@ -917,12 +940,15 @@ class SettingsViewModel @Inject constructor(
                 mdbListCode = null,
                 mdbListUrl = null,
                 mdbListUsername = null,
+                isWeTrakrConnected = weTrakr.isConnected(),
+                weTrakrBusy = false, weTrakrCode = null,
                 isSimklConnected = isSimkl,
                 simklUsername = null,
                 trackingWatchlistReadMode = trackingPreferences.watchlistReadMode,
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                 trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                 lastSyncTime = null,
                 syncedMovies = 0,
@@ -1176,12 +1202,26 @@ class SettingsViewModel @Inject constructor(
         // Observe sync status
         viewModelScope.launch {
             traktSyncService.isSyncing.collect { isSyncing ->
-                if (_uiState.value.isSyncing != isSyncing) {
-                    _uiState.value = _uiState.value.copy(isSyncing = isSyncing)
+                val busy = isSyncing || manualTrackingSync
+                if (_uiState.value.isSyncing != busy) {
+                    _uiState.value = _uiState.value.copy(isSyncing = busy)
                 }
             }
         }
 
+    }
+
+    private fun observeTraktConnection() {
+        viewModelScope.launch {
+            traktRepository.connection.collect { connection ->
+                if (connection.profileId != profileManager.getProfileIdSync()) return@collect
+                _uiState.value = _uiState.value.copy(
+                    isTraktAuthenticated = connection.connected,
+                    traktReconnectRequired = connection.reconnectRequired,
+                    traktUsername = _uiState.value.traktUsername.takeIf { connection.connected }
+                )
+            }
+        }
     }
 
     private fun formatSyncTime(isoTime: String?): String? {
@@ -1376,6 +1416,50 @@ class SettingsViewModel @Inject constructor(
     // ========== App Updates ==========
 
     private var lastManualSyncTimeMs = 0L
+    private var manualTrackingSync = false
+
+    fun forceTraktSync() {
+        val now = System.currentTimeMillis()
+        if (_uiState.value.isSyncing || now - lastManualSyncTimeMs < 10_000L) return
+        lastManualSyncTimeMs = now
+        viewModelScope.launch {
+            val profileId = profileManager.getProfileIdSync()
+            manualTrackingSync = true
+            _uiState.value = _uiState.value.copy(isSyncing = true)
+            try {
+                val result = withContext(Dispatchers.IO) { traktManualSync.sync() }
+                if (profileManager.getProfileIdSync() != profileId) return@launch
+                _uiState.value = when (result) {
+                    is SyncResult.Success -> _uiState.value.copy(
+                        syncedMovies = result.moviesSynced,
+                        syncedEpisodes = result.episodesSynced,
+                        lastSyncTime = formatSyncTime(java.time.Instant.now().toString()),
+                        toastMessage = SettingsMessage.Res(R.string.settings_sync_summary,
+                            listOf(result.moviesSynced, result.episodesSynced)),
+                        toastType = ToastType.SUCCESS
+                    )
+                    is SyncResult.Error -> _uiState.value.copy(
+                        syncProgress = SyncProgress(status = SyncStatus.ERROR, message = result.message),
+                        toastMessage = if (result.reconnectRequired) SettingsMessage.Res(R.string.trakt_reconnect_required)
+                            else SettingsMessage.Res(R.string.sync_failed, listOf(result.message)),
+                        toastType = ToastType.ERROR
+                    )
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (profileManager.getProfileIdSync() == profileId) {
+                    _uiState.value = _uiState.value.copy(
+                        syncProgress = SyncProgress(status = SyncStatus.ERROR, message = error.message.orEmpty()),
+                        toastMessage = SettingsMessage.Res(R.string.sync_failed, listOf(error.message.orEmpty())),
+                        toastType = ToastType.ERROR
+                    )
+                }
+            } finally {
+                manualTrackingSync = false
+                _uiState.value = _uiState.value.copy(isSyncing = traktSyncService.isSyncing.value)
+            }
+        }
+    }
 
     fun syncAllTrackingProviders(silent: Boolean = false) {
         val now = System.currentTimeMillis()
@@ -1388,6 +1472,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             if (_uiState.value.isSyncing) return@launch
             withContext(Dispatchers.Main) {
+                manualTrackingSync = true
                 _uiState.value = _uiState.value.copy(isSyncing = true)
             }
             try {
@@ -1497,8 +1582,9 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             } finally {
-                withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(isSyncing = false)
+                withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
+                    manualTrackingSync = false
+                    _uiState.value = _uiState.value.copy(isSyncing = traktSyncService.isSyncing.value)
                 }
             }
         }
@@ -2411,6 +2497,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun moveStreamProviderBy(id: String, steps: Int) {
+        viewModelScope.launch {
+            if (streamIntegrationRepository.moveProviderItemBy(id, steps)) {
+                syncLocalStateToCloud(silent = true)
+            }
+        }
+    }
+
     fun toggleStreamProvider(id: String) {
         if (!canManage("connections")) return
         viewModelScope.launch {
@@ -3238,6 +3332,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun moveCatalogBy(catalogId: String, steps: Int) {
+        viewModelScope.launch {
+            if (catalogRepository.moveCatalogBy(catalogId, steps)) {
+                syncLocalStateToCloud(silent = true)
+            }
+        }
+    }
+
     fun saveIptvConfig(m3uUrl: String, epgUrl: String) {
         if (!canManage("connections")) return
         viewModelScope.launch {
@@ -3398,6 +3500,25 @@ class SettingsViewModel @Inject constructor(
         persistStalkerPortals(current)
     }
 
+    fun onMoveStalkerPortalBy(portalId: String, steps: Int) {
+        val current = _uiState.value.iptvStalkerPortals
+        val idx = current.indexOfFirst { it.id == portalId }
+        if (idx < 0) return
+        val updated = current.withItemMoved(idx, (idx + steps).coerceIn(0, current.lastIndex))
+        if (updated == current) return
+        persistStalkerPortals(updated)
+    }
+
+    /** Moves a playlist several places at once - one save, so one reload, for a row dragged on the phone. */
+    fun moveIptvPlaylistBy(playlistId: String, steps: Int) {
+        val current = _uiState.value.iptvPlaylists
+        val idx = current.indexOfFirst { it.id == playlistId }
+        if (idx < 0) return
+        val updated = current.withItemMoved(idx, (idx + steps).coerceIn(0, current.lastIndex))
+        if (updated == current) return
+        saveIptvPlaylists(updated)
+    }
+
     fun onRemoveStalkerPortal(portalId: String) {
         if (!canManage("connections")) return
         val updated = _uiState.value.iptvStalkerPortals.filterNot { it.id == portalId }
@@ -3409,6 +3530,18 @@ class SettingsViewModel @Inject constructor(
                 toastType = ToastType.SUCCESS
             )
         }
+    }
+
+    fun removeStalkerPortals(portalIds: Set<String>) {
+        val current = _uiState.value.iptvStalkerPortals
+        val updated = current.filterNot { it.id in portalIds }
+        if (updated != current) persistStalkerPortals(updated)
+    }
+
+    fun removeIptvPlaylists(playlistIds: Set<String>) {
+        val current = _uiState.value.iptvPlaylists
+        val updated = current.filterNot { it.id in playlistIds }
+        if (updated != current) saveIptvPlaylists(updated)
     }
 
     /**
@@ -3583,6 +3716,10 @@ class SettingsViewModel @Inject constructor(
 
     fun saveIptvPlaylists(playlists: List<IptvPlaylistEntry>) {
         if (!canManage("connections")) return
+        if (playlists.count { it.m3uUrl.isNotBlank() } > com.arflix.tv.data.repository.MAX_IPTV_PLAYLISTS) {
+            _uiState.value = _uiState.value.copy(toastMessage = SettingsMessage.Res(R.string.settings_iptv_max_reached), toastType = ToastType.ERROR)
+            return
+        }
         val previous = _uiState.value.iptvPlaylists
         viewModelScope.launch {
             iptvRepository.savePlaylists(playlists)
@@ -3595,7 +3732,7 @@ class SettingsViewModel @Inject constructor(
                 portals = stored.stalkerPortals,
             )
             _uiState.value = _uiState.value.copy(
-                iptvPlaylists = playlists.filter { it.m3uUrl.isNotBlank() }
+                iptvPlaylists = stored.playlists
             )
             syncLocalStateToCloud(silent = true)
             refreshIptv(showToast = true, configured = true, force = true)
@@ -4847,6 +4984,8 @@ class SettingsViewModel @Inject constructor(
                 val message: SettingsMessage = when (e) {
                     is retrofit2.HttpException -> if (e.code() == 429) {
                         SettingsMessage.Res(R.string.settings_trakt_rate_limited)
+                    } else if (e.code() in 500..599) {
+                        SettingsMessage.Res(R.string.settings_trakt_unavailable)
                     } else SettingsMessage.Res(
                         R.string.settings_trakt_activation_failed_code,
                         listOf(e.code())
@@ -4919,6 +5058,7 @@ class SettingsViewModel @Inject constructor(
                         trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                         trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                         trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                        trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                         trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                         toastMessage = SettingsMessage.Res(R.string.settings_trakt_connected_toast),
                         toastType = ToastType.SUCCESS
@@ -4973,7 +5113,11 @@ class SettingsViewModel @Inject constructor(
                     // Only the poll itself is retried (pollForToken also stores the token): once
                     // the token is saved, asking again would report the code as already used.
                     if (!tokenSaved && com.arflix.tv.data.repository.isTransientTraktPollFailure(e)) {
-                        networkFailure = e.message.orMessage(SettingsMessage.Res(R.string.settings_trakt_auth_failed))
+                        networkFailure = if (httpError != null) SettingsMessage.Res(R.string.settings_trakt_unavailable)
+                            else e.message.orMessage(SettingsMessage.Res(R.string.settings_trakt_auth_failed))
+                        pollDelayMs = com.arflix.tv.data.repository.traktRetryDelayMs(
+                            httpError?.response()?.headers()?.get("Retry-After"), maxOf(pollDelayMs, 15_000L)
+                        )
                         continue
                     }
 
@@ -5037,6 +5181,7 @@ class SettingsViewModel @Inject constructor(
                 trackingContinueReadMode = preferences.continueWatchingReadMode,
                 trackingWatchedReadMode = preferences.watchedReadMode,
                 trackingWriteToTrakt = false,
+                trackingWriteToWeTrakr = preferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = preferences.writeToSimkl == true,
                 toastMessage = SettingsMessage.Res(R.string.settings_trakt_disconnected),
                 toastType = ToastType.SUCCESS
@@ -5094,6 +5239,7 @@ class SettingsViewModel @Inject constructor(
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                 trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                 toastMessage = SettingsMessage.Res(R.string.mdblist_connected),
                 toastType = ToastType.SUCCESS
@@ -5197,6 +5343,7 @@ class SettingsViewModel @Inject constructor(
                         trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                         trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                         trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                        trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                         trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                         toastMessage = SettingsMessage.Res(R.string.mdblist_connected),
                         toastType = ToastType.SUCCESS
@@ -5280,6 +5427,7 @@ class SettingsViewModel @Inject constructor(
                 trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                 trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                 trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                 toastMessage = SettingsMessage.Res(R.string.mdblist_disconnected),
                 toastType = ToastType.SUCCESS
@@ -5353,6 +5501,7 @@ class SettingsViewModel @Inject constructor(
                             trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                             trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                             trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                            trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                             trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                             toastMessage = SettingsMessage.Res(R.string.settings_simkl_connected),
                             toastType = ToastType.SUCCESS
@@ -5410,6 +5559,7 @@ class SettingsViewModel @Inject constructor(
                         trackingContinueReadMode = trackingPreferences.continueWatchingReadMode,
                         trackingWatchedReadMode = trackingPreferences.watchedReadMode,
                         trackingWriteToTrakt = trackingPreferences.writeToTrakt == true,
+                        trackingWriteToWeTrakr = trackingPreferences.writeToWeTrakr == true,
                         trackingWriteToSimkl = trackingPreferences.writeToSimkl == true,
                         toastMessage = SettingsMessage.Res(R.string.settings_simkl_connected),
                         toastType = ToastType.SUCCESS
@@ -5466,6 +5616,45 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private var weTrakrJob: kotlinx.coroutines.Job? = null
+    fun toggleWeTrakr() {
+        val profile = profileManager.getProfileIdSync()
+        val cancel = _uiState.value.weTrakrBusy
+        weTrakrJob?.cancel()
+        weTrakrJob = viewModelScope.launch {
+            try {
+                if (cancel) { weTrakr.cancel(profile); return@launch }
+                if (weTrakr.isConnected(profile)) {
+                    weTrakr.disconnect(profile)
+                    syncProviderStore.onProviderDisconnected(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, profile)
+                } else {
+                    _uiState.value = _uiState.value.copy(weTrakrBusy = true)
+                    val code = weTrakr.start(profile)
+                    if (profileManager.getProfileIdSync() != profile) return@launch
+                    _uiState.value = _uiState.value.copy(weTrakrCode = code)
+                    while (System.currentTimeMillis() < code.expiresAt && profileManager.getProfileIdSync() == profile) {
+                        delay(code.interval * 1000)
+                        if (weTrakr.poll(profile)) {
+                            syncProviderStore.onProviderConnected(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, profile)
+                            break
+                        }
+                    }
+                    if (!weTrakr.isConnected(profile)) throw com.arflix.tv.data.repository.wetrakr.WeTrakrError(410, "expired_token")
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (profileManager.getProfileIdSync() == profile) _uiState.value = _uiState.value.copy(toastMessage = SettingsMessage.Raw(e.message ?: "WeTrakr unavailable"), toastType = ToastType.ERROR)
+            } finally {
+                if (profileManager.getProfileIdSync() == profile) {
+                    val prefs = syncProviderStore.getTrackingPreferences()
+                    _uiState.value = _uiState.value.copy(weTrakrBusy = false, weTrakrCode = null, isWeTrakrConnected = weTrakr.isConnected(profile),
+                        trackingWriteToWeTrakr = prefs.writeToWeTrakr == true, trackingWatchlistReadMode = prefs.watchlistReadMode,
+                        trackingContinueReadMode = prefs.continueWatchingReadMode, trackingWatchedReadMode = prefs.watchedReadMode)
+                }
+            }
+        }
+    }
+
     fun setTrackingReadMode(
         feature: com.arflix.tv.data.repository.sync.TrackingFeature,
         mode: com.arflix.tv.data.repository.sync.TrackingReadMode
@@ -5488,6 +5677,7 @@ class SettingsViewModel @Inject constructor(
             val preferences = syncProviderStore.getTrackingPreferences()
             _uiState.value = _uiState.value.copy(
                 trackingWriteToTrakt = preferences.writeToTrakt == true,
+                trackingWriteToWeTrakr = preferences.writeToWeTrakr == true,
                 trackingWriteToSimkl = preferences.writeToSimkl == true
             )
             syncLocalStateToCloud(silent = true, force = true)

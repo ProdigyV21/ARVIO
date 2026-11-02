@@ -107,6 +107,46 @@ async function mediaTicketAllowed(env: Env, ticket: string | null) {
   return validStreamTicketV2(env, ticket);
 }
 
+// "View on Trakt": redirect to the title's Trakt page, found by its IMDb or
+// TMDB id. The browser build carries no Trakt client id and Trakt blocks the
+// Netlify backend, so the lookup runs here; misses fall back to a title search.
+async function traktLink(url: URL, env: Env): Promise<Response> {
+  const kind = url.searchParams.get("type") === "movie" ? "movie" : "show";
+  const imdb = (url.searchParams.get("imdb") ?? "").match(/^tt\d{5,10}$/)?.[0];
+  const tmdb = (url.searchParams.get("tmdb") ?? "").match(/^\d{1,9}$/)?.[0];
+  const title = (url.searchParams.get("title") ?? "").slice(0, 200);
+  const fallback = `https://trakt.tv/search?query=${encodeURIComponent(title)}`;
+  const go = (location: string, maxAge: number) => new Response(null, { status: 302, headers: { location, "cache-control": `public, max-age=${maxAge}` } });
+  if (!env.TRAKT_CLIENT_ID || (!imdb && !tmdb)) return go(fallback, 300);
+  const [source, id] = imdb ? ["imdb", imdb] : ["tmdb", tmdb!];
+  const cacheKey = `trakt-link:v1:${kind}:${source}:${id}`;
+  const known = await env.RESOLVER_KV?.get(cacheKey).catch(() => null);
+  if (known) return go(known, 86400);
+  try {
+    const response = await fetch(`https://api.trakt.tv/search/${source}/${encodeURIComponent(id)}?type=${kind}`, {
+      headers: { "content-type": "application/json", "trakt-api-version": "2", "trakt-api-key": env.TRAKT_CLIENT_ID, "user-agent": "ARVIO/1.0" }
+    });
+    // ?debug=1: the lookup's own status, for support (no keys or tokens).
+    if (url.searchParams.get("debug") === "1") {
+      const body = await response.clone().text().catch(() => "");
+      return new Response(JSON.stringify({ status: response.status, sample: body.slice(0, 160) }), { headers: { "content-type": "application/json" } });
+    }
+    if (response.ok) {
+      const results = await response.json<Array<Record<string, { ids?: { slug?: string } } | string | undefined>>>();
+      const match = results.find((result) => result.type === kind)?.[kind] as { ids?: { slug?: string } } | undefined;
+      const slug = match?.ids?.slug;
+      if (slug) {
+        const page = `https://trakt.tv/${kind === "movie" ? "movies" : "shows"}/${encodeURIComponent(slug)}`;
+        await env.RESOLVER_KV?.put(cacheKey, page, { expirationTtl: 30 * 86400 }).catch(() => undefined);
+        return go(page, 86400);
+      }
+    }
+  } catch {
+    // fall through to the search
+  }
+  return go(fallback, 300);
+}
+
 // Trakt device-token exchange from the Worker. The Netlify backend's egress IP
 // is Cloudflare-challenged by Trakt; the Worker (Cloudflare-origin) is not. The
 // client secret lives here as a Worker secret and never touches the browser.
@@ -255,7 +295,7 @@ export default {
         return apiProxy(request, env);
       }
       if (url.pathname === "/health") {
-        return json({ ok: true, service: "arvio-resolver" }, request, env);
+        return json({ ok: true, service: "arvio-resolver", features: ["trakt-link"] }, request, env);
       }
       if (url.pathname === "/sources" && request.method === "POST") {
         return sources(request, env);
@@ -268,6 +308,9 @@ export default {
       }
       if (url.pathname === "/launch" && request.method === "GET") {
         return launchPage(request, env);
+      }
+      if (url.pathname === "/trakt/link" && request.method === "GET") {
+        return traktLink(url, env);
       }
       if (url.pathname === "/trakt/device/token" && request.method === "POST") {
         return traktDeviceToken(request, env);

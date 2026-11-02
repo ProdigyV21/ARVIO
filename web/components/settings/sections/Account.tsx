@@ -1,6 +1,7 @@
 "use client";
 import { CheckCircle2, ExternalLink, LogOut, RefreshCw, User, UserCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { weTrakrClient, type WeTrakrCode } from "@/lib/wetrakr";
 import { useTranslation } from "@/lib/i18n";
 import { config, getAuthPortalUrl, hasNetlifyBackendConfig, hasSimklConfig, hasSupabaseConfig, hasTraktConfig } from "@/lib/config";
 import { useApp, useAppPick } from "@/lib/store";
@@ -154,6 +155,63 @@ export function ServicesSection() {
     deviceCode, simklDeviceCode, beginTrakt, pollTrakt, disconnectTrakt, connectMdblist, disconnectMdblist,
     beginSimkl, pollSimkl, disconnectSimkl,
   } = useAppPick("traktConnected", "mdblistConnected", "simklConnected", "trackingPreferences", "updateTrackingPreferences", "deviceCode", "simklDeviceCode", "beginTrakt", "pollTrakt", "disconnectTrakt", "connectMdblist", "disconnectMdblist", "beginSimkl", "pollSimkl", "disconnectSimkl");
+  const { activeProfile, refreshData } = useAppPick("activeProfile", "refreshData");
+  const [weTrakrConnected, setWeTrakrConnected] = useState(weTrakrClient.isConnected);
+  const [weTrakrBusy, setWeTrakrBusy] = useState(false);
+  const [weTrakrError, setWeTrakrError] = useState<string | null>(null);
+  const [weTrakrCode, setWeTrakrCode] = useState<WeTrakrCode | null>(null);
+  const weTrakrGeneration = useRef(0);
+  useEffect(() => {
+    const generation = ++weTrakrGeneration.current;
+    weTrakrClient.setProfile(activeProfile?.id || null);
+    setWeTrakrCode(null); setWeTrakrBusy(false); setWeTrakrError(null); setWeTrakrConnected(false);
+    if (activeProfile) void weTrakrClient.restoreSession().then(() => {
+      if (generation === weTrakrGeneration.current) setWeTrakrConnected(weTrakrClient.isConnected);
+    }).catch(() => undefined);
+    return () => { weTrakrGeneration.current++; };
+  }, [activeProfile?.id]);
+  useEffect(() => {
+    if (!weTrakrCode) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        if (await weTrakrClient.poll(weTrakrCode)) {
+          if (cancelled) return;
+          setWeTrakrConnected(true); setWeTrakrCode(null);
+          const mode = (value: typeof trackingPreferences.watchlistReadMode) => value === "auto" ? "wetrakr" as const : value;
+          await updateTrackingPreferences({ writeToWeTrakr: true, watchlistReadMode: mode(trackingPreferences.watchlistReadMode),
+            continueWatchingReadMode: mode(trackingPreferences.continueWatchingReadMode), watchedReadMode: mode(trackingPreferences.watchedReadMode) });
+          if (!cancelled) await refreshData();
+          return;
+        }
+      } catch (error) {
+        if (!cancelled) { setWeTrakrError(error instanceof Error ? error.message : "WeTrakr unavailable"); setWeTrakrCode(null); }
+        return;
+      }
+      if (!cancelled) timer = setTimeout(poll, weTrakrCode.interval * 1000);
+    };
+    timer = setTimeout(poll, weTrakrCode.interval * 1000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [weTrakrCode]);
+  const changeWeTrakr = async () => {
+    const generation = weTrakrGeneration.current;
+    setWeTrakrBusy(true); setWeTrakrError(null);
+    try {
+      if (weTrakrClient.isConnected || weTrakrCode) {
+        await weTrakrClient.disconnect();
+        if (generation !== weTrakrGeneration.current) return;
+        setWeTrakrConnected(false); setWeTrakrCode(null);
+        const mode = (value: typeof trackingPreferences.watchlistReadMode) => value === "wetrakr" ? "auto" as const : value;
+        await updateTrackingPreferences({ writeToWeTrakr: false, watchlistReadMode: mode(trackingPreferences.watchlistReadMode),
+          continueWatchingReadMode: mode(trackingPreferences.continueWatchingReadMode), watchedReadMode: mode(trackingPreferences.watchedReadMode) });
+      } else {
+        const code = await weTrakrClient.begin();
+        if (generation === weTrakrGeneration.current) setWeTrakrCode(code);
+      }
+    } catch (error) { if (generation === weTrakrGeneration.current) setWeTrakrError(error instanceof Error ? error.message : "WeTrakr unavailable"); }
+    finally { if (generation === weTrakrGeneration.current) setWeTrakrBusy(false); }
+  };
   const [traktError, setTraktError] = useState<string | null>(null);
   const [traktBusy, setTraktBusy] = useState<"start" | "poll" | null>(null);
   const [simklError, setSimklError] = useState<string | null>(null);
@@ -178,11 +236,12 @@ export function ServicesSection() {
   if (traktConnected && simklConnected) routingOptions.push(["both", "Trakt + Simkl"]);
   if (traktConnected) routingOptions.push(["trakt", "Trakt"]);
   if (simklConnected) routingOptions.push(["simkl", "Simkl"]);
+  if (weTrakrConnected) routingOptions.push(["wetrakr", "WeTrakr"]);
   if (mdblistConnected) routingOptions.push(["mdblist", "MDBList"]);
 
   return (
     <>
-      <SectionHeader title="Connected services" description="Link Trakt, Simkl or MDBList once and every ARVIO app on this profile uses them for watchlists, history and progress." />
+      <SectionHeader title="Connected services" description="Connect your tracking services for watchlists, watched history and playback progress. WeTrakr connects separately in each browser or device." />
 
       <Group title="Trakt" description="Scrobbles what you watch and fills your watchlist and Continue Watching.">
         {traktError && <p className="st-error">{translateUi(traktError)}</p>}
@@ -232,6 +291,16 @@ export function ServicesSection() {
         </div>
       </Group>
 
+      <Group title="WeTrakr" description="Watchlists, watched history and playback progress. This connection belongs to this browser and profile.">
+        {weTrakrError && <p className="st-error" role="alert">{translateUi(weTrakrError)}</p>}
+        <Row label="Status" scope="browser"><Status tone={weTrakrConnected ? "ok" : "off"}>{translateUi(weTrakrConnected ? "Connected" : "Not linked")}</Status></Row>
+        {weTrakrCode && <div className="st-code"><strong>{weTrakrCode.user_code}</strong>
+          <p>{translateUi("Open")} <a className="st-link" href={weTrakrCode.verification_url} target="_blank" rel="noreferrer">wetrakr.com/activate</a> {translateUi("and enter the code above")}</p>
+          <p aria-live="polite">{translateUi("Waiting for approval...")}</p></div>}
+        <div className="st-group-foot"><button type="button" className={`st-btn ${weTrakrConnected ? "is-danger" : "is-primary"}`} disabled={weTrakrBusy} onClick={() => void changeWeTrakr()}>
+          {translateUi(weTrakrBusy ? "Please wait..." : weTrakrConnected ? "Disconnect WeTrakr" : weTrakrCode ? "Cancel" : "Connect WeTrakr")}</button></div>
+      </Group>
+
       <Group title="MDBList" description={<>{translateUi("Lists and ratings from MDBList. Get your API key from")} <a className="st-link" href="https://mdblist.com/preferences/" target="_blank" rel="noreferrer">mdblist.com/preferences <ExternalLink size={12} /></a></>}>
         {mdblistError && <p className="st-error">{translateUi(mdblistError)}</p>}
         <Row label="Status" scope="all">
@@ -270,6 +339,7 @@ export function ServicesSection() {
               <Toggle label="Update Trakt while watching" value={trackingPreferences.writeToTrakt} onChange={(writeToTrakt) => void updateTrackingPreferences({ writeToTrakt })} />
             </Row>
           )}
+          {weTrakrConnected && <Row id="write-wetrakr" label="Update WeTrakr while watching" scope="all"><Toggle label="Update WeTrakr while watching" value={trackingPreferences.writeToWeTrakr === true} onChange={(writeToWeTrakr) => void updateTrackingPreferences({ writeToWeTrakr })} /></Row>}
           {simklConnected && (
             <Row id="write-simkl" label="Update Simkl while watching" scope="all">
               <Toggle label="Update Simkl while watching" value={trackingPreferences.writeToSimkl} onChange={(writeToSimkl) => void updateTrackingPreferences({ writeToSimkl })} />
@@ -277,7 +347,7 @@ export function ServicesSection() {
           )}
         </Group>
       )}
-      {!traktConnected && !simklConnected && !mdblistConnected && (
+      {!traktConnected && !simklConnected && !mdblistConnected && !weTrakrConnected && (
         <p className="st-row-hint" style={{ display: "flex", gap: 6, alignItems: "center" }}><CheckCircle2 size={14} /> {translateUi("Linked services on your TV show up here automatically.")}</p>
       )}
     </>

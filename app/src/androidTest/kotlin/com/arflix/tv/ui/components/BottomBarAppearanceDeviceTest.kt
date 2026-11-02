@@ -3,6 +3,9 @@ package com.arflix.tv.ui.components
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +29,35 @@ import kotlin.math.abs
 
 class BottomBarAppearanceDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun landscapeSettingsStaysPinnedWhenUpperItemsScrollAndWindowResizes() {
+        val height = mutableStateOf(180.dp)
+        compose.setContent {
+            val landscape = Configuration(LocalConfiguration.current).apply {
+                screenWidthDp = 800
+                screenHeightDp = 360
+                orientation = Configuration.ORIENTATION_LANDSCAPE
+            }
+            CompositionLocalProvider(LocalDeviceType provides DeviceType.PHONE,
+                LocalConfiguration provides landscape) {
+                Box(Modifier.fillMaxSize()) {
+                    AppBottomBar("home", {}, Modifier.height(height.value).testTag("rail"))
+                }
+            }
+        }
+        val settings = compose.onNodeWithContentDescription(compose.activity.getString(com.arflix.tv.R.string.settings))
+        settings.assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        val original = settings.fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithContentDescription(compose.activity.getString(com.arflix.tv.R.string.topbar_tv)).performScrollTo()
+        assertEquals(original, settings.fetchSemanticsNode().boundsInRoot)
+        compose.runOnIdle { height.value = 320.dp }
+        compose.waitForIdle()
+        val resized = settings.fetchSemanticsNode().boundsInRoot
+        val rail = compose.onNodeWithTag("rail").fetchSemanticsNode().boundsInRoot
+        assertTrue(resized.top > original.top)
+        assertTrue(resized.bottom <= rail.bottom)
+        assertTrue(resized.top > rail.center.y)
+    }
 
     @Test fun tabsKeepBoundsAndUseEverySettingsAccent() {
         val route = mutableStateOf("home")
