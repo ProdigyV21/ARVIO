@@ -66,6 +66,10 @@ ratings; visible cards receive full details and ratings afterward, two at a time
 Partial pages keep source order so TV focus does not jump as requests finish.
 Imported collections fetch one upstream page initially and expand on scroll;
 movie/series filters, pagination and the collection's contents are preserved.
+Public MDBList sources have no total title cap. Their anonymous endpoint returns
+the full ID list, which is cached for five minutes and shared across pages and
+movie/series tabs. Only the requested page's cards are hydrated, keeping home
+previews small while making the full list accessible through View All.
 
 Run the collection regression tests with:
 

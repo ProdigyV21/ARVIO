@@ -161,6 +161,7 @@ class MediaRepository @Inject constructor(
         synchronized(seasonEpisodesCache) { seasonEpisodesCache.clear() }
         collectionRefsCache.clear()
         tmdbCatalogRefsCache.clear()
+        mdblistCollectionRefsCache.clear()
     }
 
     private data class MediaCacheEntry(val item: MediaItem, val timestamp: Long, val complete: Boolean)
@@ -182,6 +183,7 @@ class MediaRepository @Inject constructor(
     private val homeServerLogoRefCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val collectionRefsCache = ConcurrentHashMap<String, CacheEntry<CollectionRefs>>()
     private val tmdbCatalogRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
+    private val mdblistCollectionRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
     private val _episodeRatingsUpdated = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 64)
     val episodeRatingsUpdated = _episodeRatingsUpdated.asSharedFlow()
 
@@ -331,7 +333,9 @@ class MediaRepository @Inject constructor(
                 null
             } else when (source.kind) {
                 CollectionSourceKind.ADDON_CATALOG -> 120
-                CollectionSourceKind.MDBLIST_PUBLIC -> 96
+                // Public lists can contain thousands of titles. Only the requested
+                // page is hydrated; a preview budget must not end View All.
+                CollectionSourceKind.MDBLIST_PUBLIC -> null
                 else -> 72
             }
         }
@@ -1505,6 +1509,12 @@ class MediaRepository @Inject constructor(
     ): List<Pair<MediaType, Int>> {
         val slug = source.mdblistSlug?.trim()?.trim('/').orEmpty()
         if (slug.isBlank()) return emptyList()
+        val cached = mdblistCollectionRefsCache[slug]
+        if (cached != null && System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS) {
+            return cached.data.asSequence().filter { mediaType == null || it.first == mediaType }.take(limit).toList()
+        }
+        // The anonymous endpoint returns a complete ID list. Keep these small
+        // references across pages and tabs, never hydrate the whole list at once.
         val body = withContext(Dispatchers.IO) {
             fetchUrl(withListFreshness("https://mdblist.com/lists/$slug/json"))
         } ?: throw java.io.IOException("Collection list could not be loaded")
@@ -1518,11 +1528,12 @@ class MediaRepository @Inject constructor(
                 "show", "series", "tv" -> MediaType.TV
                 else -> continue
             }
-            if (mediaType != null && type != mediaType) continue
             refs.add(type to id)
-            if (refs.size >= limit) break
         }
-        return refs
+        val unique = refs.distinct()
+        mdblistCollectionRefsCache.entries.removeIf { System.currentTimeMillis() - it.value.timestamp >= CACHE_TTL_MS }
+        mdblistCollectionRefsCache[slug] = CacheEntry(unique, System.currentTimeMillis())
+        return unique.asSequence().filter { mediaType == null || it.first == mediaType }.take(limit).toList()
     }
 
     /**
