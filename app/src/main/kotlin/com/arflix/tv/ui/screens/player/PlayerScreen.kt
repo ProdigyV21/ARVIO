@@ -1558,6 +1558,19 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                                 }
                                 return
                             }
+                            // A source reopened after the app was closed can carry a link that has
+                            // since expired (source lists are kept on disk for hours, and a restored
+                            // player screen keeps its old URL). Before giving the source up, fetch a
+                            // fresh source list once and play the SAME source from it.
+                            if (!hasPlaybackStarted && isTransientStartupReadError && !startupSameSourceRefreshAttempted &&
+                                !userSelectedSourceManually && latestUiState.selectedStream != null
+                            ) {
+                                startupSameSourceRefreshAttempted = true
+                                if (viewModel.refetchSameSourceFresh()) {
+                                    playbackStartupDiag("same-source fresh re-fetch code=${error.errorCode}")
+                                    return
+                                }
+                            }
                             if (!hasPlaybackStarted && heavy && isTimeoutError) {
                                 // One-time full re-resolve of same source to refresh debrid URL/headers.
                                 if (!startupSameSourceRefreshAttempted) {
