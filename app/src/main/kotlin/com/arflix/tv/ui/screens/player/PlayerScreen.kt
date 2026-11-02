@@ -3478,8 +3478,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         exoPlayer.currentPosition,
                         safeDuration,
                         safeProgressPercent,
-                        isPlaying = exoPlayer.isPlaying,
-                        playbackState = exoPlayer.playbackState
+                        isPlaying = false,
+                        playbackState = exoPlayer.playbackState,
+                        closing = true
                     )
                 }
             }

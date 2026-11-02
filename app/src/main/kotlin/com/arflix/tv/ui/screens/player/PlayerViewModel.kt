@@ -7878,7 +7878,8 @@ class PlayerViewModel @Inject constructor(
         duration: Long,
         progressPercent: Int,
         isPlaying: Boolean,
-        playbackState: Int
+        playbackState: Int,
+        closing: Boolean = false
     ): Job? {
         if (duration <= 0) return null
         noteRecentSourcePlayback(position, isPlaying)
@@ -7890,15 +7891,15 @@ class PlayerViewModel @Inject constructor(
 
         // On pause/stop, replace an in-flight periodic save. During normal playback,
         // debounce by returning the save that is already running.
-        if (!isPlaying || playbackState == Player.STATE_ENDED) {
+        if (closing || !isPlaying || playbackState == Player.STATE_ENDED) {
             progressSaveJob?.cancel()
         } else if (progressSaveJob?.isActive == true) {
             return progressSaveJob
         }
 
-        progressSaveCompleting = completing
+        progressSaveCompleting = completing || closing
         val completionProfileId = profileManager.getProfileIdSync()
-        val job = viewModelScope.launchPlaybackProgressSave(completing, stopWhen = {
+        val job = viewModelScope.launchPlaybackProgressSave(completing, closing = closing, stopWhen = {
             // A surviving final save still belongs to the profile that watched this video.
             profileManager.activeProfileId.first { it != completionProfileId }
         }) {
@@ -7925,7 +7926,14 @@ class PlayerViewModel @Inject constructor(
             )
 
             // Scrobble start/pause/updates with debounce
-            if (!isLiveStreamOrSports && isPlaying && !lastIsPlaying) {
+            if (!isLiveStreamOrSports && closing) {
+                try {
+                    remoteSyncManager.scrobbleStop(currentMediaType, currentMediaId,
+                        scrobbleProgressPercent, currentSeason, currentEpisode, isCurrentAnime())
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                }
+            } else if (!isLiveStreamOrSports && isPlaying && !lastIsPlaying) {
                 hasScrobbledIntermediateStop = false
                 try {
                     remoteSyncManager.scrobbleStart(
@@ -8078,7 +8086,7 @@ class PlayerViewModel @Inject constructor(
             ) {
                 hasMarkedWatched = true
                 try {
-                    remoteSyncManager.scrobbleStop(
+                    if (!closing) remoteSyncManager.scrobbleStop(
                         mediaType = currentMediaType,
                         tmdbId = currentMediaId,
                         progress = scrobbleProgressPercent,
