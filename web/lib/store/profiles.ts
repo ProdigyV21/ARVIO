@@ -5,6 +5,9 @@ import { useCallback, useEffect } from "react";
 import { config, getAuthPortalUrl } from "../config";
 import { pullCloudProfiles, saveCloudProfiles } from "../cloud";
 import { loadStored, saveStored } from "../storage";
+import { saveLocalAddons } from "../addons";
+import { savePlaylists } from "../iptv";
+import { defaultSettings, settingsKey } from "./settings";
 import { verifyProfilePin } from "../profilePin";
 import { hydratedProfileId } from "../profiles";
 import { partnerLoginRedirect } from "../partnerLinks";
@@ -43,6 +46,37 @@ export function currentAccountEmail(): string {
   return (authClient.session?.email ?? "").trim().toLowerCase();
 }
 
+/** Run before adopting a different account, including portal callbacks and signup after logout. */
+export function resetDifferentAccount(store: StoreCore, email: string) {
+  const next = email.trim().toLowerCase();
+  const owner = (loadStored<string | null>(PROFILES_OWNER_KEY, null) ?? "").trim().toLowerCase();
+  if (!next || owner === next) return;
+  const fresh = [makeProfile("Profile 1", randomProfileColor(), 0)];
+  ++store.refreshGenerationRef.current;
+  store.refreshKeyRef.current = null;
+  store.lastSyncedSettingsRef.current = null;
+  store.activeProfileIdRef.current = fresh[0].id;
+  store.settingsRef.current = { ...defaultSettings };
+  store.setProfiles(fresh);
+  store.setActiveProfileId(fresh[0].id);
+  store.setAvatarImages({});
+  store.setAddons([]);
+  store.setAddonsReady(false);
+  store.setSettings({ ...defaultSettings });
+  store.setContinueWatching([]);
+  store.setWatchlist([]);
+  store.setCategories([]);
+  store.setWatchedKeys(new Set());
+  store.cwSourceRef.current = "none";
+  saveStored(PROFILES_KEY, fresh);
+  saveStored(ACTIVE_PROFILE_KEY, fresh[0].id);
+  saveStored(AVATAR_IMAGES_KEY, {});
+  saveStored(settingsKey, defaultSettings);
+  saveLocalAddons([]);
+  savePlaylists([]);
+  saveStored(PROFILES_OWNER_KEY, next);
+}
+
 // Cached profiles are only trusted when they belong to the signed-in account
 // (or when signed out, where local-only profiles are expected).
 export function localProfilesMatchAccount(): boolean {
@@ -77,11 +111,13 @@ export function makeProfile(name: string, avatarColor: number, avatarId = 0): Pr
 export function useProfileSync(store: StoreCore & Pick<ReturnType<typeof useRefreshData>, "refreshData">) {
   const { activeProfileId, activeProfileIdRef, auth, profiles, refreshData, setActiveProfileId, setAvatarImages, setCloudProfilesHydrated, setProfiles } = store;
   useEffect(() => {
+    // Never relabel the old account's cache merely because auth changed. Signup
+    // after logout and portal callbacks must reset it before the new cloud pull.
+    if (authClient.session && !localProfilesMatchAccount()) return;
     saveStored(PROFILES_KEY, profiles);
     saveStored(ACTIVE_PROFILE_KEY, activeProfileId);
-    // Stamp which account these cached profiles belong to (empty when signed
-    // out), so another account on this browser won't inherit them.
-    saveStored(PROFILES_OWNER_KEY, currentAccountEmail());
+    // Keep ownership across logout, so a later signup cannot adopt this cache.
+    if (currentAccountEmail()) saveStored(PROFILES_OWNER_KEY, currentAccountEmail());
   }, [profiles, activeProfileId, auth]);
 
   // When signed in, pull the shared profiles from the same account_sync_state
@@ -91,10 +127,12 @@ export function useProfileSync(store: StoreCore & Pick<ReturnType<typeof useRefr
       setCloudProfilesHydrated(true);
       return;
     }
+    resetDifferentAccount(store, currentAccountEmail());
+    const accountId = authClient.session.userId;
     let cancelled = false;
     void pullCloudProfiles(authClient)
       .then((cloud) => {
-        if (cancelled) return;
+        if (cancelled || authClient.session?.userId !== accountId) return;
         if (cloud.profiles.length) {
           setProfiles(cloud.profiles);
           setAvatarImages(cloud.avatarImages);
@@ -121,7 +159,7 @@ export function useProfileSync(store: StoreCore & Pick<ReturnType<typeof useRefr
         setCloudProfilesHydrated(true);
       })
       .catch(() => {
-        if (!cancelled) setCloudProfilesHydrated(true);
+        if (!cancelled && authClient.session?.userId === accountId) setCloudProfilesHydrated(true);
       });
     return () => {
       cancelled = true;

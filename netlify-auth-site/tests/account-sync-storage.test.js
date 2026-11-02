@@ -39,6 +39,23 @@ function fixture() {
   };
 }
 
+test("a referred account cannot read the inviter snapshot through referral fields", async () => {
+  const value = fixture();
+  await value.backend.saveSnapshotToBlobs({}, value.identity, {
+    payload: { profiles: [{ id: "private-profile", name: "Private" }], addons: [{ id: "private-addon" }], settings: { private: true } }
+  });
+  const recipient = { supabaseUserId: "recipient-id", email: "recipient@example.test", ownerHash: value.identity.supabaseUserId, referrer: value.identity.email };
+  const recipientRead = await value.backend.loadSnapshotFromBlobs({}, recipient);
+  assert.equal(recipientRead, null);
+  await value.backend.saveSnapshotToBlobs({}, recipient, { payload: { profiles: [{ id: "recipient-profile" }] } });
+  const inviterRead = await value.backend.loadSnapshotFromBlobs({}, value.identity);
+  assert.equal(inviterRead.payload.profiles[0].id, "private-profile");
+  const ownRead = await value.backend.loadSnapshotFromBlobs({}, recipient);
+  assert.equal(ownRead.payload.profiles[0].id, "recipient-profile");
+  assert.equal(ownRead.payload.addons, undefined);
+  assert.equal(ownRead.payload.settings, undefined);
+});
+
 test("conditional snapshot saves do not overwrite or mirror a newer canonical version", async () => {
   const value = fixture();
   value.seed("account-sync", value.keys.supabase, { payload: { version: "old" } });
