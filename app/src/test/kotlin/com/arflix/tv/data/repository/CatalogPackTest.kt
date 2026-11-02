@@ -8,13 +8,16 @@ import com.arflix.tv.data.model.CatalogPackItem
 import com.arflix.tv.data.model.CatalogSourceType
 import com.arflix.tv.data.model.CatalogValidationResult
 import com.arflix.tv.data.api.TraktApi
+import com.arflix.tv.testing.IsolatedSettingsStoreRule
 import io.mockk.*
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Rule
 
 class CatalogPackTest {
+    @get:Rule val settingsStore = IsolatedSettingsStoreRule()
 
     @Test
     fun `fetchCatalogPackManifest rejects duplicate catalog URLs`() = runBlocking {
