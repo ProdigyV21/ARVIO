@@ -569,6 +569,11 @@ class DetailsViewModel @Inject constructor(
                     logoUrl = cachedLogoUrl,
                     episodes = cachedEpisodes ?: emptyList(),
                     currentSeason = seasonToLoad,
+                    initialSeasonIndex = (seasonToLoad - 1).coerceAtLeast(0),
+                    initialEpisodeIndex = if (reentry) {
+                        detailEpisodeReturnIndex(cachedEpisodes.orEmpty(), playedIdentity)
+                            ?: previousState.initialEpisodeIndex
+                    } else 0,
                     totalSeasons = cachedTotalSeasons,
                     playSeason = initialSeason,
                     playEpisode = initialEpisode,
@@ -1054,7 +1059,10 @@ class DetailsViewModel @Inject constructor(
                             }
                         }
 
-                        val targetEpisodeForRow = if (initialSeason == seasonToLoad) initialEpisode else null
+                        val targetIdentityForRow = if (initialSeason != null && initialEpisode != null) {
+                            EpisodeIdentity.canonical(initialSeason, initialEpisode)
+                        } else null
+                        val targetIndexForRow = detailEpisodeReturnIndex(decoratedEpisodes, targetIdentityForRow)
                         val nextUnwatchedEpisode = decoratedEpisodes.firstOrNull { !it.isWatched }
                         // Focus the explicit target episode if the caller passed one (deeplink /
                         // Continue Watching tile), otherwise focus the first unwatched episode so
@@ -1063,8 +1071,7 @@ class DetailsViewModel @Inject constructor(
                         // the first episode (index 0) — from there the user can jump to the next
                         // season via the season selector. See issue #117.
                         val initialEpisodeIndex = when {
-                            targetEpisodeForRow != null ->
-                                decoratedEpisodes.indexOfFirst { it.episodeNumber == targetEpisodeForRow }.coerceAtLeast(0)
+                            targetIndexForRow != null -> targetIndexForRow
                             nextUnwatchedEpisode != null ->
                                 decoratedEpisodes.indexOf(nextUnwatchedEpisode).coerceAtLeast(0)
                             else -> 0

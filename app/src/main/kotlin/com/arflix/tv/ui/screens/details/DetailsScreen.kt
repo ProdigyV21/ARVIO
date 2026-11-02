@@ -301,7 +301,8 @@ fun DetailsScreen(
     val isMobile = LocalDeviceType.current.isTouchDevice()
 
     // Start on buttons for both TV and movies (buttons are now shown for both)
-    var focusedSection by remember { mutableStateOf(FocusSection.BUTTONS) }
+    var focusedSection by rememberSaveable(mediaType, mediaId) { mutableStateOf(FocusSection.BUTTONS) }
+    var hasEnteredDetails by rememberSaveable(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(false) }
     var buttonIndex by remember { mutableIntStateOf(0) }
     var episodeIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedEpisodeIdentity by rememberSaveable { mutableStateOf<EpisodeIdentity?>(null) }
@@ -355,6 +356,7 @@ fun DetailsScreen(
             tmdbEpisode = tmdbEpisode
         )
         viewModel.recordPlayedEpisode(mediaId, identity)
+        if (identity != null) focusedSection = FocusSection.EPISODES
         // Let the player resolve this identity. The current Details snapshot may still
         // contain another episode's sources, and starting both resolvers duplicates requests.
         onNavigateToPlayer(
@@ -386,21 +388,24 @@ fun DetailsScreen(
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(mediaType, mediaId, initialSeason, initialEpisode) {
-        focusedSection = FocusSection.BUTTONS
-        buttonIndex = 0
-        episodeIndex = 0
-        selectedEpisodeIdentity = null
-        ratingsIndex = 0
-        seasonIndex = 0
-        castIndex = 0
-        reviewIndex = 0
-        similarIndex = 0
-        isSidebarFocused = false
+        if (!hasEnteredDetails) {
+            focusedSection = FocusSection.BUTTONS
+            buttonIndex = 0
+            episodeIndex = 0
+            selectedEpisodeIdentity = null
+            ratingsIndex = 0
+            seasonIndex = 0
+            castIndex = 0
+            reviewIndex = 0
+            similarIndex = 0
+            isSidebarFocused = false
+            hasEnteredDetails = true
+        }
         viewModel.loadDetails(mediaType, mediaId, initialSeason, initialEpisode)
     }
 
     LaunchedEffect(uiState.episodes.size, uiState.totalSeasons, uiState.cast.size, uiState.reviews.size, uiState.similar.size) {
-        if (episodeIndex >= uiState.episodes.size) {
+        if (uiState.episodes.isNotEmpty() && episodeIndex >= uiState.episodes.size) {
             episodeIndex = (uiState.episodes.size - 1).coerceAtLeast(0)
         }
         if (seasonIndex >= uiState.totalSeasons) {
@@ -1119,6 +1124,7 @@ fun DetailsScreen(
                         ) uiState.playPositionMs else null
                 }
                 viewModel.recordPlayedEpisode(mediaId, identity)
+                if (identity != null) focusedSection = FocusSection.EPISODES
                 onNavigateToPlayer(
                     mediaType, mediaId,
                     identity,
