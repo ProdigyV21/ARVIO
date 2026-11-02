@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,10 +53,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -273,8 +276,17 @@ internal fun TrailerPlayerSurface(
 }
 
 /** Shown in place of the player when YouTube refuses to embed the video. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun TrailerEmbedFallback(onOpenExternally: () -> Unit) {
+private fun TrailerEmbedFallback(onOpenExternally: () -> Unit, onClose: (() -> Unit)? = null) {
+    val buttonFocusRequester = remember { FocusRequester() }
+    var fallbackBtnFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { buttonFocusRequester.requestFocus() }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -287,20 +299,31 @@ private fun TrailerEmbedFallback(onOpenExternally: () -> Unit) {
             style = ArvioSkin.typography.body.copy(color = Color.White.copy(alpha = 0.8f)),
             modifier = Modifier.padding(bottom = 16.dp)
         )
-        var fallbackBtnFocused by remember { mutableStateOf(false) }
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (fallbackBtnFocused) ArvioSkin.colors.focusOutline else Color(0xFFCC0000))
-                .padding(horizontal = 20.dp, vertical = 10.dp)
+                .background(Color(0xFFCC0000))
+                .then(
+                    if (fallbackBtnFocused) {
+                        Modifier.border(2.dp, ArvioSkin.colors.focusOutline, RoundedCornerShape(8.dp))
+                    } else Modifier
+                )
+                .focusRequester(buttonFocusRequester)
                 .onFocusChanged { fallbackBtnFocused = it.isFocused }
+                .focusProperties {
+                    left = FocusRequester.Cancel
+                    right = FocusRequester.Cancel
+                    up = FocusRequester.Cancel
+                    down = FocusRequester.Cancel
+                }
                 .clickable { onOpenExternally() }
+                .padding(horizontal = 20.dp, vertical = 10.dp)
         ) {
             Text(
                 text = "Watch on YouTube",
                 style = ArvioSkin.typography.button.copy(
                     fontWeight = FontWeight.Bold,
-                    color = if (fallbackBtnFocused) Color.Black else Color.White
+                    color = Color.White
                 )
             )
         }
@@ -392,8 +415,8 @@ fun YouTubeTrailerModal(
 
     // TV drives the player with the D-pad, so the video takes focus on open.
     // On mobile the taps go to YouTube's own controls instead.
-    LaunchedEffect(isMobile) {
-        if (!isMobile) {
+    LaunchedEffect(isMobile, playbackError) {
+        if (!isMobile && !playbackError) {
             delay(150)
             runCatching { playerFocusRequester.requestFocus() }
         }
@@ -488,7 +511,10 @@ fun YouTubeTrailerModal(
                     onReleased = { activePlayer = null; nativePlayerView = null }
                 )
             } else {
-                TrailerEmbedFallback(onOpenExternally = { openExternalYouTube() })
+                TrailerEmbedFallback(
+                    onOpenExternally = { openExternalYouTube() },
+                    onClose = onClose
+                )
             }
         }
     }
@@ -577,6 +603,16 @@ fun YouTubeTrailerModal(
                         .focusRequester(playerFocusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
+                            if (playbackError) {
+                                if (event.key == Key.DirectionLeft ||
+                                    event.key == Key.DirectionRight ||
+                                    event.key == Key.DirectionUp ||
+                                    event.key == Key.DirectionDown
+                                ) {
+                                    return@onPreviewKeyEvent true
+                                }
+                                return@onPreviewKeyEvent false
+                            }
                             // Once the user enters YouTube's controls, do not steal
                             // navigation or OK from captions, settings and links.
                             if (nativePlayerView?.hasFocus() == true) {

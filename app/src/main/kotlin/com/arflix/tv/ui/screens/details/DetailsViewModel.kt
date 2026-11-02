@@ -149,6 +149,8 @@ data class DetailsUiState(
     val playTmdbEpisode: Int? = null,
     val playLabel: String? = null,
     val playPositionMs: Long? = null,
+    // Cached metadata can render before resume history and episode progress have resolved.
+    val isPlaybackTargetReady: Boolean = false,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val animeStructuringStyle: AnimeStructuringStyle = AnimeStructuringStyle.BROADCAST,
@@ -482,6 +484,7 @@ class DetailsViewModel @Inject constructor(
         animeSeasonStructure = null
         availableAnimeStructure = null
         initialLoadComplete = false
+        _uiState.value = _uiState.value.copy(isPlaybackTargetReady = false)
         vodAppendJob?.cancel()
         homeServerAppendJob?.cancel()
         streamListPrewarmJob?.cancel()
@@ -1182,7 +1185,8 @@ class DetailsViewModel @Inject constructor(
                                 playLabel = displayTarget?.let {
                                     context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
                                 } ?: matchedResume?.label ?: context.getString(R.string.continue_season_episode, initialSeason, initialEpisode),
-                                playPositionMs = matchedResume?.positionMs
+                                playPositionMs = matchedResume?.positionMs,
+                                isPlaybackTargetReady = true
                             )
                         }
                         return@launch
@@ -1208,7 +1212,8 @@ class DetailsViewModel @Inject constructor(
                                         context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
                                     }
                                 } ?: playTarget?.label,
-                                playPositionMs = playTarget?.positionMs
+                                playPositionMs = playTarget?.positionMs,
+                                isPlaybackTargetReady = true
                             )
                         }
                     } else {
@@ -1232,7 +1237,8 @@ class DetailsViewModel @Inject constructor(
                                         context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
                                     }
                                 } ?: playTarget?.label,
-                                playPositionMs = playTarget?.positionMs
+                                playPositionMs = playTarget?.positionMs,
+                                isPlaybackTargetReady = true
                             )
                         }
                     }

@@ -82,7 +82,9 @@ class CrashReportActivity : ComponentActivity() {
                     hasReportedCrashMsg = reportedCrashMsg != null,
                     crashTime = crashTime,
                     crashVersion = crashVersion,
-                    crashProvider = prefs.getString("last_crash_provider", "sentry") ?: "sentry",
+                    crashProvider = intent.getStringExtra(EXTRA_CRASH_PROVIDER)
+                        ?: prefs.getString("last_crash_provider", "firebase")
+                        ?: "firebase",
                     onRestartApp = {
                         val restartIntent = Intent(this@CrashReportActivity, MainActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -100,6 +102,7 @@ class CrashReportActivity : ComponentActivity() {
         const val EXTRA_CRASH_ID = "extra_crash_id"
         const val EXTRA_CRASH_MSG = "extra_crash_msg"
         const val EXTRA_CRASH_TIME = "extra_crash_time"
+        const val EXTRA_CRASH_PROVIDER = "extra_crash_provider"
         const val DISCORD_BUG_CHANNEL_URL = "https://discord.gg/UavuEYMfQ4"
     }
 }
@@ -136,7 +139,7 @@ fun CrashReportScreen(
         sdf.format(Date(crashTime))
     }
 
-    val firebase = crashProvider == "firebase"
+    val firebase = crashProvider != "sentry"
     val dashboardLink = if (firebase) "https://console.firebase.google.com/project/arvio-15c5a/crashlytics"
         else "https://sentry.io/issues/?query=id%3A${Uri.encode(crashId)}"
 
