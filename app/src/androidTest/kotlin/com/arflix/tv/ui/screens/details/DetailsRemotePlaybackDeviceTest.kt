@@ -16,10 +16,12 @@ import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StreamSource
+import com.arflix.tv.data.repository.KidsContentFilter
 import com.arflix.tv.ui.theme.ArflixTvTheme
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
 import io.mockk.every
+import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,6 +124,10 @@ class DetailsRemotePlaybackDeviceTest {
             streams = listOf(StreamSource("Test source", "Test addon", "fixture", "1080p", "", url = "https://example.invalid/test.mp4")),
         ))
         every { model.uiState } returns state
+        every { model.kidsFilterState } returns MutableStateFlow(KidsContentFilter.State(null, "US", emptyMap()))
+        every { model.applyKidsFilter(any(), any()) } answers { firstArg() }
+        every { model.listPicker } returns MutableStateFlow(null)
+        coEvery { model.hasPersonalLists() } returns false
         compose.setContent {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.TV) {
                 ArflixTvTheme {
