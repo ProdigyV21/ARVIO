@@ -19,6 +19,11 @@ const STORE_KEY = "arvio.web.imdbRatings.v1";
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 900;
 
+function normalizeImdbId(value: unknown): string {
+  const id = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^tt\d+$/.test(id) ? id : "";
+}
+
 function readStore(): Record<string, CacheEntry> {
   return loadStored<Record<string, CacheEntry>>(STORE_KEY, {});
 }
@@ -80,7 +85,7 @@ function remember(imdbId: string, rating: string) {
  * have none) once looked up, undefined when never looked up.
  */
 export function peekImdbRating(imdbId?: string | null): string | null | undefined {
-  const id = (imdbId ?? "").trim().toLowerCase();
+  const id = normalizeImdbId(imdbId);
   if (!/^tt\d+$/.test(id)) return null;
   const hit = cached(id);
   return hit === null ? undefined : hit || null;
@@ -114,7 +119,7 @@ const AGREGARR_ENDPOINT = "https://api.agregarr.org/api/ratings";
  * limit the Android client uses).
  */
 export async function getImdbRatings(imdbIds: string[]): Promise<Record<string, string>> {
-  const unique = [...new Set(imdbIds.map((id) => (id ?? "").trim().toLowerCase()).filter((id) => /^tt\d+$/.test(id)))];
+  const unique = [...new Set(imdbIds.map(normalizeImdbId).filter(Boolean))];
   const result: Record<string, string> = {};
   const missing: string[] = [];
   unique.forEach((id) => {
@@ -136,7 +141,7 @@ export async function getImdbRatings(imdbIds: string[]): Promise<Record<string, 
       const rows = await response.json() as Array<{ imdbId?: string; rating?: unknown }>;
       const seen = new Set<string>();
       rows.forEach((row) => {
-        const id = (row?.imdbId ?? "").trim().toLowerCase();
+        const id = normalizeImdbId(row?.imdbId);
         if (!id) return;
         seen.add(id);
         const rating = normalize(row?.rating);
@@ -159,7 +164,7 @@ export async function getImdbRatings(imdbIds: string[]): Promise<Record<string, 
  * rather than substituting a different provider's score).
  */
 export async function getImdbRating(mediaType: "movie" | "tv", imdbId?: string | null): Promise<string | null> {
-  const id = (imdbId ?? "").trim().toLowerCase();
+  const id = normalizeImdbId(imdbId);
   if (!/^tt\d+$/.test(id)) return null;
   const hit = cached(id);
   if (hit !== null) return hit || null;

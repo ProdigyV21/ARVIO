@@ -2,8 +2,9 @@
 // shown without backgrounds, exactly like the app. Mapping mirrors
 // MediaRepository.canonicalStreamingServiceName / bundledStreamingLogoUri.
 
-export function canonicalServiceName(raw: string | null | undefined): string {
-  const name = (raw ?? "").trim();
+export function canonicalServiceName(raw: unknown): string {
+  // Provider metadata can come from add-ons or older cloud snapshots, not only TMDB.
+  const name = typeof raw === "string" ? raw.trim() : "";
   if (!name) return "";
   const n = name.toLowerCase();
   if (n === "max" || n.includes("hbo")) return "HBO Max";
