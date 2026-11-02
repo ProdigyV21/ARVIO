@@ -336,4 +336,34 @@
     <string name="youtube_ok_move_down">%1$d • OK: הזזה למטה</string>
     <string name="youtube_ok_remove">%1$d • OK: הסרה</string>
     <string name="youtube_video_removed">הוסר: %1$s</string>
+    <!-- TMDB genre names (service genre chips, Home genre tiles) -->
+    <string name="collections_genre_action">אקשן</string>
+    <string name="collections_genre_adventure">הרפתקאות</string>
+    <string name="collections_genre_animation">אנימציה</string>
+    <string name="collections_genre_comedy">קומדיה</string>
+    <string name="collections_genre_documentary">דוקומנטרי</string>
+    <string name="collections_genre_drama">דרמה</string>
+    <string name="collections_genre_family">משפחה</string>
+    <string name="collections_genre_fantasy">פנטזיה</string>
+    <string name="collections_genre_horror">אימה</string>
+    <string name="collections_genre_romance">רומנטיקה</string>
+    <string name="collections_genre_sci_fi">מדע בדיוני</string>
+    <string name="collections_genre_thriller">מותחן</string>
+    <string name="collections_genre_superhero">גיבורי על</string>
+    <string name="collections_genre_war_military">מלחמה וצבא</string>
+    <string name="tmdb_genre_crime">פשע</string>
+    <string name="tmdb_genre_history">היסטוריה</string>
+    <string name="tmdb_genre_music">מוזיקה</string>
+    <string name="tmdb_genre_mystery">מסתורין</string>
+    <string name="tmdb_genre_tv_movie">סרט טלוויזיה</string>
+    <string name="tmdb_genre_war">מלחמה</string>
+    <string name="tmdb_genre_western">מערבון</string>
+    <string name="tmdb_genre_action_adventure">אקשן והרפתקאות</string>
+    <string name="tmdb_genre_kids">ילדים</string>
+    <string name="tmdb_genre_news">חדשות</string>
+    <string name="tmdb_genre_reality">ריאליטי</string>
+    <string name="tmdb_genre_sci_fi_fantasy">מדע בדיוני ופנטזיה</string>
+    <string name="tmdb_genre_soap">אופרת סבון</string>
+    <string name="tmdb_genre_talk">אירוח</string>
+    <string name="tmdb_genre_war_politics">מלחמה ופוליטיקה</string>
 </resources>
