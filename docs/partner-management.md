@@ -123,7 +123,7 @@ adb -s emulator-5554 shell am instrument -w -r -e class com.arflix.tv.data.repos
 ```
 
 This verifies the tested Android IPTV protocol paths, not every provider variation,
-the full remote-control UI workflow, or commercial Partner launch readiness. The
+the full remote-control UI workflow, or commercial Partner launch readiness.
 Partner Android builds must explicitly enable `-PpartnerManagement=true`; normal
 builds retain their existing behavior. Pilot builds are not a public product launch.
 
@@ -137,8 +137,29 @@ emulator-only live tests; credentials are supplied at runtime, never in source.
 Web delivery is behind `NEXT_PUBLIC_PARTNER_MANAGEMENT=true`; backend access is
 behind `PARTNER_ENABLED=true`. Both remain off by default in code. The auth-site
 backend is enabled only for the private allowlisted pilot. The normal webapp's
-managed delivery has not been deployed. No real-payment test or commit has been
-performed.
+managed delivery has not been deployed. No real-payment test has been performed.
+
+## Sharing an Android pilot
+
+Build the normal release variant with the pilot flag, not the debug APK:
+
+```powershell
+./gradlew.bat :app:assembleSideloadRelease -PpartnerManagement=true
+```
+
+Use the existing release keystore and omit `includeX86Abis` for the shareable
+ARM/ARM64 APK. Verify the signer, non-debuggable manifest and generated Partner
+flag before sharing. Install as an update over a matching signed GitHub APK;
+do not uninstall or clear app data. The device must sign in as the customer who
+accepted the manager's invitation, not merely as the dashboard administrator.
+Keep the package published and the customer enabled. This build is for the private
+pilot, not a replacement for the public release or permission to sell Partner access.
+
+After integrating main on 2 November, all 238 backend tests, the public-build
+packaging check, 36 focused web tests and the web TypeScript check passed. The
+full web run had 1,444 passes, 11 skips and 9 failures out of 1,464 tests. Failures
+include the earlier five, a calendar timing check and three stale-translation
+checks for the playlist-limit wording. Do not report the whole web suite as green.
 
 Run `npm run preview:partner-management` from `web` for a disposable localhost
 preview. The command prints its URL. Admin `operator@example.test`, customer
