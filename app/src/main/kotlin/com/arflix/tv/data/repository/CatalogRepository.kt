@@ -336,6 +336,29 @@ class CatalogRepository @Inject constructor(
         invalidationBus.markDirty(CloudSyncScope.CATALOGS, safeProfileId, "set hidden addon catalogs")
     }
 
+    /**
+     * Un-deletes [addon]'s rows for the active profile. Row ids are stable per addon +
+     * catalog, so rows deleted under an earlier install would otherwise stay hidden after
+     * the user installs the addon again. Call before [syncAddonCatalogs].
+     */
+    suspend fun restoreHiddenAddonCatalogs(addon: Addon) {
+        val rowIds = addon.manifest?.catalogs.orEmpty()
+            .mapNotNull { buildAddonCatalogConfig(addon, it)?.id }
+            .toSet()
+        if (rowIds.isEmpty()) return
+        val profileId = activeProfileId()
+        var restored = false
+        context.settingsDataStore.edit { prefs ->
+            val hidden = decodeHiddenAddon(profileId, prefs)
+            if (hidden.none { it in rowIds }) return@edit
+            writeCatalogField(prefs, profileId, "hiddenAddonByProfile", gson.toJson((hidden - rowIds).toList()))
+            restored = true
+        }
+        if (!restored) return
+        lastSyncedAddonFingerprint = null
+        invalidationBus.markDirty(CloudSyncScope.CATALOGS, profileId, "restore reinstalled addon catalogs")
+    }
+
     suspend fun getHiddenHomeServerCatalogIdsForProfile(profileId: String): List<String> {
         val safeProfileId = profileId.trim().ifBlank { "default" }
         val prefs = context.settingsDataStore.data.first()
