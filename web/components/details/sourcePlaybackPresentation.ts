@@ -135,15 +135,21 @@ export function sourceBadges(stream: StreamSource, info: { debrid: boolean; unca
  * what tells two "Torrentio 1080p" rows apart), else the addon's own label.
  */
 export function sourceTitle(stream: Pick<StreamSource, "source" | "addonName" | "description" | "behaviorHints">) {
-  const file = stream.behaviorHints?.filename?.trim();
+  const rawFilename = stream.behaviorHints?.filename;
+  const file = typeof rawFilename === "string" ? rawFilename.trim() : "";
   if (file) return file;
-  const firstLine = stream.description?.split("\n").map((line) => line.trim()).find(Boolean);
+
+  const description = typeof stream.description === "string" ? stream.description : "";
+  const firstLine = description.split("\n").map((line) => line.trim()).find(Boolean);
   // Stremio addons put the release name on the first description line and
   // decorations (👤 seeders, 💾 size, ⚙️ provider) on the following ones.
   if (firstLine && /[._ -]/.test(firstLine) && firstLine.length > 8 && !/^[👤💾⚙️🔗📦]/u.test(firstLine)) {
     return firstLine.replace(/\s*💾.*$/u, "").trim() || firstLine;
   }
-  return stream.source || stream.addonName;
+
+  if (typeof stream.source === "string" && stream.source) return stream.source;
+  if (typeof stream.addonName === "string" && stream.addonName) return stream.addonName;
+  return "Source";
 }
 
 export type SourceFilter = "all" | "here" | "4k" | "1080p" | "cached";
