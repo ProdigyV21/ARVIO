@@ -31,6 +31,10 @@ import com.google.gson.JsonParser
 @Config(sdk = [28], application = android.app.Application::class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class PartnerDeliveryRepositoryTest {
+    @org.junit.Before fun requirePartnerBuild() {
+        org.junit.Assume.assumeTrue(com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
+    }
+
     @Test fun `public addon accepts absent or null customer credentials and respects manifest override`() = runBlocking {
         val auth = mockk<AuthRepository>()
         every { auth.authState } returns MutableStateFlow<AuthState>(AuthState.Authenticated("qa-addon", "qa@example.test", null))

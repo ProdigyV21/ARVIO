@@ -20,6 +20,10 @@ import org.robolectric.annotation.ConscryptMode
 @Config(sdk = [28], application = Application::class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class PartnerHomeServerTest {
+    @org.junit.Before fun requirePartnerBuild() {
+        org.junit.Assume.assumeTrue(com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
+    }
+
     @Test fun `managed servers reach source lookup but never personal export and disappear on revocation`() = runBlocking {
         val profiles = mockk<ProfileManager> {
             every { activeProfileId } returns MutableStateFlow("partner-server-qa")
