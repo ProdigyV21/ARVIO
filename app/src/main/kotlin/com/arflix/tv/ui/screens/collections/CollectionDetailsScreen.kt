@@ -244,14 +244,17 @@ class CollectionDetailsViewModel @Inject constructor(
 
     /**
      * Narrow [tab] to [genreId] (null for every genre) and reload it from the first page.
-     * The other tab keeps what it already loaded unless it was still loading.
+     * The other tab keeps its loaded pages even if an append was in flight.
      */
     fun selectGenre(tab: CollectionTab, genreId: Int?) {
         val state = _uiState.value
         val catalog = state.catalog ?: return
         if (!state.genreFilterable || state.genreId(tab) == genreId) return
         val other = if (tab == CollectionTab.MOVIES) CollectionTab.SERIES else CollectionTab.MOVIES
-        val otherLoaded = !isLoadingTab(state, other)
+        val otherLoaded = when (other) {
+            CollectionTab.MOVIES -> !state.isLoadingMovies
+            CollectionTab.SERIES -> !state.isLoadingSeries
+        }
         val generation = restartCollectionScope()
         _uiState.value = CollectionDetailsUiState(
             catalog = catalog,
@@ -275,11 +278,6 @@ class CollectionDetailsViewModel @Inject constructor(
             }
         }
         loadJob = collectionScope.launch { loadTabs(catalog, tab, generation, loadSecondary = !otherLoaded) }
-    }
-
-    private fun isLoadingTab(state: CollectionDetailsUiState, tab: CollectionTab) = when (tab) {
-        CollectionTab.MOVIES -> state.isLoadingMovies || state.isLoadingMoreMovies
-        CollectionTab.SERIES -> state.isLoadingSeries || state.isLoadingMoreSeries
     }
 
     /** Cancels every in-flight page, logo and detail request of the previous load. */
