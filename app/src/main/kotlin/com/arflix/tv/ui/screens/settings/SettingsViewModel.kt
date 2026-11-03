@@ -426,7 +426,8 @@ data class SettingsUiState(
     val streamProviderItems: List<StreamProviderItem> = emptyList(),
     val streamSearchMode: StreamSearchMode = StreamSearchMode.PARALLEL,
     val pluginsCount: Int = 0,
-    val isTelegramConnected: Boolean = false
+    val isTelegramConnected: Boolean = false,
+    val telegramUserName: String? = null
 )
 
 @HiltViewModel
@@ -1184,7 +1185,10 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             telegramRepository.authState.collect { authState ->
-                _uiState.value = _uiState.value.copy(isTelegramConnected = authState is TelegramAuthState.Ready)
+                _uiState.value = _uiState.value.copy(
+                    isTelegramConnected = authState is TelegramAuthState.Ready,
+                    telegramUserName = (authState as? TelegramAuthState.Ready)?.firstName?.takeIf { it.isNotBlank() }
+                )
             }
         }
     }

@@ -5589,6 +5589,7 @@ private fun MobileSettingsMainPage(
                         uiState.isTraktAuthenticated -> "Trakt"
                         uiState.isMdbListConnected -> "MDBList"
                         uiState.isSimklConnected -> "Simkl"
+                        uiState.isWeTrakrConnected -> "WeTrakr"
                         else -> ""
                     },
                     isFocused = false,
@@ -5597,7 +5598,14 @@ private fun MobileSettingsMainPage(
                 MobileSettingsRow(
                     iconRes = R.drawable.ic_telegram,
                     title = "Telegram",
-                    value = "",
+                    subtitle = when {
+                        uiState.isTelegramConnected && !uiState.telegramUserName.isNullOrBlank() ->
+                            stringResource(R.string.settings_connected_as, uiState.telegramUserName.orEmpty())
+                        uiState.isTelegramConnected ->
+                            stringResource(R.string.connected)
+                        else -> ""
+                    },
+                    value = if (uiState.isTelegramConnected) stringResource(R.string.connected) else stringResource(R.string.connect),
                     isExternalLink = false,
                     isFocused = false,
                     onClick = { onNavigate("Telegram") }
@@ -10920,8 +10928,14 @@ private fun AccountsSettings(
         // Telegram
         SettingsActionRow(
             title = "Telegram",
-            description = stringResource(R.string.settings_telegram_desc),
-            actionLabel = stringResource(R.string.settings_badge_open),
+            description = when {
+                trackingUiState.isTelegramConnected && !trackingUiState.telegramUserName.isNullOrBlank() ->
+                    stringResource(R.string.settings_connected_as, trackingUiState.telegramUserName.orEmpty())
+                trackingUiState.isTelegramConnected ->
+                    stringResource(R.string.connected)
+                else -> stringResource(R.string.settings_telegram_desc)
+            },
+            actionLabel = if (trackingUiState.isTelegramConnected) stringResource(R.string.connected) else stringResource(R.string.settings_badge_open),
             isFocused = focusedIndex == 11,
             onClick = onNavigateToTelegram,
             modifier = Modifier.settingsFocusSlot(11)
