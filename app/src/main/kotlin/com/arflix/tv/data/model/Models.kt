@@ -252,7 +252,9 @@ data class StreamSource(
     val preview: StreamPreviewMetadata? = null,
     // Ephemeral resolved YouTube tracks, never persisted as collection URLs.
     val youTubeAudioUrl: String? = null,
-    val youTubeFallbackUrl: String? = null
+    val youTubeFallbackUrl: String? = null,
+    // The playlist or portal an IPTV VOD source came from; the URL that plays can't tell.
+    val iptvSourceId: String? = null
 ) : Serializable
 
 enum class StreamPreviewKind { JELLYFIN, PLEX, EMBY, WEBVTT, IMAGE_HLS, BIF }

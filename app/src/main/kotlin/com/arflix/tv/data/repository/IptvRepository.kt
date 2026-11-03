@@ -1558,12 +1558,7 @@ class IptvRepository @Inject constructor(
      */
     suspend fun resolveStalkerStreamUrl(channelId: String?, command: String): String? {
         val config = observeConfig().first()
-        val portals = config.stalkerPortals
-        if (portals.isEmpty()) return null
-        val portalId = channelId?.let { portalIdFromChannelId(it) }
-        val portal = portalId
-            ?.let { id -> portals.firstOrNull { it.id == id } }
-            ?: portals.first()
+        val portal = StalkerPortalSupport.portalForChannel(channelId, config.stalkerPortals) ?: return null
         if (portal.portalUrl.isBlank() || portal.macAddress.isBlank()) return null
         val stalker = getOrCreateStalkerApi(portal)
         return stalker?.resolveStreamUrl(command)
@@ -6131,13 +6126,14 @@ class IptvRepository @Inject constructor(
      */
     private data class XtreamVodProvider(
         val creds: XtreamCredentials,
-        val name: String
+        val name: String,
+        val sourceId: String
     )
 
     private fun xtreamProvidersForVodImport(config: IptvConfig): List<XtreamVodProvider> =
         activeVodPlaylists(config)
             .mapNotNull { playlist ->
-                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim()) }
+                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim(), playlist.id) }
             }
             // Dedupe on the credentials alone, exactly as before: two playlist
             // entries pointing at the same account are one provider, and the
@@ -6147,7 +6143,7 @@ class IptvRepository @Inject constructor(
     private fun xtreamProvidersForSeriesImport(config: IptvConfig): List<XtreamVodProvider> =
         activeSeriesPlaylists(config)
             .mapNotNull { playlist ->
-                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim()) }
+                resolveXtreamCredentials(playlist)?.let { XtreamVodProvider(it, playlist.name.trim(), playlist.id) }
             }
             .distinctBy { it.creds }
 
@@ -6241,7 +6237,7 @@ class IptvRepository @Inject constructor(
                         // Stamped here rather than deeper down on purpose: every
                         // source in this batch came from this one provider, and
                         // the disk cache below never has to know about names.
-                        .map { it.withIptvProvider(provider.name) }
+                        .map { it.withIptvProvider(provider.name).copy(iptvSourceId = provider.sourceId) }
                 }
             // Additive second provider: each Stalker portal is searched on its
             // own, and a failing portal never removes Xtream results.
@@ -6258,7 +6254,7 @@ class IptvRepository @Inject constructor(
                             originalTitle = originalTitle
                         )
                     }.getOrDefault(emptyList())
-                        .map { it.withIptvProvider(portal.name) }
+                        .map { it.withIptvProvider(portal.name).copy(iptvSourceId = portal.id) }
                 }
             sortVodSources(xtreamSources + stalkerSources)
         }
@@ -7319,7 +7315,7 @@ class IptvRepository @Inject constructor(
                             allowNetwork = allowNetwork
                         )
                     }.getOrDefault(emptyList())
-                        .map { it.withIptvProvider(provider.name) }
+                        .map { it.withIptvProvider(provider.name).copy(iptvSourceId = provider.sourceId) }
                 }
             // Additive second provider, exactly as on the movie path: each
             // Stalker portal is searched on its own, and a failing portal never
@@ -7345,7 +7341,7 @@ class IptvRepository @Inject constructor(
                         // Stamped before the partial list is published, not after:
                         // this path reports each portal's result as it arrives, so
                         // a later stamp would show the first batch without a name.
-                        .map { it.withIptvProvider(portal.name) }
+                        .map { it.withIptvProvider(portal.name).copy(iptvSourceId = portal.id) }
                         .also { found ->
                             completedSources.addAll(found)
                             onSources(sortVodSources(completedSources))

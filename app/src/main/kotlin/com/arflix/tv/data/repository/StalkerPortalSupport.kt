@@ -36,6 +36,16 @@ internal object StalkerPortalSupport {
         return portalId.takeIf { it.isNotBlank() }
     }
 
+    /**
+     * The portal a Stalker channel plays through: the one its id names, otherwise the first
+     * configured (legacy single-portal ids). `create_link` and connection identity both ask
+     * here, so a stream never counts against a portal other than the one that issued its link.
+     */
+    fun portalForChannel(channelId: String?, portals: List<StalkerPortalEntry>): StalkerPortalEntry? {
+        val portalId = channelId?.let { portalIdFromChannelId(it) }
+        return portalId?.let { id -> portals.firstOrNull { it.id == id } } ?: portals.firstOrNull()
+    }
+
     /** Returns the owning source id for playlist/group and cache scoping. */
     fun playlistIdFromChannelId(channelId: String): String {
         return portalIdFromChannelId(channelId)

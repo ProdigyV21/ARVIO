@@ -4488,7 +4488,10 @@ class StreamRepository @Inject constructor(
             val playable = direct.startsWith("http://", ignoreCase = true) ||
                 direct.startsWith("https://", ignoreCase = true)
             if (!playable) return null
-            return stream.copy(url = direct)
+            return stream.copy(
+                url = direct,
+                iptvSourceId = stream.iptvSourceId ?: StalkerVodLink.parseMarker(url)?.portalId
+            )
         }
 
         val normalizedUrl = when {

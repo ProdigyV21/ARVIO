@@ -31,8 +31,7 @@ internal class IptvProviderRequestGuard(
     private val providers = HashMap<String, Provider>()
 
     private fun provider(url: HttpUrl): Provider = synchronized(providers) {
-        val key = url.host + if (url.port in setOf(80, 443)) "" else ":${url.port}"
-        providers.getOrPut(key) { Provider() }
+        providers.getOrPut(iptvProviderHostKey(url)) { Provider() }
     }
 
     private fun recordResponse(provider: Provider, response: Response, playback: Boolean = false) {
