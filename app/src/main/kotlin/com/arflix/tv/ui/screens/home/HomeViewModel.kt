@@ -1117,6 +1117,22 @@ class HomeViewModel @Inject constructor(
             .getOrNull()
     }
 
+    /** Null until the card's channel is known; the hero opens nothing until it has an answer. */
+    internal suspend fun iptvPreviewGate(itemId: Int): HomeIptvPreviewGate? {
+        val channel = iptvChannelMap[itemId] ?: return null
+        return readHomeIptvPreviewGate(itemId) { iptvRepository.streamPolicyFor(channel) }
+    }
+
+    /** The account and limit a channel card's preview session opens under; null keeps today's untagged preview. */
+    internal suspend fun iptvPreviewPolicy(itemId: Int): com.arflix.tv.data.repository.IptvStreamPolicy? {
+        val channel = iptvChannelMap[itemId] ?: return null
+        return iptvRepository.streamPolicyFor(channel)
+    }
+
+    /** The panel's live slot count for a preview's cold-start check, never stored. */
+    internal suspend fun iptvAccountUsage(account: com.arflix.tv.network.IptvProviderAccount) =
+        iptvRepository.fetchAccountUsage(account)
+
     /** The profile's "Default subtitle" setting for channel previews (off when it cannot be read). */
     internal suspend fun previewSubtitleDefault(): com.arflix.tv.ui.screens.tv.live.LiveSubtitleDefault = runCatching {
         val prefs = context.settingsDataStore.data.first()
