@@ -171,7 +171,8 @@ function extracted(relative, selector, globals) {
   // Player status/hop bookkeeping that these harnesses do not exercise.
   const playerDefaults = { setBootStatus: () => {}, autoSourceHopsRef: { current: 0 }, sourceListRef: { current: [] },
     needsAudioConversion: () => false, browserAutoplayCandidates: () => [], diagnoseSourceFailure: async () => null, setEnded: () => {},
-    onAdvanceRef: { current: async () => false }, upNextShownRef: { current: false } };
+    onAdvanceRef: { current: async () => false }, upNextShownRef: { current: false },
+    liveReconnectsRef: { current: null } };
   vm.runInNewContext(code, { module, Error, Event, DOMException, AbortController, console, ...playerDefaults, ...globals }, { filename });
   return module.exports;
 }
@@ -548,7 +549,9 @@ test('live network interruptions also recover instead of waiting for a VOD-only 
   const cleanup = h.setup(); h.emit('playing');
   h.video.paused = true;
   h.transportError({ kind: 'network', fatal: true, retryable: true, message: 'Connection interrupted' });
-  assert.deepEqual(h.state.reloads, [undefined]);
+  // The dropped connection is released and the same channel reconnected after a short wait (#849).
+  assert.deepEqual(h.state.reloads, []);
+  h.fireTimeouts();
   assert.equal(h.video.paused, false);
   assert.equal(h.state.errors.includes(true), false);
   cleanup();
@@ -564,14 +567,14 @@ test('raw video errors do not bypass adaptive engine recovery or walk the fallba
   cleanup();
 });
 
-test('silent live stalls use live-edge recovery, reconnect the channel twice, and never select an unrelated lighter VOD source', () => {
-  const calls = { live: 0, reloads: [], errors: [], selections: 0, restarts: 0, failure: null };
+test('silent live stalls use live-edge recovery, hand reconnects to the engine\'s budget, and never select an unrelated lighter VOD source', () => {
+  const calls = { live: 0, reloads: [], errors: [], selections: 0, rounds: 0, events: [] };
   let recovery;
   const effect = extracted('components/player/PlayerOverlay.tsx', (node, source) =>
     ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
       && ts.isArrowFunction(node.arguments[0]) && node.arguments[0].getText(source).includes('monitorPlaybackStall(')
       ? node.arguments[0] : undefined, {
-    booted: true, liveTv: true, stream: {}, videoRef: { current: {} },
+    booted: true, liveTv: true, stream: {}, videoRef: { current: { dispatchEvent: (event) => calls.events.push(event.type) } },
     transportRef: { current: { goLive: () => calls.live++, reload: position => calls.reloads.push(position) } },
     currentStreamRef: { current: { autoSelect: true } }, sourceListRef: { current: [file()] },
     monitorPlaybackStall: (_video, options) => { recovery = options; return () => {}; },
@@ -579,21 +582,22 @@ test('silent live stalls use live-edge recovery, reconnect the channel twice, an
     failureDiagnosticRef: { current: {} }, setErrorDetail: () => {},
     setError: value => calls.errors.push(value), setBuffering: () => {}, setShowControls: () => {},
     onToast: () => {}, onSelectStream: () => calls.selections++,
-    liveStallRestartsRef: { current: 0 }, setRemuxRestartKey: () => calls.restarts++, setLiveFailure: value => { calls.failure = value; }
+    setRemuxRestartKey: () => { throw new Error('A live stall must not restart the whole plan'); },
+    setLiveStallRound: () => calls.rounds++
   });
   const cleanup = effect();
   assert.ok(recovery, 'live playback installs the silent-stall monitor');
   assert.equal(recovery.live, true, 'live reloads may reset the timestamp window');
-  recovery.nudge(123); recovery.reload(123);
-  // A live channel has no other sources: reconnect it (twice), then explain.
-  recovery.onFailure(); recovery.onFailure();
-  assert.equal(calls.restarts, 2);
-  assert.deepEqual(calls.errors, []);
-  recovery.onFailure();
+  recovery.nudge(123);
   assert.equal(calls.live, 1);
-  assert.deepEqual(calls.reloads, [undefined]);
-  assert.deepEqual(calls.errors, [true]);
-  assert.equal(calls.failure.kind, 'stopped');
+  // A reload and the final step both open a provider connection: the engine
+  // reconnects on the route that played, within the channel's budget.
+  recovery.reload(123);
+  recovery.onFailure();
+  assert.deepEqual(calls.reloads, []);
+  assert.deepEqual(calls.events, ['arvio-live-stalled', 'arvio-live-stalled']);
+  assert.equal(calls.rounds, 1, 'the watchdog re-arms for the reconnected stream');
+  assert.deepEqual(calls.errors, []);
   assert.equal(calls.selections, 0);
   cleanup();
 });

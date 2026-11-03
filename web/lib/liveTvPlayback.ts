@@ -354,6 +354,34 @@ export function mayRetryChannel(faults: LiveFault[], context: RelayContext) {
   return !providerRefusal(faults, context);
 }
 
+/**
+ * Automatic reconnects of a channel that has played. IPTV panels (XC_VM,
+ * Xtream Codes) count every stream request as a connection, keep counting a
+ * closed one for several seconds and close the oldest viewer's stream when a
+ * shared line goes over its limit (#849). So a drop gets at most
+ * LIVE_RECONNECT_LIMIT reconnects per channel URL in LIVE_RECONNECT_WINDOW_MS,
+ * spaced out, on the route that was playing. The stall watchdog's reconnects
+ * count too; the viewer's Retry starts a fresh budget.
+ */
+export const LIVE_RECONNECT_LIMIT = 3;
+export const LIVE_RECONNECT_WINDOW_MS = 5 * 60_000;
+export const LIVE_RECONNECT_DELAYS_MS = [2_000, 5_000, 10_000];
+export type LiveReconnects = { key: string; at: number[] };
+
+/** The wait before the next automatic reconnect of `key`, recorded as taken; null once the budget is spent. */
+export function takeLiveReconnect(budget: { current: LiveReconnects | null }, key: string, now: number): number | null {
+  const at = budget.current?.key === key ? budget.current.at.filter((time) => now - time < LIVE_RECONNECT_WINDOW_MS) : [];
+  if (at.length >= LIVE_RECONNECT_LIMIT) { budget.current = { key, at }; return null; }
+  budget.current = { key, at: [...at, now] };
+  return LIVE_RECONNECT_DELAYS_MS[Math.min(at.length, LIVE_RECONNECT_DELAYS_MS.length - 1)];
+}
+
+/** The attempt in a fresh plan (a refreshed Stalker link) that goes the way the playing one went. */
+export function sameRouteAttempt(attempts: LiveAttempt[], playing: LiveAttempt) {
+  return attempts.findIndex((attempt) => attempt.route === playing.route && attempt.variant === playing.variant
+    && attempt.transport === playing.transport && attempt.hlsEngine === playing.hlsEngine);
+}
+
 const AUDIO_LABELS: [RegExp, string][] = [
   [/^(ac-?3|a52)/i, "Dolby Digital (AC-3)"], [/^(ec-?3|e-?ac-?3)/i, "Dolby Digital Plus (E-AC-3)"],
   [/^(mp3|mp4a\.6b|mp4a\.69|mpga|mp2)/i, "MPEG audio (MP2/MP3)"], [/^(mp4a|aac)/i, "AAC"], [/^opus/i, "Opus"], [/^dts|^dtsc/i, "DTS"]

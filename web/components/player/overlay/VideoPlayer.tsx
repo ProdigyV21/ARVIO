@@ -6,7 +6,7 @@ import { getPriorityConfig, authClient } from "@/lib/store";
 import { usePlayerEpisodeMetadata } from "../usePlayerEpisodeMetadata";
 import { useLivePlayerDock } from "../useLivePlayerDock";
 import type { PlaybackHandle, PlaybackTracks } from "@/lib/player";
-import type { LiveFailure } from "@/lib/liveTvPlayback";
+import type { LiveFailure, LiveReconnects } from "@/lib/liveTvPlayback";
 import { subtitleLanguageName, SubtitleTranslator } from "@/lib/subtitleAi";
 import { trackLanguageName, languageCode } from "@/lib/languages";
 import { trackPremiumAttempt, trackPremiumDaily, trackPremiumMilestone, trackPremiumEvent } from "@/lib/premiumAnalytics";
@@ -178,9 +178,12 @@ export function VideoPlayer({
   const notify = useCallback((message: string, values?: Record<string, string | number>) => {
     onToast(translateUi(message, values && Object.fromEntries(Object.entries(values).map(([key, value]) => [key, typeof value === "string" ? translateUi(value) : value]))));
   }, [onToast, translateUi]);
-  // Live channels reconnect after a mid-play stall instead of pointing at a
-  // source list Live TV does not have; bounded per channel.
-  const liveStallRestartsRef = useRef(0);
+  // Live channels reconnect after a drop or a mid-play stall instead of
+  // pointing at a source list Live TV does not have: a few times per channel
+  // in five minutes (takeLiveReconnect), the watchdog's reconnects included.
+  const liveReconnectsRef = useRef<LiveReconnects | null>(null);
+  // Re-arms the stall watchdog after it handed a live stall to the engine.
+  const [liveStallRound, setLiveStallRound] = useState(0);
   // A refreshed Stalker link replaces the stale one for restarts, outside
   // players and Copy link while the channel is the same stream.
   const liveSourceOverrideRef = useRef<{ from: string; url: string; headers?: Record<string, string> } | null>(null);
@@ -189,7 +192,6 @@ export function VideoPlayer({
     if (!liveTv || !fresh || selected.url !== fresh.from) return selected;
     return { ...selected, url: fresh.url, behaviorHints: { ...selected.behaviorHints, proxyHeaders: { ...selected.behaviorHints?.proxyHeaders, request: fresh.headers } } };
   }, [liveTv]);
-  useEffect(() => { liveStallRestartsRef.current = 0; }, [stream.url]);
   const failureDiagnosticRef = useRef<{ failure_kind: string; phase: "startup" | "playback"; transport?: string }>({ failure_kind: "unknown", phase: "startup" });
   // One diagnostic per failed attempt (capped per page): platform, method,
   // container and host type — allow-listed labels, never URLs or titles.
@@ -431,19 +433,20 @@ export function VideoPlayer({
       });
     };
 
+    // A live reconnect is the engine's (usePlaybackEngine): same route, same budget.
+    const reconnectLive = () => video.dispatchEvent(new Event("arvio-live-stalled"));
     return monitorPlaybackStall(video, {
       live: liveTv,
-      reload: (position) => transportRef.current?.reload(liveTv ? undefined : position),
+      reload: (position) => { if (liveTv) reconnectLive(); else transportRef.current?.reload(position); },
       nudge: liveTv ? () => { transportRef.current?.goLive(); } : undefined,
       onRecover: () => onToast("Playback stalled — trying to recover…"),
       onFailure: () => {
-        if (liveTv && liveStallRestartsRef.current < 2) {
-          liveStallRestartsRef.current += 1;
-          onToast("Reconnecting to the channel…");
-          setRemuxRestartKey((key) => key + 1);
+        if (liveTv) {
+          reconnectLive();
+          setLiveStallRound((round) => round + 1);
           return;
         }
-        const lighter = liveTv ? undefined : lighterSource();
+        const lighter = lighterSource();
         if (lighter && currentStreamRef.current.autoSelect) {
           onToast("Your connection can't keep up with this version — switching to a lighter one.");
           onSelectStream({ ...lighter, autoSelect: true }, { forceBrowser: true });
@@ -452,12 +455,6 @@ export function VideoPlayer({
         // Nothing lighter: surface the failure instead of buffering silently so
         // the source list (and the external-player options) are reachable.
         failureDiagnosticRef.current = { failure_kind: "timeout", phase: "playback" };
-        if (liveTv) {
-          setLiveFailure({ kind: "stopped", title: "The channel stopped", message: "The channel stopped sending video and could not be reconnected. Retry, or try again later." });
-          setErrorDetail("The channel stopped sending video and could not be reconnected. Retry, or try again later.");
-          setBuffering(false); setError(true); setShowControls(true);
-          return;
-        }
         setErrorDetail("This source stopped responding. Pick another source to continue.");
         setBuffering(false);
         setError(true);
@@ -466,7 +463,7 @@ export function VideoPlayer({
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booted, stream.url, liveTv, remuxRestartKey]);
+  }, [booted, stream.url, liveTv, remuxRestartKey, liveStallRound]);
 
   useEffect(() => {
     setBootLogo(null);
@@ -569,7 +566,7 @@ export function VideoPlayer({
     }
   }, [stream.subtitles, stream.url, settings.defaultSubtitle, aiAvailable, settings.aiAutoSelect, liveTv]);
 
-  usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failureDiagnosticRef, lastSavedRef, liveSourceOverrideRef, liveTv, liveXtreamOrigin, notify, onSelectStream, onToast, playbackIdentity, playbackRate, refreshLiveSource, remuxAudioIndexRef, remuxRestartKey, resumeAtRef, setBootStatus, setBuffering, setError, setErrorDetail, setLiveFailure, setPlayBlocked, setRemuxAudioIndex, setRemuxTracks, setShowControls, settings, setTransportTracks, sourceListRef, stream, transportRef, tryNextSource, videoRef });
+  usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failureDiagnosticRef, lastSavedRef, liveReconnectsRef, liveSourceOverrideRef, liveTv, liveXtreamOrigin, notify, onSelectStream, onToast, playbackIdentity, playbackRate, refreshLiveSource, remuxAudioIndexRef, remuxRestartKey, resumeAtRef, setBootStatus, setBuffering, setError, setErrorDetail, setLiveFailure, setPlayBlocked, setRemuxAudioIndex, setRemuxTracks, setShowControls, settings, setTransportTracks, sourceListRef, stream, transportRef, tryNextSource, videoRef });
 
   useEffect(() => {
     const video = videoRef.current;
@@ -683,7 +680,11 @@ export function VideoPlayer({
     // Terminal failure stops a home-server session. Ask the server for a fresh
     // playback session instead of trying to reopen its stopped conversion URL.
     if (stream.homeServer) selectStream({ ...stream, resumePositionSeconds: resumeAtRef.current || stream.resumePositionSeconds || 0 }, { forceBrowser: true });
-    else setRemuxRestartKey((key) => key + 1);
+    else {
+      // The viewer's Retry starts a fresh live reconnect budget.
+      liveReconnectsRef.current = null;
+      setRemuxRestartKey((key) => key + 1);
+    }
   }, [stream, selectStream]);
 
   const togglePlay = useCallback(() => {

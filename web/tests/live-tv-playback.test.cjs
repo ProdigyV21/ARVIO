@@ -260,7 +260,7 @@ function effect(globals) {
 
 const flush = () => new Promise(setImmediate);
 
-function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket', paywall = true, xtreamOrigin = null, overrideRef = { current: null } } = {}) {
+function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket', paywall = true, xtreamOrigin = null, overrideRef = { current: null }, reconnects = { current: null } } = {}) {
   const state = { attached: [], liveFailure: null, errors: [], toasts: [], refreshes: 0 };
   const video = Object.assign(new EventTarget(), { readyState: 0, currentTime: 0, duration: NaN, paused: true, ended: false, videoWidth: 0,
     pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); }, removeAttribute() {}, load() {} });
@@ -287,7 +287,7 @@ function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket'
     workerManifestUrl: (target) => `https://app.example/api/proxy?rewrite=worker&url=${encodeURIComponent(target)}`,
     directManifestUrl: (target) => `https://app.example/api/proxy?rewrite=direct&url=${encodeURIComponent(target)}`,
     proxiedUrl: (target) => `https://app.example/api/proxy?url=${encodeURIComponent(target)}`,
-    ...live, liveSourceOverrideRef: overrideRef, liveXtreamOrigin: xtreamOrigin,
+    ...live, liveSourceOverrideRef: overrideRef, liveXtreamOrigin: xtreamOrigin, liveReconnectsRef: reconnects,
     getMediaCapabilities: () => ({ mse: env.mse, nativeHls: env.nativeHls }), preferNativeHls: () => env.preferNativeHls,
     mediaSourceConstructor: () => ({ isTypeSupported: () => true }), currentStreamTicket: () => ticket,
     navigator: { userAgent: 'Mozilla/5.0 Chrome/126.0 Safari/537.36' }, document: { createElement: () => ({ canPlayType: () => '' }) },
@@ -297,11 +297,17 @@ function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket'
       handles.push(handle);
       return handle;
     },
-    window: { location: { protocol: env.pageProtocol }, setTimeout: (fn) => { timers.set(++id, fn); return id; }, clearTimeout: (key) => timers.delete(key),
+    window: { location: { protocol: env.pageProtocol }, setTimeout: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimeout: (key) => timers.delete(key),
       setInterval: () => 0, clearInterval: noop }
   };
   const setup = effect(globals);
-  return { state, video, setup, overrideRef, fail: (fault) => handles.at(-1).options.onError(fault), last: () => state.attached.at(-1),
+  // Runs the pending reconnect waits (lib/liveTvPlayback.ts LIVE_RECONNECT_DELAYS_MS), not the startup watchdogs.
+  const runReconnects = () => {
+    const waits = [...timers].filter(([, timer]) => live.LIVE_RECONNECT_DELAYS_MS.includes(timer.ms));
+    for (const [key, timer] of waits) { timers.delete(key); timer.fn(); }
+    return waits.map(([, timer]) => timer.ms);
+  };
+  return { state, video, setup, overrideRef, runReconnects, fail: (fault) => handles.at(-1).options.onError(fault), last: () => state.attached.at(-1),
     playing: () => { video.readyState = 4; video.dispatchEvent(new Event('playing')); } };
 }
 
@@ -340,16 +346,20 @@ test('player: an expired Stalker link is re-resolved once and the channel plays 
   cleanup();
 });
 
-test('player: a decoder error after the channel played reconnects once, then ends on the explanation (not the VOD message)', async () => {
+test('player: a decoder error after the channel played reconnects on the same route within the budget, then ends on the explanation (not the VOD message)', async () => {
   const h = liveHarness({ url: 'http://p.example/channel/sd.ts' });
   const cleanup = h.setup();
   const playing = () => { h.video.readyState = 4; h.video.dispatchEvent(new Event('playing')); };
   playing();
   const rungs = h.state.attached.length;
+  const route = h.last().url;
   h.fail({ transport: 'mpegts', kind: 'media', fatal: true, retryable: false, message: 'MPEG-TS playback failed.', code: 'MediaMSEError' });
-  assert.equal(h.state.attached.length, rungs, 'first: an in-place reconnect, not a new rung');
-  for (let i = 0; i < 8 && !h.state.liveFailure; i++) { playing(); h.fail({ transport: h.last().transport, kind: 'media', fatal: true, retryable: false, message: 'x', code: 'MediaMSEError' }); }
+  assert.equal(h.state.attached.length, rungs, 'first: the reconnect waits, no new rung');
+  h.runReconnects();
+  for (let i = 0; i < 8 && !h.state.liveFailure; i++) { playing(); h.fail({ transport: h.last().transport, kind: 'media', fatal: true, retryable: false, message: 'x', code: 'MediaMSEError' }); h.runReconnects(); }
   assert.equal(h.state.liveFailure.kind, 'codec');
+  assert.equal(h.state.attached.length, rungs + 3, 'three reconnects, then the explanation');
+  assert.ok(h.state.attached.slice(rungs - 1).every((a) => a.url === route), 'only the route that was playing');
   assert.equal(h.state.toasts.includes('This source stopped decoding partway through. Try another source or open it in VLC.'), false);
   cleanup();
 });
@@ -460,15 +470,17 @@ test('Apple WebKit gets no "try Safari" advice; TV and console WebKit is not Saf
   assert.doesNotMatch(live.classifyLiveFailure(hevc, context({ browser: 'Firefox', appleWebKit: true, canDecode: () => false })).message, /Try Safari/);
 });
 
-test('player: an old fault from before the channel played does not explain a later drop or skip URLs on the next pass', async () => {
+test('player: an old fault from before the channel played does not explain a later drop, which reconnects only the rung that played', async () => {
   const h = liveHarness({ url: 'http://p.example:8080/live/u/p/1.ts' });
   const cleanup = h.setup();
   // First rung: a decoder error, then the next rung (the .m3u8 twin) plays.
   h.fail({ transport: 'mpegts', kind: 'media', fatal: true, retryable: false, message: 'x', code: 'MediaMSEError' });
   h.playing();
-  // Later the connection drops on every rung.
-  for (let i = 0; i < 12 && !h.state.liveFailure; i++) { h.fail({ transport: h.last().transport, kind: 'network', fatal: true, retryable: true, message: 'x', code: 'Exception' }); }
+  const playedOn = h.last().url;
+  // Later the connection keeps dropping.
+  for (let i = 0; i < 12 && !h.state.liveFailure; i++) { h.fail({ transport: h.last().transport, kind: 'network', fatal: true, retryable: true, message: 'x', code: 'Exception' }); h.runReconnects(); }
   assert.equal(h.state.liveFailure.kind, 'stopped', 'not "a format Chrome can\'t decode"');
+  assert.deepEqual(h.state.attached.slice(2).map((a) => a.url), [playedOn, playedOn, playedOn]);
   cleanup();
 });
 
@@ -544,4 +556,100 @@ test('Strong8K-style failure: timeouts directly, 403 only at the app backend, ht
   // Without the segment address: not "your subscription", just unreachable.
   const unknown = faults.map((f, i) => i === 0 ? { ...f, fault: { kind: 'network', code: 'STARTUP_TIMEOUT' } } : f);
   assert.notEqual(live.classifyLiveFailure(unknown, ctx).kind, 'provider-refused');
+});
+
+// ---- #849: IPTV connection limits ----
+
+const drop = (code = 'Exception') => ({ transport: 'mpegts', kind: 'network', fatal: true, retryable: true, message: 'x', code });
+
+test('reconnect budget: three per channel in five minutes, spaced out, a new channel or Retry starts afresh', () => {
+  const budget = { current: null };
+  const at = (seconds) => 1_000_000 + seconds * 1000;
+  assert.deepEqual([0, 1, 2, 3].map((i) => live.takeLiveReconnect(budget, 'chan-a', at(i))), [2000, 5000, 10000, null]);
+  assert.equal(live.takeLiveReconnect(budget, 'chan-a', at(299)), null, 'still inside the window');
+  assert.equal(live.takeLiveReconnect(budget, 'chan-a', at(300)), 10000, 'the first one aged out; two are still recent');
+  assert.equal(live.takeLiveReconnect(budget, 'chan-a', at(300.5)), null);
+  assert.equal(live.takeLiveReconnect(budget, 'chan-b', at(302)), 2000, 'a channel change starts a fresh budget');
+  budget.current = null; // Retry
+  assert.equal(live.takeLiveReconnect(budget, 'chan-b', at(303)), 2000);
+});
+
+test('player: a drop after the channel played waits, reconnects the same route only, and stops when the budget is spent', async () => {
+  const h = liveHarness({ url: 'http://p.example:8080/live/u/p/1.ts' });
+  const cleanup = h.setup();
+  h.playing();
+  const route = h.last();
+  const waits = [];
+  for (const code of ['Exception', 'LIVE_STREAM_ENDED', 'STARTUP_TIMEOUT', 'Exception']) {
+    h.fail(drop(code));
+    h.fail(drop(code)); // a second report while waiting is the same drop
+    waits.push(...h.runReconnects());
+  }
+  assert.deepEqual(waits, [2000, 5000, 10000]);
+  assert.equal(h.state.attached.length, 4, 'one tune plus three reconnects, never the plan\'s other routes');
+  assert.ok(h.state.attached.every((a) => a.url === route.url && a.transport === route.transport));
+  assert.equal(h.state.liveFailure.kind, 'stopped');
+  assert.equal(h.state.toasts.filter((m) => m === 'Reconnecting to the channel…').length, 3);
+  cleanup();
+});
+
+test('player: the stall watchdog\'s reconnects and a restart of the player draw on the same budget', async () => {
+  const reconnects = { current: null };
+  const h = liveHarness({ url: 'https://cdn.example/channel.ts', reconnects });
+  const cleanup = h.setup();
+  h.playing();
+  h.video.dispatchEvent(new Event('arvio-live-stalled'));
+  h.video.dispatchEvent(new Event('arvio-live-stalled')); // ignored while the reconnect waits
+  assert.deepEqual(h.runReconnects(), [2000]);
+  h.playing();
+  h.video.dispatchEvent(new Event('arvio-live-stalled'));
+  assert.deepEqual(h.runReconnects(), [5000]);
+  cleanup();
+  // The same channel opened again by the player (not by Retry) keeps the count.
+  const again = liveHarness({ url: 'https://cdn.example/channel.ts', reconnects });
+  const cleanupAgain = again.setup();
+  again.playing();
+  again.fail(drop());
+  assert.deepEqual(again.runReconnects(), [10000]);
+  again.playing();
+  again.fail(drop());
+  assert.deepEqual(again.runReconnects(), []);
+  assert.equal(again.state.liveFailure.kind, 'stopped');
+  cleanupAgain();
+});
+
+test('player: a provider refusal or limit on a reconnect ends it at once', async () => {
+  for (const status of [429, 403]) {
+    const h = liveHarness({ url: 'https://cdn.example/live/u/p/7.ts' });
+    const cleanup = h.setup();
+    h.playing();
+    h.fail(drop());
+    h.runReconnects();
+    h.fail({ ...drop(), httpStatus: status, retryable: status === 429 });
+    assert.deepEqual(h.runReconnects(), []);
+    assert.equal(h.state.attached.length, 2);
+    assert.equal(h.state.liveFailure.kind, status === 429 ? 'provider-busy' : 'provider-refused');
+    cleanup();
+  }
+});
+
+test('player: a Stalker channel that played gets a fresh link before it reconnects, on the same route', async () => {
+  const overrideRef = { current: null };
+  const stale = 'http://portal.example/play/live.php?stream=9&extension=ts&play_token=old';
+  const fresh = 'http://portal.example/play/live.php?stream=9&extension=ts&play_token=new';
+  const h = liveHarness({ url: stale, headers: { 'User-Agent': 'MAG200' }, overrideRef, refresh: () => ({ url: fresh, headers: { 'User-Agent': 'MAG200' } }) });
+  const cleanup = h.setup();
+  h.playing();
+  const route = h.last();
+  h.fail(drop());
+  assert.equal(h.state.refreshes, 0, 'the refresh waits with the reconnect');
+  h.runReconnects();
+  await flush(); await flush();
+  assert.equal(h.state.refreshes, 1);
+  assert.equal(h.state.attached.length, 2);
+  assert.equal(h.last().transport, route.transport);
+  assert.equal(new URL(h.last().url).origin, new URL(route.url).origin, 'the same route (the relay)');
+  assert.match(decodeURIComponent(h.last().url), /play_token=new/);
+  assert.equal(overrideRef.current.url, fresh);
+  cleanup();
 });
