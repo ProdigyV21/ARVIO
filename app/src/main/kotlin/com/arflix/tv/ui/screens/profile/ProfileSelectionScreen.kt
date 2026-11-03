@@ -296,7 +296,7 @@ internal fun ProfileSelectionContent(
     ) {
         val contentWidth = if (isTouchDevice) (maxWidth - 48.dp).coerceAtMost(560.dp) else maxWidth - 96.dp
         val columns = if (isTouchDevice && maxWidth >= 600.dp) 3 else 2
-        val avatarSize = if (isTouchDevice) ((contentWidth - 24.dp * (columns - 1)) / columns).coerceAtMost(152.dp)
+        val avatarSize = if (isTouchDevice) ((contentWidth - 24.dp * (columns - 1)) / columns).coerceIn(92.dp, 108.dp)
             else ((contentWidth - 24.dp * 4) / 5).coerceAtMost(120.dp)
         val avatarSpacing = 24.dp
         val backgroundAlpha = if (isTransitioning) {
@@ -324,10 +324,11 @@ internal fun ProfileSelectionContent(
 
                 Text(
                     text = if (uiState.isManageMode) stringResource(R.string.manage_profiles) else stringResource(R.string.whos_watching),
-                    fontSize = if (isTouchDevice) 32.sp else 40.sp,
+                    fontSize = if (isTouchDevice) 28.sp else 40.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = if (isTouchDevice) Modifier.fillMaxWidth() else Modifier
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(if (isTouchDevice) 32.dp else 24.dp))
@@ -626,8 +627,8 @@ private fun ProfileAvatar(
             val avatarContent: @Composable () -> Unit = {
                 ProfileAvatarVisual(
                     profile = profile,
-                    letterFontSize = 48.sp,
-                    iconPadding = 12.dp
+                    letterFontSize = if (isTouchDevice) 36.sp else 48.sp,
+                    iconPadding = if (isTouchDevice) 10.dp else 12.dp
                 )
             }
 
@@ -740,7 +741,7 @@ private fun AddProfileButton(
     ) {
         val addContent: @Composable () -> Unit = {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(if (isTouchDevice) 36.dp else 48.dp))
             }
         }
         if (isTouchDevice) {
@@ -801,39 +802,55 @@ private fun ManageProfilesButton(
     isManageMode: Boolean,
     onClick: () -> Unit
 ) {
+    val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
 
-    val isTouchDevice = LocalDeviceType.current.isTouchDevice()
-    Surface(
-        onClick = if (isTouchDevice) ({}) else onClick,
-        modifier = Modifier
-            .then(
-                if (isTouchDevice) Modifier.fillMaxWidth().clickable { onClick() } else Modifier
+    if (isTouchDevice) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(24.dp))
+                .background(if (isManageMode) Color.White.copy(alpha = 0.15f) else Color.Transparent)
+                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                .clickable { onClick() }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                textAlign = TextAlign.Center
             )
-            .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.1f)
-        ),
-        border = ClickableSurfaceDefaults.border(
-            border = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(24.dp)
+        }
+    } else {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White.copy(alpha = 0.1f)
             ),
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                shape = RoundedCornerShape(24.dp)
+            border = ClickableSurfaceDefaults.border(
+                border = androidx.tv.material3.Border(
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(24.dp)
+                ),
+                focusedBorder = androidx.tv.material3.Border(
+                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                    shape = RoundedCornerShape(24.dp)
+                )
             )
-        )
-    ) {
-        Text(
-            text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
-        )
+        ) {
+            Text(
+                text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+        }
     }
 }
 

@@ -230,6 +230,11 @@ import com.arflix.tv.util.formatGenreName
 import com.arflix.tv.util.isInCinema
 import com.arflix.tv.util.parseRatingValue
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
@@ -2218,7 +2223,9 @@ private fun DetailsContent(
                 val genreText = genres.take(2).map(::formatGenreName).joinToString(" / ").ifEmpty {
                     if (item.mediaType == MediaType.TV) tvSeriesLabel else movieLabel
                 }
-                val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() } ?: item.year
+                val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() }?.let { dateStr ->
+                    formatEpisodeAirDateLabel(dateStr) ?: dateStr
+                } ?: item.year
                 val hasDuration = item.duration.isNotEmpty() && item.duration != "0m"
                 val rating = imdbRatingFor(item)
                 val ratingValue = parseRatingValue(rating)
@@ -4363,9 +4370,22 @@ internal fun EpisodeCard(
     }
 }
 
+private fun episodeAirZoned(rawDate: String): ZonedDateTime? {
+    val value = rawDate.trim().takeIf { it.length >= 10 }?.take(10) ?: return null
+    return runCatching {
+        val localDate = LocalDate.parse(value)
+        localDate.atTime(20, 0).atZone(ZoneId.of("America/New_York"))
+    }.getOrNull()
+}
+
 private fun formatEpisodeAirDateLabel(rawDate: String): String? {
     val value = rawDate.trim()
     if (value.isEmpty()) return null
+    val airZoned = episodeAirZoned(value)
+    if (airZoned != null) {
+        val localDate = airZoned.withZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
+        return localDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US))
+    }
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         parser.isLenient = false
@@ -4379,6 +4399,10 @@ private fun formatEpisodeAirDateLabel(rawDate: String): String? {
 private fun isFutureEpisodeAirDate(rawDate: String): Boolean {
     val value = rawDate.trim()
     if (value.isEmpty()) return false
+    val airZoned = episodeAirZoned(value)
+    if (airZoned != null) {
+        return Instant.now().isBefore(airZoned.toInstant())
+    }
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         parser.isLenient = false

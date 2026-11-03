@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -474,8 +475,12 @@ private fun CalendarRelease.artwork(): String? = media.episodeStill?.takeIf { it
 
 @Composable
 private fun releaseSubtitle(release: CalendarRelease, timezone: ZoneId, locale: Locale, concise: Boolean = false, includeEpisodeTitle: Boolean = false): String {
-    val time = release.releaseInstant?.atZone(timezone)?.format(DateTimeFormatter.ofPattern("HH:mm", locale)) ?: tr("Time TBA")
-    if (concise) return time
+    val context = LocalContext.current
+    val is24Hour = remember(context) { android.text.format.DateFormat.is24HourFormat(context) }
+    val timePattern = if (is24Hour) "HH:mm" else "h:mm a"
+    val time = release.releaseInstant?.atZone(timezone)?.format(DateTimeFormatter.ofPattern(timePattern, locale))
+        ?: if (release.kind == CalendarReleaseKind.EPISODE) tr("Time TBA") else null
+    if (concise) return time.orEmpty()
     val label = if (release.kind == CalendarReleaseKind.EPISODE) {
         if (release.seasonNumber != null && release.episodeNumber != null) String.format(Locale.ROOT, "S%02d E%02d", release.seasonNumber, release.episodeNumber)
         else tr("Episode")
