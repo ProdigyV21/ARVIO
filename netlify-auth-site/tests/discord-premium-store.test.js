@@ -13,7 +13,7 @@ const event = {};
 test("Discord badge links survive API failures, reject identity conflicts and reconcile expiry", async (t) => {
   const db = new PGlite();
   t.after(() => db.close());
-  await db.exec(readFileSync(path.join(__dirname, "../sql/discord-premium.sql"), "utf8"));
+  await db.exec(readFileSync(path.join(__dirname, "../netlify/database/migrations/20261103120000_discord_premium/migration.sql"), "utf8"));
   const client = { query: db.query.bind(db), release() {} };
   const pool = { query: client.query, connect: async () => client };
   let active = true;

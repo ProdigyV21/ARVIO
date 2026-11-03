@@ -7,7 +7,7 @@ if (!connectionString) throw new Error("An auth-site PostgreSQL connection URL i
 const client = new pg.Client({ connectionString });
 try {
   await client.connect();
-  await client.query(await fs.readFile(new URL("../sql/discord-premium.sql", import.meta.url), "utf8"));
+  await client.query(await fs.readFile(new URL("../netlify/database/migrations/20261103120000_discord_premium/migration.sql", import.meta.url), "utf8"));
   console.log("Discord Premium link storage is ready.");
 } finally {
   await client.end();
