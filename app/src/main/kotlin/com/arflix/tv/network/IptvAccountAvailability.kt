@@ -1,5 +1,6 @@
 package com.arflix.tv.network
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -8,8 +9,22 @@ internal const val MAX_IPTV_CHECK_WAIT_MS = 6_000L
 internal const val DEFAULT_IPTV_CHECK_POLL_MS = 2_000L
 internal const val MAX_IPTV_RECONNECT_CHECK_WAIT_MS = 15_000L
 internal const val DEFAULT_IPTV_RECONNECT_CHECK_POLL_MS = 3_000L
+internal const val MAX_IPTV_USAGE_AGE_MS = 60_000L
 
 internal data class IptvAccountUsage(val active: Int, val max: Int)
+
+/** Auto reads only answers the panel already gave, and none older than a minute, so it never asks on its own. */
+internal class IptvLatestAccountUsage(private val clock: () -> Long = System::currentTimeMillis) {
+    private val answers = ConcurrentHashMap<IptvProviderAccount, Pair<IptvAccountUsage, Long>>()
+
+    /** Null forgets the account: a check that found nothing leaves no older answer behind. */
+    fun record(account: IptvProviderAccount, usage: IptvAccountUsage?) {
+        if (usage == null) answers.remove(account) else answers[account] = usage to clock()
+    }
+
+    fun fresh(account: IptvProviderAccount): IptvAccountUsage? =
+        answers[account]?.takeIf { clock() - it.second < MAX_IPTV_USAGE_AGE_MS }?.first
+}
 
 internal sealed class IptvAdmission {
     data object Proceed : IptvAdmission()
@@ -18,6 +33,9 @@ internal sealed class IptvAdmission {
 
 /** active_cons is best effort: only an answer of full delays a stream, for a bounded time, and silence never blocks one. */
 internal object IptvAccountAvailability {
+    /** Process-wide, like the session table, so a zap reads what the cold start's check found. */
+    val latestUsage = IptvLatestAccountUsage()
+
     suspend fun admit(check: suspend () -> IptvAccountUsage?): IptvAdmission =
         poll(DEFAULT_IPTV_CHECK_POLL_MS, MAX_IPTV_CHECK_WAIT_MS, check)
 

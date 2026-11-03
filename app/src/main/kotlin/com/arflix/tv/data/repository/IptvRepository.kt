@@ -17,6 +17,10 @@ import com.arflix.tv.data.model.StalkerVodLink
 import com.arflix.tv.data.model.StreamBehaviorHints
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.R
+import com.arflix.tv.network.IptvAccountAvailability
+import com.arflix.tv.network.IptvAccountUsage
+import com.arflix.tv.network.IptvProviderAccount
+import com.arflix.tv.network.withIptvAccountCheckGuard
 import com.arflix.tv.network.withIptvProviderRequestGuard
 import com.arflix.tv.network.iptvProviderCooldownMs
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
@@ -1104,6 +1108,16 @@ class IptvRepository @Inject constructor(
             .callTimeout(12, TimeUnit.SECONDS)
             .build()
     }
+    /** A panel's bad answer about the account must not defer the stream that is about to play. */
+    private val xtreamAccountCheckHttpClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .withIptvAccountCheckGuard()
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
+            .build()
+    }
     private val xtreamGuideHttpClient: OkHttpClient by lazy {
         okHttpClient.newBuilder()
             .withIptvProviderRequestGuard()
@@ -1219,7 +1233,10 @@ class IptvRepository @Inject constructor(
      * answer (offline, HTML page, or the request guard deferred it) - which is
      * not the same as "answered without details".
      */
-    suspend fun fetchAccountInfo(playlist: IptvPlaylistEntry): IptvAccountInfo? {
+    suspend fun fetchAccountInfo(playlist: IptvPlaylistEntry): IptvAccountInfo? =
+        fetchXtreamAccountInfo(playlist, xtreamLookupHttpClient)
+
+    private suspend fun fetchXtreamAccountInfo(playlist: IptvPlaylistEntry, client: OkHttpClient): IptvAccountInfo? {
         val fingerprint = IptvAccountInfoParser.fingerprint(playlist)
         val now = System.currentTimeMillis()
         // An independently configured EPG feed can belong to a different account.
@@ -1232,7 +1249,7 @@ class IptvRepository @Inject constructor(
             ?.build()
             ?.toString()
             ?: return IptvAccountInfoParser.unavailable(fingerprint, now)
-        val body: JsonObject? = requestJson(url, JsonObject::class.java, client = xtreamLookupHttpClient)
+        val body: JsonObject? = requestJson(url, JsonObject::class.java, client = client)
         return IptvAccountInfoParser.parseXtream(body?.toString(), fingerprint, System.currentTimeMillis())
     }
 
@@ -1265,6 +1282,9 @@ class IptvRepository @Inject constructor(
     /** Drops entries whose source no longer exists. */
     suspend fun retainAccountInfo(sourceIds: Set<String>) {
         context.settingsDataStore.edit { prefs ->
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            val retainedLimits = limits.filterKeys { it in sourceIds }
+            if (retainedLimits.size != limits.size) writeConnectionLimits(prefs, retainedLimits)
             val current = decodeAccountInfo(prefs[accountInfoKey()])
             val retained = current.filterKeys { it in sourceIds }
             if (retained.size == current.size) return@edit
@@ -1284,6 +1304,271 @@ class IptvRepository @Inject constructor(
             ).type
             gson.fromJson<Map<String, IptvAccountInfo>>(raw, type)
         }.getOrNull().orEmpty()
+    }
+
+    /** What each saved source's settings row shows. */
+    fun observeConnectionLimits(): Flow<Map<String, IptvConnectionLimitState>> =
+        observeConfig().combine(context.settingsDataStore.data) { config, prefs ->
+            val sources = iptvLimitSources(config)
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            val info = decodeAccountInfo(prefs[accountInfoKey()])
+            sources.associate { source ->
+                source.id to IptvConnectionLimitState(
+                    setting = storedIptvConnectionLimit(limits[source.id], source.limitFingerprint),
+                    effectiveLimit = iptvPolicyFor(source.primaryAccount, sources, limits, info)?.effectiveLimit
+                )
+            }
+        }.distinctUntilChanged()
+
+    /**
+     * Moves one saved source to its next limit. Device-local on purpose, like
+     * [saveAccountInfo]: it touches neither the source entry nor the cloud snapshot, so
+     * nothing reloads. Stepping inside the edit keeps two quick presses from landing on one value.
+     */
+    suspend fun stepConnectionLimit(sourceId: String) {
+        val fingerprint = savedSourceLimitFingerprint(sourceId) ?: return
+        context.settingsDataStore.edit { prefs ->
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            val next = storedIptvConnectionLimit(limits[sourceId], fingerprint).next()
+            writeConnectionLimits(
+                prefs,
+                if (next == IptvConnectionLimit.AUTO) limits - sourceId
+                else limits + (sourceId to storedIptvConnectionLimitEntry(next, fingerprint))
+            )
+        }
+    }
+
+    /** The limit chosen while adding a source, stored once its save has given it an id; device-local like [stepConnectionLimit]. */
+    suspend fun saveConnectionLimit(sourceId: String, limit: IptvConnectionLimit) {
+        val fingerprint = savedSourceLimitFingerprint(sourceId) ?: return
+        context.settingsDataStore.edit { prefs ->
+            val limits = decodeConnectionLimits(prefs[connectionLimitsKey()])
+            writeConnectionLimits(
+                prefs,
+                if (limit == IptvConnectionLimit.AUTO) limits - sourceId
+                else limits + (sourceId to storedIptvConnectionLimitEntry(limit, fingerprint))
+            )
+        }
+    }
+
+    /** Read from the stored entry, which saving may have rewritten from what was typed. */
+    private suspend fun savedSourceLimitFingerprint(sourceId: String): String? {
+        val config = observePersonalConfig().first()
+        return config.playlists.firstOrNull { it.id == sourceId }?.let(::iptvConnectionLimitFingerprint)
+            ?: config.stalkerPortals.firstOrNull { it.id == sourceId }?.let(::iptvConnectionLimitFingerprint)
+    }
+
+    internal suspend fun streamPolicyFor(channel: IptvChannel): IptvStreamPolicy? = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val prefs = context.settingsDataStore.data.first()
+        iptvPolicyFor(
+            iptvChannelAccount(channel, config),
+            iptvLimitSources(config),
+            decodeConnectionLimits(prefs[connectionLimitsKey()]),
+            decodeAccountInfo(prefs[accountInfoKey()])
+        )
+    }
+
+    /** Null for every source that is not IPTV VOD, before anything is read. */
+    internal suspend fun streamPolicyFor(vodStream: StreamSource): IptvStreamPolicy? {
+        if (!IptvVodSourceIds.isIptvVodAddonId(vodStream.addonId)) return null
+        return withContext(Dispatchers.IO) {
+            val config = observeConfig().first()
+            val prefs = context.settingsDataStore.data.first()
+            iptvPolicyFor(
+                iptvVodAccount(vodStream, config),
+                iptvLimitSources(config),
+                decodeConnectionLimits(prefs[connectionLimitsKey()]),
+                decodeAccountInfo(prefs[accountInfoKey()])
+            )
+        }
+    }
+
+    /**
+     * A null policy also covers an unresolvable owner, which stays out of warm-ups; only
+     * a resolved account whose entries chose No limit re-enables them.
+     */
+    internal suspend fun isExplicitlyUnlimited(vodStream: StreamSource): Boolean {
+        if (!IptvVodSourceIds.isIptvVodAddonId(vodStream.addonId)) return false
+        return withContext(Dispatchers.IO) {
+            val config = observeConfig().first()
+            val account = iptvVodAccount(vodStream, config) ?: return@withContext false
+            val limits = decodeConnectionLimits(context.settingsDataStore.data.first()[connectionLimitsKey()])
+            iptvConnectionLimitFor(account, iptvLimitSources(config), limits) == IptvConnectionLimit.NO_LIMIT
+        }
+    }
+
+    /**
+     * Fetches the allowance once, in the background, when a user-started Xtream play finds
+     * none stored for these credentials, so upgraded users need not visit settings. At most
+     * once per process per source; the caller never waits for it.
+     */
+    internal fun bootstrapAccountAllowance(sourceId: String): kotlinx.coroutines.Job = iptvCacheScope.launch {
+        val playlist = observeConfig().first().playlists.firstOrNull { it.id == sourceId } ?: return@launch
+        if (iptvM3uAccount(playlist)?.kind != IptvProviderAccount.Kind.XTREAM) return@launch
+        val stored = decodeAccountInfo(context.settingsDataStore.data.first()[accountInfoKey()])[sourceId]
+        val fingerprint = IptvAccountInfoParser.fingerprint(playlist)
+        if (stored?.sourceFingerprint == fingerprint) return@launch
+        // Source ids are per profile and reused, so the login is part of what was already asked.
+        if (!accountAllowanceBootstraps.add("$sourceId|$fingerprint")) return@launch
+        fetchXtreamAccountInfo(playlist, xtreamAccountCheckHttpClient)?.let { saveAccountInfo(sourceId, it) }
+    }
+
+    private val accountAllowanceBootstraps = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * The panel's live slot count for an account, never persisted; Auto remembers it in memory for
+     * a minute. Null means unknown, including when the guard defers it.
+     */
+    internal suspend fun fetchAccountUsage(account: IptvProviderAccount): IptvAccountUsage? {
+        val latest = IptvAccountAvailability.latestUsage
+        // Forgotten first, so a check cut short by its timeout also leaves no answer behind.
+        latest.record(account, null)
+        if (account.kind != IptvProviderAccount.Kind.XTREAM) return null
+        val config = observeConfig().first()
+        val playlist = config.playlists.ifEmpty { activePlaylists(config) }.firstOrNull { iptvM3uAccount(it) == account } ?: return null
+        val creds = resolveXtreamCredentials(playlist.m3uUrl) ?: return null
+        val url = "${creds.baseUrl}/player_api.php".toHttpUrlOrNull()
+            ?.newBuilder()
+            ?.addQueryParameter("username", creds.username)
+            ?.addQueryParameter("password", creds.password)
+            ?.build()
+            ?.toString()
+            ?: return null
+        val body: JsonObject? = requestJson(url, JsonObject::class.java, client = xtreamAccountCheckHttpClient)
+        return IptvAccountInfoParser.parseXtreamAvailability(body?.toString()).also { latest.record(account, it) }
+    }
+
+    /** One configured playlist or portal as the limit policy sees it. */
+    private class IptvLimitSource(
+        val id: String,
+        val limitFingerprint: String,
+        val infoFingerprint: String,
+        /** Every account its streams can count against; an EPG login can differ from the M3U one. */
+        val streamAccounts: Set<IptvProviderAccount>,
+        val primaryAccount: IptvProviderAccount?,
+        /** The account its stored [IptvAccountInfo] describes. */
+        val infoAccount: IptvProviderAccount?,
+    )
+
+    private fun iptvLimitSources(config: IptvConfig): List<IptvLimitSource> =
+        config.playlists.ifEmpty { activePlaylists(config) }.map { playlist ->
+            val m3uAccount = iptvM3uAccount(playlist)
+            val playlistAccount = iptvPlaylistAccount(playlist)
+            IptvLimitSource(
+                id = playlist.id,
+                limitFingerprint = iptvConnectionLimitFingerprint(playlist),
+                infoFingerprint = IptvAccountInfoParser.fingerprint(playlist),
+                streamAccounts = setOfNotNull(m3uAccount, playlistAccount),
+                primaryAccount = playlistAccount ?: m3uAccount,
+                infoAccount = m3uAccount
+            )
+        } + config.stalkerPortals.map { portal ->
+            val account = IptvProviderAccount.stalker(portal.portalUrl, portal.macAddress)
+            IptvLimitSource(
+                id = portal.id,
+                limitFingerprint = iptvConnectionLimitFingerprint(portal),
+                infoFingerprint = IptvAccountInfoParser.fingerprint(portal),
+                streamAccounts = setOfNotNull(account),
+                primaryAccount = account,
+                infoAccount = account
+            )
+        }
+
+    private fun iptvConnectionLimitFor(
+        account: IptvProviderAccount,
+        sources: List<IptvLimitSource>,
+        limits: Map<String, Map<String, String>>,
+    ): IptvConnectionLimit = strictestIptvConnectionLimit(
+        sources.filter { account in it.streamAccounts }
+            .map { storedIptvConnectionLimit(limits[it.id], it.limitFingerprint) }
+    )
+
+    private fun iptvPolicyFor(
+        account: IptvProviderAccount?,
+        sources: List<IptvLimitSource>,
+        limits: Map<String, Map<String, String>>,
+        info: Map<String, IptvAccountInfo>,
+    ): IptvStreamPolicy? {
+        if (account == null) return null
+        val allowance = sources.filter { account in it.streamAccounts }
+            .mapNotNull { reliableIptvAllowance(info[it.id], it.infoFingerprint, it.infoAccount, account) }
+            .minOrNull()
+        return iptvStreamPolicy(
+            account, iptvConnectionLimitFor(account, sources, limits), allowance, IptvAccountAvailability.latestUsage.fresh(account)
+        )
+    }
+
+    /** Null means no owner: the stream stays untagged, as it is today. Never reads the URL that plays. */
+    private fun iptvChannelAccount(channel: IptvChannel, config: IptvConfig): IptvProviderAccount? {
+        if (channel.id.startsWith("stalker:")) {
+            val portal = StalkerPortalSupport.portalForChannel(channel.id, config.stalkerPortals) ?: return null
+            return IptvProviderAccount.stalker(portal.portalUrl, portal.macAddress)
+        }
+        val ownerId = StalkerPortalSupport.playlistIdFromChannelId(channel.id)
+        val playlist = config.playlists.ifEmpty { activePlaylists(config) }.firstOrNull { it.id == ownerId } ?: return null
+        return if (channel.xtreamStreamId != null) iptvPlaylistAccount(playlist) else iptvM3uAccount(playlist)
+    }
+
+    private fun iptvVodAccount(stream: StreamSource, config: IptvConfig): IptvProviderAccount? {
+        val markerPortalId = stream.url?.let(StalkerVodLink::parseMarker)?.portalId
+        val ownerId = stream.iptvSourceId ?: markerPortalId ?: return null
+        return if (stream.addonId.trim().lowercase(Locale.US) == IptvVodSourceIds.STALKER) {
+            config.stalkerPortals.firstOrNull { it.id == ownerId }
+                ?.let { IptvProviderAccount.stalker(it.portalUrl, it.macAddress) }
+        } else {
+            config.playlists.ifEmpty { activePlaylists(config) }.firstOrNull { it.id == ownerId }
+                ?.let(::iptvPlaylistAccount)
+        }
+    }
+
+    /** The login Xtream API channels and VOD URLs are built with, which may come from the EPG field. */
+    private fun iptvPlaylistAccount(playlist: IptvPlaylistEntry): IptvProviderAccount? {
+        val (loginUrl, creds) = (playlist.allEpgUrls() + playlist.m3uUrl)
+            .firstNotNullOfOrNull { url -> resolveXtreamCredentials(url)?.let { url to it } } ?: return null
+        return if (hasExplicitXtreamLogin(normalizeStoredIptvUrl(loginUrl))) {
+            IptvProviderAccount.xtream(creds.baseUrl, creds.username, creds.password)
+        } else {
+            iptvM3uAccount(playlist)
+        }
+    }
+
+    /** A numeric path tail is only a guess at a login, so such a list counts as plain M3U. */
+    private fun iptvM3uAccount(playlist: IptvPlaylistEntry): IptvProviderAccount? {
+        val url = normalizeStoredIptvUrl(playlist.m3uUrl)
+        val creds = resolveXtreamCredentials(url).takeIf { hasExplicitXtreamLogin(url) }
+        return if (creds != null) IptvProviderAccount.xtream(creds.baseUrl, creds.username, creds.password)
+        else IptvProviderAccount.m3u(url)
+    }
+
+    private fun hasExplicitXtreamLogin(url: String): Boolean {
+        val parsed = url.toHttpUrlOrNull() ?: return false
+        val inQuery = listOf("username", "user", "uname").any { !parsed.queryParameter(it).isNullOrBlank() } &&
+            listOf("password", "pass", "pwd").any { !parsed.queryParameter(it).isNullOrBlank() }
+        val segments = parsed.pathSegments
+        return inQuery || (segments.size >= 4 && segments.first().lowercase(Locale.US) in setOf("live", "movie", "series"))
+    }
+
+    private fun connectionLimitsKey(): Preferences.Key<String> =
+        profileManager.profileStringKey("iptv_connection_limits")
+
+    // Plain maps, not a class: release builds rename the fields of unkept classes, and a
+    // setting must still read after an update.
+    private fun decodeConnectionLimits(raw: String?): Map<String, Map<String, String>> {
+        if (raw.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val entry = TypeToken.getParameterized(Map::class.java, String::class.java, String::class.java).type
+            val type = TypeToken.getParameterized(Map::class.java, String::class.java, entry).type
+            gson.fromJson<Map<String, Map<String, String>>>(raw, type)
+        }.getOrNull().orEmpty()
+    }
+
+    private fun writeConnectionLimits(
+        prefs: androidx.datastore.preferences.core.MutablePreferences,
+        limits: Map<String, Map<String, String>>,
+    ) {
+        if (limits.isEmpty()) prefs.remove(connectionLimitsKey())
+        else prefs[connectionLimitsKey()] = gson.toJson(limits)
     }
 
     /**

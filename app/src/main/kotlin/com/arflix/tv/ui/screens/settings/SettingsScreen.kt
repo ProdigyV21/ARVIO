@@ -159,6 +159,8 @@ import com.arflix.tv.ui.components.rememberDragReorderState
 import com.arflix.tv.ui.components.MobileSettingsCategory
 import com.arflix.tv.ui.components.MobileSettingsRow
 import com.arflix.tv.ui.components.IptvPlaylistModal
+import com.arflix.tv.ui.components.iptvConnectionLimitLabel
+import com.arflix.tv.ui.components.iptvProviderAllowanceLabel
 import com.arflix.tv.ui.components.IptvSourceType
 import com.arflix.tv.ui.components.QrCodeImage
 import com.arflix.tv.ui.components.Toast
@@ -237,6 +239,7 @@ import com.arflix.tv.data.model.RuntimeKind
 import com.arflix.tv.data.model.StalkerCatalogKind
 import com.arflix.tv.data.repository.HomeServerConnection
 import com.arflix.tv.data.repository.HomeServerKind
+import com.arflix.tv.data.repository.IptvConnectionLimit
 import com.arflix.tv.data.repository.IptvPlaylistEntry
 import com.arflix.tv.data.repository.MAX_IPTV_PLAYLISTS
 import com.arflix.tv.data.repository.StalkerPortalEntry
@@ -2729,6 +2732,8 @@ fun SettingsScreen(
                 else if (isEditingIptv) "iptv_${editingPlaylist.id}"
                 else "iptv_new"
             ) {
+                // Set by the add dialog just before it calls a save callback below.
+                var newSourceConnectionLimit by remember { mutableStateOf(IptvConnectionLimit.AUTO) }
                 IptvPlaylistModal(
                     isEditing = isEditing,
                     initialSourceType = sourceInfo.sourceType,
@@ -2771,7 +2776,7 @@ fun SettingsScreen(
                         } else {
                             updated.add(entry)
                         }
-                        viewModel.saveIptvPlaylists(updated)
+                        viewModel.saveIptvPlaylists(updated, newSourceConnectionLimit)
                         showIptvInput = false
                         showStalkerInput = false
                         editingIptvIndex = -1
@@ -2796,7 +2801,8 @@ fun SettingsScreen(
                                 name.trim(),
                                 importLiveTv,
                                 importVod,
-                                importSeries
+                                importSeries,
+                                connectionLimit = newSourceConnectionLimit
                             )
                         }
                         showIptvInput = false
@@ -2812,7 +2818,13 @@ fun SettingsScreen(
                     },
                     accountCheckedAtLabel = accountCheckedAtLabel,
                     isAccountRefreshing = accountSourceId != null && accountSourceId in uiState.iptvAccountInfoRefreshing,
-                    onRefreshAccount = accountSourceId?.let { id -> { viewModel.refreshIptvAccountInfo(id) } }
+                    onRefreshAccount = accountSourceId?.let { id -> { viewModel.refreshIptvAccountInfo(id) } },
+                    providerAllowanceLabel = if (accountSourceId != null && sourceInfo.sourceType == IptvSourceType.XTREAM) {
+                        iptvProviderAllowanceLabel(accountInfo?.maxConnections)
+                    } else null,
+                    connectionLimitLabel = iptvConnectionLimitLabel(uiState.iptvConnectionLimits[accountSourceId]),
+                    onStepConnectionLimit = accountSourceId?.let { id -> { viewModel.stepIptvConnectionLimit(id) } },
+                    onNewSourceConnectionLimit = { newSourceConnectionLimit = it }
                 )
             }
         }

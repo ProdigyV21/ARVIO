@@ -18,7 +18,8 @@ import java.util.Locale
  *
  * Stored per source id, locally only (never in the cloud snapshot): the values
  * describe one provider account at one moment, and are asked for only when a
- * source is added or edited, or when the user taps "Refresh now".
+ * source is added or edited, when the user taps "Refresh now", or once per process
+ * when a user-started Xtream play finds none stored for these credentials.
  *
  * Every field is nullable on purpose - the map is stored as Gson JSON, and Gson
  * skips Kotlin default values (see [StalkerPortalEntry]).

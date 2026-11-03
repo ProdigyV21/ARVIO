@@ -50,6 +50,8 @@ import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlexPinAuthSession
 import com.arflix.tv.data.repository.IptvAccountInfo
 import com.arflix.tv.data.repository.IptvAccountInfoParser
+import com.arflix.tv.data.repository.IptvConnectionLimit
+import com.arflix.tv.data.repository.IptvConnectionLimitState
 import com.arflix.tv.data.repository.IptvConfig
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.MAX_STALKER_PORTALS
@@ -318,6 +320,7 @@ data class SettingsUiState(
     val iptvStalkerPortals: List<StalkerPortalEntry> = emptyList(),
     /** Subscription end and stream limit per playlist / portal id, as last asked. */
     val iptvAccountInfo: Map<String, IptvAccountInfo> = emptyMap(),
+    val iptvConnectionLimits: Map<String, IptvConnectionLimitState> = emptyMap(),
     /** Source ids whose account details are being asked right now. */
     val iptvAccountInfoRefreshing: Set<String> = emptySet(),
     val iptvSortOrder: String = "provider",
@@ -2828,6 +2831,13 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            iptvRepository.observeConnectionLimits().flowOn(Dispatchers.IO).collect { limits ->
+                if (_uiState.value.iptvConnectionLimits != limits) {
+                    _uiState.value = _uiState.value.copy(iptvConnectionLimits = limits)
+                }
+            }
+        }
+        viewModelScope.launch {
             // Parsing stored playlists includes keystore decryption; never do it on the input thread.
             iptvRepository.observePersonalConfig().distinctUntilChanged().flowOn(Dispatchers.IO).collect { config ->
                 val current = _uiState.value
@@ -3378,7 +3388,8 @@ class SettingsViewModel @Inject constructor(
         name: String? = null,
         importLiveTv: Boolean = true,
         importVod: Boolean = true,
-        importSeries: Boolean = true
+        importSeries: Boolean = true,
+        connectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO
     ) {
         if (!canManage("connections")) return
         val trimmedUrl = portalUrl.trim().trimEnd('/')
@@ -3412,7 +3423,7 @@ class SettingsViewModel @Inject constructor(
             importVod = importVod,
             importSeries = importSeries
         )
-        persistStalkerPortals(current + portal)
+        persistStalkerPortals(current + portal, connectionLimit)
     }
 
     /**
@@ -3556,12 +3567,16 @@ class SettingsViewModel @Inject constructor(
         setIptvSelectedPlaylistId(portalId)
     }
 
-    private fun persistStalkerPortals(portals: List<StalkerPortalEntry>) {
+    private fun persistStalkerPortals(
+        portals: List<StalkerPortalEntry>,
+        newSourceConnectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO,
+    ) {
         val previous = _uiState.value.iptvStalkerPortals
         viewModelScope.launch {
             iptvRepository.saveStalkerPortals(portals)
             // Compare what was actually stored: saving normalizes entries.
             val stored = iptvRepository.observePersonalConfig().first()
+            saveNewSourceConnectionLimit(previous.map { it.id }, stored.stalkerPortals.map { it.id }, newSourceConnectionLimit)
             onIptvSourcesSaved(
                 changedIds = changedAccountSources(previous, stored.stalkerPortals, { p: StalkerPortalEntry -> p.id }, { p: StalkerPortalEntry -> IptvAccountInfoParser.fingerprint(p) }),
                 playlists = stored.playlists,
@@ -3588,9 +3603,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Account details are asked only when a source is added or edited, and via
-     * [refreshIptvAccountInfo] - never on start-up or in the background, to keep
-     * the requests a provider sees to the minimum.
+     * Account details are asked when a source is added or edited, via
+     * [refreshIptvAccountInfo], and once per process when a user-started Xtream play
+     * finds none stored ([IptvRepository.bootstrapAccountAllowance]) - never on start-up
+     * or while browsing, to keep the requests a provider sees to the minimum.
      */
     private fun onIptvSourcesSaved(
         changedIds: Set<String>,
@@ -3616,6 +3632,22 @@ class SettingsViewModel @Inject constructor(
         (playlists.map { it.id } + portals.map { it.id }).forEach {
             refreshIptvAccountInfo(it, playlists, portals, automatic = true)
         }
+    }
+
+    /** The row belongs to this device, so unlike a source edit it syncs and reloads nothing. */
+    fun stepIptvConnectionLimit(sourceId: String) {
+        if (!canManage("connections")) return
+        viewModelScope.launch { iptvRepository.stepConnectionLimit(sourceId) }
+    }
+
+    /**
+     * The limit chosen while adding a source goes to the id its save assigned, on this
+     * device only like [stepIptvConnectionLimit]. Auto is the absence of an entry.
+     */
+    private suspend fun saveNewSourceConnectionLimit(previousIds: List<String>, storedIds: List<String>, limit: IptvConnectionLimit) {
+        if (limit == IptvConnectionLimit.AUTO) return
+        val newId = (storedIds - previousIds.toSet()).singleOrNull() ?: return
+        iptvRepository.saveConnectionLimit(newId, limit)
     }
 
     /** "Refresh now" in the edit dialog of a playlist or portal. */
@@ -3717,7 +3749,10 @@ class SettingsViewModel @Inject constructor(
         saveIptvConfig(m3uInput, epgInput)
     }
 
-    fun saveIptvPlaylists(playlists: List<IptvPlaylistEntry>) {
+    fun saveIptvPlaylists(
+        playlists: List<IptvPlaylistEntry>,
+        newSourceConnectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO,
+    ) {
         if (!canManage("connections")) return
         if (playlists.count { it.m3uUrl.isNotBlank() } > com.arflix.tv.data.repository.MAX_IPTV_PLAYLISTS) {
             _uiState.value = _uiState.value.copy(toastMessage = SettingsMessage.Res(R.string.settings_iptv_max_reached), toastType = ToastType.ERROR)
@@ -3729,6 +3764,7 @@ class SettingsViewModel @Inject constructor(
             // Compare what was actually stored: saving rewrites "host user pass"
             // into a get.php address, so the entry as typed never matches a row.
             val stored = iptvRepository.observePersonalConfig().first()
+            saveNewSourceConnectionLimit(previous.map { it.id }, stored.playlists.map { it.id }, newSourceConnectionLimit)
             onIptvSourcesSaved(
                 changedIds = changedAccountSources(previous, stored.playlists, { p: IptvPlaylistEntry -> p.id }, { p: IptvPlaylistEntry -> IptvAccountInfoParser.fingerprint(p) }),
                 playlists = stored.playlists,

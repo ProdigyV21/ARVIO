@@ -963,6 +963,13 @@
     <string name="iptv_account_refresh">Jetzt aktualisieren</string>
     <string name="iptv_account_refreshing">Wird abgefragt…</string>
     <string name="iptv_account_refresh_failed">Der Anbieter hat nicht geantwortet. Bitte in einer Minute noch einmal versuchen.</string>
+    <string name="iptv_connection_limit_title">Verbindungslimit auf diesem Gerät</string>
+    <string name="iptv_connection_limit_auto">Auto</string>
+    <string name="iptv_connection_limit_no_limit">Kein Limit</string>
+    <string name="iptv_connection_limit_at_a_time">%1$d gleichzeitig</string>
+    <string name="iptv_connection_limit_with_effective">%1$s (%2$d gleichzeitig)</string>
+    <string name="iptv_provider_allowance">Vom Anbieter erlaubt: %1$s</string>
+    <string name="iptv_provider_allowance_not_reported">Vom Anbieter erlaubt: nicht angegeben</string>
     <string name="settings_section_stalker_portals">STALKER-PORTALE</string>
     <string name="settings_stalker_add_hint">Bis zu 10 Stalker-/Ministra-Portale hinzufügen</string>
     <string name="settings_stalker_create_another">Weiteres Stalker-Portal hinzufügen</string>
