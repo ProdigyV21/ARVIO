@@ -148,6 +148,37 @@ class TraktSessionTest {
         coVerify(exactly = 5) { api.refreshToken(any()) }
     }
 
+    @Test fun sameRefreshTokenRefusedRepeatedlyRequiresReconnect() = runBlocking {
+        var now = System.currentTimeMillis()
+        session.clock = { now }
+        coEvery { api.refreshToken(any()) } throws http(400, """{"error":"invalid_request"}""")
+        repeat(2) {
+            assertNull(session.accessToken())
+            assertFalse(session.connection.first().reconnectRequired)
+            now += 6 * 60_000L
+        }
+        assertNull(session.accessToken())
+        assertTrue(session.connection.first().reconnectRequired)
+        coVerify(exactly = 3) { api.refreshToken(any()) }
+    }
+
+    @Test fun rotatedTokenIsPublishedToCloudForOtherDevices() = runBlocking {
+        val bus = CloudSyncInvalidationBus()
+        val shared = TraktSession(RuntimeEnvironment.getApplication(), profiles, api, bus)
+        coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
+        assertEquals("new", shared.accessToken())
+        val published = bus.events.replayCache.single()
+        assertEquals(CloudSyncScope.ACCOUNT, published.scope)
+        assertEquals("a", published.profileId)
+    }
+
+    @Test fun libraryWatchlistReportsLostSessionInsteadOfEmptyList() = runBlocking {
+        coEvery { api.refreshToken(any()) } throws http(400, """{"error":"invalid_grant"}""")
+        val error = runCatching { repository().libraryWatchlist() }.exceptionOrNull()
+        assertTrue(error is TraktAuthUnavailable && error.reconnectRequired)
+        assertTrue(repository().getWatchlist().isEmpty())
+    }
+
     @Test fun offlineRefreshKeepsAnUnexpiredAccessToken() = runBlocking {
         session.save(token(expires = 600), "a")
         coEvery { api.refreshToken(any()) } throws java.io.IOException("offline")

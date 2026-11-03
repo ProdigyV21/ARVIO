@@ -366,4 +366,13 @@
     <string name="tmdb_genre_soap">אופרת סבון</string>
     <string name="tmdb_genre_talk">אירוח</string>
     <string name="tmdb_genre_war_politics">מלחמה ופוליטיקה</string>
+    <string name="settings_connected_as">מחובר בתור %1$s</string>
+    <string name="trakt_reconnect_required">ההרשאה של Trakt פגה או בוטלה. חבר את Trakt מחדש כדי להמשיך לסנכרן.</string>
+    <string name="trakt_session_unavailable">אין חיבור ל-Trakt, ולכן הסנכרון מושהה. ARVIO ממשיך לנסות; אם זה נמשך, חבר את Trakt מחדש.</string>
+    <string name="trakt_library_unavailable">אין חיבור ל-Trakt כרגע. נסה שוב בעוד כמה דקות.</string>
+    <string name="trakt_library_load_failed">לא ניתן לטעון את הרשימה הזו מ-Trakt. נסה שוב.</string>
+    <string name="mdblist_reconnect_required">MDBList כבר לא מקבל את החיבור הזה. חבר את MDBList מחדש כדי להמשיך לסנכרן.</string>
+    <string name="mdblist_session_unavailable">אין חיבור ל-MDBList, ולכן הסנכרון מושהה. ARVIO ממשיך לנסות; אם זה נמשך, חבר את MDBList מחדש.</string>
+    <string name="mdblist_library_unavailable">אין חיבור ל-MDBList כרגע. נסה שוב בעוד כמה דקות.</string>
+    <string name="mdblist_library_load_failed">לא ניתן לטעון את הרשימה הזו מ-MDBList. נסה שוב.</string>
 </resources>

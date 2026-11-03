@@ -27,11 +27,13 @@ import com.arflix.tv.data.api.MdbWatchlistItem
 import com.arflix.tv.data.api.MdbWatchlistModifyBody
 import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.repository.sync.MdbListConnection
 import com.arflix.tv.data.repository.sync.RemoteWatchlistResult
 import com.arflix.tv.data.repository.sync.SyncProviderStore
 import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -58,6 +60,10 @@ data class MdbExternalRating(
     val source: String,
     val label: String,
     val value: String
+)
+
+class MdbListAuthUnavailable(val reconnectRequired: Boolean) : IllegalStateException(
+    if (reconnectRequired) "Reconnect MDBList to continue syncing" else "MDBList is temporarily unavailable"
 )
 
 enum class MdbListDeviceError {
@@ -105,7 +111,8 @@ fun parseMdbListDeviceError(throwable: Throwable): MdbListDeviceError {
 class MdbListRepository @Inject constructor(
     private val api: MdbListApi,
     private val store: SyncProviderStore,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val invalidationBus: CloudSyncInvalidationBus = CloudSyncInvalidationBus()
 ) {
     private val TAG = "MdbListRepository"
     private data class RatingsCacheEntry(val storedAt: Long, val ratings: List<MdbExternalRating>)
@@ -113,6 +120,11 @@ class MdbListRepository @Inject constructor(
 
     private val tokenRenewalMutex = Mutex()
     private val tokenRenewalBackoffUntilMs = ConcurrentHashMap<String, Long>()
+    private val renewalRefusals = ConcurrentHashMap<String, Pair<SyncProviderStore.MdbListCredential.OAuth, Int>>()
+    internal var clock: () -> Long = System::currentTimeMillis
+
+    /** The active profile's MDBList connection, and whether MDBList rejected its credential. */
+    val connection: Flow<MdbListConnection> get() = store.mdbListConnection
 
     sealed interface MdbListAuth {
         data class OAuth(val accessToken: String) : MdbListAuth
@@ -127,6 +139,8 @@ class MdbListRepository @Inject constructor(
     suspend fun resolveAuth(profileId: String? = null, forceRefresh: Boolean = false, rejectedAccessToken: String? = null): MdbListAuth? {
         val targetProfile = profileId ?: profileManager.getProfileIdSync()
         val cred = store.getMdbListCredential(targetProfile) ?: return null
+        // A rejected credential stays rejected until a new login or a newer cloud copy replaces it.
+        if (store.isMdbListReconnectRequired(targetProfile)) return null
         return when (cred) {
             is SyncProviderStore.MdbListCredential.ApiKey -> MdbListAuth.ApiKey(cred.apiKey)
             is SyncProviderStore.MdbListCredential.OAuth -> {
@@ -147,7 +161,7 @@ class MdbListRepository @Inject constructor(
     ): String? {
         val refreshToken = currentOAuth.refreshToken
         val expiresAt = currentOAuth.expiresAt
-        val nowMs = System.currentTimeMillis()
+        val nowMs = clock()
 
         val clientId = Constants.MDBLIST_CLIENT_ID.trim()
         if (refreshToken.isNullOrBlank() || clientId.isBlank()) {
@@ -162,7 +176,7 @@ class MdbListRepository @Inject constructor(
         return tokenRenewalMutex.withLock {
             val lockedCred = store.getMdbListCredential(profileId) as? SyncProviderStore.MdbListCredential.OAuth
                 ?: return@withLock null
-            val lockedNow = System.currentTimeMillis()
+            val lockedNow = clock()
             val lockedRefreshToken = lockedCred.refreshToken ?: return@withLock lockedCred.accessToken
             val lockedExpiresAt = lockedCred.expiresAt ?: Long.MAX_VALUE
 
@@ -184,6 +198,7 @@ class MdbListRepository @Inject constructor(
                 }
                 require(response.accessToken.isNotBlank()) { "MDBList returned an empty access token" }
                 tokenRenewalBackoffUntilMs.remove(profileId)
+                renewalRefusals.remove(profileId)
 
                 val newRefreshToken = response.refreshToken?.takeIf { it.isNotBlank() } ?: lockedRefreshToken
                 val applied = store.setMdbListOAuthTokens(
@@ -193,22 +208,74 @@ class MdbListRepository @Inject constructor(
                     profileId = profileId,
                     expected = lockedCred
                 )
+                // Other devices and the web app share this credential; publish the replacement
+                // right away so none of them renews with a refresh token that may now be dead.
+                if (applied) invalidationBus.markUserDirty(CloudSyncScope.ACCOUNT, profileId, "mdblist token rotated")
                 response.accessToken.takeIf { applied }
             } catch (e: retrofit2.HttpException) {
                 val code = e.code()
-                // A configuration/server rejection is not authorization to erase the user's connection.
-                tokenRenewalBackoffUntilMs[profileId] = System.currentTimeMillis() + 30_000L
-                AppLogger.w(TAG, "MDBList token renewal deferred after HTTP $code")
-                if (!forceRefresh && System.currentTimeMillis() < lockedExpiresAt &&
+                val oauthError = runCatching {
+                    JsonParser.parseString(e.response()?.errorBody()?.string()).asJsonObject.get("error")?.asString
+                }.getOrNull()
+                AppLogger.w(TAG, "MDBList token renewal failed: http=$code error=$oauthError")
+                // A configuration rejection (invalid_client) is not the user's connection. A
+                // refresh token refused outright, or again and again, is dead: keeping it left
+                // MDBList showing as connected while nothing synced. It is marked, not erased.
+                val strikes = if (code == 400 || code == 403) {
+                    (renewalRefusals[profileId]?.takeIf { it.first == lockedCred }?.second ?: 0) + 1
+                } else {
+                    0
+                }
+                if (oauthError == "invalid_grant" || strikes >= RENEWAL_REFUSALS_BEFORE_RECONNECT) {
+                    renewalRefusals.remove(profileId)
+                    tokenRenewalBackoffUntilMs.remove(profileId)
+                    store.markMdbListReconnectRequired(profileId, lockedCred)
+                    return@withLock null
+                }
+                if (strikes > 0) renewalRefusals[profileId] = lockedCred to strikes else renewalRefusals.remove(profileId)
+                tokenRenewalBackoffUntilMs[profileId] = clock() + 30_000L
+                if (!forceRefresh && clock() < lockedExpiresAt &&
                     store.getMdbListCredential(profileId) == lockedCred) lockedCred.accessToken else null
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                tokenRenewalBackoffUntilMs[profileId] = System.currentTimeMillis() + 30_000L
+                tokenRenewalBackoffUntilMs[profileId] = clock() + 30_000L
                 AppLogger.w(TAG, "MDBList token renewal failed")
-                if (!forceRefresh && System.currentTimeMillis() < lockedExpiresAt &&
+                if (!forceRefresh && clock() < lockedExpiresAt &&
                     store.getMdbListCredential(profileId) == lockedCred) lockedCred.accessToken else null
             }
         }
+    }
+
+    private suspend fun unavailable(profileId: String) =
+        MdbListAuthUnavailable(store.isMdbListReconnectRequired(profileId))
+
+    /**
+     * MDBList answers a dead credential with 401 ("Invalid API key" / "Invalid OAuth token").
+     * The account endpoint must refuse it too before the connection is marked for reconnecting,
+     * so a 401 on one resource cannot cost the user their connection.
+     */
+    private suspend fun markRejected(profileId: String, auth: MdbListAuth): Boolean {
+        val refused = try {
+            when (auth) {
+                is MdbListAuth.OAuth -> api.getUser(authHeader = "Bearer ${auth.accessToken}", apiKey = null)
+                is MdbListAuth.ApiKey -> api.getUser(authHeader = null, apiKey = auth.apiKey)
+            }
+            false
+        } catch (e: retrofit2.HttpException) {
+            e.code() == 401 || e.code() == 403
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            false
+        }
+        if (!refused) return false
+        val current = store.getMdbListCredential(profileId) ?: return false
+        val same = when (auth) {
+            is MdbListAuth.OAuth -> (current as? SyncProviderStore.MdbListCredential.OAuth)?.accessToken == auth.accessToken
+            is MdbListAuth.ApiKey -> (current as? SyncProviderStore.MdbListCredential.ApiKey)?.apiKey == auth.apiKey
+        }
+        if (!same) return false
+        AppLogger.w(TAG, "MDBList rejected the stored credential; reconnect required")
+        return store.markMdbListReconnectRequired(profileId, current)
     }
 
     private suspend inline fun <T> executeWithAuth(
@@ -217,7 +284,7 @@ class MdbListRepository @Inject constructor(
     ): T? {
         val targetProfile = profileId ?: profileManager.getProfileIdSync()
         val auth = resolveAuth(targetProfile, forceRefresh = false)
-            ?: throw IllegalStateException("MDBList authentication unavailable; reconnect or retry")
+            ?: throw unavailable(targetProfile)
 
         try {
             return when (auth) {
@@ -225,13 +292,22 @@ class MdbListRepository @Inject constructor(
                 is MdbListAuth.ApiKey -> block(null, auth.apiKey)
             }
         } catch (e: retrofit2.HttpException) {
-            if (e.code() == 401 && auth is MdbListAuth.OAuth) {
-                val renewedAuth = resolveAuth(targetProfile, forceRefresh = true, rejectedAccessToken = auth.accessToken)
-                if (renewedAuth is MdbListAuth.OAuth) {
-                    return block("Bearer ${renewedAuth.accessToken}", null)
-                }
+            if (e.code() != 401) throw e
+            if (auth is MdbListAuth.ApiKey) {
+                if (markRejected(targetProfile, auth)) throw MdbListAuthUnavailable(reconnectRequired = true)
+                throw e
             }
-            throw e
+            val rejected = (auth as MdbListAuth.OAuth).accessToken
+            val renewedAuth = resolveAuth(targetProfile, forceRefresh = true, rejectedAccessToken = rejected)
+                as? MdbListAuth.OAuth ?: throw unavailable(targetProfile)
+            try {
+                return block("Bearer ${renewedAuth.accessToken}", null)
+            } catch (retry: retrofit2.HttpException) {
+                if (retry.code() == 401 && markRejected(targetProfile, renewedAuth)) {
+                    throw MdbListAuthUnavailable(reconnectRequired = true)
+                }
+                throw retry
+            }
         }
     }
 
@@ -281,15 +357,18 @@ class MdbListRepository @Inject constructor(
      * Fetches the MDBList username for the currently connected API key or token.
      * Returns null gracefully if not connected or if the request fails.
      */
-    suspend fun fetchUsername(profileId: String? = null): String? = withContext(Dispatchers.IO) {
+    suspend fun fetchUsername(profileId: String? = null): String? = checkSession(profileId).getOrNull()
+
+    /** The account's username, or the failure that kept MDBList from confirming the credential. */
+    suspend fun checkSession(profileId: String? = null): Result<String?> = withContext(Dispatchers.IO) {
         try {
-            executeWithAuth(profileId) { authHeader, apiKey ->
+            Result.success(executeWithAuth(profileId) { authHeader, apiKey ->
                 api.getUser(authHeader = authHeader, apiKey = apiKey).username
-            }
+            })
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -348,6 +427,7 @@ class MdbListRepository @Inject constructor(
         this?.takeUnless { it.isJsonNull }?.runCatching { asString.toDoubleOrNull() }?.getOrNull()
 
     private companion object {
+        const val RENEWAL_REFUSALS_BEFORE_RECONNECT = 3
         const val RATINGS_CACHE_TTL_MS = 12 * 60 * 60 * 1000L
         val RATING_SOURCE_ORDER = listOf(
             "tomatoes", "popcorn", "metacritic", "letterboxd", "trakt", "tmdb", "myanimelist", "rogerebert", "metacriticuser"
@@ -407,9 +487,7 @@ class MdbListRepository @Inject constructor(
     suspend fun getUserLists(includeDynamic: Boolean = false): List<MdbUserList> = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext emptyList()
         try {
-            executeWithAuth { authHeader, apiKey -> api.getUserLists(authHeader = authHeader, apiKey = apiKey) }
-                .orEmpty()
-                .filter { it.id > 0 && (includeDynamic || it.dynamic != true) }
+            libraryUserLists(includeDynamic)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             AppLogger.e(TAG, "user lists failed", e)
@@ -417,27 +495,37 @@ class MdbListRepository @Inject constructor(
         }
     }
 
+    /** [getUserLists] for the Library, which must tell a failed read from having no lists. */
+    suspend fun libraryUserLists(includeDynamic: Boolean = true): List<MdbUserList> = withContext(Dispatchers.IO) {
+        executeWithAuth { authHeader, apiKey -> api.getUserLists(authHeader = authHeader, apiKey = apiKey) }
+            .orEmpty()
+            .filter { it.id > 0 && (includeDynamic || it.dynamic != true) }
+    }
+
     /**
      * The titles in one of the user's lists, in list order; empty when it cannot be read.
      * The API returns at most [LIST_ITEMS_PAGE] titles per request, so every page is read: a
      * missing page would leave titles out of the Library and show them unticked in the picker.
      */
-    suspend fun listItems(listId: Long): List<MediaItem> = withContext(Dispatchers.IO) {
+    suspend fun listItems(listId: Long): List<MediaItem> = try {
+        libraryListItems(listId)
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        AppLogger.e(TAG, "list items failed", e)
+        emptyList()
+    }
+
+    /** [listItems] for the Library: a failed page throws instead of reading as an empty list. */
+    suspend fun libraryListItems(listId: Long): List<MediaItem> = withContext(Dispatchers.IO) {
         val rows = fetchAllPages(LIST_ITEMS_PAGE, LIST_ITEMS_MAX_PAGES) { offset ->
-            val json = try {
-                executeWithAuth { authHeader, apiKey ->
-                    api.getListItems(
-                        listId = listId,
-                        authHeader = authHeader,
-                        apiKey = apiKey,
-                        limit = LIST_ITEMS_PAGE,
-                        offset = offset
-                    )
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                AppLogger.e(TAG, "list items failed at offset $offset", e)
-                null
+            val json = executeWithAuth { authHeader, apiKey ->
+                api.getListItems(
+                    listId = listId,
+                    authHeader = authHeader,
+                    apiKey = apiKey,
+                    limit = LIST_ITEMS_PAGE,
+                    offset = offset
+                )
             } ?: return@fetchAllPages null
             when {
                 json.isJsonArray -> json.asJsonArray.toList()
@@ -445,7 +533,7 @@ class MdbListRepository @Inject constructor(
                     .flatMap { key -> json.asJsonObject.getAsJsonArray(key)?.toList().orEmpty() }
                 else -> emptyList()
             }
-        } ?: return@withContext emptyList()
+        } ?: throw IllegalStateException("MDBList list $listId could not be read")
         rows.mapIndexedNotNull { index, row ->
             val obj = row.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapIndexedNotNull null
             fun text(name: String) = obj.get(name)?.takeIf { it.isJsonPrimitive }?.asString
