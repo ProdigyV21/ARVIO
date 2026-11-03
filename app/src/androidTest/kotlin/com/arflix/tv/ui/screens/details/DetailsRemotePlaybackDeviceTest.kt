@@ -132,7 +132,7 @@ class DetailsRemotePlaybackDeviceTest {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.TV) {
                 ArflixTvTheme {
                     DetailsScreen(type, 42, viewModel = model,
-                        onNavigateToPlayer = { _, _, episode, _, _, _, _, _ -> plays++; playedEpisode = episode },
+                        onNavigateToPlayer = { _, _, episode, _, _, _, _, _, _ -> plays++; playedEpisode = episode },
                         onNavigateToDetails = { _, _ -> }, onBack = {})
                 }
             }

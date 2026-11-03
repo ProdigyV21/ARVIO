@@ -116,7 +116,7 @@ class DetailsAutoplayDeviceTest {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.TV) {
                 ArflixTvTheme {
                     DetailsScreen(type, 42, autoPlay = true, onAutoPlayHandled = { handled++ }, viewModel = model,
-                        onNavigateToPlayer = { _, _, episode, _, _, _, _, position ->
+                        onNavigateToPlayer = { _, _, episode, _, _, _, _, position, _ ->
                             plays++
                             playedEpisode = episode
                             playedPosition = position

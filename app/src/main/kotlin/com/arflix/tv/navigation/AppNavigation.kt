@@ -137,7 +137,7 @@ sealed class Screen(val route: String) {
         }
     }
 
-    data object Player : Screen("player/{mediaType}/{mediaId}?seasonNumber={seasonNumber}&episodeNumber={episodeNumber}&tmdbSeasonNumber={tmdbSeasonNumber}&tmdbEpisodeNumber={tmdbEpisodeNumber}&kitsuId={kitsuId}&kitsuEpisodeNumber={kitsuEpisodeNumber}&imdbId={imdbId}&streamUrl={streamUrl}&preferredAddonId={preferredAddonId}&preferredSourceName={preferredSourceName}&preferredBingeGroup={preferredBingeGroup}&startPositionMs={startPositionMs}&isLiveStream={isLiveStream}") {
+    data object Player : Screen("player/{mediaType}/{mediaId}?seasonNumber={seasonNumber}&episodeNumber={episodeNumber}&tmdbSeasonNumber={tmdbSeasonNumber}&tmdbEpisodeNumber={tmdbEpisodeNumber}&kitsuId={kitsuId}&kitsuEpisodeNumber={kitsuEpisodeNumber}&imdbId={imdbId}&streamUrl={streamUrl}&preferredAddonId={preferredAddonId}&preferredSourceName={preferredSourceName}&preferredBingeGroup={preferredBingeGroup}&startPositionMs={startPositionMs}&isLiveStream={isLiveStream}&iptvSourceId={iptvSourceId}") {
         fun createRoute(
             mediaType: MediaType,
             mediaId: Int,
@@ -153,7 +153,8 @@ sealed class Screen(val route: String) {
             preferredSourceName: String? = null,
             preferredBingeGroup: String? = null,
             startPositionMs: Long? = null,
-            isLiveStream: Boolean = false
+            isLiveStream: Boolean = false,
+            iptvSourceId: String? = null
         ): String {
             val base = "player/${mediaType.name.lowercase()}/$mediaId"
             val params = mutableListOf<String>()
@@ -170,6 +171,7 @@ sealed class Screen(val route: String) {
             preferredBingeGroup?.let { params.add("preferredBingeGroup=${android.net.Uri.encode(it)}") }
             startPositionMs?.let { params.add("startPositionMs=$it") }
             if (isLiveStream) params.add("isLiveStream=true")
+            iptvSourceId?.let { params.add("iptvSourceId=${android.net.Uri.encode(it)}") }
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
@@ -618,7 +620,7 @@ fun AppNavigation(
                     backStackEntry.savedStateHandle["autoPlayHandled"] = true
                 },
                 currentProfile = currentProfile,
-                onNavigateToPlayer = { type, id, identity, imdbId, url, preferredAddonId, preferredSourceName, startPositionMs ->
+                onNavigateToPlayer = { type, id, identity, imdbId, url, preferredAddonId, preferredSourceName, startPositionMs, iptvSourceId ->
                     navController.navigate(
                         Screen.Player.createRoute(
                             mediaType = type,
@@ -633,7 +635,8 @@ fun AppNavigation(
                             streamUrl = url,
                             preferredAddonId = preferredAddonId,
                             preferredSourceName = preferredSourceName,
-                            startPositionMs = startPositionMs
+                            startPositionMs = startPositionMs,
+                            iptvSourceId = iptvSourceId
                         )
                     ) {
                         if (autoPlayArg) {
@@ -729,6 +732,11 @@ fun AppNavigation(
                 navArgument("isLiveStream") {
                     type = NavType.BoolType
                     defaultValue = false
+                },
+                navArgument("iptvSourceId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
                 }
             ),
             exitTransition = { ExitTransition.None },
@@ -751,6 +759,7 @@ fun AppNavigation(
             val preferredBingeGroup = backStackEntry.arguments?.getString("preferredBingeGroup")?.takeIf { it.isNotBlank() }
             val startPositionMs = backStackEntry.arguments?.getLong("startPositionMs")?.takeIf { it >= 0L }
             val isLiveStream = backStackEntry.arguments?.getBoolean("isLiveStream") ?: false
+            val iptvSourceId = backStackEntry.arguments?.getString("iptvSourceId")?.takeIf { it.isNotBlank() }
             val mediaType = if (mediaTypeStr == "tv") MediaType.TV else MediaType.MOVIE
 
             PlayerScreen(
@@ -769,6 +778,7 @@ fun AppNavigation(
                 preferredBingeGroup = preferredBingeGroup,
                 startPositionMs = startPositionMs,
                 isLiveStream = isLiveStream,
+                iptvSourceId = iptvSourceId,
                 onBack = { navController.popBackStack() },
                 onPlayNext = { nextIdentity, nextPreferredAddonId, nextPreferredSourceName, nextPreferredBingeGroup ->
                     // Navigate to next episode
