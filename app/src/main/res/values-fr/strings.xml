@@ -179,7 +179,7 @@
     <string name="frame_rate_desc">Désactivé, fluide ou toujours</string>
     <string name="quality_filters_desc">Exclure des niveaux de qualité sur cet appareil</string>
     <string name="card_layout_desc">Cartes paysage ou affiche</string>
-    <string name="card_layout_classic_desc">Cartes paysage ou affiche (disposition classique)</string>
+    <string name="card_layout_netflix_exception_desc">Sans effet sur les rangées standard de l’accueil façon Netflix</string>
     <string name="ui_mode_desc">Forcer TV, tablette ou téléphone</string>
     <string name="skip_profile_desc">Charge auto. le dernier profil utilisé au redémarrage</string>
     <string name="oled_black_background_desc">Utilisez des fonds noir pur pour les écrans OLED</string>

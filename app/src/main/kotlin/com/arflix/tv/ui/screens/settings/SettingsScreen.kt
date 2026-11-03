@@ -7422,7 +7422,7 @@ private fun TvGeneralSettingsRows(
                     icon = Icons.Default.Widgets,
                     title = stringResource(R.string.card_layout),
                     subtitle = stringResource(
-                        if (netflixHomeStyle) R.string.card_layout_classic_desc else R.string.card_layout_desc
+                        if (netflixHomeStyle) R.string.card_layout_netflix_exception_desc else R.string.card_layout_desc
                     ),
                     value = cardLayoutMode,
                     isFocused = focusedIndex == localIndex,
