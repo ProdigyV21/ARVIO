@@ -163,12 +163,16 @@ exports.handler = async (event) => {
     }).catch((error) => console.error("kofi funnel recording failed", error));
 
     // Side effects that must never fail the payment itself.
-    await queueForPayment(event, { email, emailHash, plan, firstPayment: firstPayment || isFirstSub, record })
+    const reward = await rewardReferralIfDue(event, { emailHash, payerHash: emailHash })
+      .catch((error) => {
+        console.error("referral reward failed", error && error.message);
+        return null;
+      });
+    const expiresAt = reward?.rewarded ? reward.expiresAt : record.expiresAt;
+    await queueForPayment(event, { email, emailHash, plan, firstPayment: firstPayment || isFirstSub, record: { ...record, expiresAt } })
       .catch((error) => console.error("member emails not queued", error && error.message));
-    await rewardReferralIfDue(event, { emailHash, payerHash: emailHash })
-      .catch((error) => console.error("referral reward failed", error && error.message));
 
-    return json(200, { ok: true, entitled: true, plan, expiresAt: record.expiresAt });
+    return json(200, { ok: true, entitled: true, plan, expiresAt });
   } catch (error) {
     console.error("kofi-webhook failed", error);
     // 500 → Ko-fi will retry, which is what we want on a transient storage error.
