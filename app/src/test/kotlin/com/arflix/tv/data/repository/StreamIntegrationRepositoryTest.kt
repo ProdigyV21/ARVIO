@@ -1,6 +1,7 @@
 package com.arflix.tv.data.repository
 
 import android.app.Application
+import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.arflix.tv.core.plugin.PluginManager
@@ -18,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +40,15 @@ class StreamIntegrationRepositoryTest {
 
     @get:Rule
     val settingsStore = IsolatedSettingsStoreRule()
+
+    @Before fun isolateEffectiveSettings() {
+        mockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
+        every { any<Context>().effectiveSettingsDataStore } answers { firstArg<Context>().settingsDataStore }
+    }
+
+    @After fun releaseEffectiveSettings() {
+        unmockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
+    }
 
     private val profile = "profile-${UUID.randomUUID()}"
     private val profileManager = mockk<ProfileManager> {

@@ -286,12 +286,14 @@ class MainActivity : ComponentActivity() {
             val crashId = crashPrefs.getString("last_crash_id", "N/A")
             val crashMsg = crashPrefs.getString("last_crash_msg", "Unexpected error")
             val crashTime = crashPrefs.getLong("last_crash_time", System.currentTimeMillis())
+            val crashProvider = crashPrefs.getString("last_crash_provider", "firebase") ?: "firebase"
             crashPrefs.edit().putBoolean("has_pending_crash_report", false).commit()
 
             val crashIntent = android.content.Intent(this, com.arflix.tv.ui.screens.crash.CrashReportActivity::class.java).apply {
                 putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_ID, crashId)
                 putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_MSG, crashMsg)
                 putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_TIME, crashTime)
+                putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_PROVIDER, crashProvider)
             }
             startActivity(crashIntent)
         }
