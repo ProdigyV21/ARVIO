@@ -95,8 +95,13 @@ internal class IptvProviderRequestGuard(
         chain.proceed(chain.request()).also { recordResponse(provider, it, playback = true) }
     }
 
+    /** Paced and blocked like metadata, but a failed check is an unknown answer, not a provider block. */
+    fun accountCheckInterceptor() = Interceptor { chain -> proceedGuarded(chain, recordFailure = false) }
+
+    override fun intercept(chain: Interceptor.Chain): Response = proceedGuarded(chain, recordFailure = true)
+
     @Suppress("SENSELESS_COMPARISON") // Play and sideload resolve different OkHttp body nullability.
-    override fun intercept(chain: Interceptor.Chain): Response {
+    private fun proceedGuarded(chain: Interceptor.Chain, recordFailure: Boolean): Response {
         val url = chain.request().url
         // Share the budget across accounts, profiles and default HTTP/HTTPS ports.
         val provider = provider(url)
@@ -130,7 +135,7 @@ internal class IptvProviderRequestGuard(
         }
         try {
             val response = chain.proceed(chain.request())
-            recordResponse(provider, response)
+            if (recordFailure) recordResponse(provider, response)
             val body = response.body
             if (body == null) {
                 release()
@@ -185,4 +190,10 @@ internal fun OkHttpClient.Builder.withIptvProviderRequestGuard(): OkHttpClient.B
     addInterceptor(IptvProviderRequestGuard.shared.preflightInterceptor())
     // Network interception also counts redirects and OkHttp's HTTP follow-ups.
     addNetworkInterceptor(IptvProviderRequestGuard.shared)
+}
+
+internal fun OkHttpClient.Builder.withIptvAccountCheckGuard(): OkHttpClient.Builder = apply {
+    retryOnConnectionFailure(false)
+    addInterceptor(IptvProviderRequestGuard.shared.preflightInterceptor())
+    addNetworkInterceptor(IptvProviderRequestGuard.shared.accountCheckInterceptor())
 }

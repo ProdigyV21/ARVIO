@@ -3,6 +3,7 @@ package com.arflix.tv.data.repository
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.arflix.tv.network.IptvAccountUsage
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -105,6 +106,22 @@ object IptvAccountInfoParser {
             unlimited = unlimited && !expired,
             maxConnections = maxConnections,
         )
+    }
+
+    /**
+     * Reads the live slot count from the same answer as [parseXtream]. Never
+     * stored, because it ages within seconds. Null means unknown: not an account
+     * answer, a rejected or inactive login, or counts a panel did not report.
+     */
+    internal fun parseXtreamAvailability(body: String?): IptvAccountUsage? {
+        val root = parseObject(body) ?: return null
+        val userInfo = root.get("user_info")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+        if (userInfo.text("auth") == "0") return null
+        val status = userInfo.text("status")?.lowercase(Locale.ROOT)
+        if (status != null && status != "active") return null
+        val active = userInfo.text("active_cons")?.toIntOrNull()?.takeIf { it >= 0 } ?: return null
+        val max = userInfo.text("max_connections")?.toIntOrNull()?.takeIf { it > 0 } ?: return null
+        return IptvAccountUsage(active, max)
     }
 
     /**
