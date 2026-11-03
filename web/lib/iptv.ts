@@ -122,7 +122,7 @@ export function xtreamInfoFromUrl(url: string): XtreamInfo | null {
   return xtreamInfoFromPlaylist(normalizeIptvInput(url));
 }
 
-export { buildXtreamPlayerApiUrl, playlistProxyHeaders, fetchXtreamJson };
+export { buildXtreamPlayerApiUrl, playlistProxyHeaders, fetchXtreamJson, fetchXtreamAccountUsage };
 
 type XtreamCategory = {
   category_id?: string | number;
@@ -686,17 +686,7 @@ async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) 
   const existing = apiInFlight.get(key);
   if (existing) return existing as Promise<T>;
   const task = (async () => {
-    const load = async () => {
-      try {
-        const text = await providerTextRequest(url, url);
-        jsonFromText(text);
-        return text;
-      } catch {
-        const text = await providerTextRequest(url, playlistTextUrl(url, headers));
-        jsonFromText(text);
-        return text;
-      }
-    };
+    const load = () => xtreamApiText(url, headers);
     const action = new URL(url).searchParams.get("action");
     const guide = action === "get_short_epg" || action === "get_simple_data_table";
     const text = guide ? await load() : await cachedRemoteText(`api:${key}`, PLAYLIST_TTL_MS, load);
@@ -707,6 +697,39 @@ async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) 
       while (guideApiCache.size > 128) guideApiCache.delete(guideApiCache.keys().next().value!);
     }
     return data;
+  })();
+  apiInFlight.set(key, task);
+  try { return await task; } finally { if (apiInFlight.get(key) === task) apiInFlight.delete(key); }
+}
+
+/** player_api.php text, directly and then through the app proxy (panels without CORS), both behind the provider request guard. */
+async function xtreamApiText(url: string, headers: Record<string, string>) {
+  try {
+    const text = await providerTextRequest(url, url);
+    jsonFromText(text);
+    return text;
+  } catch {
+    const text = await providerTextRequest(url, playlistTextUrl(url, headers));
+    jsonFromText(text);
+    return text;
+  }
+}
+
+/**
+ * The line's connection count from player_api.php user_info, which opens no
+ * stream. Never cached (the numbers change by the second); asks made at the
+ * same time share one request. Null when the panel does not say.
+ */
+async function fetchXtreamAccountUsage(info: XtreamInfo, headers: Record<string, string>): Promise<{ active: number; max: number } | null> {
+  const url = buildXtreamPlayerApiUrl(info.baseUrl, info.username, info.password);
+  const key = `usage|${url}`;
+  const existing = apiInFlight.get(key);
+  if (existing) return existing as Promise<{ active: number; max: number } | null>;
+  const task = (async () => {
+    const user = jsonFromText<{ user_info?: { active_cons?: unknown; max_connections?: unknown } }>(await xtreamApiText(url, headers))?.user_info;
+    const active = Number(user?.active_cons);
+    const max = Number(user?.max_connections);
+    return user && Number.isFinite(active) && Number.isFinite(max) ? { active, max } : null;
   })();
   apiInFlight.set(key, task);
   try { return await task; } finally { if (apiInFlight.get(key) === task) apiInFlight.delete(key); }

@@ -382,6 +382,12 @@ export function sameRouteAttempt(attempts: LiveAttempt[], playing: LiveAttempt) 
     && attempt.transport === playing.transport && attempt.hlsEngine === playing.hlsEngine);
 }
 
+/** The panel said every connection on the account is in use (player_api.php user_info). */
+export function accountFullFailure(): LiveFailure {
+  return { kind: "provider-busy", title: translateUi("Too many connections"),
+    message: translateUi("Every connection on your IPTV account is in use right now. Stop playback on another device, then retry.") };
+}
+
 const AUDIO_LABELS: [RegExp, string][] = [
   [/^(ac-?3|a52)/i, "Dolby Digital (AC-3)"], [/^(ec-?3|e-?ac-?3)/i, "Dolby Digital Plus (E-AC-3)"],
   [/^(mp3|mp4a\.6b|mp4a\.69|mpga|mp2)/i, "MPEG audio (MP2/MP3)"], [/^(mp4a|aac)/i, "AAC"], [/^opus/i, "Opus"], [/^dts|^dtsc/i, "DTS"]

@@ -260,7 +260,7 @@ function effect(globals) {
 
 const flush = () => new Promise(setImmediate);
 
-function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket', paywall = true, xtreamOrigin = null, overrideRef = { current: null }, reconnects = { current: null } } = {}) {
+function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket', paywall = true, xtreamOrigin = null, overrideRef = { current: null }, reconnects = { current: null }, extra = {} } = {}) {
   const state = { attached: [], liveFailure: null, errors: [], toasts: [], refreshes: 0 };
   const video = Object.assign(new EventTarget(), { readyState: 0, currentTime: 0, duration: NaN, paused: true, ended: false, videoWidth: 0,
     pause() { this.paused = true; }, play() { this.paused = false; return Promise.resolve(); }, removeAttribute() {}, load() {} });
@@ -287,7 +287,7 @@ function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket'
     workerManifestUrl: (target) => `https://app.example/api/proxy?rewrite=worker&url=${encodeURIComponent(target)}`,
     directManifestUrl: (target) => `https://app.example/api/proxy?rewrite=direct&url=${encodeURIComponent(target)}`,
     proxiedUrl: (target) => `https://app.example/api/proxy?url=${encodeURIComponent(target)}`,
-    ...live, liveSourceOverrideRef: overrideRef, liveXtreamOrigin: xtreamOrigin, liveReconnectsRef: reconnects,
+    ...live, liveSourceOverrideRef: overrideRef, liveXtreamOrigin: xtreamOrigin, liveReconnectsRef: reconnects, iptvAccountOf: () => null,
     getMediaCapabilities: () => ({ mse: env.mse, nativeHls: env.nativeHls }), preferNativeHls: () => env.preferNativeHls,
     mediaSourceConstructor: () => ({ isTypeSupported: () => true }), currentStreamTicket: () => ticket,
     navigator: { userAgent: 'Mozilla/5.0 Chrome/126.0 Safari/537.36' }, document: { createElement: () => ({ canPlayType: () => '' }) },
@@ -298,7 +298,8 @@ function liveHarness({ url, headers, refresh, env = CHROME, ticket = 'v1.ticket'
       return handle;
     },
     window: { location: { protocol: env.pageProtocol }, setTimeout: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimeout: (key) => timers.delete(key),
-      setInterval: () => 0, clearInterval: noop }
+      setInterval: () => 0, clearInterval: noop },
+    ...extra
   };
   const setup = effect(globals);
   // Runs the pending reconnect waits (lib/liveTvPlayback.ts LIVE_RECONNECT_DELAYS_MS), not the startup watchdogs.
@@ -652,4 +653,38 @@ test('player: a Stalker channel that played gets a fresh link before it reconnec
   assert.match(decodeURIComponent(h.last().url), /play_token=new/);
   assert.equal(overrideRef.current.url, fresh);
   cleanup();
+});
+
+test('player: an Xtream line the panel reports full is not tuned; silence or a free line tunes; a channel change skips the check', async () => {
+  const account = { baseUrl: 'http://p.example:8080', username: 'u', password: 'p' };
+  const run = async (verdict, check = true) => {
+    const asked = [];
+    const noted = [];
+    const h = liveHarness({ url: 'http://p.example:8080/live/u/p/1.ts', xtreamOrigin: 'http://p.example:8080', extra: {
+      iptvAccountOf: () => account, shouldCheckIptvAccount: () => check,
+      checkIptvAccount: async (info) => { asked.push(info); return verdict; }, noteIptvAccountInUse: (info) => noted.push(info)
+    } });
+    const cleanup = h.setup();
+    const before = h.state.attached.length;
+    await flush();
+    return { h, asked, noted, before, cleanup };
+  };
+  const full = await run('full');
+  assert.equal(full.before, 0, 'nothing opens before the answer');
+  assert.equal(full.h.state.attached.length, 0);
+  assert.equal(full.h.state.liveFailure.kind, 'provider-busy');
+  assert.equal(full.h.state.liveFailure.title, 'Too many connections');
+  full.cleanup();
+  assert.equal(full.noted.length, 0, 'no stream was held');
+  for (const verdict of ['free', 'unknown']) {
+    const r = await run(verdict);
+    assert.equal(r.h.state.attached.length, 1, verdict);
+    assert.equal(r.h.state.liveFailure, null);
+    r.cleanup();
+    assert.equal(r.noted.length, 2, 'noted when tuning and again on release');
+  }
+  const change = await run('full', false);
+  assert.equal(change.before, 1, 'a channel change tunes at once');
+  assert.equal(change.asked.length, 0);
+  change.cleanup();
 });

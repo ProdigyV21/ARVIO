@@ -4,7 +4,8 @@ import { playbackFailureKind, classifyMediaError, diagnoseSourceFailure } from "
 import { canProviderTranscode, hasDolbyVision, recordBrowserPlaybackFailure, canTryRemux } from "@/lib/streamCompatibility";
 import { browserAutoplayCandidates } from "@/lib/browserAutoplay";
 import { type PlaybackHandle, attachPlayback, type PlaybackError, type PlaybackTracks, type PlaybackTransport, type PlaybackMediaInfo, preferNativeHls } from "@/lib/player";
-import { planLiveAttempts, attemptAllowed, providerRefusal, mayRefreshChannel, mayRetryChannel, classifyLiveFailure, liveMediaNotice, browserName, isAppleWebKit, decodeCheck, isInsecureForPage, takeLiveReconnect, sameRouteAttempt, type LiveAttempt, type LiveFailure, type LiveFault, type LivePlan, type LiveReconnects } from "@/lib/liveTvPlayback";
+import { planLiveAttempts, attemptAllowed, providerRefusal, mayRefreshChannel, mayRetryChannel, classifyLiveFailure, liveMediaNotice, browserName, isAppleWebKit, decodeCheck, isInsecureForPage, takeLiveReconnect, sameRouteAttempt, accountFullFailure, type LiveAttempt, type LiveFailure, type LiveFault, type LivePlan, type LiveReconnects } from "@/lib/liveTvPlayback";
+import { iptvAccountOf, shouldCheckIptvAccount, checkIptvAccount, noteIptvAccountInUse } from "@/lib/iptvConnections";
 import { getMediaCapabilities, mediaSourceConstructor } from "@/lib/capabilities";
 import { currentStreamTicket } from "@/lib/streamTicket";
 import { resolverMediaUrl } from "@/lib/resolver";
@@ -43,6 +44,8 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
       const controller = new AbortController();
       let handle: { destroy: () => void } | null = null;
       let remuxWatchdog: number | undefined;
+      const account = iptvAccountOf(stream, { liveTv: false });
+      let opened = false;
       setError(false);
       setErrorDetail("");
       failureDiagnosticRef.current = { failure_kind: "unknown", phase: "startup" };
@@ -73,6 +76,18 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
       };
       void (async () => {
         try {
+          // IPTV: a line whose every connection is in use is not asked for another (#849).
+          if (account && shouldCheckIptvAccount(account) && await checkIptvAccount(account, stream.behaviorHints?.proxyHeaders?.request) === "full") {
+            if (cancelled) return;
+            recovering = true;
+            failureDiagnosticRef.current = { failure_kind: "network", phase: "startup" };
+            setErrorDetail(accountFullFailure().message);
+            setBuffering(false); setError(true); setShowControls(true);
+            return;
+          }
+          if (cancelled) return;
+          opened = true;
+          if (account) noteIptvAccountInUse(account);
           const { probeAndPrepareRemux } = await import("@/lib/remux");
           const iptvVod = stream.addonId === "iptv_xtream_vod";
           const directIptv = iptvVod && stream.originalUrl && stream.originalUrl !== stream.url;
@@ -130,6 +145,8 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
         cancelled = true;
         controller.abort();
         window.clearInterval(remuxWatchdog);
+        // The panel may count this stream a few seconds more: the next tune on the account skips its check.
+        if (account && opened) noteIptvAccountInUse(account);
         handle?.destroy();
         video.removeAttribute("src");
         video.load();
@@ -590,8 +607,28 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
       failLive();
       return () => { cancelled = true; };
     }
-    detach = attach(ladder[0]);
-    armStallTimer();
+    // IPTV (#849): before opening a stream, one look at whether the Xtream
+    // line has a free connection; only a clear "full" stops the tune.
+    const account = iptvAccountOf(stream, { liveTv, xtreamOrigin: liveXtreamOrigin });
+    let startTimer: number | undefined;
+    const begin = () => {
+      if (account) noteIptvAccountInUse(account);
+      detach = attach(ladder[0]);
+      armStallTimer();
+      startTimer = window.setTimeout(requestPlayback, 0);
+    };
+    if (account && shouldCheckIptvAccount(account)) {
+      void checkIptvAccount(account, headers).then((verdict) => {
+        if (cancelled) return;
+        if (verdict !== "full") { begin(); return; }
+        cancelled = true;
+        const failure = accountFullFailure();
+        failureDiagnosticRef.current = { failure_kind: "network", phase: "startup" };
+        setBuffering(false); setError(true); setShowControls(true);
+        if (liveTv) setLiveFailure?.(failure);
+        setErrorDetail(failure.message);
+      });
+    } else begin();
     function onReadyToStart() {
       if (cancelled || !video) return;
       window.clearTimeout(stallTimer);
@@ -609,7 +646,6 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
       }
       requestPlayback();
     }
-    const startTimer = window.setTimeout(requestPlayback, 0);
     const onUserPlay = () => {
       if (cancelled || !awaitingGesture) return;
       awaitingGesture = false;
@@ -656,6 +692,8 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
       video.removeEventListener("timeupdate", onFirstPlaying);
       video.removeEventListener("arvio-live-stalled", onLiveStalled);
       clearAttemptStart();
+      // The panel may count this stream a few seconds more: the next tune on the account skips its check.
+      if (account && detach) noteIptvAccountInUse(account);
       detach?.();
       if (transportRef.current === detach) transportRef.current = null;
     };
