@@ -74,11 +74,12 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
       void (async () => {
         try {
           const { probeAndPrepareRemux } = await import("@/lib/remux");
-          const directIptv = stream.addonId === "iptv_xtream_vod" && stream.originalUrl && stream.originalUrl !== stream.url;
+          const iptvVod = stream.addonId === "iptv_xtream_vod";
+          const directIptv = iptvVod && stream.originalUrl && stream.originalUrl !== stream.url;
           const prepared = await probeAndPrepareRemux(directIptv ? stream.originalUrl! : stream.url!,
             directIptv ? undefined : stream.behaviorHints?.proxyHeaders?.request, settings.audioLanguage,
             { signal: controller.signal, onError: remuxFailed, expectDolbyVision: hasDolbyVision(stream),
-              fallbackUrl: directIptv ? stream.url! : undefined });
+              fallbackUrl: directIptv ? stream.url! : undefined, iptv: iptvVod });
           if (cancelled || recovering) { prepared?.destroy(); return; }
           handle = prepared;
           if (!prepared || (prepared.probe.audioTracks.length > 0 && prepared.probe.chosenAudioIndex < 0) || !prepared.probe.videoPlayable) {

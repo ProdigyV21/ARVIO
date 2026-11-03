@@ -7,6 +7,7 @@ import { usePlayerEpisodeMetadata } from "../usePlayerEpisodeMetadata";
 import { useLivePlayerDock } from "../useLivePlayerDock";
 import type { PlaybackHandle, PlaybackTracks } from "@/lib/player";
 import type { LiveFailure, LiveReconnects } from "@/lib/liveTvPlayback";
+import { isIptvSource } from "@/lib/iptvConnections";
 import { subtitleLanguageName, SubtitleTranslator } from "@/lib/subtitleAi";
 import { trackLanguageName, languageCode } from "@/lib/languages";
 import { trackPremiumAttempt, trackPremiumDaily, trackPremiumMilestone, trackPremiumEvent } from "@/lib/premiumAnalytics";
@@ -298,7 +299,9 @@ export function VideoPlayer({
   }, [stream.url]);
   const probeAudioTracks = useCallback(() => {
     const current = currentStreamRef.current;
-    if (liveTv || current.remux || !current.url) return;
+    // An IPTV panel counts the probe's reads as more connections on the
+    // subscriber's line while the video plays (#849).
+    if (liveTv || current.remux || !current.url || isIptvSource(current)) return;
     if (!canTryRemux(current)) return;
     setAudioProbeState("probing");
     audioProbeAbort.current?.abort();

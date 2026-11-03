@@ -10,7 +10,7 @@ export type RemuxProbe = {
   audioTracks: RemuxAudioTrack[]; chosenAudioIndex: number; duration: number;
 };
 export type RemuxCommand =
-  | { type: "probe"; url: string; headers?: Record<string, string>; audioCodecs: string[]; language?: string; expectDolbyVision?: boolean }
+  | { type: "probe"; url: string; headers?: Record<string, string>; audioCodecs: string[]; language?: string; expectDolbyVision?: boolean; iptv?: boolean }
   | { type: "start"; generation: number; time: number; audioIndex: number }
   | { type: "clock"; time: number }
   | { type: "ack"; id: number };

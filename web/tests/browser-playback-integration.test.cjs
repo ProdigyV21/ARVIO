@@ -172,7 +172,8 @@ function extracted(relative, selector, globals) {
   const playerDefaults = { setBootStatus: () => {}, autoSourceHopsRef: { current: 0 }, sourceListRef: { current: [] },
     needsAudioConversion: () => false, browserAutoplayCandidates: () => [], diagnoseSourceFailure: async () => null, setEnded: () => {},
     onAdvanceRef: { current: async () => false }, upNextShownRef: { current: false },
-    liveReconnectsRef: { current: null } };
+    // IPTV connection rules (lib/iptvConnections.ts); these sources are not IPTV accounts.
+    isIptvSource: () => false, liveReconnectsRef: { current: null } };
   vm.runInNewContext(code, { module, Error, Event, DOMException, AbortController, console, ...playerDefaults, ...globals }, { filename });
   return module.exports;
 }
