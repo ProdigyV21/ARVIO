@@ -358,13 +358,14 @@ private fun CalendarSourceRow(source: ReleaseCalendarSource, selected: Boolean, 
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val icon = when (source) {
-            ReleaseCalendarSource.TRAKT -> R.drawable.calendar_trakt_official
-            ReleaseCalendarSource.SIMKL -> R.drawable.calendar_simkl_official
-            ReleaseCalendarSource.MDBLIST -> R.drawable.calendar_mdblist_official
-            else -> null
+            ReleaseCalendarSource.ALL -> R.drawable.ic_all_watchlists
+            ReleaseCalendarSource.ARVIO -> R.drawable.ic_arvio
+            ReleaseCalendarSource.TRAKT -> R.drawable.ic_trakt
+            ReleaseCalendarSource.SIMKL -> R.drawable.ic_simkl
+            ReleaseCalendarSource.MDBLIST -> R.drawable.ic_mdblist
         }
         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-            if (icon != null) Image(painterResource(icon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            Icon(painterResource(icon), null, Modifier.size(20.dp), tint = foreground)
         }
         Text(tr(source.label), Modifier.weight(1f), color = foreground, fontSize = 13.sp, maxLines = 2)
         count?.let { Text(it.toString(), color = foreground.copy(.7f), fontSize = 11.sp) }
