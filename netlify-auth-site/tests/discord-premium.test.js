@@ -1,7 +1,49 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
+const vm = require("node:vm");
+const { evaluateEntitlement } = require("../netlify/functions/_entitlements");
 const { createState, readState, badgeCookie, authorizeUrl, discordIdentity, setDiscordBadge } = require("../netlify/functions/_discord-premium");
+
+test("existing annual Shop purchases qualify without a new payment, including a verified billing link", async () => {
+  const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
+  const billing = "billing@example.test";
+  const billingHash = hash(billing);
+  const accountHash = hash("viewer@example.test");
+  const annualPass = {
+    source: "kofi", status: "active", plan: "yearly", tier: "12-month pass",
+    startedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+    expiresAt: new Date(Date.now() + 330 * 86400000).toISOString()
+  };
+  const entitlements = new Map([[billingHash, annualPass]]);
+  const accounts = new Map([
+    ["accounts/email/" + billingHash + ".json", { accountId: "billing-account", email: billing }],
+    ["accounts/email/" + accountHash + ".json", { accountId: "viewer", email: "viewer@example.test" }]
+  ]);
+  const deleted = new Map();
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve("../netlify/functions/_discord-premium"), "utf8"), {
+    module, process: { env: {} },
+    require: (name) => ({
+      "node:crypto": crypto,
+      "@netlify/blobs": { connectLambda() {}, getStore: (store) => store === "arvio-auth" ? accounts : deleted },
+      "./_backend": { normalizeEmail: (email) => String(email || "").trim().toLowerCase(), sha256: hash },
+      "./_entitlements": { entitlementsStore: () => entitlements, readEntitlement: (store, key) => store.get(key), evaluateEntitlement }
+    })[name]
+  });
+  const eligible = module.exports.eligibleForDiscordBadge;
+  assert.equal(await eligible({}, billingHash, "billing-account"), true);
+  assert.equal(await eligible({}, accountHash, "viewer"), false);
+  entitlements.set("link-owner/" + billingHash, { accountHash });
+  entitlements.set(accountHash, { ...annualPass, linkedFrom: billing });
+  assert.equal(await eligible({}, accountHash, "viewer"), true);
+  assert.equal(await eligible({}, billingHash, "billing-account"), false);
+  entitlements.set(billingHash, { ...annualPass, status: "cancelled" });
+  assert.equal(await eligible({}, accountHash, "viewer"), false);
+  deleted.set("revoked/account/" + hash("viewer") + ".json", { deleted: true });
+  assert.equal(await eligible({}, accountHash, "viewer"), "deleted");
+});
 
 test("OAuth state is encrypted, expires and requires the initiating browser cookie", () => {
   process.env.DISCORD_PREMIUM_CLIENT_SECRET = "test-client-secret";
