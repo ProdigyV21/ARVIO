@@ -73,6 +73,8 @@ import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.KidsAgeLevel
+import com.arflix.tv.ui.components.CloudEmailPasswordModal
+import com.arflix.tv.ui.components.CloudPairModal
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.ui.components.Toast
 import com.arflix.tv.util.LocalDeviceType
@@ -89,6 +91,7 @@ fun ProfileSelectionScreen(
     isCloudConnected: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val effectiveCloudConnected = isCloudConnected || uiState.isCloudConnected
     ProfileSelectionContent(uiState, ProfileSelectionActions(
         createProfile = viewModel::createProfile,
         deleteProfile = viewModel::deleteProfile,
@@ -115,7 +118,12 @@ fun ProfileSelectionScreen(
         toggleManageMode = viewModel::toggleManageMode,
         updateProfile = viewModel::updateProfile,
         verifyPinAndSelectProfile = viewModel::verifyPinAndSelectProfile,
-    ), onProfileSelected, onConnectCloud, isCloudConnected)
+        startCloudAuth = viewModel::startCloudAuth,
+        openCloudEmailPasswordDialog = viewModel::openCloudEmailPasswordDialog,
+        cancelCloudAuth = viewModel::cancelCloudAuth,
+        closeCloudEmailPasswordDialog = viewModel::closeCloudEmailPasswordDialog,
+        completeCloudAuthWithEmailPassword = viewModel::completeCloudAuthWithEmailPassword,
+    ), onProfileSelected, onConnectCloud, effectiveCloudConnected)
 }
 
 internal data class ProfileSelectionActions(
@@ -144,6 +152,11 @@ internal data class ProfileSelectionActions(
     val toggleManageMode: () -> Unit = { },
     val updateProfile: () -> Unit = { },
     val verifyPinAndSelectProfile: (String) -> Unit = { _ -> },
+    val startCloudAuth: () -> Unit = { },
+    val openCloudEmailPasswordDialog: () -> Unit = { },
+    val cancelCloudAuth: () -> Unit = { },
+    val closeCloudEmailPasswordDialog: () -> Unit = { },
+    val completeCloudAuthWithEmailPassword: (String, String, Boolean) -> Unit = { _, _, _ -> },
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -430,7 +443,11 @@ internal fun ProfileSelectionContent(
                     CloudConnectButton(
                         onClick = {
                             if ((isTouchDevice || isReadyForInput) && !uiState.isSwitchingProfile && !isTransitioning) {
-                                onConnectCloud()
+                                if (isTouchDevice) {
+                                    viewModel.openCloudEmailPasswordDialog()
+                                } else {
+                                    viewModel.startCloudAuth()
+                                }
                             }
                         }
                     )
@@ -548,6 +565,47 @@ internal fun ProfileSelectionContent(
                 onDismiss = { viewModel.hideEditDialog() },
                 onShowPinSetup = { viewModel.showPinSetupDialog() },
                 onRemovePin = { viewModel.removeProfilePin() }
+            )
+        }
+
+        // Cloud Email/Password Modal
+        if (uiState.showCloudEmailPasswordDialog) {
+            var email by remember { mutableStateOf("") }
+            var password by remember { mutableStateOf("") }
+            val context = LocalContext.current
+            CloudEmailPasswordModal(
+                email = email,
+                password = password,
+                onEmailChange = { email = it },
+                onPasswordChange = { password = it },
+                onDismiss = { viewModel.closeCloudEmailPasswordDialog() },
+                onSignIn = {
+                    viewModel.completeCloudAuthWithEmailPassword(email, password, false)
+                },
+                onCreateAccount = {
+                    viewModel.completeCloudAuthWithEmailPassword(email, password, true)
+                },
+                onOpenPrivacy = {
+                    runCatching {
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://arvio.tv/privacy")
+                        )
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    }
+                }
+            )
+        }
+
+        // Cloud TV Pairing Modal
+        if (uiState.showCloudPairDialog) {
+            CloudPairModal(
+                verificationUrl = uiState.cloudVerificationUrl.orEmpty(),
+                userCode = uiState.cloudUserCode.orEmpty(),
+                isWorking = uiState.isCloudAuthWorking,
+                onDismiss = { viewModel.cancelCloudAuth() },
+                onUseEmailPassword = { viewModel.openCloudEmailPasswordDialog() }
             )
         }
 

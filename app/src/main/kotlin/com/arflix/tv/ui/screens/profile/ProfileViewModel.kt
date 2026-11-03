@@ -17,15 +17,21 @@ import com.arflix.tv.data.repository.TraktRepository
 import com.arflix.tv.data.repository.WatchHistoryRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.IptvRepository
+import com.arflix.tv.data.repository.TvDeviceAuthRepository
+import com.arflix.tv.data.repository.TvDeviceAuthSession
+import com.arflix.tv.data.repository.TvDeviceAuthStatusType
 import com.arflix.tv.ui.components.ToastType
+import com.arflix.tv.util.AuthEmailValidator
 import com.arflix.tv.util.PinUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,7 +65,14 @@ data class ProfileUiState(
     val pinDialogMode: String = "", // "verify" or "setup"
     val pendingProfileForPin: Profile? = null,
     val pinContext: String = "", // "select", "edit", or "delete"
-    val pinError: String = "" // Error message for wrong PIN
+    val pinError: String = "", // Error message for wrong PIN
+    // Cloud auth state
+    val showCloudPairDialog: Boolean = false,
+    val showCloudEmailPasswordDialog: Boolean = false,
+    val cloudVerificationUrl: String? = null,
+    val cloudUserCode: String? = null,
+    val isCloudAuthWorking: Boolean = false,
+    val isCloudConnected: Boolean = false
 )
 
 internal fun ProfileUiState.canFinishSelection(targetProfileId: String?): Boolean =
@@ -77,16 +90,25 @@ class ProfileViewModel @Inject constructor(
     private val watchlistRepository: WatchlistRepository,
     private val iptvRepository: IptvRepository,
     private val profileAvatarImageManager: ProfileAvatarImageManager,
-    private val cloudSyncRepository: CloudSyncRepository
+    private val cloudSyncRepository: CloudSyncRepository,
+    private val tvDeviceAuthRepository: TvDeviceAuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
     private var lastInitialRestoreUserId: String? = null
 
+    private var cloudDeviceCode: String? = null
+    private var cloudUserCode: String? = null
+    private var cloudVerificationUrl: String? = null
+    private var cloudPollIntervalMs: Long = 800L
+    private var cloudExpiresAtMs: Long = 0L
+    private var cloudPollingJob: Job? = null
+
     init {
         loadProfiles()
         observeProfiles()
+        observeAuthState()
         restoreCloudProfilesForFreshLogin()
     }
 
@@ -645,6 +667,281 @@ class ProfileViewModel @Inject constructor(
             showToast(context.getString(R.string.profile_pin_removed_success), ToastType.SUCCESS)
             runCatching { cloudSyncRepository.pushToCloud(force = true) }
         }
+    }
+
+    private fun observeAuthState() {
+        viewModelScope.launch {
+            authRepository.authState.collect { authState ->
+                val isAuth = authState is AuthState.Authenticated
+                _uiState.update { it.copy(isCloudConnected = isAuth) }
+            }
+        }
+    }
+
+    fun startCloudAuth() {
+        if (_uiState.value.isCloudConnected || _uiState.value.isCloudAuthWorking) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCloudAuthWorking = true) }
+            ensureCloudAuthSession(startPolling = true)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            isCloudAuthWorking = false,
+                            showCloudPairDialog = true,
+                            cloudUserCode = cloudUserCode,
+                            cloudVerificationUrl = cloudVerificationUrl
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    clearCloudAuthSession()
+                    _uiState.update {
+                        it.copy(
+                            isCloudAuthWorking = false,
+                            toastMessage = error.message ?: context.getString(R.string.cloud_login_failed_start),
+                            toastType = ToastType.ERROR,
+                            showToast = true
+                        )
+                    }
+                }
+        }
+    }
+
+    fun openCloudEmailPasswordDialog() {
+        if (_uiState.value.isCloudConnected) return
+        _uiState.update {
+            it.copy(
+                showCloudPairDialog = false,
+                showCloudEmailPasswordDialog = true,
+                isCloudAuthWorking = false
+            )
+        }
+    }
+
+    fun closeCloudEmailPasswordDialog() {
+        cancelCloudAuth()
+    }
+
+    fun cancelCloudAuth() {
+        clearCloudAuthSession()
+        _uiState.update {
+            it.copy(
+                showCloudPairDialog = false,
+                cloudUserCode = null,
+                cloudVerificationUrl = null,
+                showCloudEmailPasswordDialog = false,
+                isCloudAuthWorking = false
+            )
+        }
+    }
+
+    fun completeCloudAuthWithEmailPassword(
+        email: String,
+        password: String,
+        createAccount: Boolean
+    ) {
+        val trimmedEmail = AuthEmailValidator.normalize(email)
+        AuthEmailValidator.validate(trimmedEmail, rejectDisposable = createAccount)?.let { messageRes ->
+            showToast(context.getString(messageRes), ToastType.ERROR)
+            return
+        }
+        if (password.isBlank()) {
+            showToast(context.getString(R.string.settings_cloud_password_required), ToastType.ERROR)
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCloudAuthWorking = true) }
+            val userCode = cloudUserCode
+            if (!userCode.isNullOrBlank()) {
+                tvDeviceAuthRepository.completeWithEmailPassword(
+                    userCode = userCode,
+                    email = trimmedEmail,
+                    password = password,
+                    intent = if (createAccount) "signup" else "signin"
+                ).onSuccess {
+                    showToast(context.getString(R.string.settings_waiting_for_approval), ToastType.INFO)
+                    _uiState.update {
+                        it.copy(
+                            showCloudEmailPasswordDialog = false,
+                            isCloudAuthWorking = true
+                        )
+                    }
+                    startCloudPolling()
+                }.onFailure { error ->
+                    showToast(error.message ?: context.getString(R.string.tv_link_failed), ToastType.ERROR)
+                    _uiState.update { it.copy(isCloudAuthWorking = false) }
+                }
+            } else {
+                val result = if (createAccount) {
+                    authRepository.signUp(trimmedEmail, password)
+                } else {
+                    authRepository.signIn(trimmedEmail, password)
+                }
+                if (result.isSuccess) {
+                    onCloudAuthSuccessful()
+                } else {
+                    showToast(
+                        result.exceptionOrNull()?.message ?: context.getString(R.string.auth_signin_failed),
+                        ToastType.ERROR
+                    )
+                    _uiState.update { it.copy(isCloudAuthWorking = false) }
+                }
+            }
+        }
+    }
+
+    private fun startCloudPolling() {
+        val deviceCode = cloudDeviceCode ?: return
+        cloudPollingJob?.cancel()
+        cloudPollingJob = viewModelScope.launch {
+            _uiState.update { it.copy(isCloudAuthWorking = true) }
+            val now = System.currentTimeMillis()
+            val intervalMs = cloudPollIntervalMs.coerceIn(500L, 3_000L)
+            val hardDeadline = now + 10 * 60_000L
+            val deadline = listOf(
+                cloudExpiresAtMs.takeIf { it > 0L } ?: (now + 60_000L),
+                hardDeadline
+            ).minOrNull() ?: hardDeadline
+
+            while (System.currentTimeMillis() < deadline) {
+                val status = tvDeviceAuthRepository.pollStatus(deviceCode).getOrNull()
+                when (status?.status) {
+                    TvDeviceAuthStatusType.PENDING -> Unit
+                    TvDeviceAuthStatusType.APPROVED -> {
+                        val access = status.accessToken
+                        val refresh = status.refreshToken
+                        if (access.isNullOrBlank() || refresh.isNullOrBlank()) {
+                            showToast(
+                                status.message ?: context.getString(R.string.tv_link_approved_no_tokens),
+                                ToastType.ERROR
+                            )
+                            _uiState.update { it.copy(isCloudAuthWorking = false) }
+                            return@launch
+                        }
+
+                        val tokenImport = authRepository.signInWithSessionTokens(access, refresh)
+                        if (tokenImport.isSuccess) {
+                            onCloudAuthSuccessful()
+                        } else {
+                            showToast(context.getString(R.string.tv_link_failed), ToastType.ERROR)
+                            _uiState.update { it.copy(isCloudAuthWorking = false) }
+                        }
+                        return@launch
+                    }
+                    TvDeviceAuthStatusType.EXPIRED,
+                    TvDeviceAuthStatusType.ERROR -> {
+                        clearCloudAuthSession()
+                        showToast(
+                            status.message ?: context.getString(R.string.tv_link_failed),
+                            ToastType.ERROR
+                        )
+                        _uiState.update {
+                            it.copy(
+                                isCloudAuthWorking = false,
+                                showCloudPairDialog = false,
+                                showCloudEmailPasswordDialog = false,
+                                cloudUserCode = null,
+                                cloudVerificationUrl = null
+                            )
+                        }
+                        return@launch
+                    }
+                    null -> Unit
+                }
+                delay(intervalMs)
+            }
+
+            clearCloudAuthSession()
+            showToast(context.getString(R.string.settings_cloud_signin_incomplete), ToastType.ERROR)
+            _uiState.update {
+                it.copy(
+                    isCloudAuthWorking = false,
+                    showCloudPairDialog = false,
+                    showCloudEmailPasswordDialog = false,
+                    cloudUserCode = null,
+                    cloudVerificationUrl = null
+                )
+            }
+        }
+    }
+
+    private suspend fun onCloudAuthSuccessful() {
+        withContext(Dispatchers.IO) {
+            var restoreResult = withTimeoutOrNull(15_000L) {
+                cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
+            } ?: CloudSyncRepository.RestoreResult.FAILED
+            if (restoreResult == CloudSyncRepository.RestoreResult.FAILED) {
+                delay(1200L)
+                withTimeoutOrNull(15_000L) {
+                    cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
+                }
+            }
+        }
+        clearCloudAuthSession(cancelPolling = false)
+        val profiles = profileRepository.getProfiles()
+        val activeProfile = profileRepository.getActiveProfile()
+        _uiState.update {
+            it.copy(
+                isCloudAuthWorking = false,
+                showCloudPairDialog = false,
+                showCloudEmailPasswordDialog = false,
+                cloudUserCode = null,
+                cloudVerificationUrl = null,
+                profiles = profiles,
+                activeProfile = activeProfile,
+                isCloudConnected = true
+            )
+        }
+        showToast(context.getString(R.string.settings_cloud_sync_complete), ToastType.SUCCESS)
+    }
+
+    private fun hasActiveCloudAuthSession(): Boolean {
+        val hasCodes = !cloudDeviceCode.isNullOrBlank() && !cloudUserCode.isNullOrBlank()
+        if (!hasCodes) return false
+        return cloudExpiresAtMs <= 0L || System.currentTimeMillis() < cloudExpiresAtMs
+    }
+
+    private fun applyCloudAuthSession(session: TvDeviceAuthSession) {
+        cloudDeviceCode = session.deviceCode
+        cloudUserCode = session.userCode
+        cloudVerificationUrl = session.verificationUrl
+        cloudPollIntervalMs = (session.intervalSeconds.coerceIn(1, 10) * 1000L)
+        cloudExpiresAtMs = System.currentTimeMillis() + (session.expiresInSeconds.coerceAtLeast(30) * 1000L)
+    }
+
+    private fun clearCloudAuthSession(cancelPolling: Boolean = true) {
+        cloudDeviceCode = null
+        cloudUserCode = null
+        cloudVerificationUrl = null
+        cloudPollIntervalMs = 800L
+        cloudExpiresAtMs = 0L
+        if (cancelPolling) {
+            cloudPollingJob?.cancel()
+        }
+        cloudPollingJob = null
+    }
+
+    private suspend fun ensureCloudAuthSession(startPolling: Boolean): Result<Unit> {
+        if (hasActiveCloudAuthSession()) {
+            if (startPolling && cloudPollingJob?.isActive != true) {
+                startCloudPolling()
+            }
+            return Result.success(Unit)
+        }
+
+        clearCloudAuthSession()
+        return tvDeviceAuthRepository.startSession().map { session ->
+            applyCloudAuthSession(session)
+            if (startPolling) {
+                startCloudPolling()
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        clearCloudAuthSession()
     }
 
     companion object {
