@@ -6336,6 +6336,7 @@ private fun MobileSettingsSubPage(
                     onConnectSimkl = onConnectSimkl,
                     onCancelSimkl = onCancelSimkl,
                     onDisconnectSimkl = onDisconnectSimkl,
+                    onToggleWeTrakr = { viewModel.toggleWeTrakr() },
                     onReadMode = { feature, mode -> viewModel.setTrackingReadMode(feature, mode) },
                     onWriteTarget = { provider, enabled ->
                         viewModel.setTrackingWriteTarget(provider, enabled)
@@ -11301,6 +11302,7 @@ private fun TrackingIntegrationsPage(
     onConnectSimkl: () -> Unit = {},
     onCancelSimkl: () -> Unit = {},
     onDisconnectSimkl: () -> Unit = {},
+    onToggleWeTrakr: () -> Unit = {},
     onReadMode: (
         com.arflix.tv.data.repository.sync.TrackingFeature,
         com.arflix.tv.data.repository.sync.TrackingReadMode
@@ -11337,6 +11339,7 @@ private fun TrackingIntegrationsPage(
         if (uiState.isTraktAuthenticated) add("Trakt")
         if (uiState.isMdbListConnected) add("MDBList")
         if (uiState.isSimklConnected) add("Simkl")
+        if (uiState.isWeTrakrConnected) add("WeTrakr")
     }
     val activeProvider = if (activeProviders.isNotEmpty()) {
         activeProviders.joinToString(", ")
@@ -11458,7 +11461,7 @@ private fun TrackingIntegrationsPage(
                 isWorking = uiState.isSimklAuthStarting || uiState.isSimklPolling,
                 connectedAs = if (uiState.isSimklConnected) (uiState.simklUsername ?: stringResource(R.string.connected)) else null,
                 comingSoon = false,
-                showDivider = false,
+                showDivider = true,
                 onConnect = {
                     if (uiState.isSimklPolling || uiState.isSimklConnected) {
                         onCancelSimkl()
@@ -11468,19 +11471,20 @@ private fun TrackingIntegrationsPage(
                 },
                 onDisconnect = onDisconnectSimkl
             )
-        }
 
-        val integrationsViewModel: SettingsViewModel = hiltViewModel()
-        MobileSettingsCategory(title = "WeTrakr") {
-            AccountRow(name = "WeTrakr", description = stringResource(R.string.settings_wetrakr_tagline),
-                isConnected = uiState.isWeTrakrConnected, isWorking = uiState.weTrakrBusy,
-                authCode = uiState.weTrakrCode?.userCode, authUrl = uiState.weTrakrCode?.verificationUrl,
-                isFocused = false, onConnect = integrationsViewModel::toggleWeTrakr, onDisconnect = integrationsViewModel::toggleWeTrakr)
-            if (uiState.isWeTrakrConnected) TrackingRoutingRow(
-                title = stringResource(R.string.settings_wetrakr_update),
-                value = stringResource(if (uiState.trackingWriteToWeTrakr) R.string.on else R.string.off),
+            // WeTrakr
+            TrackingServiceRow(
+                iconRes = R.drawable.ic_wetrakr,
+                title = "WeTrakr",
+                tagline = stringResource(R.string.settings_wetrakr_tagline),
+                isConnected = uiState.isWeTrakrConnected,
+                isWorking = uiState.weTrakrBusy,
+                connectedAs = null,
+                comingSoon = false,
                 showDivider = false,
-                onClick = { onWriteTarget(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, !uiState.trackingWriteToWeTrakr) })
+                onConnect = onToggleWeTrakr,
+                onDisconnect = onToggleWeTrakr
+            )
         }
 
         if (uiState.isTraktAuthenticated || uiState.isSimklConnected || uiState.isMdbListConnected || uiState.isWeTrakrConnected) {
@@ -11510,7 +11514,7 @@ private fun TrackingIntegrationsPage(
                 TrackingRoutingRow(
                     title = stringResource(R.string.settings_routing_watched_source),
                     value = trackingModeLabel(uiState.trackingWatchedReadMode),
-                    showDivider = uiState.isTraktAuthenticated || uiState.isSimklConnected,
+                    showDivider = uiState.isTraktAuthenticated || uiState.isSimklConnected || uiState.isWeTrakrConnected,
                     onClick = {
                         onReadMode(
                             com.arflix.tv.data.repository.sync.TrackingFeature.WATCHED,
@@ -11522,7 +11526,7 @@ private fun TrackingIntegrationsPage(
                     TrackingRoutingRow(
                         title = stringResource(R.string.settings_routing_update_trakt),
                         value = stringResource(if (uiState.trackingWriteToTrakt) R.string.on else R.string.off),
-                        showDivider = uiState.isSimklConnected,
+                        showDivider = uiState.isSimklConnected || uiState.isWeTrakrConnected,
                         onClick = {
                             onWriteTarget(
                                 com.arflix.tv.data.repository.sync.SyncProvider.TRAKT,
@@ -11535,11 +11539,24 @@ private fun TrackingIntegrationsPage(
                     TrackingRoutingRow(
                         title = stringResource(R.string.settings_routing_update_simkl),
                         value = stringResource(if (uiState.trackingWriteToSimkl) R.string.on else R.string.off),
-                        showDivider = false,
+                        showDivider = uiState.isWeTrakrConnected,
                         onClick = {
                             onWriteTarget(
                                 com.arflix.tv.data.repository.sync.SyncProvider.SIMKL,
                                 !uiState.trackingWriteToSimkl
+                            )
+                        }
+                    )
+                }
+                if (uiState.isWeTrakrConnected) {
+                    TrackingRoutingRow(
+                        title = stringResource(R.string.settings_wetrakr_update),
+                        value = stringResource(if (uiState.trackingWriteToWeTrakr) R.string.on else R.string.off),
+                        showDivider = false,
+                        onClick = {
+                            onWriteTarget(
+                                com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR,
+                                !uiState.trackingWriteToWeTrakr
                             )
                         }
                     )
