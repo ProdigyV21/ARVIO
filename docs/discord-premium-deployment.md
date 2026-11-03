@@ -1,6 +1,6 @@
 # ARVIO Discord Premium badge
 
-1. Run `node scripts/migrate-discord-premium.mjs` from the auth site using the same server-only Postgres connection as its functions. The migration is idempotent. It creates the role link table and its due-work index.
+1. The normal Git-triggered Auth deploy applies the versioned Netlify Database migration. It creates the role link table and its due-work index. For a manual migration, run `node scripts/migrate-discord-premium.mjs` from the auth site with a server-only Postgres connection that can create tables. The migration is idempotent.
 2. Create or select a dedicated application in the Discord Developer Portal. Add the OAuth redirect URL `https://auth.arvio.tv/.netlify/functions/discord-premium-callback`. The account-linking flow requests the `identify` scope. Users join the ARVIO server themselves.
 3. Install the application's bot on the ARVIO server with Manage Roles. Give it a dedicated bot role without Administrator. Place that role directly above the dedicated ARVIO-managed Premium role and below staff and other privileged roles. Use the same badge and Premium channel access for the ARVIO-managed role that members already receive with the Ko-fi role. Keep the existing Ko-fi role mapping separate so neither bot can remove the other's entitlement.
 4. Set these production Functions environment variables on the auth site. Keep both credentials in server-side secrets.
