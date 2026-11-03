@@ -1203,6 +1203,7 @@
     <string name="frame_rate_desc">Aus, Nahtlos oder Immer</string>
     <string name="quality_filters_desc">Qualitätsstufen auf diesem Gerät ausschließen</string>
     <string name="card_layout_desc">Querformat- oder Poster-Karten</string>
+    <string name="card_layout_classic_desc">Querformat- oder Poster-Karten (klassisches Layout)</string>
     <string name="ui_mode_desc">TV, Tablet oder Telefon erzwingen</string>
     <string name="skip_profile_desc">Zuletzt genutztes Profil nach Neustart automatisch laden</string>
     <string name="oled_black_background_desc">Rein schwarze App-Hintergründe für OLED-Bildschirme nutzen</string>

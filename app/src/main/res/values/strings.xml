@@ -210,6 +210,7 @@
     <string name="frame_rate_desc">Off, Seamless, or Always</string>
     <string name="quality_filters_desc">Exclude quality tiers on this device</string>
     <string name="card_layout_desc">Landscape or poster cards</string>
+    <string name="card_layout_classic_desc">Landscape or poster cards (Classic layout)</string>
     <string name="ui_mode_desc">Force TV, Tablet, or Phone</string>
     <string name="skip_profile_desc">Auto-load last used profile after restart</string>
     <string name="oled_black_background_desc">Use pure black app backgrounds for OLED screens</string>

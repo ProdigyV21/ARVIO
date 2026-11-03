@@ -7418,7 +7418,17 @@ private fun TvGeneralSettingsRows(
                 14 -> SettingsToggleRow(stringResource(R.string.trailer_sound), stringResource(R.string.trailer_sound_desc), trailerSoundEnabled, focusedIndex == localIndex, onTrailerSoundEnabledToggle, Modifier.settingsFocusSlot(localIndex))
                 15 -> SettingsRow(Icons.Default.Movie, stringResource(R.string.frame_rate), stringResource(R.string.frame_rate_desc), frameRateMatchingMode, focusedIndex == localIndex, onFrameRateMatchingClick, Modifier.settingsFocusSlot(localIndex))
                 16 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.quality_filters), stringResource(R.string.quality_filters_desc), qualityFilterValue, focusedIndex == localIndex, onQualityFiltersClick, Modifier.settingsFocusSlot(localIndex))
-                17 -> SettingsRow(Icons.Default.Widgets, stringResource(R.string.card_layout), stringResource(R.string.card_layout_desc), cardLayoutMode, focusedIndex == localIndex, onCardLayoutToggle, Modifier.settingsFocusSlot(localIndex))
+                17 -> SettingsRow(
+                    icon = Icons.Default.Widgets,
+                    title = stringResource(R.string.card_layout),
+                    subtitle = stringResource(
+                        if (netflixHomeStyle) R.string.card_layout_classic_desc else R.string.card_layout_desc
+                    ),
+                    value = cardLayoutMode,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onCardLayoutToggle,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
                 18 -> SettingsRow(
                     icon = Icons.Default.Settings,
                     title = stringResource(R.string.ui_mode),

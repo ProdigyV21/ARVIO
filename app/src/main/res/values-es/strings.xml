@@ -194,6 +194,7 @@
     <string name="frame_rate_desc">Desactivado, Fluido (Seamless) o Siempre</string>
     <string name="quality_filters_desc">Excluir niveles de calidad en este dispositivo</string>
     <string name="card_layout_desc">Tarjetas en formato horizontal o póster</string>
+    <string name="card_layout_classic_desc">Tarjetas en formato horizontal o póster (diseño clásico)</string>
     <string name="ui_mode_desc">Forzar modo TV, Tablet o Teléfono</string>
     <string name="skip_profile_desc">Cargar automáticamente el último perfil usado al reiniciar</string>
     <string name="oled_black_background_desc">Usar fondos de la app en negro puro para pantallas OLED</string>

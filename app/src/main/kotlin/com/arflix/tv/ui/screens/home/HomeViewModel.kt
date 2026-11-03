@@ -737,6 +737,16 @@ class HomeViewModel @Inject constructor(
                 val prefs = context.settingsDataStore.data.first()
                 val profileId = profileManager.getProfileIdSync().ifBlank { "default" }
 
+                // In Netflix-style TV Home, regular catalog rows are always posters.
+                val netflixHomeStyleKey = profileManager.profileBooleanKeyFor(
+                    profileId,
+                    NETFLIX_HOME_STYLE_KEY
+                )
+                val netflixHomeStyle = prefs[netflixHomeStyleKey] ?: true
+                if (isTvDevice && netflixHomeStyle) {
+                    return@withContext true
+                }
+
                 // 1. Check specific row layout mode
                 val rowKey = "home:$catalogId"
                 val normalizedRowKey = com.arflix.tv.ui.components.normalizeCatalogueRowLayoutKey(rowKey)

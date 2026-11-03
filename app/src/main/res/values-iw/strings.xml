@@ -125,6 +125,7 @@
     <string name="frame_rate_desc">כבוי, חלק, או תמיד</string>
     <string name="quality_filters_desc">הוצא רמות איכות במכשיר זה</string>
     <string name="card_layout_desc">כרטיסים לרוחב או לגובה</string>
+    <string name="card_layout_classic_desc">כרטיסים לרוחב או לגובה (פריסה קלאסית)</string>
     <string name="ui_mode_desc">כפה מצב טלוויזיה, טאבלט, או טלפון</string>
     <string name="skip_profile_desc">טען אוטומטית את הפרופיל האחרון</string>
     <string name="clock_format_desc">בחר פורמט 12 או 24 שעות</string>
