@@ -594,6 +594,8 @@
     <string name="settings_routing_update_simkl">Update Simkl while watching</string>
     <string name="settings_routing_update_simkl_on">Send progress and watched changes to Simkl.</string>
     <string name="settings_routing_update_simkl_off">Connect Simkl to enable this.</string>
+    <string name="settings_routing_update_wetrakr_on">Send progress and watched changes to WeTrakr.</string>
+    <string name="settings_routing_update_wetrakr_off">Connect WeTrakr to enable this.</string>
     <string name="settings_tracking_mode_automatic">Automatic</string>
 
     <string name="settings_fact_app_language">App language</string>
@@ -2048,7 +2050,7 @@
     <string name="youtube_collection_full">This collection has reached the limit of %1$d videos. Remove a video before adding another.</string>
     <string name="youtube_parent_approval_required">A correct parent PIN is required to add videos to this kids profile. Set a parent PIN in Manage Profiles if needed.</string>
     <string name="youtube_profile_changed">The profile changed. Please add the video again.</string>
-    <string name="settings_wetrakr_tagline">Watchlists, watched history and playback progress. Connect separately on each device.</string>
+    <string name="settings_wetrakr_tagline">Watchlists, history &amp; playback progress</string>
     <string name="settings_wetrakr_device">Connection for this device and profile</string>
     <string name="settings_wetrakr_update">Update WeTrakr while watching</string>
     <string name="settings_connect_wetrakr">Connect WeTrakr</string>

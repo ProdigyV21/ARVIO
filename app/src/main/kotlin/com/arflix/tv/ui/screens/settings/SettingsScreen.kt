@@ -2518,6 +2518,7 @@ fun SettingsScreen(
                             onConnectSimkl = { viewModel.startSimklAuth() },
                             onCancelSimkl = { viewModel.cancelSimklAuth() },
                             onDisconnectSimkl = { viewModel.disconnectSimkl() },
+                            onToggleWeTrakr = { viewModel.toggleWeTrakr() },
                             trackingUiState = uiState,
                             onTrackingReadMode = viewModel::setTrackingReadMode,
                             onTrackingWriteTarget = viewModel::setTrackingWriteTarget,
@@ -3283,15 +3284,22 @@ fun SettingsScreen(
         uiState.weTrakrCode?.let { code ->
             val clipboardManager = LocalClipboardManager.current
             TraktActivationModal(
-                verificationUrl = code.verificationUrl, userCode = code.userCode,
+                verificationUrl = code.verificationUrl,
+                userCode = code.userCode,
                 title = stringResource(R.string.settings_connect_wetrakr),
-                instruction = stringResource(R.string.settings_activation_visit_instruction, code.verificationUrl),
+                instruction = if (LocalDeviceType.current.isTouchDevice()) {
+                    stringResource(R.string.settings_activation_visit_instruction, code.verificationUrl)
+                } else {
+                    stringResource(R.string.settings_activation_instruction_tv, code.verificationUrl)
+                },
                 onOpenUrl = {
                     clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(code.userCode))
                     openExternalUrl(context, code.verificationUrl)
                 },
                 openUrlLabel = stringResource(R.string.settings_wetrakr_copy_open),
-                expiresAtMillis = code.expiresAt, onDismiss = viewModel::toggleWeTrakr
+                qrData = code.verificationUrl,
+                expiresAtMillis = code.expiresAt,
+                onDismiss = viewModel::toggleWeTrakr
             )
         }
 
@@ -6662,11 +6670,26 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
         "accounts" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.cloud_account), stringResource(R.string.settings_help_cloud_account_desc))
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_trakt), stringResource(R.string.settings_help_trakt_desc))
-            10 -> TvSettingsHelp("Discord RPC", stringResource(R.string.discord_rpc_help_desc))
-            11 -> TvSettingsHelp(stringResource(R.string.force_cloud_sync), stringResource(R.string.settings_help_force_sync_desc))
-            12 -> TvSettingsHelp(stringResource(R.string.settings_help_app_updates), stringResource(R.string.settings_help_app_updates_desc))
-            13 -> TvSettingsHelp(stringResource(R.string.settings_diagnostics_sharing), stringResource(R.string.settings_diagnostics_sharing_desc))
-            14 -> TvSettingsHelp(stringResource(R.string.settings_privacy_policy), stringResource(R.string.settings_privacy_policy_desc))
+            2 -> TvSettingsHelp(stringResource(R.string.mdblist_account), stringResource(R.string.settings_mdblist_tagline))
+            3 -> TvSettingsHelp("Simkl", stringResource(R.string.settings_simkl_tagline))
+            4 -> TvSettingsHelp("WeTrakr", stringResource(R.string.settings_wetrakr_tagline))
+            5 -> TvSettingsHelp(stringResource(R.string.settings_routing_watchlist_source), stringResource(R.string.settings_routing_watchlist_source_desc))
+            6 -> TvSettingsHelp(stringResource(R.string.settings_routing_continue_source), stringResource(R.string.settings_routing_continue_source_desc))
+            7 -> TvSettingsHelp(stringResource(R.string.settings_routing_watched_source), stringResource(R.string.settings_routing_watched_source_desc))
+            8 -> TvSettingsHelp(stringResource(R.string.settings_routing_update_trakt), stringResource(R.string.settings_routing_update_trakt_on))
+            9 -> TvSettingsHelp(stringResource(R.string.settings_routing_update_simkl), stringResource(R.string.settings_routing_update_simkl_on))
+            10 -> TvSettingsHelp(stringResource(R.string.settings_wetrakr_update), stringResource(R.string.settings_routing_update_wetrakr_on))
+            11 -> TvSettingsHelp("Telegram", stringResource(R.string.settings_telegram_desc))
+            12 -> TvSettingsHelp("Discord RPC", stringResource(R.string.discord_rpc_help_desc))
+            13 -> TvSettingsHelp(stringResource(R.string.force_cloud_sync), stringResource(R.string.settings_help_force_sync_desc))
+            14 -> TvSettingsHelp(stringResource(R.string.settings_force_trakt_sync), stringResource(R.string.settings_force_trakt_sync_desc))
+            15 -> TvSettingsHelp(stringResource(R.string.settings_help_app_updates), stringResource(R.string.settings_help_app_updates_desc))
+            16 -> TvSettingsHelp(stringResource(R.string.settings_quiet_update_notifications), stringResource(R.string.settings_quiet_update_notifications_desc))
+            17 -> TvSettingsHelp(stringResource(R.string.settings_diagnostics_sharing), stringResource(R.string.settings_diagnostics_sharing_desc))
+            18 -> TvSettingsHelp(stringResource(R.string.settings_privacy_policy), stringResource(R.string.settings_privacy_policy_desc))
+            19 -> TvSettingsHelp(stringResource(R.string.settings_account_data_deletion), stringResource(R.string.settings_account_data_deletion_desc))
+            20 -> TvSettingsHelp(stringResource(R.string.about_credits), stringResource(R.string.about_credits_description))
+            21 -> TvSettingsHelp(stringResource(R.string.settings_usage_statistics), stringResource(R.string.settings_usage_statistics_desc))
             else -> TvSettingsHelp(stringResource(R.string.settings_help_account_data), stringResource(R.string.settings_help_account_data_desc))
         }
         else -> TvSettingsHelp(stringResource(R.string.settings_help_setting), stringResource(R.string.settings_help_setting_desc))
@@ -10138,6 +10161,7 @@ private fun AccountsSettings(
     onConnectSimkl: () -> Unit = {},
     onCancelSimkl: () -> Unit = {},
     onDisconnectSimkl: () -> Unit = {},
+    onToggleWeTrakr: () -> Unit = {},
     trackingUiState: SettingsUiState,
     onTrackingReadMode: (
         com.arflix.tv.data.repository.sync.TrackingFeature,
@@ -10170,7 +10194,6 @@ private fun AccountsSettings(
     onOpenCredits: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
-    val integrationsViewModel: SettingsViewModel = hiltViewModel()
     Column {
         if (LocalDeviceType.current.isTouchDevice()) {
             Text(
@@ -10258,8 +10281,8 @@ private fun AccountsSettings(
             authCode = trackingUiState.weTrakrCode?.userCode,
             authUrl = trackingUiState.weTrakrCode?.verificationUrl,
             isFocused = focusedIndex == 4,
-            onConnect = integrationsViewModel::toggleWeTrakr,
-            onDisconnect = integrationsViewModel::toggleWeTrakr,
+            onConnect = onToggleWeTrakr,
+            onDisconnect = onToggleWeTrakr,
             modifier = Modifier.settingsFocusSlot(4)
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -10336,7 +10359,7 @@ private fun AccountsSettings(
 
         SettingsToggleRow(
             title = stringResource(R.string.settings_wetrakr_update),
-            subtitle = stringResource(R.string.settings_wetrakr_device),
+            subtitle = stringResource(if (trackingUiState.isWeTrakrConnected) R.string.settings_routing_update_wetrakr_on else R.string.settings_routing_update_wetrakr_off),
             isEnabled = trackingUiState.isWeTrakrConnected && trackingUiState.trackingWriteToWeTrakr,
             isFocused = focusedIndex == 10,
             onToggle = { if (trackingUiState.isWeTrakrConnected) onTrackingWriteTarget(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, it) },
