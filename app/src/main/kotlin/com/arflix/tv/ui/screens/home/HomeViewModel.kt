@@ -550,6 +550,9 @@ class HomeViewModel @Inject constructor(
     private var selectedSportsCategoryId: String? = null
 
     companion object {
+        /** Profiles already told this app run that Trakt needs reconnecting. */
+        private val traktReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        private val mdbListReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
         /** Unfiltered titles a kids top-up may load for one grid before it gives up. */
         private const val MAX_KIDS_TOP_UP_ITEMS = 600
@@ -1774,6 +1777,32 @@ class HomeViewModel @Inject constructor(
         // A list edited through "Add to list" is shown fresh at once, not after the next reload.
         viewModelScope.launch {
             personalListsRepository.changes.collect { list -> reloadRowsFor(list.provider) }
+        }
+        // Continue Watching silently stops syncing when the Trakt session is lost; say so once
+        // per app run and profile instead of leaving the user to find it in Settings.
+        viewModelScope.launch {
+            traktRepository.connection
+                .filter { it.reconnectRequired }
+                .collect { connection ->
+                    if (traktReconnectNoticeShown.add(connection.profileId)) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = context.getString(R.string.trakt_reconnect_required),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+                }
+        }
+        viewModelScope.launch {
+            personalListsRepository.mdbListConnection
+                .filter { it.connected && it.reconnectRequired }
+                .collect { connection ->
+                    if (mdbListReconnectNoticeShown.add(connection.profileId)) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = context.getString(R.string.mdblist_reconnect_required),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+                }
         }
     }
 

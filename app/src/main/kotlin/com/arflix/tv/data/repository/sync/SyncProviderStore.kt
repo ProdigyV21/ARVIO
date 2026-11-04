@@ -8,6 +8,8 @@ import com.arflix.tv.util.settingsDataStore
 import com.arflix.tv.util.traktDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -78,6 +80,8 @@ internal fun repairUnavailableTrackingReadMode(
     TrackingReadMode.AUTO -> mode
 }
 
+data class MdbListConnection(val profileId: String, val connected: Boolean, val reconnectRequired: Boolean)
+
 /**
  * Owns per-profile tracking connections and routing preferences.
  *
@@ -145,6 +149,8 @@ class SyncProviderStore @Inject constructor(
         profileManager.profileLongKey("mdblist_credential_updated_at_v3")
     private fun mdbListCredentialUpdatedAtKeyFor(profileId: String) =
         profileManager.profileLongKeyFor(profileId, "mdblist_credential_updated_at_v3")
+    private fun mdbListReconnectKeyFor(profileId: String) =
+        profileManager.profileBooleanKeyFor(profileId, "mdblist_reconnect_required")
 
     suspend fun getProvider(): SyncProvider {
         val prefs = context.settingsDataStore.data.first()
@@ -440,6 +446,50 @@ class SyncProviderStore @Inject constructor(
         ) : MdbListCredential
     }
 
+    val mdbListConnection: Flow<MdbListConnection> by lazy {
+        profileManager.activeProfileId.combine(context.traktDataStore.data) { id, prefs ->
+            MdbListConnection(
+                profileId = id,
+                connected = !prefs[mdbListKeyFor(id)].isNullOrBlank() || !prefs[mdbListAccessTokenKeyFor(id)].isNullOrBlank(),
+                reconnectRequired = prefs[mdbListReconnectKeyFor(id)] == true
+            )
+        }.distinctUntilChanged()
+    }
+
+    suspend fun isMdbListReconnectRequired(profileId: String): Boolean =
+        context.traktDataStore.data.first()[mdbListReconnectKeyFor(profileId)] == true
+
+    /**
+     * Marks the stored credential as rejected by MDBList. It is kept, not erased: a newer login
+     * from another device restores the profile through cloud sync, and any new credential
+     * clears the mark. Ignored when [expected] is no longer the stored credential.
+     */
+    suspend fun markMdbListReconnectRequired(profileId: String, expected: MdbListCredential): Boolean {
+        var marked = false
+        context.traktDataStore.edit { prefs ->
+            if (mdbListCredential(prefs, profileId) == expected) {
+                prefs[mdbListReconnectKeyFor(profileId)] = true
+                marked = true
+            }
+        }
+        return marked
+    }
+
+    private fun mdbListCredential(
+        prefs: androidx.datastore.preferences.core.Preferences,
+        profileId: String
+    ): MdbListCredential? {
+        val token = prefs[mdbListAccessTokenKeyFor(profileId)]?.trim()?.takeIf { it.isNotEmpty() }
+        if (token != null) {
+            return MdbListCredential.OAuth(
+                accessToken = token,
+                refreshToken = prefs[mdbListRefreshTokenKeyFor(profileId)]?.trim()?.takeIf { it.isNotEmpty() },
+                expiresAt = prefs[mdbListTokenExpiresAtKeyFor(profileId)]
+            )
+        }
+        return prefs[mdbListKeyFor(profileId)]?.trim()?.takeIf { it.isNotEmpty() }?.let { MdbListCredential.ApiKey(it) }
+    }
+
     suspend fun getMdbListCredential(profileId: String? = null): MdbListCredential? {
         val prefs = context.traktDataStore.data.first()
         val accessKey = if (profileId != null) mdbListAccessTokenKeyFor(profileId) else mdbListAccessTokenKey()
@@ -505,6 +555,7 @@ class SyncProviderStore @Inject constructor(
         val expiresKey = if (profileId != null) mdbListTokenExpiresAtKeyFor(profileId) else mdbListTokenExpiresAtKey()
         val legacyKey = if (profileId != null) mdbListKeyFor(profileId) else mdbListKey()
         val updatedKey = if (profileId != null) mdbListCredentialUpdatedAtKeyFor(profileId) else mdbListCredentialUpdatedAtKey()
+        val reconnectKey = mdbListReconnectKeyFor(profileId ?: profileManager.getProfileIdSync())
 
         var applied = false
         context.traktDataStore.edit { prefs ->
@@ -514,6 +565,7 @@ class SyncProviderStore @Inject constructor(
                 return@edit
             }
             applied = true
+            prefs.remove(reconnectKey)
             val cleanAccess = accessToken?.trim().orEmpty()
             val cleanRefresh = refreshToken?.trim().orEmpty()
             if (cleanAccess.isEmpty()) {
@@ -547,8 +599,10 @@ class SyncProviderStore @Inject constructor(
         val expiresKey = if (profileId != null) mdbListTokenExpiresAtKeyFor(profileId) else mdbListTokenExpiresAtKey()
         val legacyKey = if (profileId != null) mdbListKeyFor(profileId) else mdbListKey()
         val updatedKey = if (profileId != null) mdbListCredentialUpdatedAtKeyFor(profileId) else mdbListCredentialUpdatedAtKey()
+        val reconnectKey = mdbListReconnectKeyFor(profileId ?: profileManager.getProfileIdSync())
 
         context.traktDataStore.edit { prefs ->
+            prefs.remove(reconnectKey)
             val trimmed = apiKey?.trim().orEmpty()
             if (trimmed.isEmpty()) {
                 prefs.remove(legacyKey)
@@ -575,11 +629,14 @@ class SyncProviderStore @Inject constructor(
         val legacyKey = if (profileId != null) mdbListKeyFor(profileId) else mdbListKey()
         val updatedKey = if (profileId != null) mdbListCredentialUpdatedAtKeyFor(profileId) else mdbListCredentialUpdatedAtKey()
 
+        val reconnectKey = mdbListReconnectKeyFor(profileId ?: profileManager.getProfileIdSync())
+
         context.traktDataStore.edit { prefs ->
             prefs.remove(legacyKey)
             prefs.remove(accessKey)
             prefs.remove(refreshKey)
             prefs -= expiresKey
+            prefs.remove(reconnectKey)
         }
         context.settingsDataStore.edit { prefs ->
             prefs[updatedKey] = updatedAt
@@ -763,6 +820,7 @@ class SyncProviderStore @Inject constructor(
                 val accessToken = selection.mdbListAccessToken?.trim().orEmpty()
                 val refreshToken = selection.mdbListRefreshToken?.trim().orEmpty()
                 val expiresAt = selection.mdbListTokenExpiresAt
+                prefs.remove(mdbListReconnectKeyFor(profileId))
 
                 if (accessToken.isNotEmpty()) {
                     prefs[mdbListAccessTokenKeyFor(profileId)] = accessToken

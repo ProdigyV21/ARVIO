@@ -567,6 +567,10 @@
     <string name="mdblist_code_expired">MDBList code expired. Please try again.</string>
     <string name="mdblist_code_denied">MDBList authorization denied.</string>
     <string name="mdblist_connect_with_key">Enter API Key manually</string>
+    <string name="mdblist_reconnect_required">MDBList no longer accepts this connection. Connect MDBList again to resume syncing.</string>
+    <string name="mdblist_session_unavailable">MDBList could not be reached, so syncing is paused. ARVIO keeps retrying; reconnect MDBList if this lasts.</string>
+    <string name="mdblist_library_unavailable">MDBList could not be reached right now. Try again in a few minutes.</string>
+    <string name="mdblist_library_load_failed">Could not load this list from MDBList. Try again.</string>
     <!-- Tracking Integrations sub-page -->
     <string name="settings_tracking_integrations">Tracking Integrations</string>
     <string name="settings_connected_as">Connected as %1$s</string>
@@ -1779,6 +1783,9 @@
     <string name="trakt_not_authenticated">Not authenticated with Trakt</string>
     <string name="trakt_reconnect_required">Your Trakt authorization expired or was revoked. Connect Trakt again to resume syncing.</string>
     <string name="trakt_sync_refresh_failed">History was imported, but Continue Watching could not be fully refreshed. Saved items have been kept; try again later.</string>
+    <string name="trakt_session_unavailable">Trakt could not be reached, so syncing is paused. ARVIO keeps retrying; reconnect Trakt if this lasts.</string>
+    <string name="trakt_library_unavailable">Trakt could not be reached right now. Try again in a few minutes.</string>
+    <string name="trakt_library_load_failed">Could not load this list from Trakt. Try again.</string>
     <string name="sync_supabase_auth_failed">Supabase auth failed</string>
     <string name="launcher_continue_dash">%1$s - %2$s</string>
     <string name="telegram_search_timed_out">Telegram search timed out</string>
