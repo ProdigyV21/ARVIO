@@ -2205,7 +2205,20 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             args.onBack()
         }
     )
-    val onExitPlayer: () -> Unit = exitTransition::requestExit
+    val onExitPlayer: () -> Unit = {
+        if (viewModel.idleReturnCoordinator.shouldDiscardPlayer || viewModel.idleReturnCoordinator.isIdle()) {
+            leftForIdle = true
+            viewModel.discardProgressForIdle()
+        }
+        exitTransition.requestExit()
+    }
+
+    fun leaveIdlePlayer() {
+        if (playerReleased || exitTransition.isExiting || isInPipMode || exoPlayer.isPlaying) return
+        leftForIdle = true
+        viewModel.discardProgressForIdle()
+        onExitPlayer()
+    }
 
     // A player left paused through a long idle (TV switched off on a paused episode) goes back
     // to the previous screen, which then shows the progress pulled from the other devices.
@@ -2215,23 +2228,21 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     }
     LaunchedEffect(Unit) {
         val coordinator = viewModel.idleReturnCoordinator
-        fun leaveIfStale() {
-            if (playerReleased || exitTransition.isExiting || isInPipMode || exoPlayer.isPlaying) return
-            leftForIdle = true
-            onExitPlayer()
-        }
         val idleReturnsAtStart = coordinator.idleReturns.value
         launch {
             // The box slept (or the user came back): idle ended before any timer could fire.
             coordinator.idleReturns.collect { generation ->
-                if (generation != idleReturnsAtStart) leaveIfStale()
+                if (generation != idleReturnsAtStart) leaveIdlePlayer()
             }
         }
         while (true) {
             // The box stayed awake with the TV off: leave once the idle period has passed.
             delay((coordinator.idleThresholdMs / 4).coerceIn(5_000L, 60_000L))
-            if (coordinator.isIdle()) leaveIfStale()
+            if (coordinator.shouldDiscardPlayer) leaveIdlePlayer()
         }
+    }
+    LaunchedEffect(isInPipMode) {
+        if (!isInPipMode && viewModel.idleReturnCoordinator.shouldDiscardPlayer) leaveIdlePlayer()
     }
     val cancelNextEpisodePrompt: () -> Unit = {
         showNextEpisodePrompt = false
@@ -2293,6 +2304,13 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     DisposableEffect(exoPlayer, exitTransition) {
         val listener = object : Player.Listener {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (playWhenReady && viewModel.idleReturnCoordinator.shouldDiscardPlayer && !playerReleased) {
+                    leftForIdle = true
+                    viewModel.discardProgressForIdle()
+                    exoPlayer.pause()
+                    leaveIdlePlayer()
+                    return
+                }
                 if (playWhenReady && exitTransition.isExiting && !playerReleased) exoPlayer.pause()
             }
         }
@@ -3463,7 +3481,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // Someone watching without touching the remote is not idle.
             if (exoPlayer.isPlaying) viewModel.idleReturnCoordinator.markActive()
 
-            if (currentPosition > 0 && duration > 0 && playingCheckedRealSource()) {
+            if (!leftForIdle && currentPosition > 0 && duration > 0 && playingCheckedRealSource()) {
                 val currentSecond = (currentPosition / 1000L).coerceAtLeast(0L)
                 val shouldReport =
                     (!exoPlayer.isPlaying && currentSecond != lastProgressReportSecond) ||
@@ -3495,6 +3513,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         onDispose {
             playerReleasedAtomic.set(true)
             playerReleased = true
+            if (viewModel.idleReturnCoordinator.shouldDiscardPlayer || viewModel.idleReturnCoordinator.isIdle()) {
+                viewModel.discardProgressForIdle()
+            }
             // Leaving after an idle period saves nothing: the position is the one left here
             // before going idle, and stamping it now would bury newer progress made elsewhere.
             if (!nextEpisodeTransitionInProgress && !leftForIdle && playingCheckedRealSource()) {

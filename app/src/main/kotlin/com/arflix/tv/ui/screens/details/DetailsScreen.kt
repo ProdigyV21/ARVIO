@@ -311,7 +311,10 @@ fun DetailsScreen(
     var hasEnteredDetails by rememberSaveable(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(false) }
     var buttonIndex by remember { mutableIntStateOf(0) }
     var episodeIndex by rememberSaveable { mutableIntStateOf(0) }
-    var selectedEpisodeIdentity by rememberSaveable { mutableStateOf<EpisodeIdentity?>(null) }
+    var selectedEpisodeIdentity by rememberSaveable(mediaType, mediaId) {
+        mutableStateOf<EpisodeIdentity?>(null)
+    }
+    var selectedEpisodeRevision by rememberSaveable(mediaType, mediaId) { mutableLongStateOf(uiState.idleSyncRevision) }
     var ratingsIndex by rememberSaveable { mutableIntStateOf(0) }
     var seasonIndex by rememberSaveable { mutableIntStateOf(0) }
     var castIndex by remember { mutableIntStateOf(0) }
@@ -352,6 +355,7 @@ fun DetailsScreen(
         tmdbSeason: Int? = displaySeason,
         tmdbEpisode: Int? = displayEpisode
     ) {
+        if (!viewModel.canStartPlayback(uiState.idleSyncRevision)) return
         showStreamSelector = false
         val identity = uiState.episodes.firstOrNull {
             it.seasonNumber == displaySeason && it.episodeNumber == displayEpisode
@@ -507,8 +511,17 @@ fun DetailsScreen(
     // uiState.episodes alone resolved taps to the wrong episode — usually S1E1.
     var tappedEpisode by remember { mutableStateOf<Episode?>(null) }
     val currentTappedEpisode = rememberUpdatedState(tappedEpisode)
+    val currentSelectionRevision = rememberUpdatedState(selectedEpisodeRevision)
+    LaunchedEffect(uiState.idleSyncRevision) {
+        if (selectedEpisodeRevision != uiState.idleSyncRevision) {
+            selectedEpisodeIdentity = null
+            selectedEpisodeRevision = uiState.idleSyncRevision
+            tappedEpisode = null
+            showStreamSelector = false
+        }
+    }
     fun selectedEpisodeIn(state: DetailsUiState, identity: EpisodeIdentity?): Episode? =
-        if (identity == null) null
+        if (identity == null || currentSelectionRevision.value != state.idleSyncRevision) null
         else state.episodes.firstOrNull { it.identity == identity }
             ?: currentTappedEpisode.value?.takeIf { it.identity == identity }
 
@@ -518,7 +531,7 @@ fun DetailsScreen(
             val currentEpIdx = currentEpisodeIndex.value
             val selectedEp = selectedEpisodeIn(state, currentSelectedEpisodeIdentity.value)
             // While a post-idle sync runs the play target may still be the stale one.
-            if (idx == 0 && state.isSyncingProgress) Unit
+            if (idx in 0..1 && !viewModel.canStartPlayback(state.idleSyncRevision)) Unit
             else if (idx == currentListButtonIndex.value) viewModel.openListPicker() else when (idx) {
                 0 -> { // Play
                     val season = if (mediaType == MediaType.TV) {
@@ -599,9 +612,10 @@ fun DetailsScreen(
 
     var autoPlayPending by rememberSaveable(mediaType, mediaId) { mutableStateOf(autoPlay) }
 
-    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, uiState.isPlaybackTargetReady, kidsGatePending) {
+    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, uiState.isPlaybackTargetReady,
+        uiState.isSyncingProgress, uiState.idleSyncRevision, kidsGatePending) {
         if (autoPlayPending && !uiState.isLoading && uiState.item != null &&
-            uiState.isPlaybackTargetReady && !kidsGatePending) {
+            uiState.isPlaybackTargetReady && !kidsGatePending && viewModel.canStartPlayback(uiState.idleSyncRevision)) {
             autoPlayPending = false
             onAutoPlayHandled()
             onButtonClickRemembered(0)
@@ -628,9 +642,10 @@ fun DetailsScreen(
     val onEpisodeItemClickRemembered: (Episode) -> Unit = remember(isMobile, mediaType, mediaId) {
         { ep: Episode ->
             val state = currentUiState.value
-            tappedEpisode = ep
-            val idx = state.episodes.indexOfFirst { it.identity == ep.identity }
-            run {
+            if (viewModel.canStartPlayback(state.idleSyncRevision)) {
+                selectedEpisodeRevision = state.idleSyncRevision
+                tappedEpisode = ep
+                val idx = state.episodes.indexOfFirst { it.identity == ep.identity }
                 if (idx >= 0) episodeIndex = idx
                 if (isMobile && currentSelectedEpisodeIdentity.value != ep.identity) {
                     selectedEpisodeIdentity = ep.identity
@@ -1021,7 +1036,7 @@ fun DetailsScreen(
                         externalRatings = uiState.externalRatings,
                         seasonProgress = uiState.seasonProgress,
                         episodePlaybackProgress = uiState.episodePlaybackProgress,
-                        selectedEpisodeIdentity = selectedEpisodeIdentity,
+                        selectedEpisodeIdentity = selectedEpisodeIdentity.takeIf { selectedEpisodeRevision == uiState.idleSyncRevision },
                         playLabel = effectivePlayLabel,
                         showEpisodeRatings = uiState.showEpisodeRatings,
                         hasTrailer = uiState.trailerKey != null,
@@ -1113,6 +1128,8 @@ fun DetailsScreen(
                 }
             },
             onSelect = { stream ->
+                if (!viewModel.canStartPlayback(uiState.idleSyncRevision) ||
+                    currentSelectionRevision.value != uiState.idleSyncRevision) return@StreamSelector
                 if (isTelegramSearchRow(stream)) {
                     viewModel.searchTelegramNow()
                     return@StreamSelector

@@ -184,7 +184,8 @@ class MainActivity : ComponentActivity() {
     lateinit var idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
 
     /** Key whose press ended an idle period on the player; its release is swallowed too. */
-    private var swallowedIdleKeyCode: Int? = null
+    private val swallowedIdleKeys = mutableSetOf<Int>()
+    private var swallowedIdleTouch = false
 
     /** True until the first onResume after onCreate has been handled. */
     private var hasHandledFirstResume = false
@@ -496,19 +497,34 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode in swallowedIdleKeys) {
+            if (event.action == android.view.KeyEvent.ACTION_UP) swallowedIdleKeys.remove(event.keyCode)
+            return true
+        }
         if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             // The first press after a long idle must not act on a player left paused
             // overnight (resuming it would write its old position over newer progress
             // from another device); the player is leaving for the previous screen instead.
-            if (idleReturnCoordinator.onUserInteraction() && idleReturnCoordinator.isPlayerOpen) {
-                swallowedIdleKeyCode = event.keyCode
+            idleReturnCoordinator.onUserInteraction()
+            if (idleReturnCoordinator.isPlayerOpen && idleReturnCoordinator.shouldDiscardPlayer) {
+                swallowedIdleKeys.add(event.keyCode)
                 return true
             }
-        } else if (event.action == android.view.KeyEvent.ACTION_UP && event.keyCode == swallowedIdleKeyCode) {
-            swallowedIdleKeyCode = null
-            return true
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            idleReturnCoordinator.onUserInteraction()
+            swallowedIdleTouch = idleReturnCoordinator.isPlayerOpen && idleReturnCoordinator.shouldDiscardPlayer
+        }
+        if (swallowedIdleTouch) {
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP ||
+                event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) swallowedIdleTouch = false
+            return true
+        }
+        return super.dispatchTouchEvent(event)
     }
 
     override fun onUserInteraction() {

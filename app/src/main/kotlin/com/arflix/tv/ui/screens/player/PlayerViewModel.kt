@@ -7874,6 +7874,13 @@ class PlayerViewModel @Inject constructor(
         recentPlayedSourceRepository.save(profileManager.getProfileIdSync(), record)
     }
 
+    private var progressDiscardedForIdle = false
+
+    fun discardProgressForIdle() {
+        progressDiscardedForIdle = true
+        progressSaveJob?.cancel()
+    }
+
     fun saveProgress(
         position: Long,
         duration: Long,
@@ -7882,7 +7889,7 @@ class PlayerViewModel @Inject constructor(
         playbackState: Int,
         closing: Boolean = false
     ): Job? {
-        if (duration <= 0) return null
+        if (progressDiscardedForIdle || duration <= 0) return null
         noteRecentSourcePlayback(position, isPlaying)
 
         // A completion transaction must not be cancelled/restarted by the ended polling tick

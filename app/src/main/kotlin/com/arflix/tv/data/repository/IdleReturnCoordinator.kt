@@ -4,15 +4,12 @@ import android.os.SystemClock
 import android.util.Log
 import com.arflix.tv.BuildConfig
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,11 +36,13 @@ import javax.inject.Singleton
  *   has been sitting paused through an idle period.
  */
 @Singleton
-class IdleReturnCoordinator @Inject constructor(
+class IdleReturnCoordinator internal constructor(
     private val cloudSyncRepository: CloudSyncRepository,
     private val watchHistoryRepository: WatchHistoryRepository,
+    private val scope: CoroutineScope,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Inject constructor(cloudSyncRepository: CloudSyncRepository, watchHistoryRepository: WatchHistoryRepository) :
+        this(cloudSyncRepository, watchHistoryRepository, CoroutineScope(SupervisorJob() + Dispatchers.IO))
 
     /** Monotonic clock that keeps counting in deep sleep; replaceable in tests. */
     internal var clock: () -> Long = { SystemClock.elapsedRealtime() }
@@ -56,12 +55,9 @@ class IdleReturnCoordinator @Inject constructor(
     /** A post-idle cloud pull is running; resume targets on screen may be out of date. */
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
-    private val _syncCompleted = MutableSharedFlow<Unit>(
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
-    /** Fires when a post-idle pull finished (or timed out); rebuild resume targets now. */
-    val syncCompleted: SharedFlow<Unit> = _syncCompleted.asSharedFlow()
+    private val _syncCompleted = MutableStateFlow(0L)
+    /** Retained revision, including failed/timed-out pulls, so a loading screen cannot miss it. */
+    val syncCompleted: StateFlow<Long> = _syncCompleted.asStateFlow()
 
     private val _idleReturns = MutableStateFlow(0L)
     /** Bumped each time an idle period ends. */
@@ -72,6 +68,17 @@ class IdleReturnCoordinator @Inject constructor(
     /** A player screen is on display (set by the player while it is composed). */
     @Volatile
     var isPlayerOpen: Boolean = false
+        set(value) {
+            field = value
+            if (value) stalePlayer = false
+        }
+
+    @Volatile
+    private var stalePlayer = false
+
+    /** Foreground/input resets the idle clock, but must not make the old player safe again. */
+    val shouldDiscardPlayer: Boolean
+        get() = stalePlayer || (isPlayerOpen && isIdle())
 
     val idleThresholdMs: Long
         get() = debugIdleThresholdOverrideMs() ?: IDLE_THRESHOLD_MS
@@ -103,6 +110,7 @@ class IdleReturnCoordinator @Inject constructor(
         val idleMs = idleForMs()
         markActive()
         if (!wasIdle) return false
+        if (isPlayerOpen) stalePlayer = true
         log("Idle ended by $reason after ${idleMs / 1000}s; pulling latest progress")
         _idleReturns.value = _idleReturns.value + 1
         startSync()
@@ -115,9 +123,14 @@ class IdleReturnCoordinator @Inject constructor(
         syncJob = scope.launch {
             try {
                 val result = withTimeoutOrNull(SYNC_TIMEOUT_MS) {
-                    runCatching { cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false) }
-                        .onFailure { log("Post-idle pull failed: ${it.message}") }
-                        .getOrNull()
+                    try {
+                        cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        log("Post-idle pull failed: ${error.message}")
+                        null
+                    }
                 }
                 log("Post-idle pull finished: ${result ?: "timed out"}")
                 // This device's in-memory watch history only holds its own plays, so after an
@@ -127,8 +140,8 @@ class IdleReturnCoordinator @Inject constructor(
                     watchHistoryRepository.clearProfileCaches()
                 }
             } finally {
+                _syncCompleted.value += 1L
                 _isSyncing.value = false
-                _syncCompleted.tryEmit(Unit)
             }
         }
     }

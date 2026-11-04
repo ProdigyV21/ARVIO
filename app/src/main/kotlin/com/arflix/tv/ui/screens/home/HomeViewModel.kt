@@ -2356,8 +2356,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             // After a long idle this device pulls the other devices' progress first;
             // rebuild the row from it once that lands.
-            idleReturnCoordinator.syncCompleted.collect {
-                refreshContinueWatchingOnly(force = true)
+            idleReturnCoordinator.syncCompleted.collect { revision ->
+                if (revision > 0L) refreshContinueWatchingOnly(force = true)
             }
         }
 

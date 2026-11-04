@@ -24,6 +24,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -154,6 +155,20 @@ class RecentSourcePlaybackTimingTest {
         autoplaySelectBest(listOf(iptv))
 
         assertSame(iptv, model.uiState.value.selectedStream)
+    }
+
+    @Test fun anIdleSessionCannotSaveOrScrobbleOnPlayOrFinalExit() {
+        model.discardProgressForIdle()
+        assertNull(model.saveProgress(97_000L, 400_000L, 24, true, androidx.media3.common.Player.STATE_READY))
+        assertNull(model.saveProgress(97_000L, 400_000L, 24, false, androidx.media3.common.Player.STATE_READY, closing = true))
+        verify(exactly = 0) { recentRepository.save(any(), any()) }
+    }
+
+    @Test fun discardingAnIdleSessionCancelsItsPendingProgressWrite() {
+        val pending = Job()
+        field("progressSaveJob").set(model, pending)
+        model.discardProgressForIdle()
+        assertTrue(pending.isCancelled)
     }
 
     /** The playing video reports progress every 2 s for [seconds], as PlayerScreen's loop does. */
