@@ -346,6 +346,7 @@ fun DetailsScreen(
     var contextMenuSeason by remember { mutableIntStateOf(1) }
     var seasonSelectDownAtMs by remember { mutableLongStateOf(0L) }
     var ignoreFirstResumeRefresh by remember(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(true) }
+    val currentUiState = rememberUpdatedState(uiState)
 
     fun requestFastAutoPlay(
         imdbId: String?,
@@ -355,9 +356,10 @@ fun DetailsScreen(
         tmdbSeason: Int? = displaySeason,
         tmdbEpisode: Int? = displayEpisode
     ) {
-        if (!viewModel.canStartPlayback(uiState.idleSyncRevision)) return
+        val state = currentUiState.value
+        if (!viewModel.canStartPlayback(state.idleSyncRevision)) return
         showStreamSelector = false
-        val identity = uiState.episodes.firstOrNull {
+        val identity = state.episodes.firstOrNull {
             it.seasonNumber == displaySeason && it.episodeNumber == displayEpisode
         }?.identity ?: viewModel.resolveEpisodeIdentity(
             displaySeason = displaySeason,
@@ -502,7 +504,6 @@ fun DetailsScreen(
     }
     val maxActionButtonIndex = 4 + (if (hasCollectionButton) 1 else 0) + (if (hasPersonalLists) 1 else 0)
     val currentListButtonIndex = rememberUpdatedState(listButtonIndex)
-    val currentUiState = rememberUpdatedState(uiState)
     val currentEpisodeIndex = rememberUpdatedState(episodeIndex)
     val currentSelectedEpisodeIdentity = rememberUpdatedState(selectedEpisodeIdentity)
     // The episode card the user tapped, kept as an object. The phone layout
