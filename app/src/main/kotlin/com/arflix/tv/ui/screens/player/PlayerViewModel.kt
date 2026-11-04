@@ -318,7 +318,8 @@ class PlayerViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
 ) : ViewModel() {
 
     /** Whether the active profile may play this title; always true outside a kids profile. */
@@ -7873,6 +7874,13 @@ class PlayerViewModel @Inject constructor(
         recentPlayedSourceRepository.save(profileManager.getProfileIdSync(), record)
     }
 
+    private var progressDiscardedForIdle = false
+
+    fun discardProgressForIdle() {
+        progressDiscardedForIdle = true
+        progressSaveJob?.cancel()
+    }
+
     fun saveProgress(
         position: Long,
         duration: Long,
@@ -7881,7 +7889,7 @@ class PlayerViewModel @Inject constructor(
         playbackState: Int,
         closing: Boolean = false
     ): Job? {
-        if (duration <= 0) return null
+        if (progressDiscardedForIdle || duration <= 0) return null
         noteRecentSourcePlayback(position, isPlaying)
 
         // A completion transaction must not be cancelled/restarted by the ended polling tick
