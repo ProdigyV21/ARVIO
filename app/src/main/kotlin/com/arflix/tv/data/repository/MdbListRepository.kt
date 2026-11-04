@@ -221,7 +221,7 @@ class MdbListRepository @Inject constructor(
                 // A configuration rejection (invalid_client) is not the user's connection. A
                 // refresh token refused outright, or again and again, is dead: keeping it left
                 // MDBList showing as connected while nothing synced. It is marked, not erased.
-                val strikes = if (code == 400 || code == 403) {
+                val strikes = if (oauthError != "invalid_client" && (code == 400 || code == 403)) {
                     (renewalRefusals[profileId]?.takeIf { it.first == lockedCred }?.second ?: 0) + 1
                 } else {
                     0

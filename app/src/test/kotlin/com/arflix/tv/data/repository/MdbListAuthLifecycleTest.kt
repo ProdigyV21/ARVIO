@@ -450,13 +450,40 @@ class MdbListAuthLifecycleTest {
 
     @Test
     fun `missing client configuration never marks the user's connection`() = runTest {
+        var now = 1_000_000L
+        repository.clock = { now }
         val cred = SyncProviderStore.MdbListCredential.OAuth("expired", "refresh", 1L)
         coEvery { store.getMdbListCredential("p") } returns cred
-        coEvery { api.refreshToken(any(), any(), any()) } throws httpException(401, """{"error": "invalid_client"}""")
+        for (code in listOf(400, 401, 403)) {
+            coEvery { api.refreshToken(any(), any(), any()) } coAnswers {
+                throw httpException(code, """{"error":"invalid_client"}""")
+            }
+            repeat(3) {
+                assertNull(repository.resolveAuth("p"))
+                now += 31_000L
+            }
+            coVerify(exactly = 0) { store.markMdbListReconnectRequired(any(), any()) }
+        }
+        coVerify(exactly = 9) { api.refreshToken(any(), any(), any()) }
+    }
 
-        assertNull(repository.resolveAuth("p"))
-
+    @Test
+    fun `client configuration failure resets consecutive credential refusals`() = runTest {
+        var now = 1_000_000L
+        repository.clock = { now }
+        val cred = SyncProviderStore.MdbListCredential.OAuth("expired", "refresh", 1L)
+        coEvery { store.getMdbListCredential("p") } returns cred
+        val errors = listOf("unknown", "unknown", "invalid_client", "unknown", "unknown", "unknown").iterator()
+        coEvery { api.refreshToken(any(), any(), any()) } coAnswers {
+            throw httpException(400, """{"error":"${errors.next()}"}""")
+        }
+        repeat(5) {
+            assertNull(repository.resolveAuth("p"))
+            now += 31_000L
+        }
         coVerify(exactly = 0) { store.markMdbListReconnectRequired(any(), any()) }
+        assertNull(repository.resolveAuth("p"))
+        coVerify(exactly = 1) { store.markMdbListReconnectRequired("p", cred) }
     }
 
     @Test

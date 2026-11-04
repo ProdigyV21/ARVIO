@@ -173,9 +173,11 @@ class TraktSession @Inject constructor(
         const val REFUSALS_BEFORE_RECONNECT = 3
     }
 
-    private suspend fun reject(profileId: String, expected: Credential) {
+    private suspend fun reject(profileId: String, expected: Credential): Boolean {
+        var rejected = false
         context.traktDataStore.edit { prefs ->
             if (credential(prefs, profileId) == expected) {
+                rejected = true
                 prefs.remove(accessKey(profileId))
                 prefs.remove(refreshKey(profileId))
                 prefs.remove(expiresKey(profileId))
@@ -184,6 +186,19 @@ class TraktSession @Inject constructor(
                 if (prefs[updatedKey(profileId)] == null) prefs[updatedKey(profileId)] = 1L
                 prefs[reconnectKey(profileId)] = true
             }
+        }
+        return rejected
+    }
+
+    private suspend fun accountRejects(accessToken: String): Boolean {
+        return try {
+            api.getMe(auth = "Bearer $accessToken", clientId = Constants.TRAKT_CLIENT_ID)
+            false
+        } catch (error: HttpException) {
+            error.code() == 401
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            false
         }
     }
 
@@ -194,6 +209,9 @@ class TraktSession @Inject constructor(
             block("Bearer $token")
         } catch (error: HttpException) {
             if (error.code() != 401) throw error
+            // A list can refuse access while the account still works. Confirm the account
+            // before forcing renewal, which can otherwise reject an unrefreshable credential.
+            if (!accountRejects(token)) throw error
             val refreshed = accessToken(id, force = true, rejectedAccessToken = token) ?: throw unavailable(id)
             try {
                 block("Bearer $refreshed")
@@ -201,8 +219,10 @@ class TraktSession @Inject constructor(
                 if (retry.code() != 401) throw retry
                 val prefs = context.traktDataStore.data.first()
                 val expected = credential(prefs, id)
-                if (expected.access == refreshed) reject(id, expected)
-                throw unavailable(id)
+                if (expected.access == refreshed && accountRejects(refreshed) && reject(id, expected)) {
+                    throw unavailable(id)
+                }
+                throw retry
             }
         }
     }
