@@ -31,7 +31,7 @@ process.env.KOFI_YEARLY_ITEM_CODES = 'abc123def, other999';
 process.env.KOFI_YEARLY_URL = 'https://ko-fi.com/s/abc123def';
 process.env.STREAM_TICKET_SECRET = 's'.repeat(40);
 
-const { evaluateEntitlement, buildPaidRecord, DAY_MS } = require('../netlify/functions/_entitlements');
+const { evaluateEntitlement, buildPaidRecord, addMonths, DAY_MS } = require('../netlify/functions/_entitlements');
 const webhook = require('../netlify/functions/kofi-webhook');
 const referrals = require('../netlify/functions/_referrals');
 const memberEmails = require('../netlify/functions/_member-emails');
@@ -114,7 +114,7 @@ test('tips and other shop items never unlock Premium', async () => {
   assert.equal(webhook._test.passesInOrder({ shop_items: [{ direct_link_code: 'abc123def', quantity: 2 }, { direct_link_code: 'other999' }] }), 3);
 });
 
-test('give a month, get a month: new payers only, after the refund window, once per payer, within the cap', async () => {
+test('give a month, get a month: instant on first verified payment, once per payer, within the cap', async () => {
   reset();
   const ent = store('entitlements');
   const owner = { email: 'owner@example.test', emailHash: sha256('owner@example.test') };
@@ -133,17 +133,22 @@ test('give a month, get a month: new payers only, after the refund window, once 
   const friendHash = sha256('friend@example.test');
   assert.equal((await referrals.claimReferral({}, { emailHash: friendHash, code: status.code.toLowerCase() })).ok, true);
   assert.equal((await referrals.claimReferral({}, { emailHash: friendHash, code: status.code })).error, 'already_claimed');
+  assert.equal((await referrals.rewardReferralIfDue({}, { emailHash: friendHash })).reason, 'not_paying', 'signup alone earns no bonus');
+  assert.equal(entitlement('friend@example.test'), undefined);
+  assert.equal(entitlement('owner@example.test'), undefined);
 
   // The owner only ever had a legacy trial: a bonus must still be visible.
   ent.data.set(`email/${owner.emailHash}.json`, { status: 'expired', source: 'trial', startedAt: '2026-08-01', expiresAt: '2026-08-04T00:00:00Z', trialUsed: true });
 
-  await kofi({ type: 'Subscription', email: 'friend@example.test', is_subscription_payment: true, is_first_subscription_payment: true, kofi_transaction_id: 'f1' });
-  const paidEnd = Date.parse(entitlement('friend@example.test').expiresAt);
-  assert.equal((await referrals.rewardReferralIfDue({}, { emailHash: friendHash })).reason, 'too_early', 'nothing within the 7-day refund window');
+  const payment = { type: 'Subscription', email: 'friend@example.test', is_subscription_payment: true, is_first_subscription_payment: true, kofi_transaction_id: 'f1' };
+  const response = JSON.parse((await kofi(payment)).body);
+  const friend = entitlement('friend@example.test');
+  const paidEnd = addMonths(Date.parse(friend.startedAt), 1);
+  assert.equal(Date.parse(friend.expiresAt) - paidEnd, 31 * DAY_MS, 'friend: 31 bonus days on the first webhook');
+  assert.equal(response.expiresAt, friend.expiresAt);
+  assert.equal(JSON.parse((await kofi(payment)).body).duplicate, true);
+  assert.equal(entitlement('friend@example.test').expiresAt, friend.expiresAt);
   const later = Date.now() + 8 * DAY_MS;
-  const reward = await referrals.rewardReferralIfDue({}, { emailHash: friendHash, now: later });
-  assert.equal(reward.rewarded, true);
-  assert.equal(Date.parse(entitlement('friend@example.test').expiresAt) - paidEnd, 31 * DAY_MS, 'friend: 31 bonus days on top');
   const inviter = entitlement('owner@example.test');
   assert.equal(inviter.source, 'referral', 'a trial record becomes a visible referral record');
   assert.equal(evaluateEntitlement(inviter, later).entitled, true);
@@ -167,6 +172,8 @@ test('give a month, get a month: new payers only, after the refund window, once 
   ownerRecord.rewards = Array.from({ length: 6 }, () => new Date(later).toISOString());
   const second = sha256('second@example.test');
   await referrals.claimReferral({}, { emailHash: second, code: status.code });
+  ent.data.set(`email/${second}.json`, { status: 'active', source: 'manual', startedAt: new Date().toISOString() });
+  assert.equal((await referrals.rewardReferralIfDue({}, { emailHash: second })).reason, 'not_paying', 'a complimentary grant is not a payment');
   ent.data.set(`email/${second}.json`, { status: 'active', source: 'kofi', plan: 'monthly', startedAt: new Date(Date.now()).toISOString(), expiresAt: new Date(Date.now() + 30 * DAY_MS).toISOString() });
   const before = entitlement('owner@example.test').expiresAt;
   const capped = await referrals.rewardReferralIfDue({}, { emailHash: second, now: later });
@@ -181,6 +188,25 @@ test('give a month, get a month: new payers only, after the refund window, once 
   ent.data.set(`email/${third}.json`, { status: 'active', source: 'kofi', plan: 'monthly', startedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * DAY_MS).toISOString() });
   assert.equal((await referrals.rewardReferralIfDue({}, { emailHash: third, now: later })).inviterRewarded, false);
   assert.equal(store('premium-referrals').data.has(`owner/${owner.emailHash}.json`), false);
+});
+
+test('an invited annual buyer receives the bonus before expiry reminders are scheduled', async () => {
+  reset();
+  const ownerEmail = 'annual-inviter@example.test';
+  const buyerEmail = 'annual-buyer@example.test';
+  const { code } = await referrals.referralStatus({}, { email: ownerEmail, emailHash: sha256(ownerEmail) });
+  await referrals.claimReferral({}, { emailHash: sha256(buyerEmail), code });
+  const response = JSON.parse((await kofi({
+    type: 'Shop Order', email: buyerEmail, kofi_transaction_id: 'annual-referral',
+    shop_items: [{ direct_link_code: 'ABC123DEF', quantity: 1 }]
+  })).body);
+  const buyer = entitlement(buyerEmail);
+  assert.equal(Date.parse(buyer.expiresAt) - Date.parse(buyer.startedAt), 397 * DAY_MS);
+  assert.equal(response.expiresAt, buyer.expiresAt);
+  const reminders = [...store('premium-member-emails').data.values()].filter((job) => job.type.startsWith('pass_ends_'));
+  assert.equal(reminders.length, 2);
+  assert.ok(reminders.every((job) => job.targetEnd === buyer.expiresAt));
+  assert.equal(entitlement(ownerEmail).source, 'referral');
 });
 
 test('grace is for late monthly Ko-fi renewals only, and an unmatched $20 order is recorded', async () => {

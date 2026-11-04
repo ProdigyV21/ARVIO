@@ -1,6 +1,6 @@
 // "Give a month, get a month". Every account can get an invite code. Someone
 // who signs up through it and then starts paying earns 31 extra days for both
-// accounts, once the 7-day refund window has passed; the inviter can earn at
+// accounts as soon as the payment is confirmed; the inviter can earn at
 // most MAX_REWARDS_PER_YEAR a year. Each paying identity (the billing email)
 // rewards at most once, however many accounts link it.
 //
@@ -18,8 +18,6 @@ const { entitlementsStore, readEntitlement, updateEntitlement, evaluateEntitleme
 const { queueMemberEmail, _test: memberEmailInternals } = require("./_member-emails");
 
 const REWARD_DAYS = 31;
-// Matches the refund promise: a payment refunded within 7 days earns nothing.
-const REWARD_DELAY_MS = 7 * DAY_MS;
 const MAX_REWARDS_PER_YEAR = 6;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PATTERN = /^[A-HJ-NP-Z2-9]{8}$/;
@@ -143,8 +141,7 @@ function addBonus(store, hash, event, now) {
 // Checked after payments and when a paying account opens ARVIO Web.
 // `emailHash` is the invited ARVIO account; `payerHash` the billing email
 // that pays for it (the same unless a Ko-fi email is linked). Rewards both
-// accounts once, when the payer started paying after the invite and has
-// stayed past the refund window.
+// accounts once, when the payer started paying after the invite.
 async function rewardReferralIfDue(event, { emailHash, payerHash = emailHash, now = Date.now() }, { entitlements } = {}) {
   const store = referralStore(event);
   const snapshot = await getVersioned(store, `referred/${emailHash}.json`);
@@ -153,15 +150,14 @@ async function rewardReferralIfDue(event, { emailHash, payerHash = emailHash, no
 
   const entitlementStore = entitlements || entitlementsStore(event);
   const payer = await readEntitlement(entitlementStore, payerHash);
-  const paying = payer && payer.status === "active" && payer.source !== "trial" && payer.source !== "referral" && evaluateEntitlement(payer, now).entitled;
+  const paying = payer?.source === "kofi" && evaluateEntitlement(payer, now).reason === "subscription";
   const started = Date.parse(payer?.startedAt || "");
-  if (!paying || !Number.isFinite(started)) return { rewarded: false, reason: "not_paying" };
+  if (!paying || !Number.isFinite(started) || started > now) return { rewarded: false, reason: "not_paying" };
   // Paying since before the invite: an existing member, not a new one.
   if (started < Date.parse(referred.claimedAt) - 60 * 60 * 1000) {
     await store.setJSON(`referred/${emailHash}.json`, { ...referred, rewardedAt: new Date(now).toISOString(), outcome: "existing_member" }, { onlyIfMatch: snapshot.etag });
     return { rewarded: false, reason: "existing_member" };
   }
-  if (now - started < REWARD_DELAY_MS) return { rewarded: false, reason: "too_early" };
 
   // One reward per billing identity, however many accounts link it.
   const payerMark = await store.setJSON(`rewarded-payer/${payerHash}.json`, { at: new Date(now).toISOString(), account: emailHash }, { onlyIfNew: true });
@@ -172,12 +168,12 @@ async function rewardReferralIfDue(event, { emailHash, payerHash = emailHash, no
   const marked = await store.setJSON(`referred/${emailHash}.json`, { ...referred, rewardedAt: new Date(now).toISOString(), outcome: "rewarded" }, { onlyIfMatch: snapshot.etag });
   if (marked?.modified === false) return { rewarded: false };
 
-  await addBonus(entitlementStore, payerHash, "referral-bonus-invited", now);
+  const { record: payerRecord } = await addBonus(entitlementStore, payerHash, "referral-bonus-invited", now);
 
   const ownerSnapshot = await getVersioned(store, `owner/${referred.ownerHash}.json`);
   const owner = ownerSnapshot?.data;
   // The inviter deleted their account: nothing to reward or recreate.
-  if (!owner) return { rewarded: true, inviterRewarded: false };
+  if (!owner) return { rewarded: true, inviterRewarded: false, expiresAt: payerRecord.expiresAt };
   const ownerUpdate = { ...owner, joined: Number(owner.joined || 0) + 1 };
   let inviterRewarded = false;
   if (rewardsInLastYear(owner, now) < MAX_REWARDS_PER_YEAR) {
@@ -194,7 +190,7 @@ async function rewardReferralIfDue(event, { emailHash, payerHash = emailHash, no
     }
   }
   await store.setJSON(`owner/${referred.ownerHash}.json`, ownerUpdate, { onlyIfMatch: ownerSnapshot.etag });
-  return { rewarded: true, inviterRewarded };
+  return { rewarded: true, inviterRewarded, expiresAt: payerRecord.expiresAt };
 }
 
 async function deleteReferralData(event, emailHash) {
