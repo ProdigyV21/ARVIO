@@ -1027,8 +1027,11 @@
 
     <!-- Extracted from code: Profile, Login and Collections -->
     <string name="profile_edit_title">Edit Profile</string>
+    <string name="profile_choose_avatar">Choose an avatar</string>
     <string name="profile_name_hint">Profile name</string>
     <string name="profile_lock">Profile Lock</string>
+    <string name="profile_lock_desc">Require a PIN to access this profile</string>
+    <string name="profile_pin_active">PIN protection is active</string>
     <string name="profile_set_pin">Set PIN</string>
     <string name="profile_change_pin">Change PIN</string>
     <string name="profile_remove_pin">Remove PIN</string>
