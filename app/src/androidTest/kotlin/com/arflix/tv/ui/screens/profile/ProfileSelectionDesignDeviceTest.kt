@@ -34,13 +34,14 @@ class ProfileSelectionDesignDeviceTest {
     private var selections = 0
     private var entered: String? = null
     private var manageClicks = 0
+    private var restoreRetries = 0
 
     private fun fixture(phone: Boolean, count: Int = 5) {
         state.value = state.value.copy(profiles = profiles.take(count))
         compose.setContent {
             CompositionLocalProvider(LocalDeviceType provides if (phone) DeviceType.PHONE else DeviceType.TV) {
                 Box(Modifier.testTag("profile-fixture").size(if (phone) 360.dp else 960.dp, if (phone) 520.dp else 540.dp)) {
-                    ProfileSelectionContent(state.collectAsState().value, ProfileSelectionActions(toggleManageMode = { manageClicks++ }, selectProfile = {
+                    ProfileSelectionContent(state.collectAsState().value, ProfileSelectionActions(toggleManageMode = { manageClicks++ }, retryCloudRestore = { restoreRetries++ }, selectProfile = {
                         selections++
                         state.value = state.value.copy(activeProfile = it, isSwitchingProfile = false)
                     }), { entered = it })
@@ -96,5 +97,41 @@ class ProfileSelectionDesignDeviceTest {
         compose.waitUntil(5000) { entered != null }
         assertEquals("two", entered)
         assertEquals(1, selections)
+    }
+
+    @Test fun phoneCanRetryFailedRestoreWithoutAnotherSignIn() {
+        state.value = state.value.copy(isCloudConnected = true, cloudRestoreFailed = true)
+        fixture(true)
+        compose.onNodeWithText(compose.activity.getString(R.string.settings_cloud_signed_in_restore_failed))
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.retry))
+            .performScrollTo().performTouchInput { click() }
+        compose.runOnIdle { assertEquals(1, restoreRetries) }
+        screenshot("profiles-mobile-restore-failed")
+    }
+
+    @Test fun tvCanFocusAndRetryFailedRestore() {
+        state.value = state.value.copy(isCloudConnected = true, cloudRestoreFailed = true)
+        fixture(false)
+        compose.onNodeWithText(compose.activity.getString(R.string.settings_cloud_signed_in_restore_failed))
+            .assertIsDisplayed()
+        val device = androidx.test.uiautomator.UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.pressDPadDown()
+        compose.waitForIdle()
+        device.pressDPadDown()
+        compose.waitForIdle()
+        compose.onNodeWithText(compose.activity.getString(R.string.retry)).assertIsFocused()
+        screenshot("profiles-tv-restore-failed")
+        device.pressDPadCenter()
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(1, restoreRetries) }
+    }
+
+    @Test fun retryCannotBeSubmittedAgainWhileRestoring() {
+        state.value = state.value.copy(isCloudConnected = true, cloudRestoreFailed = true, isCloudAuthWorking = true)
+        fixture(true)
+        compose.onNodeWithText(compose.activity.getString(R.string.syncing))
+            .performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(0, restoreRetries) }
     }
 }
