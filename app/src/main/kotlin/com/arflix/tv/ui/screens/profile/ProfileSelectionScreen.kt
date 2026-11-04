@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +81,7 @@ import com.arflix.tv.ui.components.CloudEmailPasswordModal
 import com.arflix.tv.ui.components.CloudPairModal
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.ui.components.Toast
+import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.PinUtil
 import kotlinx.coroutines.delay
@@ -126,6 +128,7 @@ fun ProfileSelectionScreen(
         cancelCloudAuth = viewModel::cancelCloudAuth,
         closeCloudEmailPasswordDialog = viewModel::closeCloudEmailPasswordDialog,
         completeCloudAuthWithEmailPassword = viewModel::completeCloudAuthWithEmailPassword,
+        retryCloudRestore = viewModel::retryCloudRestore,
     ), onProfileSelected, onConnectCloud, effectiveCloudConnected)
 }
 
@@ -160,6 +163,7 @@ internal data class ProfileSelectionActions(
     val cancelCloudAuth: () -> Unit = { },
     val closeCloudEmailPasswordDialog: () -> Unit = { },
     val completeCloudAuthWithEmailPassword: (String, String, Boolean) -> Unit = { _, _, _ -> },
+    val retryCloudRestore: () -> Unit = {},
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -439,7 +443,23 @@ internal fun ProfileSelectionContent(
                     }
                 )
 
-                if (!isCloudConnected) {
+                if (uiState.cloudRestoreFailed) {
+                    Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
+                    Text(
+                        text = stringResource(R.string.settings_cloud_signed_in_restore_failed),
+                        color = ErrorRed,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CloudConnectButton(
+                        label = stringResource(if (uiState.isCloudAuthWorking) R.string.syncing else R.string.retry),
+                        retry = true,
+                        isWorking = uiState.isCloudAuthWorking,
+                        onClick = viewModel.retryCloudRestore
+                    )
+                } else if (!isCloudConnected) {
                     Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
 
                     // Cloud connect button — focusable on TV, tappable on mobile
@@ -918,7 +938,10 @@ private fun ManageProfilesButton(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CloudConnectButton(
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    label: String? = null,
+    retry: Boolean = false,
+    isWorking: Boolean = false
 ) {
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
@@ -936,19 +959,23 @@ private fun CloudConnectButton(
                     )
                 )
                 .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-                .clickable { onClick() }
+                .clickable(enabled = !isWorking) { onClick() }
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Cloud,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(18.dp)
-            )
+            if (isWorking) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    imageVector = if (retry) Icons.Default.Refresh else Icons.Default.Cloud,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
             Text(
-                text = stringResource(R.string.connect_to_cloud),
+                text = label ?: stringResource(R.string.connect_to_cloud),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.85f)
@@ -957,6 +984,7 @@ private fun CloudConnectButton(
     } else {
         Surface(
             onClick = onClick,
+            enabled = !isWorking,
             modifier = Modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
             colors = ClickableSurfaceDefaults.colors(
@@ -979,14 +1007,18 @@ private fun CloudConnectButton(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Cloud,
-                    contentDescription = null,
-                    tint = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
+                if (isWorking) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        imageVector = if (retry) Icons.Default.Refresh else Icons.Default.Cloud,
+                        contentDescription = null,
+                        tint = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
                 Text(
-                    text = stringResource(R.string.connect_to_cloud),
+                    text = label ?: stringResource(R.string.connect_to_cloud),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f)

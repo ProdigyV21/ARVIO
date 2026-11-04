@@ -4,6 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.TimeZone
+import java.time.LocalDate
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 
 class EpisodeAirDateTest {
 
@@ -54,16 +57,27 @@ class EpisodeAirDateTest {
     }
 
     @Test
-    fun preserveDummyUtcMidnightAcrossTimeZones() {
-        // Trakt calendar often sends dummy midnight UTC timestamps for items without an air time
-        val testZones = listOf("America/New_York", "America/Los_Angeles", "UTC", "Asia/Kolkata")
-        for (zone in testZones) {
+    fun convertsExplicitUtcMidnightAcrossTimeZones() {
+        val expected = mapOf(
+            "America/New_York" to "31 Dec 2025", "America/Los_Angeles" to "31 Dec 2025",
+            "UTC" to "1 Jan 2026", "Asia/Kolkata" to "1 Jan 2026"
+        )
+        for ((zone, label) in expected) {
             withDefaultTimeZone(zone) {
                 assertEquals(
                     "Failed in $zone",
-                    "1 Jan 2026",
+                    label,
                     formatEpisodeAirDateLabel("2026-01-01T00:00:00.000Z")
                 )
+            }
+        }
+    }
+
+    @Test fun dateOnlyDoesNotInventAnAmericanEveningAirTime() {
+        for (zone in listOf("America/New_York", "Europe/Paris", "Asia/Tokyo")) {
+            withDefaultTimeZone(zone) {
+                assertFalse(isFutureEpisodeAirDate(LocalDate.now().toString()))
+                assertTrue(isFutureEpisodeAirDate(LocalDate.now().plusDays(1).toString()))
             }
         }
     }
@@ -86,4 +100,3 @@ class EpisodeAirDateTest {
         assertNull(formatEpisodeAirDateLabel("   "))
     }
 }
-

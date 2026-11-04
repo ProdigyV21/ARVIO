@@ -22,11 +22,15 @@ import com.arflix.tv.data.repository.TvDeviceAuthSession
 import com.arflix.tv.data.repository.TvDeviceAuthStatusType
 import com.arflix.tv.ui.components.ToastType
 import com.arflix.tv.util.AuthEmailValidator
+import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.PinUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,7 +76,8 @@ data class ProfileUiState(
     val cloudVerificationUrl: String? = null,
     val cloudUserCode: String? = null,
     val isCloudAuthWorking: Boolean = false,
-    val isCloudConnected: Boolean = false
+    val isCloudConnected: Boolean = false,
+    val cloudRestoreFailed: Boolean = false
 )
 
 internal fun ProfileUiState.canFinishSelection(targetProfileId: String?): Boolean =
@@ -104,6 +109,7 @@ class ProfileViewModel @Inject constructor(
     private var cloudPollIntervalMs: Long = 800L
     private var cloudExpiresAtMs: Long = 0L
     private var cloudPollingJob: Job? = null
+    private var cloudAuthJob: Job? = null
 
     init {
         loadProfiles()
@@ -153,7 +159,15 @@ class ProfileViewModel @Inject constructor(
                 }
 
                 val userId = state.userId
-                if (lastInitialRestoreUserId == userId || cloudSyncRepository.hasMeaningfulLocalProfiles()) {
+                if (lastInitialRestoreUserId == userId) {
+                    return@collect
+                }
+                // The explicit login flow owns its restore and reports its result.
+                if (_uiState.value.isCloudAuthWorking) {
+                    lastInitialRestoreUserId = userId
+                    return@collect
+                }
+                if (cloudSyncRepository.hasMeaningfulLocalProfiles()) {
                     return@collect
                 }
 
@@ -168,26 +182,15 @@ class ProfileViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(isLoading = true)
                 }
 
-                var restoreResult = withContext(Dispatchers.IO) {
-                    withTimeoutOrNull(18_000L) {
-                        cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
-                    } ?: CloudSyncRepository.RestoreResult.FAILED
-                }
-                if (restoreResult == CloudSyncRepository.RestoreResult.FAILED) {
-                    delay(1_200L)
-                    restoreResult = withContext(Dispatchers.IO) {
-                        withTimeoutOrNull(18_000L) {
-                            cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
-                        } ?: CloudSyncRepository.RestoreResult.FAILED
-                    }
-                }
+                val restoreResult = pullCloudProfilesWithRetry(timeoutMs = 18_000L)
 
                 val profiles = profileRepository.getProfiles()
                 val activeProfile = profileRepository.getActiveProfile()
                 _uiState.value = _uiState.value.copy(
                     profiles = profiles,
                     activeProfile = activeProfile,
-                    isLoading = false
+                    isLoading = false,
+                    cloudRestoreFailed = restoreResult == CloudSyncRepository.RestoreResult.FAILED
                 )
             }
         }
@@ -673,16 +676,20 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.authState.collect { authState ->
                 val isAuth = authState is AuthState.Authenticated
-                _uiState.update { it.copy(isCloudConnected = isAuth) }
+                _uiState.update {
+                    it.copy(isCloudConnected = isAuth, cloudRestoreFailed = it.cloudRestoreFailed && isAuth)
+                }
             }
         }
     }
 
     fun startCloudAuth() {
-        if (_uiState.value.isCloudConnected || _uiState.value.isCloudAuthWorking) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isCloudAuthWorking = true) }
-            ensureCloudAuthSession(startPolling = true)
+        if (_uiState.value.isCloudConnected || _uiState.value.isCloudAuthWorking || cloudAuthJob?.isActive == true) return
+        _uiState.update { it.copy(isCloudAuthWorking = true, showToast = false) }
+        cloudAuthJob = viewModelScope.launch {
+            val result = ensureCloudAuthSession(startPolling = true)
+            currentCoroutineContext().ensureActive()
+            result
                 .onSuccess {
                     _uiState.update {
                         it.copy(
@@ -723,6 +730,8 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun cancelCloudAuth() {
+        cloudAuthJob?.cancel()
+        cloudAuthJob = null
         clearCloudAuthSession()
         _uiState.update {
             it.copy(
@@ -740,6 +749,7 @@ class ProfileViewModel @Inject constructor(
         password: String,
         createAccount: Boolean
     ) {
+        if (cloudAuthJob?.isActive == true) return
         val trimmedEmail = AuthEmailValidator.normalize(email)
         AuthEmailValidator.validate(trimmedEmail, rejectDisposable = createAccount)?.let { messageRes ->
             showToast(context.getString(messageRes), ToastType.ERROR)
@@ -750,16 +760,18 @@ class ProfileViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isCloudAuthWorking = true) }
+        _uiState.update { it.copy(isCloudAuthWorking = true, showToast = false) }
+        cloudAuthJob = viewModelScope.launch {
             val userCode = cloudUserCode
             if (!userCode.isNullOrBlank()) {
-                tvDeviceAuthRepository.completeWithEmailPassword(
+                val result = tvDeviceAuthRepository.completeWithEmailPassword(
                     userCode = userCode,
                     email = trimmedEmail,
                     password = password,
                     intent = if (createAccount) "signup" else "signin"
-                ).onSuccess {
+                )
+                currentCoroutineContext().ensureActive()
+                result.onSuccess {
                     showToast(context.getString(R.string.settings_waiting_for_approval), ToastType.INFO)
                     _uiState.update {
                         it.copy(
@@ -778,6 +790,7 @@ class ProfileViewModel @Inject constructor(
                 } else {
                     authRepository.signIn(trimmedEmail, password)
                 }
+                currentCoroutineContext().ensureActive()
                 if (result.isSuccess) {
                     onCloudAuthSuccessful()
                 } else {
@@ -806,9 +819,11 @@ class ProfileViewModel @Inject constructor(
 
             while (System.currentTimeMillis() < deadline) {
                 val status = tvDeviceAuthRepository.pollStatus(deviceCode).getOrNull()
+                currentCoroutineContext().ensureActive()
                 when (status?.status) {
                     TvDeviceAuthStatusType.PENDING -> Unit
                     TvDeviceAuthStatusType.APPROVED -> {
+                        _uiState.update { it.copy(isCloudAuthWorking = true) }
                         val access = status.accessToken
                         val refresh = status.refreshToken
                         if (access.isNullOrBlank() || refresh.isNullOrBlank()) {
@@ -821,6 +836,7 @@ class ProfileViewModel @Inject constructor(
                         }
 
                         val tokenImport = authRepository.signInWithSessionTokens(access, refresh)
+                        currentCoroutineContext().ensureActive()
                         if (tokenImport.isSuccess) {
                             onCloudAuthSuccessful()
                         } else {
@@ -866,21 +882,39 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onCloudAuthSuccessful() {
+    fun retryCloudRestore() {
+        if (!_uiState.value.isCloudConnected || _uiState.value.isCloudAuthWorking || cloudAuthJob?.isActive == true) return
+        _uiState.update { it.copy(isCloudAuthWorking = true, showToast = false) }
+        cloudAuthJob = viewModelScope.launch { onCloudAuthSuccessful() }
+    }
+
+    private suspend fun pullCloudProfilesWithRetry(timeoutMs: Long = 15_000L): CloudSyncRepository.RestoreResult =
         withContext(Dispatchers.IO) {
-            var restoreResult = withTimeoutOrNull(15_000L) {
-                cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
-            } ?: CloudSyncRepository.RestoreResult.FAILED
-            if (restoreResult == CloudSyncRepository.RestoreResult.FAILED) {
-                delay(1200L)
-                withTimeoutOrNull(15_000L) {
-                    cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
+            repeat(2) { attempt ->
+                val result = try {
+                    withTimeoutOrNull(timeoutMs) {
+                        cloudSyncRepository.pullFromCloud(pushPendingLocalFirst = false)
+                    } ?: CloudSyncRepository.RestoreResult.FAILED
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    AppLogger.e("ProfileViewModel", "Cloud restore failed", error)
+                    CloudSyncRepository.RestoreResult.FAILED
                 }
+                if (result != CloudSyncRepository.RestoreResult.FAILED) return@withContext result
+                if (attempt == 0) delay(1_200L)
             }
+            CloudSyncRepository.RestoreResult.FAILED
         }
+
+    private suspend fun onCloudAuthSuccessful() {
+        currentCoroutineContext().ensureActive()
+        val restoreResult = pullCloudProfilesWithRetry()
+        currentCoroutineContext().ensureActive()
         clearCloudAuthSession(cancelPolling = false)
         val profiles = profileRepository.getProfiles()
         val activeProfile = profileRepository.getActiveProfile()
+        currentCoroutineContext().ensureActive()
         _uiState.update {
             it.copy(
                 isCloudAuthWorking = false,
@@ -890,10 +924,18 @@ class ProfileViewModel @Inject constructor(
                 cloudVerificationUrl = null,
                 profiles = profiles,
                 activeProfile = activeProfile,
-                isCloudConnected = true
+                isCloudConnected = true,
+                cloudRestoreFailed = restoreResult == CloudSyncRepository.RestoreResult.FAILED
             )
         }
-        showToast(context.getString(R.string.settings_cloud_sync_complete), ToastType.SUCCESS)
+        when (restoreResult) {
+            CloudSyncRepository.RestoreResult.RESTORED ->
+                showToast(context.getString(R.string.settings_cloud_sync_complete), ToastType.SUCCESS)
+            CloudSyncRepository.RestoreResult.NO_BACKUP ->
+                showToast(context.getString(R.string.settings_cloud_sync_complete_no_backup_toast), ToastType.SUCCESS)
+            CloudSyncRepository.RestoreResult.FAILED ->
+                showToast(context.getString(R.string.settings_cloud_signed_in_restore_failed), ToastType.ERROR)
+        }
     }
 
     private fun hasActiveCloudAuthSession(): Boolean {
@@ -931,7 +973,9 @@ class ProfileViewModel @Inject constructor(
         }
 
         clearCloudAuthSession()
-        return tvDeviceAuthRepository.startSession().map { session ->
+        val result = tvDeviceAuthRepository.startSession()
+        currentCoroutineContext().ensureActive()
+        return result.map { session ->
             applyCloudAuthSession(session)
             if (startPolling) {
                 startCloudPolling()
@@ -941,6 +985,7 @@ class ProfileViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        cloudAuthJob?.cancel()
         clearCloudAuthSession()
     }
 

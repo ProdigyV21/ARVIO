@@ -9,10 +9,8 @@ import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.model.ReleaseCalendarSource
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
-import java.time.ZoneOffset
 
 internal fun calendarDate(value: String?): LocalDate? =
     value?.takeIf { it.length >= 10 }?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
@@ -85,7 +83,6 @@ internal fun calendarEpisodeReleases(
     return episodes.mapNotNull { episode ->
         val exact = timed[episode.seasonNumber to episode.episodeNumber]?.firstAired
             ?.let { runCatching { Instant.parse(it) }.getOrNull() }
-            ?.takeUnless { it.atZone(ZoneOffset.UTC).toLocalTime() == LocalTime.MIDNIGHT }
         val date = exact?.atZone(timezone)?.toLocalDate() ?: calendarDate(episode.airDate)
             ?: return@mapNotNull null
         if (YearMonth.from(date) != month) return@mapNotNull null
