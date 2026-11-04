@@ -513,7 +513,9 @@ fun DetailsScreen(
             val state = currentUiState.value
             val currentEpIdx = currentEpisodeIndex.value
             val selectedEp = selectedEpisodeIn(state, currentSelectedEpisodeIdentity.value)
-            if (idx == currentListButtonIndex.value) viewModel.openListPicker() else when (idx) {
+            // While a post-idle sync runs the play target may still be the stale one.
+            if (idx == 0 && state.isSyncingProgress) Unit
+            else if (idx == currentListButtonIndex.value) viewModel.openListPicker() else when (idx) {
                 0 -> { // Play
                     val season = if (mediaType == MediaType.TV) {
                         selectedEp?.seasonNumber
@@ -973,7 +975,9 @@ fun DetailsScreen(
                     val selectedProgress = selectedEpisode?.let {
                         uiState.episodePlaybackProgress[it.identity]
                     }
-                    val effectivePlayLabel = selectedEpisode?.let { episode ->
+                    val effectivePlayLabel = if (uiState.isSyncingProgress) {
+                        context.getString(R.string.syncing_progress)
+                    } else selectedEpisode?.let { episode ->
                         context.getString(
                             if (selectedProgress != null) {
                                 R.string.continue_season_episode

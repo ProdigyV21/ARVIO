@@ -391,6 +391,7 @@ class HomeViewModel @Inject constructor(
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val continueWatchingUpdates: ContinueWatchingUpdates,
     private val appForegroundSignals: com.arflix.tv.data.repository.AppForegroundSignals,
+    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator,
     private val realtimeSyncManager: com.arflix.tv.data.repository.RealtimeSyncManager,
     private val profileManager: ProfileManager,
     private val appUpdateRepository: com.arflix.tv.updater.AppUpdateRepository,
@@ -2348,6 +2349,14 @@ class HomeViewModel @Inject constructor(
             // elsewhere overnight missing here until something else happened
             // to clear both windows.
             appForegroundSignals.returnedToForeground.collect {
+                refreshContinueWatchingOnly(force = true)
+            }
+        }
+
+        viewModelScope.launch {
+            // After a long idle this device pulls the other devices' progress first;
+            // rebuild the row from it once that lands.
+            idleReturnCoordinator.syncCompleted.collect {
                 refreshContinueWatchingOnly(force = true)
             }
         }

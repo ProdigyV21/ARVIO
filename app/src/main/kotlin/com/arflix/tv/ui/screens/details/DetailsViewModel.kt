@@ -149,6 +149,8 @@ data class DetailsUiState(
     val playTmdbEpisode: Int? = null,
     val playLabel: String? = null,
     val playPositionMs: Long? = null,
+    /** Pulling other devices' progress after a long idle; the play target may be stale. */
+    val isSyncingProgress: Boolean = false,
     // Cached metadata can render before resume history and episode progress have resolved.
     val isPlaybackTargetReady: Boolean = false,
     val autoPlaySingleSource: Boolean = true,
@@ -271,7 +273,8 @@ class DetailsViewModel @Inject constructor(
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
     personalListsRepository: PersonalListsRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
 ) : ViewModel() {
 
     /** "Add to list" from the action row; the result shows as a Details toast. */
@@ -365,6 +368,18 @@ class DetailsViewModel @Inject constructor(
     private enum class WatchlistWrite { SAVED, UNCHANGED, FAILED }
 
     init {
+        viewModelScope.launch {
+            idleReturnCoordinator.isSyncing.collect { syncing ->
+                if (_uiState.value.isSyncingProgress != syncing) {
+                    _uiState.value = _uiState.value.copy(isSyncingProgress = syncing)
+                }
+            }
+        }
+        viewModelScope.launch {
+            // Another device may have moved this show on while this one sat idle; once its
+            // progress is pulled, rebuild the target from the synced sources.
+            idleReturnCoordinator.syncCompleted.collect { refreshAfterPlayerReturn(fullResume = true) }
+        }
         viewModelScope.launch {
             mediaRepository.episodeRatingsUpdated.collect { (tvId, seasonNumber) ->
                 if (tvId == currentMediaId && currentMediaType == MediaType.TV) {
@@ -1683,9 +1698,11 @@ class DetailsViewModel @Inject constructor(
      * Refresh watched badges and continue target when returning from Player.
      * Uses local caches/history first for near-instant UI updates.
      */
-    fun refreshAfterPlayerReturn() {
+    fun refreshAfterPlayerReturn(fullResume: Boolean = false) {
         val tmdbId = currentMediaId
         if (tmdbId == 0) return
+        // A post-idle pull is running; its completion refreshes with the synced data.
+        if (idleReturnCoordinator.isSyncing.value) return
         // Don't run during initial load — would overwrite episodes/seasonProgress with empty data.
         // The isLoading guard alone is insufficient: cached items set isLoading=false immediately,
         // but episodes haven't been populated yet. Wait for the episodes coroutine to finish.
@@ -1741,7 +1758,11 @@ class DetailsViewModel @Inject constructor(
             }
 
             // 3. Re-derive play target: try resume info first, then next unwatched episode
-            val quickResume = fetchResumeInfoFromHistoryOnly(tmdbId, mediaType)
+            val quickResume = if (fullResume) {
+                fetchResumeInfo(tmdbId, mediaType)
+            } else {
+                fetchResumeInfoFromHistoryOnly(tmdbId, mediaType)
+            }
             val playTarget = if (quickResume != null) {
                 PlayTarget(
                     season = quickResume.season,

@@ -318,7 +318,8 @@ class PlayerViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
 ) : ViewModel() {
 
     /** Whether the active profile may play this title; always true outside a kids profile. */

@@ -825,6 +825,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     val playbackFrameRate = remember { com.arflix.tv.util.PlaybackFrameRate() }
     var frameRateSurface by remember { mutableStateOf<android.view.Surface?>(null) }
     var playerReleased by remember { mutableStateOf(false) }
+    /** The player left on its own after an idle period; its exit must not save progress. */
+    var leftForIdle by remember { mutableStateOf(false) }
 
     // Picture-in-Picture state
     var isInPipMode by remember { mutableStateOf(false) }
@@ -2204,6 +2206,33 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         }
     )
     val onExitPlayer: () -> Unit = exitTransition::requestExit
+
+    // A player left paused through a long idle (TV switched off on a paused episode) goes back
+    // to the previous screen, which then shows the progress pulled from the other devices.
+    DisposableEffect(Unit) {
+        viewModel.idleReturnCoordinator.isPlayerOpen = true
+        onDispose { viewModel.idleReturnCoordinator.isPlayerOpen = false }
+    }
+    LaunchedEffect(Unit) {
+        val coordinator = viewModel.idleReturnCoordinator
+        fun leaveIfStale() {
+            if (playerReleased || exitTransition.isExiting || isInPipMode || exoPlayer.isPlaying) return
+            leftForIdle = true
+            onExitPlayer()
+        }
+        val idleReturnsAtStart = coordinator.idleReturns.value
+        launch {
+            // The box slept (or the user came back): idle ended before any timer could fire.
+            coordinator.idleReturns.collect { generation ->
+                if (generation != idleReturnsAtStart) leaveIfStale()
+            }
+        }
+        while (true) {
+            // The box stayed awake with the TV off: leave once the idle period has passed.
+            delay((coordinator.idleThresholdMs / 4).coerceIn(5_000L, 60_000L))
+            if (coordinator.isIdle()) leaveIfStale()
+        }
+    }
     val cancelNextEpisodePrompt: () -> Unit = {
         showNextEpisodePrompt = false
         onExitPlayer()
@@ -3431,6 +3460,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // Checked before any progress is saved: a live stream's window looks like a duration.
             if (exoPlayer.isCurrentMediaItemLive) viewModel.onLivePlaybackDetected()
 
+            // Someone watching without touching the remote is not idle.
+            if (exoPlayer.isPlaying) viewModel.idleReturnCoordinator.markActive()
+
             if (currentPosition > 0 && duration > 0 && playingCheckedRealSource()) {
                 val currentSecond = (currentPosition / 1000L).coerceAtLeast(0L)
                 val shouldReport =
@@ -3463,7 +3495,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         onDispose {
             playerReleasedAtomic.set(true)
             playerReleased = true
-            if (!nextEpisodeTransitionInProgress && playingCheckedRealSource()) {
+            // Leaving after an idle period saves nothing: the position is the one left here
+            // before going idle, and stamping it now would bury newer progress made elsewhere.
+            if (!nextEpisodeTransitionInProgress && !leftForIdle && playingCheckedRealSource()) {
                 runCatching {
                     if (exoPlayer.isCurrentMediaItemLive) viewModel.onLivePlaybackDetected()
                     val safeDuration = exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L

@@ -229,7 +229,7 @@ class DetailsPlaybackTargetTest {
             tmdbApi = api, watchHistoryRepository = historyRepository, watchlistRepository = mockk(relaxed = true),
             cloudSyncRepository = mockk(relaxed = true), launcherContinueWatchingRepository = mockk(relaxed = true),
             streamIntegrationRepository = integrations, recentPlayedSourceRepository = mockk(relaxed = true),
-            personalListsRepository = mockk(relaxed = true), kidsContentFilter = mockk(relaxed = true),
+            personalListsRepository = mockk(relaxed = true), kidsContentFilter = mockk(relaxed = true), idleReturnCoordinator = com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true)),
         )
         store.put("details", model)
         model.loadDetails(item.mediaType, 42, initialSeason, initialEpisode)

@@ -180,6 +180,12 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appForegroundSignals: com.arflix.tv.data.repository.AppForegroundSignals
 
+    @Inject
+    lateinit var idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
+
+    /** Key whose press ended an idle period on the player; its release is swallowed too. */
+    private var swallowedIdleKeyCode: Int? = null
+
     /** True until the first onResume after onCreate has been handled. */
     private var hasHandledFirstResume = false
 
@@ -489,7 +495,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            // The first press after a long idle must not act on a player left paused
+            // overnight (resuming it would write its old position over newer progress
+            // from another device); the player is leaving for the previous screen instead.
+            if (idleReturnCoordinator.onUserInteraction() && idleReturnCoordinator.isPlayerOpen) {
+                swallowedIdleKeyCode = event.keyCode
+                return true
+            }
+        } else if (event.action == android.view.KeyEvent.ACTION_UP && event.keyCode == swallowedIdleKeyCode) {
+            swallowedIdleKeyCode = null
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        idleReturnCoordinator.onUserInteraction()
+    }
+
     override fun onResume() {
+        // Before super.onResume(): screens observe ON_RESUME and must already see the
+        // post-idle sync as running, or they would rebuild from stale state first.
+        idleReturnCoordinator.onAppForeground()
         super.onResume()
         // Signalled from here, not from a screen: the app can return to the
         // foreground on any destination — a TV woken in the morning resumes onto
