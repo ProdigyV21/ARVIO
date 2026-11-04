@@ -1789,7 +1789,8 @@ fun SettingsScreen(
                                                     }
                                                 }
                                                 2 -> {
-                                                    if (uiState.isMdbListConnected) {
+                                                    // A rejected connection is replaced by connecting again.
+                                                    if (uiState.isMdbListConnected && !uiState.mdbListReconnectRequired) {
                                                         showMdbListDisconnectConfirm = true
                                                     } else if (uiState.isMdbListPolling) {
                                                         viewModel.cancelMdbListAuth()
@@ -6868,7 +6869,17 @@ private fun TvGeneralSettingsRows(
                 14 -> SettingsToggleRow(stringResource(R.string.trailer_sound), stringResource(R.string.trailer_sound_desc), trailerSoundEnabled, focusedIndex == localIndex, onTrailerSoundEnabledToggle, Modifier.settingsFocusSlot(localIndex))
                 15 -> SettingsRow(Icons.Default.Movie, stringResource(R.string.frame_rate), stringResource(R.string.frame_rate_desc), frameRateMatchingMode, focusedIndex == localIndex, onFrameRateMatchingClick, Modifier.settingsFocusSlot(localIndex))
                 16 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.quality_filters), stringResource(R.string.quality_filters_desc), qualityFilterValue, focusedIndex == localIndex, onQualityFiltersClick, Modifier.settingsFocusSlot(localIndex))
-                17 -> SettingsRow(Icons.Default.Widgets, stringResource(R.string.card_layout), stringResource(R.string.card_layout_desc), cardLayoutMode, focusedIndex == localIndex, onCardLayoutToggle, Modifier.settingsFocusSlot(localIndex))
+                17 -> SettingsRow(
+                    icon = Icons.Default.Widgets,
+                    title = stringResource(R.string.card_layout),
+                    subtitle = stringResource(
+                        if (netflixHomeStyle) R.string.card_layout_netflix_exception_desc else R.string.card_layout_desc
+                    ),
+                    value = cardLayoutMode,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onCardLayoutToggle,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
                 18 -> SettingsRow(
                     icon = Icons.Default.Settings,
                     title = stringResource(R.string.ui_mode),
@@ -10225,7 +10236,13 @@ private fun AccountsSettings(
         // Trakt.tv
         AccountRow(
             name = "Trakt.tv",
-            description = stringResource(if (trackingUiState.traktReconnectRequired) R.string.trakt_reconnect_required else R.string.settings_trakt_desc),
+            description = when {
+                trackingUiState.traktReconnectRequired -> stringResource(R.string.trakt_reconnect_required)
+                isTraktAuthenticated && trackingUiState.traktUnavailable -> stringResource(R.string.trakt_session_unavailable)
+                isTraktAuthenticated && !trackingUiState.traktUsername.isNullOrBlank() ->
+                    stringResource(R.string.settings_connected_as, "@${trackingUiState.traktUsername}")
+                else -> stringResource(R.string.settings_trakt_desc)
+            },
             isConnected = isTraktAuthenticated,
             isWorking = trackingUiState.isTraktAuthStarting || trackingUiState.isTraktPolling,
             authCode = trackingUiState.traktCode?.userCode,
@@ -10242,8 +10259,14 @@ private fun AccountsSettings(
         // MDBList (per-profile alternative to Trakt)
         AccountRow(
             name = stringResource(R.string.mdblist_account),
-            description = stringResource(R.string.settings_mdblist_tagline),
-            isConnected = isMdbListConnected,
+            description = when {
+                isMdbListConnected && trackingUiState.mdbListReconnectRequired -> stringResource(R.string.mdblist_reconnect_required)
+                isMdbListConnected && trackingUiState.mdbListUnavailable -> stringResource(R.string.mdblist_session_unavailable)
+                isMdbListConnected && !trackingUiState.mdbListUsername.isNullOrBlank() ->
+                    stringResource(R.string.settings_connected_as, "@${trackingUiState.mdbListUsername}")
+                else -> stringResource(R.string.settings_mdblist_tagline)
+            },
+            isConnected = isMdbListConnected && !trackingUiState.mdbListReconnectRequired,
             isWorking = trackingUiState.mdbListConnecting || trackingUiState.isMdbListPolling,
             authCode = trackingUiState.mdbListCode,
             authUrl = trackingUiState.mdbListUrl,
@@ -10873,7 +10896,11 @@ private fun TrackingIntegrationsPage(
             TrackingServiceRow(
                 iconRes = R.drawable.ic_trakt,
                 title = "Trakt",
-                tagline = stringResource(if (uiState.traktReconnectRequired) R.string.trakt_reconnect_required else R.string.settings_trakt_tagline),
+                tagline = stringResource(when {
+                    uiState.traktReconnectRequired -> R.string.trakt_reconnect_required
+                    uiState.isTraktAuthenticated && uiState.traktUnavailable -> R.string.trakt_session_unavailable
+                    else -> R.string.settings_trakt_tagline
+                }),
                 isConnected = uiState.isTraktAuthenticated,
                 isWorking = uiState.isTraktPolling || uiState.isTraktAuthStarting,
                 connectedAs = uiState.traktUsername,
@@ -10892,8 +10919,12 @@ private fun TrackingIntegrationsPage(
             TrackingServiceRow(
                 iconRes = R.drawable.ic_mdblist,
                 title = "MDBList",
-                tagline = stringResource(R.string.settings_mdblist_tagline),
-                isConnected = uiState.isMdbListConnected,
+                tagline = stringResource(when {
+                    uiState.isMdbListConnected && uiState.mdbListReconnectRequired -> R.string.mdblist_reconnect_required
+                    uiState.isMdbListConnected && uiState.mdbListUnavailable -> R.string.mdblist_session_unavailable
+                    else -> R.string.settings_mdblist_tagline
+                }),
+                isConnected = uiState.isMdbListConnected && !uiState.mdbListReconnectRequired,
                 isWorking = uiState.mdbListConnecting || uiState.isMdbListPolling,
                 connectedAs = if (uiState.isMdbListConnected) (uiState.mdbListUsername ?: stringResource(R.string.connected)) else null,
                 showDivider = true,

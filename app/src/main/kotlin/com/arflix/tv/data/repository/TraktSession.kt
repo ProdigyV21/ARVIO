@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import com.arflix.tv.data.api.RefreshTokenRequest
 import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.api.TraktToken
+import com.arflix.tv.util.AppLogger
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.traktDataStore
 import com.google.gson.JsonParser
@@ -36,10 +37,13 @@ class TraktAuthUnavailable(val reconnectRequired: Boolean) : IllegalStateExcepti
 class TraktSession @Inject constructor(
     @ApplicationContext private val context: Context,
     private val profiles: ProfileManager,
-    @Named("traktAuth") private val api: TraktApi
+    @Named("traktAuth") private val api: TraktApi,
+    private val invalidationBus: CloudSyncInvalidationBus = CloudSyncInvalidationBus()
 ) {
     private val refreshMutex = Mutex()
     private val backoff = mutableMapOf<String, Pair<Credential, Long>>()
+    private val refusals = mutableMapOf<String, Pair<Credential, Int>>()
+    internal var clock: () -> Long = System::currentTimeMillis
     private data class Credential(val access: String?, val refresh: String?, val expires: Long?, val updated: Long?)
 
     private fun accessKey(id: String) = profiles.profileStringKeyFor(id, "trakt_access_token")
@@ -91,7 +95,7 @@ class TraktSession @Inject constructor(
             // A concurrent refresh/login/cloud restore already replaced the rejected credential.
             val rejected = rejectedAccessToken ?: observed.access
             val mustRefresh = force && access == rejected && (rejectedAccessToken != null || current == observed)
-            val now = System.currentTimeMillis()
+            val now = clock()
             if (!mustRefresh && (current.expires == null || now / 1000 < current.expires - 3600)) {
                 return@withLock access
             }
@@ -114,8 +118,10 @@ class TraktSession @Inject constructor(
                         clientSecret = Constants.TRAKT_CLIENT_SECRET
                     ))
                     // Do not overwrite a login, logout or cloud restore during the request.
+                    var rotated = false
                     context.traktDataStore.edit { prefs ->
                         if (credential(prefs, profileId) == current) {
+                            rotated = true
                             prefs[accessKey(profileId)] = token.accessToken
                             prefs[refreshKey(profileId)] = token.refreshToken
                             prefs[expiresKey(profileId)] = token.createdAt + token.expiresIn
@@ -123,24 +129,39 @@ class TraktSession @Inject constructor(
                             prefs.remove(reconnectKey(profileId))
                         }
                     }
+                    // Other devices share this session and the old refresh token is now dead:
+                    // publish the replacement right away instead of at the next unrelated push.
+                    if (rotated) invalidationBus.markUserDirty(CloudSyncScope.ACCOUNT, profileId, "trakt token rotated")
                 }
                 backoff.remove(profileId)
+                refusals.remove(profileId)
                 currentCoroutineContext().ensureActive()
                 credential(context.traktDataStore.data.first(), profileId).access
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 val http = error as? HttpException
-                val invalidGrant = http?.code() == 400 && runCatching {
-                    JsonParser.parseString(http.response()?.errorBody()?.string())
-                        .asJsonObject.get("error")?.asString == "invalid_grant"
-                }.getOrDefault(false)
-                if (http?.code() == 401 || invalidGrant) {
+                val oauthError = runCatching {
+                    JsonParser.parseString(http?.response()?.errorBody()?.string())
+                        .asJsonObject.get("error")?.asString
+                }.getOrNull()
+                AppLogger.w("TraktSession", "Token refresh failed: http=${http?.code()} error=$oauthError")
+                // A lone 400/403 without invalid_grant may be transient, but the same refresh
+                // token refused again and again is dead; keeping it left the session showing as
+                // connected while nothing synced.
+                val strikes = if (http?.code() == 400 || http?.code() == 403) {
+                    (refusals[profileId]?.takeIf { it.first == current }?.second ?: 0) + 1
+                } else {
+                    0
+                }
+                if (http?.code() == 401 || oauthError == "invalid_grant" || strikes >= REFUSALS_BEFORE_RECONNECT) {
                     reject(profileId, current)
                     backoff.remove(profileId)
+                    refusals.remove(profileId)
                 } else {
+                    if (strikes > 0) refusals[profileId] = current to strikes else refusals.remove(profileId)
                     val retryMs = http?.response()?.headers()?.get("Retry-After")?.toLongOrNull()
                         ?.coerceIn(30L, 3600L)?.times(1000L) ?: 300_000L
-                    backoff[profileId] = current to (System.currentTimeMillis() + retryMs)
+                    backoff[profileId] = current to (clock() + retryMs)
                 }
                 val latest = credential(context.traktDataStore.data.first(), profileId)
                 if (latest != current) latest.access else usable()
@@ -148,9 +169,15 @@ class TraktSession @Inject constructor(
         }
     }
 
-    private suspend fun reject(profileId: String, expected: Credential) {
+    private companion object {
+        const val REFUSALS_BEFORE_RECONNECT = 3
+    }
+
+    private suspend fun reject(profileId: String, expected: Credential): Boolean {
+        var rejected = false
         context.traktDataStore.edit { prefs ->
             if (credential(prefs, profileId) == expected) {
+                rejected = true
                 prefs.remove(accessKey(profileId))
                 prefs.remove(refreshKey(profileId))
                 prefs.remove(expiresKey(profileId))
@@ -159,6 +186,19 @@ class TraktSession @Inject constructor(
                 if (prefs[updatedKey(profileId)] == null) prefs[updatedKey(profileId)] = 1L
                 prefs[reconnectKey(profileId)] = true
             }
+        }
+        return rejected
+    }
+
+    private suspend fun accountRejects(accessToken: String): Boolean {
+        return try {
+            api.getMe(auth = "Bearer $accessToken", clientId = Constants.TRAKT_CLIENT_ID)
+            false
+        } catch (error: HttpException) {
+            error.code() == 401
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            false
         }
     }
 
@@ -169,6 +209,9 @@ class TraktSession @Inject constructor(
             block("Bearer $token")
         } catch (error: HttpException) {
             if (error.code() != 401) throw error
+            // A list can refuse access while the account still works. Confirm the account
+            // before forcing renewal, which can otherwise reject an unrefreshable credential.
+            if (!accountRejects(token)) throw error
             val refreshed = accessToken(id, force = true, rejectedAccessToken = token) ?: throw unavailable(id)
             try {
                 block("Bearer $refreshed")
@@ -176,8 +219,10 @@ class TraktSession @Inject constructor(
                 if (retry.code() != 401) throw retry
                 val prefs = context.traktDataStore.data.first()
                 val expected = credential(prefs, id)
-                if (expected.access == refreshed) reject(id, expected)
-                throw unavailable(id)
+                if (expected.access == refreshed && accountRejects(refreshed) && reject(id, expected)) {
+                    throw unavailable(id)
+                }
+                throw retry
             }
         }
     }
