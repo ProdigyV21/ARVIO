@@ -9,6 +9,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -127,14 +128,17 @@ class DetailsRemotePlaybackDeviceTest {
 
     @Test fun remotePlayWaitsForPostIdleRefreshAndUsesTheNewPosition() {
         val state = show(MediaType.MOVIE)
+        val syncingLabel = compose.activity.getString(R.string.syncing_progress)
         compose.runOnIdle {
             state.value = state.value.copy(isSyncingProgress = true, playPositionMs = 90_000L)
         }
+        compose.onNodeWithText(syncingLabel).assertIsDisplayed()
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(0, plays) }
         compose.runOnIdle {
             state.value = state.value.copy(isSyncingProgress = false, idleSyncRevision = 1L, playPositionMs = 224_000L)
         }
+        compose.onNodeWithText(syncingLabel).assertDoesNotExist()
         key(KeyEvent.KEYCODE_DPAD_CENTER)
         compose.runOnIdle { assertEquals(1, plays); assertEquals(224_000L, playedPosition) }
     }
