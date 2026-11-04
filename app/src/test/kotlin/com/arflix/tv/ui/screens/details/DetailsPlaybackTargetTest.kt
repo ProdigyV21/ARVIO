@@ -309,7 +309,8 @@ class DetailsPlaybackTargetTest {
         runCurrent()
         assertFalse(model.uiState.value.isSyncingProgress)
         assertTrue(model.canStartPlayback(1L))
-        assertTrue(model.uiState.value.showToast)
+        assertEquals(RuntimeEnvironment.getApplication().getString(com.arflix.tv.R.string.details_progress_refresh_failed),
+            model.uiState.value.toastMessage)
         assertEquals(90_000L, model.uiState.value.playPositionMs)
         history.complete(entry(MediaType.MOVIE, position = 224))
         runCurrent()
