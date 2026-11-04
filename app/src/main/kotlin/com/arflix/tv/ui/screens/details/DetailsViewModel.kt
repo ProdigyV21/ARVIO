@@ -1748,7 +1748,7 @@ class DetailsViewModel @Inject constructor(
         if (useFullResume) _uiState.value = _uiState.value.copy(isSyncingProgress = true)
 
         resumeRefreshJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
-            try {
+            suspend fun refreshTarget() {
                 // Force-refresh watched episodes from backend (not just in-memory cache)
                 // to pick up episodes marked watched during playback.
                 val watchedKeys = if (mediaType == MediaType.TV) {
@@ -1829,7 +1829,7 @@ class DetailsViewModel @Inject constructor(
                     animeSeasonStructure?.identityForTmdb(season, episode)
                 }
                 if (!currentCoroutineContext().isActive || currentMediaId != tmdbId || currentMediaType != mediaType ||
-                    idleReturnCoordinator.isSyncing.value || idleReturnCoordinator.syncCompleted.value != revision) return@launch
+                    idleReturnCoordinator.isSyncing.value || idleReturnCoordinator.syncCompleted.value != revision) return
                 val latestState = _uiState.value
                 val previousTarget = latestState.takeUnless { useFullResume }
                 _uiState.value = latestState.copy(
@@ -1853,9 +1853,21 @@ class DetailsViewModel @Inject constructor(
                     } ?: playTarget?.label ?: previousTarget?.playLabel,
                     playPositionMs = playTarget?.positionMs ?: 0L
                 )
+            }
+            try {
+                if (useFullResume) {
+                    val refreshed = withTimeoutOrNull(com.arflix.tv.data.repository.IdleReturnCoordinator.SYNC_TIMEOUT_MS) {
+                        refreshTarget()
+                        true
+                    } ?: false
+                    if (!refreshed) showToast(context.getString(R.string.details_progress_refresh_failed), ToastType.ERROR)
+                } else {
+                    refreshTarget()
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 Log.w(TAG, "Failed to refresh playback target", error)
+                if (useFullResume) showToast(context.getString(R.string.details_progress_refresh_failed), ToastType.ERROR)
             } finally {
                 if (useFullResume && currentCoroutineContext().isActive &&
                     currentMediaId == tmdbId && currentMediaType == mediaType &&

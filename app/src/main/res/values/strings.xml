@@ -1548,6 +1548,7 @@
     <!-- Extracted from code (data layer): shared labels and errors -->
     <string name="continue_season_episode">Continue S%1$dE%2$d</string>
     <string name="syncing_progress">Syncing progress…</string>
+    <string name="details_progress_refresh_failed">Could not refresh watch progress. Showing saved progress.</string>
     <string name="play_season_episode">Play S%1$dE%2$d</string>
     <string name="continue_season_episode_at">Continue S%1$dE%2$d at %3$s</string>
     <string name="continue_at">Continue at %1$s</string>

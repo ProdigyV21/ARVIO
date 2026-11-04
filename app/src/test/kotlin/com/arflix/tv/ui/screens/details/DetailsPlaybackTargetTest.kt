@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -294,6 +295,25 @@ class DetailsPlaybackTargetTest {
         runCurrent()
         assertEquals(300_000L, model.uiState.value.playPositionMs)
         assertTrue(model.canStartPlayback(2L))
+    }
+
+    @Test fun aSlowTargetLookupTimesOutWithoutFreezingContinueOrApplyingALateResult() = runTest {
+        val model = open(item(MediaType.MOVIE))
+        history.complete(entry(MediaType.MOVIE))
+        runCurrent()
+        history = CompletableDeferred()
+        idleCompleted.value = 1L
+        runCurrent()
+        assertFalse(model.canStartPlayback())
+        advanceTimeBy(IdleReturnCoordinator.SYNC_TIMEOUT_MS)
+        runCurrent()
+        assertFalse(model.uiState.value.isSyncingProgress)
+        assertTrue(model.canStartPlayback(1L))
+        assertTrue(model.uiState.value.showToast)
+        assertEquals(90_000L, model.uiState.value.playPositionMs)
+        history.complete(entry(MediaType.MOVIE, position = 224))
+        runCurrent()
+        assertEquals(90_000L, model.uiState.value.playPositionMs)
     }
 
     private fun item(type: MediaType) = MediaItem(42, "Playback target fixture", mediaType = type, totalEpisodes = 2)
