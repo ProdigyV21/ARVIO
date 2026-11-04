@@ -3,6 +3,7 @@ package com.arflix.tv.ui.screens.profile
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -54,8 +55,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -324,13 +327,13 @@ internal fun ProfileSelectionContent(
                     .then(if (isTouchDevice) Modifier.verticalScroll(rememberScrollState()).padding(vertical = 32.dp) else Modifier)
                     .graphicsLayer { alpha = backgroundAlpha }
             ) {
-                // Title
-                Text(
-                    text = "ARVIO",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                    letterSpacing = 6.sp
+                // Title / Brand Wordmark Logo
+                Image(
+                    painter = painterResource(id = R.drawable.ic_arvio_wordmark),
+                    contentDescription = "ARVIO",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .height(if (isTouchDevice) 22.dp else 30.dp)
                 )
 
                 Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
