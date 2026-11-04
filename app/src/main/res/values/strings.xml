@@ -599,6 +599,8 @@
     <string name="settings_routing_update_simkl">Update Simkl while watching</string>
     <string name="settings_routing_update_simkl_on">Send progress and watched changes to Simkl.</string>
     <string name="settings_routing_update_simkl_off">Connect Simkl to enable this.</string>
+    <string name="settings_routing_update_wetrakr_on">Send progress and watched changes to WeTrakr.</string>
+    <string name="settings_routing_update_wetrakr_off">Connect WeTrakr to enable this.</string>
     <string name="settings_tracking_mode_automatic">Automatic</string>
 
     <string name="settings_fact_app_language">App language</string>
@@ -1030,8 +1032,11 @@
 
     <!-- Extracted from code: Profile, Login and Collections -->
     <string name="profile_edit_title">Edit Profile</string>
+    <string name="profile_choose_avatar">Choose an avatar</string>
     <string name="profile_name_hint">Profile name</string>
     <string name="profile_lock">Profile Lock</string>
+    <string name="profile_lock_desc">Require a PIN to access this profile</string>
+    <string name="profile_pin_active">PIN protection is active</string>
     <string name="profile_set_pin">Set PIN</string>
     <string name="profile_change_pin">Change PIN</string>
     <string name="profile_remove_pin">Remove PIN</string>
@@ -1607,7 +1612,9 @@
     <string name="settings_community_addons_search">Search addons</string>
     <string name="settings_community_addons_all">All</string>
     <string name="settings_community_addons_empty">No addons match your search</string>
+    <string name="settings_community_addons_clear_filters">Clear search &amp; filters</string>
     <string name="settings_community_addons_failed">Couldn\'t load community addons</string>
+    <string name="settings_copied_url">URL copied to clipboard</string>
     <string name="settings_community_addon_configure">Configure</string>
     <string name="settings_community_addon_configurable">Configurable</string>
     <string name="settings_community_addon_uninstall">Uninstall</string>
@@ -2057,7 +2064,7 @@
     <string name="youtube_collection_full">This collection has reached the limit of %1$d videos. Remove a video before adding another.</string>
     <string name="youtube_parent_approval_required">A correct parent PIN is required to add videos to this kids profile. Set a parent PIN in Manage Profiles if needed.</string>
     <string name="youtube_profile_changed">The profile changed. Please add the video again.</string>
-    <string name="settings_wetrakr_tagline">Watchlists, watched history and playback progress. Connect separately on each device.</string>
+    <string name="settings_wetrakr_tagline">Watchlists, history &amp; playback progress</string>
     <string name="settings_wetrakr_device">Connection for this device and profile</string>
     <string name="settings_wetrakr_update">Update WeTrakr while watching</string>
     <string name="settings_connect_wetrakr">Connect WeTrakr</string>

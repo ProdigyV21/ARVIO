@@ -70,6 +70,28 @@ class ReleaseCalendarMappingTest {
         assertTrue(calendarEpisodeReleases(title, listOf(TmdbEpisode(), TmdbEpisode(airDate = "2026-02-31")), emptyList(), month, ZoneId.of("UTC")).isEmpty())
     }
 
+    @Test fun `confirmed midnight release retains the local day month and instant`() {
+        val exact = Instant.parse("2026-11-01T00:00:00Z")
+        val episode = TmdbEpisode(seasonNumber = 2, episodeNumber = 3, airDate = "2026-11-01")
+        val timed = TraktCalendarEpisode(2, 3, firstAired = exact.toString())
+        val release = calendarEpisodeReleases(
+            title, listOf(episode), listOf(timed), month, ZoneId.of("America/Los_Angeles")
+        ).single()
+        assertEquals(LocalDate.of(2026, 10, 31), release.date)
+        assertEquals(exact, release.releaseInstant)
+    }
+
+    @Test fun `authoritative midnight time works without a TMDB fallback date`() {
+        val exact = Instant.parse("2026-10-04T00:00:00Z")
+        val release = calendarEpisodeReleases(
+            title, listOf(TmdbEpisode(seasonNumber = 1, episodeNumber = 1)),
+            listOf(TraktCalendarEpisode(1, 1, firstAired = exact.toString())),
+            month, ZoneId.of("Asia/Tokyo")
+        ).single()
+        assertEquals(LocalDate.of(2026, 10, 4), release.date)
+        assertEquals(exact, release.releaseInstant)
+    }
+
     @Test fun `episode still is retained separately from series artwork`() {
         val result = calendarEpisodeReleases(title.copy(media = title.media.copy(backdrop = "series.jpg")),
             listOf(TmdbEpisode(airDate = "2026-10-04", stillPath = "https://images.example/episode.jpg")), emptyList(), month, ZoneId.of("UTC")).single()
