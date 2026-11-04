@@ -1603,7 +1603,9 @@
     <string name="settings_community_addons_search">Search addons</string>
     <string name="settings_community_addons_all">All</string>
     <string name="settings_community_addons_empty">No addons match your search</string>
+    <string name="settings_community_addons_clear_filters">Clear search &amp; filters</string>
     <string name="settings_community_addons_failed">Couldn\'t load community addons</string>
+    <string name="settings_copied_url">URL copied to clipboard</string>
     <string name="settings_community_addon_configure">Configure</string>
     <string name="settings_community_addon_configurable">Configurable</string>
     <string name="settings_community_addon_uninstall">Uninstall</string>
