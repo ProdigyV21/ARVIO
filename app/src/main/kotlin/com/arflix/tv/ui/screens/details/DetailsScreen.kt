@@ -232,7 +232,10 @@ import com.arflix.tv.util.parseRatingValue
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Date
@@ -4378,14 +4381,36 @@ private fun episodeAirZoned(rawDate: String): ZonedDateTime? {
     }.getOrNull()
 }
 
-private fun formatEpisodeAirDateLabel(rawDate: String): String? {
+private val episodeAirDateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+
+internal fun formatEpisodeAirDateLabel(rawDate: String): String? {
     val value = rawDate.trim()
     if (value.isEmpty()) return null
-    val airZoned = episodeAirZoned(value)
-    if (airZoned != null) {
-        val localDate = airZoned.withZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
-        return localDate.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US))
+
+    // If timestamp has explicit time and timezone, convert that instant to device zone
+    if (value.contains('T') || value.contains(':')) {
+        val instant = runCatching { Instant.parse(value) }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(value).toInstant() }.getOrNull()
+        if (instant != null) {
+            val localDate = if (instant.atZone(ZoneOffset.UTC).toLocalTime() == LocalTime.MIDNIGHT) {
+                // Discard dummy UTC midnight timestamps and preserve original calendar date
+                instant.atZone(ZoneOffset.UTC).toLocalDate()
+            } else {
+                instant.atZone(ZoneId.systemDefault()).toLocalDate()
+            }
+            return localDate.format(episodeAirDateFormatter)
+        }
     }
+
+    // Preserve date-only air dates (e.g. "2026-01-01") directly as calendar dates without timezone shifting
+    val localDate = runCatching {
+        val datePart = if (value.length >= 10) value.take(10) else value
+        LocalDate.parse(datePart)
+    }.getOrNull()
+    if (localDate != null) {
+        return localDate.format(episodeAirDateFormatter)
+    }
+
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         parser.isLenient = false
@@ -4396,12 +4421,25 @@ private fun formatEpisodeAirDateLabel(rawDate: String): String? {
     }
 }
 
-private fun isFutureEpisodeAirDate(rawDate: String): Boolean {
+private fun episodeAirInstant(rawDate: String): Instant? {
+    val value = rawDate.trim()
+    if (value.isEmpty()) return null
+    if (value.contains('T') || value.contains(':')) {
+        val parsed = runCatching { Instant.parse(value) }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(value).toInstant() }.getOrNull()
+        if (parsed != null && parsed.atZone(ZoneOffset.UTC).toLocalTime() != LocalTime.MIDNIGHT) {
+            return parsed
+        }
+    }
+    return episodeAirZoned(value)?.toInstant()
+}
+
+internal fun isFutureEpisodeAirDate(rawDate: String): Boolean {
     val value = rawDate.trim()
     if (value.isEmpty()) return false
-    val airZoned = episodeAirZoned(value)
-    if (airZoned != null) {
-        return Instant.now().isBefore(airZoned.toInstant())
+    val instant = episodeAirInstant(value)
+    if (instant != null) {
+        return Instant.now().isBefore(instant)
     }
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
