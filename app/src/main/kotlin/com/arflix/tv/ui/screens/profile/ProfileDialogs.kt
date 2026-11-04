@@ -453,7 +453,33 @@ private fun ProfileDialogContent(
                             }
                         }
 
-                        // 3. Choose Avatar Section (Categories)
+                        // 3. Kids Profile Controls (Optimized Mobile Card)
+                        MobileKidsProfileControls(
+                            isKidsProfile = isKidsProfile,
+                            onKidsProfileChange = {
+                                hideKeyboard()
+                                onKidsProfileChange(it)
+                            },
+                            kidsAgeLevel = kidsAgeLevel,
+                            onKidsAgeLevelChange = onKidsAgeLevelChange
+                        )
+
+                        // 4. Profile Lock (Optimized Mobile Card)
+                        if (profile != null && onShowPinSetup != null && onRemovePin != null) {
+                            MobileProfileLockControls(
+                                hasPin = !profile.pin.isNullOrEmpty(),
+                                onSetPin = {
+                                    hideKeyboard()
+                                    onShowPinSetup()
+                                },
+                                onRemovePin = {
+                                    hideKeyboard()
+                                    onRemovePin()
+                                }
+                            )
+                        }
+
+                        // 5. Choose Avatar Section (Categories)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -499,32 +525,6 @@ private fun ProfileDialogContent(
                                     }
                                 }
                             }
-                        }
-
-                        // 4. Kids Profile Controls (Optimized Mobile Card)
-                        MobileKidsProfileControls(
-                            isKidsProfile = isKidsProfile,
-                            onKidsProfileChange = {
-                                hideKeyboard()
-                                onKidsProfileChange(it)
-                            },
-                            kidsAgeLevel = kidsAgeLevel,
-                            onKidsAgeLevelChange = onKidsAgeLevelChange
-                        )
-
-                        // 5. Profile Lock (Optimized Mobile Card)
-                        if (profile != null && onShowPinSetup != null && onRemovePin != null) {
-                            MobileProfileLockControls(
-                                hasPin = !profile.pin.isNullOrEmpty(),
-                                onSetPin = {
-                                    hideKeyboard()
-                                    onShowPinSetup()
-                                },
-                                onRemovePin = {
-                                    hideKeyboard()
-                                    onRemovePin()
-                                }
-                            )
                         }
                     }
 
@@ -1054,7 +1054,7 @@ private fun MobileProfileLockControls(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
                     text = stringResource(R.string.profile_lock),
                     fontSize = 14.sp,
@@ -1069,7 +1069,6 @@ private fun MobileProfileLockControls(
                     lineHeight = 15.sp
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
             if (!hasPin) {
                 DialogButton(
                     text = stringResource(R.string.profile_set_pin),
@@ -1342,7 +1341,7 @@ private fun DialogButton(
 
     val buttonContent: @Composable () -> Unit = {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -1354,7 +1353,8 @@ private fun DialogButton(
                 text = text,
                 fontSize = if (isPrimary && isTouchDevice) 15.sp else 13.sp,
                 fontWeight = if (isPrimary && isTouchDevice) FontWeight.SemiBold else FontWeight.Medium,
-                color = contentColor
+                color = contentColor,
+                maxLines = 1
             )
         }
     }
