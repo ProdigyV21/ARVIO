@@ -10,6 +10,9 @@ internal class LiveTvPlaybackSession(
     private var suspended = false
     private var resumePlayback = false
 
+    /** A retune starts playing, so the caller reapplies a pause from this. */
+    val resumesPlaying: Boolean get() = resumePlayback
+
     fun suspend() {
         if (suspended) return
         suspended = true
@@ -19,12 +22,18 @@ internal class LiveTvPlaybackSession(
         cancelRequests()
     }
 
-    fun resume(isLive: Boolean, allowed: Boolean) {
-        if (!suspended || !allowed) return
+    /** Returns true when the retained source was dropped, so the caller must tune again. */
+    fun resume(isLive: Boolean, allowed: Boolean, retainedSourceUsable: Boolean = true): Boolean {
+        if (!suspended || !allowed) return false
         suspended = false
-        if (player.mediaItemCount == 0) return
+        if (player.mediaItemCount == 0) return false
+        if (!retainedSourceUsable) {
+            player.clearMediaItems()
+            return true
+        }
         if (isLive) player.seekToDefaultPosition()
         player.prepare()
         player.playWhenReady = resumePlayback
+        return false
     }
 }

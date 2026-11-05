@@ -4292,14 +4292,33 @@ class StreamRepository @Inject constructor(
         return textContainsAny(descriptor, SIDE_EFFECT_PRONE_PREWARM_TEXT_MARKERS)
     }
 
-    fun canPrewarmWithoutSideEffects(stream: StreamSource): Boolean {
+    /** The one warm-up gate: an IPTV VOD row also needs the user's explicit No limit, because any request can spend the account's allowance. */
+    suspend fun canPrewarmWithoutSideEffects(stream: StreamSource): Boolean {
         val rawUrl = stream.url?.trim().orEmpty()
         if (rawUrl.isBlank()) return false
         if (rawUrl.startsWith("magnet:", ignoreCase = true)) return false
         if (!rawUrl.startsWith("http://", ignoreCase = true) && !rawUrl.startsWith("https://", ignoreCase = true)) {
             return false
         }
-        return !isSideEffectPronePrewarmSource(rawUrl, stream)
+        if (isSideEffectPronePrewarmSource(rawUrl, stream)) return false
+        if (!IptvVodSourceIds.isIptvVodAddonId(stream.addonId)) return true
+        return try {
+            iptvRepository.isExplicitlyUnlimited(stream)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            false
+        }
+    }
+
+    internal suspend fun iptvStreamPolicyFor(stream: StreamSource): IptvStreamPolicy? =
+        iptvRepository.streamPolicyFor(stream)
+
+    internal suspend fun iptvAccountUsage(account: com.arflix.tv.network.IptvProviderAccount): com.arflix.tv.network.IptvAccountUsage? =
+        iptvRepository.fetchAccountUsage(account)
+
+    /** Never waits: playback must not depend on the answer. */
+    internal fun bootstrapIptvAllowance(stream: StreamSource) {
+        stream.iptvSourceId?.let { iptvRepository.bootstrapAccountAllowance(it) }
     }
 
     private suspend fun warmHttpConnection(stream: StreamSource) {
@@ -4453,10 +4472,14 @@ class StreamRepository @Inject constructor(
         limit: Int = 3,
         allowNetworkWarmup: Boolean = true
     ) = withContext(Dispatchers.IO) {
-        streams.asSequence()
-            .filter { !it.url.isNullOrBlank() }
-            .filter { canPrewarmWithoutSideEffects(it) }
-            .take(limit.coerceAtLeast(0))
+        // Stops at the limit: the gate can read stored settings, so rows past it must not pay for that.
+        val wanted = limit.coerceAtLeast(0)
+        val warmable = ArrayList<StreamSource>(wanted)
+        for (stream in streams) {
+            if (warmable.size >= wanted) break
+            if (!stream.url.isNullOrBlank() && canPrewarmWithoutSideEffects(stream)) warmable.add(stream)
+        }
+        warmable
             .map { stream ->
                 async {
                     runCatching {
@@ -4464,7 +4487,6 @@ class StreamRepository @Inject constructor(
                     }
                 }
             }
-            .toList()
             .awaitAll()
     }
 
@@ -4488,7 +4510,10 @@ class StreamRepository @Inject constructor(
             val playable = direct.startsWith("http://", ignoreCase = true) ||
                 direct.startsWith("https://", ignoreCase = true)
             if (!playable) return null
-            return stream.copy(url = direct)
+            return stream.copy(
+                url = direct,
+                iptvSourceId = stream.iptvSourceId ?: StalkerVodLink.parseMarker(url)?.portalId
+            )
         }
 
         val normalizedUrl = when {

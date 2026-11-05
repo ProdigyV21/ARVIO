@@ -258,7 +258,7 @@ fun DetailsScreen(
     onAutoPlayHandled: () -> Unit = {},
     viewModel: DetailsViewModel = hiltViewModel(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
-    onNavigateToPlayer: (MediaType, Int, EpisodeIdentity?, String?, String?, String?, String?, Long?) -> Unit,
+    onNavigateToPlayer: (MediaType, Int, EpisodeIdentity?, String?, String?, String?, String?, Long?, String?) -> Unit,
     onNavigateToDetails: (MediaType, Int) -> Unit,
     onNavigateToCollection: (String) -> Unit = {},
     onNavigateToHome: () -> Unit = {},
@@ -379,7 +379,8 @@ fun DetailsScreen(
             null,
             null,
             null,
-            startPositionMs
+            startPositionMs,
+            null
         )
     }
 
@@ -568,7 +569,7 @@ fun DetailsScreen(
                         viewModel.recordPlayedEpisode(mediaId, null)
                         onNavigateToPlayer(
                             mediaType, mediaId, null, state.imdbId,
-                            stream.url, stream.addonId, stream.source, startPositionMs
+                            stream.url, stream.addonId, stream.source, startPositionMs, null
                         )
                     } else if (!state.autoPlaySingleSource) {
                         // Autoplay OFF → open the source picker; never auto-play.
@@ -1171,7 +1172,8 @@ fun DetailsScreen(
                     stream.url?.takeIf { it.isNotBlank() },
                     stream.addonId.takeIf { it.isNotBlank() },
                     stream.source.takeIf { it.isNotBlank() },
-                    startPositionMs
+                    startPositionMs,
+                    stream.iptvSourceId
                 )
             },
             onClose = {

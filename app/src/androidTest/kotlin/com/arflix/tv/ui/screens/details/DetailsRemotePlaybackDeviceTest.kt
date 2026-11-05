@@ -186,7 +186,7 @@ class DetailsRemotePlaybackDeviceTest {
                 CompositionLocalProvider(LocalDeviceType provides if (phone) DeviceType.PHONE else DeviceType.TV) {
                     ArflixTvTheme {
                         DetailsScreen(type, 42, viewModel = model,
-                            onNavigateToPlayer = { _, _, episode, _, _, _, _, position ->
+                            onNavigateToPlayer = { _, _, episode, _, _, _, _, position, _ ->
                                 plays++
                                 playedEpisode = episode
                                 playedPosition = position
