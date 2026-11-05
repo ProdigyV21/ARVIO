@@ -1560,5 +1560,8 @@
   "Converting the audio for your browser…": "A hang átalakítása a böngészőhöz…",
   "Picking the best source…": "A legjobb forrás kiválasztása…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "A Ko-fi amerikai dollárban terhel; a bankja automatikusan átváltja az összeget.",
-  "Maximum of 10 IPTV playlists reached": "Elérted a legfeljebb 10 IPTV-lejátszási listát"
+  "Maximum of 10 IPTV playlists reached": "Elérted a legfeljebb 10 IPTV-lejátszási listát",
+  "Regional price · save {value0}": "Regionális ár · {value0} megtakarítás",
+  "One payment, no automatic renewal. About {value0} a month.": "Egyszeri fizetés, automatikus megújítás nélkül. Kb. havi {value0}.",
+  "12-month pass · {value0}": "12 hónapos bérlet · {value0}"
 }

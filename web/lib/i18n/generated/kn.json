@@ -1600,5 +1600,8 @@
   "Converting the audio for your browser…": "ನಿಮ್ಮ ಬ್ರೌಸರ್‌ಗಾಗಿ ಆಡಿಯೋವನ್ನು ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ…",
   "Picking the best source…": "ಉತ್ತಮ ಮೂಲವನ್ನು ಆಯ್ಕೆಮಾಡಲಾಗುತ್ತಿದೆ…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi ಯುಎಸ್ ಡಾಲರ್‌ಗಳಲ್ಲಿ ಶುಲ್ಕ ವಿಧಿಸುತ್ತದೆ; ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಮೊತ್ತವನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪರಿವರ್ತಿಸುತ್ತದೆ.",
-  "Maximum of 10 IPTV playlists reached": "ಗರಿಷ್ಠ 10 IPTV ಪ್ಲೇಲಿಸ್ಟ್‌ಗಳ ಮಿತಿ ತಲುಪಿದೆ"
+  "Maximum of 10 IPTV playlists reached": "ಗರಿಷ್ಠ 10 IPTV ಪ್ಲೇಲಿಸ್ಟ್‌ಗಳ ಮಿತಿ ತಲುಪಿದೆ",
+  "Regional price · save {value0}": "ಪ್ರಾದೇಶಿಕ ಬೆಲೆ · {value0} ಉಳಿಸಿ",
+  "One payment, no automatic renewal. About {value0} a month.": "ಒಂದೇ ಪಾವತಿ, ಸ್ವಯಂ ನವೀಕರಣ ಇಲ್ಲ. ತಿಂಗಳಿಗೆ ಸುಮಾರು {value0}.",
+  "12-month pass · {value0}": "12 ತಿಂಗಳ ಪಾಸ್ · {value0}"
 }

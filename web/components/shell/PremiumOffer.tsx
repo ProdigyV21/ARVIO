@@ -1,5 +1,6 @@
 "use client";
 import "@/app/premium.css";
+import { useRegionalYearly } from "@/lib/regionalPricing";
 
 import { useEffect, useId, useRef, useState } from "react";
 import { BadgeCheck, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
@@ -94,6 +95,7 @@ export function PremiumOffer({ intent, state, status, account, onClose, onRetry,
   const { auth } = useAppPick("auth");
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
+  useRegionalYearly(); // re-render with the regional link once the country is known
   const yearly = kofiYearlyUrl();
   const device = deviceName();
   const lapsed = Boolean(state?.everPaid) && !state?.entitled;

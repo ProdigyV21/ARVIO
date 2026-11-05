@@ -1563,5 +1563,8 @@
   "Converting the audio for your browser…": "Po konvertohet audioja për shfletuesin tuaj…",
   "Picking the best source…": "Po zgjidhet burimi më i mirë…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi tarifon në dollarë amerikanë; banka juaj e konverton shumën automatikisht.",
-  "Maximum of 10 IPTV playlists reached": "U arrit maksimumi prej 10 listash IPTV"
+  "Maximum of 10 IPTV playlists reached": "U arrit maksimumi prej 10 listash IPTV",
+  "Regional price · save {value0}": "Çmim rajonal · kurseni {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Një pagesë, pa rinovim automatik. Rreth {value0} në muaj.",
+  "12-month pass · {value0}": "Leje 12-mujore · {value0}"
 }

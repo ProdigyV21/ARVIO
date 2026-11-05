@@ -1571,5 +1571,8 @@
   "Converting the audio for your browser…": "Kino-convert ang audio para sa iyong browser…",
   "Picking the best source…": "Pinipili ang pinakamahusay na source…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Naniningil ang Ko-fi sa US dollar; awtomatikong kino-convert ng iyong bangko ang halaga.",
-  "Maximum of 10 IPTV playlists reached": "Naabot na ang maximum na 10 IPTV playlist"
+  "Maximum of 10 IPTV playlists reached": "Naabot na ang maximum na 10 IPTV playlist",
+  "Regional price · save {value0}": "Rehiyonal na presyo · makatipid ng {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Isang bayad, walang awtomatikong renewal. Mga {value0} kada buwan.",
+  "12-month pass · {value0}": "12-buwang pass · {value0}"
 }

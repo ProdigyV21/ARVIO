@@ -1561,5 +1561,8 @@
   "Converting the audio for your browser…": "Garsas konvertuojamas jūsų naršyklei…",
   "Picking the best source…": "Renkamas geriausias šaltinis…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi apmokestina JAV doleriais; jūsų bankas sumą konvertuoja automatiškai.",
-  "Maximum of 10 IPTV playlists reached": "Pasiektas didžiausias 10 IPTV grojaraščių skaičius"
+  "Maximum of 10 IPTV playlists reached": "Pasiektas didžiausias 10 IPTV grojaraščių skaičius",
+  "Regional price · save {value0}": "Regioninė kaina · sutaupykite {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Vienas mokėjimas, be automatinio atnaujinimo. Apie {value0} per mėnesį.",
+  "12-month pass · {value0}": "12 mėnesių leidimas · {value0}"
 }

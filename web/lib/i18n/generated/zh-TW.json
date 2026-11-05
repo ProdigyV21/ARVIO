@@ -1558,5 +1558,8 @@
   "Converting the audio for your browser…": "正在為您的瀏覽器轉換音訊…",
   "Picking the best source…": "正在挑選最佳來源…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi 以美元收費，您的銀行會自動換算金額。",
-  "Maximum of 10 IPTV playlists reached": "已達 IPTV 播放清單上限（10 個）"
+  "Maximum of 10 IPTV playlists reached": "已達 IPTV 播放清單上限（10 個）",
+  "Regional price · save {value0}": "地區價格 · 省 {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "一次性付款，不會自動續訂。約合每月 {value0}。",
+  "12-month pass · {value0}": "12 個月通行證 · {value0}"
 }

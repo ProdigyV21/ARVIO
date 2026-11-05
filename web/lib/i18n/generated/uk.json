@@ -1560,5 +1560,8 @@
   "Converting the audio for your browser…": "Конвертуємо звук для вашого браузера…",
   "Picking the best source…": "Вибираємо найкраще джерело…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi списує оплату в доларах США; ваш банк автоматично конвертує суму.",
-  "Maximum of 10 IPTV playlists reached": "Досягнуто максимуму — 10 плейлистів IPTV"
+  "Maximum of 10 IPTV playlists reached": "Досягнуто максимуму — 10 плейлистів IPTV",
+  "Regional price · save {value0}": "Регіональна ціна · економія {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Один платіж, без автоматичного продовження. Близько {value0} на місяць.",
+  "12-month pass · {value0}": "Пропуск на 12 місяців · {value0}"
 }

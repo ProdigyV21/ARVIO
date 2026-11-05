@@ -1561,5 +1561,8 @@
   "Converting the audio for your browser…": "Đang chuyển đổi âm thanh cho trình duyệt của bạn…",
   "Picking the best source…": "Đang chọn nguồn tốt nhất…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi tính phí bằng đô la Mỹ; ngân hàng của bạn sẽ tự động quy đổi số tiền.",
-  "Maximum of 10 IPTV playlists reached": "Đã đạt tối đa 10 danh sách phát IPTV"
+  "Maximum of 10 IPTV playlists reached": "Đã đạt tối đa 10 danh sách phát IPTV",
+  "Regional price · save {value0}": "Giá theo khu vực · tiết kiệm {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Thanh toán một lần, không tự động gia hạn. Khoảng {value0} mỗi tháng.",
+  "12-month pass · {value0}": "Gói 12 tháng · {value0}"
 }

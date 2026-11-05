@@ -1562,5 +1562,8 @@
   "Converting the audio for your browser…": "Audio tiek konvertēts jūsu pārlūkprogrammai…",
   "Picking the best source…": "Tiek izvēlēts labākais avots…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi iekasē maksu ASV dolāros; jūsu banka summu konvertē automātiski.",
-  "Maximum of 10 IPTV playlists reached": "Sasniegts maksimālais skaits — 10 IPTV atskaņošanas saraksti"
+  "Maximum of 10 IPTV playlists reached": "Sasniegts maksimālais skaits — 10 IPTV atskaņošanas saraksti",
+  "Regional price · save {value0}": "Reģionālā cena · ietaupiet {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Viens maksājums, bez automātiskas atjaunošanas. Aptuveni {value0} mēnesī.",
+  "12-month pass · {value0}": "12 mēnešu caurlaide · {value0}"
 }

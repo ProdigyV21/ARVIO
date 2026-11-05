@@ -1558,5 +1558,8 @@
   "Converting the audio for your browser…": "در حال تبدیل صدا برای مرورگر شما…",
   "Picking the best source…": "در حال انتخاب بهترین منبع…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi مبلغ را به دلار آمریکا دریافت می‌کند؛ بانک شما آن را به‌طور خودکار تبدیل می‌کند.",
-  "Maximum of 10 IPTV playlists reached": "به حداکثر ۱۰ فهرست پخش IPTV رسیدید"
+  "Maximum of 10 IPTV playlists reached": "به حداکثر ۱۰ فهرست پخش IPTV رسیدید",
+  "Regional price · save {value0}": "قیمت منطقه‌ای · {value0} صرفه‌جویی",
+  "One payment, no automatic renewal. About {value0} a month.": "یک بار پرداخت، بدون تمدید خودکار. حدود {value0} در ماه.",
+  "12-month pass · {value0}": "اشتراک ۱۲ ماهه · {value0}"
 }

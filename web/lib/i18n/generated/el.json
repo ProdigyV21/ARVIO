@@ -1559,5 +1559,8 @@
   "Converting the audio for your browser…": "Μετατροπή του ήχου για το πρόγραμμα περιήγησής σας…",
   "Picking the best source…": "Επιλογή της καλύτερης πηγής…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Το Ko-fi χρεώνει σε δολάρια ΗΠΑ· η τράπεζά σας μετατρέπει το ποσό αυτόματα.",
-  "Maximum of 10 IPTV playlists reached": "Συμπληρώθηκε το όριο των 10 λιστών IPTV"
+  "Maximum of 10 IPTV playlists reached": "Συμπληρώθηκε το όριο των 10 λιστών IPTV",
+  "Regional price · save {value0}": "Περιφερειακή τιμή · εξοικονόμηση {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Μία πληρωμή, χωρίς αυτόματη ανανέωση. Περίπου {value0} τον μήνα.",
+  "12-month pass · {value0}": "Πάσο 12 μηνών · {value0}"
 }

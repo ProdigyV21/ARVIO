@@ -1564,5 +1564,8 @@
   "Converting the audio for your browser…": "Konverterer lyden til din browser…",
   "Picking the best source…": "Vælger den bedste kilde…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi opkræver i amerikanske dollars; din bank omregner beløbet automatisk.",
-  "Maximum of 10 IPTV playlists reached": "Maksimum på 10 IPTV-playlister er nået"
+  "Maximum of 10 IPTV playlists reached": "Maksimum på 10 IPTV-playlister er nået",
+  "Regional price · save {value0}": "Regional pris · spar {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Én betaling, ingen automatisk fornyelse. Cirka {value0} om måneden.",
+  "12-month pass · {value0}": "12-måneders pas · {value0}"
 }

@@ -1561,5 +1561,8 @@
   "Converting the audio for your browser…": "Audioa zure arakatzailerako bihurtzen…",
   "Picking the best source…": "Iturri onena aukeratzen…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi-k AEBetako dolarretan kobratzen du; zure bankuak automatikoki bihurtzen du zenbatekoa.",
-  "Maximum of 10 IPTV playlists reached": "10 IPTV zerrendako muga gainditu da"
+  "Maximum of 10 IPTV playlists reached": "10 IPTV zerrendako muga gainditu da",
+  "Regional price · save {value0}": "Eskualdeko prezioa · aurreztu {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Ordainketa bakarra, berritze automatikorik gabe. Hilean {value0} inguru.",
+  "12-month pass · {value0}": "12 hilabeteko txartela · {value0}"
 }

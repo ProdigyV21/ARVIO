@@ -1,5 +1,6 @@
 "use client";
 import { useTranslation } from "@/lib/i18n";
+import { useRegionalYearly } from "@/lib/regionalPricing";
 
 import { BadgeCheck, Copy, ExternalLink, Gift } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -51,6 +52,7 @@ export function PremiumAccount() {
   const [state, setState] = useState(entitlement);
   const [message, setMessage] = useState("");
   useEffect(() => { setState(entitlement); setMessage(""); }, [auth?.userId, entitlement]);
+  useRegionalYearly(); // re-render with the regional link once the country is known
   if (!config.paywallEnabled || !auth) return null;
   const paid = Boolean(state?.entitled);
   const yearly = kofiYearlyUrl();

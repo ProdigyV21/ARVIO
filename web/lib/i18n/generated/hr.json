@@ -1563,5 +1563,8 @@
   "Converting the audio for your browser…": "Pretvaramo zvuk za vaš preglednik…",
   "Picking the best source…": "Odabiremo najbolji izvor…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi naplaćuje u američkim dolarima; vaša banka automatski preračunava iznos.",
-  "Maximum of 10 IPTV playlists reached": "Dosegnut je najveći broj od 10 IPTV popisa"
+  "Maximum of 10 IPTV playlists reached": "Dosegnut je najveći broj od 10 IPTV popisa",
+  "Regional price · save {value0}": "Regionalna cijena · uštedite {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "Jedna uplata, bez automatske obnove. Oko {value0} mjesečno.",
+  "12-month pass · {value0}": "Propusnica za 12 mjeseci · {value0}"
 }
