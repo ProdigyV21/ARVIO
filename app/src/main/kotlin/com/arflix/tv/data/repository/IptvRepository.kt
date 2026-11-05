@@ -1358,15 +1358,19 @@ class IptvRepository @Inject constructor(
             ?: config.stalkerPortals.firstOrNull { it.id == sourceId }?.let(::iptvConnectionLimitFingerprint)
     }
 
-    internal suspend fun streamPolicyFor(channel: IptvChannel): IptvStreamPolicy? = withContext(Dispatchers.IO) {
+    internal suspend fun streamPolicyFor(channel: IptvChannel): IptvStreamPolicy? =
+        resolveChannelStreamPolicy(channel)?.limit
+
+    internal suspend fun resolveChannelStreamPolicy(channel: IptvChannel): ResolvedIptvChannelPolicy? = withContext(Dispatchers.IO) {
         val config = observeConfig().first()
+        val account = iptvChannelAccount(channel, config) ?: return@withContext null
         val prefs = context.settingsDataStore.data.first()
-        iptvPolicyFor(
-            iptvChannelAccount(channel, config),
+        ResolvedIptvChannelPolicy(iptvPolicyFor(
+            account,
             iptvLimitSources(config),
             decodeConnectionLimits(prefs[connectionLimitsKey()]),
             decodeAccountInfo(prefs[accountInfoKey()])
-        )
+        ))
     }
 
     /** Null for every source that is not IPTV VOD, before anything is read. */

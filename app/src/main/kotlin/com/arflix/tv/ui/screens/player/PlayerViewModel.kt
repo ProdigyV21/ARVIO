@@ -88,6 +88,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Clock
@@ -7658,6 +7659,14 @@ class PlayerViewModel @Inject constructor(
     internal fun reportIptvAccountBusy() {
         iptvRecheckAfterBusy = true
         _uiState.value = _uiState.value.copy(error = IPTV_ACCOUNT_BUSY_MESSAGE)
+    }
+
+    internal fun reportIptvReopenBusy(positionMs: Long) {
+        iptvRecheckAfterBusy = true
+        lastKnownPositionMs = positionMs
+        _uiState.update {
+            it.copy(selectedStreamUrl = null, savedPosition = positionMs, error = IPTV_ACCOUNT_BUSY_MESSAGE)
+        }
     }
 
     /** Runs only for IPTV VOD: every other source reads no setting and returns without suspending. */

@@ -1111,6 +1111,7 @@ class HomeViewModel @Inject constructor(
         IptvPlaybackUrlResolver(
             OkHttpProvider.playbackClient.newBuilder()
                 .withIptvProviderRequestGuard()
+                .addInterceptor(com.arflix.tv.network.IptvPlaybackConnections())
                 .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
                 .writeTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -1124,9 +1125,12 @@ class HomeViewModel @Inject constructor(
      * (`.../play/channel`) says nothing about its format; the resolver asks the server once and
      * caches the answer, while addresses that already show their type are returned as they are.
      */
-    internal suspend fun resolveIptvPreviewTarget(itemId: Int): IptvPlaybackTarget? {
+    internal suspend fun resolveIptvPreviewTarget(
+        itemId: Int,
+        session: com.arflix.tv.network.IptvStreamSession?,
+    ): IptvPlaybackTarget? {
         val channel = iptvChannelMap[itemId] ?: return null
-        return runCatching { iptvPlaybackUrlResolver.resolve(channel.streamUrl, channel.requestHeaders) }
+        return runCatching { iptvPlaybackUrlResolver.resolve(channel.streamUrl, channel.requestHeaders, session = session) }
             .onFailure { if (it is CancellationException) throw it }
             .getOrNull()
     }
@@ -1134,16 +1138,16 @@ class HomeViewModel @Inject constructor(
     /** Null until the card's channel is known; the hero opens nothing until it has an answer. */
     internal suspend fun iptvPreviewGate(itemId: Int): HomeIptvPreviewGate? {
         val channel = iptvChannelMap[itemId] ?: return null
-        return readHomeIptvPreviewGate(itemId) { iptvRepository.streamPolicyFor(channel) }
+        return readHomeIptvPreviewGate(itemId) { iptvRepository.resolveChannelStreamPolicy(channel) }
     }
 
-    /** The account and limit a channel card's preview session opens under; null keeps today's untagged preview. */
-    internal suspend fun iptvPreviewPolicy(itemId: Int): com.arflix.tv.data.repository.IptvStreamPolicy? {
+    /** A preview must resolve to a known owner, even when that owner explicitly allows unlimited playback. */
+    internal suspend fun iptvPreviewPolicy(itemId: Int): com.arflix.tv.data.repository.ResolvedIptvChannelPolicy? {
         val channel = iptvChannelMap[itemId] ?: return null
-        return iptvRepository.streamPolicyFor(channel)
+        return iptvRepository.resolveChannelStreamPolicy(channel)
     }
 
-    /** The panel's live slot count for a preview's cold-start check, never stored. */
+    /** The panel's live slot count for preview admission, never stored on disk. */
     internal suspend fun iptvAccountUsage(account: com.arflix.tv.network.IptvProviderAccount) =
         iptvRepository.fetchAccountUsage(account)
 

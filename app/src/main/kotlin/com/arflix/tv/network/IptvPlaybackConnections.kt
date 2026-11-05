@@ -222,6 +222,12 @@ internal class IptvStreamSessionTable(
         return session
     }
 
+    /** Optional previews may use a free slot but must never close somebody else's stream. */
+    fun tryOpenSpare(account: IptvProviderAccount, limit: Int): IptvStreamSession? = synchronized(lock) {
+        if (open[account].orEmpty().size >= limit || !closing[account].isNullOrEmpty()) return@synchronized null
+        IptvStreamSession(account, this).also { open.getOrPut(account) { ArrayList() }.add(it) }
+    }
+
     /** Closes [previous], then this device's oldest sessions, until a new session fits under [limit]. */
     suspend fun makeRoom(account: IptvProviderAccount, limit: Int, previous: IptvStreamSession? = null) {
         val previousClose = previous?.close()

@@ -2136,7 +2136,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                         activity?.isInPictureInPictureMode == true
                     if (!inPip) iptvVodGate.closeForBackground(exoPlayer)
                 }
-                // Reopens through the stream effect, and so through makeRoom, at the saved position.
+                // Reopens through the stream effect's admission check at the saved position.
                 Lifecycle.Event.ON_START -> iptvVodGate.reopenAfterBackground()
                 else -> Unit
             }
@@ -2799,7 +2799,17 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // - DASH/Progressive: dedicated factories for optimal handling
             val isHeavy = isLikelyHeavyStream(latestUiState.selectedStream)
             val isRemoteHttp = urlLower.startsWith("http://") || urlLower.startsWith("https://")
-            val iptvVodSession = iptvVodGate.open(exoPlayer, viewModel.iptvVodPolicy(iptvVodStreamFor(latestUiState.selectedStream, url)))
+            val iptvPolicy = viewModel.iptvVodPolicy(iptvVodStreamFor(latestUiState.selectedStream, url))
+            if (iptvVodReopening) {
+                val admission = iptvVodGate.admitReopen(iptvPolicy, viewModel::iptvAccountUsage)
+                if (latestUiState.selectedStreamUrl != url || playerReleased || exitTransition.isExiting) return@LaunchedEffect
+                if (admission is com.arflix.tv.network.IptvAdmission.Full) {
+                    iptvVodGate.takeReopen()?.let { viewModel.reportIptvReopenBusy(it.positionMs) }
+                    return@LaunchedEffect
+                }
+                streamSelectedTime = System.currentTimeMillis()
+            }
+            val iptvVodSession = iptvVodGate.open(exoPlayer, iptvPolicy)
             if (iptvVodSession != null && !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                 iptvVodGate.deferOpen(exoPlayer, uiState.savedPosition)
                 return@LaunchedEffect
@@ -3379,7 +3389,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             }
 
             // Initial startup watchdog: while first frame has not really started, enforce bounded startup.
-            val startupPending = uiState.selectedStreamUrl != null && !hasPlaybackStarted && !iptvVodGate.isClosedForBackground
+            val startupPending = uiState.selectedStreamUrl != null && !hasPlaybackStarted &&
+                !iptvVodGate.isClosedForBackground && !iptvVodGate.hasPendingReopen
             if (startupPending) {
                 val selectedAt = streamSelectedTime ?: System.currentTimeMillis()
                 val startupBufferDuration = loopNowMs - selectedAt

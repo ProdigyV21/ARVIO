@@ -43,10 +43,10 @@ internal object IptvAccountAvailability {
     suspend fun admitReconnect(check: suspend () -> IptvAccountUsage?): IptvAdmission =
         poll(DEFAULT_IPTV_RECONNECT_CHECK_POLL_MS, MAX_IPTV_RECONNECT_CHECK_WAIT_MS, check)
 
-    /** An optional stream such as a Home preview asks once and never polls: only a first answer of full refuses it. */
-    suspend fun admitOnce(check: suspend () -> IptvAccountUsage?): IptvAdmission {
-        val answer = withTimeoutOrNull(MAX_IPTV_FIRST_CHECK_MS) { ask(check) } ?: return IptvAdmission.Proceed
-        return if (answer.active < answer.max) IptvAdmission.Proceed else IptvAdmission.Full(answer.active, answer.max)
+    /** An optional stream asks once and fails closed if the provider cannot confirm room. */
+    suspend fun hasVerifiedSpareSlot(check: suspend () -> IptvAccountUsage?): Boolean {
+        val answer = withTimeoutOrNull(MAX_IPTV_FIRST_CHECK_MS) { ask(check) } ?: return false
+        return answer.active in 0 until answer.max
     }
 
     private suspend fun poll(pollMs: Long, deadlineMs: Long, check: suspend () -> IptvAccountUsage?): IptvAdmission {

@@ -21,6 +21,7 @@ import com.arflix.tv.network.IptvStreamSession
 import com.arflix.tv.network.IptvStreamSessionTable
 import com.arflix.tv.ui.screens.tv.live.LiveDrop
 import io.mockk.mockk
+import io.mockk.every
 import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,6 +56,23 @@ class IptvVodStreamGateTest {
     private val limitTwo = iptvStreamPolicy(alice, IptvConnectionLimit.TWO, null)!!
     private val checked = iptvStreamPolicy(alice, IptvConnectionLimit.AUTO, 1)!!
     private fun TestScope.table() = IptvStreamSessionTable({ testScheduler.currentTime }, StandardTestDispatcher(testScheduler))
+
+    @Test fun backgroundReopenChecksEvenAfterARecentCloseAndPreservesThePausedPosition() = runTest {
+        val table = table()
+        val gate = IptvVodStreamGate(table)
+        every { player.currentPosition } returns 22_000L
+        gate.open(player, limitOne)
+        gate.closeForBackground(player)
+        gate.reopenAfterBackground()
+        assertFalse(table.isColdStart(alice))
+        var checks = 0
+        assertEquals(IptvAdmission.Full(1, 1), gate.admitReopen(limitOne) { checks++; IptvAccountUsage(1, 1) })
+        assertTrue(checks > 0)
+        assertNull(gate.session)
+        assertEquals(0, table.openCount())
+        assertEquals(IptvAdmission.Proceed, gate.admitReopen(limitOne) { IptvAccountUsage(0, 1) })
+        assertEquals(IptvVodReopen(22_000L, false), gate.takeReopen())
+    }
 
     @Test fun limitOneStopsAndClosesBeforeOpeningTheNextVersion() = runTest {
         val table = table()

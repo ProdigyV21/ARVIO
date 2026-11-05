@@ -82,6 +82,16 @@ internal class IptvVodStreamGate(
     /** A reopen is the same source carrying on, so the stream effect must not treat it as a startup. */
     val hasPendingReopen: Boolean get() = pendingReopen != null
 
+    /** A released stream is a new provider connection, even if the player will resume paused. */
+    suspend fun admitReopen(
+        next: IptvStreamPolicy?,
+        checkAccount: suspend (IptvProviderAccount) -> IptvAccountUsage?,
+    ): IptvAdmission {
+        val account = next?.account ?: return IptvAdmission.Proceed
+        if (!hasPendingReopen || account.kind != IptvProviderAccount.Kind.XTREAM) return IptvAdmission.Proceed
+        return IptvAccountAvailability.admit { checkAccount(account) }
+    }
+
     /** Runs right before a media source is built. Null means that source stays on today's factories. */
     suspend fun open(player: Player, next: IptvStreamPolicy?): IptvStreamSession? {
         rung?.cancel()

@@ -32,6 +32,12 @@ internal data class IptvStreamPolicy(
     val panelCheckAllowed: Boolean,
 )
 
+/** A known channel owner, including an explicit No limit policy. */
+internal data class ResolvedIptvChannelPolicy(val limit: IptvStreamPolicy?) {
+    val allowsHomePreview: Boolean
+        get() = limit?.let { it.homePreviewAllowed && it.panelCheckAllowed } ?: true
+}
+
 /**
  * Null means No limit or no resolvable account: every path stays as it is today. Auto follows
  * [latestUsage], the panel's last fresh answer, and never asks for one itself.
@@ -55,7 +61,7 @@ internal fun iptvStreamPolicy(
     return IptvStreamPolicy(
         account,
         effectiveLimit = limit,
-        // Under Auto the preview's own one-shot check decides whether the account has room.
+        // Under Auto a preview still needs a confirmed spare slot.
         homePreviewAllowed = explicit == null || limit >= 2,
         matroskaIndexAllowed = limit >= 2,
         panelCheckAllowed = reliableAllowance != null

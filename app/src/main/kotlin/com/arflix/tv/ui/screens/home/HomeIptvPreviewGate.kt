@@ -1,7 +1,7 @@
 package com.arflix.tv.ui.screens.home
 
 import androidx.media3.common.Player
-import com.arflix.tv.data.repository.IptvStreamPolicy
+import com.arflix.tv.data.repository.ResolvedIptvChannelPolicy
 
 /** What one channel card's hero preview may do under its account's connection limit. */
 internal data class HomeIptvPreviewGate(val itemId: Int, val allowed: Boolean, val stopOnLeave: Boolean)
@@ -12,11 +12,11 @@ internal fun HomeIptvPreviewGate?.allows(itemId: Int): Boolean = this?.itemId ==
 /** A full account found at prepare time takes back only that card's preview. */
 internal fun HomeIptvPreviewGate?.refused(itemId: Int): HomeIptvPreviewGate? = if (this?.itemId == itemId) copy(allowed = false) else this
 
-/** A null policy keeps today's preview and pause; an unreadable one opens nothing on the account. */
-internal suspend fun readHomeIptvPreviewGate(itemId: Int, policy: suspend () -> IptvStreamPolicy?): HomeIptvPreviewGate =
+/** An unknown owner or unreadable policy must not open a preview. */
+internal suspend fun readHomeIptvPreviewGate(itemId: Int, policy: suspend () -> ResolvedIptvChannelPolicy?): HomeIptvPreviewGate =
     runCatching {
         val read = policy()
-        HomeIptvPreviewGate(itemId, allowed = read?.homePreviewAllowed ?: true, stopOnLeave = read != null)
+        HomeIptvPreviewGate(itemId, allowed = read?.allowsHomePreview == true, stopOnLeave = read?.limit != null)
     }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
         .getOrDefault(HomeIptvPreviewGate(itemId, allowed = false, stopOnLeave = true))
 

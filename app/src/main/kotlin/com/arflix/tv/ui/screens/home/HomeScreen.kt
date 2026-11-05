@@ -1330,24 +1330,35 @@ fun HomeScreen(
             val handles = heroPlaybackHandles ?: return@LaunchedEffect
             if (preparedHeroVideoUrl != heroVideoUrl) {
                 val heroIptvItem = displayHeroItem?.takeIf { isHeroIptv }
+                val iptvSession: com.arflix.tv.network.IptvStreamSession?
                 if (heroIptvItem != null) {
                     // The admission may stop the player, so nothing counts as prepared until the new source is.
                     preparedHeroVideoUrl = null
-                    if (!homeIptvPreview.admit(player) { viewModel.iptvPreviewPolicy(heroIptvItem.id) }) {
+                    val admission = homeIptvPreview.admit(player) { viewModel.iptvPreviewPolicy(heroIptvItem.id) }
+                    if (admission == null) {
                         heroIptvPreviewGate = heroIptvPreviewGate.refused(heroIptvItem.id)
                         return@LaunchedEffect
                     }
+                    iptvSession = admission.session
+                } else {
+                    homeIptvPreview.close()
+                    iptvSession = null
                 }
-                // Channel cards: ask the server what an address without a file type serves, as
-                // the Live TV screen does. Other previews keep reading the address alone.
-                val iptvTarget = heroIptvItem?.let { viewModel.resolveIptvPreviewTarget(it.id) }
-                // Channel previews follow the profile's default subtitle setting, as the Live TV
-                // screen does. Trailers and other previews share this player, so they get the
-                // player's own defaults back rather than whatever the last channel set.
-                val subtitleDefault = if (isHeroIptv) viewModel.previewSubtitleDefault() else null
+                val (iptvTarget, subtitleDefault) = try {
+                    // Channel previews probe through the admitted session and follow the profile subtitle setting.
+                    val target = heroIptvItem?.let { viewModel.resolveIptvPreviewTarget(it.id, iptvSession) }
+                    val subtitles = if (isHeroIptv) viewModel.previewSubtitleDefault() else null
+                    target to subtitles
+                } catch (error: Throwable) {
+                    iptvSession?.close()
+                    throw error
+                }
+                if (iptvSession?.isClosed == true) {
+                    heroIptvItem?.let { heroIptvPreviewGate = heroIptvPreviewGate.refused(it.id) }
+                    return@LaunchedEffect
+                }
                 player?.stop()
                 player?.clearMediaItems()
-                val iptvSession = homeIptvPreview.sessionForPrepare(isHeroIptv)
                 player?.let { p ->
                     p.trackSelectionParameters = subtitleDefault
                         ?.let { p.trackSelectionParameters.withLiveSubtitleDefault(it) }
