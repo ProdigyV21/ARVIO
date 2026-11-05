@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -357,13 +358,14 @@ private fun CalendarSourceRow(source: ReleaseCalendarSource, selected: Boolean, 
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val icon = when (source) {
-            ReleaseCalendarSource.TRAKT -> R.drawable.calendar_trakt_official
-            ReleaseCalendarSource.SIMKL -> R.drawable.calendar_simkl_official
-            ReleaseCalendarSource.MDBLIST -> R.drawable.calendar_mdblist_official
-            else -> null
+            ReleaseCalendarSource.ALL -> R.drawable.ic_all_watchlists
+            ReleaseCalendarSource.ARVIO -> R.drawable.ic_arvio
+            ReleaseCalendarSource.TRAKT -> R.drawable.ic_trakt
+            ReleaseCalendarSource.SIMKL -> R.drawable.ic_simkl
+            ReleaseCalendarSource.MDBLIST -> R.drawable.ic_mdblist
         }
         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-            if (icon != null) Image(painterResource(icon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            Icon(painterResource(icon), null, Modifier.size(20.dp), tint = foreground)
         }
         Text(tr(source.label), Modifier.weight(1f), color = foreground, fontSize = 13.sp, maxLines = 2)
         count?.let { Text(it.toString(), color = foreground.copy(.7f), fontSize = 11.sp) }
@@ -474,8 +476,12 @@ private fun CalendarRelease.artwork(): String? = media.episodeStill?.takeIf { it
 
 @Composable
 private fun releaseSubtitle(release: CalendarRelease, timezone: ZoneId, locale: Locale, concise: Boolean = false, includeEpisodeTitle: Boolean = false): String {
-    val time = release.releaseInstant?.atZone(timezone)?.format(DateTimeFormatter.ofPattern("HH:mm", locale)) ?: tr("Time TBA")
-    if (concise) return time
+    val context = LocalContext.current
+    val is24Hour = remember(context) { android.text.format.DateFormat.is24HourFormat(context) }
+    val timePattern = if (is24Hour) "HH:mm" else "h:mm a"
+    val time = release.releaseInstant?.atZone(timezone)?.format(DateTimeFormatter.ofPattern(timePattern, locale))
+        ?: if (release.kind == CalendarReleaseKind.EPISODE) tr("Time TBA") else null
+    if (concise) return time.orEmpty()
     val label = if (release.kind == CalendarReleaseKind.EPISODE) {
         if (release.seasonNumber != null && release.episodeNumber != null) String.format(Locale.ROOT, "S%02d E%02d", release.seasonNumber, release.episodeNumber)
         else tr("Episode")

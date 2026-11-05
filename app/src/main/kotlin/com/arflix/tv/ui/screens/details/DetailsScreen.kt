@@ -230,7 +230,11 @@ import com.arflix.tv.util.formatGenreName
 import com.arflix.tv.util.isInCinema
 import com.arflix.tv.util.parseRatingValue
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
 import androidx.compose.ui.res.stringResource
@@ -307,7 +311,10 @@ fun DetailsScreen(
     var hasEnteredDetails by rememberSaveable(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(false) }
     var buttonIndex by remember { mutableIntStateOf(0) }
     var episodeIndex by rememberSaveable { mutableIntStateOf(0) }
-    var selectedEpisodeIdentity by rememberSaveable { mutableStateOf<EpisodeIdentity?>(null) }
+    var selectedEpisodeIdentity by rememberSaveable(mediaType, mediaId) {
+        mutableStateOf<EpisodeIdentity?>(null)
+    }
+    var selectedEpisodeRevision by rememberSaveable(mediaType, mediaId) { mutableLongStateOf(uiState.idleSyncRevision) }
     var ratingsIndex by rememberSaveable { mutableIntStateOf(0) }
     var seasonIndex by rememberSaveable { mutableIntStateOf(0) }
     var castIndex by remember { mutableIntStateOf(0) }
@@ -339,6 +346,7 @@ fun DetailsScreen(
     var contextMenuSeason by remember { mutableIntStateOf(1) }
     var seasonSelectDownAtMs by remember { mutableLongStateOf(0L) }
     var ignoreFirstResumeRefresh by remember(mediaType, mediaId, initialSeason, initialEpisode) { mutableStateOf(true) }
+    val currentUiState = rememberUpdatedState(uiState)
 
     fun requestFastAutoPlay(
         imdbId: String?,
@@ -348,8 +356,10 @@ fun DetailsScreen(
         tmdbSeason: Int? = displaySeason,
         tmdbEpisode: Int? = displayEpisode
     ) {
+        val state = currentUiState.value
+        if (!viewModel.canStartPlayback(state.idleSyncRevision)) return
         showStreamSelector = false
-        val identity = uiState.episodes.firstOrNull {
+        val identity = state.episodes.firstOrNull {
             it.seasonNumber == displaySeason && it.episodeNumber == displayEpisode
         }?.identity ?: viewModel.resolveEpisodeIdentity(
             displaySeason = displaySeason,
@@ -495,7 +505,6 @@ fun DetailsScreen(
     }
     val maxActionButtonIndex = 4 + (if (hasCollectionButton) 1 else 0) + (if (hasPersonalLists) 1 else 0)
     val currentListButtonIndex = rememberUpdatedState(listButtonIndex)
-    val currentUiState = rememberUpdatedState(uiState)
     val currentEpisodeIndex = rememberUpdatedState(episodeIndex)
     val currentSelectedEpisodeIdentity = rememberUpdatedState(selectedEpisodeIdentity)
     // The episode card the user tapped, kept as an object. The phone layout
@@ -504,8 +513,17 @@ fun DetailsScreen(
     // uiState.episodes alone resolved taps to the wrong episode — usually S1E1.
     var tappedEpisode by remember { mutableStateOf<Episode?>(null) }
     val currentTappedEpisode = rememberUpdatedState(tappedEpisode)
+    val currentSelectionRevision = rememberUpdatedState(selectedEpisodeRevision)
+    LaunchedEffect(uiState.idleSyncRevision) {
+        if (selectedEpisodeRevision != uiState.idleSyncRevision) {
+            selectedEpisodeIdentity = null
+            selectedEpisodeRevision = uiState.idleSyncRevision
+            tappedEpisode = null
+            showStreamSelector = false
+        }
+    }
     fun selectedEpisodeIn(state: DetailsUiState, identity: EpisodeIdentity?): Episode? =
-        if (identity == null) null
+        if (identity == null || currentSelectionRevision.value != state.idleSyncRevision) null
         else state.episodes.firstOrNull { it.identity == identity }
             ?: currentTappedEpisode.value?.takeIf { it.identity == identity }
 
@@ -514,7 +532,9 @@ fun DetailsScreen(
             val state = currentUiState.value
             val currentEpIdx = currentEpisodeIndex.value
             val selectedEp = selectedEpisodeIn(state, currentSelectedEpisodeIdentity.value)
-            if (idx == currentListButtonIndex.value) viewModel.openListPicker() else when (idx) {
+            // While a post-idle sync runs the play target may still be the stale one.
+            if (idx in 0..1 && !viewModel.canStartPlayback(state.idleSyncRevision)) Unit
+            else if (idx == currentListButtonIndex.value) viewModel.openListPicker() else when (idx) {
                 0 -> { // Play
                     val season = if (mediaType == MediaType.TV) {
                         selectedEp?.seasonNumber
@@ -594,9 +614,10 @@ fun DetailsScreen(
 
     var autoPlayPending by rememberSaveable(mediaType, mediaId) { mutableStateOf(autoPlay) }
 
-    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, uiState.isPlaybackTargetReady, kidsGatePending) {
+    LaunchedEffect(autoPlayPending, uiState.isLoading, uiState.item, uiState.isPlaybackTargetReady,
+        uiState.isSyncingProgress, uiState.idleSyncRevision, kidsGatePending) {
         if (autoPlayPending && !uiState.isLoading && uiState.item != null &&
-            uiState.isPlaybackTargetReady && !kidsGatePending) {
+            uiState.isPlaybackTargetReady && !kidsGatePending && viewModel.canStartPlayback(uiState.idleSyncRevision)) {
             autoPlayPending = false
             onAutoPlayHandled()
             onButtonClickRemembered(0)
@@ -623,9 +644,10 @@ fun DetailsScreen(
     val onEpisodeItemClickRemembered: (Episode) -> Unit = remember(isMobile, mediaType, mediaId) {
         { ep: Episode ->
             val state = currentUiState.value
-            tappedEpisode = ep
-            val idx = state.episodes.indexOfFirst { it.identity == ep.identity }
-            run {
+            if (viewModel.canStartPlayback(state.idleSyncRevision)) {
+                selectedEpisodeRevision = state.idleSyncRevision
+                tappedEpisode = ep
+                val idx = state.episodes.indexOfFirst { it.identity == ep.identity }
                 if (idx >= 0) episodeIndex = idx
                 if (isMobile && currentSelectedEpisodeIdentity.value != ep.identity) {
                     selectedEpisodeIdentity = ep.identity
@@ -974,7 +996,9 @@ fun DetailsScreen(
                     val selectedProgress = selectedEpisode?.let {
                         uiState.episodePlaybackProgress[it.identity]
                     }
-                    val effectivePlayLabel = selectedEpisode?.let { episode ->
+                    val effectivePlayLabel = if (uiState.isSyncingProgress) {
+                        context.getString(R.string.syncing_progress)
+                    } else selectedEpisode?.let { episode ->
                         context.getString(
                             if (selectedProgress != null) {
                                 R.string.continue_season_episode
@@ -1014,7 +1038,7 @@ fun DetailsScreen(
                         externalRatings = uiState.externalRatings,
                         seasonProgress = uiState.seasonProgress,
                         episodePlaybackProgress = uiState.episodePlaybackProgress,
-                        selectedEpisodeIdentity = selectedEpisodeIdentity,
+                        selectedEpisodeIdentity = selectedEpisodeIdentity.takeIf { selectedEpisodeRevision == uiState.idleSyncRevision },
                         playLabel = effectivePlayLabel,
                         showEpisodeRatings = uiState.showEpisodeRatings,
                         hasTrailer = uiState.trailerKey != null,
@@ -1106,6 +1130,8 @@ fun DetailsScreen(
                 }
             },
             onSelect = { stream ->
+                if (!viewModel.canStartPlayback(uiState.idleSyncRevision) ||
+                    currentSelectionRevision.value != uiState.idleSyncRevision) return@StreamSelector
                 if (isTelegramSearchRow(stream)) {
                     viewModel.searchTelegramNow()
                     return@StreamSelector
@@ -2220,7 +2246,9 @@ private fun DetailsContent(
                 val genreText = genres.take(2).map(::formatGenreName).joinToString(" / ").ifEmpty {
                     if (item.mediaType == MediaType.TV) tvSeriesLabel else movieLabel
                 }
-                val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() } ?: item.year
+                val displayDate = item.releaseDate?.takeIf { it.isNotEmpty() }?.let { dateStr ->
+                    formatEpisodeAirDateLabel(dateStr) ?: dateStr
+                } ?: item.year
                 val hasDuration = item.duration.isNotEmpty() && item.duration != "0m"
                 val rating = imdbRatingFor(item)
                 val ratingValue = parseRatingValue(rating)
@@ -4365,9 +4393,30 @@ internal fun EpisodeCard(
     }
 }
 
-private fun formatEpisodeAirDateLabel(rawDate: String): String? {
+private val episodeAirDateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US)
+
+internal fun formatEpisodeAirDateLabel(rawDate: String): String? {
     val value = rawDate.trim()
     if (value.isEmpty()) return null
+
+    // If timestamp has explicit time and timezone, convert that instant to device zone
+    if (value.contains('T') || value.contains(':')) {
+        val instant = episodeAirInstant(value)
+        if (instant != null) {
+            val localDate = instant.atZone(ZoneId.systemDefault()).toLocalDate()
+            return localDate.format(episodeAirDateFormatter)
+        }
+    }
+
+    // Preserve date-only air dates (e.g. "2026-01-01") directly as calendar dates without timezone shifting
+    val localDate = runCatching {
+        val datePart = if (value.length >= 10) value.take(10) else value
+        LocalDate.parse(datePart)
+    }.getOrNull()
+    if (localDate != null) {
+        return localDate.format(episodeAirDateFormatter)
+    }
+
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         parser.isLenient = false
@@ -4378,17 +4427,24 @@ private fun formatEpisodeAirDateLabel(rawDate: String): String? {
     }
 }
 
-private fun isFutureEpisodeAirDate(rawDate: String): Boolean {
+private fun episodeAirInstant(rawDate: String): Instant? {
+    val value = rawDate.trim()
+    if (value.isEmpty()) return null
+    if (value.contains('T') || value.contains(':')) {
+        return runCatching { Instant.parse(value) }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(value).toInstant() }.getOrNull()
+    }
+    return null
+}
+
+internal fun isFutureEpisodeAirDate(rawDate: String): Boolean {
     val value = rawDate.trim()
     if (value.isEmpty()) return false
-    return try {
-        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        parser.isLenient = false
-        val date = parser.parse(value) ?: return false
-        date.after(Date())
-    } catch (_: Exception) {
-        false
+    val instant = episodeAirInstant(value)
+    if (instant != null) {
+        return Instant.now().isBefore(instant)
     }
+    return runCatching { LocalDate.parse(value.take(10)).isAfter(LocalDate.now()) }.getOrDefault(false)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)

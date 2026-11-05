@@ -486,7 +486,13 @@ fun AppNavigation(
                         onSwitchProfile()
                         navController.navigateToProfileSelection()
                     },
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        if (currentProfile == null) {
+                            navController.navigateToProfileSelection()
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                     onSubPageChanged = { settingsHasSubPage = it; onSettingsSubPageChanged(it) }
                 )
             }
@@ -507,9 +513,6 @@ fun AppNavigation(
                     }
                 },
                 onShowAddProfile = { /* Handled internally by ProfileSelectionScreen */ },
-                onConnectCloud = {
-                    navController.navigate("settings?autoCloudAuth=true")
-                },
                 isCloudConnected = isCloudConnected
             )
         }

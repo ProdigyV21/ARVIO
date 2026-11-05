@@ -391,6 +391,7 @@ class HomeViewModel @Inject constructor(
     private val launcherContinueWatchingRepository: LauncherContinueWatchingRepository,
     private val continueWatchingUpdates: ContinueWatchingUpdates,
     private val appForegroundSignals: com.arflix.tv.data.repository.AppForegroundSignals,
+    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator,
     private val realtimeSyncManager: com.arflix.tv.data.repository.RealtimeSyncManager,
     private val profileManager: ProfileManager,
     private val appUpdateRepository: com.arflix.tv.updater.AppUpdateRepository,
@@ -550,6 +551,9 @@ class HomeViewModel @Inject constructor(
     private var selectedSportsCategoryId: String? = null
 
     companion object {
+        /** Profiles already told this app run that Trakt needs reconnecting. */
+        private val traktReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+        private val mdbListReconnectNoticeShown: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         const val FAVORITE_TV_CATEGORY_ID = "favorite_tv"
         /** Unfiltered titles a kids top-up may load for one grid before it gives up. */
         private const val MAX_KIDS_TOP_UP_ITEMS = 600
@@ -736,6 +740,16 @@ class HomeViewModel @Inject constructor(
             try {
                 val prefs = context.settingsDataStore.data.first()
                 val profileId = profileManager.getProfileIdSync().ifBlank { "default" }
+
+                // In Netflix-style TV Home, regular catalog rows are always posters.
+                val netflixHomeStyleKey = profileManager.profileBooleanKeyFor(
+                    profileId,
+                    NETFLIX_HOME_STYLE_KEY
+                )
+                val netflixHomeStyle = prefs[netflixHomeStyleKey] ?: true
+                if (isTvDevice && netflixHomeStyle) {
+                    return@withContext true
+                }
 
                 // 1. Check specific row layout mode
                 val rowKey = "home:$catalogId"
@@ -1781,6 +1795,32 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             personalListsRepository.changes.collect { list -> reloadRowsFor(list.provider) }
         }
+        // Continue Watching silently stops syncing when the Trakt session is lost; say so once
+        // per app run and profile instead of leaving the user to find it in Settings.
+        viewModelScope.launch {
+            traktRepository.connection
+                .filter { it.reconnectRequired }
+                .collect { connection ->
+                    if (traktReconnectNoticeShown.add(connection.profileId)) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = context.getString(R.string.trakt_reconnect_required),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+                }
+        }
+        viewModelScope.launch {
+            personalListsRepository.mdbListConnection
+                .filter { it.connected && it.reconnectRequired }
+                .collect { connection ->
+                    if (mdbListReconnectNoticeShown.add(connection.profileId)) {
+                        _uiState.value = _uiState.value.copy(
+                            toastMessage = context.getString(R.string.mdblist_reconnect_required),
+                            toastType = ToastType.ERROR
+                        )
+                    }
+                }
+        }
     }
 
     /**
@@ -2326,6 +2366,14 @@ class HomeViewModel @Inject constructor(
             // to clear both windows.
             appForegroundSignals.returnedToForeground.collect {
                 refreshContinueWatchingOnly(force = true)
+            }
+        }
+
+        viewModelScope.launch {
+            // After a long idle this device pulls the other devices' progress first;
+            // rebuild the row from it once that lands.
+            idleReturnCoordinator.syncCompleted.collect { revision ->
+                if (revision > 0L) refreshContinueWatchingOnly(force = true)
             }
         }
 

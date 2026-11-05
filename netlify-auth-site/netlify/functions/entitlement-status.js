@@ -102,9 +102,8 @@ exports.handler = async (event) => {
       }
     }
 
-    // Invites are rewarded once the invited account has been paying for 7
-    // days (past the refund window); a paying member opening ARVIO Web is the
-    // moment to check. Bonuses land on the billing record.
+    // Catch payments that arrived under a different, subsequently verified
+    // billing email, and referrals still pending from before instant rewards.
     if (state.entitled && state.reason === "subscription" && record && record.source !== "referral") {
       const reward = await rewardReferralIfDue(event, { emailHash, payerHash }).catch((error) => {
         console.error("referral reward check failed", error && error.message);

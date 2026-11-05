@@ -1,9 +1,11 @@
 package com.arflix.tv.data.repository
 
 import com.arflix.tv.data.model.MediaType
+import com.arflix.tv.data.repository.sync.MdbListConnection
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -66,10 +68,16 @@ class PersonalListsRepository @Inject constructor(
     /** An MDBList list for the Library; [path] is "user/slug", as in its mdblist.com URL. */
     data class MdbListLibraryList(val id: Long, val title: String, val path: String?)
 
-    /** Every MDBList list of the user, filter-based ones too, for the Library's "My lists". */
+    /** The active profile's MDBList connection, for screens that list its lists. */
+    val mdbListConnection: Flow<MdbListConnection> get() = mdbListRepository.connection
+
+    /**
+     * Every MDBList list of the user, filter-based ones too, for the Library's "My lists".
+     * Throws when MDBList cannot be read, so a failure is not shown as having no lists.
+     */
     suspend fun mdbListLibraryLists(): List<MdbListLibraryList> =
         if (!mdbListRepository.isConnected()) emptyList()
-        else mdbListRepository.getUserLists(includeDynamic = true).map { list ->
+        else mdbListRepository.libraryUserLists(includeDynamic = true).map { list ->
             MdbListLibraryList(
                 id = list.id,
                 title = list.name ?: list.slug ?: "MDBList",
@@ -77,7 +85,8 @@ class PersonalListsRepository @Inject constructor(
             )
         }
 
-    suspend fun mdbListItems(listId: Long) = mdbListRepository.listItems(listId)
+    /** The titles of one MDBList list; throws when it cannot be read. */
+    suspend fun mdbListItems(listId: Long) = mdbListRepository.libraryListItems(listId)
 
     private val _changes = MutableSharedFlow<UserList>(extraBufferCapacity = 8)
 

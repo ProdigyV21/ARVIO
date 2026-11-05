@@ -271,6 +271,47 @@ class CollectionDetailsLoadingTest {
         coVerify(exactly = 1) { media.getTvDetails(1) }
     }
 
+    @Test fun changingSeriesGenrePreservesMoviesWhileAnAppendIsInFlight() = runTest {
+        coEvery { catalogs.getCatalogs() } returns listOf(catalog("first").copy(
+            collectionSources = listOf("movie", "series").map { type ->
+                CollectionSourceConfig(CollectionSourceKind.TMDB_WATCH_PROVIDER, mediaType = type, tmdbWatchProviderId = 8)
+            }
+        ))
+        coEvery { media.loadCollectionCatalogPage(any(), 0, 8, MediaType.MOVIE, any()) } returns
+            page(listOf(item(1)), hasMore = true, nextOffset = 8)
+        coEvery { media.loadCollectionCatalogPage(any(), 0, 8, MediaType.TV, any()) } answers {
+            val genreId = firstArg<CatalogConfig>().collectionSources.single().tmdbGenreId
+            page(listOf(item(if (genreId == 10764) 3 else 2).copy(mediaType = MediaType.TV)))
+        }
+        var appendCancelled = false
+        coEvery { media.loadCollectionCatalogPage(any(), 8, 12, MediaType.MOVIE, any()) } coAnswers {
+            try { awaitCancellation() } finally { appendCancelled = true }
+        }
+
+        model.load("first")
+        advanceUntilIdle()
+        assertTrue(model.uiState.value.isLoadingMoreMovies)
+        assertEquals(listOf(2), model.uiState.value.seriesItems.map { it.id })
+        model.selectGenre(CollectionTab.SERIES, 10764)
+        advanceUntilIdle()
+
+        val state = model.uiState.value
+        assertTrue(appendCancelled)
+        assertFalse(state.isLoadingMovies)
+        assertFalse(state.isLoadingMoreMovies)
+        assertTrue(state.hasMoreMovies)
+        assertEquals(8, state.loadedMovieOffset)
+        assertEquals(listOf(1), state.movieItems.map { it.id })
+        assertEquals(listOf(3), state.seriesItems.map { it.id })
+        coVerify(exactly = 1) { media.loadCollectionCatalogPage(any(), 0, 8, MediaType.MOVIE, any()) }
+
+        coEvery { media.loadCollectionCatalogPage(any(), 8, 12, MediaType.MOVIE, any()) } returns
+            page(listOf(item(4)), nextOffset = 9)
+        model.loadMoreIfNeeded(CollectionTab.MOVIES)
+        advanceUntilIdle()
+        assertEquals(listOf(1, 4), model.uiState.value.movieItems.map { it.id })
+    }
+
     @Test fun cancellationIsNotPublishedAsAnEmptyPageOrLoadError() = runTest {
         coEvery { media.loadCollectionCatalogPage(any(), any(), any(), any(), any()) } throws CancellationException()
         model.load("first")

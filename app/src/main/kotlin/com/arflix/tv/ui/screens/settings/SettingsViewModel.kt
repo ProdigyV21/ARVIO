@@ -268,6 +268,8 @@ data class SettingsUiState(
     // Trakt
     val isTraktAuthenticated: Boolean = false,
     val traktReconnectRequired: Boolean = false,
+    /** Stored session exists but Trakt could not confirm it (offline, server error, expired token). */
+    val traktUnavailable: Boolean = false,
     val traktCode: TraktDeviceCode? = null,
     /** Wall clock time the current activation code dies, so the dialog can count down. */
     val traktCodeExpiresAtMillis: Long? = null,
@@ -284,6 +286,10 @@ data class SettingsUiState(
     val mdbListCode: String? = null,
     val mdbListUrl: String? = null,
     val mdbListUsername: String? = null,
+    /** MDBList rejected the stored credential; the user has to connect it again. */
+    val mdbListReconnectRequired: Boolean = false,
+    /** Stored credential exists but MDBList could not confirm it (offline, server error). */
+    val mdbListUnavailable: Boolean = false,
     val showMdbListApiKeyDialog: Boolean = false,
     val mdbListConnecting: Boolean = false,
     // Simkl (alternative remote sync provider)
@@ -429,7 +435,8 @@ data class SettingsUiState(
     val streamProviderItems: List<StreamProviderItem> = emptyList(),
     val streamSearchMode: StreamSearchMode = StreamSearchMode.PARALLEL,
     val pluginsCount: Int = 0,
-    val isTelegramConnected: Boolean = false
+    val isTelegramConnected: Boolean = false,
+    val telegramUserName: String? = null
 )
 
 @HiltViewModel
@@ -659,6 +666,7 @@ class SettingsViewModel @Inject constructor(
         observeHomeServer()
         observeSyncState()
         observeTraktConnection()
+        observeMdbListConnection()
         observeAuthState()
         observeIptvConfig()
         observeIptvGroupPrefs()
@@ -995,36 +1003,32 @@ class SettingsViewModel @Inject constructor(
         integrationMetadataJob = viewModelScope.launch {
             if (isTraktConnected) {
                 launch {
-                    val username = try {
-                        withTimeoutOrNull(5_000L) { traktRepository.fetchUsername() }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
+                    // A slow answer is not a failure; only a real error marks the session unavailable.
+                    val session = withTimeoutOrNull(5_000L) { traktRepository.checkSession() }
                     if (
                         profileManager.getProfileIdSync() == profileId &&
                         _uiState.value.isTraktAuthenticated
                     ) {
-                        _uiState.value = _uiState.value.copy(traktUsername = username)
+                        _uiState.value = _uiState.value.copy(
+                            traktUsername = session?.getOrNull(),
+                            traktUnavailable = session?.isFailure == true
+                        )
                     }
                 }
             }
 
             if (isMdbListConnected) {
                 launch {
-                    val username = try {
-                        withTimeoutOrNull(5_000L) { mdbListRepository.fetchUsername() }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
+                    // A slow answer is not a failure; only a real error marks the connection unavailable.
+                    val session = withTimeoutOrNull(5_000L) { mdbListRepository.checkSession() }
                     if (
                         profileManager.getProfileIdSync() == profileId &&
                         _uiState.value.isMdbListConnected
                     ) {
-                        _uiState.value = _uiState.value.copy(mdbListUsername = username)
+                        _uiState.value = _uiState.value.copy(
+                            mdbListUsername = session?.getOrNull(),
+                            mdbListUnavailable = session?.isFailure == true
+                        )
                     }
                 }
             }
@@ -1187,7 +1191,10 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             telegramRepository.authState.collect { authState ->
-                _uiState.value = _uiState.value.copy(isTelegramConnected = authState is TelegramAuthState.Ready)
+                _uiState.value = _uiState.value.copy(
+                    isTelegramConnected = authState is TelegramAuthState.Ready,
+                    telegramUserName = (authState as? TelegramAuthState.Ready)?.firstName?.takeIf { it.isNotBlank() }
+                )
             }
         }
     }
@@ -1221,7 +1228,20 @@ class SettingsViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isTraktAuthenticated = connection.connected,
                     traktReconnectRequired = connection.reconnectRequired,
-                    traktUsername = _uiState.value.traktUsername.takeIf { connection.connected }
+                    traktUsername = _uiState.value.traktUsername.takeIf { connection.connected },
+                    traktUnavailable = _uiState.value.traktUnavailable && connection.connected
+                )
+            }
+        }
+    }
+
+    private fun observeMdbListConnection() {
+        viewModelScope.launch {
+            mdbListRepository.connection.collect { connection ->
+                if (connection.profileId != profileManager.getProfileIdSync()) return@collect
+                _uiState.value = _uiState.value.copy(
+                    mdbListReconnectRequired = connection.connected && connection.reconnectRequired,
+                    mdbListUnavailable = _uiState.value.mdbListUnavailable && connection.connected
                 )
             }
         }

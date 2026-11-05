@@ -1,0 +1,27 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="0.67"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 1.56 20.80 c 0.14 -0.22 2.48 -4.14 3.84 -6.44 0.21 -0.36 0.57 -0.97 0.80 -1.35 0.23 -0.39 0.75 -1.26 1.16 -1.95 0.40 -0.69 0.83 -1.40 0.94 -1.59 0.11 -0.19 0.68 -1.14 1.25 -2.11 1.27 -2.15 2.50 -4.20 2.53 -4.24 0.01 -0.01 0.12 0.13 0.23 0.31 0.11 0.18 0.36 0.57 0.55 0.87 0.53 0.84 0.80 1.44 0.74 1.62 -0.03 0.08 -0.84 1.44 -2.60 4.41 -0.31 0.52 -1.64 2.77 -2.96 4.99 -1.32 2.23 -2.48 4.16 -2.56 4.28 -0.40 0.60 -0.95 0.98 -1.68 1.17 -0.30 0.08 -0.38 0.09 -1.31 0.10 l -1.00 0.01 c 0.00 0.00 0.06 -0.09 0.06 -0.09 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="0.67"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 9.68 20.86 c 0.00 -0.02 0.34 -0.56 0.75 -1.20 1.57 -2.42 1.56 -2.40 1.64 -2.31 0.05 0.06 2.33 3.44 2.35 3.50 0.01 0.03 -0.46 0.04 -2.36 0.04 -1.63 0.00 -2.38 -0.01 -2.38 -0.03 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="0.67"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 20.49 20.75 c -0.73 -0.07 -1.35 -0.44 -1.81 -1.09 -0.08 -0.11 -0.34 -0.54 -0.59 -0.96 -0.57 -0.97 -2.06 -3.49 -2.55 -4.32 -0.52 -0.88 -0.77 -1.13 -1.33 -1.33 -0.67 -0.24 -1.29 -0.22 -1.85 0.05 -0.14 0.07 -0.26 0.13 -0.26 0.12 -0.00 -0.00 1.72 -2.88 2.12 -3.52 0.42 -0.69 0.77 -0.89 1.18 -0.69 0.18 0.09 0.22 0.15 1.03 1.52 0.60 1.01 1.07 1.81 2.54 4.28 0.32 0.54 0.95 1.60 1.40 2.36 0.45 0.76 1.11 1.88 1.47 2.48 l 0.65 1.09 -0.59 0.04 c -0.39 0.03 -1.39 0.02 -1.72 -0.00 z" />
+</vector>
