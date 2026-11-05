@@ -183,7 +183,8 @@ class IptvSourceBrowsingConnectionTest {
             watchHistoryRepository = mockk(relaxed = true), watchlistRepository = mockk(relaxed = true),
             cloudSyncRepository = mockk(relaxed = true), launcherContinueWatchingRepository = mockk(relaxed = true),
             streamIntegrationRepository = integrations, recentPlayedSourceRepository = mockk(relaxed = true),
-            personalListsRepository = mockk(relaxed = true), kidsContentFilter = mockk(relaxed = true)
+            personalListsRepository = mockk(relaxed = true), kidsContentFilter = mockk(relaxed = true),
+            idleReturnCoordinator = IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         ).also { models += it; store.put("details", it) }
     }
 
@@ -197,7 +198,8 @@ class IptvSourceBrowsingConnectionTest {
             tmdbApi = mockk(relaxed = true), skipIntroRepository = mockk(relaxed = true),
             playbackTelemetryRepository = mockk(relaxed = true), pluginManager = mockk(relaxed = true),
             streamIntegrationRepository = mockk(relaxed = true), recentPlayedSourceRepository = mockk(relaxed = true),
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true),
+            idleReturnCoordinator = IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         ).also { models += it; store.put("player", it) }
     }
 

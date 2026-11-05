@@ -77,7 +77,8 @@ class IptvSecondaryRequestsTest {
             tmdbApi = mockk(relaxed = true), skipIntroRepository = mockk(relaxed = true),
             playbackTelemetryRepository = mockk(relaxed = true), pluginManager = mockk(relaxed = true),
             streamIntegrationRepository = integrations, recentPlayedSourceRepository = mockk(relaxed = true),
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true),
+            idleReturnCoordinator = com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         )
         store.put("player", model)
     }
