@@ -3264,6 +3264,17 @@ fun LiveTvScreen(
     val liveAiSubsOn = liveAiSubsSettings.enabled && playingChannelId != null &&
         (liveAiSubsChoices[playingChannelId] ?: (liveAiSubsSettings.autoStart && !liveChannelHasTargetSubs))
     val liveAiCue by liveAiSession.cue.collectAsState()
+    val liveAiStatus by liveAiSession.status.collectAsState()
+    // On, but unable to run on this channel (no or rejected key, audio that cannot be decoded):
+    // no hold, and the channel's own subtitles show instead.
+    val liveAiBlocked = !liveAiSubsSettings.hasKey || liveAiStatus is LiveAiSubsStatus.NoKey ||
+        liveAiStatus is LiveAiSubsStatus.InvalidKey || liveAiStatus is LiveAiSubsStatus.Unsupported
+    val liveAiHolds = liveAiSubsOn && !liveAiBlocked
+    // A quota or connection pause is temporary: the hold stays (so playback does not stall when
+    // AI comes back), but the channel's own subtitles fill in meanwhile.
+    val liveAiShowsNative = liveAiSubsOn && (liveAiBlocked ||
+        liveAiStatus is LiveAiSubsStatus.QuotaPaused || liveAiStatus is LiveAiSubsStatus.Offline)
+    val liveAiShows = liveAiSubsOn && !liveAiShowsNative
     var liveAiPreparingSeconds by remember { mutableStateOf<Int?>(null) }
     // Bumped to restart the stream so audio already buffered gets subtitled too.
     var liveAiRestartRequest by remember { mutableIntStateOf(0) }
@@ -3286,10 +3297,12 @@ fun LiveTvScreen(
     }
     // While AI subtitles show, the stream's own text subtitles stay selected but hidden: they are
     // read ahead of playback and translated (a stream that is not selected is not even
-    // downloaded). Without a text track, AI subtitles come from the audio.
-    LaunchedEffect(liveAiSubsOn, liveTracks, liveAiTargetCode) {
+    // downloaded). Without a text track, AI subtitles come from the audio. While AI cannot run,
+    // the channel's own subtitles are selected and shown instead.
+    LaunchedEffect(liveAiSubsOn, liveAiShowsNative, liveTracks, liveAiTargetCode) {
         if (!liveAiSubsOn) return@LaunchedEffect
-        val source = liveCaptionSourceKey(liveTracks, liveAiTargetCode)
+        val source = if (liveAiShowsNative) liveAiFallbackSubtitleKey(liveTracks, liveAiTargetCode)
+        else liveCaptionSourceKey(liveTracks, liveAiTargetCode)
         val selected = liveSelectedSubtitleKey(liveTracks)
         when {
             source != null && selected != source -> applyLiveSubtitleChoice(exoPlayer, source)
@@ -3298,13 +3311,17 @@ fun LiveTvScreen(
     }
     // Turned on while the channel plays: the seconds already buffered were downloaded before
     // capture started, so they would play without subtitles. Restart the stream instead; the
-    // start-up hold then shows "Preparing subtitles" and the first line is covered.
-    LaunchedEffect(liveAiSubsOn) {
-        if (liveAiSubsOn && exoPlayer.isPlaying && exoPlayer.currentMediaItem?.mediaId == playingChannelId.orEmpty()) {
+    // start-up hold then shows "Preparing subtitles" and the first line is covered. Not when AI
+    // cannot run (nothing to prepare), and not in catch-up: a recording has no hold and reads
+    // far enough ahead on its own, and a restart would lose the position in it.
+    LaunchedEffect(liveAiHolds) {
+        if (liveAiHolds && playingCatchupProgram == null && exoPlayer.isPlaying &&
+            exoPlayer.currentMediaItem?.mediaId == playingChannelId.orEmpty()
+        ) {
             liveAiRestartRequest++
         }
     }
-    val liveAiTick by rememberUpdatedState(liveAiSubsOn to (playingCatchupProgram == null))
+    val liveAiTick by rememberUpdatedState(liveAiHolds to (playingCatchupProgram == null))
     LaunchedEffect(exoPlayer, liveAiSession) {
         val window = androidx.media3.common.Timeline.Window()
         while (true) {
@@ -4945,11 +4962,11 @@ fun LiveTvScreen(
                         }
                         // With AI subtitles the stream's own subtitles are only read, not shown.
                         view.subtitleView?.visibility =
-                            if (liveAiSubsOn) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                            if (liveAiShows) android.view.View.INVISIBLE else android.view.View.VISIBLE
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen && liveAiSubsOn) {
+                if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen && liveAiShows) {
                     LiveAiSubtitleOverlay(
                         cue = liveAiCue,
                         style = liveSubtitleStyle,

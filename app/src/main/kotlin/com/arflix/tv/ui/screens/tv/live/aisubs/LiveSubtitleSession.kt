@@ -30,10 +30,14 @@ internal sealed interface LiveAiSubsStatus {
     data class Unsupported(val mimeType: String) : LiveAiSubsStatus
 }
 
-/** One piece of work for the AI: a stretch of speech, or a sentence of the channel's captions. */
+/**
+ * One piece of work for the AI: a stretch of speech, or a sentence of the channel's captions.
+ * [generation] is the channel source it was captured from (see [LiveSpeechPipeline.generation]).
+ */
 internal sealed interface LiveWork {
-    class Audio(val segment: SpeechSegment) : LiveWork
-    class Caption(val sentence: CaptionSentence) : LiveWork
+    val generation: Int
+    class Audio(val segment: SpeechSegment, override val generation: Int) : LiveWork
+    class Caption(val sentence: CaptionSentence, override val generation: Int) : LiveWork
 }
 
 /**
@@ -63,10 +67,10 @@ internal class LiveSubtitleSession(
 
     val pipeline = LiveSpeechPipeline(
         context = context,
-        onSegment = { segment -> segments.trySend(LiveWork.Audio(segment)) },
-        onCaption = { sentence ->
+        onSegment = { segment, generation -> segments.trySend(LiveWork.Audio(segment, generation)) },
+        onCaption = { sentence, generation ->
             captionsUntilUs = sentence.endUs + CAPTION_HOLDOVER_US
-            segments.trySend(LiveWork.Caption(sentence))
+            segments.trySend(LiveWork.Caption(sentence, generation))
         },
         onUnsupportedAudio = { mime -> scope.launch { setStatus(LiveAiSubsStatus.Unsupported(mime)) } },
     )
@@ -185,12 +189,17 @@ internal class LiveSubtitleSession(
                 }
             }
             for (work in segments) {
-                if (!shouldSend(work)) continue
+                // Waits for a free request slot first: the channel can change while waiting.
+                inFlight.acquire()
+                // Captured from an earlier channel (or before a restart): never sent, never shown.
+                if (work.generation != pipeline.generation || !shouldSend(work)) {
+                    inFlight.release()
+                    continue
+                }
                 val sentEpoch = epoch
                 val context = recentLines.toList()
                 val name = languageName
                 val isRtl = rtl
-                inFlight.acquire()
                 val deferred = async {
                     try {
                         val started = SystemClock.elapsedRealtime()

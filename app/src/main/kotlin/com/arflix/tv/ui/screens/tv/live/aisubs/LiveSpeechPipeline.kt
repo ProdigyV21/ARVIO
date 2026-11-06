@@ -33,16 +33,24 @@ import com.arflix.tv.ui.screens.tv.live.isBitmapSubtitle
  */
 internal class LiveSpeechPipeline(
     context: Context,
-    private val onSegment: (SpeechSegment) -> Unit,
+    /** A speech segment, with the [generation] of the channel source its audio came from. */
+    private val onSegment: (SpeechSegment, generation: Int) -> Unit,
     /** A sentence of the channel's own closed captions, read ahead of playback. */
-    private val onCaption: (CaptionSentence) -> Unit,
+    private val onCaption: (CaptionSentence, generation: Int) -> Unit,
     /** The channel's audio format cannot be decoded ahead of playback on this device. */
     private val onUnsupportedAudio: (mimeType: String) -> Unit,
 ) {
     private val appContext = context.applicationContext
 
     @Volatile private var weights: SileroVadWeights? = null
-    @Volatile private var generation = 0
+    /** Bumped for every prepared channel source; work tagged with an older one is stale. */
+    @Volatile var generation = 0
+        private set
+    /**
+     * The source the decoder's audio belongs to. Decoder thread: it moves to [generation] when
+     * the decoder resets, which drops everything queued from before ([newSinks] queues a reset).
+     */
+    @Volatile private var audioGeneration = 0
     @Volatile private var decoder: AudioSyncDecoder? = null
 
     /** Capture only while AI subtitles are on for the channel and it is playing fullscreen. */
@@ -126,6 +134,7 @@ internal class LiveSpeechPipeline(
         val vadWeights = weights ?: return null
         synchronized(this) {
             decoder?.let { return it }
+            audioGeneration = generation
             val analyzer = SpeechAnalyzer(SileroVad(vadWeights), SpeechTimeline())
             val segmenter = SpeechSegmenter(
                 maxSegmentFrames = MAX_SEGMENT_FRAMES,
@@ -134,7 +143,7 @@ internal class LiveSpeechPipeline(
                 val startUs = startFrame.toLong() * SpeechTimeline.FRAME_DURATION_US
                 val endUs = startUs + samples.size * 1_000_000L / SileroVad.SAMPLE_RATE
                 segmentsEmitted++
-                onSegment(SpeechSegment(startUs, endUs, samples))
+                onSegment(SpeechSegment(startUs, endUs, samples), audioGeneration)
             }
             analyzer.chunkListener = object : SpeechAnalyzer.ChunkListener {
                 override fun onChunk(frame: Int, chunk: FloatArray, probability: Float) {
@@ -152,7 +161,10 @@ internal class LiveSpeechPipeline(
                     segmenter.onChunk(frame, chunk, probability)
                 }
 
-                override fun onReset() = segmenter.onReset()
+                override fun onReset() {
+                    audioGeneration = generation
+                    segmenter.onReset()
+                }
             }
             return AudioSyncDecoder(
                 analyzer = analyzer,
@@ -224,10 +236,10 @@ internal class LiveSpeechPipeline(
      */
     private inner class CaptionSink(private val sinkGeneration: Int) : AudioSampleSink {
         private val assembler = Cea608TextAssembler { sentence ->
-            if (sinkGeneration == generation) onCaption(sentence)
+            if (sinkGeneration == generation) onCaption(sentence, sinkGeneration)
         }
         private val cueReader = CaptionCueReader { sentence ->
-            if (sinkGeneration == generation) onCaption(sentence)
+            if (sinkGeneration == generation) onCaption(sentence, sinkGeneration)
         }
         private val loggedMimes = HashSet<String>()
 

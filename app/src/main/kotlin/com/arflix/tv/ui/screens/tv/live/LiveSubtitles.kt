@@ -100,6 +100,19 @@ internal fun liveCaptionSourceKey(tracks: Tracks, avoidLanguage: String?): Strin
 }
 
 /**
+ * The channel's own subtitles to show while AI subtitles are on but cannot run (no or rejected
+ * key, audio that cannot be decoded, quota or connection pause): [preferredLanguage] first, then
+ * English, then any track (picture subtitles included: these are only shown). Null when the
+ * channel has none.
+ */
+internal fun liveAiFallbackSubtitleKey(tracks: Tracks, preferredLanguage: String?): String? {
+    val all = typedTracks(tracks, C.TRACK_TYPE_TEXT)
+    return (all.firstOrNull { preferredLanguage != null && it.language == preferredLanguage }
+        ?: all.firstOrNull { it.language == "en" }
+        ?: all.firstOrNull())?.key
+}
+
+/**
  * True for picture subtitles (DVB, PGS, VobSub), which carry no text. Subtitles the player parses
  * during extraction arrive as `application/x-media3-cues`, with the original type kept in codecs.
  */
