@@ -109,7 +109,7 @@ class OledLibraryDeviceTest {
 
     @Test fun phoneSearchOpensTheKeyboardOnTheFirstTap() {
         show(false, deviceOverride = DeviceType.PHONE)
-        compose.onNodeWithContentDescription("Search library").performClick()
+        compose.onNodeWithContentDescription("Search library").performTouchInput { click() }
         val field = compose.onNodeWithTag("library-search-field").assertIsFocused()
         compose.waitUntil(timeoutMillis = 5_000) {
             compose.runOnUiThread {

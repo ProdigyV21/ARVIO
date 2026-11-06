@@ -334,6 +334,8 @@ fun WatchlistScreen(
                     val keyboard = LocalSoftwareKeyboardController.current
                     LaunchedEffect(searchFocus) {
                         searchFocus.requestFocus()
+                        // Let Android attach the new field's input connection before showing the IME.
+                        withFrameNanos { }
                         keyboard?.show()
                     }
                     Row(
