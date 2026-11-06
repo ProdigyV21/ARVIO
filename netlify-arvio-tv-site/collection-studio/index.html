@@ -16,14 +16,14 @@
   <meta name="twitter:image" content="https://arvio.tv/assets/screenshots-v2/tv/01-home.webp">
   <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebApplication","name":"ARVIO Collection Studio","url":"https://arvio.tv/collection-studio/","applicationCategory":"UtilitiesApplication","operatingSystem":"Web browser","description":"Create an ARVIO Home collection with TMDB, MDBList or Trakt. Try three ready-to-use templates, customize folders, share a preview and export collection JSON.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"ARVIO","item":"https://arvio.tv/"},{"@type":"ListItem","position":2,"name":"Collection Studio","item":"https://arvio.tv/collection-studio/"}]}]}</script>
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <link rel="stylesheet" href="./studio.css">
   <script type="module" src="./studio.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#studio">Skip to collection studio</a>
   <header class="site-header shell">
-    <a class="brand" href="/" aria-label="ARVIO home">ARVIO<span class="brand-dot" aria-hidden="true"></span></a>
+    <a class="brand" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.svg" alt="ARVIO" width="112" height="24"></a>
     <nav aria-label="Main navigation"><a href="/collections-catalogs/">Collection guide</a><a class="nav-pill" href="https://play.google.com/store/apps/details?id=com.arvio.tv">Get ARVIO <span aria-hidden="true">↗</span></a></nav>
   </header>
   <main class="shell">
@@ -86,6 +86,6 @@
     </div><p class="starter-intro">Download JSON, copy its text and paste it into ARVIO. Or use the JSON file's public address in the collection importer; a Studio preview link is not an import URL.</p></section>
     <section class="how-to" id="how-to-use" aria-labelledby="how-title"><div class="how-intro"><p class="eyebrow">The next chapter</p><h2 id="how-title">Put your collection <br>where you watch.</h2><p>A collection organizes metadata. No playable media is included. Sender and recipient each use their own sources they are authorized to access.</p></div><div class="how-steps"><article><span>1</span><div><h3>Copy your JSON</h3><p>Use Copy JSON above. A downloaded file is useful for sharing or hosting; direct file uploads into ARVIO are not currently supported.</p></div></article><article><span>2</span><div><h3>Import it in ARVIO</h3><p>On Android, open Settings → Catalogs → Import Catalog Pack / Collections and paste the JSON. On ARVIO Web, open Settings → Catalogs (Home Rows), paste it into Collection, and choose Import collections.</p></div></article><article><span>3</span><div><h3>Find your new Home row</h3><p>Open a folder to browse its titles. Public list access and service availability are required; Studio cannot verify them. Import into the profile you want to use.</p><a href="/collections-catalogs/">Read the collection guide <span aria-hidden="true">↗</span></a></div></article></div></section>
   </main>
-  <footer class="shell"><a class="brand" href="/">ARVIO<span class="brand-dot" aria-hidden="true"></span></a><p>Your media. Your sources. Your Home.</p><nav aria-label="Footer navigation"><a href="/collections-catalogs/">Guide</a><a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a><a href="/privacy">Privacy</a></nav></footer>
+  <footer class="shell"><a class="brand" href="/"><img src="/assets/arvio-wordmark.svg" alt="ARVIO" width="96" height="20"></a><p>Your media. Your sources. Your Home.</p><nav aria-label="Footer navigation"><a href="/collections-catalogs/">Guide</a><a href="https://play.google.com/store/apps/details?id=com.arvio.tv">Google Play</a><a href="/privacy">Privacy</a></nav></footer>
 </body>
 </html>

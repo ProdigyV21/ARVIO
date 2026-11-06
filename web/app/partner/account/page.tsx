@@ -54,7 +54,7 @@ export default function ManagedAccount() {
     finally { setBusy(false); }
   }
   return <main className="partner-app partner-auth">
-    <a className="partner-wordmark" href="/"><img src="/arvio-icon-192.png" alt="" />ARVIO <span>Managed account</span></a>
+    <a className="partner-wordmark" href="/"><img src="/arvio-icon-192.png" alt="" /><img className="partner-logo-wordmark" src="/arvio-wordmark.svg" alt="ARVIO" /> <span>Managed account</span></a>
     <section className="partner-auth-form">
       <ShieldCheck size={30} className="partner-accent" /><h1>{membership?.name || "Your managed account"}</h1>
       {error && <div role="alert" className="partner-message error">{error}</div>}

@@ -3,152 +3,291 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ARVIO Crash Diagnostics</title>
+  <title>ARVIO Diagnostics &amp; Support</title>
   <meta name="description" content="Report ARVIO app diagnostics and crashes to our Discord bug channel.">
-  <link rel="icon" href="../assets/arvio-icon-512.png" type="image/png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+  <link rel="stylesheet" href="/guides/guide.css">
   <style>
-    :root {
-      color-scheme: dark;
-      --bg: #050505;
-      --card-bg: rgba(18, 20, 26, 0.92);
-      --border: rgba(255, 255, 255, 0.14);
-      --text-main: #ffffff;
-      --text-muted: #a0a6b2;
-      --accent: #5865f2;
-      --accent-success: #10b981;
-      --code-bg: rgba(0, 0, 0, 0.45);
+    .diagnostic-shell {
+      width: min(720px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 120px 0 80px;
     }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: radial-gradient(900px 600px at 50% -10%, rgba(13, 240, 194, 0.16), transparent 60%),
-                  radial-gradient(900px 600px at 50% 110%, rgba(88, 101, 242, 0.14), transparent 60%),
-                  var(--bg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      color: var(--text-main);
-      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-    }
-    .card {
-      width: 100%;
-      max-width: 520px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 36px 28px;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
-      text-align: center;
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-    }
-    .icon-wrap {
-      width: 68px;
-      height: 68px;
-      border-radius: 18px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 18px;
+    .page-title {
       font-size: 34px;
-    }
-    h1 {
-      margin: 0 0 8px;
-      font-size: 26px;
       font-weight: 750;
+      letter-spacing: -0.03em;
+      margin: 0 0 10px;
       color: #fff;
     }
-    .subtitle {
-      margin: 0 0 24px;
-      color: var(--text-muted);
+    .page-desc {
+      color: var(--muted);
       font-size: 15px;
-      line-height: 1.5;
+      line-height: 1.6;
+      margin: 0 0 32px;
     }
-    .report-box {
-      background: var(--code-bg);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 16px;
-      padding: 18px;
+    .diagnostic-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 32px;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 650;
+      color: #fff;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .status-dot.alert {
+      background: #f87171;
+    }
+    .panel-meta {
+      color: var(--quiet);
+      font-size: 13px;
+    }
+    .panel-text {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 0 0 16px;
+    }
+    .code-box {
+      background: #000;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
       text-align: left;
-      margin-bottom: 26px;
-    }
-    .report-label {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #0df0c2;
-      font-weight: 700;
-      margin-bottom: 10px;
     }
     pre {
       margin: 0;
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-      font-size: 13px;
-      color: #e0e4eb;
+      font-size: 12.5px;
+      color: #d6d9da;
       line-height: 1.6;
       white-space: pre-wrap;
       word-break: break-word;
     }
-    .btn-copy {
-      width: 100%;
-      padding: 16px 22px;
-      border-radius: 14px;
+    .btn-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 18px;
+      border-radius: 7px;
+      background: #fff;
+      color: #000;
+      font-size: 14px;
+      font-weight: 650;
+      border: 1px solid #fff;
+      cursor: pointer;
+      text-decoration: none;
+      transition: opacity 0.15s ease;
+    }
+    .btn-action:hover {
+      opacity: 0.9;
+    }
+    .btn-action.copied {
       background: var(--accent);
-      color: #ffffff;
+      border-color: var(--accent);
+      color: #000;
+    }
+    .btn-muted {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 16px;
+      border-radius: 7px;
+      background: transparent;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid var(--line-strong);
+      text-decoration: none;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn-muted:hover {
+      background: var(--surface-raised);
+      border-color: #555d62;
+    }
+    .resource-section {
+      border-top: 1px solid var(--line);
+      padding-top: 32px;
+    }
+    .resource-heading {
       font-size: 16px;
       font-weight: 650;
-      border: none;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 8px 24px rgba(88, 101, 242, 0.4);
-      margin-bottom: 16px;
-    }
-    .btn-copy.copied {
-      background: var(--accent-success);
-      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
-    }
-    .link-direct {
-      color: var(--text-muted);
-      font-size: 14px;
-      text-decoration: none;
-      display: inline-block;
-      padding: 6px 12px;
-      transition: color 0.2s ease;
-    }
-    .link-direct:hover {
       color: #fff;
+      margin: 0 0 14px;
+    }
+    .resource-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+    .resource-item a {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #f6f7f7;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .resource-item a:hover {
+      border-color: var(--line-strong);
+      background: var(--surface-raised);
+    }
+    .resource-arrow {
+      color: var(--quiet);
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="icon-wrap">🚨</div>
-    <h1>ARVIO Crash Diagnostics</h1>
-    <p class="subtitle">
-      Tap below to instantly copy this bug report to your phone clipboard and open the ARVIO Discord bug channel.
-    </p>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand-link" href="/" aria-label="ARVIO home">
+        <img src="/assets/arvio-wordmark.svg" alt="ARVIO" width="134" height="34">
+      </a>
+      <nav class="header-nav" aria-label="Main navigation">
+        <a href="/">Home</a>
+        <a href="/guides/">Guides</a>
+        <a href="https://discord.gg/UavuEYMfQ4" target="_blank" rel="noopener">Discord</a>
+      </nav>
+    </div>
+  </header>
 
-    <div class="report-box">
-      <div class="report-label">Formatted Bug Report</div>
-      <pre id="report-text">Loading diagnostic report...</pre>
+  <main class="diagnostic-shell">
+    <p class="panel-meta" style="margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; font-size: 12px;">Diagnostics &amp; Support</p>
+    <h1 class="page-title">ARVIO Diagnostics</h1>
+    <p class="page-desc">App health status, crash reports, and troubleshooting references.</p>
+
+    <!-- Crash View: Shown when query parameters contain crash details -->
+    <div id="crash-view" style="display:none">
+      <div class="diagnostic-panel">
+        <div class="panel-header">
+          <div class="panel-status">
+            <span class="status-dot alert"></span>
+            <span>Crash Report Captured</span>
+          </div>
+          <span class="panel-meta" id="time-display">Just now</span>
+        </div>
+        <p class="panel-text">
+          An unexpected issue was captured on your device. Copy the diagnostic summary below to paste in the ARVIO Discord bug channel.
+        </p>
+        <div class="code-box">
+          <pre id="report-text">Loading diagnostic report...</pre>
+        </div>
+        <div class="btn-row">
+          <button id="copy-btn" type="button" class="btn-action">Copy Report &amp; Open Discord</button>
+          <a href="https://discord.gg/UavuEYMfQ4" class="btn-muted" target="_blank" rel="noopener">Open Discord Without Copying &rarr;</a>
+        </div>
+      </div>
     </div>
 
-    <button id="copy-btn" class="btn-copy">Copy Report &amp; Open Discord</button>
-
-    <div>
-      <a href="https://discord.gg/UavuEYMfQ4" class="link-direct">Open Discord Without Copying &rarr;</a>
+    <!-- Healthy View: Shown when accessed directly without crash parameters -->
+    <div id="healthy-view">
+      <div class="diagnostic-panel">
+        <div class="panel-header">
+          <div class="panel-status">
+            <span class="status-dot"></span>
+            <span>No Crash Detected</span>
+          </div>
+          <span class="panel-meta">Normal Session</span>
+        </div>
+        <p class="panel-text">
+          No crash data was passed to this page. When ARVIO encounters an unexpected exception on Android TV or mobile, scanning the on-screen QR code opens this diagnostic page with the captured error trace.
+        </p>
+        <div class="btn-row">
+          <a href="https://discord.gg/UavuEYMfQ4" class="btn-action" target="_blank" rel="noopener">Join Discord Community</a>
+          <a href="/guides/" class="btn-muted">Browse Setup Guides</a>
+        </div>
+      </div>
     </div>
-  </div>
+
+    <section class="resource-section">
+      <h2 class="resource-heading">Troubleshooting resources</h2>
+      <ul class="resource-list">
+        <li class="resource-item">
+          <a href="/guides/">
+            <span>Connecting Jellyfin, Plex, Emby and IPTV</span>
+            <span class="resource-arrow">&rarr;</span>
+          </a>
+        </li>
+        <li class="resource-item">
+          <a href="/browser-playback-guide/">
+            <span>Browser playback and video codec limitations</span>
+            <span class="resource-arrow">&rarr;</span>
+          </a>
+        </li>
+        <li class="resource-item">
+          <a href="https://github.com/ProdigyV21/ARVIO/issues" target="_blank" rel="noopener">
+            <span>GitHub issue tracker</span>
+            <span class="resource-arrow">&rarr;</span>
+          </a>
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell">
+      <div class="footer-main">
+        <div class="footer-brand">
+          <a class="brand-link" href="/" aria-label="ARVIO home">
+            <img src="/assets/arvio-wordmark.svg" alt="ARVIO" width="122" height="30">
+          </a>
+          <p>Open-source media management for Android TV, Google TV and Android mobile.</p>
+        </div>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="/">Home</a>
+          <a href="/guides/">Guides</a>
+          <a href="/privacy">Privacy</a>
+          <a href="https://github.com/ProdigyV21/ARVIO" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2026 ARVIO</span>
+        <span>Independent, open-source software.</span>
+      </div>
+    </div>
+  </footer>
 
   <script>
     (function() {
       const params = new URLSearchParams(window.location.search);
+      const hasCrash = Boolean(params.get("id") || params.get("err") || params.get("error"));
       const id = params.get("id") || "N/A";
       const version = params.get("v") || params.get("version") || "1.0";
       const error = params.get("err") || params.get("error") || "Unexpected crash";
@@ -182,6 +321,18 @@
       const preEl = document.getElementById("report-text");
       if (preEl) {
         preEl.textContent = reportText;
+      }
+
+      const crashView = document.getElementById("crash-view");
+      const healthyView = document.getElementById("healthy-view");
+      if (crashView && crashView.style && healthyView && healthyView.style) {
+        if (hasCrash) {
+          crashView.style.display = "block";
+          healthyView.style.display = "none";
+        } else {
+          crashView.style.display = "none";
+          healthyView.style.display = "block";
+        }
       }
 
       const btnEl = document.getElementById("copy-btn");

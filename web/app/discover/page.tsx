@@ -224,7 +224,7 @@ function DiscoverContent() {
         <div className="header-top">
           <div className="logo-section">
             <img src="/arvio-logo.svg" alt="ARVIO Logo" className="logo" />
-            <span className="logo-text">ARVIO</span>
+            <img src="/arvio-wordmark.svg" alt="ARVIO" className="wordmark-logo" />
           </div>
           <button
             ref={modalTrigger}
@@ -489,11 +489,10 @@ function DiscoverContent() {
           height: 48px;
         }
 
-        .logo-text {
-          font-size: 28px;
-          font-weight: 800;
-          letter-spacing: 1px;
-          color: #fff;
+        .wordmark-logo {
+          height: 28px;
+          width: auto;
+          display: block;
         }
 
         .submit-trigger-button {

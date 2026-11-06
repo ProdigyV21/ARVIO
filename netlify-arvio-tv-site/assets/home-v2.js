@@ -88,3 +88,21 @@ function openLinkedGallery() {
 }
 window.addEventListener('hashchange',openLinkedGallery);
 openLinkedGallery();
+
+/* Show the latest GitHub release in the hero badge */
+(async function() {
+  const link = document.querySelector('.release');
+  if (!link) return;
+  try {
+    const res = await fetch('https://api.github.com/repos/ProdigyV21/ARVIO/releases/latest');
+    if (!res.ok) return;
+    const release = await res.json();
+    if (release && release.tag_name) {
+      if (release.html_url) link.href = release.html_url;
+      const tag = release.tag_name;
+      const label = typeof t === 'function' ? t('LATEST RELEASE') : 'LATEST RELEASE';
+      const dot = link.querySelector('.dot') ? '<span class="dot"></span> ' : '';
+      link.innerHTML = dot + label + ' · ' + tag + ' <span aria-hidden="true">↗</span>';
+    }
+  } catch {}
+})();

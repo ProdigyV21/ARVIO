@@ -24,7 +24,6 @@ async function copyText(text: string): Promise<boolean> {
 function ReportContent() {
   const translateUi = useTranslation();
   const searchParams = useSearchParams();
-  // The Android app opens this page with ?id=…&v=…&err=… after a crash.
   const bare = !searchParams.get("id") && !searchParams.get("err") && !searchParams.get("error");
   const id = searchParams.get("id") || "N/A";
   const version = searchParams.get("v") || searchParams.get("version") || "1.0";
@@ -61,158 +60,180 @@ ${firebase ? `**Report reference:** \`arvio_report_id=${id}\`` : ""}
 **Time:** ${timeStr}
 **Error:** ${error}`;
 
-  // Only say "Copied" when it was; otherwise leave the report on screen to copy by hand.
   const handleCopyAndRedirect = async () => {
     const ok = await copyText(reportText);
     setCopied(ok ? "copied" : "failed");
     if (ok) setTimeout(() => { window.location.href = DISCORD_URL; }, 700);
   };
-  const fields: Array<[string, string, boolean?]> = [
-    [translateUi("Crash ID"), id, true],
-    [firebase ? "Crashlytics" : "Sentry", dashboard],
-    ...(firebase ? [[translateUi("Report reference"), `arvio_report_id=${id}`, true] as [string, string, boolean]] : []),
-    [translateUi("Version"), version],
-    [translateUi("Time"), timeStr],
-    [translateUi("Error"), error]
-  ];
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(900px 600px at 50% -10%, rgba(13, 240, 194, 0.16), transparent 60%), radial-gradient(900px 600px at 50% 110%, rgba(88, 101, 242, 0.14), transparent 60%), #050505",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px",
-        color: "#f5f5f5",
-        fontFamily: 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif'
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "520px",
-          background: "rgba(18, 20, 26, 0.92)",
-          border: "1px solid rgba(255, 255, 255, 0.14)",
-          borderRadius: "24px",
-          padding: "36px 28px",
-          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.65)",
-          textAlign: "center",
-          backdropFilter: "blur(16px)"
-        }}
-      >
-        <div
-          style={{
-            width: "68px",
-            height: "68px",
-            borderRadius: "18px",
-            background: "rgba(255, 255, 255, 0.05)",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 18px",
-            fontSize: "34px"
-          }}
-        >
-          🚨
-        </div>
-
-        <h1 style={{ margin: "0 0 8px", fontSize: "26px", fontWeight: 750, color: "#fff" }}>
-          {bare ? translateUi("Report a problem") : translateUi("ARVIO crash report")}
-        </h1>
-        <p style={{ margin: "0 0 24px", color: "#a0a6b2", fontSize: "15px", lineHeight: 1.5 }}>
-          {bare
-            ? translateUi("Tell us what happened on the ARVIO Discord. Include your device, the app version and what you were doing.")
-            : translateUi("Copy this report and paste it in the ARVIO Discord bug channel, so we can find what went wrong.")}
-        </p>
-        {!bare && <>
-        <div
-          style={{
-            background: "rgba(0, 0, 0, 0.45)",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            borderRadius: "16px",
-            padding: "18px",
-            textAlign: "left",
-            marginBottom: "26px"
-          }}
-        >
-          <div
-            style={{
-              fontSize: "12px",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              color: "#0df0c2",
-              fontWeight: 700,
-              marginBottom: "10px"
-            }}
-          >
-            {translateUi("Report")}
-          </div>
-          <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", gap: "6px 14px", fontSize: "13px", lineHeight: 1.5 }}>
-            {fields.map(([label, value, code]) => <React.Fragment key={label}>
-              <dt style={{ color: "#a0a6b2", fontWeight: 600 }}>{label}</dt>
-              <dd style={{ margin: 0, color: "#e0e4eb", wordBreak: "break-word", fontFamily: code ? "ui-monospace, SFMono-Regular, Consolas, monospace" : undefined }}>
-                {/^https:\/\//.test(value) ? <a href={value} target="_blank" rel="noopener noreferrer" style={{ color: "#8ab4ff" }}>{value}</a> : value}
-              </dd>
-            </React.Fragment>)}
-          </dl>
-          {copied === "failed" && <textarea readOnly value={reportText} aria-label={translateUi("Report text")} onFocus={(event) => event.currentTarget.select()} autoFocus
-            style={{ width: "100%", minHeight: "140px", marginTop: "14px", padding: "10px", borderRadius: "10px", border: "1px solid #444", background: "#0b0b0b", color: "#e0e4eb", fontSize: "12px", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }} />}
-        </div>
-
-        <button
-          onClick={handleCopyAndRedirect}
-          style={{
-            width: "100%",
-            padding: "16px 22px",
-            borderRadius: "14px",
-            background: copied === "copied" ? "#10b981" : "#5865f2",
-            color: "#ffffff",
-            fontSize: "16px",
-            fontWeight: 650,
-            border: "none",
-            cursor: "pointer",
-            transition: "all 0.2s ease",
-            boxShadow: copied === "copied"
-              ? "0 8px 24px rgba(16, 185, 129, 0.4)"
-              : "0 8px 24px rgba(88, 101, 242, 0.4)",
-            marginBottom: "16px"
-          }}
-        >
-          {copied === "copied" ? translateUi("Copied. Opening Discord…") : copied === "failed" ? translateUi("Couldn't copy: select the text above") : translateUi("Copy report and open Discord")}
-        </button>
-        </>}
-        {copied === "failed" && <p role="alert" style={{ margin: "0 0 12px", color: "#ffb4ab", fontSize: "14px" }}>{translateUi("Your browser blocked copying. Select the report text, copy it, then open Discord.")}</p>}
-
-        <div>
-          <a
-            href={DISCORD_URL}
-            style={{
-              color: "#a0a6b2",
-              fontSize: "14px",
-              textDecoration: "none",
-              display: "inline-block",
-              padding: "6px 12px"
-            }}
-          >
-            {bare ? translateUi("Open the ARVIO Discord") : translateUi("Open Discord without copying")} &rarr;
+    <div style={{ minHeight: "100vh", background: "#050606", color: "#f6f7f7", fontFamily: 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif' }}>
+      <header style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.11)", background: "rgba(4, 5, 5, 0.85)", position: "sticky", top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: "1180px", margin: "0 auto", padding: "0 24px", minHeight: "70px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <a href="/" aria-label="ARVIO home" style={{ display: "inline-flex", alignItems: "center" }}>
+            <img src="/arvio-wordmark.svg" alt="ARVIO" width={134} height={34} style={{ width: "134px", height: "auto" }} />
           </a>
+          <nav style={{ display: "flex", gap: "22px", fontSize: "14px", fontWeight: 600 }}>
+            <a href="/" style={{ color: "#d6d9da", textDecoration: "none" }}>{translateUi("Home")}</a>
+            <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" style={{ color: "#d6d9da", textDecoration: "none" }}>Discord</a>
+          </nav>
         </div>
-      </div>
+      </header>
+
+      <main style={{ width: "min(720px, calc(100% - 48px))", margin: "0 auto", padding: "64px 0 80px" }}>
+        <p style={{ color: "#717779", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 650, margin: "0 0 8px" }}>
+          {translateUi("Support & Troubleshooting")}
+        </p>
+        <h1 style={{ fontSize: "32px", fontWeight: 750, letterSpacing: "-0.03em", margin: "0 0 10px", color: "#fff" }}>
+          {translateUi("ARVIO Diagnostics")}
+        </h1>
+        <p style={{ color: "#a6abad", fontSize: "15px", lineHeight: 1.6, margin: "0 0 32px" }}>
+          {translateUi("App health status, crash reports, and troubleshooting references.")}
+        </p>
+
+        {!bare ? (
+          <div style={{ background: "#0d0f10", border: "1px solid #25292b", borderRadius: "12px", padding: "24px", marginBottom: "32px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", paddingBottom: "14px", borderBottom: "1px solid #25292b" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 650, color: "#fff" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f87171", display: "inline-block" }}></span>
+                <span>{translateUi("Crash Report Captured")}</span>
+              </div>
+              <span style={{ color: "#717779", fontSize: "13px" }}>{timeStr}</span>
+            </div>
+            <p style={{ color: "#a6abad", fontSize: "14px", lineHeight: 1.6, margin: "0 0 16px" }}>
+              {translateUi("An unexpected issue was captured on your device. Copy the diagnostic summary below to paste in the ARVIO Discord bug channel.")}
+            </p>
+            <div style={{ background: "#000", border: "1px solid #25292b", borderRadius: "8px", padding: "14px 16px", marginBottom: "20px" }}>
+              <pre style={{ margin: 0, fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: "12.5px", color: "#d6d9da", lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                {reportText}
+              </pre>
+            </div>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={handleCopyAndRedirect}
+                type="button"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 18px",
+                  borderRadius: "7px",
+                  background: copied === "copied" ? "#53d9c1" : "#fff",
+                  color: "#000",
+                  fontSize: "14px",
+                  fontWeight: 650,
+                  border: "1px solid #fff",
+                  cursor: "pointer"
+                }}
+              >
+                {copied === "copied" ? translateUi("Copied! Opening Discord...") : translateUi("Copy Report & Open Discord")}
+              </button>
+              <a
+                href={DISCORD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 16px",
+                  borderRadius: "7px",
+                  background: "transparent",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  border: "1px solid #373d40",
+                  textDecoration: "none"
+                }}
+              >
+                {translateUi("Open Discord Without Copying")} &rarr;
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: "#0d0f10", border: "1px solid #25292b", borderRadius: "12px", padding: "24px", marginBottom: "32px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", paddingBottom: "14px", borderBottom: "1px solid #25292b" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", fontWeight: 650, color: "#fff" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#53d9c1", display: "inline-block" }}></span>
+                <span>{translateUi("No Crash Detected")}</span>
+              </div>
+              <span style={{ color: "#717779", fontSize: "13px" }}>{translateUi("Normal Session")}</span>
+            </div>
+            <p style={{ color: "#a6abad", fontSize: "14px", lineHeight: 1.6, margin: "0 0 20px" }}>
+              {translateUi("No crash data was passed to this page. When ARVIO encounters an unexpected exception on Android TV or mobile, scanning the on-screen QR code opens this diagnostic page with the captured error trace.")}
+            </p>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+              <a
+                href={DISCORD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 18px",
+                  borderRadius: "7px",
+                  background: "#fff",
+                  color: "#000",
+                  fontSize: "14px",
+                  fontWeight: 650,
+                  textDecoration: "none"
+                }}
+              >
+                {translateUi("Join Discord Community")}
+              </a>
+              <a
+                href="/"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 16px",
+                  borderRadius: "7px",
+                  background: "transparent",
+                  color: "#fff",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  border: "1px solid #373d40",
+                  textDecoration: "none"
+                }}
+              >
+                {translateUi("Return to ARVIO Web")} &rarr;
+              </a>
+            </div>
+          </div>
+        )}
+
+        <section style={{ borderTop: "1px solid #25292b", paddingTop: "32px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 650, color: "#fff", margin: "0 0 14px" }}>
+            {translateUi("Troubleshooting resources")}
+          </h2>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "10px" }}>
+            <li style={{ padding: "14px 18px", background: "#0d0f10", border: "1px solid #25292b", borderRadius: "8px" }}>
+              <a href="https://github.com/ProdigyV21/ARVIO/issues" target="_blank" rel="noopener noreferrer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "#f6f7f7", textDecoration: "none", fontSize: "14px", fontWeight: 500 }}>
+                <span>GitHub Issue Tracker</span>
+                <span style={{ color: "#717779" }}>&rarr;</span>
+              </a>
+            </li>
+            <li style={{ padding: "14px 18px", background: "#0d0f10", border: "1px solid #25292b", borderRadius: "8px" }}>
+              <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "#f6f7f7", textDecoration: "none", fontSize: "14px", fontWeight: 500 }}>
+                <span>Discord Support Channel</span>
+                <span style={{ color: "#717779" }}>&rarr;</span>
+              </a>
+            </li>
+          </ul>
+        </section>
+      </main>
     </div>
   );
 }
 
 export default function ReportPage() {
-  // Outside the app shell: follow the browser language.
   const [language, setLanguage] = useState("en");
   useEffect(() => setLanguage(navigator.language || "en"), []);
   return (
     <LanguageProvider language={language}>
-      <Suspense fallback={<div style={{ minHeight: "100vh", background: "#050505" }} />}>
+      <Suspense fallback={<div style={{ minHeight: "100vh", background: "#050606" }} />}>
         <ReportContent />
       </Suspense>
     </LanguageProvider>
