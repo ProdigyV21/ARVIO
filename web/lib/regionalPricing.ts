@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 
 export const REGIONAL_YEARLY_URL = "https://ko-fi.com/arvio/link/ARVIOREGION50";
+export const STANDARD_YEARLY_PRICE = "$20";
 export const REGIONAL_YEARLY_PRICE = "$10";
 export const REGIONAL_YEARLY_PER_MONTH = "$0.83";
 export const REGIONAL_YEARLY_SAVING = "72%";

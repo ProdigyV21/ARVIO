@@ -1561,7 +1561,7 @@
   "Picking the best source…": "Parima allika valimine…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi võtab tasu USA dollarites; teie pank konverteerib summa automaatselt.",
   "Maximum of 10 IPTV playlists reached": "Saavutatud on maksimaalselt 10 IPTV esitusloendit",
-  "Regional price · save {value0}": "Piirkondlik hind · säästke {value0}",
+  "Regional price · save {value0} vs. 12 monthly payments": "Piirkondlik hind · säästa {value0} võrreldes 12 kuumaksega",
   "One payment, no automatic renewal. About {value0} a month.": "Ühekordne makse, automaatset uuendamist pole. Umbes {value0} kuus.",
   "12-month pass · {value0}": "12 kuu pass · {value0}"
 }

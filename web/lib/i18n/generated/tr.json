@@ -1561,7 +1561,7 @@
   "Picking the best source…": "En iyi kaynak seçiliyor…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi ödemeyi ABD doları olarak alır; bankanız tutarı otomatik olarak dönüştürür.",
   "Maximum of 10 IPTV playlists reached": "En fazla 10 IPTV oynatma listesi sınırına ulaşıldı",
-  "Regional price · save {value0}": "Bölgesel fiyat · {value0} tasarruf",
+  "Regional price · save {value0} vs. 12 monthly payments": "Bölgesel fiyat · 12 aylık ödemeye kıyasla {value0} tasarruf",
   "One payment, no automatic renewal. About {value0} a month.": "Tek ödeme, otomatik yenileme yok. Ayda yaklaşık {value0}.",
   "12-month pass · {value0}": "12 aylık geçiş · {value0}"
 }
