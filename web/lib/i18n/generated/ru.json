@@ -1561,7 +1561,7 @@
   "Picking the best source…": "Выбираем лучший источник…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi списывает оплату в долларах США; ваш банк автоматически конвертирует сумму.",
   "Maximum of 10 IPTV playlists reached": "Достигнут максимум — 10 плейлистов IPTV",
-  "Regional price · save {value0}": "Региональная цена · экономия {value0}",
+  "Regional price · save {value0} vs. 12 monthly payments": "Региональная цена · экономия {value0} по сравнению с 12 ежемесячными платежами",
   "One payment, no automatic renewal. About {value0} a month.": "Один платёж, без автопродления. Около {value0} в месяц.",
   "12-month pass · {value0}": "Пропуск на 12 месяцев · {value0}"
 }

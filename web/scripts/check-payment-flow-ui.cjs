@@ -11,9 +11,13 @@ const assert = require('node:assert/strict');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const fixture = name => path.join(root, 'tests/fixtures', name);
+  const regionalOnly = process.env.PAYMENT_UI_ONLY === 'regional-pricing';
+  const yearlyUrl = 'https://ko-fi.com/s/373de24a07';
+  const regionalUrl = 'https://ko-fi.com/arvio/link/ARVIOREGION50';
   const result = await esbuild.build({
     entryPoints: [fixture('premium-ui.tsx')], bundle: true, write: false, outdir: 'payment-fixture', jsx: 'automatic',
-    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_PAYWALL_ENABLED': '"true"', 'process.env.NEXT_PUBLIC_KOFI_URL': '"https://ko-fi.com/arvio/tiers"' },
+    define: { 'process.env': '{}', 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_PAYWALL_ENABLED': '"true"', 'process.env.NEXT_PUBLIC_KOFI_URL': '"https://ko-fi.com/arvio/tiers"',
+      'process.env.NEXT_PUBLIC_KOFI_YEARLY_URL': JSON.stringify(regionalOnly ? yearlyUrl : '') },
     plugins: [{ name: 'local-only-payment-transport', setup(build) {
       build.onResolve({ filter: /^@\// }, args => ({ path: args.path === '@/lib/store' ? fixture('premium-store.ts') : ['.tsx', '.ts', '/index.tsx', '/index.ts', ''].map(ext => path.join(root, args.path.slice(2) + ext)).find(file => fs.existsSync(file)) }));
       build.onResolve({ filter: /(^|\/)http$/ }, () => ({ path: fixture('premium-http.ts') }));
@@ -65,6 +69,39 @@ const assert = require('node:assert/strict');
     const events = name => page.evaluate(name => window.__premiumFixture.events.filter(event => event.event_name === name), name);
     const waitEvent = name => page.waitForFunction(name => window.__premiumFixture.events.some(event => event.event_name === name), name);
     const go = async scenario => { await page.goto(`${base}/?case=${scenario}`); await page.getByRole('link', { name: /Keep Premium|Subscribe on Ko-fi/ }).first().waitFor(); };
+    if (regionalOnly) {
+      const preview = page.locator('.web-preview-hero-cta');
+      await context.route('**/api/geo', route => route.fulfill({ json: { country: new URL(page.url()).searchParams.get('country') } }));
+      for (const [country, price, destination] of [['BR', '$10', regionalUrl], ['US', '$20', yearlyUrl]]) {
+        await page.goto(`${base}/?case=preview-signedout&country=${country}`);
+        await preview.getByText(`12-month pass · ${price}`, { exact: false }).waitFor();
+        assert.match(await preview.innerText(), /Monthly · \$2\.99/);
+        if (country === 'BR') {
+          await page.getByText('Regional price · save 72% vs. 12 monthly payments', { exact: true }).waitFor();
+          assert.doesNotMatch(await preview.innerText(), /\$20/);
+        }
+        await page.goto(`${base}/?case=preview-paid&country=${country}`);
+        await page.getByText('Membership active', { exact: true }).waitFor();
+        const offer = page.getByRole('link', { name: `Get the 12-month pass · ${price}`, exact: true });
+        await offer.waitFor();
+        assert.equal(await offer.getAttribute('href'), destination);
+        const opened = context.waitForEvent('page');
+        await offer.click();
+        await (await opened).close();
+        await waitEvent('checkout_opened');
+        const recovery = page.getByRole('dialog', { name: 'Finish your membership' });
+        await recovery.getByRole('link', { name: 'Return to Ko-fi' }).waitFor();
+        assert.equal(await recovery.getByRole('link', { name: 'Return to Ko-fi' }).getAttribute('href'), destination);
+        await recovery.getByText(/No paid membership found yet/).waitFor();
+        await page.evaluate(() => window.__premiumFixture.markYearlyPaid());
+        await recovery.getByRole('button', { name: 'Check payment status', exact: true }).click();
+        await page.getByText('12-month pass active', { exact: true }).waitFor();
+        await page.evaluate(() => sessionStorage.removeItem('arvio.visitorCountry.v1'));
+      }
+      assert.deepEqual(errors, []);
+      console.log('Regional and standard prices, checkout destinations and annual activation passed.');
+      return;
+    }
     const handoff = async (link, button = 'left') => {
       assert.equal(await link.getAttribute('href'), 'https://ko-fi.com/arvio/tiers', 'native provider URL has no email, journey ID or tracking query');
       assert.equal(await link.getAttribute('target'), '_blank');

@@ -64,8 +64,8 @@ test('/api/geo returns only the two-letter country and allows arvio.tv', () => {
 
 test('the plan card shows the regional price and the discounted link', () => {
   const plans = fs.readFileSync(path.join(__dirname, '../components/shell/PremiumPlans.tsx'), 'utf8');
-  assert.match(plans, /regional \? translateUi\("Regional price · save \{value0\}", \{ value0: REGIONAL_YEARLY_SAVING \}\)/);
-  assert.match(plans, /<strong>\{regional \? REGIONAL_YEARLY_PRICE : "\$20"\}<\/strong>/);
+  assert.match(plans, /regional \? translateUi\("Regional price · save \{value0\} vs\. 12 monthly payments", \{ value0: REGIONAL_YEARLY_SAVING \}\)/);
+  assert.match(plans, /<strong>\{regional \? REGIONAL_YEARLY_PRICE : STANDARD_YEARLY_PRICE\}<\/strong>/);
   for (const file of ['PremiumOffer.tsx', 'PremiumAccount.tsx']) {
     assert.match(fs.readFileSync(path.join(__dirname, '../components/shell', file), 'utf8'), /useRegionalYearly\(\);/);
   }

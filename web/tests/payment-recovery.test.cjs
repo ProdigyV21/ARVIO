@@ -4,10 +4,11 @@ const { load } = require('./load.cjs');
 const { createPaymentRecovery } = load('lib/paymentRecovery.ts');
 const trial = { entitled: true, reason: 'trial' };
 const paid = { entitled: true, reason: 'subscription' };
-function fixture(check = async () => trial) {
+function fixture(check = async () => trial, activeWhen) {
   let current = true, visible = true, calls = 0;
   const timers = new Map(), results = [];
   const controller = createPaymentRecovery({ check: async () => { calls++; return check(); }, isCurrent: () => current, isVisible: () => visible,
+    activeWhen,
     onResult: (status, state) => results.push({ status, state }),
     schedule: (callback, delay) => { const key = timers.size + 1; timers.set(key, { callback, delay }); return key; },
     cancel: key => timers.delete(key)
@@ -28,6 +29,17 @@ test('a delayed server-confirmed payment activates once and stops polling', asyn
   await f.controller.resume(); await f.next(); await f.controller.resume();
   assert.equal(f.calls(), 2); assert.equal(f.timers.size, 0);
   assert.equal(f.results.filter(x => x.status === 'active').length, 1);
+});
+test('an existing monthly membership keeps annual upgrade recovery running', async () => {
+  let state = { ...paid, plan: 'monthly' };
+  const f = fixture(async () => state, next => next.plan === 'yearly');
+  await f.controller.resume();
+  assert.equal(f.results.at(-1).status, 'pending');
+  assert.equal(f.timers.size, 1);
+  state = { ...paid, plan: 'yearly' };
+  await f.next();
+  assert.equal(f.results.at(-1).status, 'active');
+  assert.equal(f.timers.size, 0);
 });
 test('hidden tabs do not check; visibility resumes the bounded controller', async () => {
   const f = fixture(); f.setVisible(false); await f.controller.resume(); assert.equal(f.calls(), 0);

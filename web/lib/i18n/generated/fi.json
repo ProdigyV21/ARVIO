@@ -1563,7 +1563,7 @@
   "Picking the best source…": "Valitaan paras lähde…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi veloittaa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti.",
   "Maximum of 10 IPTV playlists reached": "Enintään 10 IPTV-soittolistaa saavutettu",
-  "Regional price · save {value0}": "Alueellinen hinta · säästä {value0}",
+  "Regional price · save {value0} vs. 12 monthly payments": "Alueellinen hinta · säästä {value0} verrattuna 12 kuukausimaksuun",
   "One payment, no automatic renewal. About {value0} a month.": "Kertamaksu, ei automaattista uusimista. Noin {value0} kuukaudessa.",
   "12-month pass · {value0}": "12 kuukauden passi · {value0}"
 }

@@ -97,9 +97,8 @@ function MembershipCheckoutSession({ children, className, entry, title, onEntitl
       check: () => fetchEntitlement(authClient),
       isCurrent: () => authClient.session?.userId === accountId,
       isVisible: () => document.visibilityState === "visible" && document.hasFocus(),
-      onResult: (rawResult, state) => {
-        // An upgrade is done only when its condition holds (e.g. plan yearly).
-        const result = rawResult === "active" && state && done.current && !done.current(state) ? "pending" : rawResult;
+      activeWhen: state => done.current?.(state) ?? true,
+      onResult: (result, state) => {
         setStatus(result);
         if (result !== "checking") void trackPremiumEvent(authClient, "payment_status_checked", { entry, status: result, ...flow });
         if (result === "active" && state) activate(state);

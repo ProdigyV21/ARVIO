@@ -6,6 +6,7 @@ export function createPaymentRecovery(options: {
   check: () => Promise<EntitlementState>;
   isCurrent: () => boolean;
   isVisible: () => boolean;
+  activeWhen?: (state: EntitlementState) => boolean;
   onResult: (status: "checking" | "pending" | "active" | "error", state?: EntitlementState) => void;
   schedule?: (callback: () => void, delay: number) => ReturnType<typeof setTimeout>;
   cancel?: (timer: ReturnType<typeof setTimeout>) => void;
@@ -25,7 +26,7 @@ export function createPaymentRecovery(options: {
     try {
       const state = await options.check();
       if (!valid()) return;
-      if (state.entitled && state.reason === "subscription") {
+      if (state.entitled && state.reason === "subscription" && (options.activeWhen?.(state) ?? true)) {
         stopped = true;
         options.onResult("active", state);
         return;
