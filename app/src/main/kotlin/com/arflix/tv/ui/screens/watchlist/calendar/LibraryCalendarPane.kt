@@ -411,7 +411,7 @@ private fun CalendarButton(label: String, modifier: Modifier = Modifier, selecte
     val background = if (active) Color.White else if (touch && dropdown) BackgroundElevated else Color.Transparent
     val foreground = if (active) Color.Black else Color.White
     val border = if (touch && dropdown) null else BorderStroke(0.6.dp, if (active) Color.White else BorderLight)
-    Row(modifier.heightIn(min = if (touch) 38.dp else 0.dp).onFocusChanged { focused = it.isFocused }.clip(shape)
+    Row(modifier.heightIn(min = if (touch) 44.dp else 0.dp).onFocusChanged { focused = it.isFocused }.clip(shape)
         .then(if (border != null) Modifier.border(border, shape) else Modifier)
         .background(background)
         .clickable(onClick = onClick).padding(horizontal = if (touch) 14.dp else 16.dp, vertical = if (touch) 8.dp else 3.dp),

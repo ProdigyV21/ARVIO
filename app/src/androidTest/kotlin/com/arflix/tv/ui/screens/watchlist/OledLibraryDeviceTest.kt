@@ -72,7 +72,7 @@ class OledLibraryDeviceTest {
         compose.onNodeWithText("Filters").performClick()
         compose.onNodeWithText("Title A-Z").assertIsDisplayed().performClick()
         capture("filters-right")
-        compose.onNodeWithText("Close ×").performClick()
+        compose.onNode(hasTestTag("library-drawer-close") or hasText("Close") or hasText("Close ×")).performClick()
         card(0).performClick()
         assertNotNull(opened)
     }

@@ -608,9 +608,11 @@ fun WatchlistScreen(
         state.toastMessage?.let { message ->
             Toast(message = message, isVisible = true, onDismiss = viewModel::dismissToast)
         }
+        TextInputModal(search && !compact, tr("Search library"), initialValue = query,
+            onConfirm = { query = it.trim(); search = false }, onCancel = { search = false })
     }
     if(sourcesOpen) OledDrawer(tr("Sources"), { sourcesOpen = false }) {
-        OledSources(scopeSources, selectedId, Modifier.fillMaxWidth().heightIn(max = 500.dp), ::selectSource, onNavigateToSettings)
+        OledSources(scopeSources, selectedId, Modifier.fillMaxWidth(), ::selectSource, onNavigateToSettings)
     }
     if(filters) OledDrawer(tr("Filters"), { filters = false; if(!touch) filterButton.requestFocus() }) {
         Text(tr("Sort"), color = Color.LightGray, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -669,8 +671,6 @@ fun WatchlistScreen(
             }
         }
     }
-    TextInputModal(search && !touch, tr("Search library"), initialValue = query,
-        onConfirm = { query = it.trim(); search = false }, onCancel = { search = false })
 }
 
 @Composable
@@ -914,6 +914,7 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
                                 .size(32.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.12f))
+                                .testTag("library-drawer-close")
                                 .clickable(onClick = close),
                             contentAlignment = Alignment.Center
                         ) {
@@ -928,7 +929,7 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
                         OledControl(
                             tr("Close"),
                             icon = Icons.Default.Close,
-                            modifier = Modifier.focusRequester(initial),
+                            modifier = Modifier.testTag("library-drawer-close").focusRequester(initial),
                             onClick = close
                         )
                     }
