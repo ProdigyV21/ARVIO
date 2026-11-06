@@ -37,12 +37,6 @@ internal class AudioTapHlsExtractorFactory(
         val extractor = delegate.createExtractor(
             uri, format, muxedCaptionFormats, timestampAdjuster, responseHeaders, sniffingExtractorInput, playerId,
         )
-        if (LiveAiSubsDebug.enabled) {
-            LiveAiSubsLog.i(
-                "hls chunk extractor ${extractor.javaClass.simpleName} packedAudio=${extractor.isPackedAudioExtractor} " +
-                    "codecs=${format.codecs} mime=${format.sampleMimeType ?: format.containerMimeType}",
-            )
-        }
         return AudioTapHlsChunkExtractor(extractor, sinks)
     }
 

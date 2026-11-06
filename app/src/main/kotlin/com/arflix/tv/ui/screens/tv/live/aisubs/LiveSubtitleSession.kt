@@ -36,20 +36,6 @@ internal sealed interface LiveWork {
     class Caption(val sentence: CaptionSentence) : LiveWork
 }
 
-/** Counters for the hidden debug overlay. */
-internal data class LiveAiSubsStats(
-    val lookaheadMs: Long? = null,
-    val latencyP50Ms: Long? = null,
-    val latencyP95Ms: Long? = null,
-    val lateDropped: Int = 0,
-    val skippedSegments: Int = 0,
-    val backlogSkips: Int = 0,
-    val segmentsPerMinute: Int = 0,
-    val failures: Int = 0,
-    /** Lines made from the channel's own captions rather than its audio. */
-    val captionLines: Int = 0,
-)
-
 /**
  * Live TV AI subtitles for the one Live TV player: [pipeline] cuts speech segments from the
  * channel's audio ahead of playback, [engine] turns each into timed lines, and [scheduler] shows
@@ -92,9 +78,6 @@ internal class LiveSubtitleSession(
     private val _status = MutableStateFlow<LiveAiSubsStatus>(LiveAiSubsStatus.Off)
     val status: StateFlow<LiveAiSubsStatus> = _status.asStateFlow()
 
-    private val _stats = MutableStateFlow(LiveAiSubsStats())
-    val stats: StateFlow<LiveAiSubsStats> = _stats.asStateFlow()
-
     private var languageName = "English"
     private var rtl = false
     private var running = false
@@ -104,10 +87,6 @@ internal class LiveSubtitleSession(
     private var pausedUntilMs = 0L
     private val recentLines = ArrayDeque<String>()
     private val latencies = ArrayDeque<Long>()
-    private val segmentTimes = ArrayDeque<Long>()
-    private var skippedSegments = 0
-    private var failures = 0
-    private var captionLines = 0
     private var worker: Job? = null
 
     /** Measured p95 of the AI's answer time, for the Auto delay. */
@@ -163,24 +142,12 @@ internal class LiveSubtitleSession(
     }
 
     /** UI thread, about every 100 ms. */
-    fun tick(periodPositionUs: Long, playing: Boolean, lookaheadMs: Long?) {
+    fun tick(periodPositionUs: Long, playing: Boolean) {
         positionUs = periodPositionUs
         pipeline.onPosition(periodPositionUs, playing)
         val now = SystemClock.elapsedRealtime()
         (_status.value as? LiveAiSubsStatus.QuotaPaused)?.let { if (now >= it.untilMs) setStatus(LiveAiSubsStatus.Running) }
         _cue.value = if (running) scheduler.cueAt(periodPositionUs) else null
-        while (segmentTimes.isNotEmpty() && now - segmentTimes.first() > 60_000L) segmentTimes.removeFirst()
-        _stats.value = LiveAiSubsStats(
-            lookaheadMs = lookaheadMs,
-            latencyP50Ms = latencies.sorted().let { if (it.isEmpty()) null else it[it.size / 2] },
-            latencyP95Ms = latencyP95Ms,
-            lateDropped = scheduler.lateDropped,
-            skippedSegments = skippedSegments,
-            backlogSkips = pipeline.backlogSkips,
-            segmentsPerMinute = segmentTimes.size,
-            failures = failures,
-            captionLines = captionLines,
-        )
     }
 
     fun release() {
@@ -218,11 +185,7 @@ internal class LiveSubtitleSession(
                 }
             }
             for (work in segments) {
-                if (!shouldSend(work)) {
-                    skippedSegments++
-                    continue
-                }
-                segmentTimes.addLast(SystemClock.elapsedRealtime())
+                if (!shouldSend(work)) continue
                 val sentEpoch = epoch
                 val context = recentLines.toList()
                 val name = languageName
@@ -233,8 +196,7 @@ internal class LiveSubtitleSession(
                         val started = SystemClock.elapsedRealtime()
                         val result = when (work) {
                             is LiveWork.Audio -> engine.process(work.segment, context, name, isRtl)
-                            is LiveWork.Caption -> captionTranslator.translate(work.sentence, name, isRtl).also {
-                                if (it is LiveEngineResult.Cues && it.cues.isNotEmpty()) captionLines++                            }
+                            is LiveWork.Caption -> captionTranslator.translate(work.sentence, name, isRtl)
                         }
                         if (result is LiveEngineResult.Cues) recordLatency(SystemClock.elapsedRealtime() - started)
                         result
@@ -285,10 +247,7 @@ internal class LiveSubtitleSession(
                 pausedUntilMs = SystemClock.elapsedRealtime() + OFFLINE_RETRY_MS
                 setStatus(LiveAiSubsStatus.Offline)
             }
-            is LiveEngineResult.Failed -> {
-                failures++
-                LiveAiSubsLog.w("segment failed: ${result.reason}")
-            }
+            is LiveEngineResult.Failed -> LiveAiSubsLog.w("segment failed: ${result.reason}")
         }
     }
 

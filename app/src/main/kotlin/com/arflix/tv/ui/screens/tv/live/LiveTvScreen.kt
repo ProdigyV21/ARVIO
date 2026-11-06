@@ -125,7 +125,6 @@ import com.arflix.tv.ui.screens.player.subtitles.RTL_LANGUAGES
 import com.arflix.tv.ui.screens.tv.live.aisubs.GeminiCaptionTranslator
 import com.arflix.tv.ui.screens.tv.live.aisubs.GeminiSegmentEngine
 import com.arflix.tv.ui.screens.tv.live.aisubs.LiveTapExtractorsFactory
-import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsDebug
 import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs
 import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsSettings
 import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsStatus
@@ -3246,7 +3245,6 @@ fun LiveTvScreen(
         .collectAsState(initial = LiveAiSubsSettings())
     val liveAiKey = rememberUpdatedState(liveAiSubsSettings.apiKey)
     val liveAiSession = remember(context) {
-        LiveAiSubsDebug.start()
         LiveSubtitleSession(
             context,
             GeminiSegmentEngine(apiKey = { liveAiKey.value }),
@@ -3266,9 +3264,7 @@ fun LiveTvScreen(
     val liveAiSubsOn = liveAiSubsSettings.enabled && playingChannelId != null &&
         (liveAiSubsChoices[playingChannelId] ?: (liveAiSubsSettings.autoStart && !liveChannelHasTargetSubs))
     val liveAiCue by liveAiSession.cue.collectAsState()
-    val liveAiStats by liveAiSession.stats.collectAsState()
     var liveAiPreparingSeconds by remember { mutableStateOf<Int?>(null) }
-    var liveAiDebugVisible by remember { mutableStateOf(false) }
     // Bumped to restart the stream so audio already buffered gets subtitled too.
     var liveAiRestartRequest by remember { mutableIntStateOf(0) }
     var liveSubtitleStyle by remember { mutableStateOf(LiveSubtitleStyle()) }
@@ -3315,7 +3311,6 @@ fun LiveTvScreen(
             val (on, isLive) = liveAiTick
             val requiredMs = if (on && isLive) autoLiveAiSubsDelayMs(liveAiSession.latencyP95Ms) else 0L
             liveLoadControl.requiredLookaheadUs = requiredMs * 1_000L
-            liveAiDebugVisible = LiveAiSubsDebug.enabled
             if (on) {
                 // currentPosition is relative to the live window; captured audio is timed on the
                 // period, so the window offset into the period is added.
@@ -3323,7 +3318,7 @@ fun LiveTvScreen(
                 val windowOffsetUs = if (timeline.isEmpty) 0L else
                     timeline.getWindow(exoPlayer.currentMediaItemIndex, window).positionInFirstPeriodUs
                 val lookaheadMs = (exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)
-                liveAiSession.tick(exoPlayer.currentPosition * 1_000L + windowOffsetUs, exoPlayer.isPlaying, lookaheadMs)
+                liveAiSession.tick(exoPlayer.currentPosition * 1_000L + windowOffsetUs, exoPlayer.isPlaying)
                 val held = liveLoadControl.holding && exoPlayer.playbackState == Player.STATE_BUFFERING
                 liveAiPreparingSeconds = if (held && requiredMs > 0L) {
                     ((requiredMs - lookaheadMs + 999L) / 1_000L).toInt().coerceAtLeast(1)
@@ -4959,7 +4954,6 @@ fun LiveTvScreen(
                         cue = liveAiCue,
                         style = liveSubtitleStyle,
                         preparingText = liveAiPreparingSeconds?.let { stringResource(R.string.live_ai_subs_preparing, it) },
-                        debugStats = liveAiStats.takeIf { liveAiDebugVisible },
                     )
                 }
                 if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen) {
