@@ -1559,5 +1559,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "इस स्रोत का ऑडियो इस ब्राउज़र में नहीं चल सकता। कोई अन्य स्रोत चुनें या किसी बाहरी प्लेयर का उपयोग करें।",
   "Converting the audio for your browser…": "आपके ब्राउज़र के लिए ऑडियो बदला जा रहा है…",
   "Picking the best source…": "सबसे अच्छा स्रोत चुना जा रहा है…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi अमेरिकी डॉलर में शुल्क लेता है; आपका बैंक राशि को अपने-आप बदल देता है।"
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi अमेरिकी डॉलर में शुल्क लेता है; आपका बैंक राशि को अपने-आप बदल देता है।",
+  "Maximum of 10 IPTV playlists reached": "अधिकतम 10 IPTV प्लेलिस्ट की सीमा पूरी हो गई",
+  "Regional price · save {value0} vs. 12 monthly payments": "क्षेत्रीय कीमत · 12 मासिक भुगतानों के मुकाबले {value0} की बचत",
+  "One payment, no automatic renewal. About {value0} a month.": "एक बार भुगतान, कोई स्वचालित नवीनीकरण नहीं। लगभग {value0} प्रति माह।",
+  "12-month pass · {value0}": "12 महीने का पास · {value0}"
 }

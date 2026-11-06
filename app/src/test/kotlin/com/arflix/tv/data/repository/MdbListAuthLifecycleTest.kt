@@ -419,6 +419,128 @@ class MdbListAuthLifecycleTest {
     }
 
     @Test
+    fun `refused refresh token marks the connection for reconnecting`() = runTest {
+        val dead = SyncProviderStore.MdbListCredential.OAuth("expired", "revoked", 1L)
+        coEvery { store.getMdbListCredential("p") } returns dead
+        coEvery { api.refreshToken(any(), any(), any()) } throws httpException(400, """{"error":"invalid_grant"}""")
+
+        assertNull(repository.resolveAuth("p"))
+
+        coVerify(exactly = 1) { store.markMdbListReconnectRequired("p", dead) }
+        coVerify(exactly = 0) { store.clearAllMdbListCredentials(any()) }
+    }
+
+    @Test
+    fun `same refresh token refused repeatedly requires reconnect`() = runTest {
+        var now = 1_000_000L
+        repository.clock = { now }
+        val dead = SyncProviderStore.MdbListCredential.OAuth("expired", "refused", 1L)
+        coEvery { store.getMdbListCredential("p") } returns dead
+        coEvery { api.refreshToken(any(), any(), any()) } throws httpException(400, """{"error":"unknown"}""")
+
+        repeat(2) {
+            assertNull(repository.resolveAuth("p"))
+            now += 31_000L
+        }
+        coVerify(exactly = 0) { store.markMdbListReconnectRequired(any(), any()) }
+
+        assertNull(repository.resolveAuth("p"))
+        coVerify(exactly = 1) { store.markMdbListReconnectRequired("p", dead) }
+    }
+
+    @Test
+    fun `missing client configuration never marks the user's connection`() = runTest {
+        var now = 1_000_000L
+        repository.clock = { now }
+        val cred = SyncProviderStore.MdbListCredential.OAuth("expired", "refresh", 1L)
+        coEvery { store.getMdbListCredential("p") } returns cred
+        for (code in listOf(400, 401, 403)) {
+            coEvery { api.refreshToken(any(), any(), any()) } coAnswers {
+                throw httpException(code, """{"error":"invalid_client"}""")
+            }
+            repeat(3) {
+                assertNull(repository.resolveAuth("p"))
+                now += 31_000L
+            }
+            coVerify(exactly = 0) { store.markMdbListReconnectRequired(any(), any()) }
+        }
+        coVerify(exactly = 9) { api.refreshToken(any(), any(), any()) }
+    }
+
+    @Test
+    fun `client configuration failure resets consecutive credential refusals`() = runTest {
+        var now = 1_000_000L
+        repository.clock = { now }
+        val cred = SyncProviderStore.MdbListCredential.OAuth("expired", "refresh", 1L)
+        coEvery { store.getMdbListCredential("p") } returns cred
+        val errors = listOf("unknown", "unknown", "invalid_client", "unknown", "unknown", "unknown").iterator()
+        coEvery { api.refreshToken(any(), any(), any()) } coAnswers {
+            throw httpException(400, """{"error":"${errors.next()}"}""")
+        }
+        repeat(5) {
+            assertNull(repository.resolveAuth("p"))
+            now += 31_000L
+        }
+        coVerify(exactly = 0) { store.markMdbListReconnectRequired(any(), any()) }
+        assertNull(repository.resolveAuth("p"))
+        coVerify(exactly = 1) { store.markMdbListReconnectRequired("p", cred) }
+    }
+
+    @Test
+    fun `rotated token is published to cloud for other devices`() = runTest {
+        val bus = CloudSyncInvalidationBus()
+        repository = MdbListRepository(api, store, profileManager, bus)
+        coEvery { store.getMdbListCredential("p") } returns SyncProviderStore.MdbListCredential.OAuth("old", "refresh", 1L)
+        coEvery { api.refreshToken(any(), any(), any()) } returns MdbTokenResponse(accessToken = "new", refreshToken = "rotated", expiresIn = 3600)
+
+        repository.resolveAuth("p")
+
+        val event = bus.events.replayCache.single()
+        assertEquals(CloudSyncScope.ACCOUNT, event.scope)
+        assertEquals("p", event.profileId)
+    }
+
+    @Test
+    fun `revoked API key reports reconnect instead of an empty library`() = runTest {
+        val key = SyncProviderStore.MdbListCredential.ApiKey("revoked-key")
+        coEvery { store.getMdbListCredential("default-profile") } returns key
+        coEvery { store.markMdbListReconnectRequired("default-profile", key) } returns true
+        coEvery { api.getUserLists(any(), any()) } throws httpException(401, """{"error":"Invalid API key"}""")
+        coEvery { api.getUser(any(), any()) } throws httpException(403, "")
+
+        val error = runCatching { repository.libraryUserLists() }.exceptionOrNull()
+
+        assertTrue(error is MdbListAuthUnavailable && error.reconnectRequired)
+        coVerify(exactly = 1) { store.markMdbListReconnectRequired("default-profile", key) }
+        assertTrue(repository.getUserLists().isEmpty())
+    }
+
+    @Test
+    fun `refused resource does not cost a working connection`() = runTest {
+        coEvery { store.getMdbListCredential("default-profile") } returns SyncProviderStore.MdbListCredential.ApiKey("good-key")
+        coEvery { api.getListItems(any(), any(), any(), any(), any(), any()) } throws httpException(401, """{"error":"Not your list"}""")
+        coEvery { api.getUser(any(), any()) } returns MdbUser(username = "still_valid")
+
+        val error = runCatching { repository.libraryListItems(42L) }.exceptionOrNull()
+
+        assertTrue(error is HttpException)
+        coVerify(exactly = 0) { store.markMdbListReconnectRequired(any(), any()) }
+        assertTrue(repository.listItems(42L).isEmpty())
+    }
+
+    @Test
+    fun `connection marked for reconnecting is not sent to MDBList`() = runTest {
+        coEvery { store.getMdbListCredential("default-profile") } returns SyncProviderStore.MdbListCredential.ApiKey("revoked-key")
+        coEvery { store.isMdbListReconnectRequired("default-profile") } returns true
+
+        val session = repository.checkSession()
+
+        val error = session.exceptionOrNull()
+        assertTrue(error is MdbListAuthUnavailable && error.reconnectRequired)
+        coVerify(exactly = 0) { api.getUser(any(), any()) }
+    }
+
+    @Test
     fun `unavailable auth is not reported as a successfully empty watchlist`() = runTest {
         every { Constants.MDBLIST_CLIENT_ID } returns ""
         coEvery { store.getMdbListCredential("default-profile") } returns SyncProviderStore.MdbListCredential.OAuth("expired", "refresh", 1L)

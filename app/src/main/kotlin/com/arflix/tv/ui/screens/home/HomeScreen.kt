@@ -561,7 +561,9 @@ internal fun homeHeroUsesHls(url: String, serverSaysHls: Boolean): Boolean {
 @androidx.compose.runtime.Immutable
 private data class HomeHeroPlaybackHandles(
     val player: ExoPlayer,
-    val hlsFactory: HlsMediaSource.Factory
+    val hlsFactory: HlsMediaSource.Factory,
+    val iptvClient: OkHttpClient,
+    val userAgent: String
 )
 
 private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHandles {
@@ -574,8 +576,9 @@ private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHan
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
+    val heroUserAgent = OkHttpProvider.getAppUserAgent(context)
     val heroDataSourceFactory =
-        OkHttpDataSource.Factory(heroOkHttp).setUserAgent(OkHttpProvider.getAppUserAgent(context))
+        OkHttpDataSource.Factory(heroOkHttp).setUserAgent(heroUserAgent)
     // The hero previews favorite IPTV channels, so it needs the same non-IDR keyframe
     // extractors as the TV screens or those channels stall on the home screen.
     val heroHlsFactory = HlsMediaSource.Factory(heroDataSourceFactory)
@@ -600,7 +603,9 @@ private fun createHomeHeroPlaybackHandles(context: Context): HomeHeroPlaybackHan
         }
     return HomeHeroPlaybackHandles(
         player = player,
-        hlsFactory = heroHlsFactory
+        hlsFactory = heroHlsFactory,
+        iptvClient = homeHeroIptvClient(heroOkHttp),
+        userAgent = heroUserAgent
     )
 }
 
@@ -783,7 +788,7 @@ fun HomeScreen(
     preloadedHeroLogoUrl: String? = null,
     preloadedLogoCache: Map<String, String> = emptyMap(),
     currentProfile: com.arflix.tv.data.model.Profile? = null,
-    onNavigateToDetails: (MediaType, Int, Int?, Int?) -> Unit = { _, _, _, _ -> },
+    onNavigateToDetails: (MediaType, Int, Int?, Int?, Boolean) -> Unit = { _, _, _, _, _ -> },
     onNavigateToCollection: (String) -> Unit = {},
     onNavigateToCategory: (String) -> Unit = {},
     onNavigateToSearch: () -> Unit = {},
@@ -829,7 +834,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var suppressSelectUntilMs by remember { mutableLongStateOf(0L) }
 
-    val navigateToDetailsWithCache: (MediaType, Int, Int?, Int?) -> Unit = { mediaType, mediaId, initialSeason, initialEpisode ->
+    val navigateToDetailsWithCache: (MediaType, Int, Int?, Int?, Boolean) -> Unit = { mediaType, mediaId, initialSeason, initialEpisode, autoPlay ->
         val matchingItem = uiState.categories.asSequence()
             .flatMap { it.items.asSequence() }
             .firstOrNull { it.id == mediaId && it.mediaType == mediaType }
@@ -844,7 +849,7 @@ fun HomeScreen(
         if (!matchingLogo.isNullOrBlank()) {
             viewModel.cacheLogoUrl(mediaType, mediaId, matchingLogo)
         }
-        onNavigateToDetails(mediaType, mediaId, initialSeason, initialEpisode)
+        onNavigateToDetails(mediaType, mediaId, initialSeason, initialEpisode, autoPlay)
     }
 
     LaunchedEffect(Unit) {
@@ -1231,6 +1236,10 @@ fun HomeScreen(
     val serviceHeroVideoUrl = displayHeroItem
         ?.takeIf { heroVideoAllowed && isHeroCollection && collectionVideoFinishedId != it.id }
         ?.let { viewModel.getCollectionHeroVideoUrl(it) }
+    var heroIptvPreviewGate by remember { mutableStateOf<HomeIptvPreviewGate?>(null) }
+    LaunchedEffect(displayHeroItem?.id, isHeroIptv, iptvChannelsVersion, isHomeStarted) {
+        heroIptvPreviewGate = displayHeroItem?.takeIf { isHeroIptv }?.let { viewModel.iptvPreviewGate(it.id) }
+    }
     val heroVideoUrl = when {
         netflixHome && focusState.isHeroFocused -> null
         !isMobile && !focusState.userHasNavigated -> null
@@ -1240,8 +1249,8 @@ fun HomeScreen(
         // Keep the idle gate for heavier IPTV/live playback, but do not delay MP4 previews.
         serviceHeroVideoUrl != null -> serviceHeroVideoUrl
         suppressHeroVideoPlayback -> null
-        // Reading the version re-evaluates this once resolveIptvChannels() finds the channel.
-        isHeroIptv -> displayHeroItem?.takeIf { iptvChannelsVersion >= 0 }?.let { viewModel.getIptvStreamUrl(it.id) }
+        // The gate's effect keys on the channels version, so this re-evaluates once resolveIptvChannels() finds the channel.
+        isHeroIptv -> homeIptvPreviewUrl(displayHeroItem?.id, heroIptvPreviewGate, viewModel::getIptvStreamUrl)
         else -> null
     }
     // A focused channel card whose channel isn't known yet: look it up now rather than
@@ -1262,10 +1271,13 @@ fun HomeScreen(
 
     var heroPlaybackHandles by remember { mutableStateOf<HomeHeroPlaybackHandles?>(null) }
     var preparedHeroVideoUrl by remember { mutableStateOf<String?>(null) }
+    var preparedHeroStopsOnLeave by remember { mutableStateOf(false) }
+    val homeIptvPreview = remember { HomeIptvPreviewSessions(checkAccount = viewModel::iptvAccountUsage) }
     val heroExoPlayer = heroPlaybackHandles?.player
     DisposableEffect(Unit) {
         onDispose {
             heroPlaybackHandles?.player?.release()
+            homeIptvPreview.close()
             heroPlaybackHandles = null
             preparedHeroVideoUrl = null
         }
@@ -1280,6 +1292,7 @@ fun HomeScreen(
                 player.stop()
                 player.clearMediaItems()
             }
+            homeIptvPreview.close()
             preparedHeroVideoUrl = null
         }
     }
@@ -1316,15 +1329,34 @@ fun HomeScreen(
         if (heroVideoUrl != null) {
             val handles = heroPlaybackHandles ?: return@LaunchedEffect
             if (preparedHeroVideoUrl != heroVideoUrl) {
-                // Channel cards: ask the server what an address without a file type serves, as
-                // the Live TV screen does. Other previews keep reading the address alone.
-                val iptvTarget = displayHeroItem
-                    ?.takeIf { isHeroIptv }
-                    ?.let { viewModel.resolveIptvPreviewTarget(it.id) }
-                // Channel previews follow the profile's default subtitle setting, as the Live TV
-                // screen does. Trailers and other previews share this player, so they get the
-                // player's own defaults back rather than whatever the last channel set.
-                val subtitleDefault = if (isHeroIptv) viewModel.previewSubtitleDefault() else null
+                val heroIptvItem = displayHeroItem?.takeIf { isHeroIptv }
+                val iptvSession: com.arflix.tv.network.IptvStreamSession?
+                if (heroIptvItem != null) {
+                    // The admission may stop the player, so nothing counts as prepared until the new source is.
+                    preparedHeroVideoUrl = null
+                    val admission = homeIptvPreview.admit(player) { viewModel.iptvPreviewPolicy(heroIptvItem.id) }
+                    if (admission == null) {
+                        heroIptvPreviewGate = heroIptvPreviewGate.refused(heroIptvItem.id)
+                        return@LaunchedEffect
+                    }
+                    iptvSession = admission.session
+                } else {
+                    homeIptvPreview.close()
+                    iptvSession = null
+                }
+                val (iptvTarget, subtitleDefault) = try {
+                    // Channel previews probe through the admitted session and follow the profile subtitle setting.
+                    val target = heroIptvItem?.let { viewModel.resolveIptvPreviewTarget(it.id, iptvSession) }
+                    val subtitles = if (isHeroIptv) viewModel.previewSubtitleDefault() else null
+                    target to subtitles
+                } catch (error: Throwable) {
+                    iptvSession?.close()
+                    throw error
+                }
+                if (iptvSession?.isClosed == true) {
+                    heroIptvItem?.let { heroIptvPreviewGate = heroIptvPreviewGate.refused(it.id) }
+                    return@LaunchedEffect
+                }
                 player?.stop()
                 player?.clearMediaItems()
                 player?.let { p ->
@@ -1341,13 +1373,16 @@ fun HomeScreen(
                             .setMinPlaybackSpeed(1.0f).setMaxPlaybackSpeed(1.0f)
                             .setTargetOffsetMs(4_000).build()
                     ).build()
-                if (useHls) {
+                if (iptvSession != null) {
+                    player?.setMediaSource(homeIptvPreviewSource(context, handles.iptvClient, handles.userAgent, iptvSession, mi, useHls))
+                } else if (useHls) {
                     player?.setMediaSource(handles.hlsFactory.createMediaSource(mi))
                 } else {
                     player?.setMediaItem(mi)
                 }
                 player?.prepare()
                 preparedHeroVideoUrl = heroVideoUrl
+                preparedHeroStopsOnLeave = homeHeroStopsOnLeave(isHeroIptv, heroIptvPreviewGate)
             }
             // Service videos play once with sound and stop; IPTV live streams
             // naturally don't loop (they're live) so REPEAT_MODE_OFF is safe
@@ -1356,7 +1391,10 @@ fun HomeScreen(
             player?.volume = 1f
             player?.playWhenReady = true
         } else {
-            player?.playWhenReady = false
+            if (homeIptvPreview.leave(player, preparedHeroStopsOnLeave)) {
+                preparedHeroVideoUrl = null
+                preparedHeroStopsOnLeave = false
+            }
         }
     }
 
@@ -1559,7 +1597,7 @@ fun HomeScreen(
                     } else if (viewModel.isCollectionItem(item)) {
                         onNavigateToCollection(item.status?.removePrefix("collection:").orEmpty())
                     } else {
-                        navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                        navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber, true)
                     }
                 }
             },
@@ -1572,7 +1610,7 @@ fun HomeScreen(
                     } else if (viewModel.isCollectionItem(item)) {
                         onNavigateToCollection(item.status?.removePrefix("collection:").orEmpty())
                     } else {
-                        navigateToDetailsWithCache(item.mediaType, item.id, null, null)
+                        navigateToDetailsWithCache(item.mediaType, item.id, null, null, false)
                     }
                 }
             },
@@ -1590,7 +1628,7 @@ fun HomeScreen(
             onMobileCategoryVisiblePosition = { categoryId, lastVisibleItemIndex ->
                 viewModel.onMobileCategoryVisiblePosition(categoryId, lastVisibleItemIndex)
             },
-            onNavigateToDetails = navigateToDetailsWithCache,
+            onNavigateToDetails = { type, id, s, ep -> navigateToDetailsWithCache(type, id, s, ep, false) },
             onNavigateToCollection = onNavigateToCollection,
             onNavigateToCategory = onNavigateToCategory,
             onNavigateToSearch = onNavigateToSearch,
@@ -1627,7 +1665,8 @@ fun HomeScreen(
                 navigateToDetailsWithCache(
                     item.mediaType, item.id,
                     item.nextEpisode?.seasonNumber.takeIf { play },
-                    item.nextEpisode?.episodeNumber.takeIf { play }
+                    item.nextEpisode?.episodeNumber.takeIf { play },
+                    play
                 )
             },
             reserveTrailerSpace = reserveTrailerSpace,
@@ -1651,7 +1690,7 @@ fun HomeScreen(
                 isMobile = isMobile,
                 showBudget = uiState.showBudget,
                 compactForTrailer = reserveTrailerSpace,
-                onNavigateToDetails = navigateToDetailsWithCache,
+                onNavigateToDetails = { type, id, s, ep -> navigateToDetailsWithCache(type, id, s, ep, false) },
                 onNavigateToTv = { channelId, streamUrl -> onNavigateToTv(channelId, streamUrl) },
                 isIptvItem = { item -> viewModel.isIptvItem(item) },
                 getIptvChannelId = { item -> viewModel.getIptvChannelId(item) }
@@ -1711,7 +1750,7 @@ fun HomeScreen(
                         } else if (viewModel.isIptvItem(item)) {
                             onNavigateToTv(viewModel.getIptvChannelId(item), null)
                         } else {
-                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber, true)
                         }
                     },
                     onViewDetails = {
@@ -1720,7 +1759,7 @@ fun HomeScreen(
                         } else if (viewModel.isIptvItem(item)) {
                             onNavigateToTv(viewModel.getIptvChannelId(item), null)
                         } else {
-                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber)
+                            navigateToDetailsWithCache(item.mediaType, item.id, item.nextEpisode?.seasonNumber, item.nextEpisode?.episodeNumber, false)
                         }
                     },
                     onToggleWatchlist = {

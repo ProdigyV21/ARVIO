@@ -180,6 +180,13 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appForegroundSignals: com.arflix.tv.data.repository.AppForegroundSignals
 
+    @Inject
+    lateinit var idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
+
+    /** Key whose press ended an idle period on the player; its release is swallowed too. */
+    private val swallowedIdleKeys = mutableSetOf<Int>()
+    private var swallowedIdleTouch = false
+
     /** True until the first onResume after onCreate has been handled. */
     private var hasHandledFirstResume = false
 
@@ -286,12 +293,14 @@ class MainActivity : ComponentActivity() {
             val crashId = crashPrefs.getString("last_crash_id", "N/A")
             val crashMsg = crashPrefs.getString("last_crash_msg", "Unexpected error")
             val crashTime = crashPrefs.getLong("last_crash_time", System.currentTimeMillis())
+            val crashProvider = crashPrefs.getString("last_crash_provider", "firebase") ?: "firebase"
             crashPrefs.edit().putBoolean("has_pending_crash_report", false).commit()
 
             val crashIntent = android.content.Intent(this, com.arflix.tv.ui.screens.crash.CrashReportActivity::class.java).apply {
                 putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_ID, crashId)
                 putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_MSG, crashMsg)
                 putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_TIME, crashTime)
+                putExtra(com.arflix.tv.ui.screens.crash.CrashReportActivity.EXTRA_CRASH_PROVIDER, crashProvider)
             }
             startActivity(crashIntent)
         }
@@ -487,7 +496,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.keyCode in swallowedIdleKeys) {
+            if (event.action == android.view.KeyEvent.ACTION_UP) swallowedIdleKeys.remove(event.keyCode)
+            return true
+        }
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            // The first press after a long idle must not act on a player left paused
+            // overnight (resuming it would write its old position over newer progress
+            // from another device); the player is leaving for the previous screen instead.
+            idleReturnCoordinator.onUserInteraction()
+            if (idleReturnCoordinator.isPlayerOpen && idleReturnCoordinator.shouldDiscardPlayer) {
+                swallowedIdleKeys.add(event.keyCode)
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            idleReturnCoordinator.onUserInteraction()
+            swallowedIdleTouch = idleReturnCoordinator.isPlayerOpen && idleReturnCoordinator.shouldDiscardPlayer
+        }
+        if (swallowedIdleTouch) {
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP ||
+                event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) swallowedIdleTouch = false
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        idleReturnCoordinator.onUserInteraction()
+    }
+
     override fun onResume() {
+        // Before super.onResume(): screens observe ON_RESUME and must already see the
+        // post-idle sync as running, or they would rebuild from stale state first.
+        idleReturnCoordinator.onAppForeground()
         super.onResume()
         // Signalled from here, not from a screen: the app can return to the
         // foreground on any destination — a TV woken in the morning resumes onto

@@ -36,6 +36,7 @@ import javax.inject.Provider
 class TraktSessionTest {
     @Test fun watchlistAddRefreshesRejectedTokenAndRetriesSameMovie() = runBlocking {
         session.save(token(expires = 86_400), "a")
+        coEvery { api.getMe(any(), any(), any()) } throws http(401)
         coEvery { api.addToWatchlist("Bearer old", any(), any(), any()) } throws http(401)
         coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
         coEvery { api.addToWatchlist("Bearer new", any(), any(), any()) } returns
@@ -47,6 +48,7 @@ class TraktSessionTest {
 
     @Test fun watchlistRemovalRefreshesRejectedTokenAndRetriesSameShow() = runBlocking {
         session.save(token(expires = 86_400), "a")
+        coEvery { api.getMe(any(), any(), any()) } throws http(401)
         coEvery { api.removeFromWatchlist("Bearer old", any(), any(), any()) } throws http(401)
         coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
         coEvery { api.removeFromWatchlist("Bearer new", any(), any(), any()) } returns
@@ -67,6 +69,7 @@ class TraktSessionTest {
 
     @Test fun watchlistRepeatedUnauthorizedStopsAfterOneRetryAndRequiresReconnect() = runBlocking {
         session.save(token(expires = 86_400), "a")
+        coEvery { api.getMe(any(), any(), any()) } throws http(401)
         coEvery { api.addToWatchlist(any(), any(), any(), any()) } throws http(401)
         coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
         assertFalse(repository().addToWatchlist(com.arflix.tv.data.model.MediaType.TV, 1399))
@@ -148,6 +151,110 @@ class TraktSessionTest {
         coVerify(exactly = 5) { api.refreshToken(any()) }
     }
 
+    @Test fun sameRefreshTokenRefusedRepeatedlyRequiresReconnect() = runBlocking {
+        var now = System.currentTimeMillis()
+        session.clock = { now }
+        coEvery { api.refreshToken(any()) } throws http(400, """{"error":"invalid_request"}""")
+        repeat(2) {
+            assertNull(session.accessToken())
+            assertFalse(session.connection.first().reconnectRequired)
+            now += 6 * 60_000L
+        }
+        assertNull(session.accessToken())
+        assertTrue(session.connection.first().reconnectRequired)
+        coVerify(exactly = 3) { api.refreshToken(any()) }
+    }
+
+    @Test fun rotatedTokenIsPublishedToCloudForOtherDevices() = runBlocking {
+        val bus = CloudSyncInvalidationBus()
+        val shared = TraktSession(RuntimeEnvironment.getApplication(), profiles, api, bus)
+        coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
+        assertEquals("new", shared.accessToken())
+        val published = bus.events.replayCache.single()
+        assertEquals(CloudSyncScope.ACCOUNT, published.scope)
+        assertEquals("a", published.profileId)
+    }
+
+    @Test fun libraryWatchlistReportsLostSessionInsteadOfEmptyList() = runBlocking {
+        coEvery { api.refreshToken(any()) } throws http(400, """{"error":"invalid_grant"}""")
+        val error = runCatching { repository().libraryWatchlist() }.exceptionOrNull()
+        assertTrue(error is TraktAuthUnavailable && error.reconnectRequired)
+        assertTrue(repository().getWatchlist().isEmpty())
+    }
+
+    @Test fun listRefusalKeepsWorkingCredentialsWithOrWithoutRefreshToken() = runBlocking {
+        coEvery { api.getMyListItems(any(), any(), any(), any(), any(), any(), any(), any()) } throws http(401)
+        coEvery { api.getMe(any(), any(), any()) } returns TraktUserProfile("still_valid")
+        for (refresh in listOf("refresh", "")) {
+            session.save(token(refresh = refresh, expires = 86_400), "a")
+            val error = runCatching { repository().libraryPersonalListItems("42") }.exceptionOrNull()
+            assertTrue(error is HttpException && error.code() == 401)
+            assertEquals(TraktConnection("a", true, false), session.connection.first())
+            assertEquals("old", session.accessToken())
+        }
+        coVerify(exactly = 0) { api.refreshToken(any()) }
+        coVerify(exactly = 2) { api.getMe("Bearer old", any(), any()) }
+    }
+
+    @Test fun refusedListKeepsARotatedCredentialAcceptedByTheAccountEndpoint() = runBlocking {
+        session.save(token(expires = 86_400), "a")
+        coEvery { api.getMyListItems(any(), any(), any(), any(), any(), any(), any(), any()) } throws http(401)
+        coEvery { api.getMe("Bearer old", any(), any()) } throws http(401)
+        coEvery { api.getMe("Bearer new", any(), any()) } returns TraktUserProfile("still_valid")
+        coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
+
+        val error = runCatching { repository().libraryPersonalListItems("42") }.exceptionOrNull()
+
+        assertTrue(error is HttpException && error.code() == 401)
+        assertEquals(TraktConnection("a", true, false), session.connection.first())
+        assertEquals("new", session.accessToken())
+        coVerify(exactly = 1) { api.refreshToken(any()) }
+        coVerify(exactly = 2) { api.getMyListItems(any(), any(), any(), any(), any(), any(), any(), any()) }
+    }
+
+    @Test fun unavailableAccountProbeDoesNotRefreshOrRejectCredentials() = runBlocking {
+        session.save(token(expires = 86_400), "a")
+        for (failure in listOf(http(403), http(429), http(500), java.io.IOException("offline"))) {
+            coEvery { api.getMe(any(), any(), any()) } throws failure
+            val error = runCatching { session.authorized<Unit> { throw http(401) } }.exceptionOrNull()
+            assertTrue(error is HttpException && error.code() == 401)
+            assertEquals(TraktConnection("a", true, false), session.connection.first())
+        }
+        coVerify(exactly = 0) { api.refreshToken(any()) }
+    }
+
+    @Test fun cancellingAccountProbeKeepsCredentialsAndPropagatesCancellation() = runBlocking {
+        session.save(token(expires = 86_400), "a")
+        coEvery { api.getMe(any(), any(), any()) } throws CancellationException("cancelled")
+        val error = runCatching { session.authorized<Unit> { throw http(401) } }.exceptionOrNull()
+        assertTrue(error is CancellationException)
+        assertEquals(TraktConnection("a", true, false), session.connection.first())
+        coVerify(exactly = 0) { api.refreshToken(any()) }
+    }
+
+    @Test fun lateAccountRefusalCannotRejectANewLogin() = runBlocking {
+        session.save(token(expires = 86_400), "a")
+        coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
+        coEvery { api.getMe("Bearer old", any(), any()) } throws http(401)
+        coEvery { api.getMe("Bearer new", any(), any()) } coAnswers {
+            session.save(token("login", "login-refresh", 86_400), "a")
+            throw http(401)
+        }
+
+        val error = runCatching { session.authorized<Unit> { throw http(401) } }.exceptionOrNull()
+
+        assertTrue(error is HttpException && error.code() == 401)
+        assertEquals("login", session.accessToken())
+        assertEquals(TraktConnection("a", true, false), session.connection.first())
+    }
+
+    @Test fun successfulRequestDoesNotProbeAccountOrRefresh() = runBlocking {
+        session.save(token(expires = 86_400), "a")
+        assertEquals("ok", session.authorized { "ok" })
+        coVerify(exactly = 0) { api.getMe(any(), any(), any()) }
+        coVerify(exactly = 0) { api.refreshToken(any()) }
+    }
+
     @Test fun offlineRefreshKeepsAnUnexpiredAccessToken() = runBlocking {
         session.save(token(expires = 600), "a")
         coEvery { api.refreshToken(any()) } throws java.io.IOException("offline")
@@ -200,6 +307,7 @@ class TraktSessionTest {
 
     @Test fun api401ForcesRefreshEvenWithFutureExpiry() = runBlocking {
         session.save(token(expires = 86_400), "a")
+        coEvery { api.getMe(any(), any(), any()) } throws http(401)
         coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
         val headers = mutableListOf<String>()
         val result = session.authorized { header ->
@@ -291,6 +399,7 @@ class TraktSessionTest {
     }
 
     @Test fun aSecondApi401RequiresReconnect() = runBlocking {
+        coEvery { api.getMe(any(), any(), any()) } throws http(401)
         coEvery { api.refreshToken(any()) } returns token("new", "rotated", 86_400)
         try {
             session.authorized<Unit> { throw http(401) }

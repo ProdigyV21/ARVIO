@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModelStore
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.repository.ProfileManager
+import com.arflix.tv.data.repository.effectiveSettingsDataStore
 import com.arflix.tv.ui.screens.player.subtitles.SubtitleSyncMatcher
 import com.arflix.tv.util.settingsDataStore
 import io.mockk.*
@@ -60,6 +61,8 @@ class UserSubtitleSelectionTest {
                 transform(preferences.value).toPreferences().also { preferences.value = it }
         }
         every { any<Context>().settingsDataStore } returns memoryStore
+        mockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
+        every { any<Context>().effectiveSettingsDataStore } returns memoryStore
         val context = mockk<Context>(relaxed = true)
         every { context.cacheDir } returns temporary.root
         val profiles = mockk<ProfileManager>(relaxed = true)
@@ -72,7 +75,8 @@ class UserSubtitleSelectionTest {
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
-            mockk(relaxed = true)
+            mockk(relaxed = true),
+            com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         )
         store.put("player", model)
         state().value = PlayerUiState(subtitles = listOf(english, remote))
@@ -87,6 +91,7 @@ class UserSubtitleSelectionTest {
             scheduler.runCurrent()
         } finally {
             unmockkObject(SubtitleSyncMatcher)
+            unmockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
             unmockkStatic("com.arflix.tv.util.DataStoresKt")
             unmockkStatic(Log::class)
             Dispatchers.resetMain()

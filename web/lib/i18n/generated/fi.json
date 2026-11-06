@@ -1561,5 +1561,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "Tämän lähteen ääntä ei voi toistaa tässä selaimessa. Valitse toinen lähde tai käytä ulkoista soitinta.",
   "Converting the audio for your browser…": "Muunnetaan ääntä selaimellesi…",
   "Picking the best source…": "Valitaan paras lähde…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi veloittaa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti."
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi veloittaa Yhdysvaltain dollareina; pankkisi muuntaa summan automaattisesti.",
+  "Maximum of 10 IPTV playlists reached": "Enintään 10 IPTV-soittolistaa saavutettu",
+  "Regional price · save {value0} vs. 12 monthly payments": "Alueellinen hinta · säästä {value0} verrattuna 12 kuukausimaksuun",
+  "One payment, no automatic renewal. About {value0} a month.": "Kertamaksu, ei automaattista uusimista. Noin {value0} kuukaudessa.",
+  "12-month pass · {value0}": "12 kuukauden passi · {value0}"
 }

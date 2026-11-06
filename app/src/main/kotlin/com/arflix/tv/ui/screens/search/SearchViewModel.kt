@@ -271,7 +271,7 @@ class SearchViewModel @Inject constructor(
                 }
                 categories.forEach { cat -> cat.items.forEach { mediaRepository.cacheItem(it) } }
                 val isWatched = watchedMatcher()
-                _uiState.value = _uiState.value.copy(discoverCategories = markWatched(categories, isWatched), isDiscoverLoading = false)
+                _uiState.update { it.copy(discoverCategories = markWatched(categories, isWatched), isDiscoverLoading = false) }
                 // Fetch logos for top items in each row (background, non-blocking)
                 launch(Dispatchers.IO) {
                     val slots = Semaphore(3)
@@ -294,7 +294,7 @@ class SearchViewModel @Inject constructor(
                 }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
-                _uiState.value = _uiState.value.copy(isDiscoverLoading = false)
+                _uiState.update { it.copy(isDiscoverLoading = false) }
             }
         }
     }
@@ -818,7 +818,7 @@ class SearchViewModel @Inject constructor(
         if (newQuery == _uiState.value.query) return
         searchJob?.cancel()
         activeSearchQuery = null
-        _uiState.value = _uiState.value.copy(query = newQuery, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS)
+        _uiState.update { it.copy(query = newQuery, isAiSearch = false, aiInterpretation = null, aiResults = EMPTY_MEDIA_ITEMS) }
         if (newQuery.trim().isEmpty()) {
             clearSearch()
             return
@@ -826,10 +826,10 @@ class SearchViewModel @Inject constructor(
         filterDebounceJob?.cancel()
         discoverJob?.cancel()
         cancelGridLoad()
-        _uiState.value = _uiState.value.copy(isLoading = true, isDiscoverLoading = false,
+        _uiState.update { it.copy(isLoading = true, isDiscoverLoading = false,
             isGridLoading = false, isGridLoadingMore = false, error = null, results = EMPTY_MEDIA_ITEMS,
             movieResults = EMPTY_MEDIA_ITEMS, tvResults = EMPTY_MEDIA_ITEMS,
-            personResults = EMPTY_CATEGORIES, cardLogoUrls = EMPTY_LOGO_URLS)
+            personResults = EMPTY_CATEGORIES, cardLogoUrls = EMPTY_LOGO_URLS) }
         debounceSearch()
     }
 

@@ -11,6 +11,9 @@
 [functions."trial-email-worker"]
   schedule = "*/30 * * * *"
 
+[functions."discord-premium-reconcile"]
+  schedule = "*/15 * * * *"
+
 [[redirects]]
   from = "/delete"
   to = "/delete-account.html"

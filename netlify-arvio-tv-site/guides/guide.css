@@ -228,6 +228,14 @@ h1 {
   gap: 12px;
 }
 
+.hero-price-note {
+  margin: 14px 0 0;
+  max-width: 640px;
+  color: #c9cece;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .button {
   min-height: 48px;
   display: inline-flex;

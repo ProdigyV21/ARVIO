@@ -1,4 +1,5 @@
 import { AuthClient } from "./auth";
+import { REGIONAL_YEARLY_URL, regionalYearly } from "./regionalPricing";
 import { config } from "./config";
 import { jsonRequest } from "./http";
 import { loadStored, saveStored } from "./storage";
@@ -139,8 +140,10 @@ export function fetchStreamTicket(auth: AuthClient): Promise<{ ticket: string; e
 }
 
 // The 12-month pass on Ko-fi Shop; empty when the yearly plan is not set up.
+// Visitors from regional-price countries get the 50% discount link instead.
 export function kofiYearlyUrl(): string {
-  return config.kofiYearlyUrl || "";
+  if (!config.kofiYearlyUrl) return "";
+  return regionalYearly() ? REGIONAL_YEARLY_URL : config.kofiYearlyUrl;
 }
 
 // URL the paywall's subscribe button opens. Set NEXT_PUBLIC_KOFI_URL to your
