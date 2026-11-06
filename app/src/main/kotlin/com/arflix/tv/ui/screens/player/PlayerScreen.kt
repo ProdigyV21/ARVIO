@@ -804,7 +804,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var startupRecoverAttempted by remember { mutableStateOf(false) }
     var startupHardFailureReported by remember { mutableStateOf(false) }
     var startupSameSourceRetryCount by remember { mutableIntStateOf(0) }
-    var startupSameSourceRefreshAttempted by remember { mutableStateOf(false) }
+    val startupSourceRecovery = remember { StartupSourceRecovery() }
     var startupUrlLock by remember { mutableStateOf<String?>(null) }
     var pendingStartupFailover by remember { mutableStateOf(false) }
     var pendingStartupFailoverMessage by remember { mutableStateOf<PlayerMessage?>(null) }
@@ -946,7 +946,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         startupRecoverAttempted = false
         startupHardFailureReported = false
         startupSameSourceRetryCount = 0
-        startupSameSourceRefreshAttempted = false
+        startupSourceRecovery.reset()
         startupUrlLock = null
         pendingStartupFailover = false
         pendingStartupFailoverMessage = null
@@ -1055,7 +1055,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 startupRecoverAttempted = false
                 startupHardFailureReported = false
                 startupSameSourceRetryCount = 0
-                startupSameSourceRefreshAttempted = false
+                startupSourceRecovery.reset()
                 startupUrlLock = null
                 pendingStartupFailover = false
                 pendingStartupFailoverMessage = null
@@ -1133,11 +1133,11 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
         } ?: 0L
         playbackStartupDiag(
-            "started reason=$reason startupMs=$startupMs retries=$startupSameSourceRetryCount refresh=$startupSameSourceRefreshAttempted failovers=$autoAdvanceAttempts"
+            "started reason=$reason startupMs=$startupMs retries=$startupSameSourceRetryCount refresh=${startupSourceRecovery.sameSourceRefreshAttempted} refetch=${startupSourceRecovery.freshRefetchAttempted} failovers=$autoAdvanceAttempts"
         )
         viewModel.onPlaybackStarted(
             startupMs = startupMs,
-            startupRetries = startupSameSourceRetryCount + if (startupSameSourceRefreshAttempted) 1 else 0,
+            startupRetries = startupSameSourceRetryCount + startupSourceRecovery.attemptCount,
             autoFailovers = autoAdvanceAttempts
         )
     }
@@ -1585,12 +1585,22 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             }
                             // A source reopened after the app was closed can carry a link that has
                             // since expired (source lists are kept on disk for hours, and a restored
-                            // player screen keeps its old URL). Before giving the source up, fetch a
-                            // fresh source list once and play the SAME source from it.
-                            if (!hasPlaybackStarted && isTransientStartupReadError && !startupSameSourceRefreshAttempted &&
-                                !userSelectedSourceManually && latestUiState.selectedStream != null
-                            ) {
-                                startupSameSourceRefreshAttempted = true
+                            // player screen keeps its old URL). Before giving the source up on a resumed
+                            // or restored playback, fetch a fresh source list once and play the SAME source.
+                            if (startupSourceRecovery.tryFreshRefetch(
+                                    hasPlaybackStarted = hasPlaybackStarted,
+                                    errorCode = error.errorCode,
+                                    isTimeoutError = isTimeoutError,
+                                    userSelectedSourceManually = userSelectedSourceManually,
+                                    startPositionMs = args.startPositionMs,
+                                    savedPositionMs = latestUiState.savedPosition,
+                                    selectedStream = latestUiState.selectedStream,
+                                    recentSource = latestUiState.recentSource?.takeIf {
+                                        it.appliesTo(args.mediaType, args.mediaId,
+                                            args.tmdbSeasonNumber ?: args.seasonNumber,
+                                            args.tmdbEpisodeNumber ?: args.episodeNumber)
+                                    },
+                                )) {
                                 if (viewModel.refetchSameSourceFresh()) {
                                     playbackStartupDiag("same-source fresh re-fetch code=${error.errorCode}")
                                     return
@@ -1598,8 +1608,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                             }
                             if (!hasPlaybackStarted && heavy && isTimeoutError) {
                                 // One-time full re-resolve of same source to refresh debrid URL/headers.
-                                if (!startupSameSourceRefreshAttempted) {
-                                    startupSameSourceRefreshAttempted = true
+                                if (startupSourceRecovery.trySameSourceRefresh()) {
                                     latestUiState.selectedStream?.let { viewModel.selectStream(it, this@apply.currentPosition) }
                                     return
                                 }
@@ -2715,7 +2724,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 startupRecoverAttempted = false
                 startupHardFailureReported = false
                 startupSameSourceRetryCount = 0
-                startupSameSourceRefreshAttempted = false
+                startupSourceRecovery.reset()
                 pendingStartupFailover = false
                 pendingStartupFailoverMessage = null
                 pendingStartupFailureRecorded = false
@@ -3241,7 +3250,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         startupRecoverAttempted = false
         startupHardFailureReported = false
         startupSameSourceRetryCount = 0
-        startupSameSourceRefreshAttempted = false
+        startupSourceRecovery.reset()
         startupUrlLock = null
         pendingStartupFailover = false
         pendingStartupFailoverMessage = null
