@@ -92,7 +92,7 @@ const assert = require('node:assert/strict');
         const recovery = page.getByRole('dialog', { name: 'Finish your membership' });
         await recovery.getByRole('link', { name: 'Return to Ko-fi' }).waitFor();
         assert.equal(await recovery.getByRole('link', { name: 'Return to Ko-fi' }).getAttribute('href'), destination);
-        await recovery.getByText(/No paid membership found yet/).waitFor();
+        await recovery.getByText(/Payment has not arrived yet/).waitFor();
         await page.evaluate(() => window.__premiumFixture.markYearlyPaid());
         await recovery.getByRole('button', { name: 'Check payment status', exact: true }).click();
         await page.getByText('12-month pass active', { exact: true }).waitFor();

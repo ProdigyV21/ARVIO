@@ -147,6 +147,9 @@ function MembershipCheckoutSession({ children, className, entry, title, onEntitl
     else handoff();
   };
   const recoveryLabel = waiting || status === "active" ? translateUi(status === "active" ? "Membership active" : "Check payment status") : undefined;
+  const pendingMessage = activeWhen
+    ? "Payment has not arrived yet. Try again shortly or link the email on your Ko-fi receipt. Do not pay again."
+    : "No paid membership found yet. Check again or link the email on your receipt.";
 
   return <>
     {!auth ? <button ref={element => { trigger.current = element; }} type="button" className={className} title={title} aria-label={title} onClick={goToLogin}>{children}</button>
@@ -175,7 +178,7 @@ function MembershipCheckoutSession({ children, className, entry, title, onEntitl
       </div>
       <p role="status" aria-live="polite">
         {status === "checking" && <Loader2 size={16} className="paywall-spinner" />}
-        {translateUi(status === "active" ? "Your Premium membership is active." : status === "checking" ? "Checking your payment status…" : status === "error" ? "Could not check access. Your payment status has not changed; please retry." : status === "pending" ? "No paid membership found yet. Check again or link the email on your receipt." : "After payment, come back here to confirm activation.")}
+        {translateUi(status === "active" ? "Your Premium membership is active." : status === "checking" ? "Checking your payment status…" : status === "error" ? "Could not check access. Your payment status has not changed; please retry." : status === "pending" ? pendingMessage : "After payment, come back here to confirm activation.")}
         {status !== "active" && status !== "error" && <> {translateUi("Activation usually takes under a minute.")}</>}
       </p>
       {status === "pending" && <p className="membership-support">{translateUi("Paid and still not active after a few minutes?")} <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">{translateUi("Ask us on Discord")}</a></p>}
