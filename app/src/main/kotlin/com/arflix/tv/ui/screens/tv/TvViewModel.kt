@@ -149,6 +149,9 @@ class TvViewModel @Inject constructor(
      */
     internal suspend fun liveAiSubsDefaultLanguage(): String =
         (liveSubtitleDefault() as? com.arflix.tv.ui.screens.tv.live.LiveSubtitleDefault.Language)?.code
+            // The device language, in the same form as track languages ("iw" -> "he").
+            ?: (com.arflix.tv.ui.screens.tv.live.liveSubtitleDefault(java.util.Locale.getDefault().language)
+                as? com.arflix.tv.ui.screens.tv.live.LiveSubtitleDefault.Language)?.code
             ?: java.util.Locale.getDefault().language
 
     /** The profile's subtitle look, read the same way the VOD player reads it. */

@@ -86,6 +86,36 @@ internal fun withAiSubtitlesOption(
     return withSelection + LiveTrackOption(LIVE_SUBTITLES_AI, aiLabel, selected = aiSelected)
 }
 
+/**
+ * The subtitle track AI subtitles read text from: a text track (not a bitmap one, which carries
+ * no text), English first, never one already in [avoidLanguage] (that one needs no AI). Null when
+ * the channel has none; it is then subtitled from its audio.
+ */
+internal fun liveCaptionSourceKey(tracks: Tracks, avoidLanguage: String?): String? {
+    val textTracks = typedTracks(tracks, C.TRACK_TYPE_TEXT).filter { track ->
+        !isBitmapSubtitle(track.group.getTrackFormat(track.trackIndex)) &&
+            (avoidLanguage == null || track.language != avoidLanguage)
+    }
+    return (textTracks.firstOrNull { it.language == "en" } ?: textTracks.firstOrNull())?.key
+}
+
+/**
+ * True for picture subtitles (DVB, PGS, VobSub), which carry no text. Subtitles the player parses
+ * during extraction arrive as `application/x-media3-cues`, with the original type kept in codecs.
+ */
+internal fun isBitmapSubtitle(format: androidx.media3.common.Format): Boolean =
+    format.sampleMimeType in BITMAP_SUBTITLE_MIMES || format.codecs in BITMAP_SUBTITLE_MIMES
+
+/** The key of the subtitle track selected now, or null when subtitles are off. */
+internal fun liveSelectedSubtitleKey(tracks: Tracks): String? =
+    typedTracks(tracks, C.TRACK_TYPE_TEXT).firstOrNull { it.selected }?.key
+
+private val BITMAP_SUBTITLE_MIMES = setOf(
+    androidx.media3.common.MimeTypes.APPLICATION_DVBSUBS,
+    androidx.media3.common.MimeTypes.APPLICATION_PGS,
+    androidx.media3.common.MimeTypes.APPLICATION_VOBSUB,
+)
+
 /** The audio choices for what is playing, one per language or track. */
 internal fun liveAudioOptions(tracks: Tracks, displayLocale: Locale = Locale.getDefault()) =
     liveTrackOptions(tracks, C.TRACK_TYPE_AUDIO, offLabel = null, displayLocale)

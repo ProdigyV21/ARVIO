@@ -76,7 +76,8 @@ internal fun LiveAiSubtitleOverlay(
                     "look-ahead ${lookaheadMs?.let { "%.1f s".format(it / 1000f) } ?: "-"}\n" +
                         "AI p50 ${latencyP50Ms ?: "-"} ms  p95 ${latencyP95Ms ?: "-"} ms\n" +
                         "segments/min $segmentsPerMinute  late dropped $lateDropped\n" +
-                        "skipped $skippedSegments  backlog skips $backlogSkips  failures $failures"
+                        "skipped $skippedSegments  backlog skips $backlogSkips  failures $failures\n" +
+                        "lines from captions $captionLines"
                 },
                 color = Color(0xFFB9F6CA),
                 fontSize = 12.sp,

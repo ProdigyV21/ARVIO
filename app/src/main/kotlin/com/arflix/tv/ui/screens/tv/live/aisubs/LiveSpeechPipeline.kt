@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Process
 import android.os.SystemClock
 import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import com.arflix.tv.R
 import com.arflix.tv.ui.screens.player.audiosync.AudioSampleSink
 import com.arflix.tv.ui.screens.player.audiosync.AudioSyncDecoder
@@ -14,6 +15,7 @@ import com.arflix.tv.ui.screens.player.audiosync.SileroVadWeights
 import com.arflix.tv.ui.screens.player.audiosync.SpeechAnalyzer
 import com.arflix.tv.ui.screens.player.audiosync.SpeechTimeline
 import com.arflix.tv.ui.screens.player.audiosync.asr.SpeechSegmenter
+import com.arflix.tv.ui.screens.tv.live.isBitmapSubtitle
 
 /**
  * Live TV speech capture: copies the channel's compressed audio at the extractor, as it is
@@ -32,6 +34,8 @@ import com.arflix.tv.ui.screens.player.audiosync.asr.SpeechSegmenter
 internal class LiveSpeechPipeline(
     context: Context,
     private val onSegment: (SpeechSegment) -> Unit,
+    /** A sentence of the channel's own closed captions, read ahead of playback. */
+    private val onCaption: (CaptionSentence) -> Unit,
     /** The channel's audio format cannot be decoded ahead of playback on this device. */
     private val onUnsupportedAudio: (mimeType: String) -> Unit,
 ) {
@@ -83,11 +87,11 @@ internal class LiveSpeechPipeline(
         return if (tap == UNKNOWN || position == UNKNOWN) null else tap - position
     }
 
-    /** A sink for one prepared channel source. */
-    fun newSink(): AudioSampleSink {
+    /** The audio and caption sinks for one prepared channel source. */
+    fun newSinks(): LiveTapSinks {
         val sinkGeneration = ++generation
         reset()
-        return ChannelSink(sinkGeneration)
+        return LiveTapSinks(ChannelSink(sinkGeneration), CaptionSink(sinkGeneration))
     }
 
     /** Forget everything in flight (channel change, seek, resume). */
@@ -210,6 +214,49 @@ internal class LiveSpeechPipeline(
         override fun onDiscontinuity() {
             if (sinkGeneration != generation) return
             decoder?.discontinuity()
+        }
+    }
+
+    /**
+     * Reads the channel's own text subtitles into sentences: CEA-608 closed captions carried in
+     * the video, and text renditions (WebVTT and the like) the player parsed during extraction.
+     * Bitmap subtitles (DVB) carry no text; those channels are subtitled from their audio.
+     */
+    private inner class CaptionSink(private val sinkGeneration: Int) : AudioSampleSink {
+        private val assembler = Cea608TextAssembler { sentence ->
+            if (sinkGeneration == generation) onCaption(sentence)
+        }
+        private val cueReader = CaptionCueReader { sentence ->
+            if (sinkGeneration == generation) onCaption(sentence)
+        }
+        private val loggedMimes = HashSet<String>()
+
+        override fun wantsSamples(format: Format): Boolean {
+            if (sinkGeneration != generation || !active) return false
+            val mime = format.sampleMimeType ?: return false
+            if (synchronized(loggedMimes) { loggedMimes.add("$mime ${format.codecs} ${format.language}") }) {
+                LiveAiSubsLog.i("text track offered: $mime codecs=${format.codecs} lang=${format.language}")
+            }
+            if (isBitmapSubtitle(format)) return false
+            return mime == MimeTypes.APPLICATION_CEA608 || mime == MimeTypes.APPLICATION_MEDIA3_CUES
+        }
+
+        override fun onSample(format: Format, timeUs: Long, data: ByteArray, offset: Int, size: Int) {
+            if (sinkGeneration != generation) return
+            synchronized(assembler) {
+                if (format.sampleMimeType == MimeTypes.APPLICATION_MEDIA3_CUES) {
+                    cueReader.feed(timeUs, data, offset, size)
+                } else {
+                    assembler.feed(timeUs, data, offset, size)
+                }
+            }
+        }
+
+        override fun onDiscontinuity() {
+            synchronized(assembler) {
+                assembler.reset()
+                cueReader.reset()
+            }
         }
     }
 

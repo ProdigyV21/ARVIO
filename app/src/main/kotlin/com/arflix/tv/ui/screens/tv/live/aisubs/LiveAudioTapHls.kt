@@ -11,11 +11,9 @@ import androidx.media3.exoplayer.hls.HlsMediaChunkExtractor
 import androidx.media3.extractor.ExtractorInput
 import androidx.media3.extractor.ExtractorOutput
 import androidx.media3.extractor.text.SubtitleParser
-import com.arflix.tv.ui.screens.player.audiosync.AudioSampleSink
-import com.arflix.tv.ui.screens.player.audiosync.AudioTapExtractorOutput
 
 /**
- * HLS counterpart of `AudioSyncExtractorsFactory`: HLS segments are not read through an
+ * HLS counterpart of [LiveTapExtractorsFactory]: HLS segments are not read through an
  * `ExtractorsFactory`, so the audio copy is made here, around whatever [delegate] returns. Hooking
  * the chunk extractor's output covers TS segments (ARVIO's reused TS extractor) and every other
  * segment type (packed audio, fMP4) in one place.
@@ -25,7 +23,7 @@ import com.arflix.tv.ui.screens.player.audiosync.AudioTapExtractorOutput
  */
 internal class AudioTapHlsExtractorFactory(
     private val delegate: HlsExtractorFactory,
-    private val sink: AudioSampleSink,
+    private val sinks: LiveTapSinks,
 ) : HlsExtractorFactory {
     override fun createExtractor(
         uri: Uri,
@@ -45,7 +43,7 @@ internal class AudioTapHlsExtractorFactory(
                     "codecs=${format.codecs} mime=${format.sampleMimeType ?: format.containerMimeType}",
             )
         }
-        return AudioTapHlsChunkExtractor(extractor, sink)
+        return AudioTapHlsChunkExtractor(extractor, sinks)
     }
 
     override fun setSubtitleParserFactory(subtitleParserFactory: SubtitleParser.Factory): HlsExtractorFactory {
@@ -70,10 +68,10 @@ internal class AudioTapHlsExtractorFactory(
 
 private class AudioTapHlsChunkExtractor(
     private val delegate: HlsMediaChunkExtractor,
-    private val sink: AudioSampleSink,
+    private val sinks: LiveTapSinks,
 ) : HlsMediaChunkExtractor {
     override fun init(extractorOutput: ExtractorOutput) =
-        delegate.init(AudioTapExtractorOutput(extractorOutput, sink))
+        delegate.init(LiveTapExtractorOutput(extractorOutput, sinks))
 
     override fun read(extractorInput: ExtractorInput): Boolean = delegate.read(extractorInput)
 
@@ -81,11 +79,12 @@ private class AudioTapHlsChunkExtractor(
 
     override fun isReusable(): Boolean = delegate.isReusable
 
-    override fun recreate(): HlsMediaChunkExtractor = AudioTapHlsChunkExtractor(delegate.recreate(), sink)
+    override fun recreate(): HlsMediaChunkExtractor = AudioTapHlsChunkExtractor(delegate.recreate(), sinks)
 
     override fun onTruncatedSegmentParsed() {
         // The extractor restarts its state; the next samples may not continue the previous ones.
-        sink.onDiscontinuity()
+        sinks.audio.onDiscontinuity()
+        sinks.captions.onDiscontinuity()
         delegate.onTruncatedSegmentParsed()
     }
 }

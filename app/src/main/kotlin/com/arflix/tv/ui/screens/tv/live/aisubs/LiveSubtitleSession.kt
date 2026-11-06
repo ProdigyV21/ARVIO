@@ -30,6 +30,12 @@ internal sealed interface LiveAiSubsStatus {
     data class Unsupported(val mimeType: String) : LiveAiSubsStatus
 }
 
+/** One piece of work for the AI: a stretch of speech, or a sentence of the channel's captions. */
+internal sealed interface LiveWork {
+    class Audio(val segment: SpeechSegment) : LiveWork
+    class Caption(val sentence: CaptionSentence) : LiveWork
+}
+
 /** Counters for the hidden debug overlay. */
 internal data class LiveAiSubsStats(
     val lookaheadMs: Long? = null,
@@ -40,6 +46,8 @@ internal data class LiveAiSubsStats(
     val backlogSkips: Int = 0,
     val segmentsPerMinute: Int = 0,
     val failures: Int = 0,
+    /** Lines made from the channel's own captions rather than its audio. */
+    val captionLines: Int = 0,
 )
 
 /**
@@ -55,14 +63,25 @@ internal data class LiveAiSubsStats(
 internal class LiveSubtitleSession(
     context: Context,
     private val engine: LiveSubtitleEngine,
+    private val captionTranslator: LiveCaptionTranslator,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val segments = Channel<SpeechSegment>(capacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val segments = Channel<LiveWork>(capacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /**
+     * Captions first: while the channel's own captions keep coming (up to [CAPTION_HOLDOVER_US]
+     * after the last one), its audio is not sent. When they stop, the audio takes over again.
+     */
+    @Volatile private var captionsUntilUs = Long.MIN_VALUE
     private val inFlight = Semaphore(MAX_IN_FLIGHT)
 
     val pipeline = LiveSpeechPipeline(
         context = context,
-        onSegment = { segment -> segments.trySend(segment) },
+        onSegment = { segment -> segments.trySend(LiveWork.Audio(segment)) },
+        onCaption = { sentence ->
+            captionsUntilUs = sentence.endUs + CAPTION_HOLDOVER_US
+            segments.trySend(LiveWork.Caption(sentence))
+        },
         onUnsupportedAudio = { mime -> scope.launch { setStatus(LiveAiSubsStatus.Unsupported(mime)) } },
     )
     private val scheduler = LiveCueScheduler()
@@ -88,6 +107,7 @@ internal class LiveSubtitleSession(
     private val segmentTimes = ArrayDeque<Long>()
     private var skippedSegments = 0
     private var failures = 0
+    private var captionLines = 0
     private var worker: Job? = null
 
     /** Measured p95 of the AI's answer time, for the Auto delay. */
@@ -127,6 +147,7 @@ internal class LiveSubtitleSession(
     /** A new channel (or a re-prepared source): nothing from before may show. */
     fun onNewSource() {
         epoch++
+        captionsUntilUs = Long.MIN_VALUE
         scheduler.clear()
         recentLines.clear()
         _cue.value = null
@@ -158,6 +179,7 @@ internal class LiveSubtitleSession(
             backlogSkips = pipeline.backlogSkips,
             segmentsPerMinute = segmentTimes.size,
             failures = failures,
+            captionLines = captionLines,
         )
     }
 
@@ -195,8 +217,8 @@ internal class LiveSubtitleSession(
                     if (resultEpoch == epoch) apply(result)
                 }
             }
-            for (segment in segments) {
-                if (!shouldSend(segment)) {
+            for (work in segments) {
+                if (!shouldSend(work)) {
                     skippedSegments++
                     continue
                 }
@@ -209,7 +231,11 @@ internal class LiveSubtitleSession(
                 val deferred = async {
                     try {
                         val started = SystemClock.elapsedRealtime()
-                        val result = engine.process(segment, context, name, isRtl)
+                        val result = when (work) {
+                            is LiveWork.Audio -> engine.process(work.segment, context, name, isRtl)
+                            is LiveWork.Caption -> captionTranslator.translate(work.sentence, name, isRtl).also {
+                                if (it is LiveEngineResult.Cues && it.cues.isNotEmpty()) captionLines++                            }
+                        }
                         if (result is LiveEngineResult.Cues) recordLatency(SystemClock.elapsedRealtime() - started)
                         result
                     } finally {
@@ -221,14 +247,20 @@ internal class LiveSubtitleSession(
         }
     }
 
-    private fun shouldSend(segment: SpeechSegment): Boolean {
+    private fun shouldSend(work: LiveWork): Boolean {
+        val (startUs, endUs) = when (work) {
+            is LiveWork.Audio -> work.segment.startUs to work.segment.endUs
+            is LiveWork.Caption -> work.sentence.startUs to work.sentence.endUs
+        }
+        // The channel's captions cover this stretch: no need to listen to its audio.
+        if (work is LiveWork.Audio && startUs <= captionsUntilUs) return false
         val status = _status.value
         if (status is LiveAiSubsStatus.InvalidKey || status is LiveAiSubsStatus.Unsupported) return false
         val now = SystemClock.elapsedRealtime()
         if (status is LiveAiSubsStatus.QuotaPaused && now < status.untilMs) return false
         if (status is LiveAiSubsStatus.Offline && now < pausedUntilMs) return false
         // Its window would already be over when an answer could arrive.
-        return segment.endUs + LiveCueScheduler.MIN_DISPLAY_US > pipeline.estimatedPositionUs() + MIN_ANSWER_US
+        return endUs + LiveCueScheduler.MIN_DISPLAY_US > pipeline.estimatedPositionUs() + MIN_ANSWER_US
     }
 
     private fun apply(result: LiveEngineResult) {
@@ -274,5 +306,7 @@ internal class LiveSubtitleSession(
         const val QUOTA_BACKOFF_START_MS = 30_000L
         const val QUOTA_BACKOFF_MAX_MS = 240_000L
         const val OFFLINE_RETRY_MS = 10_000L
+        /** How long after the last caption the audio stays unused (captions pause between lines). */
+        const val CAPTION_HOLDOVER_US = 20_000_000L
     }
 }
