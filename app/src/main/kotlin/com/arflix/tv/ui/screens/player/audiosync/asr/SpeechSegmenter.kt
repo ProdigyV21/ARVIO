@@ -6,9 +6,14 @@ import com.arflix.tv.ui.screens.player.audiosync.SpeechAnalyzer
 /**
  * Cuts the analysed 16 kHz audio into speech segments using the Silero probabilities that are
  * already being computed, so the recogniser only ever sees dialogue: no silence, music-only
- * stretches or effects. Segments are at most [MAX_SEGMENT_FRAMES] long so words come back quickly.
+ * stretches or effects. Segments are at most [maxSegmentFrames] long so words come back quickly.
  */
 internal class SpeechSegmenter(
+    /**
+     * Longest segment in 32 ms frames. Live subtitles keep this short (about 5 s): a line can only
+     * be translated once its segment has ended, so it bounds how far ahead playback must be held.
+     */
+    private val maxSegmentFrames: Int = MAX_SEGMENT_FRAMES,
     private val onSegment: (startFrame: Int, samples: FloatArray) -> Unit,
 ) : SpeechAnalyzer.ChunkListener {
     private val chunk = SileroVad.CHUNK_SAMPLES
@@ -42,7 +47,7 @@ internal class SpeechSegmenter(
         }
         append(chunk)
         if (speech) lastSpeechFrame = frame
-        if (frame - lastSpeechFrame > HANGOVER_FRAMES || bufferFrames >= MAX_SEGMENT_FRAMES) finish()
+        if (frame - lastSpeechFrame > HANGOVER_FRAMES || bufferFrames >= maxSegmentFrames) finish()
     }
 
     @Synchronized
@@ -80,6 +85,6 @@ internal class SpeechSegmenter(
         private const val HANGOVER_FRAMES = 8
         private const val MIN_SPEECH_FRAMES = 6
         /** 12 s. */
-        private const val MAX_SEGMENT_FRAMES = 375
+        const val MAX_SEGMENT_FRAMES = 375
     }
 }

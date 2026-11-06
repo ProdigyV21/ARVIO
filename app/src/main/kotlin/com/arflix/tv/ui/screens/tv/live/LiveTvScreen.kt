@@ -119,6 +119,11 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import com.arflix.tv.ui.screens.player.audiosync.AudioSyncExtractorsFactory
+import com.arflix.tv.ui.screens.tv.live.aisubs.AudioTapHlsExtractorFactory
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsDebug
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveSpeechProbe
+import com.arflix.tv.ui.screens.tv.live.aisubs.SubtitleLookaheadLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -3086,7 +3091,11 @@ fun LiveTvScreen(
             isLowRamDevice = activityManager?.isLowRamDevice == true
         )
     }
-    val exoPlayer = remember(livePlaybackBufferProfile) {
+    // Live TV AI subtitles, Phase 0 probe: taps the channel audio ahead of playback and logs
+    // segment timing under "LiveAiSubs". Inert unless switched on over adb in a debug build.
+    val liveSpeechProbe = remember(context) { LiveSpeechProbe(context) }
+    DisposableEffect(liveSpeechProbe) { onDispose { liveSpeechProbe.release() } }
+    val liveLoadControl = remember(livePlaybackBufferProfile) {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 livePlaybackBufferProfile.minBufferMs,
@@ -3104,9 +3113,31 @@ fun LiveTvScreen(
             .setPrioritizeTimeOverSizeThresholds(false)
             .setBackBuffer(livePlaybackBufferProfile.backBufferMs, true)
             .build()
+        // Holds playback back so AI subtitles get audio ahead of time; a no-op until asked to.
+        SubtitleLookaheadLoadControl(loadControl)
+    }
+    val exoPlayer = remember(liveLoadControl) {
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setLoadControl(loadControl)
+            .setLoadControl(liveLoadControl)
+            .apply {
+                // Debug builds only: hear the played audio too, to check the tap's time base.
+                if (com.arflix.tv.BuildConfig.DEBUG) {
+                    setRenderersFactory(object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
+                        override fun buildAudioSink(
+                            context: Context,
+                            enableFloatOutput: Boolean,
+                            enableAudioTrackPlaybackParams: Boolean,
+                        ): androidx.media3.exoplayer.audio.AudioSink? {
+                            val sink = super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)
+                                ?: return null
+                            return com.arflix.tv.ui.screens.player.audiosync.PlaybackAudioTap(
+                                sink, liveSpeechProbe.playbackListener,
+                            )
+                        }
+                    })
+                }
+            }
             // A live stream whose buffer stops moving while buffering raises an error after
             // this long, which the retry below recovers, instead of a spinner for ten minutes.
             .setStuckBufferingDetectionTimeoutMs(LIVE_STUCK_BUFFERING_TIMEOUT_MS)
@@ -3136,6 +3167,27 @@ fun LiveTvScreen(
             exoPlayer.release()
             liveStreamGate.close()
             playbackConnections.cancelAllAsync(iptvHttpClient)
+        }
+    }
+
+    val probeFullscreen by rememberUpdatedState(isFullScreen && !fullscreenGuideOpen && !quickZapOpen)
+    LaunchedEffect(exoPlayer, liveSpeechProbe) {
+        val window = androidx.media3.common.Timeline.Window()
+        while (true) {
+            liveSpeechProbe.fullscreen = probeFullscreen
+            if (LiveAiSubsDebug.enabled) {
+                // currentPosition is relative to the live window; the tapped samples are timed on
+                // the period, so add the window's offset into the period.
+                val timeline = exoPlayer.currentTimeline
+                val windowOffsetUs = if (timeline.isEmpty) 0L else
+                    timeline.getWindow(exoPlayer.currentMediaItemIndex, window).positionInFirstPeriodUs
+                liveSpeechProbe.onPosition(
+                    periodPositionUs = exoPlayer.currentPosition * 1_000L + windowOffsetUs,
+                    bufferedAheadMs = exoPlayer.bufferedPosition - exoPlayer.currentPosition,
+                    playing = exoPlayer.isPlaying,
+                )
+            }
+            delay(250L)
         }
     }
 
@@ -3382,14 +3434,20 @@ fun LiveTvScreen(
         }
         // HLS gets its own factory: DefaultMediaSourceFactory cannot set the HLS extractors,
         // and channels without IDR frames need iptvHlsExtractorFactory() to show video.
+        // Live TV AI subtitles: every channel source gets a fresh audio tap (Phase 0 probe), so a
+        // load still running for the previous channel can never feed this one.
+        val liveAudioSink = liveSpeechProbe.newSink(if (isHls) "hls" else "progressive")
+        liveLoadControl.requiredLookaheadUs =
+            if (playingCatchupProgram == null) LiveAiSubsDebug.delayMs * 1_000L else 0L
         val source = if (isHls) {
             HlsMediaSource.Factory(sourceDataFactory)
                 .setAllowChunklessPreparation(IPTV_HLS_CHUNKLESS_PREPARATION)
-                .setExtractorFactory(iptvHlsExtractorFactory())
+                .setExtractorFactory(AudioTapHlsExtractorFactory(iptvHlsExtractorFactory(), liveAudioSink))
                 .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
                 .createMediaSource(mediaItem)
         } else {
-            DefaultMediaSourceFactory(context, iptvExtractorsFactory()).setDataSourceFactory(sourceDataFactory)
+            DefaultMediaSourceFactory(context, AudioSyncExtractorsFactory(iptvExtractorsFactory(), liveAudioSink))
+                .setDataSourceFactory(sourceDataFactory)
                 .setLoadErrorHandlingPolicy(
                     IptvLoadErrorHandlingPolicy(
                         liveMidStreamDrop(
