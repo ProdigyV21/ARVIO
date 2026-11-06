@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Page Not Found · 404 | ARVIO</title>
+  <meta name="description" content="This page is not available. Return to the ARVIO homepage or browse our setup guides.">
+  <link rel="icon" href="/assets/arvio-icon-512.png" type="image/png">
+  <link rel="stylesheet" href="/assets/home-v2.css?v=11">
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #070b0c;
+    }
+    .not-found-main {
+      flex: 1 0 auto;
+      display: flex;
+      align-items: center;
+      position: relative;
+      isolation: isolate;
+      padding: 130px 0 80px;
+      overflow: clip;
+    }
+    .not-found-shell {
+      width: min(840px, calc(100% - 48px));
+      margin: 0 auto;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+    }
+    .not-found-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 10px;
+      letter-spacing: 1.8px;
+      color: #c7d6cd;
+      border: 1px solid #b5d4c522;
+      background: #b5d4c50a;
+      padding: 8px 16px;
+      border-radius: 30px;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+    }
+    .not-found-title {
+      font-size: clamp(38px, 5.2vw, 68px);
+      font-weight: 580;
+      letter-spacing: -0.055em;
+      line-height: 1.08;
+      margin: 0 0 18px;
+      color: #f5f8f6;
+    }
+    .headline-accent {
+      background: linear-gradient(115deg, #ddf3e6 4%, #9bd1ba 60%, #749d9c);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent !important;
+    }
+    .not-found-lead {
+      font-size: 16px;
+      line-height: 1.7;
+      color: #a5b5ae;
+      max-width: 560px;
+      margin: 0 auto 36px;
+    }
+    .actions-row {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 56px;
+    }
+    .actions-row .button {
+      font-size: 13px;
+      min-height: 50px;
+      padding: 14px 26px;
+      gap: 16px;
+    }
+    .destinations-section {
+      border-top: 1px solid var(--line);
+      padding-top: 36px;
+      text-align: left;
+    }
+    .destinations-label {
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #8f9f94;
+      text-transform: uppercase;
+      margin: 0 0 18px;
+      font-weight: 600;
+    }
+    .destinations-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .destination-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 18px 20px;
+      background: #0d1311;
+      border: 1px solid #ffffff12;
+      border-radius: 12px;
+      text-decoration: none;
+      transition: border-color .22s, transform .22s, background .22s;
+    }
+    .destination-card:hover {
+      border-color: #9efbd544;
+      background: #111a17;
+      transform: translateY(-2px);
+    }
+    .destination-card:focus-visible {
+      outline: 2px solid var(--mint);
+      outline-offset: 3px;
+    }
+    .dest-index {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mint);
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+    .dest-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .dest-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f4f7f6;
+      margin: 0 0 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .dest-arrow {
+      color: #778b80;
+      font-size: 13px;
+      transition: transform .2s, color .2s;
+    }
+    .destination-card:hover .dest-arrow {
+      color: var(--mint);
+      transform: translate(2px, -2px);
+    }
+    .dest-desc {
+      font-size: 12px;
+      color: #919c98;
+      margin: 0;
+      line-height: 1.55;
+    }
+    @media (max-width: 700px) {
+      .not-found-main {
+        padding: 100px 0 60px;
+      }
+      .destinations-grid {
+        grid-template-columns: 1fr;
+      }
+      .actions-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .actions-row .button {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/" aria-label="ARVIO home">
+      <img src="/assets/arvio-wordmark.svg" width="134" height="34" alt="ARVIO">
+    </a>
+    <nav aria-label="Main navigation">
+      <a href="/">Home</a>
+      <a href="/guides/">Guides</a>
+      <a href="/sponsors/">Sponsors</a>
+      <a class="nav-community" href="https://discord.gg/UavuEYMfQ4" target="_blank" rel="noopener">Discord <span aria-hidden="true">↗</span></a>
+    </nav>
+    <div class="nav-actions">
+      <a class="button small glass" href="https://github.com/ProdigyV21/ARVIO/releases/latest" target="_blank" rel="noopener">Free APK <span aria-hidden="true">↗</span></a>
+      <a class="button small mint-button" href="https://web.arvio.tv/" target="_blank" rel="noopener">Open ARVIO Web <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+
+  <main class="not-found-main" id="main">
+    <div class="hero-atmosphere" aria-hidden="true">
+      <div class="aurora aurora-a"></div>
+      <div class="aurora aurora-b"></div>
+      <div class="horizon"></div>
+    </div>
+
+    <div class="not-found-shell">
+      <div class="not-found-pill">
+        <span class="dot"></span> 404 &middot; Page Not Found
+      </div>
+      <h1 class="not-found-title">
+        This page isn’t <span class="headline-accent">available.</span>
+      </h1>
+      <p class="not-found-lead">
+        The link you followed may be broken, or the page may have been moved or retired. Return to home or explore our setup guides below.
+      </p>
+
+      <div class="actions-row">
+        <a href="/" class="button white">
+          <span>Return to Home</span>
+          <span aria-hidden="true">&rarr;</span>
+        </a>
+        <a href="/guides/" class="button glass">
+          <span>Browse Setup Guides</span>
+          <span aria-hidden="true">&rarr;</span>
+        </a>
+      </div>
+
+      <section class="destinations-section">
+        <p class="destinations-label">Popular Destinations</p>
+        <div class="destinations-grid">
+          <a href="/guides/" class="destination-card">
+            <span class="dest-index" aria-hidden="true">01</span>
+            <div class="dest-content">
+              <div class="dest-title">
+                <span>Setup &amp; Connection Guides</span>
+                <span class="dest-arrow" aria-hidden="true">&rarr;</span>
+              </div>
+              <p class="dest-desc">Configure Jellyfin, Plex, Emby, IPTV and addons on Android TV.</p>
+            </div>
+          </a>
+
+          <a href="/premium/" class="destination-card">
+            <span class="dest-index" aria-hidden="true">02</span>
+            <div class="dest-content">
+              <div class="dest-title">
+                <span>ARVIO Web &amp; Premium</span>
+                <span class="dest-arrow" aria-hidden="true">&rarr;</span>
+              </div>
+              <p class="dest-desc">Watch directly in browser on iPhone, iPad, Mac and Windows.</p>
+            </div>
+          </a>
+
+          <a href="https://discord.gg/UavuEYMfQ4" target="_blank" rel="noopener" class="destination-card">
+            <span class="dest-index" aria-hidden="true">03</span>
+            <div class="dest-content">
+              <div class="dest-title">
+                <span>Discord Community</span>
+                <span class="dest-arrow" aria-hidden="true">&nearr;</span>
+              </div>
+              <p class="dest-desc">Get setup help, report issues, and chat with other members.</p>
+            </div>
+          </a>
+
+          <a href="https://github.com/ProdigyV21/ARVIO" target="_blank" rel="noopener" class="destination-card">
+            <span class="dest-index" aria-hidden="true">04</span>
+            <div class="dest-content">
+              <div class="dest-title">
+                <span>GitHub Releases &amp; Code</span>
+                <span class="dest-arrow" aria-hidden="true">&nearr;</span>
+              </div>
+              <p class="dest-desc">Download official APK releases or inspect the open-source code.</p>
+            </div>
+          </a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="wrap">
+    <div>
+      <a class="brand" href="/" aria-label="ARVIO home"><img src="/assets/arvio-wordmark.svg" width="134" height="34" alt="ARVIO"></a>
+      <p>Built with care. Kept going by you.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="/guides/">Guides</a>
+      <a href="https://arvio-ui.web.app/" target="_blank" rel="noopener">Dashboard</a>
+      <a href="/sponsors/">Sponsors</a>
+      <a href="/credits/">Credits</a>
+      <a href="https://github.com/ProdigyV21/ARVIO" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://discord.gg/UavuEYMfQ4" target="_blank" rel="noopener">Discord</a>
+      <a href="/premium/">Premium</a>
+      <a href="/privacy">Privacy</a>
+    </nav>
+    <small>Independent, open-source software. Media and third-party subscriptions are not included.<br>&copy; 2026 ARVIO &middot; Free &amp; open source</small>
+  </footer>
+</body>
+</html>

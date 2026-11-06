@@ -29,6 +29,7 @@
 .partner-sidebar { position:sticky; top:0; height:100dvh; display:flex; flex-direction:column; padding:24px 16px 16px; border-right:1px solid var(--p-border); background:#141617; }
 .partner-wordmark { display:flex; gap:7px; align-items:center; font-size:19px; font-weight:700; white-space:nowrap; }
 .partner-wordmark img { width:26px; height:26px; object-fit:contain; margin-right:3px; }
+.partner-wordmark img.partner-logo-wordmark { width:auto; height:18px; margin-right:0; }
 .partner-wordmark span { font-size:13px; font-weight:400; color:var(--p-muted); border-left:1px solid #444; padding-left:9px; margin-left:4px; }
 .partner-workspace { display:flex; align-items:center; gap:10px; margin:34px 0 26px; min-width:0; }
 .partner-workspace>div { min-width:0; }
