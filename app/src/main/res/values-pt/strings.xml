@@ -1569,5 +1569,4 @@
     <string name="live_ai_subs_needs_key">Adicione primeiro uma chave de API do Google Gemini</string>
     <string name="live_ai_subs_auto_title">Traduzir automaticamente ao iniciar um canal</string>
     <string name="live_ai_subs_auto_desc">Cada canal começa com legendas IA, sem as escolher no menu de legendas</string>
-    <string name="live_ai_subs_preparing_short">A preparar legendas…</string>
 </resources>

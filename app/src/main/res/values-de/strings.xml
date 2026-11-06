@@ -1937,5 +1937,4 @@
     <string name="live_ai_subs_needs_key">Füge zuerst einen Google-Gemini-API-Schlüssel hinzu</string>
     <string name="live_ai_subs_auto_title">Automatisch übersetzen, wenn ein Sender startet</string>
     <string name="live_ai_subs_auto_desc">Jeder Sender startet mit KI-Untertiteln, ohne sie im Untertitelmenü auszuwählen</string>
-    <string name="live_ai_subs_preparing_short">Untertitel werden vorbereitet…</string>
 </resources>

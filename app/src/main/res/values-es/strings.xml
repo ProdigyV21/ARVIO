@@ -1657,5 +1657,4 @@
     <string name="live_ai_subs_needs_key">Primero añade una clave de API de Google Gemini</string>
     <string name="live_ai_subs_auto_title">Traducir automáticamente al iniciar un canal</string>
     <string name="live_ai_subs_auto_desc">Cada canal empieza con subtítulos IA, sin elegirlos en el menú de subtítulos</string>
-    <string name="live_ai_subs_preparing_short">Preparando subtítulos…</string>
 </resources>

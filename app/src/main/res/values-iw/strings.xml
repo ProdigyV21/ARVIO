@@ -394,5 +394,4 @@
     <string name="live_ai_subs_needs_key">יש להוסיף קודם מפתח Google Gemini API</string>
     <string name="live_ai_subs_auto_title">תרגום אוטומטי כשערוץ מתחיל</string>
     <string name="live_ai_subs_auto_desc">כל ערוץ מתחיל עם כתוביות AI, בלי לבחור אותן בתפריט הכתוביות</string>
-    <string name="live_ai_subs_preparing_short">מכין כתוביות…</string>
 </resources>

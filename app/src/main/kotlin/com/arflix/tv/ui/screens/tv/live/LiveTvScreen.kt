@@ -3258,9 +3258,6 @@ fun LiveTvScreen(
     val liveAiStats by liveAiSession.stats.collectAsState()
     var liveAiPreparingSeconds by remember { mutableStateOf<Int?>(null) }
     var liveAiDebugVisible by remember { mutableStateOf(false) }
-    // Since when AI subtitles have been waiting for their first line (new source or switched on).
-    var liveAiAwaitingSinceMs by remember { mutableStateOf<Long?>(null) }
-    var liveAiAwaitingFirstLine by remember { mutableStateOf(false) }
     // Bumped to restart the stream so audio already buffered gets subtitled too.
     var liveAiRestartRequest by remember { mutableIntStateOf(0) }
     var liveSubtitleStyle by remember { mutableStateOf(LiveSubtitleStyle()) }
@@ -3289,16 +3286,10 @@ fun LiveTvScreen(
     // capture started, so they would play without subtitles. Restart the stream instead; the
     // start-up hold then shows "Preparing subtitles" and the first line is covered.
     LaunchedEffect(liveAiSubsOn) {
-        if (!liveAiSubsOn) {
-            liveAiAwaitingSinceMs = null
-            return@LaunchedEffect
-        }
-        liveAiAwaitingSinceMs = android.os.SystemClock.elapsedRealtime()
-        if (exoPlayer.isPlaying && exoPlayer.currentMediaItem?.mediaId == playingChannelId.orEmpty()) {
+        if (liveAiSubsOn && exoPlayer.isPlaying && exoPlayer.currentMediaItem?.mediaId == playingChannelId.orEmpty()) {
             liveAiRestartRequest++
         }
     }
-    LaunchedEffect(liveAiCue) { if (liveAiCue != null) liveAiAwaitingSinceMs = null }
     val liveAiTick by rememberUpdatedState(liveAiSubsOn to (playingCatchupProgram == null))
     LaunchedEffect(exoPlayer, liveAiSession) {
         val window = androidx.media3.common.Timeline.Window()
@@ -3316,9 +3307,6 @@ fun LiveTvScreen(
                 val lookaheadMs = (exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)
                 liveAiSession.tick(exoPlayer.currentPosition * 1_000L + windowOffsetUs, exoPlayer.isPlaying, lookaheadMs)
                 val held = liveLoadControl.holding && exoPlayer.playbackState == Player.STATE_BUFFERING
-                liveAiAwaitingFirstLine = !held && liveAiAwaitingSinceMs?.let { since ->
-                    android.os.SystemClock.elapsedRealtime() - since < LIVE_AI_FIRST_LINE_NOTE_MS
-                } == true
                 liveAiPreparingSeconds = if (held && requiredMs > 0L) {
                     ((requiredMs - lookaheadMs + 999L) / 1_000L).toInt().coerceAtLeast(1)
                 } else {
@@ -3332,7 +3320,6 @@ fun LiveTvScreen(
                 }
             } else {
                 liveAiPreparingSeconds = null
-                liveAiAwaitingFirstLine = false
             }
             delay(LIVE_AI_TICK_MS)
         }
@@ -3519,7 +3506,6 @@ fun LiveTvScreen(
         // Live TV AI subtitles: every channel source gets a fresh audio tap, so a load still
         // running for the previous channel can never feed this one.
         liveAiSession.onNewSource()
-        liveAiAwaitingSinceMs = android.os.SystemClock.elapsedRealtime()
         val liveAudioSink = liveAiSession.pipeline.newSink()
         val source = if (isHls) {
             HlsMediaSource.Factory(sourceDataFactory)
@@ -4951,8 +4937,7 @@ fun LiveTvScreen(
                     LiveAiSubtitleOverlay(
                         cue = liveAiCue,
                         style = liveSubtitleStyle,
-                        preparingText = liveAiPreparingSeconds?.let { stringResource(R.string.live_ai_subs_preparing, it) }
-                            ?: stringResource(R.string.live_ai_subs_preparing_short).takeIf { liveAiAwaitingFirstLine },
+                        preparingText = liveAiPreparingSeconds?.let { stringResource(R.string.live_ai_subs_preparing, it) },
                         debugStats = liveAiStats.takeIf { liveAiDebugVisible },
                     )
                 }
@@ -5623,9 +5608,6 @@ private fun classifyPlaybackError(error: PlaybackException): String {
 
 /** How often Live TV AI subtitles follow the player position (cue display, hold, look-ahead). */
 private const val LIVE_AI_TICK_MS = 100L
-
-/** How long "Preparing subtitles…" may wait for the first line before giving up (silence, music). */
-private const val LIVE_AI_FIRST_LINE_NOTE_MS = 25_000L
 
 internal fun buildLiveTvConfiguration(): MediaItem.LiveConfiguration =
     MediaItem.LiveConfiguration.Builder()

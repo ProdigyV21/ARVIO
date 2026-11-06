@@ -39,7 +39,7 @@ internal data class LiveSubtitleStyle(
 internal fun LiveAiSubtitleOverlay(
     cue: LiveCue?,
     style: LiveSubtitleStyle,
-    /** "Preparing subtitles…" while the first lines are not ready yet, or null. */
+    /** "Preparing subtitles… N s" while playback is held for the delay, or null. */
     preparingText: String?,
     debugStats: LiveAiSubsStats?,
     modifier: Modifier = Modifier,
