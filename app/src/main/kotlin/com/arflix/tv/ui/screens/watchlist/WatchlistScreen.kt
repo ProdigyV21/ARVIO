@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -56,6 +59,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import com.arflix.tv.R
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
@@ -223,6 +227,7 @@ fun WatchlistScreen(
     }
     fun selectSection(next: LibrarySection) {
         section = next; openedList = null; query = ""; mediaFilter = null
+        search = false; sourcesOpen = false; filters = false
         if (next == LibrarySection.WATCHLISTS) viewModel.selectSource(WatchlistSourceItem.MyWatchlist.id)
         if (next == LibrarySection.SERVERS && servers.selectedSourceRef == null) {
             servers.libraries.firstOrNull()?.let { viewModel.selectLibraryProvider(it.serverKind); viewModel.selectLibrary(it.sourceRef) }
@@ -263,7 +268,7 @@ fun WatchlistScreen(
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("oled-library")) {
-        val compact = touch && maxWidth < 700.dp
+        val compact = touch && (maxWidth < 700.dp || maxHeight < 500.dp)
         val sideWidth = if (touch) 160.dp else 126.dp
             if (!touch) {
                 Box(Modifier.fillMaxWidth().height(AppTopBarContentTopInset).focusRequester(topFocus).onFocusChanged { topFocused = it.isFocused }
@@ -487,14 +492,75 @@ fun WatchlistScreen(
                         if (touch || collections) LocalBringIntoViewSpec.current else LibraryTvBringIntoViewSpec) {
                     if (collections) {
                         val lists = scopeSources.filter { it.title.contains(query, true) }
-                        if(lists.isEmpty()) OledMessage(tr("No lists yet"), tr("Your custom catalogs and personal lists appear here."))
-                        LazyVerticalGrid(GridCells.Fixed(columns), state = grid, modifier = Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalBottomBarInset.current)) {
-                            items(lists, key = { it.id }) { source ->
-                                var cover by remember(source) { mutableStateOf<String?>((source as? WatchlistSourceItem.Catalog)?.config?.collectionCoverImageUrl) }
-                                LaunchedEffect(source) { cover = viewModel.collectionCover(source) }
-                                OledCollection(source, cover, width) { openedList = source.id; viewModel.selectSource(source.id) }
+                        if (lists.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(68.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.08f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (query.isNotEmpty()) Icons.Outlined.Search else Icons.Default.BookmarkBorder,
+                                            contentDescription = null,
+                                            tint = resolveAccentColor(Color.White),
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (query.isNotEmpty()) tr("No matching lists") else tr("No lists yet"),
+                                            color = Color.White,
+                                            fontSize = 19.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = if (query.isNotEmpty()) tr("No lists found matching \"%s\"").format(query)
+                                                else tr("Your custom catalogs and personal lists appear here."),
+                                            color = Color.Gray,
+                                            fontSize = 13.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.widthIn(max = 280.dp)
+                                        )
+                                    }
+                                    if (query.isNotEmpty()) {
+                                        OledControl(
+                                            label = tr("Clear search"),
+                                            compact = touch,
+                                            onClick = { query = "" }
+                                        )
+                                    } else {
+                                        OledControl(
+                                            label = "+ " + tr("New list"),
+                                            compact = touch,
+                                            selected = true,
+                                            onClick = { onNavigateToSettings("catalogs") }
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            LazyVerticalGrid(GridCells.Fixed(columns), state = grid, modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp + LocalBottomBarInset.current)) {
+                                items(lists, key = { it.id }) { source ->
+                                    var cover by remember(source) { mutableStateOf<String?>((source as? WatchlistSourceItem.Catalog)?.config?.collectionCoverImageUrl) }
+                                    LaunchedEffect(source) { cover = viewModel.collectionCover(source) }
+                                    OledCollection(source, cover, width) { openedList = source.id; viewModel.selectSource(source.id) }
+                                }
                             }
                         }
                     } else if (loading && items.isEmpty()) {
@@ -768,14 +834,23 @@ private fun OledCollection(source: WatchlistSourceItem, cover: String?, width: D
 private fun OledDrawer(title: String, close: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val initial = remember { FocusRequester() }
     val touch = LocalDeviceType.current.isTouchDevice()
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(
+        onDismissRequest = close,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
         Box(
             Modifier
                 .fillMaxSize()
                 .testTag("library-drawer-root")
-                .background(Color.Black.copy(alpha = .55f))
-                .then(if (touch) Modifier.clickable(onClick = close) else Modifier)
         ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .pointerInput(close) {
+                        detectTapGestures { close() }
+                    }
+            )
             Column(
                 Modifier
                     .then(
@@ -786,7 +861,9 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
                                 .heightIn(max = 560.dp)
                                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                                 .background(BackgroundDark)
-                                .clickable(enabled = false) {}
+                                .pointerInput(Unit) {
+                                    detectTapGestures { }
+                                }
                                 .padding(horizontal = 20.dp, vertical = 14.dp)
                                 .navigationBarsPadding()
                         } else {
@@ -796,6 +873,9 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
                                 .widthIn(max = 340.dp)
                                 .fillMaxWidth()
                                 .background(BackgroundDark)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { }
+                                }
                                 .padding(24.dp)
                         }
                     )
@@ -828,12 +908,30 @@ private fun OledDrawer(title: String, close: () -> Unit, content: @Composable Co
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = if (touch) 4.dp else 12.dp)
                     )
-                    OledControl(
-                        "${tr("Close")} ×",
-                        modifier = Modifier.focusRequester(initial),
-                        compact = touch,
-                        onClick = close
-                    )
+                    if (touch) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.12f))
+                                .clickable(onClick = close),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = tr("Close"),
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
+                        OledControl(
+                            tr("Close"),
+                            icon = Icons.Default.Close,
+                            modifier = Modifier.focusRequester(initial),
+                            onClick = close
+                        )
+                    }
                 }
                 content()
             }
