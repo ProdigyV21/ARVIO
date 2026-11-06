@@ -511,10 +511,16 @@ export function usePlaybackEngine({ autoSourceHopsRef, currentStreamRef, failure
         });
       }
     };
-    // A refreshed Stalker link, when it is a new one. Restarts, VLC and Copy
-    // link use it from now on.
+    // A Stalker portal can renew authorization without changing the media URL.
+    // Restarts, VLC and Copy link use the refreshed source from now on.
     function useFreshLink(fresh: { url: string; headers?: Record<string, string> } | null) {
-      if (!fresh?.url || fresh.url === liveSource.url) return false;
+      if (!fresh?.url) return false;
+      if (fresh.url === liveSource.url) {
+        const nextHeaders = Object.entries(fresh.headers ?? {});
+        const currentHeaders = liveSource.headers ?? {};
+        if (nextHeaders.length === Object.keys(currentHeaders).length
+          && nextHeaders.every(([key, value]) => currentHeaders[key] === value)) return false;
+      }
       liveSource = { url: fresh.url, headers: fresh.headers };
       if (liveSourceOverrideRef && stream.url) liveSourceOverrideRef.current = { from: stream.url, url: fresh.url, headers: fresh.headers };
       return true;

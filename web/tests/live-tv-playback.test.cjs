@@ -655,6 +655,47 @@ test('player: a Stalker channel that played gets a fresh link before it reconnec
   cleanup();
 });
 
+test('player: a Stalker reconnect uses renewed authorization even when the URL is unchanged', async () => {
+  const url = 'http://portal.example/play/live.php?stream=9&extension=ts';
+  const headers = { Authorization: 'Bearer old' };
+  const renewed = { Authorization: 'Bearer renewed' };
+  const h = liveHarness({ url, headers, refresh: () => ({ url, headers: renewed }), extra: {
+    resolverMediaUrl: (target, request) => `https://relay.example/media?${new URLSearchParams({ url: target, authorization: request.Authorization })}`
+  } });
+  const cleanup = h.setup();
+  const initial = new URL(h.last().url);
+  assert.equal(initial.searchParams.get('authorization'), headers.Authorization);
+  h.playing();
+  h.fail(drop());
+  assert.deepEqual(h.runReconnects(), [2000]);
+  await flush(); await flush();
+  const retry = new URL(h.last().url);
+  assert.equal(h.state.refreshes, 1);
+  assert.equal(h.state.attached.length, 2);
+  assert.equal(retry.origin, initial.origin);
+  assert.equal(retry.searchParams.get('url'), url);
+  assert.equal(retry.searchParams.get('authorization'), renewed.Authorization);
+  assert.equal(h.overrideRef.current?.headers.Authorization, renewed.Authorization);
+  cleanup();
+});
+
+test('player: reordering otherwise identical Stalker headers is not a fresh link', async () => {
+  const url = 'http://portal.example/play/live.php?stream=9&extension=ts';
+  const headers = { Authorization: 'Bearer unchanged', 'User-Agent': 'MAG200' };
+  const h = liveHarness({ url, headers, refresh: () => ({ url, headers: { 'User-Agent': 'MAG200', Authorization: 'Bearer unchanged' } }) });
+  const cleanup = h.setup();
+  const initial = h.last();
+  h.playing();
+  h.fail(drop());
+  assert.deepEqual(h.runReconnects(), [2000]);
+  await flush(); await flush();
+  assert.equal(h.state.refreshes, 1);
+  assert.equal(h.state.attached.length, 2);
+  assert.equal(h.last().url, initial.url);
+  assert.equal(h.overrideRef.current, null);
+  cleanup();
+});
+
 test('player: an Xtream line the panel reports full is not tuned; silence or a free line tunes; a channel change skips the check', async () => {
   const account = { baseUrl: 'http://p.example:8080', username: 'u', password: 'p' };
   const run = async (verdict, check = true) => {
