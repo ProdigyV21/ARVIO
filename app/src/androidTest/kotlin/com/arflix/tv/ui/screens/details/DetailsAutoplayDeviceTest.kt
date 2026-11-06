@@ -92,6 +92,22 @@ class DetailsAutoplayDeviceTest {
         }
     }
 
+    @Test fun idleSyncKeepsAutoplayPendingUntilTheRefreshedTargetIsReady() {
+        val state = show(MediaType.MOVIE)
+        compose.runOnIdle {
+            state.value = state.value.copy(isPlaybackTargetReady = true, isSyncingProgress = true, playPositionMs = 90_000L)
+        }
+        compose.runOnIdle { assertEquals(0, plays); assertEquals(0, handled) }
+        compose.runOnIdle {
+            state.value = state.value.copy(isSyncingProgress = false, idleSyncRevision = 1L, playPositionMs = 224_000L)
+        }
+        compose.runOnIdle {
+            assertEquals(1, plays)
+            assertEquals(1, handled)
+            assertEquals(224_000L, playedPosition)
+        }
+    }
+
     private fun show(type: MediaType, autoplay: Boolean = true): MutableStateFlow<DetailsUiState> {
         val state = MutableStateFlow(DetailsUiState(
             isLoading = false, item = MediaItem(42, "Autoplay fixture", mediaType = type),
@@ -100,6 +116,9 @@ class DetailsAutoplayDeviceTest {
                 url = "https://example.invalid/fixture.mp4")),
         ))
         every { model.uiState } returns state
+        every { model.canStartPlayback(any()) } answers {
+            !state.value.isSyncingProgress && firstArg<Long>() == state.value.idleSyncRevision
+        }
         every { model.kidsFilterState } returns MutableStateFlow(KidsContentFilter.State(null, "US", emptyMap()))
         every { model.applyKidsFilter(any(), any()) } answers { firstArg() }
         every { model.listPicker } returns MutableStateFlow(null)
@@ -116,7 +135,7 @@ class DetailsAutoplayDeviceTest {
             CompositionLocalProvider(LocalDeviceType provides DeviceType.TV) {
                 ArflixTvTheme {
                     DetailsScreen(type, 42, autoPlay = true, onAutoPlayHandled = { handled++ }, viewModel = model,
-                        onNavigateToPlayer = { _, _, episode, _, _, _, _, position ->
+                        onNavigateToPlayer = { _, _, episode, _, _, _, _, position, _ ->
                             plays++
                             playedEpisode = episode
                             playedPosition = position

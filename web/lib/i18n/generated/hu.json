@@ -1559,5 +1559,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "A forrás hangja nem játszható le ebben a böngészőben. Válasszon másik forrást, vagy használjon külső lejátszót.",
   "Converting the audio for your browser…": "A hang átalakítása a böngészőhöz…",
   "Picking the best source…": "A legjobb forrás kiválasztása…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "A Ko-fi amerikai dollárban terhel; a bankja automatikusan átváltja az összeget."
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "A Ko-fi amerikai dollárban terhel; a bankja automatikusan átváltja az összeget.",
+  "Maximum of 10 IPTV playlists reached": "Elérted a legfeljebb 10 IPTV-lejátszási listát",
+  "Regional price · save {value0} vs. 12 monthly payments": "Regionális ár · {value0} megtakarítás 12 havi fizetéshez képest",
+  "One payment, no automatic renewal. About {value0} a month.": "Egyszeri fizetés, automatikus megújítás nélkül. Kb. havi {value0}.",
+  "12-month pass · {value0}": "12 hónapos bérlet · {value0}"
 }

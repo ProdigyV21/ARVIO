@@ -3,6 +3,7 @@ package com.arflix.tv.ui.screens.profile
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,8 +56,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -73,8 +77,11 @@ import androidx.tv.material3.Text
 import com.arflix.tv.R
 import com.arflix.tv.data.model.Profile
 import com.arflix.tv.data.model.KidsAgeLevel
+import com.arflix.tv.ui.components.CloudEmailPasswordModal
+import com.arflix.tv.ui.components.CloudPairModal
 import com.arflix.tv.ui.components.ProfileAvatarVisual
 import com.arflix.tv.ui.components.Toast
+import com.arflix.tv.ui.theme.ErrorRed
 import com.arflix.tv.util.LocalDeviceType
 import com.arflix.tv.util.PinUtil
 import kotlinx.coroutines.delay
@@ -89,6 +96,7 @@ fun ProfileSelectionScreen(
     isCloudConnected: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val effectiveCloudConnected = isCloudConnected || uiState.isCloudConnected
     ProfileSelectionContent(uiState, ProfileSelectionActions(
         createProfile = viewModel::createProfile,
         deleteProfile = viewModel::deleteProfile,
@@ -115,7 +123,13 @@ fun ProfileSelectionScreen(
         toggleManageMode = viewModel::toggleManageMode,
         updateProfile = viewModel::updateProfile,
         verifyPinAndSelectProfile = viewModel::verifyPinAndSelectProfile,
-    ), onProfileSelected, onConnectCloud, isCloudConnected)
+        startCloudAuth = viewModel::startCloudAuth,
+        openCloudEmailPasswordDialog = viewModel::openCloudEmailPasswordDialog,
+        cancelCloudAuth = viewModel::cancelCloudAuth,
+        closeCloudEmailPasswordDialog = viewModel::closeCloudEmailPasswordDialog,
+        completeCloudAuthWithEmailPassword = viewModel::completeCloudAuthWithEmailPassword,
+        retryCloudRestore = viewModel::retryCloudRestore,
+    ), onProfileSelected, onConnectCloud, effectiveCloudConnected)
 }
 
 internal data class ProfileSelectionActions(
@@ -144,6 +158,12 @@ internal data class ProfileSelectionActions(
     val toggleManageMode: () -> Unit = { },
     val updateProfile: () -> Unit = { },
     val verifyPinAndSelectProfile: (String) -> Unit = { _ -> },
+    val startCloudAuth: () -> Unit = { },
+    val openCloudEmailPasswordDialog: () -> Unit = { },
+    val cancelCloudAuth: () -> Unit = { },
+    val closeCloudEmailPasswordDialog: () -> Unit = { },
+    val completeCloudAuthWithEmailPassword: (String, String, Boolean) -> Unit = { _, _, _ -> },
+    val retryCloudRestore: () -> Unit = {},
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -296,7 +316,7 @@ internal fun ProfileSelectionContent(
     ) {
         val contentWidth = if (isTouchDevice) (maxWidth - 48.dp).coerceAtMost(560.dp) else maxWidth - 96.dp
         val columns = if (isTouchDevice && maxWidth >= 600.dp) 3 else 2
-        val avatarSize = if (isTouchDevice) ((contentWidth - 24.dp * (columns - 1)) / columns).coerceAtMost(152.dp)
+        val avatarSize = if (isTouchDevice) ((contentWidth - 24.dp * (columns - 1)) / columns).coerceIn(92.dp, 108.dp)
             else ((contentWidth - 24.dp * 4) / 5).coerceAtMost(120.dp)
         val avatarSpacing = 24.dp
         val backgroundAlpha = if (isTransitioning) {
@@ -311,23 +331,24 @@ internal fun ProfileSelectionContent(
                     .then(if (isTouchDevice) Modifier.verticalScroll(rememberScrollState()).padding(vertical = 32.dp) else Modifier)
                     .graphicsLayer { alpha = backgroundAlpha }
             ) {
-                // Title
-                Text(
-                    text = "ARVIO",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                    letterSpacing = 6.sp
+                // Title / Brand Wordmark Logo
+                Image(
+                    painter = painterResource(id = R.drawable.ic_arvio_wordmark),
+                    contentDescription = "ARVIO",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .height(if (isTouchDevice) 22.dp else 30.dp)
                 )
 
                 Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
 
                 Text(
                     text = if (uiState.isManageMode) stringResource(R.string.manage_profiles) else stringResource(R.string.whos_watching),
-                    fontSize = if (isTouchDevice) 32.sp else 40.sp,
+                    fontSize = if (isTouchDevice) 28.sp else 40.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = if (isTouchDevice) Modifier.fillMaxWidth() else Modifier
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(if (isTouchDevice) 32.dp else 24.dp))
@@ -422,14 +443,34 @@ internal fun ProfileSelectionContent(
                     }
                 )
 
-                if (!isCloudConnected) {
+                if (uiState.cloudRestoreFailed) {
+                    Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
+                    Text(
+                        text = stringResource(R.string.settings_cloud_signed_in_restore_failed),
+                        color = ErrorRed,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CloudConnectButton(
+                        label = stringResource(if (uiState.isCloudAuthWorking) R.string.syncing else R.string.retry),
+                        retry = true,
+                        isWorking = uiState.isCloudAuthWorking,
+                        onClick = viewModel.retryCloudRestore
+                    )
+                } else if (!isCloudConnected) {
                     Spacer(modifier = Modifier.height(if (isTouchDevice) 24.dp else 16.dp))
 
                     // Cloud connect button — focusable on TV, tappable on mobile
                     CloudConnectButton(
                         onClick = {
                             if ((isTouchDevice || isReadyForInput) && !uiState.isSwitchingProfile && !isTransitioning) {
-                                onConnectCloud()
+                                if (isTouchDevice) {
+                                    viewModel.openCloudEmailPasswordDialog()
+                                } else {
+                                    viewModel.startCloudAuth()
+                                }
                             }
                         }
                     )
@@ -550,6 +591,47 @@ internal fun ProfileSelectionContent(
             )
         }
 
+        // Cloud Email/Password Modal
+        if (uiState.showCloudEmailPasswordDialog) {
+            var email by remember { mutableStateOf("") }
+            var password by remember { mutableStateOf("") }
+            val context = LocalContext.current
+            CloudEmailPasswordModal(
+                email = email,
+                password = password,
+                onEmailChange = { email = it },
+                onPasswordChange = { password = it },
+                onDismiss = { viewModel.closeCloudEmailPasswordDialog() },
+                onSignIn = {
+                    viewModel.completeCloudAuthWithEmailPassword(email, password, false)
+                },
+                onCreateAccount = {
+                    viewModel.completeCloudAuthWithEmailPassword(email, password, true)
+                },
+                onOpenPrivacy = {
+                    runCatching {
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("https://arvio.tv/privacy")
+                        )
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    }
+                }
+            )
+        }
+
+        // Cloud TV Pairing Modal
+        if (uiState.showCloudPairDialog) {
+            CloudPairModal(
+                verificationUrl = uiState.cloudVerificationUrl.orEmpty(),
+                userCode = uiState.cloudUserCode.orEmpty(),
+                isWorking = uiState.isCloudAuthWorking,
+                onDismiss = { viewModel.cancelCloudAuth() },
+                onUseEmailPassword = { viewModel.openCloudEmailPasswordDialog() }
+            )
+        }
+
         // Toast Notification
         Toast(
             message = uiState.toastMessage ?: "",
@@ -626,8 +708,8 @@ private fun ProfileAvatar(
             val avatarContent: @Composable () -> Unit = {
                 ProfileAvatarVisual(
                     profile = profile,
-                    letterFontSize = 48.sp,
-                    iconPadding = 12.dp
+                    letterFontSize = if (isTouchDevice) 36.sp else 48.sp,
+                    iconPadding = if (isTouchDevice) 10.dp else 12.dp
                 )
             }
 
@@ -740,7 +822,7 @@ private fun AddProfileButton(
     ) {
         val addContent: @Composable () -> Unit = {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(if (isTouchDevice) 36.dp else 48.dp))
             }
         }
         if (isTouchDevice) {
@@ -801,46 +883,65 @@ private fun ManageProfilesButton(
     isManageMode: Boolean,
     onClick: () -> Unit
 ) {
+    val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
 
-    val isTouchDevice = LocalDeviceType.current.isTouchDevice()
-    Surface(
-        onClick = if (isTouchDevice) ({}) else onClick,
-        modifier = Modifier
-            .then(
-                if (isTouchDevice) Modifier.fillMaxWidth().clickable { onClick() } else Modifier
+    if (isTouchDevice) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(24.dp))
+                .background(if (isManageMode) Color.White.copy(alpha = 0.15f) else Color.Transparent)
+                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                .clickable { onClick() }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                textAlign = TextAlign.Center
             )
-            .onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.1f)
-        ),
-        border = ClickableSurfaceDefaults.border(
-            border = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(24.dp)
+        }
+    } else {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
+            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(24.dp)),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White.copy(alpha = 0.1f)
             ),
-            focusedBorder = androidx.tv.material3.Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
-                shape = RoundedCornerShape(24.dp)
+            border = ClickableSurfaceDefaults.border(
+                border = androidx.tv.material3.Border(
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(24.dp)
+                ),
+                focusedBorder = androidx.tv.material3.Border(
+                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                    shape = RoundedCornerShape(24.dp)
+                )
             )
-        )
-    ) {
-        Text(
-            text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
-        )
+        ) {
+            Text(
+                text = if (isManageMode) stringResource(R.string.done) else stringResource(R.string.manage_profiles),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun CloudConnectButton(
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    label: String? = null,
+    retry: Boolean = false,
+    isWorking: Boolean = false
 ) {
     val isTouchDevice = LocalDeviceType.current.isTouchDevice()
     var isFocused by remember { mutableIntStateOf(0) }
@@ -858,19 +959,23 @@ private fun CloudConnectButton(
                     )
                 )
                 .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-                .clickable { onClick() }
+                .clickable(enabled = !isWorking) { onClick() }
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Cloud,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(18.dp)
-            )
+            if (isWorking) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    imageVector = if (retry) Icons.Default.Refresh else Icons.Default.Cloud,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
             Text(
-                text = stringResource(R.string.connect_to_cloud),
+                text = label ?: stringResource(R.string.connect_to_cloud),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.85f)
@@ -879,6 +984,7 @@ private fun CloudConnectButton(
     } else {
         Surface(
             onClick = onClick,
+            enabled = !isWorking,
             modifier = Modifier.onFocusChanged { isFocused = if (it.isFocused) 1 else 0 },
             shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(16.dp)),
             colors = ClickableSurfaceDefaults.colors(
@@ -901,14 +1007,18 @@ private fun CloudConnectButton(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Cloud,
-                    contentDescription = null,
-                    tint = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
+                if (isWorking) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        imageVector = if (retry) Icons.Default.Refresh else Icons.Default.Cloud,
+                        contentDescription = null,
+                        tint = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
                 Text(
-                    text = stringResource(R.string.connect_to_cloud),
+                    text = label ?: stringResource(R.string.connect_to_cloud),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (isFocused > 0) Color.White else Color.White.copy(alpha = 0.7f)

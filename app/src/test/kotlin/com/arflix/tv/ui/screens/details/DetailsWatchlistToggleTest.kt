@@ -117,7 +117,7 @@ class DetailsWatchlistToggleTest {
             streamIntegrationRepository = integrations,
             recentPlayedSourceRepository = mockk(relaxed = true),
             personalListsRepository = mockk(relaxed = true),
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true), idleReturnCoordinator = com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         )
         store.put("details", model)
         model.loadDetails(MediaType.MOVIE, movie.id)

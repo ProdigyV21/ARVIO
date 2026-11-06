@@ -1560,5 +1560,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "Šio šaltinio garso negalima atkurti šioje naršyklėje. Pasirinkite kitą šaltinį arba naudokite išorinį grotuvą.",
   "Converting the audio for your browser…": "Garsas konvertuojamas jūsų naršyklei…",
   "Picking the best source…": "Renkamas geriausias šaltinis…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi apmokestina JAV doleriais; jūsų bankas sumą konvertuoja automatiškai."
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi apmokestina JAV doleriais; jūsų bankas sumą konvertuoja automatiškai.",
+  "Maximum of 10 IPTV playlists reached": "Pasiektas didžiausias 10 IPTV grojaraščių skaičius",
+  "Regional price · save {value0} vs. 12 monthly payments": "Regioninė kaina · sutaupykite {value0}, palyginti su 12 mėnesinių mokėjimų",
+  "One payment, no automatic renewal. About {value0} a month.": "Vienas mokėjimas, be automatinio atnaujinimo. Apie {value0} per mėnesį.",
+  "12-month pass · {value0}": "12 mėnesių leidimas · {value0}"
 }

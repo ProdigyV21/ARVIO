@@ -20,6 +20,9 @@ import com.arflix.tv.data.model.findRecentSourceMatch
 import com.arflix.tv.data.model.EpisodeIdentity
 import com.arflix.tv.data.model.SportsAddonCapabilities
 import com.arflix.tv.data.model.IptvVodSourceIds
+import com.arflix.tv.network.IptvAccountAvailability
+import com.arflix.tv.network.IptvAdmission
+import com.arflix.tv.network.IptvPlaybackConnections
 import com.arflix.tv.data.model.isDirectStreamUrl
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
@@ -85,6 +88,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Clock
@@ -154,6 +158,16 @@ sealed interface PlayerMessage {
 
     /** Text without a resource (e.g. a platform exception message); shown as it is. */
     data class Raw(val text: String) : PlayerMessage
+}
+
+internal val IPTV_ACCOUNT_BUSY_MESSAGE: PlayerMessage = PlayerMessage.Res(R.string.iptv_account_busy_vod)
+
+/** A full account is not a playback failure, so its modal carries the same title as the Live TV panel. */
+@StringRes
+internal fun playerErrorTitleRes(isSetupError: Boolean, error: PlayerMessage?): Int = when {
+    isSetupError -> R.string.player_addon_setup_required
+    error == IPTV_ACCOUNT_BUSY_MESSAGE -> R.string.iptv_account_busy_title
+    else -> R.string.player_playback_error
 }
 
 data class PlayerUiState(
@@ -318,7 +332,8 @@ class PlayerViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
 ) : ViewModel() {
 
     /** Whether the active profile may play this title; always true outside a kids profile. */
@@ -747,9 +762,13 @@ class PlayerViewModel @Inject constructor(
         startPositionMs: Long?,
         isLiveStreamPlayback: Boolean = false,
         forceRefresh: Boolean = false,
-        airDate: String? = null
+        airDate: String? = null,
+        providedIptvSourceId: String? = null
     ) {
         currentAirDate = airDate
+        currentProvidedStreamUrl = providedStreamUrl
+        currentProvidedIptvSourceId = providedIptvSourceId
+        iptvBusyOnProvidedPath = false
         // Playback is starting: Telegram searches still running for the source list the user
         // just chose from are stopped, and none may toast over the player (they used to: "Telegram
         // search timed out" appearing mid-episode). Held until this player is cleared.
@@ -990,7 +1009,8 @@ class PlayerViewModel @Inject constructor(
                         addonId = currentPreferredAddonId.orEmpty(),
                         quality = "",
                         size = "",
-                        url = url
+                        url = url,
+                        iptvSourceId = providedIptvSourceId
                     )
                 }
             val providedIsHubPage = providedStreamCandidate?.url
@@ -1062,6 +1082,22 @@ class PlayerViewModel @Inject constructor(
                         } else {
                             PlayerMessage.Res(R.string.player_error_open_source_failed)
                         }
+                    )
+                    return@launch
+                }
+
+                if (admitIptvVodStream(resolvedProvidedStream) is IptvAdmission.Full) {
+                    iptvBusyOnProvidedPath = true
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isLoadingStreams = false,
+                        sourceSearchActive = false,
+                        streamLoadPhase = null,
+                        streams = listOfNotNull(resolvedProvidedStream),
+                        selectedStream = resolvedProvidedStream,
+                        selectedStreamUrl = null,
+                        savedPosition = resumeData.positionMs,
+                        error = IPTV_ACCOUNT_BUSY_MESSAGE
                     )
                     return@launch
                 }
@@ -3135,6 +3171,7 @@ class PlayerViewModel @Inject constructor(
         streamSelectionJob?.cancel()
         playbackErrorReportJob?.cancel()
         listedSelectedStream = stream
+        iptvBusyOnProvidedPath = false
         streamSelectionJob = viewModelScope.launch {
             val selectionStartMs = System.currentTimeMillis()
             val requestedResumePosition = resumePositionMs?.coerceAtLeast(0L)
@@ -3262,6 +3299,19 @@ class PlayerViewModel @Inject constructor(
             aiSourceSubtitle = null
             untranslatableSourceKeys.clear()
             translationManager.isEnabled = false
+
+            if (admitIptvVodStream(resolvedStream) is IptvAdmission.Full) {
+                _uiState.value = _uiState.value.copy(
+                    selectedStream = resolvedStream,
+                    selectedStreamUrl = null,
+                    isLoading = false,
+                    isLoadingStreams = false,
+                    streamProgress = null,
+                    streamLoadPhase = null,
+                    error = IPTV_ACCOUNT_BUSY_MESSAGE
+                )
+                return@launch
+            }
 
             // Direct URL - use immediately (ExoPlayer handles redirects)
             _uiState.value = _uiState.value.copy(
@@ -6514,8 +6564,31 @@ class PlayerViewModel @Inject constructor(
         if (onlyForAutoScan && !aiFindBestMatchFirst) return
         val url = _uiState.value.selectedStreamUrl?.takeIf { it.isNotBlank() } ?: return
         val headers = _uiState.value.selectedStream?.behaviorHints?.proxyHeaders?.request.orEmpty()
+        // A policy is read off the main thread, so only IPTV VOD takes this detour.
+        if (IptvVodSourceIds.isIptvVodAddonId(_uiState.value.selectedStream?.addonId)) {
+            viewModelScope.launch {
+                if (subtitleIndexAllowed() && _uiState.value.selectedStreamUrl == url) {
+                    startSubtitleIndexPrefetch(url, headers, onlyForAutoScan)
+                }
+            }
+            return
+        }
+        startSubtitleIndexPrefetch(url, headers, onlyForAutoScan)
+    }
+
+    private fun startSubtitleIndexPrefetch(url: String, headers: Map<String, String>, onlyForAutoScan: Boolean) {
         Log.i("SubMatch", "container index: prefetch " + if (onlyForAutoScan) "at stream open" else "alongside the player buffer")
         com.arflix.tv.ui.screens.player.subtitles.MatroskaIndexSource.prefetch(url, headers)
+    }
+
+    /** At a limit of 1 the index's range reads would compete with the one stream the account may hold. */
+    private suspend fun subtitleIndexAllowed(): Boolean {
+        val stream = _uiState.value.selectedStream?.takeIf { IptvVodSourceIds.isIptvVodAddonId(it.addonId) } ?: return true
+        // A null policy is No limit or an unresolvable owner, and both stay as they are today.
+        return runCatching {
+            streamRepository.iptvStreamPolicyFor(stream)?.matroskaIndexAllowed ?: true
+        }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrDefault(false)
     }
 
     /** The index for the playing stream has been read and is waiting to be used. */
@@ -6541,6 +6614,10 @@ class PlayerViewModel @Inject constructor(
     ): List<Pair<Long, Long>> {
         val url = _uiState.value.selectedStreamUrl?.takeIf { it.isNotBlank() } ?: run {
             Log.i("SubMatch", "container index skipped: no stream URL")
+            return emptyList()
+        }
+        if (!subtitleIndexAllowed()) {
+            Log.i("SubMatch", "container index skipped: connection limit")
             return emptyList()
         }
         val headers = _uiState.value.selectedStream?.behaviorHints?.proxyHeaders?.request.orEmpty()
@@ -7572,7 +7649,89 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
+    /** The busy message's third button: the next admission does not ask the panel. */
+    fun playIptvAnyway() {
+        iptvSkipCheckOnce = true
+        retryPlayback()
+    }
+
+    /** The account filled up under a playing stream; Retry or Play anyway reopen it through the normal gate. */
+    internal fun reportIptvAccountBusy() {
+        iptvRecheckAfterBusy = true
+        _uiState.value = _uiState.value.copy(error = IPTV_ACCOUNT_BUSY_MESSAGE)
+    }
+
+    internal fun reportIptvReopenBusy(positionMs: Long) {
+        iptvRecheckAfterBusy = true
+        lastKnownPositionMs = positionMs
+        _uiState.update {
+            it.copy(selectedStreamUrl = null, savedPosition = positionMs, error = IPTV_ACCOUNT_BUSY_MESSAGE)
+        }
+    }
+
+    /** Runs only for IPTV VOD: every other source reads no setting and returns without suspending. */
+    internal suspend fun iptvVodPolicy(stream: StreamSource?): com.arflix.tv.data.repository.IptvStreamPolicy? {
+        if (stream == null || !IptvVodSourceIds.isIptvVodAddonId(stream.addonId)) return null
+        return try {
+            streamRepository.iptvStreamPolicyFor(stream)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
+        }
+    }
+
+    internal suspend fun iptvAccountUsage(account: com.arflix.tv.network.IptvProviderAccount) =
+        streamRepository.iptvAccountUsage(account)
+
+    /**
+     * The panel is asked only on a cold start with a reliable allowance. Sits outside
+     * [StreamRepository.resolveStreamForPlayback] and before the startup watchdog, so a
+     * full account is neither a failed source nor a reason to fail over.
+     */
+    private suspend fun admitIptvVodStream(stream: StreamSource?): IptvAdmission {
+        val skipCheck = iptvSkipCheckOnce
+        iptvSkipCheckOnce = false
+        val policy = iptvVodPolicy(stream) ?: return IptvAdmission.Proceed
+        if (!policy.panelCheckAllowed) stream?.let(streamRepository::bootstrapIptvAllowance)
+        if (skipCheck || !policy.panelCheckAllowed) {
+            iptvRecheckAfterBusy = false
+            return IptvAdmission.Proceed
+        }
+        // The close before a Busy keeps the account inside the cold-start window, and opening then would evict someone.
+        if (!iptvRecheckAfterBusy && !IptvPlaybackConnections.sessions.isColdStart(policy.account)) return IptvAdmission.Proceed
+        val answer = IptvAccountAvailability.admit { streamRepository.iptvAccountUsage(policy.account) }
+        iptvRecheckAfterBusy = answer is IptvAdmission.Full
+        return answer
+    }
+
+    /** A provided source that met a full account has run none of its path yet, so it starts over. */
+    private fun restartProvidedStream() {
+        _uiState.value = _uiState.value.copy(error = null)
+        loadMedia(
+            mediaType = currentMediaType,
+            mediaId = currentMediaId,
+            seasonNumber = currentSeason,
+            episodeNumber = currentEpisode,
+            displaySeasonNumber = currentDisplaySeason,
+            displayEpisodeNumber = currentDisplayEpisode,
+            animeQueryOverride = currentAnimeQueryOverride,
+            providedImdbId = currentImdbId,
+            providedStreamUrl = currentProvidedStreamUrl,
+            preferredAddonId = currentPreferredAddonId,
+            preferredSourceName = currentPreferredSourceName,
+            preferredBingeGroup = currentPreferredBingeGroup,
+            startPositionMs = currentStartPositionMs,
+            isLiveStreamPlayback = currentIsLiveStreamPlayback,
+            airDate = currentAirDate,
+            providedIptvSourceId = currentProvidedIptvSourceId
+        )
+    }
+
     fun retryPlayback() {
+        if (iptvBusyOnProvidedPath) {
+            restartProvidedStream()
+            return
+        }
         val stream = _uiState.value.selectedStream
         if (stream != null) {
             _uiState.value = _uiState.value.copy(error = null)
@@ -7873,6 +8032,13 @@ class PlayerViewModel @Inject constructor(
         recentPlayedSourceRepository.save(profileManager.getProfileIdSync(), record)
     }
 
+    private var progressDiscardedForIdle = false
+
+    fun discardProgressForIdle() {
+        progressDiscardedForIdle = true
+        progressSaveJob?.cancel()
+    }
+
     fun saveProgress(
         position: Long,
         duration: Long,
@@ -7881,7 +8047,7 @@ class PlayerViewModel @Inject constructor(
         playbackState: Int,
         closing: Boolean = false
     ): Job? {
-        if (duration <= 0) return null
+        if (progressDiscardedForIdle || duration <= 0) return null
         noteRecentSourcePlayback(position, isPlaying)
 
         // A completion transaction must not be cancelled/restarted by the ended polling tick
@@ -8225,6 +8391,11 @@ class PlayerViewModel @Inject constructor(
     private var streamPrewarmJob: Job? = null
     private var focusedStreamPrewarmJob: Job? = null
     private var streamSelectionJob: Job? = null
+    private var currentProvidedStreamUrl: String? = null
+    private var currentProvidedIptvSourceId: String? = null
+    private var iptvBusyOnProvidedPath = false
+    private var iptvSkipCheckOnce = false
+    private var iptvRecheckAfterBusy = false
     private var playbackErrorReportJob: Job? = null
     private var primaryStreamResolutionFinal: Boolean = false
     private var lastTopPrewarmKey: String = ""

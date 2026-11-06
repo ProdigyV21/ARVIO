@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -80,7 +82,9 @@ import com.arflix.tv.data.repository.SportsRepository
 import com.arflix.tv.ui.components.CardLayoutMode
 import com.arflix.tv.ui.components.LocalBottomBarInset
 import com.arflix.tv.ui.components.MediaCard
+import com.arflix.tv.ui.components.movieGenreNameRes
 import com.arflix.tv.ui.components.rememberCatalogueRowLayoutMode
+import com.arflix.tv.ui.components.tvGenreNameRes
 import com.arflix.tv.ui.focus.arvioDpadFocusGroup
 import com.arflix.tv.ui.screens.home.stableHomeRowItemKeys
 import com.arflix.tv.ui.theme.ArflixTypography
@@ -137,8 +141,13 @@ data class CollectionDetailsUiState(
     val hasMoreSeries: Boolean = false,
     val loadedMovieOffset: Int = 0,
     val loadedSeriesOffset: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    /** Service pages can be narrowed to a genre per tab; null is every genre. */
+    val genreFilterable: Boolean = false,
+    val movieGenreId: Int? = null,
+    val seriesGenreId: Int? = null
 ) {
+    fun genreId(tab: CollectionTab): Int? = if (tab == CollectionTab.MOVIES) movieGenreId else seriesGenreId
     val hasMovies: Boolean get() = movieItems.isNotEmpty()
     val hasSeries: Boolean get() = seriesItems.isNotEmpty()
 }
@@ -195,14 +204,8 @@ class CollectionDetailsViewModel @Inject constructor(
             (loadJob?.isActive == true || (_uiState.value.catalog != null &&
                 !_uiState.value.isLoadingMovies && !_uiState.value.isLoadingSeries))
         ) return
-        loadGeneration += 1
-        val generation = loadGeneration
-        collectionJob.cancel()
-        collectionJob = SupervisorJob(viewModelScope.coroutineContext[Job])
-        collectionScope = CoroutineScope(viewModelScope.coroutineContext + collectionJob)
+        val generation = restartCollectionScope()
         loadedCatalogId = normalizedCatalogId
-        detailJobs.clear()
-        detailAttempts.clear()
         enrichedDetails.clear()
         visibleDetailKeys = emptySet()
         _cardLogoUrls.value = emptyMap()
@@ -226,7 +229,8 @@ class CollectionDetailsViewModel @Inject constructor(
                 supportsMovies = supportsTab(catalog, CollectionTab.MOVIES),
                 supportsSeries = supportsTab(catalog, CollectionTab.SERIES),
                 isLoadingMovies = true,
-                isLoadingSeries = true
+                isLoadingSeries = true,
+                genreFilterable = ServiceGenreFilter.supports(catalog)
             )
 
             val primaryTab = when {
@@ -234,18 +238,72 @@ class CollectionDetailsViewModel @Inject constructor(
                 _uiState.value.supportsSeries -> CollectionTab.SERIES
                 else -> CollectionTab.MOVIES
             }
-            loadInitialTab(catalog, primaryTab, generation)
-            launch {
-                delay(1200L)
-                ensureCurrentLoad(generation)
-                val secondaryTab = if (primaryTab == CollectionTab.MOVIES) CollectionTab.SERIES else CollectionTab.MOVIES
-                if (supportsTab(catalog, secondaryTab)) {
-                    loadInitialTab(catalog, secondaryTab, generation)
-                } else {
-                    _uiState.value = when (secondaryTab) {
-                        CollectionTab.MOVIES -> _uiState.value.copy(isLoadingMovies = false)
-                        CollectionTab.SERIES -> _uiState.value.copy(isLoadingSeries = false)
-                    }
+            loadTabs(catalog, primaryTab, generation, loadSecondary = true)
+        }
+    }
+
+    /**
+     * Narrow [tab] to [genreId] (null for every genre) and reload it from the first page.
+     * The other tab keeps its loaded pages even if an append was in flight.
+     */
+    fun selectGenre(tab: CollectionTab, genreId: Int?) {
+        val state = _uiState.value
+        val catalog = state.catalog ?: return
+        if (!state.genreFilterable || state.genreId(tab) == genreId) return
+        val other = if (tab == CollectionTab.MOVIES) CollectionTab.SERIES else CollectionTab.MOVIES
+        val otherLoaded = when (other) {
+            CollectionTab.MOVIES -> !state.isLoadingMovies
+            CollectionTab.SERIES -> !state.isLoadingSeries
+        }
+        val generation = restartCollectionScope()
+        _uiState.value = CollectionDetailsUiState(
+            catalog = catalog,
+            supportsMovies = state.supportsMovies,
+            supportsSeries = state.supportsSeries,
+            isLoadingMovies = true,
+            isLoadingSeries = true,
+            genreFilterable = true,
+            movieGenreId = if (tab == CollectionTab.MOVIES) genreId else state.movieGenreId,
+            seriesGenreId = if (tab == CollectionTab.SERIES) genreId else state.seriesGenreId
+        ).let { reset ->
+            if (!otherLoaded) reset else when (other) {
+                CollectionTab.MOVIES -> reset.copy(
+                    movieItems = state.movieItems, isLoadingMovies = false, hasMoreMovies = state.hasMoreMovies,
+                    loadedMovieOffset = state.loadedMovieOffset
+                )
+                CollectionTab.SERIES -> reset.copy(
+                    seriesItems = state.seriesItems, isLoadingSeries = false, hasMoreSeries = state.hasMoreSeries,
+                    loadedSeriesOffset = state.loadedSeriesOffset
+                )
+            }
+        }
+        loadJob = collectionScope.launch { loadTabs(catalog, tab, generation, loadSecondary = !otherLoaded) }
+    }
+
+    /** Cancels every in-flight page, logo and detail request of the previous load. */
+    private fun restartCollectionScope(): Long {
+        loadGeneration += 1
+        collectionJob.cancel()
+        collectionJob = SupervisorJob(viewModelScope.coroutineContext[Job])
+        collectionScope = CoroutineScope(viewModelScope.coroutineContext + collectionJob)
+        detailJobs.clear()
+        detailAttempts.clear()
+        return loadGeneration
+    }
+
+    private suspend fun loadTabs(catalog: CatalogConfig, primaryTab: CollectionTab, generation: Long, loadSecondary: Boolean) {
+        loadInitialTab(catalog, primaryTab, generation)
+        if (!loadSecondary) return
+        collectionScope.launch {
+            delay(1200L)
+            ensureCurrentLoad(generation)
+            val secondaryTab = if (primaryTab == CollectionTab.MOVIES) CollectionTab.SERIES else CollectionTab.MOVIES
+            if (supportsTab(catalog, secondaryTab)) {
+                loadInitialTab(catalog, secondaryTab, generation)
+            } else {
+                _uiState.value = when (secondaryTab) {
+                    CollectionTab.MOVIES -> _uiState.value.copy(isLoadingMovies = false)
+                    CollectionTab.SERIES -> _uiState.value.copy(isLoadingSeries = false)
                 }
             }
         }
@@ -626,7 +684,8 @@ class CollectionDetailsViewModel @Inject constructor(
 
     private fun catalogForTab(catalog: CatalogConfig, tab: CollectionTab): CatalogConfig {
         val filteredSources = catalog.collectionSources.filter { sourceMatchesTab(it, tab) }
-        return catalog.copy(collectionSources = filteredSources)
+        val genreId = _uiState.value.takeIf { it.genreFilterable }?.genreId(tab)
+        return catalog.copy(collectionSources = ServiceGenreFilter.apply(filteredSources, genreId))
     }
 
     private fun supportsTab(catalog: CatalogConfig, tab: CollectionTab): Boolean {
@@ -846,6 +905,9 @@ fun CollectionDetailsScreen(
             seriesTabFocusRequester = seriesTabFocusRequester,
             isSportsCollection = isSportsCollection,
             onTabSelected = { selectedTab = it },
+            genreIds = if (uiState.genreFilterable) ServiceGenreFilter.genreIds(activeTab) else emptyList(),
+            selectedGenreId = uiState.genreId(activeTab),
+            onGenreSelected = { viewModel.selectGenre(activeTab, it) },
             onItemClick = { item ->
                 if (SportsAddonCapabilities.isSportsEventStatus(item.status)) {
                     viewModel.openSportsCollectionItem(
@@ -908,13 +970,21 @@ private fun CollectionTabBar(
     seriesTabFocusRequester: FocusRequester,
     isSportsCollection: Boolean,
     onTabSelected: (CollectionTab) -> Unit,
+    genreIds: List<Int>,
+    selectedGenreId: Int?,
+    onGenreSelected: (Int?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val showMovies = hasMovies || !hasSeries
     val showSeries = hasSeries || !hasMovies
     val onlyOne = showMovies xor showSeries
+    val showGenres = !isSportsCollection && genreIds.isNotEmpty()
+    // The grid moves focus between whole items, so Down from a tab would skip the genre row.
+    val genreRowFocusRequester = remember { FocusRequester() }
+    val tabDown = genreRowFocusRequester.takeIf { showGenres }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .arvioDpadFocusGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -933,6 +1003,7 @@ private fun CollectionTabBar(
                 label = stringResource(R.string.movies),
                 isSelected = selectedTab == CollectionTab.MOVIES || onlyOne,
                 focusRequester = moviesTabFocusRequester,
+                downFocusRequester = tabDown,
                 onClick = { onTabSelected(CollectionTab.MOVIES) }
             )
         }
@@ -941,7 +1012,57 @@ private fun CollectionTabBar(
                 label = stringResource(R.string.series),
                 isSelected = selectedTab == CollectionTab.SERIES || onlyOne,
                 focusRequester = seriesTabFocusRequester,
+                downFocusRequester = tabDown,
                 onClick = { onTabSelected(CollectionTab.SERIES) }
+            )
+        }
+    }
+    if (showGenres) {
+        CollectionGenreRow(
+            genreIds = genreIds,
+            isSeries = selectedTab == CollectionTab.SERIES,
+            selectedGenreId = selectedGenreId,
+            focusRequester = genreRowFocusRequester,
+            onGenreSelected = onGenreSelected
+        )
+    }
+    }
+}
+
+@Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+private fun CollectionGenreRow(
+    genreIds: List<Int>,
+    isSeries: Boolean,
+    selectedGenreId: Int?,
+    focusRequester: FocusRequester,
+    onGenreSelected: (Int?) -> Unit
+) {
+    // Null is the "All genres" chip.
+    val chips = listOf<Pair<Int?, String>>(null to stringResource(R.string.all_genres)) +
+        genreIds.mapNotNull { id ->
+            val res = if (isSeries) tvGenreNameRes(id) else movieGenreNameRes(id)
+            res?.let { id to stringResource(it) }
+        }
+    // Wrapped instead of scrolled: every genre stays in view, and a scrolling row inside the
+    // TV grid is pivot-scrolled off its start in right-to-left layouts.
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            // No restorer: Down from the tabs targets a chip directly, and a restorer around
+            // that target crashes ("Release should only be called once") on entry.
+            .arvioDpadFocusGroup(enableFocusRestorer = false),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        chips.forEach { (id, label) ->
+            CollectionTabChip(
+                label = label,
+                isSelected = selectedGenreId == id,
+                // Down from the tabs lands on the genre that is applied.
+                focusRequester = focusRequester.takeIf { selectedGenreId == id },
+                blockUp = false,
+                onClick = { onGenreSelected(id) }
             )
         }
     }
@@ -951,7 +1072,10 @@ private fun CollectionTabBar(
 private fun CollectionTabChip(
     label: String,
     isSelected: Boolean,
-    focusRequester: FocusRequester,
+    focusRequester: FocusRequester? = null,
+    downFocusRequester: FocusRequester? = null,
+    // The tab row is the top of the page; the genre row below it lets Up return to the tabs.
+    blockUp: Boolean = true,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -981,10 +1105,11 @@ private fun CollectionTabChip(
             .clip(shape)
             .background(bg)
             .border(width = borderWidth, color = borderColor, shape = shape)
-            .focusRequester(focusRequester)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(if (downFocusRequester != null) Modifier.focusProperties { down = downFocusRequester } else Modifier)
             .onFocusChanged { isFocused = it.isFocused }
             .onPreviewKeyEvent { event ->
-                event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp
+                blockUp && event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp
             }
             .clickable(onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 7.dp)
@@ -1031,7 +1156,10 @@ internal fun CollectionItemsGrid(
     providerLogos: Map<String, String?> = emptyMap(),
     showTabs: Boolean = true,
     previewItemOverride: MediaItem? = null,
-    onVisiblePositionChanged: (Int, Int) -> Unit = { _, _ -> }
+    onVisiblePositionChanged: (Int, Int) -> Unit = { _, _ -> },
+    genreIds: List<Int> = emptyList(),
+    selectedGenreId: Int? = null,
+    onGenreSelected: (Int?) -> Unit = {}
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val isMobile = LocalDeviceType.current.isTouchDevice()
@@ -1147,6 +1275,9 @@ internal fun CollectionItemsGrid(
                 seriesTabFocusRequester = seriesTabFocusRequester,
                 isSportsCollection = isSportsCollection,
                 onTabSelected = onTabSelected,
+                genreIds = genreIds,
+                selectedGenreId = selectedGenreId,
+                onGenreSelected = onGenreSelected,
                 modifier = Modifier.onFocusChanged { state ->
                     if (!isMobile && state.hasFocus) {
                         focusedRow = -1

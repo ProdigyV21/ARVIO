@@ -12,6 +12,7 @@ import com.arflix.tv.data.repository.sync.RemoteSyncManager
 import io.mockk.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -30,6 +31,7 @@ class WatchlistHomeLibraryTest {
     private val history = mockk<WatchHistoryRepository>(relaxed = true)
     private val catalogItems = MutableStateFlow<List<CatalogConfig>>(emptyList())
     private val traktAuth = MutableStateFlow(false)
+    private val traktReconnect = MutableStateFlow(false)
     private val trakt = mockk<TraktRepository>(relaxed = true)
     private lateinit var model: WatchlistViewModel
 
@@ -63,6 +65,9 @@ class WatchlistHomeLibraryTest {
             awaitCancellation()
         }
         every { trakt.isAuthenticated } returns traktAuth
+        every { trakt.connection } returns traktAuth.combine(traktReconnect) { connected, reconnect ->
+            com.arflix.tv.data.repository.TraktConnection("profile", connected, reconnect)
+        }
         val profiles = mockk<ProfileManager>(relaxed = true) {
             every { activeProfileId } returns MutableStateFlow("profile")
         }
@@ -75,7 +80,7 @@ class WatchlistHomeLibraryTest {
         coEvery { remote.isRemoteConnected(any()) } returns false
         model = WatchlistViewModel(mockk<Context>(relaxed = true), watchlist, cloud, trakt,
             remote, media, homes, catalogs, history, mockk(relaxed = true), simkl, mockk(relaxed = true), profiles,
-            personalLists(), mockk(relaxed = true))
+            lists, mockk(relaxed = true))
         store.put("library", model)
     }
 
@@ -258,12 +263,22 @@ class WatchlistHomeLibraryTest {
 
     @Test fun trackerShowsAllItemsBeforeSlowArtworkHydration() {
         coEvery { trakt.getPersonalLists() } returns emptyList()
-        coEvery { trakt.getWatchlist() } returns (1..605).map { MediaItem(id = it, title = "Movie $it") }
+        coEvery { trakt.libraryWatchlist() } returns (1..605).map { MediaItem(id = it, title = "Movie $it") }
         coEvery { media.getMovieDetails(any()) } coAnswers { awaitCancellation() }
         traktAuth.value = true
         model.selectSource("tracker_trakt___watchlist__")
         assertEquals(605, model.uiState.value.allItems.size)
         assertFalse(model.uiState.value.isLoading)
+    }
+
+    @Test fun lostTraktSessionKeepsItsWatchlistEntryAndShowsAnError() {
+        coEvery { trakt.libraryWatchlist() } throws com.arflix.tv.data.repository.TraktAuthUnavailable(reconnectRequired = true)
+        traktReconnect.value = true
+        assertTrue(model.uiState.value.sources.any { it.id == "tracker_trakt___watchlist__" })
+        model.selectSource("tracker_trakt___watchlist__")
+        assertNotNull(model.uiState.value.error)
+        assertTrue(model.uiState.value.isEmpty)
+        coVerify(exactly = 0) { trakt.getPersonalLists() }
     }
 
     @Test fun temporaryLogoFailureCanRetryOnTheNextViewportVisit() {
@@ -275,9 +290,37 @@ class WatchlistHomeLibraryTest {
         assertTrue(model.logoUrls.value.containsKey(watchlistLogoKey(item)))
     }
 
+    @Test fun unreadableMdbListKeepsOneEntryThatShowsTheError() {
+        coEvery { lists.mdbListLibraryLists() } throws MdbListAuthUnavailable(reconnectRequired = true)
+        mdbList.value = com.arflix.tv.data.repository.sync.MdbListConnection("profile", true, true)
+        val entry = model.uiState.value.sources.filterIsInstance<WatchlistSourceItem.TrackerList>()
+            .single { it.provider == TrackerLibraryProvider.MDBLIST }
+        model.selectSource(entry.id)
+        assertNotNull(model.uiState.value.error)
+        assertTrue(model.uiState.value.isEmpty)
+    }
+
+    @Test fun mdbListEntryIsReplacedByTheListsOnceMdbListAnswers() {
+        coEvery { lists.mdbListLibraryLists() } throws MdbListAuthUnavailable(reconnectRequired = false)
+        mdbList.value = com.arflix.tv.data.repository.sync.MdbListConnection("profile", true, false)
+        val entry = model.uiState.value.sources.filterIsInstance<WatchlistSourceItem.TrackerList>()
+            .single { it.provider == TrackerLibraryProvider.MDBLIST }
+        coEvery { lists.mdbListLibraryLists() } returns listOf(
+            PersonalListsRepository.MdbListLibraryList(7L, "Weekend picks", "user/weekend-picks")
+        )
+        model.selectSource(entry.id)
+        val mdbEntries = model.uiState.value.sources.filterIsInstance<WatchlistSourceItem.TrackerList>()
+            .filter { it.provider == TrackerLibraryProvider.MDBLIST }
+        assertEquals(listOf("Weekend picks"), mdbEntries.map { it.title })
+    }
+
+    private val mdbList = MutableStateFlow(com.arflix.tv.data.repository.sync.MdbListConnection("profile", false, false))
+    private val lists by lazy { personalLists() }
+
     // A relaxed mock's `changes` flow completes at once, which the ViewModel's never-ending
     // collector reports as an uncaught exception; a real (empty) flow behaves like production.
     private fun personalLists() = mockk<com.arflix.tv.data.repository.PersonalListsRepository>(relaxed = true) {
         every { changes } returns kotlinx.coroutines.flow.MutableSharedFlow()
+        every { mdbListConnection } returns mdbList
     }
 }

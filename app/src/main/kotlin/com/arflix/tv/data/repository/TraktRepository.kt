@@ -507,13 +507,16 @@ class TraktRepository @Inject constructor(
      * Returns null gracefully if not authenticated or if the request fails — a
      * failed username fetch must never break the auth or sync flow.
      */
-    suspend fun fetchUsername(): String? = withContext(Dispatchers.IO) {
+    suspend fun fetchUsername(): String? = checkSession().getOrNull()
+
+    /** The username when the stored session really works; otherwise why it does not. */
+    suspend fun checkSession(): Result<String?> = withContext(Dispatchers.IO) {
         try {
-            traktSession.authorized { auth -> traktApi.getMe(auth = auth, clientId = clientId).username }
+            Result.success(traktSession.authorized { auth -> traktApi.getMe(auth = auth, clientId = clientId).username })
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -3407,44 +3410,62 @@ class TraktRepository @Inject constructor(
 
     suspend fun getPersonalListItems(listId: String): List<MediaItem> {
         val auth = getAuthHeader() ?: return emptyList()
-
-        suspend fun loadItems(): List<TraktPublicListItem> {
-            val result = mutableListOf<TraktPublicListItem>()
-            var page = 1
-            var previousPage: List<TraktPublicListItem>? = null
-            while (true) {
-                val rows = traktApi.getMyListItems(
-                    auth = auth,
-                    clientId = clientId,
-                    listId = listId,
-                    type = TRAKT_PERSONAL_LIST_ITEM_TYPES,
-                    page = page,
-                    limit = PERSONAL_LIST_PAGE_SIZE
-                )
-                if (rows == previousPage) break
-                result += rows
-                if (rows.size < PERSONAL_LIST_PAGE_SIZE) break
-                previousPage = rows
-                page += 1
-            }
-            return result
-        }
-
         return try {
-            val rows = loadItems()
-            val items = mapTraktPersonalListItems(rows, rows.size)
-            AppLogger.breadcrumb(
-                tag = "Trakt",
-                message = "personal_list_mapped raw=${rows.size} mapped=${items.size}",
-                severity = if (rows.isNotEmpty() && items.isEmpty()) "warning" else "info"
-            )
-            items
+            mapPersonalListRows(loadPersonalListRows(auth, listId))
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
         } catch (error: Exception) {
             AppLogger.e("TraktRepository", "Failed loading personal list $listId: ${error.message}")
             emptyList()
         }
+    }
+
+    /**
+     * Library reads. Unlike the Home helpers above, a lost session or a failed request throws
+     * ([TraktAuthUnavailable] or the HTTP error) so the screen can say so instead of looking empty.
+     */
+    suspend fun libraryWatchlist(): List<MediaItem> {
+        ensureProfileCacheScope()
+        val watchlist = traktSession.authorized { auth -> fetchAllWatchlistItems(auth) }
+        return mapWatchlistItemsFastWithFallback(watchlist)
+            .sortedWith(compareBy<MediaItem> { it.sourceOrder }.thenByDescending { it.addedAt })
+    }
+
+    suspend fun libraryPersonalListItems(listId: String): List<MediaItem> {
+        ensureProfileCacheScope()
+        return mapPersonalListRows(traktSession.authorized { auth -> loadPersonalListRows(auth, listId) })
+    }
+
+    private suspend fun loadPersonalListRows(auth: String, listId: String): List<TraktPublicListItem> {
+        val result = mutableListOf<TraktPublicListItem>()
+        var page = 1
+        var previousPage: List<TraktPublicListItem>? = null
+        while (true) {
+            val rows = traktApi.getMyListItems(
+                auth = auth,
+                clientId = clientId,
+                listId = listId,
+                type = TRAKT_PERSONAL_LIST_ITEM_TYPES,
+                page = page,
+                limit = PERSONAL_LIST_PAGE_SIZE
+            )
+            if (rows == previousPage) break
+            result += rows
+            if (rows.size < PERSONAL_LIST_PAGE_SIZE) break
+            previousPage = rows
+            page += 1
+        }
+        return result
+    }
+
+    private suspend fun mapPersonalListRows(rows: List<TraktPublicListItem>): List<MediaItem> {
+        val items = mapTraktPersonalListItems(rows, rows.size)
+        AppLogger.breadcrumb(
+            tag = "Trakt",
+            message = "personal_list_mapped raw=${rows.size} mapped=${items.size}",
+            severity = if (rows.isNotEmpty() && items.isEmpty()) "warning" else "info"
+        )
+        return items
     }
 
     data class WatchlistSyncResult(

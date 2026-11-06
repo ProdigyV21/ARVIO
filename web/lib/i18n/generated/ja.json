@@ -1559,5 +1559,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "このソースの音声はこのブラウザで再生できません。別のソースを選ぶか、外部プレーヤーを使用してください。",
   "Converting the audio for your browser…": "ブラウザ用に音声を変換しています…",
   "Picking the best source…": "最適なソースを選んでいます…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi では米ドルで請求され、金額は銀行で自動的に換算されます。"
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi では米ドルで請求され、金額は銀行で自動的に換算されます。",
+  "Maximum of 10 IPTV playlists reached": "IPTV プレイリストは最大 10 件までです",
+  "Regional price · save {value0} vs. 12 monthly payments": "地域価格 · 月払い12回分に比べて{value0}お得",
+  "One payment, no automatic renewal. About {value0} a month.": "1回限りの支払いで、自動更新はありません。月あたり約 {value0} です。",
+  "12-month pass · {value0}": "12か月パス · {value0}"
 }

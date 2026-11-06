@@ -3,10 +3,12 @@ package com.arflix.tv.ui.screens.watchlist.calendar
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
@@ -23,10 +25,12 @@ import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +38,7 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
@@ -52,6 +57,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.BorderLight
 import com.arflix.tv.ui.theme.TextSecondary
@@ -144,9 +150,10 @@ fun LibraryCalendarPane(
             } else false
         }
     BoxWithConstraints(modifier.fillMaxSize().testTag("library-calendar")) {
-        val compact = maxWidth < 600.dp
-        val compactToolbar = maxWidth < 800.dp
-        val scrollable = compact || maxHeight < 320.dp
+        val isMobileLandscape = touch && maxHeight < 500.dp
+        val compact = maxWidth < 600.dp || isMobileLandscape
+        val compactToolbar = maxWidth < 800.dp && !isMobileLandscape
+        val scrollable = touch || compact || maxHeight < 560.dp
         val scroll = rememberScrollState()
         Column(Modifier.fillMaxSize().then(if (scrollable) Modifier.verticalScroll(scroll) else Modifier)) {
             CalendarToolbar(state, locale, compactToolbar, monthButton, onChangeMonth,
@@ -158,12 +165,13 @@ fun LibraryCalendarPane(
             }
             Row(Modifier.fillMaxWidth().height(if (compact) 30.dp else 24.dp), verticalAlignment = Alignment.CenterVertically) {
                 DayOfWeek.entries.forEach { day ->
-                    Text(day.getDisplayName(if (compact) TextStyle.SHORT else TextStyle.FULL, locale),
-                        Modifier.weight(1f), color = CalendarSecondary, fontSize = if (compact) 11.sp else 11.sp,
+                    Text(day.getDisplayName(if (compact || touch) TextStyle.SHORT else TextStyle.FULL, locale),
+                        Modifier.weight(1f), color = CalendarSecondary, fontSize = 11.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 1)
                 }
             }
-            Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height((dates.size / 7 * if (compact) 67 else 52).dp) else Modifier.weight(1f))
+            val gridHeight = if (isMobileLandscape) (dates.size / 7 * 48).dp else if (compact) (dates.size / 7 * 64).dp else (dates.size / 7 * 52).dp
+            Column(Modifier.fillMaxWidth().then(if (scrollable) Modifier.height(gridHeight) else Modifier.weight(1f))
                 .testTag("calendar-month-grid"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 dates.chunked(7).forEach { week ->
                     Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp)) {
@@ -253,53 +261,115 @@ fun LibraryCalendarPane(
             Spacer(Modifier.height(if (touch) 16.dp + LocalBottomBarInset.current else 8.dp))
         }
     }
-    if (showSources) Dialog(onDismissRequest = { showSources = false }) {
+    if (showSources) Dialog(
+        onDismissRequest = { showSources = false },
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
         val selectedSourceFocus = remember { FocusRequester() }
-        LaunchedEffect(Unit) { selectedSourceFocus.requestFocus() }
-        Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(8.dp)).background(BackgroundCard)
-            .padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("Watchlists"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
-                IconButton(onClick = { showSources = false }) { Icon(Icons.Outlined.Close, tr("Close"), tint = Color.White) }
-            }
-            state.sources.forEach { source ->
-                CalendarSourceRow(source, source.id == state.selectedSourceId, state.sourceCounts[source.id],
-                    Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag("calendar-source-${source.id}")
-                    .then(if (source.id == state.selectedSourceId) Modifier.focusRequester(selectedSourceFocus) else Modifier)
-                    .semantics { selected = source.id == state.selectedSourceId },
-                    onClick = { onSelectSource(source.id); showSources = false })
+        LaunchedEffect(Unit) { if (!touch) selectedSourceFocus.requestFocus() }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .testTag("calendar-sources-dialog")
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .pointerInput(Unit) {
+                        detectTapGestures { showSources = false }
+                    }
+            )
+            Column(
+                Modifier
+                    .then(
+                        if (touch) {
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .heightIn(max = 520.dp)
+                                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                                .background(BackgroundDark)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { }
+                                }
+                                .padding(horizontal = 20.dp, vertical = 14.dp)
+                                .navigationBarsPadding()
+                        } else {
+                            Modifier
+                                .align(Alignment.Center)
+                                .widthIn(max = 300.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BackgroundCard)
+                                .pointerInput(Unit) {
+                                    detectTapGestures { }
+                                }
+                                .padding(12.dp)
+                        }
+                    )
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (touch) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.width(36.dp).height(4.dp).background(Color.White.copy(alpha = 0.35f), CircleShape))
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Watchlists"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = if (touch) 20.sp else 16.sp, modifier = Modifier.weight(1f).padding(start = 4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.12f))
+                            .clickable { showSources = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Close, contentDescription = tr("Close"), tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
+                }
+                state.sources.forEach { source ->
+                    CalendarSourceRow(source, source.id == state.selectedSourceId, state.sourceCounts[source.id],
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag("calendar-source-${source.id}")
+                        .then(if (source.id == state.selectedSourceId && !touch) Modifier.focusRequester(selectedSourceFocus) else Modifier)
+                        .semantics { selected = source.id == state.selectedSourceId },
+                        onClick = { onSelectSource(source.id); showSources = false })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CalendarToolbar(state: ReleaseCalendarUiState, locale: Locale, compact: Boolean, monthButton: FocusRequester,
+private fun CalendarToolbar(state: ReleaseCalendarUiState, locale: Locale, compactToolbar: Boolean, monthButton: FocusRequester,
     onMonth: (Long) -> Unit, onSources: () -> Unit, onExitUp: () -> Unit, onEnterGrid: () -> Unit) {
     val touch = LocalDeviceType.current.isTouchDevice()
     Column(Modifier.onPreviewKeyEvent {
         if (!touch && it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) { onEnterGrid(); true } else false
     }) {
-        Row(Modifier.fillMaxWidth().height(if (compact || touch) 44.dp else 24.dp)
+        Row(Modifier.fillMaxWidth().height(if (touch) 44.dp else 24.dp)
             .onPreviewKeyEvent { if (!touch && it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) { onExitUp(); true } else false }, verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 10.dp)) {
+            horizontalArrangement = Arrangement.spacedBy(if (compactToolbar) 4.dp else 10.dp)) {
             CalendarArrow(false, Modifier.focusRequester(monthButton).testTag("calendar-previous-month")
                 .onPreviewKeyEvent { if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionUp) { onExitUp(); true } else false }) { onMonth(-1) }
             Text(state.month.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)), color = Color.White,
-                fontSize = if (compact) 15.sp else 13.sp, maxLines = 1, fontWeight = FontWeight.Medium,
-                modifier = Modifier.testTag("calendar-month-label").then(if (compact) Modifier.weight(1f) else Modifier))
+                fontSize = if (touch) 16.sp else 13.sp, maxLines = 1, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.testTag("calendar-month-label").then(if (compactToolbar) Modifier.weight(1f) else Modifier))
             CalendarArrow(true, Modifier.testTag("calendar-next-month")) { onMonth(1) }
-            if (!compact) {
+            if (!compactToolbar) {
+                Spacer(Modifier.width(6.dp))
                 CalendarButton(tr(state.sources.firstOrNull { it.id == state.selectedSourceId }?.label ?: "All watchlists"),
-                    Modifier.widthIn(min = 118.dp).testTag("calendar-source-filter"), dropdown = true, onClick = onSources)
-                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.sources.filter { state.selectedSourceId == ReleaseCalendarSource.ALL.id && it != ReleaseCalendarSource.ALL && it != ReleaseCalendarSource.ARVIO }.forEach { source ->
-                        CalendarSourceBadge(source)
+                    Modifier.testTag("calendar-source-filter"), dropdown = true, onClick = onSources)
+                if (!touch) {
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.sources.filter { state.selectedSourceId == ReleaseCalendarSource.ALL.id && it != ReleaseCalendarSource.ALL && it != ReleaseCalendarSource.ARVIO }.forEach { source ->
+                            CalendarSourceBadge(source)
+                        }
                     }
                 }
             }
         }
-        if (compact) Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically,
+        if (compactToolbar) Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalendarButton(tr(state.sources.firstOrNull { it.id == state.selectedSourceId }?.label ?: "All watchlists"),
                 Modifier.testTag("calendar-source-filter"), dropdown = true, onClick = onSources)
@@ -337,14 +407,20 @@ private fun CalendarButton(label: String, modifier: Modifier = Modifier, selecte
     var focused by remember { mutableStateOf(false) }
     val touch = LocalDeviceType.current.isTouchDevice()
     val active = selected || focused
-    val shape = RoundedCornerShape(if (dropdown) 6.dp else 30.dp)
+    val shape = if (touch) CircleShape else RoundedCornerShape(if (dropdown) 6.dp else 30.dp)
+    val background = if (active) Color.White else if (touch && dropdown) BackgroundElevated else Color.Transparent
+    val foreground = if (active) Color.Black else Color.White
+    val border = if (touch && dropdown) null else BorderStroke(0.6.dp, if (active) Color.White else BorderLight)
     Row(modifier.heightIn(min = if (touch) 44.dp else 0.dp).onFocusChanged { focused = it.isFocused }.clip(shape)
-        .background(if (active) Color.White else Color.Transparent).border(.6.dp, if (active) Color.White else BorderLight, shape)
-        .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(label, color = if (active) Color.Black else Color.White, fontSize = if (touch || dropdown) 12.sp else 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        .then(if (border != null) Modifier.border(border, shape) else Modifier)
+        .background(background)
+        .clickable(onClick = onClick).padding(horizontal = if (touch) 14.dp else 16.dp, vertical = if (touch) 8.dp else 3.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = foreground, fontSize = if (touch) 13.sp else if (dropdown) 12.sp else 10.sp,
+            fontWeight = if (touch) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false))
-        if (dropdown) Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = if (active) Color.Black else Color.White, modifier = Modifier.size(15.dp))
+        if (dropdown) Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = foreground, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -357,13 +433,14 @@ private fun CalendarSourceRow(source: ReleaseCalendarSource, selected: Boolean, 
         .padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val icon = when (source) {
-            ReleaseCalendarSource.TRAKT -> R.drawable.calendar_trakt_official
-            ReleaseCalendarSource.SIMKL -> R.drawable.calendar_simkl_official
-            ReleaseCalendarSource.MDBLIST -> R.drawable.calendar_mdblist_official
-            else -> null
+            ReleaseCalendarSource.ALL -> R.drawable.ic_all_watchlists
+            ReleaseCalendarSource.ARVIO -> R.drawable.ic_arvio
+            ReleaseCalendarSource.TRAKT -> R.drawable.ic_trakt
+            ReleaseCalendarSource.SIMKL -> R.drawable.ic_simkl
+            ReleaseCalendarSource.MDBLIST -> R.drawable.ic_mdblist
         }
         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-            if (icon != null) Image(painterResource(icon), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            Icon(painterResource(icon), null, Modifier.size(20.dp), tint = foreground)
         }
         Text(tr(source.label), Modifier.weight(1f), color = foreground, fontSize = 13.sp, maxLines = 2)
         count?.let { Text(it.toString(), color = foreground.copy(.7f), fontSize = 11.sp) }
@@ -474,8 +551,12 @@ private fun CalendarRelease.artwork(): String? = media.episodeStill?.takeIf { it
 
 @Composable
 private fun releaseSubtitle(release: CalendarRelease, timezone: ZoneId, locale: Locale, concise: Boolean = false, includeEpisodeTitle: Boolean = false): String {
-    val time = release.releaseInstant?.atZone(timezone)?.format(DateTimeFormatter.ofPattern("HH:mm", locale)) ?: tr("Time TBA")
-    if (concise) return time
+    val context = LocalContext.current
+    val is24Hour = remember(context) { android.text.format.DateFormat.is24HourFormat(context) }
+    val timePattern = if (is24Hour) "HH:mm" else "h:mm a"
+    val time = release.releaseInstant?.atZone(timezone)?.format(DateTimeFormatter.ofPattern(timePattern, locale))
+        ?: if (release.kind == CalendarReleaseKind.EPISODE) tr("Time TBA") else null
+    if (concise) return time.orEmpty()
     val label = if (release.kind == CalendarReleaseKind.EPISODE) {
         if (release.seasonNumber != null && release.episodeNumber != null) String.format(Locale.ROOT, "S%02d E%02d", release.seasonNumber, release.episodeNumber)
         else tr("Episode")

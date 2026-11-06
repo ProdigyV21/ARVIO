@@ -1561,5 +1561,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "Šī avota audio nevar atskaņot šajā pārlūkprogrammā. Izvēlieties citu avotu vai izmantojiet ārēju atskaņotāju.",
   "Converting the audio for your browser…": "Audio tiek konvertēts jūsu pārlūkprogrammai…",
   "Picking the best source…": "Tiek izvēlēts labākais avots…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi iekasē maksu ASV dolāros; jūsu banka summu konvertē automātiski."
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi iekasē maksu ASV dolāros; jūsu banka summu konvertē automātiski.",
+  "Maximum of 10 IPTV playlists reached": "Sasniegts maksimālais skaits — 10 IPTV atskaņošanas saraksti",
+  "Regional price · save {value0} vs. 12 monthly payments": "Reģionālā cena · ietaupiet {value0} salīdzinājumā ar 12 ikmēneša maksājumiem",
+  "One payment, no automatic renewal. About {value0} a month.": "Viens maksājums, bez automātiskas atjaunošanas. Aptuveni {value0} mēnesī.",
+  "12-month pass · {value0}": "12 mēnešu caurlaide · {value0}"
 }

@@ -7,7 +7,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     id: "2026-11-explore-yearly",
     date: "2026-11-01",
     title: "A 12-month pass and invites",
-    body: "Premium now has a $20 pass for a whole year, and you can invite a friend from Settings: when they join, you both get a free month."
+    body: "Premium now has a 12-month pass, and you can invite a friend from Settings. When they join Premium, you both get a free month."
   },
   {
     id: "2026-10-kids",

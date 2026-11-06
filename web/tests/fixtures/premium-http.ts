@@ -18,6 +18,7 @@ export const fixture = {
   deferNextStatus: false,
   deferNextLink: false,
   markPaid: () => { state = paid; },
+  markYearlyPaid: () => { state = { ...paid, plan: 'yearly' }; },
   completeStatusAsPaid: () => { completeStatus?.(paid); completeStatus = undefined; },
   completeLinkAsPaid: () => { completeLink?.(paid); completeLink = undefined; },
 };

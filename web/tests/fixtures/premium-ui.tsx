@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { EntitlementGate } from '../../components/shell/Paywall';
+import { EntitlementGate, PaywallScreen } from '../../components/shell/Paywall';
 import { PremiumAccount } from '../../components/shell/PremiumAccount';
 import { MembershipCheckout } from '../../components/shell/MembershipCheckout';
 import { fixture } from './premium-http';
@@ -28,10 +28,13 @@ function CheckoutOnly() {
     <p data-testid="activation-result">{activated ? 'Paid activation applied' : 'No paid activation applied'}</p>
   </main>;
 }
-const checkoutOnly = new URLSearchParams(location.search).get('case')?.startsWith('checkout');
+const scenario = new URLSearchParams(location.search).get('case');
+const checkoutOnly = scenario?.startsWith('checkout');
 createRoot(document.getElementById('root')!).render(<>
   <div style={{padding: 12, background: '#202020', fontSize: 13}}>Local payment-flow test: no real payments or emails. Valid fixture code: 1234567890abcdef.</div>
-  {checkoutOnly ? <CheckoutOnly /> : <EntitlementGate>
+  {checkoutOnly ? <CheckoutOnly /> : scenario === 'preview-signedout'
+    ? <PaywallScreen state={null} accountId={null} isSignedIn={false} onEntitled={() => {}} onConnect={() => {}} onSignOut={() => {}} />
+    : <EntitlementGate>
     <main style={{maxWidth: 820, margin: '24px auto', padding: '0 20px'}}>
       <h1 style={{fontSize: 24, marginBottom: 24}}>Accounts</h1>
       <PremiumAccount />
