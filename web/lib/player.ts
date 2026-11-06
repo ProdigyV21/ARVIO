@@ -511,6 +511,18 @@ export function attachPlayback(video: HTMLVideoElement, url: string, options: Pl
       };
       instance.on(mpegts.Events.MEDIA_INFO, onMediaInfo);
       cleanup.push(() => instance.off(mpegts.Events.MEDIA_INFO, onMediaInfo));
+      if (live) {
+        // A live channel has no end: the provider closing the stream (a panel
+        // evicting this connection, a restart) is a drop. mpegts.js reports it
+        // as a complete load and the picture would freeze on the last frame,
+        // with the stall watchdog standing down on an ended element.
+        const ended = () => fail("network", "The channel's stream ended.", "LIVE_STREAM_ENDED", true);
+        if (mpegts.Events.LOADING_COMPLETE) {
+          instance.on(mpegts.Events.LOADING_COMPLETE, ended);
+          cleanup.push(() => instance.off(mpegts.Events.LOADING_COMPLETE, ended));
+        }
+        listen(video, "ended", ended);
+      }
       controls = { selectAudioTrack: () => false, selectQuality: () => false, goLive: () => seekToLiveEdge(video) };
       instance.attachMediaElement(video);
       if (active()) instance.load();
