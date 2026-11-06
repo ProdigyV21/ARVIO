@@ -49,6 +49,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.LayoutDirection
 import com.arflix.tv.ui.focus.mirrorHorizontalForRtl
@@ -329,6 +330,12 @@ fun WatchlistScreen(
             } else {
             if (compact) {
                 if (search) {
+                    val searchFocus = remember { FocusRequester() }
+                    val keyboard = LocalSoftwareKeyboardController.current
+                    LaunchedEffect(searchFocus) {
+                        searchFocus.requestFocus()
+                        keyboard?.show()
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -349,7 +356,7 @@ fun WatchlistScreen(
                         BasicTextField(
                             value = query,
                             onValueChange = { query = it },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).focusRequester(searchFocus).testTag("library-search-field"),
                             singleLine = true,
                             textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
                             cursorBrush = SolidColor(resolveAccentColor(Color.White)),
@@ -612,7 +619,7 @@ fun WatchlistScreen(
             onConfirm = { query = it.trim(); search = false }, onCancel = { search = false })
     }
     if(sourcesOpen) OledDrawer(tr("Sources"), { sourcesOpen = false }) {
-        OledSources(scopeSources, selectedId, Modifier.fillMaxWidth(), ::selectSource, onNavigateToSettings)
+        OledSources(scopeSources, selectedId, Modifier.fillMaxWidth(), ::selectSource, onNavigateToSettings, inDrawer = true)
     }
     if(filters) OledDrawer(tr("Filters"), { filters = false; if(!touch) filterButton.requestFocus() }) {
         Text(tr("Sort"), color = Color.LightGray, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -743,7 +750,8 @@ private fun OledSources(
     selectedId: String,
     modifier: Modifier,
     select: (WatchlistSourceItem) -> Unit,
-    settings: (String) -> Unit
+    settings: (String) -> Unit,
+    inDrawer: Boolean = false
 ) {
     val touch = LocalDeviceType.current.isTouchDevice()
     val groups = sources.groupBy { when(it) {
@@ -751,57 +759,65 @@ private fun OledSources(
         is WatchlistSourceItem.HomeServer -> it.candidate.serverName
         else -> it.subtitle ?: tr("Lists")
     } }
-    val content: @Composable () -> Unit = {
-        groups.forEach { (group, entries) ->
-            Column(Modifier.padding(top = if (touch) 10.dp else 24.dp, bottom = 6.dp, start = 8.dp)) {
-                val provider = (entries.firstOrNull() as? WatchlistSourceItem.TrackerList)?.provider
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    when (provider) {
-                        TrackerLibraryProvider.TRAKT -> Icon(painterResource(R.drawable.ic_trakt), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                        TrackerLibraryProvider.SIMKL -> Icon(painterResource(R.drawable.ic_simkl), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                        TrackerLibraryProvider.MDBLIST -> Icon(painterResource(R.drawable.ic_mdblist), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                        else -> Unit
-                    }
-                    Text(
-                        group.uppercase(),
-                        color = Color.White.copy(alpha = 0.75f),
-                        fontSize = if (provider != null) 9.sp else 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        maxLines = 1
-                    )
+    val header: @Composable (String, WatchlistSourceItem?) -> Unit = { group, first ->
+        Column(Modifier.padding(top = if (touch) 10.dp else 24.dp, bottom = 6.dp, start = 8.dp)) {
+            val provider = (first as? WatchlistSourceItem.TrackerList)?.provider
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                when (provider) {
+                    TrackerLibraryProvider.TRAKT -> Icon(painterResource(R.drawable.ic_trakt), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    TrackerLibraryProvider.SIMKL -> Icon(painterResource(R.drawable.ic_simkl), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    TrackerLibraryProvider.MDBLIST -> Icon(painterResource(R.drawable.ic_mdblist), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    else -> Unit
                 }
-                (entries.firstOrNull() as? WatchlistSourceItem.HomeServer)?.let { Text(it.candidate.serverKind.name.lowercase().replaceFirstChar(Char::titlecase), color = Color.Gray, fontSize = 11.sp) }
-            }
-            entries.forEach { source ->
-                OledControl(
-                    label = tr(source.title),
-                    selected = source.id == selectedId,
-                    compact = touch,
-                    trailingIcon = if (source.id == selectedId) Icons.Outlined.Check else null,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("library-source-${source.id}"),
-                    icon = (source as? WatchlistSourceItem.HomeServer)?.let { if(it.candidate.collectionType.contains("movie", true)) Icons.Outlined.Movie else Icons.Outlined.Tv },
-                    onClick = { select(source) }
+                Text(
+                    group.uppercase(),
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = if (provider != null) 9.sp else 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1
                 )
             }
-        }
-        if(sources.isEmpty() || sources.any { it is WatchlistSourceItem.HomeServer }) {
-            OledControl(
-                label = "+ ${tr("Connect server")}",
-                compact = touch,
-                modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
-                maxLines = 2,
-                onClick = { settings("home_server") }
-            )
+            (first as? WatchlistSourceItem.HomeServer)?.let { Text(it.candidate.serverKind.name.lowercase().replaceFirstChar(Char::titlecase), color = Color.Gray, fontSize = 11.sp) }
         }
     }
-    if (touch) {
+    val row: @Composable (WatchlistSourceItem) -> Unit = { source ->
+        OledControl(
+            label = tr(source.title),
+            selected = source.id == selectedId,
+            compact = touch,
+            trailingIcon = if (source.id == selectedId) Icons.Outlined.Check else null,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("library-source-${source.id}"),
+            icon = (source as? WatchlistSourceItem.HomeServer)?.let { if(it.candidate.collectionType.contains("movie", true)) Icons.Outlined.Movie else Icons.Outlined.Tv },
+            onClick = { select(source) }
+        )
+    }
+    val showConnect = sources.isEmpty() || sources.any { it is WatchlistSourceItem.HomeServer }
+    val connect: @Composable () -> Unit = {
+        OledControl(
+            label = "+ ${tr("Connect server")}",
+            compact = touch,
+            modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+            maxLines = 2,
+            onClick = { settings("home_server") }
+        )
+    }
+    if (inDrawer) {
+        // The drawer scrolls the header and the sources together.
         Column(modifier.testTag("library-sources"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            content()
+            groups.forEach { (group, entries) ->
+                header(group, entries.firstOrNull())
+                entries.forEach { source -> key(source.id) { row(source) } }
+            }
+            if (showConnect) connect()
         }
     } else {
         LazyColumn(modifier.testTag("library-sources"), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-            item { content() }
+            groups.forEach { (group, entries) ->
+                item("group:$group") { header(group, entries.firstOrNull()) }
+                items(entries, key = { it.id }) { row(it) }
+            }
+            if (showConnect) item("connect") { connect() }
         }
     }
 }
