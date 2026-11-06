@@ -9,6 +9,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -72,7 +74,7 @@ class OledLibraryDeviceTest {
         compose.onNodeWithText("Filters").performClick()
         compose.onNodeWithText("Title A-Z").assertIsDisplayed().performClick()
         capture("filters-right")
-        compose.onNodeWithText("Close ×").performClick()
+        compose.onNode(hasTestTag("library-drawer-close") or hasText("Close") or hasText("Close ×")).performClick()
         card(0).performClick()
         assertNotNull(opened)
     }
@@ -87,6 +89,36 @@ class OledLibraryDeviceTest {
         compose.onNodeWithText("Homeserver").performClick()
         compose.onNodeWithTag("library-card-0").assertIsDisplayed()
         capture("server-libraries")
+    }
+
+    @Test fun tabletSidebarScrollsToTheLastSource() {
+        show(false, deviceOverride = DeviceType.TABLET, serverCount = 32)
+        compose.onNodeWithText("Homeserver").performClick()
+        compose.onNodeWithTag("library-sources").performScrollToKey("server_fixture-library-31")
+        compose.onNodeWithTag("library-source-server_fixture-library-31").assertIsDisplayed().performClick()
+        verify { model.selectLibrary("fixture-library-31") }
+    }
+
+    @Test fun phoneSourceDrawerStillScrollsToTheLastSource() {
+        show(false, deviceOverride = DeviceType.PHONE, serverCount = 32)
+        compose.onNodeWithText("Homeserver").performScrollTo().performClick()
+        compose.onNodeWithTag("library-source-picker").performClick()
+        compose.onNodeWithTag("library-source-server_fixture-library-31").performScrollTo().assertIsDisplayed().performClick()
+        verify { model.selectLibrary("fixture-library-31") }
+    }
+
+    @Test fun phoneSearchOpensTheKeyboardOnTheFirstTap() {
+        show(false, deviceOverride = DeviceType.PHONE)
+        compose.onNodeWithContentDescription("Search library").performTouchInput { click() }
+        val field = compose.onNodeWithTag("library-search-field").assertIsFocused()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
+                    ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            }
+        }
+        field.performTextInput("fixture")
+        field.assertTextContains("fixture")
     }
     @Test fun posterAndLongGridScroll() {
         show(true)
@@ -222,7 +254,7 @@ class OledLibraryDeviceTest {
             }
         }
     }
-    private fun show(poster: Boolean, fixedPreview: Boolean = false) {
+    private fun show(poster: Boolean, fixedPreview: Boolean = false, deviceOverride: DeviceType? = null, serverCount: Int = 1) {
         val context = compose.activity
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
         val destination = File(context.cacheDir, "library-fixtures").apply { mkdirs() }
@@ -240,12 +272,18 @@ class OledLibraryDeviceTest {
         val lists = listOf("Friday night","Science fiction essentials","Family favourites","Hidden gems","Weekend series","Award winners").mapIndexed { index, title ->
             WatchlistSourceItem.Catalog(CatalogConfig("fixture-$index", title, CatalogSourceType.TRAKT)) }
         val server = HomeServerCatalogCandidate("Movies", "fixture-movies", "Home NAS", "Movies", "movies", HomeServerKind.JELLYFIN, "fixture")
+        val serverLibraries = listOf(server) + (1 until serverCount).map { index ->
+            server.copy(sourceRef = "fixture-library-$index", collectionName = "Library $index")
+        }
         ui = MutableStateFlow(WatchlistUiState(sources=listOf(WatchlistSourceItem.MyWatchlist,
             WatchlistSourceItem.TrackerList(TrackerLibraryProvider.TRAKT,"watchlist","Watchlist"),
             WatchlistSourceItem.TrackerList(TrackerLibraryProvider.SIMKL,"plantowatch","Plan to watch"), WatchlistSourceItem.HomeServer(server)) + lists,
             isLoading=false, movies=titles.filter { it.mediaType == MediaType.MOVIE }, series=titles.filter { it.mediaType == MediaType.TV }))
-        library = MutableStateFlow(HomeLibraryUiState(providers=listOf(HomeServerKind.JELLYFIN),libraries=listOf(server)))
+        library = MutableStateFlow(HomeLibraryUiState(providers=listOf(HomeServerKind.JELLYFIN),libraries=serverLibraries))
         every { model.uiState } returns ui; every { model.libraryState } returns library; every { model.logoUrls } returns MutableStateFlow(logos)
+        every { model.kidsFilterState } returns MutableStateFlow(KidsContentFilter.State(null, "US", emptyMap()))
+        every { model.applyKidsFilter(any<WatchlistUiState>(), any()) } answers { firstArg() }
+        every { model.applyKidsFilter(any<HomeLibraryUiState>(), any()) } answers { firstArg() }
         coEvery { model.loadLibraryPreview(any()) } answers { LibraryPreview(firstArg<MediaItem>().copy(overview = "A detailed description of ${firstArg<MediaItem>().title}.")) }
         every { model.selectSource(any()) } answers { ui.value=ui.value.copy(selectedSourceId=firstArg()) }
         every { model.selectLibraryProvider(any()) } answers { library.value=library.value.copy(selectedProvider=firstArg(),selectedSourceRef=server.sourceRef,items=titles) }
@@ -257,7 +295,7 @@ class OledLibraryDeviceTest {
             previousLayout=context.settingsDataStore.data.first()[key]
             context.settingsDataStore.edit { it[key]=if(poster) "Poster" else "Landscape" }
         }
-        val device=if(InstrumentationRegistry.getArguments().getString("formFactor") == "tablet") DeviceType.TABLET else if(context.resources.configuration.screenWidthDp < 600) DeviceType.PHONE else DeviceType.TV
+        val device = deviceOverride ?: if(InstrumentationRegistry.getArguments().getString("formFactor") == "tablet") DeviceType.TABLET else if(context.resources.configuration.screenWidthDp < 600) DeviceType.PHONE else DeviceType.TV
         compose.setContent { CompositionLocalProvider(LocalDeviceType provides device, LocalAccentColorOverride provides Color.White) {
             WatchlistScreen(model,currentProfile=Profile(id="fixture", name="P", avatarColor=0xFF242426L),onNavigateToDetails={ _,id -> opened=id })
         } }
