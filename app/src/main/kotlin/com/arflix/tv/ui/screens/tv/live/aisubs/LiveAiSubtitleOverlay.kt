@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -19,7 +18,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
 import androidx.tv.material3.Text
-import com.arflix.tv.R
 import com.arflix.tv.ui.screens.player.applySubtitleAppearance
 
 /** The profile's subtitle look, as the VOD player uses it. */
@@ -41,7 +39,8 @@ internal data class LiveSubtitleStyle(
 internal fun LiveAiSubtitleOverlay(
     cue: LiveCue?,
     style: LiveSubtitleStyle,
-    preparingSeconds: Int?,
+    /** "Preparing subtitles…" while the first lines are not ready yet, or null. */
+    preparingText: String?,
     debugStats: LiveAiSubsStats?,
     modifier: Modifier = Modifier,
 ) {
@@ -59,9 +58,9 @@ internal fun LiveAiSubtitleOverlay(
             },
             modifier = Modifier.fillMaxSize(),
         )
-        if (preparingSeconds != null) {
+        if (preparingText != null) {
             Text(
-                text = stringResource(R.string.live_ai_subs_preparing, preparingSeconds.coerceAtLeast(1)),
+                text = preparingText,
                 color = Color.White,
                 fontSize = 16.sp,
                 modifier = Modifier

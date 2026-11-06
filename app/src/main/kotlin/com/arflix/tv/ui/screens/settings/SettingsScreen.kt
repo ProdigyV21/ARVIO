@@ -1486,7 +1486,7 @@ fun SettingsScreen(
                                                 31 -> viewModel.setSubtitleRemoveHearingImpaired(!uiState.subtitleRemoveHearingImpaired)
                                                 32 -> showAiApiKeyDialog = true
                                                 33 -> viewModel.startAiKeyServer()
-                                                51, 52, 53, 54, 55 -> onLiveAiSubsRowClick(context, tvGeneralRowsForSection(currentSection)[contentFocusIndex])
+                                                51, 52 -> onLiveAiSubsRowClick(context, tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                 34 -> viewModel.cycleTrailerDelay()
                                                 47 -> viewModel.cycleGuideRowCount()
                                                 37 -> viewModel.setTrailerInCards(!uiState.trailerInCards)
@@ -7587,7 +7587,7 @@ private fun AiModelDialog(
 }
 
 @Composable
-internal fun AiApiKeyDialog(
+private fun AiApiKeyDialog(
     currentKey: String,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,

@@ -498,8 +498,7 @@ class CloudSyncRepository @Inject constructor(
         "dnsProvider", "subtitleAiEnabled", "subtitleAiAutoSelect", "subtitleAiFindBestMatch",
         "subtitlePreloadEnabled", "dolbyVisionCompatEnabled", "subtitleAiApiKey",
         "subtitleAiModel", "subtitleRemoveHearingImpaired", "telegramSearchOnClickOnly",
-        "subtitleHearingSyncV2", "liveAiSubsEnabled", "liveAiSubsDelay", "liveAiSubsActivation",
-        "liveAiSubsTargetLanguage", "liveAiSubsApiKey"
+        "subtitleHearingSyncV2", "liveAiSubsEnabled", "liveAiSubsAutoStart"
     )
     // Per-profile fields excluded from the generic merge (handled by their own logic / not values).
     private val profileMergeExclude = setOf("defaultSubtitle", "subtitleSettingsUpdatedAt")
@@ -796,10 +795,7 @@ class CloudSyncRepository @Inject constructor(
         root.put("subtitleRemoveHearingImpaired", prefs[subtitleRemoveHearingImpairedKey] ?: true)
         // Live TV AI subtitles (global, like the AI subtitle key they share).
         root.put("liveAiSubsEnabled", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.ENABLED] ?: false)
-        root.put("liveAiSubsDelay", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.DELAY] ?: "")
-        root.put("liveAiSubsActivation", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.ACTIVATION] ?: "")
-        root.put("liveAiSubsTargetLanguage", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.TARGET_LANGUAGE] ?: "")
-        root.put("liveAiSubsApiKey", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.OWN_API_KEY] ?: "")
+        root.put("liveAiSubsAutoStart", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.AUTO_START] ?: false)
         root.put(
             "telegramSearchOnClickOnly",
             prefs[com.arflix.tv.data.telegram.TelegramRepository.KEY_SEARCH_ON_CLICK_ONLY] ?: true
@@ -1873,10 +1869,7 @@ class CloudSyncRepository @Inject constructor(
                 // has() guards: backups from versions without Live TV AI subtitles must not reset them.
                 val live = com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs
                 if (root.has("liveAiSubsEnabled")) prefs[live.ENABLED] = root.optBoolean("liveAiSubsEnabled", false)
-                root.optString("liveAiSubsDelay", "").takeIf { root.has("liveAiSubsDelay") && it.isNotBlank() }?.let { prefs[live.DELAY] = it }
-                root.optString("liveAiSubsActivation", "").takeIf { root.has("liveAiSubsActivation") && it.isNotBlank() }?.let { prefs[live.ACTIVATION] = it }
-                if (root.has("liveAiSubsTargetLanguage")) prefs[live.TARGET_LANGUAGE] = root.optString("liveAiSubsTargetLanguage", "")
-                root.optString("liveAiSubsApiKey", "").takeIf { it.isNotBlank() }?.let { prefs[live.OWN_API_KEY] = it }
+                if (root.has("liveAiSubsAutoStart")) prefs[live.AUTO_START] = root.optBoolean("liveAiSubsAutoStart", false)
             }
         }
         if (preservedNewerLocalSubtitle) {

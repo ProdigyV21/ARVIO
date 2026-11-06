@@ -113,23 +113,9 @@ class LiveAiSubsDelayTest {
         assertEquals(15_000L, autoLiveAiSubsDelayMs(30_000L))
     }
 
-    @Test fun fixedDelaysIgnoreLatency() {
-        assertEquals(6_000L, liveAiSubsDelayMs(LiveAiSubsDelay.SIX, 9_000L))
-        assertEquals(10_000L, liveAiSubsDelayMs(LiveAiSubsDelay.TEN, null))
-        assertEquals(15_000L, liveAiSubsDelayMs(LiveAiSubsDelay.FIFTEEN, 100L))
-        assertEquals(11_000L, liveAiSubsDelayMs(LiveAiSubsDelay.AUTO, null))
-    }
-
     @Test fun percentileNeedsAFewSamples() {
         assertNull(percentile95(listOf(1L, 2L)))
         assertEquals(96L, percentile95((1L..100L).toList()))
         assertEquals(1_900L, percentile95(listOf(1_000L, 1_200L, 1_900L, 1_100L)))
-    }
-
-    @Test fun delayChoicesCycleAndUnknownValuesFallBackToAuto() {
-        assertEquals(LiveAiSubsDelay.SIX, LiveAiSubsDelay.AUTO.next())
-        assertEquals(LiveAiSubsDelay.AUTO, LiveAiSubsDelay.FIFTEEN.next())
-        assertEquals(LiveAiSubsDelay.AUTO, LiveAiSubsDelay.fromPref("garbage"))
-        assertEquals(LiveAiSubsActivation.PER_CHANNEL, LiveAiSubsActivation.fromPref(null))
     }
 }

@@ -1650,23 +1650,12 @@
     <string name="live_ai_subs_unsupported">Subtítulos IA no disponibles en este canal</string>
     <string name="live_ai_subs_memory_capped">Este canal no se puede retrasar lo suficiente; algunos subtítulos pueden llegar tarde</string>
     <string name="live_ai_subs_title">Subtítulos IA en TV en directo</string>
-    <string name="live_ai_subs_desc">Transcribe y traduce canales en directo con Gemini. La TV en directo se retrasa unos segundos para que las líneas lleguen a tiempo.</string>
-    <string name="live_ai_subs_delay_title">Retraso de subtítulos en directo</string>
-    <string name="live_ai_subs_delay_desc">Cuánto se retrasa la TV en directo. Auto usa la velocidad medida de la IA.</string>
-    <string name="live_ai_subs_seconds">%1$d s</string>
-    <string name="live_ai_subs_activation_title">Activación de subtítulos IA en directo</string>
-    <string name="live_ai_subs_activation_desc">Cada cambio de canal espera el retraso; por canal solo retrasa los canales donde los activas</string>
-    <string name="live_ai_subs_activation_per_channel">Por canal (menú de subtítulos)</string>
-    <string name="live_ai_subs_activation_always">Siempre activados</string>
-    <string name="live_ai_subs_target_title">Idioma de subtítulos en directo</string>
-    <string name="live_ai_subs_target_desc">El idioma al que se traducen los canales en directo</string>
-    <string name="live_ai_subs_target_profile">Idioma de subtítulos del perfil</string>
-    <string name="live_ai_subs_key_title">Clave de API de Gemini para TV en directo</string>
-    <string name="live_ai_subs_key_desc">Usa la clave de subtítulos IA si es de Gemini; si no, esta</string>
-    <string name="live_ai_subs_key_shared">La TV en directo usa la clave de Gemini de subtítulos IA de arriba</string>
-    <string name="live_ai_subs_key_shared_short">Usa la clave de subtítulos IA</string>
+    <string name="live_ai_subs_desc">Añade subtítulos IA al menú de subtítulos de los canales en directo: Gemini transcribe y traduce al idioma de subtítulos del perfil. La TV en directo se retrasa unos segundos para que las líneas lleguen a tiempo.</string>
     <string name="live_ai_subs_key_valid">La clave de API de Gemini funciona</string>
     <string name="live_ai_subs_key_rejected">Gemini rechazó esta clave de API</string>
     <string name="live_ai_subs_key_unchecked">No se pudo comprobar la clave (¿sin conexión?)</string>
     <string name="live_ai_subs_needs_key">Primero añade una clave de API de Google Gemini</string>
+    <string name="live_ai_subs_auto_title">Traducir automáticamente al iniciar un canal</string>
+    <string name="live_ai_subs_auto_desc">Cada canal empieza con subtítulos IA, sin elegirlos en el menú de subtítulos</string>
+    <string name="live_ai_subs_preparing_short">Preparando subtítulos…</string>
 </resources>

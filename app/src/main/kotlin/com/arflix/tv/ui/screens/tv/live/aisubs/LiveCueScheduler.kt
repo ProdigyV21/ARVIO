@@ -106,16 +106,13 @@ internal class LiveCueScheduler {
 /**
  * The hold ("Auto" delay) that lets a whole segment be heard, sent and answered before its first
  * word plays: the longest segment, plus the AI's p95 latency, plus a margin. Before any latency has
- * been measured, it assumes [DEFAULT_LATENCY_P95_MS]. Clamped to 6–15 s, the range offered in settings.
+ * been measured, it assumes [DEFAULT_LATENCY_P95_MS]. Clamped to 6–15 s.
  */
 internal fun autoLiveAiSubsDelayMs(latencyP95Ms: Long?): Long {
     val latency = latencyP95Ms ?: DEFAULT_LATENCY_P95_MS
     return (LIVE_MAX_SEGMENT_MS + latency + DELAY_MARGIN_MS).coerceIn(6_000L, 15_000L)
 }
 
-/** The hold for [delay], given the measured latency for Auto. */
-internal fun liveAiSubsDelayMs(delay: LiveAiSubsDelay, latencyP95Ms: Long?): Long =
-    delay.fixedMs ?: autoLiveAiSubsDelayMs(latencyP95Ms)
 
 /** The 95th percentile of [samples], or null with fewer than [minSamples]. */
 internal fun percentile95(samples: List<Long>, minSamples: Int = 3): Long? {

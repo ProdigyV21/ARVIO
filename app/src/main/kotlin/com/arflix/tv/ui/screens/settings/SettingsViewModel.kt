@@ -661,7 +661,7 @@ class SettingsViewModel @Inject constructor(
         // push them to the cloud like every other setting, once they settle.
         viewModelScope.launch {
             com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.flow(context)
-                .map { listOf(it.enabled, it.delay, it.activation, it.targetLanguage, it.ownApiKey) }
+                .map { listOf(it.enabled, it.autoStart) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { syncLocalStateToCloud(silent = true) }

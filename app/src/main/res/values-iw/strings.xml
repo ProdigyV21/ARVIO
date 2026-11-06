@@ -387,23 +387,12 @@
     <string name="live_ai_subs_unsupported">כתוביות AI אינן נתמכות בערוץ הזה</string>
     <string name="live_ai_subs_memory_capped">אי אפשר לעכב את הערוץ הזה מספיק; חלק מהכתוביות עלולות לאחר</string>
     <string name="live_ai_subs_title">כתוביות AI לטלוויזיה חיה</string>
-    <string name="live_ai_subs_desc">אפשר להפעיל כתוביות AI מתפריט הכתוביות בנגן בכל ערוץ. עם ״תמיד פעיל״ למטה, כל ערוץ מתחיל איתן. השידור מתעכב כמה שניות כדי שהכתוביות יופיעו בזמן.</string>
-    <string name="live_ai_subs_delay_title">עיכוב כתוביות בטלוויזיה חיה</string>
-    <string name="live_ai_subs_delay_desc">בכמה לעכב את השידור החי. אוטומטי מתאים את עצמו למהירות ה-AI שנמדדה.</string>
-    <string name="live_ai_subs_seconds">%1$d שנ׳</string>
-    <string name="live_ai_subs_activation_title">הפעלת כתוביות AI בטלוויזיה חיה</string>
-    <string name="live_ai_subs_activation_desc">כל החלפת ערוץ ממתינה לעיכוב, לכן \"לפי ערוץ\" מעכב רק ערוצים שבהם הפעלת</string>
-    <string name="live_ai_subs_activation_per_channel">לפי ערוץ (תפריט כתוביות)</string>
-    <string name="live_ai_subs_activation_always">תמיד פעיל</string>
-    <string name="live_ai_subs_target_title">שפת הכתוביות בטלוויזיה חיה</string>
-    <string name="live_ai_subs_target_desc">השפה שאליה מתורגמים הערוצים החיים</string>
-    <string name="live_ai_subs_target_profile">שפת הכתוביות של הפרופיל</string>
-    <string name="live_ai_subs_key_title">מפתח Gemini API לטלוויזיה חיה</string>
-    <string name="live_ai_subs_key_desc">משתמש במפתח של כתוביות AI כשהוא מפתח Gemini, אחרת במפתח הזה</string>
-    <string name="live_ai_subs_key_shared">הטלוויזיה החיה משתמשת במפתח Gemini של כתוביות AI שלמעלה</string>
-    <string name="live_ai_subs_key_shared_short">משתמש במפתח של כתוביות AI</string>
+    <string name="live_ai_subs_desc">מוסיף כתוביות AI לתפריט הכתוביות בערוצים חיים: Gemini מתמלל ומתרגם לשפת הכתוביות של הפרופיל. השידור מתעכב כמה שניות כדי שהכתוביות יופיעו בזמן.</string>
     <string name="live_ai_subs_key_valid">מפתח ה-Gemini API תקין</string>
     <string name="live_ai_subs_key_rejected">Gemini דחה את המפתח הזה</string>
     <string name="live_ai_subs_key_unchecked">לא ניתן לבדוק את המפתח (אין חיבור?)</string>
     <string name="live_ai_subs_needs_key">יש להוסיף קודם מפתח Google Gemini API</string>
+    <string name="live_ai_subs_auto_title">תרגום אוטומטי כשערוץ מתחיל</string>
+    <string name="live_ai_subs_auto_desc">כל ערוץ מתחיל עם כתוביות AI, בלי לבחור אותן בתפריט הכתוביות</string>
+    <string name="live_ai_subs_preparing_short">מכין כתוביות…</string>
 </resources>

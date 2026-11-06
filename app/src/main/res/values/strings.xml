@@ -2094,23 +2094,12 @@
     <string name="live_ai_subs_unsupported">AI subtitles not supported on this channel</string>
     <string name="live_ai_subs_memory_capped">This channel can\'t be delayed enough; some subtitles may be late</string>
     <string name="live_ai_subs_title">Live TV AI subtitles</string>
-    <string name="live_ai_subs_desc">Turn on AI subtitles from the subtitle menu in the player, on any channel. With Always on below, every channel starts with them. Live TV is delayed a few seconds so lines appear on time.</string>
-    <string name="live_ai_subs_delay_title">Live TV subtitle delay</string>
-    <string name="live_ai_subs_delay_desc">How far live TV is held back. Auto uses the measured AI speed.</string>
-    <string name="live_ai_subs_seconds">%1$d s</string>
-    <string name="live_ai_subs_activation_title">Live TV AI subtitles activation</string>
-    <string name="live_ai_subs_activation_desc">Every channel change waits for the delay, so per channel only delays channels you turn it on for</string>
-    <string name="live_ai_subs_activation_per_channel">Per channel (subtitle menu)</string>
-    <string name="live_ai_subs_activation_always">Always on</string>
-    <string name="live_ai_subs_target_title">Live TV subtitle language</string>
-    <string name="live_ai_subs_target_desc">The language live channels are translated into</string>
-    <string name="live_ai_subs_target_profile">Profile subtitle language</string>
-    <string name="live_ai_subs_key_title">Gemini API key for Live TV</string>
-    <string name="live_ai_subs_key_desc">Live TV subtitles use the AI subtitles key when it is a Gemini key, otherwise this one</string>
-    <string name="live_ai_subs_key_shared">Live TV uses the AI subtitles Gemini key above</string>
-    <string name="live_ai_subs_key_shared_short">Uses the AI subtitles key</string>
+    <string name="live_ai_subs_desc">Adds AI subtitles to the subtitle menu of live channels: Gemini transcribes and translates into your profile\'s subtitle language. Live TV is delayed a few seconds so lines appear on time.</string>
     <string name="live_ai_subs_key_valid">Gemini API key works</string>
     <string name="live_ai_subs_key_rejected">Gemini rejected this API key</string>
     <string name="live_ai_subs_key_unchecked">Couldn\'t check the API key (offline?)</string>
     <string name="live_ai_subs_needs_key">Add a Google Gemini API key first</string>
+    <string name="live_ai_subs_auto_title">Auto-translate when a channel starts</string>
+    <string name="live_ai_subs_auto_desc">Every channel starts with AI subtitles on, without picking them in the subtitle menu</string>
+    <string name="live_ai_subs_preparing_short">Preparing subtitles…</string>
 </resources>
