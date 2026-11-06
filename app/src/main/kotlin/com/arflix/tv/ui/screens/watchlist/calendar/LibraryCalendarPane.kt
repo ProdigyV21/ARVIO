@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
@@ -53,6 +54,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import com.arflix.tv.ui.theme.BackgroundCard
+import com.arflix.tv.ui.theme.BackgroundDark
 import com.arflix.tv.ui.theme.BackgroundElevated
 import com.arflix.tv.ui.theme.BorderLight
 import com.arflix.tv.ui.theme.TextSecondary
@@ -256,19 +258,53 @@ fun LibraryCalendarPane(
     }
     if (showSources) Dialog(onDismissRequest = { showSources = false }) {
         val selectedSourceFocus = remember { FocusRequester() }
-        LaunchedEffect(Unit) { selectedSourceFocus.requestFocus() }
-        Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(8.dp)).background(BackgroundCard)
-            .padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(tr("Watchlists"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
-                IconButton(onClick = { showSources = false }) { Icon(Icons.Outlined.Close, tr("Close"), tint = Color.White) }
-            }
-            state.sources.forEach { source ->
-                CalendarSourceRow(source, source.id == state.selectedSourceId, state.sourceCounts[source.id],
-                    Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag("calendar-source-${source.id}")
-                    .then(if (source.id == state.selectedSourceId) Modifier.focusRequester(selectedSourceFocus) else Modifier)
-                    .semantics { selected = source.id == state.selectedSourceId },
-                    onClick = { onSelectSource(source.id); showSources = false })
+        LaunchedEffect(Unit) { if (!touch) selectedSourceFocus.requestFocus() }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(if (touch) Modifier.background(Color.Black.copy(alpha = 0.55f)).clickable { showSources = false } else Modifier)
+        ) {
+            Column(
+                Modifier
+                    .then(
+                        if (touch) {
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .heightIn(max = 520.dp)
+                                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                                .background(BackgroundDark)
+                                .clickable(enabled = false) {}
+                                .padding(horizontal = 20.dp, vertical = 16.dp)
+                                .navigationBarsPadding()
+                        } else {
+                            Modifier
+                                .align(Alignment.Center)
+                                .widthIn(max = 300.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(BackgroundCard)
+                                .padding(12.dp)
+                        }
+                    )
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (touch) {
+                    Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.width(36.dp).height(4.dp).background(Color.White.copy(alpha = 0.35f), CircleShape))
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Watchlists"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = if (touch) 18.sp else 16.sp, modifier = Modifier.weight(1f).padding(start = 4.dp))
+                    IconButton(onClick = { showSources = false }) { Icon(Icons.Outlined.Close, tr("Close"), tint = Color.White) }
+                }
+                state.sources.forEach { source ->
+                    CalendarSourceRow(source, source.id == state.selectedSourceId, state.sourceCounts[source.id],
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag("calendar-source-${source.id}")
+                        .then(if (source.id == state.selectedSourceId && !touch) Modifier.focusRequester(selectedSourceFocus) else Modifier)
+                        .semantics { selected = source.id == state.selectedSourceId },
+                        onClick = { onSelectSource(source.id); showSources = false })
+                }
             }
         }
     }

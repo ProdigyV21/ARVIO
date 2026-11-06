@@ -18,9 +18,17 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -115,6 +123,7 @@ fun WatchlistScreen(
     val servers = remember(rawServers, kidsFilterState) { viewModel.applyKidsFilter(rawServers, kidsFilterState) }
     val logos by viewModel.logoUrls.collectAsStateWithLifecycle()
     val touch = LocalDeviceType.current.isTouchDevice()
+    val haptic = LocalHapticFeedback.current
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val poster = rememberCardLayoutMode() == CardLayoutMode.POSTER
     val scrollScope = rememberCoroutineScope()
@@ -222,6 +231,9 @@ fun WatchlistScreen(
     BackHandler(!search && !filters && !sourcesOpen) {
         when { openedList != null -> openedList = null; !touch && !topFocused -> topFocus.requestFocus(); else -> onBack() }
     }
+    BackHandler(search && touch) {
+        search = false
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, viewModel) {
         val observer = LifecycleEventObserver { _, event -> if(event == Lifecycle.Event.ON_RESUME) viewModel.refreshAfterResume() }
@@ -310,12 +322,118 @@ fun WatchlistScreen(
                     modifier = Modifier.weight(1f), onExitUp = { calendarTab.requestFocus() },
                     viewModel = calendarViewModel ?: hiltViewModel())
             } else {
-            if (compact) Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!collections) OledControl(scopeSources.firstOrNull { it.id == selectedId }?.title ?: tr("Choose library"),
-                    modifier = Modifier.weight(1f).testTag("library-source-picker"), onClick = { sourcesOpen = true })
-                else OledControl("+ " + tr("New list"), modifier = Modifier.weight(1f), onClick = { onNavigateToSettings("catalogs") })
-                OledControl("⌕", onClick = { sourcesOpen = false; filters = false; search = true })
-                OledControl(tr("Filters"), modifier = Modifier.focusRequester(filterButton), onClick = { sourcesOpen = false; filters = true })
+            if (compact) {
+                if (search) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .height(42.dp)
+                            .clip(CircleShape)
+                            .background(BackgroundElevated)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = tr("Search library"),
+                            tint = resolveAccentColor(Color.White),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                            cursorBrush = SolidColor(resolveAccentColor(Color.White)),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { search = false }),
+                            decorationBox = { innerTextField ->
+                                if (query.isEmpty()) {
+                                    Text(tr("Search library…"), color = Color.Gray, fontSize = 14.sp)
+                                }
+                                innerTextField()
+                            }
+                        )
+                        if (query.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.15f))
+                                    .clickable { query = "" },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = tr("Clear search"),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable { search = false }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                tr("Done"),
+                                color = resolveAccentColor(Color.White),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (!collections) OledControl(
+                            label = scopeSources.firstOrNull { it.id == selectedId }?.title ?: tr("Choose library"),
+                            modifier = Modifier.weight(1f).testTag("library-source-picker"),
+                            compact = true,
+                            trailingIcon = Icons.Outlined.KeyboardArrowDown,
+                            onClick = { sourcesOpen = true }
+                        ) else OledControl(
+                            "+ " + tr("New list"),
+                            modifier = Modifier.weight(1f),
+                            compact = true,
+                            onClick = { onNavigateToSettings("catalogs") }
+                        )
+                        if (query.isNotEmpty()) {
+                            OledControl(
+                                label = "\"$query\"",
+                                compact = true,
+                                selected = true,
+                                trailingIcon = Icons.Default.Close,
+                                onClick = { query = "" }
+                            )
+                        } else {
+                            OledControl(
+                                "⌕",
+                                compact = true,
+                                onClick = { sourcesOpen = false; filters = false; search = true }
+                            )
+                        }
+                        val hasActiveFilters = mediaFilter != null || sort != HomeServerLibrarySort.RECENTLY_ADDED
+                        OledControl(
+                            label = tr("Filters"),
+                            compact = true,
+                            selected = hasActiveFilters,
+                            hasActiveBadge = hasActiveFilters,
+                            modifier = Modifier.focusRequester(filterButton),
+                            onClick = { sourcesOpen = false; filters = true }
+                        )
+                    }
+                }
             }
             if (openedList != null) Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 OledControl("‹ ${tr("My lists")}", onClick = { openedList = null })
@@ -340,10 +458,20 @@ fun WatchlistScreen(
                         collectionSpotlightHeight(touch, compactSpotlight) + 150.dp,
                         background = Color.Black)
                     Column(Modifier.fillMaxSize()) {
-                    if (showSpotlight) CollectionSpotlight(previewCatalog, spotlightItem, touch, compactSpotlight, {},
-                        providerLogoUrl = activePreview?.providerLogoUrl ?: spotlightItem?.primaryNetworkLogo,
-                        clearLogoUrl = previewItem?.let { logos[watchlistLogoKey(it)] },
-                        horizontalInset = 6.dp, showBackButton = false, topInset = 16.dp)
+                    if (showSpotlight) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .then(if (touch && spotlightItem != null) Modifier.clickable {
+                                    onNavigateToDetails(spotlightItem.mediaType, spotlightItem.id)
+                                } else Modifier)
+                        ) {
+                            CollectionSpotlight(previewCatalog, spotlightItem, touch, compactSpotlight, {},
+                                providerLogoUrl = activePreview?.providerLogoUrl ?: spotlightItem?.primaryNetworkLogo,
+                                clearLogoUrl = previewItem?.let { logos[watchlistLogoKey(it)] },
+                                horizontalInset = 6.dp, showBackButton = false, topInset = 16.dp)
+                        }
+                    }
                     // Row anchoring keeps the previous row entirely outside this viewport.
                     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                     val rowHeight by remember(grid) { derivedStateOf {
@@ -389,7 +517,10 @@ fun WatchlistScreen(
                                 modifier = Modifier.testTag("library-card-$index"),
                                 onFocused = { focusedPreviewKey = libraryPreviewKey(item); viewModel.saveFocusState(0, index); revealCard(index, columns) },
                                 onClick = { onNavigateToDetails(item.mediaType, item.id) },
-                                onLongClick = if(state.selectedSourceId == WatchlistSourceItem.MyWatchlist.id && !serverMode) ({ viewModel.removeFromWatchlist(item) }) else null)
+                                onLongClick = if(state.selectedSourceId == WatchlistSourceItem.MyWatchlist.id && !serverMode) ({
+                                    if (touch) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.removeFromWatchlist(item)
+                                }) else null)
                             }
                         }
                         if (if(serverMode) servers.isLoadingMore else state.isLoadingMore) item("loading-more", span = { GridItemSpan(maxLineSpan) }) {
@@ -416,26 +547,78 @@ fun WatchlistScreen(
         OledSources(scopeSources, selectedId, Modifier.fillMaxWidth().heightIn(max = 500.dp), ::selectSource, onNavigateToSettings)
     }
     if(filters) OledDrawer(tr("Filters"), { filters = false; if(!touch) filterButton.requestFocus() }) {
-        Text(tr("Sort"), color = Color.LightGray, modifier = Modifier.padding(vertical = 12.dp))
+        Text(tr("Sort"), color = Color.LightGray, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium)
         listOf("Recently added" to HomeServerLibrarySort.RECENTLY_ADDED, "Title A-Z" to HomeServerLibrarySort.TITLE,
             "Highest rated" to HomeServerLibrarySort.RATING, "Newest release" to HomeServerLibrarySort.RELEASE_DATE_NEWEST,
             "Oldest release" to HomeServerLibrarySort.RELEASE_DATE_OLDEST).forEach { (label, value) ->
-            OledControl(tr(label), selected = sort == value, modifier = Modifier.fillMaxWidth(), onClick = { sort = value })
+            OledControl(
+                tr(label),
+                selected = sort == value,
+                trailingIcon = if (sort == value) Icons.Outlined.Check else null,
+                compact = touch,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                onClick = {
+                    sort = value
+                    if (touch) filters = false
+                }
+            )
         }
         if(!collections) {
-            Text(tr("Type"), color = Color.LightGray, modifier = Modifier.padding(vertical = 12.dp))
-            listOf("All" to null, "Movies" to MediaType.MOVIE, "Series" to MediaType.TV).forEach { (label, value) ->
-                OledControl(tr(label), selected = mediaFilter == value, modifier = Modifier.fillMaxWidth(), onClick = { mediaFilter = value })
+            Text(tr("Type"), color = Color.LightGray, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("All" to null, "Movies" to MediaType.MOVIE, "Series" to MediaType.TV).forEach { (label, value) ->
+                    OledControl(
+                        tr(label),
+                        selected = mediaFilter == value,
+                        compact = true,
+                        icon = when(value) {
+                            MediaType.MOVIE -> Icons.Outlined.Movie
+                            MediaType.TV -> Icons.Outlined.Tv
+                            else -> null
+                        },
+                        modifier = Modifier.weight(1f),
+                        onClick = { mediaFilter = value }
+                    )
+                }
             }
-            OledControl(tr("Refresh"), onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() })
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (mediaFilter != null || sort != HomeServerLibrarySort.RECENTLY_ADDED) {
+                    OledControl(
+                        tr("Reset"),
+                        compact = touch,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            sort = HomeServerLibrarySort.RECENTLY_ADDED
+                            mediaFilter = null
+                        }
+                    )
+                }
+                OledControl(
+                    tr("Refresh"),
+                    compact = touch,
+                    modifier = if (mediaFilter != null || sort != HomeServerLibrarySort.RECENTLY_ADDED) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                    onClick = { if(serverMode) viewModel.refreshLibrary() else viewModel.refresh() }
+                )
+            }
         }
     }
-    TextInputModal(search, tr("Search library"), initialValue = query,
+    TextInputModal(search && !touch, tr("Search library"), initialValue = query,
         onConfirm = { query = it.trim(); search = false }, onCancel = { search = false })
 }
 
 @Composable
-internal fun OledControl(label: String, modifier: Modifier = Modifier, selected: Boolean = false, compact: Boolean = false, icon: ImageVector? = null, maxLines: Int = 1, onClick: () -> Unit) {
+internal fun OledControl(
+    label: String,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    compact: Boolean = false,
+    icon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    hasActiveBadge: Boolean = false,
+    maxLines: Int = 1,
+    onClick: () -> Unit
+) {
     var focused by remember { mutableStateOf(false) }
     val accent = resolveAccentColor(Color.White)
     // Phone/tablet (compact): selected tab is a white pill with black text.
@@ -444,52 +627,115 @@ internal fun OledControl(label: String, modifier: Modifier = Modifier, selected:
     val foreground = if(focused) { if(accent.luminance() > .4f) Color.Black else Color.White } else if(isPhoneSelected) Color.Black else Color.White
     val haptic = LocalHapticFeedback.current
     val background by animateColorAsState(if(focused) accent else if(isPhoneSelected) Color.White else if(selected) BackgroundElevated else Color.Transparent, tween(120), label = "library-control")
-    Box(modifier.onFocusChanged { focused = it.isFocused }.clip(if(compact) CircleShape else RoundedCornerShape(8.dp))
-        .background(background)
-        .clickable {
-            if (compact && !selected) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    Box(
+        modifier
+            .onFocusChanged { focused = it.isFocused }
+            .clip(if(compact) CircleShape else RoundedCornerShape(8.dp))
+            .background(background)
+            .clickable {
+                if (compact && !selected) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+                onClick()
             }
-            onClick()
-        }.padding(horizontal = if(compact) 8.dp else 12.dp, vertical = 11.dp), contentAlignment = Alignment.CenterStart) {
-        if(label == "⌕") Icon(Icons.Outlined.Search, contentDescription = tr("Search library"), tint = foreground, modifier = Modifier.size(20.dp))
-        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-        if(icon != null) Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(20.dp))
-        Text(label, color = foreground, fontSize = if(compact) 13.sp else 14.sp, fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+            .padding(horizontal = if(compact) 10.dp else 12.dp, vertical = if(compact) 8.dp else 11.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        if(label == "⌕") {
+            Icon(Icons.Outlined.Search, contentDescription = tr("Search library"), tint = foreground, modifier = Modifier.size(20.dp))
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if(icon != null) {
+                    Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(18.dp))
+                }
+                Text(
+                    label,
+                    color = foreground,
+                    fontSize = if(compact) 13.sp else 14.sp,
+                    fontWeight = if(selected || focused) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = maxLines,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (hasActiveBadge) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .background(if (isPhoneSelected) Color.Black else accent, CircleShape)
+                    )
+                }
+                if (trailingIcon != null) {
+                    Icon(trailingIcon, contentDescription = null, tint = foreground, modifier = Modifier.size(16.dp))
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun OledSources(sources: List<WatchlistSourceItem>, selectedId: String, modifier: Modifier,
-    select: (WatchlistSourceItem) -> Unit, settings: (String) -> Unit) {
+private fun OledSources(
+    sources: List<WatchlistSourceItem>,
+    selectedId: String,
+    modifier: Modifier,
+    select: (WatchlistSourceItem) -> Unit,
+    settings: (String) -> Unit
+) {
+    val touch = LocalDeviceType.current.isTouchDevice()
     val groups = sources.groupBy { when(it) {
         is WatchlistSourceItem.MyWatchlist -> tr("Saved")
         is WatchlistSourceItem.HomeServer -> it.candidate.serverName
         else -> it.subtitle ?: tr("Lists")
     } }
-    LazyColumn(modifier.testTag("library-sources"), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+    val content: @Composable () -> Unit = {
         groups.forEach { (group, entries) ->
-            item("group:$group") {
-                Column(Modifier.padding(top = 24.dp, bottom = 10.dp, start = 10.dp)) {
-                    val provider = (entries.firstOrNull() as? WatchlistSourceItem.TrackerList)?.provider
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        when (provider) {
-                            TrackerLibraryProvider.TRAKT -> Icon(painterResource(R.drawable.ic_trakt), contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
-                            TrackerLibraryProvider.SIMKL -> Icon(painterResource(R.drawable.ic_simkl), contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
-                            TrackerLibraryProvider.MDBLIST -> Icon(painterResource(R.drawable.ic_mdblist), contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
-                            else -> Unit
-                        }
-                        Text(group.uppercase(), color = Color.White, fontSize = if (provider != null) 8.sp else 13.sp, fontWeight = FontWeight.Bold, letterSpacing = if (provider != null) .3.sp else .6.sp, maxLines = 1)
+            Column(Modifier.padding(top = if (touch) 10.dp else 24.dp, bottom = 6.dp, start = 8.dp)) {
+                val provider = (entries.firstOrNull() as? WatchlistSourceItem.TrackerList)?.provider
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    when (provider) {
+                        TrackerLibraryProvider.TRAKT -> Icon(painterResource(R.drawable.ic_trakt), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        TrackerLibraryProvider.SIMKL -> Icon(painterResource(R.drawable.ic_simkl), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        TrackerLibraryProvider.MDBLIST -> Icon(painterResource(R.drawable.ic_mdblist), contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        else -> Unit
                     }
-                    (entries.firstOrNull() as? WatchlistSourceItem.HomeServer)?.let { Text(it.candidate.serverKind.name.lowercase().replaceFirstChar(Char::titlecase), color = Color.Gray, fontSize = 11.sp) }
+                    Text(
+                        group.uppercase(),
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = if (provider != null) 9.sp else 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1
+                    )
                 }
+                (entries.firstOrNull() as? WatchlistSourceItem.HomeServer)?.let { Text(it.candidate.serverKind.name.lowercase().replaceFirstChar(Char::titlecase), color = Color.Gray, fontSize = 11.sp) }
             }
-            items(entries, key = { it.id }) { source -> OledControl(tr(source.title), selected = source.id == selectedId, modifier = Modifier.fillMaxWidth().testTag("library-source-${source.id}"), icon = (source as? WatchlistSourceItem.HomeServer)?.let { if(it.candidate.collectionType.contains("movie", true)) Icons.Outlined.Movie else Icons.Outlined.Tv }, onClick = { select(source) }) }
+            entries.forEach { source ->
+                OledControl(
+                    label = tr(source.title),
+                    selected = source.id == selectedId,
+                    compact = touch,
+                    trailingIcon = if (source.id == selectedId) Icons.Outlined.Check else null,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("library-source-${source.id}"),
+                    icon = (source as? WatchlistSourceItem.HomeServer)?.let { if(it.candidate.collectionType.contains("movie", true)) Icons.Outlined.Movie else Icons.Outlined.Tv },
+                    onClick = { select(source) }
+                )
+            }
         }
-        if(sources.isEmpty() || sources.any { it is WatchlistSourceItem.HomeServer }) item("connect") {
-            OledControl("+ ${tr("Connect server")}", modifier = Modifier.padding(top = 20.dp), maxLines = 2, onClick = { settings("home_server") })
+        if(sources.isEmpty() || sources.any { it is WatchlistSourceItem.HomeServer }) {
+            OledControl(
+                label = "+ ${tr("Connect server")}",
+                compact = touch,
+                modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+                maxLines = 2,
+                onClick = { settings("home_server") }
+            )
+        }
+    }
+    if (touch) {
+        Column(modifier.testTag("library-sources"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            content()
+        }
+    } else {
+        LazyColumn(modifier.testTag("library-sources"), verticalArrangement = Arrangement.spacedBy(4.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item { content() }
         }
     }
 }
@@ -521,15 +767,77 @@ private fun OledCollection(source: WatchlistSourceItem, cover: String?, width: D
 @Composable
 private fun OledDrawer(title: String, close: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val initial = remember { FocusRequester() }
+    val touch = LocalDeviceType.current.isTouchDevice()
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().testTag("library-drawer-root").background(Color.Black.copy(alpha = .55f))) {
-            Column(Modifier.align(Alignment.CenterEnd).fillMaxHeight().widthIn(max = 340.dp).fillMaxWidth()
-                .background(BackgroundDark).padding(24.dp).verticalScroll(rememberScrollState())) {
-                OledControl("${tr("Close")} ×", modifier = Modifier.focusRequester(initial), onClick = close)
-                Text(title, color = Color.White, fontSize = 24.sp, modifier = Modifier.padding(vertical = 12.dp))
+        Box(
+            Modifier
+                .fillMaxSize()
+                .testTag("library-drawer-root")
+                .background(Color.Black.copy(alpha = .55f))
+                .then(if (touch) Modifier.clickable(onClick = close) else Modifier)
+        ) {
+            Column(
+                Modifier
+                    .then(
+                        if (touch) {
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .heightIn(max = 560.dp)
+                                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                                .background(BackgroundDark)
+                                .clickable(enabled = false) {}
+                                .padding(horizontal = 20.dp, vertical = 14.dp)
+                                .navigationBarsPadding()
+                        } else {
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .widthIn(max = 340.dp)
+                                .fillMaxWidth()
+                                .background(BackgroundDark)
+                                .padding(24.dp)
+                        }
+                    )
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (touch) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .background(Color.White.copy(alpha = 0.35f), CircleShape)
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        title,
+                        color = Color.White,
+                        fontSize = if (touch) 20.sp else 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(vertical = if (touch) 4.dp else 12.dp)
+                    )
+                    OledControl(
+                        "${tr("Close")} ×",
+                        modifier = Modifier.focusRequester(initial),
+                        compact = touch,
+                        onClick = close
+                    )
+                }
                 content()
             }
         }
-        LaunchedEffect(Unit) { initial.requestFocus() }
+        LaunchedEffect(Unit) { if (!touch) initial.requestFocus() }
     }
 }
