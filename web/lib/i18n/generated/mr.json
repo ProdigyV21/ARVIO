@@ -1597,7 +1597,7 @@
   "Picking the best source…": "सर्वोत्तम स्रोत निवडत आहे…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi अमेरिकी डॉलरमध्ये शुल्क आकारते; तुमची बँक रक्कम आपोआप रूपांतरित करते.",
   "Maximum of 10 IPTV playlists reached": "जास्तीत जास्त 10 IPTV प्लेलिस्टची मर्यादा गाठली",
-  "Regional price · save {value0}": "प्रादेशिक किंमत · {value0} बचत",
+  "Regional price · save {value0} vs. 12 monthly payments": "प्रादेशिक किंमत · 12 मासिक देयकांच्या तुलनेत {value0} बचत",
   "One payment, no automatic renewal. About {value0} a month.": "एकच पेमेंट, आपोआप नूतनीकरण नाही. महिन्याला सुमारे {value0}.",
   "12-month pass · {value0}": "12 महिन्यांचा पास · {value0}"
 }

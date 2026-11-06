@@ -6,7 +6,7 @@ import { Smartphone } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { kofiSubscribeUrl, kofiYearlyUrl } from "@/lib/entitlement";
 import { isTvBrowser } from "@/lib/tvNav";
-import { REGIONAL_YEARLY_PER_MONTH, REGIONAL_YEARLY_PRICE, REGIONAL_YEARLY_SAVING, useRegionalYearly } from "@/lib/regionalPricing";
+import { REGIONAL_YEARLY_PER_MONTH, REGIONAL_YEARLY_PRICE, REGIONAL_YEARLY_SAVING, STANDARD_YEARLY_PRICE, useRegionalYearly } from "@/lib/regionalPricing";
 
 export const DISCORD_URL = "https://discord.gg/UavuEYMfQ4";
 export const ANDROID_APP_URL = "https://arvio.tv/";
@@ -26,8 +26,8 @@ export function PremiumPlans({ action, compact = false }: { action?: (plan: Prem
   return <div className={`premium-plans${compact ? " is-compact" : ""}`}>
     <div className={`premium-offer-plans${yearly ? "" : " single"}`}>
       {yearly && <div className="premium-offer-plan best">
-        <p className="premium-offer-badge">{regional ? translateUi("Regional price · save {value0}", { value0: REGIONAL_YEARLY_SAVING }) : translateUi("Best value · save 44%")}</p>
-        <p className="premium-offer-price">{regional && <s className="premium-offer-was">$20</s>} <strong>{regional ? REGIONAL_YEARLY_PRICE : "$20"}</strong> <span>{translateUi("/ 12 months")}</span></p>
+        <p className="premium-offer-badge">{regional ? translateUi("Regional price · save {value0} vs. 12 monthly payments", { value0: REGIONAL_YEARLY_SAVING }) : translateUi("Best value · save 44%")}</p>
+        <p className="premium-offer-price">{regional && <s className="premium-offer-was">{STANDARD_YEARLY_PRICE}</s>} <strong>{regional ? REGIONAL_YEARLY_PRICE : STANDARD_YEARLY_PRICE}</strong> <span>{translateUi("/ 12 months")}</span></p>
         <p className="premium-offer-terms">{regional ? translateUi("One payment, no automatic renewal. About {value0} a month.", { value0: REGIONAL_YEARLY_PER_MONTH }) : translateUi("One payment, no automatic renewal. About $1.67 a month.")}</p>
         {action?.("yearly")}
       </div>}

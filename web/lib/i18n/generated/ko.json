@@ -1561,7 +1561,7 @@
   "Picking the best source…": "최적의 소스를 선택하는 중…",
   "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi는 미국 달러로 결제되며, 금액은 은행에서 자동으로 환전됩니다.",
   "Maximum of 10 IPTV playlists reached": "IPTV 재생목록은 최대 10개까지 추가할 수 있습니다",
-  "Regional price · save {value0}": "지역 가격 · {value0} 할인",
+  "Regional price · save {value0} vs. 12 monthly payments": "지역 가격 · 월간 결제 12회 대비 {value0} 절약",
   "One payment, no automatic renewal. About {value0} a month.": "한 번 결제, 자동 갱신 없음. 월 약 {value0}입니다.",
   "12-month pass · {value0}": "12개월 이용권 · {value0}"
 }
