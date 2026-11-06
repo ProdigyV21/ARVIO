@@ -376,4 +376,22 @@
     <string name="mdblist_session_unavailable">אין חיבור ל-MDBList, ולכן הסנכרון מושהה. ARVIO ממשיך לנסות; אם זה נמשך, חבר את MDBList מחדש.</string>
     <string name="mdblist_library_unavailable">אין חיבור ל-MDBList כרגע. נסה שוב בעוד כמה דקות.</string>
     <string name="mdblist_library_load_failed">לא ניתן לטעון את הרשימה הזו מ-MDBList. נסה שוב.</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">כתוביות AI</string>
+    <string name="live_ai_subs_preparing">מכין כתוביות… %1$d שנ׳</string>
+    <string name="live_ai_subs_no_key">כתוביות AI דורשות מפתח Google Gemini API (הגדרות ← כתוביות AI)</string>
+    <string name="live_ai_subs_invalid_key">כתוביות AI: מפתח ה-Gemini API נדחה</string>
+    <string name="live_ai_subs_quota">כתוביות AI הושהו: הגעת למכסת Gemini</string>
+    <string name="live_ai_subs_offline">כתוביות AI: אין חיבור לאינטרנט</string>
+    <string name="live_ai_subs_unsupported">כתוביות AI אינן נתמכות בערוץ הזה</string>
+    <string name="live_ai_subs_memory_capped">אי אפשר לעכב את הערוץ הזה מספיק; חלק מהכתוביות עלולות לאחר</string>
+    <string name="live_ai_subs_title">כתוביות AI לטלוויזיה חיה</string>
+    <string name="live_ai_subs_desc">מוסיף כתוביות AI לתפריט הכתוביות בערוצים חיים: Gemini מתמלל ומתרגם לשפת הכתוביות של הפרופיל. השידור מתעכב כמה שניות כדי שהכתוביות יופיעו בזמן.</string>
+    <string name="live_ai_subs_key_valid">מפתח ה-Gemini API תקין</string>
+    <string name="live_ai_subs_key_rejected">Gemini דחה את המפתח הזה</string>
+    <string name="live_ai_subs_key_unchecked">לא ניתן לבדוק את המפתח (אין חיבור?)</string>
+    <string name="live_ai_subs_needs_key">יש להוסיף קודם מפתח Google Gemini API</string>
+    <string name="live_ai_subs_auto_title">תרגום אוטומטי כשערוץ מתחיל</string>
+    <string name="live_ai_subs_auto_desc">כל ערוץ מתחיל עם כתוביות AI, בלי לבחור אותן בתפריט הכתוביות</string>
 </resources>

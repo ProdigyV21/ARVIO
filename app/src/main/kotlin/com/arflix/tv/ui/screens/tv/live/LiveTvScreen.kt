@@ -80,6 +80,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -119,6 +120,19 @@ import androidx.media3.common.Player
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import com.arflix.tv.ui.screens.tv.live.aisubs.AudioTapHlsExtractorFactory
+import com.arflix.tv.ui.screens.player.subtitles.RTL_LANGUAGES
+import com.arflix.tv.ui.screens.tv.live.aisubs.GeminiCaptionTranslator
+import com.arflix.tv.ui.screens.tv.live.aisubs.GeminiSegmentEngine
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveTapExtractorsFactory
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsSettings
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsStatus
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubtitleOverlay
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleSession
+import com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle
+import com.arflix.tv.ui.screens.tv.live.aisubs.autoLiveAiSubsDelayMs
+import com.arflix.tv.ui.screens.tv.live.aisubs.SubtitleLookaheadLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -3086,7 +3100,7 @@ fun LiveTvScreen(
             isLowRamDevice = activityManager?.isLowRamDevice == true
         )
     }
-    val exoPlayer = remember(livePlaybackBufferProfile) {
+    val liveLoadControl = remember(livePlaybackBufferProfile) {
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 livePlaybackBufferProfile.minBufferMs,
@@ -3104,9 +3118,13 @@ fun LiveTvScreen(
             .setPrioritizeTimeOverSizeThresholds(false)
             .setBackBuffer(livePlaybackBufferProfile.backBufferMs, true)
             .build()
+        // Holds playback back so AI subtitles get audio ahead of time; a no-op until asked to.
+        SubtitleLookaheadLoadControl(loadControl)
+    }
+    val exoPlayer = remember(liveLoadControl) {
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setLoadControl(loadControl)
+            .setLoadControl(liveLoadControl)
             // A live stream whose buffer stops moving while buffering raises an error after
             // this long, which the retry below recovers, instead of a spinner for ten minutes.
             .setStuckBufferingDetectionTimeoutMs(LIVE_STUCK_BUFFERING_TIMEOUT_MS)
@@ -3218,6 +3236,139 @@ fun LiveTvScreen(
     var playerIsPlaying by remember { mutableStateOf(false) }
     var playerPlayWhenReady by remember { mutableStateOf(true) }
     var playerIsBuffering by remember { mutableStateOf(false) }
+
+    // -- Live TV AI subtitles ------------------------------------------------------------------
+    // The channel's audio is copied as it downloads, cut into speech segments and sent to Gemini;
+    // playback is held back (liveLoadControl) so each line is ready before it is heard, and lines
+    // are shown by the player's position, never by when the answer came.
+    val liveAiSubsSettings by remember(context) { LiveAiSubsPrefs.flow(context.applicationContext) }
+        .collectAsState(initial = LiveAiSubsSettings())
+    val liveAiKey = rememberUpdatedState(liveAiSubsSettings.apiKey)
+    val liveAiSession = remember(context) {
+        LiveSubtitleSession(
+            context,
+            GeminiSegmentEngine(apiKey = { liveAiKey.value }),
+            GeminiCaptionTranslator(apiKey = { liveAiKey.value }),
+        )
+    }
+    DisposableEffect(liveAiSession) { onDispose { liveAiSession.release() } }
+    // The profile's subtitle language: what AI subtitles translate into.
+    var liveAiTargetCode by remember { mutableStateOf<String?>(null) }
+    // A channel that already carries subtitles in that language needs no AI to start with.
+    val liveChannelHasTargetSubs = liveAiTargetCode?.let { code ->
+        liveSubtitleOptions(liveTracks, "").any { it.key == code }
+    } == true
+    // Per channel, like the audio choice: picked in the subtitle menu, or on by default when
+    // "auto-translate when a channel starts" is set (unless the channel has the language already).
+    val liveAiSubsChoices = remember { mutableStateMapOf<String, Boolean>() }
+    val liveAiSubsOn = liveAiSubsSettings.enabled && playingChannelId != null &&
+        (liveAiSubsChoices[playingChannelId] ?: (liveAiSubsSettings.autoStart && !liveChannelHasTargetSubs))
+    val liveAiCue by liveAiSession.cue.collectAsState()
+    val liveAiStatus by liveAiSession.status.collectAsState()
+    // On, but unable to run on this channel (no or rejected key, audio that cannot be decoded):
+    // no hold, and the channel's own subtitles show instead.
+    val liveAiBlocked = !liveAiSubsSettings.hasKey || liveAiStatus is LiveAiSubsStatus.NoKey ||
+        liveAiStatus is LiveAiSubsStatus.InvalidKey || liveAiStatus is LiveAiSubsStatus.Unsupported
+    val liveAiHolds = liveAiSubsOn && !liveAiBlocked
+    // A quota or connection pause is temporary: the hold stays (so playback does not stall when
+    // AI comes back), but the channel's own subtitles fill in meanwhile.
+    val liveAiShowsNative = liveAiSubsOn && (liveAiBlocked ||
+        liveAiStatus is LiveAiSubsStatus.QuotaPaused || liveAiStatus is LiveAiSubsStatus.Offline)
+    val liveAiShows = liveAiSubsOn && !liveAiShowsNative
+    var liveAiPreparingSeconds by remember { mutableStateOf<Int?>(null) }
+    // Bumped to restart the stream so audio already buffered gets subtitled too.
+    var liveAiRestartRequest by remember { mutableIntStateOf(0) }
+    var liveSubtitleStyle by remember { mutableStateOf(LiveSubtitleStyle()) }
+    LaunchedEffect(Unit) { liveSubtitleStyle = viewModel.liveSubtitleStyle() }
+    // Always the profile's subtitle language.
+    LaunchedEffect(Unit) {
+        val code = viewModel.liveAiSubsDefaultLanguage()
+        liveAiTargetCode = code
+        val name = java.util.Locale.forLanguageTag(code).getDisplayLanguage(java.util.Locale.ENGLISH)
+            .ifBlank { "English" }
+        liveAiSession.setTargetLanguage(name, name.lowercase(java.util.Locale.ROOT) in RTL_LANGUAGES)
+    }
+    LaunchedEffect(liveAiSubsSettings.apiKey) { liveAiSession.onKeyChanged() }
+    // Capture whenever AI subtitles are on for the channel, the mini player included: the audio
+    // buffered during the start-up hold is what the first lines are made from.
+    val liveAiCapture = liveAiSubsOn && playerPlayWhenReady
+    LaunchedEffect(liveAiSubsOn, liveAiSubsSettings.hasKey, liveAiCapture) {
+        liveAiSession.update(enabled = liveAiSubsOn, hasKey = liveAiSubsSettings.hasKey, capture = liveAiCapture)
+    }
+    // While AI subtitles show, the stream's own text subtitles stay selected but hidden: they are
+    // read ahead of playback and translated (a stream that is not selected is not even
+    // downloaded). Without a text track, AI subtitles come from the audio. While AI cannot run,
+    // the channel's own subtitles are selected and shown instead.
+    LaunchedEffect(liveAiSubsOn, liveAiShowsNative, liveTracks, liveAiTargetCode) {
+        if (!liveAiSubsOn) return@LaunchedEffect
+        val source = if (liveAiShowsNative) liveAiFallbackSubtitleKey(liveTracks, liveAiTargetCode)
+        else liveCaptionSourceKey(liveTracks, liveAiTargetCode)
+        val selected = liveSelectedSubtitleKey(liveTracks)
+        when {
+            source != null && selected != source -> applyLiveSubtitleChoice(exoPlayer, source)
+            source == null && selected != null -> applyLiveSubtitleChoice(exoPlayer, LIVE_SUBTITLES_OFF)
+        }
+    }
+    // Turned on while the channel plays: the seconds already buffered were downloaded before
+    // capture started, so they would play without subtitles. Restart the stream instead; the
+    // start-up hold then shows "Preparing subtitles" and the first line is covered. Not when AI
+    // cannot run (nothing to prepare), and not in catch-up: a recording has no hold and reads
+    // far enough ahead on its own, and a restart would lose the position in it.
+    LaunchedEffect(liveAiHolds) {
+        if (liveAiHolds && playingCatchupProgram == null && exoPlayer.isPlaying &&
+            exoPlayer.currentMediaItem?.mediaId == playingChannelId.orEmpty()
+        ) {
+            liveAiRestartRequest++
+        }
+    }
+    val liveAiTick by rememberUpdatedState(liveAiHolds to (playingCatchupProgram == null))
+    LaunchedEffect(exoPlayer, liveAiSession) {
+        val window = androidx.media3.common.Timeline.Window()
+        while (true) {
+            val (on, isLive) = liveAiTick
+            val requiredMs = if (on && isLive) autoLiveAiSubsDelayMs(liveAiSession.latencyP95Ms) else 0L
+            liveLoadControl.requiredLookaheadUs = requiredMs * 1_000L
+            if (on) {
+                // currentPosition is relative to the live window; captured audio is timed on the
+                // period, so the window offset into the period is added.
+                val timeline = exoPlayer.currentTimeline
+                val windowOffsetUs = if (timeline.isEmpty) 0L else
+                    timeline.getWindow(exoPlayer.currentMediaItemIndex, window).positionInFirstPeriodUs
+                val lookaheadMs = (exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)
+                liveAiSession.tick(exoPlayer.currentPosition * 1_000L + windowOffsetUs, exoPlayer.isPlaying)
+                val held = liveLoadControl.holding && exoPlayer.playbackState == Player.STATE_BUFFERING
+                liveAiPreparingSeconds = if (held && requiredMs > 0L) {
+                    ((requiredMs - lookaheadMs + 999L) / 1_000L).toInt().coerceAtLeast(1)
+                } else {
+                    null
+                }
+                if (liveLoadControl.cappedByMemory) {
+                    liveLoadControl.cappedByMemory = false
+                    android.widget.Toast.makeText(
+                        context, context.getString(R.string.live_ai_subs_memory_capped), android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } else {
+                liveAiPreparingSeconds = null
+            }
+            delay(LIVE_AI_TICK_MS)
+        }
+    }
+    LaunchedEffect(liveAiSession) {
+        liveAiSession.status.collect { status ->
+            val message = when (status) {
+                LiveAiSubsStatus.NoKey -> R.string.live_ai_subs_no_key
+                LiveAiSubsStatus.InvalidKey -> R.string.live_ai_subs_invalid_key
+                is LiveAiSubsStatus.QuotaPaused -> R.string.live_ai_subs_quota
+                LiveAiSubsStatus.Offline -> R.string.live_ai_subs_offline
+                is LiveAiSubsStatus.Unsupported -> R.string.live_ai_subs_unsupported
+                else -> null
+            }
+            message?.let {
+                android.widget.Toast.makeText(context, context.getString(it), android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
     LaunchedEffect(exoPlayer, playingCatchupProgram, catchupUrlAnchorOffsetMs) {
         while (true) {
             val programDuration = playingCatchupProgram
@@ -3382,14 +3533,19 @@ fun LiveTvScreen(
         }
         // HLS gets its own factory: DefaultMediaSourceFactory cannot set the HLS extractors,
         // and channels without IDR frames need iptvHlsExtractorFactory() to show video.
+        // Live TV AI subtitles: every channel source gets a fresh audio tap, so a load still
+        // running for the previous channel can never feed this one.
+        liveAiSession.onNewSource()
+        val liveTapSinks = liveAiSession.pipeline.newSinks()
         val source = if (isHls) {
             HlsMediaSource.Factory(sourceDataFactory)
                 .setAllowChunklessPreparation(IPTV_HLS_CHUNKLESS_PREPARATION)
-                .setExtractorFactory(iptvHlsExtractorFactory())
+                .setExtractorFactory(AudioTapHlsExtractorFactory(iptvHlsExtractorFactory(), liveTapSinks))
                 .setLoadErrorHandlingPolicy(IptvLoadErrorHandlingPolicy())
                 .createMediaSource(mediaItem)
         } else {
-            DefaultMediaSourceFactory(context, iptvExtractorsFactory()).setDataSourceFactory(sourceDataFactory)
+            DefaultMediaSourceFactory(context, LiveTapExtractorsFactory(iptvExtractorsFactory(), liveTapSinks))
+                .setDataSourceFactory(sourceDataFactory)
                 .setLoadErrorHandlingPolicy(
                     IptvLoadErrorHandlingPolicy(
                         liveMidStreamDrop(
@@ -3425,6 +3581,19 @@ fun LiveTvScreen(
                 "anchor=$catchupUrlAnchorOffsetMs inSegment=$initialPositionMs " +
                 "target=$catchupPlaybackOffsetMs url=${redactPlaybackUrl(stream)}"
         )
+    }
+
+    // AI subtitles switched on mid-channel: restart the stream (see liveAiRestartRequest).
+    LaunchedEffect(liveAiRestartRequest) {
+        if (liveAiRestartRequest == 0) return@LaunchedEffect
+        val prepared = lastPreparedStreamUrl ?: return@LaunchedEffect
+        val restart = {
+            prepareStream(prepared, isHls = lastPreparedIsHls, headers = lastPreparedHeaders, resetRetry = false,
+                drmInfo = playingChannel?.source?.drmInfo, forcePrepare = true,
+                resolvedMimeType = lastPreparedMimeType)
+        }
+        val restartChannelId = playingChannelId
+        liveStreamGate.reopen(coroutineScope, { playingChannelId == restartChannelId }, { restart() }, restart)
     }
 
     fun toggleCatchupPlayback() {
@@ -4791,9 +4960,19 @@ fun LiveTvScreen(
                         if (view.player !== exoPlayer) {
                             view.player = exoPlayer
                         }
+                        // With AI subtitles the stream's own subtitles are only read, not shown.
+                        view.subtitleView?.visibility =
+                            if (liveAiShows) android.view.View.INVISIBLE else android.view.View.VISIBLE
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen && liveAiShows) {
+                    LiveAiSubtitleOverlay(
+                        cue = liveAiCue,
+                        style = liveSubtitleStyle,
+                        preparingText = liveAiPreparingSeconds?.let { stringResource(R.string.live_ai_subs_preparing, it) },
+                    )
+                }
                 if (isFullScreen && !fullscreenGuideOpen && !quickZapOpen) {
                     val categoryTitle = playingChannel?.source?.group?.takeIf { it.isNotBlank() }
                         ?: visibleEnrichedState.value.tree.byId(selectedCategoryId)?.label
@@ -4827,7 +5006,12 @@ fun LiveTvScreen(
                         },
                         onGuideClick = { openFullscreenGuide() },
                         onSubtitlesClick = { subtitlePickerOpen = true }
-                            .takeIf { liveSubtitleOptions(liveTracks, "").size > 1 },
+                            .takeIf {
+                                withAiSubtitlesOption(
+                                    liveSubtitleOptions(liveTracks, ""), "", "",
+                                    aiAvailable = liveAiSubsSettings.enabled, aiSelected = false,
+                                ).size > 1
+                            },
                         onAudioClick = { audioPickerOpen = true }
                             .takeIf { liveAudioOptions(liveTracks).size > 1 },
                         onOpenVariants = playingChannel?.takeIf { playingCatchupProgram == null }?.let { channel ->
@@ -5095,14 +5279,32 @@ fun LiveTvScreen(
                 title = stringResource(R.string.live_subtitles),
                 icon = Icons.Filled.Subtitles,
                 channelName = playingChannel?.name.orEmpty(),
-                options = liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
+                options = withAiSubtitlesOption(
+                    liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
+                    offLabel = stringResource(R.string.live_subtitles_off),
+                    aiLabel = stringResource(R.string.live_ai_subtitles),
+                    aiAvailable = liveAiSubsSettings.enabled,
+                    aiSelected = liveAiSubsOn,
+                ),
                 onDismiss = {
                     subtitlePickerOpen = false
                     returnToHudControls()
                 },
                 onPick = { key ->
-                    playingChannelId?.let { liveSubtitleChoices[it] = key }
-                    applyLiveSubtitleChoice(exoPlayer, key)
+                    if (key == LIVE_SUBTITLES_AI) {
+                        // AI subtitles replace the stream's own (which keep feeding them, hidden);
+                        // remembered per channel.
+                        playingChannelId?.let {
+                            liveAiSubsChoices[it] = true
+                            liveSubtitleChoices.remove(it)
+                        }
+                    } else {
+                        playingChannelId?.let {
+                            liveAiSubsChoices[it] = false
+                            liveSubtitleChoices[it] = key
+                        }
+                        applyLiveSubtitleChoice(exoPlayer, key)
+                    }
                 },
             )
         }
@@ -5435,6 +5637,9 @@ private fun classifyPlaybackError(error: PlaybackException): String {
         else -> "source did not start"
     }
 }
+
+/** How often Live TV AI subtitles follow the player position (cue display, hold, look-ahead). */
+private const val LIVE_AI_TICK_MS = 100L
 
 internal fun buildLiveTvConfiguration(): MediaItem.LiveConfiguration =
     MediaItem.LiveConfiguration.Builder()

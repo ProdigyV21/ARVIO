@@ -2083,5 +2083,22 @@
     <string name="settings_connect_wetrakr">Connect WeTrakr</string>
     <string name="settings_wetrakr_copy_open">Copy code and open WeTrakr</string>
     <string name="settings_iptv_max_reached">Maximum of 10 IPTV playlists reached</string>
-</resources>
 
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">AI subtitles</string>
+    <string name="live_ai_subs_preparing">Preparing subtitles… %1$d s</string>
+    <string name="live_ai_subs_no_key">AI subtitles need a Google Gemini API key (Settings → AI subtitles)</string>
+    <string name="live_ai_subs_invalid_key">AI subtitles: the Gemini API key was rejected</string>
+    <string name="live_ai_subs_quota">AI subtitles paused: Gemini quota reached</string>
+    <string name="live_ai_subs_offline">AI subtitles: no internet connection</string>
+    <string name="live_ai_subs_unsupported">AI subtitles not supported on this channel</string>
+    <string name="live_ai_subs_memory_capped">This channel can\'t be delayed enough; some subtitles may be late</string>
+    <string name="live_ai_subs_title">Live TV AI subtitles</string>
+    <string name="live_ai_subs_desc">Adds AI subtitles to the subtitle menu of live channels: Gemini transcribes and translates into your profile\'s subtitle language. Live TV is delayed a few seconds so lines appear on time.</string>
+    <string name="live_ai_subs_key_valid">Gemini API key works</string>
+    <string name="live_ai_subs_key_rejected">Gemini rejected this API key</string>
+    <string name="live_ai_subs_key_unchecked">Couldn\'t check the API key (offline?)</string>
+    <string name="live_ai_subs_needs_key">Add a Google Gemini API key first</string>
+    <string name="live_ai_subs_auto_title">Auto-translate when a channel starts</string>
+    <string name="live_ai_subs_auto_desc">Every channel starts with AI subtitles on, without picking them in the subtitle menu</string>
+</resources>
