@@ -14,6 +14,11 @@ internal class SpeechSegmenter(
      * be translated once its segment has ended, so it bounds how far ahead playback must be held.
      */
     private val maxSegmentFrames: Int = MAX_SEGMENT_FRAMES,
+    /**
+     * Past this length, a segment also ends at the first chunk whose speech probability dips below
+     * [DIP_THRESHOLD], a pause between words, so long speech is not cut mid-word at the hard limit.
+     */
+    private val softMaxSegmentFrames: Int = maxSegmentFrames,
     private val onSegment: (startFrame: Int, samples: FloatArray) -> Unit,
 ) : SpeechAnalyzer.ChunkListener {
     private val chunk = SileroVad.CHUNK_SAMPLES
@@ -47,7 +52,8 @@ internal class SpeechSegmenter(
         }
         append(chunk)
         if (speech) lastSpeechFrame = frame
-        if (frame - lastSpeechFrame > HANGOVER_FRAMES || bufferFrames >= maxSegmentFrames) finish()
+        val dip = bufferFrames >= softMaxSegmentFrames && probability < DIP_THRESHOLD
+        if (frame - lastSpeechFrame > HANGOVER_FRAMES || bufferFrames >= maxSegmentFrames || dip) finish()
     }
 
     @Synchronized
@@ -80,6 +86,7 @@ internal class SpeechSegmenter(
 
     companion object {
         private const val SPEECH_THRESHOLD = 0.5f
+        private const val DIP_THRESHOLD = 0.7f
         private const val PREROLL_FRAMES = 3
         private const val TAIL_FRAMES = 4
         private const val HANGOVER_FRAMES = 8

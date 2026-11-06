@@ -73,7 +73,7 @@ private class AudioTapHlsChunkExtractor(
     private val sink: AudioSampleSink,
 ) : HlsMediaChunkExtractor {
     override fun init(extractorOutput: ExtractorOutput) =
-        delegate.init(AudioTapExtractorOutput(TrackLoggingOutput(extractorOutput), sink))
+        delegate.init(AudioTapExtractorOutput(extractorOutput, sink))
 
     override fun read(extractorInput: ExtractorInput): Boolean = delegate.read(extractorInput)
 
@@ -87,13 +87,5 @@ private class AudioTapHlsChunkExtractor(
         // The extractor restarts its state; the next samples may not continue the previous ones.
         sink.onDiscontinuity()
         delegate.onTruncatedSegmentParsed()
-    }
-}
-
-/** Phase 0 diagnostics: logs which tracks a segment declares, to explain channels with no tapped audio. */
-private class TrackLoggingOutput(private val delegate: ExtractorOutput) : ExtractorOutput by delegate {
-    override fun track(id: Int, type: Int): androidx.media3.extractor.TrackOutput {
-        if (LiveAiSubsDebug.enabled) LiveAiSubsLog.i("hls segment track id=$id type=$type")
-        return delegate.track(id, type)
     }
 }

@@ -27,6 +27,23 @@ internal class SubtitleLookaheadLoadControl(
     @Volatile
     var requiredLookaheadUs: Long = 0L
 
+    /** True while playback is being held for the look-ahead (read by the UI). */
+    @Volatile
+    var holding: Boolean = false
+        private set
+
+    /** Buffered media when the hold was last checked, for "Preparing subtitles… N s". */
+    @Volatile
+    var lastBufferedUs: Long = 0L
+        private set
+
+    /**
+     * The buffer's memory cap was reached before the look-ahead (a high-bitrate channel on a
+     * low-memory box): playback started with less, so some subtitles may be late.
+     */
+    @Volatile
+    var cappedByMemory: Boolean = false
+
     private var lastHoldLogMs = 0L
 
     override fun onPrepared(playerId: PlayerId) = delegate.onPrepared(playerId)
@@ -61,7 +78,20 @@ internal class SubtitleLookaheadLoadControl(
     override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean {
         if (!delegate.shouldStartPlayback(parameters)) return false
         val required = requiredLookaheadUs
-        if (required <= 0L || parameters.bufferedDurationUs >= required) return true
+        lastBufferedUs = parameters.bufferedDurationUs
+        if (required <= 0L || parameters.bufferedDurationUs >= required) {
+            holding = false
+            return true
+        }
+        // Loading has stopped (memory target reached): waiting longer would never get there and
+        // would end in the stuck-buffering error, so play with what there is.
+        if (!delegate.shouldContinueLoading(parameters)) {
+            if (!cappedByMemory) LiveAiSubsLog.w("look-ahead capped by the buffer memory target at ${parameters.bufferedDurationUs / 1_000}ms")
+            cappedByMemory = true
+            holding = false
+            return true
+        }
+        holding = true
         val now = SystemClock.elapsedRealtime()
         if (now - lastHoldLogMs >= HOLD_LOG_INTERVAL_MS) {
             lastHoldLogMs = now

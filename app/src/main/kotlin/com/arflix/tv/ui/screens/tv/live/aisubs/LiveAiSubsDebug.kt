@@ -4,29 +4,15 @@ import com.arflix.tv.BuildConfig
 import java.util.concurrent.TimeUnit
 
 /**
- * Phase 0 switches for the Live TV AI subtitles proof of concept, set over adb so no UI is
- * needed yet (debug builds only; release builds always read "off"):
- *
- * - `adb shell setprop debug.arvio.liveaisubs 1` taps the channel's audio and logs segments.
- * - `adb shell setprop debug.arvio.liveaisubs.delay 10` holds playback until 10 s are buffered
- *   (0 = no hold). Read when a channel is prepared.
- * - `adb shell setprop debug.arvio.liveaisubs.verify 1` also runs the VAD on the audio as it is
- *   played, to compare its segment times with the look-ahead tap's (doubles the VAD cost).
- *
- * `debug.*` properties are writable from `adb shell` without root. They are polled on a daemon
- * thread, because reading them means running `getprop`, which must not happen on the UI thread.
+ * Hidden diagnostics for Live TV AI subtitles, debug builds only:
+ * `adb shell setprop debug.arvio.liveaisubs.overlay 1` shows look-ahead, AI latency p50/p95,
+ * late cues and segments per minute over the picture, and logs HLS segment details under
+ * `LiveAiSubs`. `debug.*` properties are writable from `adb shell` without root. They are polled
+ * on a daemon thread, because reading one means running `getprop`, never on the UI thread.
  */
 internal object LiveAiSubsDebug {
     @Volatile
     var enabled: Boolean = false
-        private set
-
-    @Volatile
-    var delayMs: Long = 0L
-        private set
-
-    @Volatile
-    var verify: Boolean = false
         private set
 
     @Volatile
@@ -46,15 +32,7 @@ internal object LiveAiSubsDebug {
 
     private fun pollLoop() {
         while (true) {
-            val nowEnabled = read("debug.arvio.liveaisubs") == "1"
-            val nowDelay = read("debug.arvio.liveaisubs.delay")?.toLongOrNull()?.coerceIn(0L, 30L) ?: 0L
-            val nowVerify = read("debug.arvio.liveaisubs.verify") == "1"
-            if (nowEnabled != enabled || nowDelay * 1_000L != delayMs || nowVerify != verify) {
-                LiveAiSubsLog.i("debug switches: enabled=$nowEnabled delay=${nowDelay}s verify=$nowVerify")
-            }
-            enabled = nowEnabled
-            delayMs = if (nowEnabled) nowDelay * 1_000L else 0L
-            verify = nowEnabled && nowVerify
+            enabled = read("debug.arvio.liveaisubs.overlay") == "1"
             try {
                 Thread.sleep(POLL_MS)
             } catch (_: InterruptedException) {
@@ -70,5 +48,5 @@ internal object LiveAiSubsDebug {
         value.ifEmpty { null }
     }.getOrNull()
 
-    private const val POLL_MS = 2_000L
+    private const val POLL_MS = 3_000L
 }

@@ -1551,4 +1551,34 @@
     <string name="settings_stalker_desc">Portal Ministra / Stalker com autenticação por endereço MAC.</string>
     <string name="settings_content_to_import">Conteúdo a importar</string>
     <string name="settings_label_m3u_url">URL da lista M3U</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">Legendas IA</string>
+    <string name="live_ai_subs_preparing">Preparando legendas… %1$d s</string>
+    <string name="live_ai_subs_no_key">As legendas IA precisam de uma chave de API do Google Gemini (Configurações → Legendas IA)</string>
+    <string name="live_ai_subs_invalid_key">Legendas IA: a chave de API do Gemini foi rejeitada</string>
+    <string name="live_ai_subs_quota">Legendas IA em pausa: quota do Gemini atingida</string>
+    <string name="live_ai_subs_offline">Legendas IA: sem conexão com a internet</string>
+    <string name="live_ai_subs_unsupported">Legendas IA não suportadas neste canal</string>
+    <string name="live_ai_subs_memory_capped">Não dá para atrasar este canal o suficiente; algumas legendas podem chegar atrasadas</string>
+    <string name="live_ai_subs_title">Legendas IA na TV ao vivo</string>
+    <string name="live_ai_subs_desc">Transcreve e traduz canais ao vivo com o Gemini. A TV ao vivo é atrasada alguns segundos para as linhas aparecerem na hora certa.</string>
+    <string name="live_ai_subs_delay_title">Atraso das legendas ao vivo</string>
+    <string name="live_ai_subs_delay_desc">Quanto a TV ao vivo é atrasada. Auto usa a velocidade medida da IA.</string>
+    <string name="live_ai_subs_seconds">%1$d s</string>
+    <string name="live_ai_subs_activation_title">Ativação das legendas IA ao vivo</string>
+    <string name="live_ai_subs_activation_desc">Cada troca de canal espera o atraso; por canal só atrasa os canais em que você ativar</string>
+    <string name="live_ai_subs_activation_per_channel">Por canal (menu de legendas)</string>
+    <string name="live_ai_subs_activation_always">Sempre ativas</string>
+    <string name="live_ai_subs_target_title">Idioma das legendas ao vivo</string>
+    <string name="live_ai_subs_target_desc">O idioma para o qual os canais ao vivo são traduzidos</string>
+    <string name="live_ai_subs_target_profile">Idioma de legendas do perfil</string>
+    <string name="live_ai_subs_key_title">Chave de API do Gemini para TV ao vivo</string>
+    <string name="live_ai_subs_key_desc">Usa a chave das legendas IA quando é do Gemini; caso contrário, esta</string>
+    <string name="live_ai_subs_key_shared">A TV ao vivo usa a chave do Gemini das legendas IA acima</string>
+    <string name="live_ai_subs_key_shared_short">Usa a chave das legendas IA</string>
+    <string name="live_ai_subs_key_valid">A chave de API do Gemini funciona</string>
+    <string name="live_ai_subs_key_rejected">O Gemini rejeitou esta chave de API</string>
+    <string name="live_ai_subs_key_unchecked">Não foi possível verificar a chave (sem conexão?)</string>
+    <string name="live_ai_subs_needs_key">Adicione primeiro uma chave de API do Google Gemini</string>
 </resources>

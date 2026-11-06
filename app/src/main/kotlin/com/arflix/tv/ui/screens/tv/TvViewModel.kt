@@ -143,6 +143,41 @@ class TvViewModel @Inject constructor(
         )
     }.getOrDefault(com.arflix.tv.ui.screens.tv.live.LiveSubtitleDefault.Off)
 
+    /**
+     * The language Live TV AI subtitles translate into when settings leave it to the profile: the
+     * profile's default subtitle language, else the device language.
+     */
+    internal suspend fun liveAiSubsDefaultLanguage(): String =
+        (liveSubtitleDefault() as? com.arflix.tv.ui.screens.tv.live.LiveSubtitleDefault.Language)?.code
+            ?: java.util.Locale.getDefault().language
+
+    /** The profile's subtitle look, read the same way the VOD player reads it. */
+    internal suspend fun liveSubtitleStyle(): com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle = runCatching {
+        val prefs = context.settingsDataStore.data.first()
+        val size = prefs[profileManager.profileStringKey("subtitle_size")] ?: "Medium"
+        val offset = prefs[profileManager.profileStringKey("subtitle_offset")] ?: "Bottom"
+        com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle(
+            sizePreference = size,
+            sizePercent = prefs[profileManager.profileIntKey("subtitle_size_pct")] ?: when (size.lowercase()) {
+                "small" -> 80
+                "large" -> 120
+                "extra large" -> 140
+                else -> 100
+            },
+            verticalPercent = prefs[profileManager.profileIntKey("subtitle_vertical_pct")] ?: when (offset) {
+                "Low" -> 8
+                "Medium" -> 15
+                "High" -> 25
+                else -> 2
+            },
+            color = prefs[profileManager.profileStringKey("subtitle_color")] ?: "White",
+            style = prefs[profileManager.profileStringKey("subtitle_style")] ?: "Bold",
+            font = com.arflix.tv.ui.screens.player.SubtitleFontOption.fromPreference(
+                prefs[profileManager.profileStringKey("subtitle_font")],
+            ).preferenceValue,
+        )
+    }.getOrDefault(com.arflix.tv.ui.screens.tv.live.aisubs.LiveSubtitleStyle())
+
     suspend fun cachedSportsMetadata() = sportsRepository.cachedMetadata()
     internal var cachedSportsSchedule: com.arflix.tv.ui.screens.tv.live.SportsScheduleSnapshot? = null
     private var sportsBroadcasterIndexLoad: Pair<SportsBroadcasterIndexKey, Deferred<SportsBroadcasterIndex>>? = null

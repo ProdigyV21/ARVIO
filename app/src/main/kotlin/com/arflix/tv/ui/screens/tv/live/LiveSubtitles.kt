@@ -65,6 +65,27 @@ internal fun audioPreferenceLanguage(preference: String?): String? {
 internal fun liveSubtitleOptions(tracks: Tracks, offLabel: String, displayLocale: Locale = Locale.getDefault()) =
     liveTrackOptions(tracks, C.TRACK_TYPE_TEXT, offLabel, displayLocale)
 
+/** The picker key of the "AI subtitles" entry (Live TV AI subtitles). */
+internal const val LIVE_SUBTITLES_AI = "ai"
+
+/**
+ * [streamOptions] (from [liveSubtitleOptions]) plus an "AI subtitles" entry after the stream's own
+ * tracks, when the feature is on. A channel without subtitle tracks gets "Off" and "AI subtitles".
+ * While AI subtitles are on for the channel, that entry is the selected one.
+ */
+internal fun withAiSubtitlesOption(
+    streamOptions: List<LiveTrackOption>,
+    offLabel: String,
+    aiLabel: String,
+    aiAvailable: Boolean,
+    aiSelected: Boolean,
+): List<LiveTrackOption> {
+    if (!aiAvailable) return streamOptions
+    val base = streamOptions.ifEmpty { listOf(LiveTrackOption(LIVE_SUBTITLES_OFF, offLabel, selected = true)) }
+    val withSelection = if (aiSelected) base.map { it.copy(selected = false) } else base
+    return withSelection + LiveTrackOption(LIVE_SUBTITLES_AI, aiLabel, selected = aiSelected)
+}
+
 /** The audio choices for what is playing, one per language or track. */
 internal fun liveAudioOptions(tracks: Tracks, displayLocale: Locale = Locale.getDefault()) =
     liveTrackOptions(tracks, C.TRACK_TYPE_AUDIO, offLabel = null, displayLocale)
