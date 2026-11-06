@@ -3250,10 +3250,12 @@ fun LiveTvScreen(
         LiveSubtitleSession(context, GeminiSegmentEngine(apiKey = { liveAiKey.value }))
     }
     DisposableEffect(liveAiSession) { onDispose { liveAiSession.release() } }
-    // Per channel, like the audio choice: true/false once picked; unset follows the activation setting.
+    // Per channel, like the audio choice: picking "AI subtitles" in the player always works for
+    // that stream; the settings switch only decides whether channels start with them on (Always).
     val liveAiSubsChoices = remember { mutableStateMapOf<String, Boolean>() }
-    val liveAiSubsOn = liveAiSubsSettings.enabled && playingChannelId != null &&
-        (liveAiSubsChoices[playingChannelId] ?: (liveAiSubsSettings.activation == LiveAiSubsActivation.ALWAYS))
+    val liveAiSubsOn = playingChannelId != null &&
+        (liveAiSubsChoices[playingChannelId]
+            ?: (liveAiSubsSettings.enabled && liveAiSubsSettings.activation == LiveAiSubsActivation.ALWAYS))
     val liveAiCue by liveAiSession.cue.collectAsState()
     val liveAiStats by liveAiSession.stats.collectAsState()
     var liveAiPreparingSeconds by remember { mutableStateOf<Int?>(null) }
@@ -4976,7 +4978,7 @@ fun LiveTvScreen(
                             .takeIf {
                                 withAiSubtitlesOption(
                                     liveSubtitleOptions(liveTracks, ""), "", "",
-                                    aiAvailable = liveAiSubsSettings.enabled, aiSelected = false,
+                                    aiAvailable = true, aiSelected = false,
                                 ).size > 1
                             },
                         onAudioClick = { audioPickerOpen = true }
@@ -5250,7 +5252,7 @@ fun LiveTvScreen(
                     liveSubtitleOptions(liveTracks, stringResource(R.string.live_subtitles_off)),
                     offLabel = stringResource(R.string.live_subtitles_off),
                     aiLabel = stringResource(R.string.live_ai_subtitles),
-                    aiAvailable = liveAiSubsSettings.enabled,
+                    aiAvailable = true,
                     aiSelected = liveAiSubsOn,
                 ),
                 onDismiss = {

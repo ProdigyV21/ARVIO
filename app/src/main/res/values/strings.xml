@@ -2094,7 +2094,7 @@
     <string name="live_ai_subs_unsupported">AI subtitles not supported on this channel</string>
     <string name="live_ai_subs_memory_capped">This channel can\'t be delayed enough; some subtitles may be late</string>
     <string name="live_ai_subs_title">Live TV AI subtitles</string>
-    <string name="live_ai_subs_desc">Transcribe and translate live channels with Gemini. Live TV is delayed a few seconds so lines appear on time.</string>
+    <string name="live_ai_subs_desc">Turn on AI subtitles from the subtitle menu in the player, on any channel. With Always on below, every channel starts with them. Live TV is delayed a few seconds so lines appear on time.</string>
     <string name="live_ai_subs_delay_title">Live TV subtitle delay</string>
     <string name="live_ai_subs_delay_desc">How far live TV is held back. Auto uses the measured AI speed.</string>
     <string name="live_ai_subs_seconds">%1$d s</string>

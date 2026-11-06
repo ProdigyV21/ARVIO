@@ -387,7 +387,7 @@
     <string name="live_ai_subs_unsupported">כתוביות AI אינן נתמכות בערוץ הזה</string>
     <string name="live_ai_subs_memory_capped">אי אפשר לעכב את הערוץ הזה מספיק; חלק מהכתוביות עלולות לאחר</string>
     <string name="live_ai_subs_title">כתוביות AI לטלוויזיה חיה</string>
-    <string name="live_ai_subs_desc">תמלול ותרגום של ערוצים חיים עם Gemini. השידור מתעכב כמה שניות כדי שהכתוביות יופיעו בזמן.</string>
+    <string name="live_ai_subs_desc">אפשר להפעיל כתוביות AI מתפריט הכתוביות בנגן בכל ערוץ. עם ״תמיד פעיל״ למטה, כל ערוץ מתחיל איתן. השידור מתעכב כמה שניות כדי שהכתוביות יופיעו בזמן.</string>
     <string name="live_ai_subs_delay_title">עיכוב כתוביות בטלוויזיה חיה</string>
     <string name="live_ai_subs_delay_desc">בכמה לעכב את השידור החי. אוטומטי מתאים את עצמו למהירות ה-AI שנמדדה.</string>
     <string name="live_ai_subs_seconds">%1$d שנ׳</string>
