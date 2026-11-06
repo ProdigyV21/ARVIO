@@ -505,26 +505,36 @@ function addonSupportsId(addon: InstalledAddon, id: string) {
   );
 }
 
+function streamText(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
 function normalizeStream(stream: RawStream, addon: InstalledAddon): StreamSource {
-  const text = [stream.title, stream.name, stream.description, stream.size].filter(Boolean).join(" ");
+  const name = streamText(stream.name);
+  const title = streamText(stream.title);
+  const description = streamText(stream.description);
+  const size = streamText(stream.size);
+  const addonName = streamText(addon.name) ?? "Source";
+  const text = [title, name, description, size].filter(Boolean).join(" ");
   const url = streamUrl(stream);
   const normalized: StreamSource = {
-    source: stream.name ?? stream.title ?? addon.name,
-    addonName: addon.name,
+    source: name ?? title ?? addonName,
+    addonName,
     addonId: addon.id,
     quality: detectQuality(text),
-    size: stream.size ?? sizeLabel(stream.sizeBytes ?? stream.behaviorHints?.videoSize ?? null),
+    size: size ?? sizeLabel(stream.sizeBytes ?? stream.behaviorHints?.videoSize ?? null),
     sizeBytes: stream.sizeBytes ?? stream.behaviorHints?.videoSize ?? null,
     url,
     infoHash: stream.infoHash ?? null,
     fileIdx: stream.fileIdx ?? null,
     behaviorHints: {
       ...(stream.behaviorHints ?? {}),
+      filename: streamText(stream.behaviorHints?.filename) ?? null,
       notWebReady: !url && Boolean(stream.infoHash || stream.ytId || stream.behaviorHints?.videoHash)
     },
     subtitles: stream.subtitles ?? [],
     sources: stream.sources ?? [],
-    description: stream.description ?? stream.title ?? null
+    description: description ?? title ?? null
   };
   normalized.behaviorHints = {
     ...(normalized.behaviorHints ?? {}),
