@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit
 
 private const val TAG = "SubtitleTranslation"
 
-private val RTL_LANGUAGES = setOf("hebrew", "arabic", "urdu", "persian", "farsi", "yiddish")
+internal val RTL_LANGUAGES = setOf("hebrew", "arabic", "urdu", "persian", "farsi", "yiddish")
 
 data class TranslationResult(
     val lines: List<String>,
@@ -28,7 +28,7 @@ data class TranslationResult(
 // it's not actionable and translation keeps working for everything else.
 const val TRANSLATION_ERROR_CONTENT_BLOCKED = "CONTENT_BLOCKED"
 
-private val BLOCKED_FINISH_REASONS = setOf(
+internal val BLOCKED_FINISH_REASONS = setOf(
     "PROHIBITED_CONTENT", "SAFETY", "RECITATION", "BLOCKLIST", "SPII"
 )
 
@@ -54,9 +54,62 @@ private const val GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v
 // with short exponential backoff before falling back to English. Kept short so subtitles stay in
 // sync with playback. NOT applied to 429 (that's our own quota — retrying fast makes it worse;
 // the manager's 5s cooldown handles it) or 4xx/content blocks (retrying won't change the outcome).
-private const val GEMINI_MAX_TRANSIENT_RETRIES = 2        // 3 attempts total
-private const val GEMINI_RETRY_BASE_DELAY_MS = 400L       // 400ms, then 800ms (×2 each retry)
-private val GEMINI_RETRYABLE_HTTP = setOf(500, 502, 503)
+internal const val GEMINI_MAX_TRANSIENT_RETRIES = 2        // 3 attempts total
+internal const val GEMINI_RETRY_BASE_DELAY_MS = 400L       // 400ms, then 800ms (×2 each retry)
+internal val GEMINI_RETRYABLE_HTTP = setOf(500, 502, 503)
+
+/**
+ * The JSON array in a model reply: bare, fenced, wrapped in a one-field object, or with a truncated
+ * tail. Shared by every Gemini/Groq caller in the app.
+ */
+internal fun extractJsonArray(text: String): JSONArray? {
+    val codeBlocks = Regex("```(?:json)?\\s*([\\s\\S]*?)```").findAll(text)
+        .map { it.groupValues[1].trim() }.toList().reversed()
+    val stripped = text.replace(Regex("```[^`]*```"), "").trim()
+    val candidates = codeBlocks + listOf(stripped, text)
+
+    for (candidate in candidates) {
+        try { return JSONArray(candidate) } catch (_: Exception) {}
+        // With responseMimeType=application/json the model sometimes wraps the array in an
+        // object (e.g. {"translations": [...]}) — unwrap a lone array-valued field.
+        try {
+            val obj = JSONObject(candidate)
+            val arrays = obj.keys().asSequence()
+                .mapNotNull { key -> obj.optJSONArray(key) }
+                .toList()
+            if (arrays.size == 1) return arrays[0]
+        } catch (_: Exception) {}
+        val start = candidate.indexOf('[')
+        val end = candidate.lastIndexOf(']')
+        if (start < 0 || end <= start) {
+            repairTruncatedArray(candidate)?.let { return it }
+            continue
+        }
+        try {
+            return JSONArray(candidate.substring(start, end + 1))
+        } catch (_: Exception) {}
+    }
+    return null
+}
+
+/**
+ * Gemini's JSON mode intermittently truncates output at the very tail (finishReason STOP but
+ * the closing bracket — sometimes a trailing element — is missing). The translations
+ * themselves are intact, so re-terminate the array instead of failing the whole batch.
+ */
+internal fun repairTruncatedArray(text: String): JSONArray? {
+    val t = text.trim()
+    if (!t.startsWith("[") || t.endsWith("]")) return null
+    val lastQuote = t.lastIndexOf('"')
+    if (lastQuote <= 0) return null
+    // Try closing as-is, then after dropping a trailing partial element.
+    for (cut in listOf(t, t.substring(0, lastQuote + 1))) {
+        val trimmed = cut.trimEnd().trimEnd(',')
+        try { return JSONArray("$trimmed]") } catch (_: Exception) {}
+        try { return JSONArray("$trimmed\"]") } catch (_: Exception) {}
+    }
+    return null
+}
 
 class SubtitleTranslationService(
     private val apiKeyProvider: () -> String,
@@ -67,55 +120,6 @@ class SubtitleTranslationService(
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
-
-    private fun extractJsonArray(text: String): JSONArray? {
-        val codeBlocks = Regex("```(?:json)?\\s*([\\s\\S]*?)```").findAll(text)
-            .map { it.groupValues[1].trim() }.toList().reversed()
-        val stripped = text.replace(Regex("```[^`]*```"), "").trim()
-        val candidates = codeBlocks + listOf(stripped, text)
-
-        for (candidate in candidates) {
-            try { return JSONArray(candidate) } catch (_: Exception) {}
-            // With responseMimeType=application/json the model sometimes wraps the array in an
-            // object (e.g. {"translations": [...]}) — unwrap a lone array-valued field.
-            try {
-                val obj = JSONObject(candidate)
-                val arrays = obj.keys().asSequence()
-                    .mapNotNull { key -> obj.optJSONArray(key) }
-                    .toList()
-                if (arrays.size == 1) return arrays[0]
-            } catch (_: Exception) {}
-            val start = candidate.indexOf('[')
-            val end = candidate.lastIndexOf(']')
-            if (start < 0 || end <= start) {
-                repairTruncatedArray(candidate)?.let { return it }
-                continue
-            }
-            try {
-                return JSONArray(candidate.substring(start, end + 1))
-            } catch (_: Exception) {}
-        }
-        return null
-    }
-
-    /**
-     * Gemini's JSON mode intermittently truncates output at the very tail (finishReason STOP but
-     * the closing bracket — sometimes a trailing element — is missing). The translations
-     * themselves are intact, so re-terminate the array instead of failing the whole batch.
-     */
-    private fun repairTruncatedArray(text: String): JSONArray? {
-        val t = text.trim()
-        if (!t.startsWith("[") || t.endsWith("]")) return null
-        val lastQuote = t.lastIndexOf('"')
-        if (lastQuote <= 0) return null
-        // Try closing as-is, then after dropping a trailing partial element.
-        for (cut in listOf(t, t.substring(0, lastQuote + 1))) {
-            val trimmed = cut.trimEnd().trimEnd(',')
-            try { return JSONArray("$trimmed]") } catch (_: Exception) {}
-            try { return JSONArray("$trimmed\"]") } catch (_: Exception) {}
-        }
-        return null
-    }
 
     private fun buildSystemPrompt(targetLanguage: String, NL: String) =
         "You are a professional subtitle translator. Translate the following JSON array into natural $targetLanguage.\n" +

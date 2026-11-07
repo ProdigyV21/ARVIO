@@ -1919,4 +1919,22 @@
     <string name="discord_qr_instructions">1. QR-Code mit dem Telefon scannen\n2. In Discord auf \'Autorisieren\' tippen\n3. Verbindet sich automatisch</string>
     <string name="discord_not_included_in_build">In dieser Version nicht enthalten</string>
     <string name="discord_rpc_help_desc">Zeige deinen Wiedergabestatus in deinem Discord-Profil.</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">KI-Untertitel</string>
+    <string name="live_ai_subs_preparing">Untertitel werden vorbereitet… %1$d s</string>
+    <string name="live_ai_subs_no_key">KI-Untertitel brauchen einen Google-Gemini-API-Schlüssel (Einstellungen → KI-Untertitel)</string>
+    <string name="live_ai_subs_invalid_key">KI-Untertitel: Der Gemini-API-Schlüssel wurde abgelehnt</string>
+    <string name="live_ai_subs_quota">KI-Untertitel pausiert: Gemini-Kontingent erreicht</string>
+    <string name="live_ai_subs_offline">KI-Untertitel: keine Internetverbindung</string>
+    <string name="live_ai_subs_unsupported">KI-Untertitel werden auf diesem Sender nicht unterstützt</string>
+    <string name="live_ai_subs_memory_capped">Dieser Sender kann nicht genug verzögert werden; manche Untertitel kommen evtl. zu spät</string>
+    <string name="live_ai_subs_title">KI-Untertitel für Live-TV</string>
+    <string name="live_ai_subs_desc">Fügt KI-Untertitel zum Untertitelmenü von Live-Sendern hinzu: Gemini transkribiert und übersetzt in die Untertitelsprache des Profils. Live-TV wird einige Sekunden verzögert, damit die Zeilen rechtzeitig erscheinen.</string>
+    <string name="live_ai_subs_key_valid">Gemini-API-Schlüssel funktioniert</string>
+    <string name="live_ai_subs_key_rejected">Gemini hat diesen API-Schlüssel abgelehnt</string>
+    <string name="live_ai_subs_key_unchecked">Schlüssel konnte nicht geprüft werden (offline?)</string>
+    <string name="live_ai_subs_needs_key">Füge zuerst einen Google-Gemini-API-Schlüssel hinzu</string>
+    <string name="live_ai_subs_auto_title">Automatisch übersetzen, wenn ein Sender startet</string>
+    <string name="live_ai_subs_auto_desc">Jeder Sender startet mit KI-Untertiteln, ohne sie im Untertitelmenü auszuwählen</string>
 </resources>

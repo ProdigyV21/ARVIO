@@ -14,10 +14,12 @@ async function copyText(text: string): Promise<boolean> {
     const textArea = document.createElement("textarea");
     textArea.value = text;
     document.body.appendChild(textArea);
-    textArea.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(textArea);
-    return ok;
+    try {
+      textArea.select();
+      return document.execCommand("copy");
+    } finally {
+      textArea.remove();
+    }
   } catch { return false; }
 }
 
@@ -108,6 +110,19 @@ ${firebase ? `**Report reference:** \`arvio_report_id=${id}\`` : ""}
                 {reportText}
               </pre>
             </div>
+            {copied === "failed" && <>
+              <p role="alert" style={{ color: "#ffb4ab", fontSize: "14px", lineHeight: 1.6 }}>
+                {translateUi("Your browser blocked copying. Select the report text, copy it, then open Discord.")}
+              </p>
+              <textarea
+                readOnly
+                autoFocus
+                aria-label={translateUi("Report text")}
+                value={reportText}
+                onFocus={(event) => event.currentTarget.select()}
+                style={{ width: "100%", boxSizing: "border-box", minHeight: "180px", marginBottom: "20px", padding: "12px", border: "1px solid #373d40", borderRadius: "7px", background: "#000", color: "#f6f7f7", fontSize: "13px" }}
+              />
+            </>}
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
               <button
                 onClick={handleCopyAndRedirect}
@@ -126,7 +141,7 @@ ${firebase ? `**Report reference:** \`arvio_report_id=${id}\`` : ""}
                   cursor: "pointer"
                 }}
               >
-                {copied === "copied" ? translateUi("Copied! Opening Discord...") : translateUi("Copy Report & Open Discord")}
+                {copied === "copied" ? translateUi("Copied! Opening Discord...") : copied === "failed" ? translateUi("Couldn't copy: select the text above") : translateUi("Copy Report & Open Discord")}
               </button>
               <a
                 href={DISCORD_URL}

@@ -113,6 +113,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -249,6 +251,11 @@ data class SettingsUiState(
     // Volume boost in decibels (0 = off, up to 15 dB). Applied via system LoudnessEnhancer
     // attached to the ExoPlayer audio session. Issue #88.
     val volumeBoostDb: Int = 0,
+    // On-disk playback cache (per device, see player/cache/PlaybackCache): the user's size limit,
+    // what it holds now, and the most the free space allows (0 = not measured yet).
+    val playbackCacheLimitGb: Int = com.arflix.tv.player.cache.PlaybackCache.DEFAULT_LIMIT_GB,
+    val playbackCacheUsedBytes: Long = 0L,
+    val playbackCacheMaxBytes: Long = 0L,
     val showLoadingStats: Boolean = true,
     val diagnosticsSharingEnabled: Boolean = true,
     val usageStatisticsEnabled: Boolean = false,
@@ -655,6 +662,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     init {
+        // Live TV AI subtitles settings are written by their own rows (LiveAiSubsSettingsRows);
+        // push them to the cloud like every other setting, once they settle.
+        viewModelScope.launch {
+            com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.flow(context)
+                .map { listOf(it.enabled, it.autoStart) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { syncLocalStateToCloud(silent = true) }
+        }
         _uiState.value = _uiState.value.copy(
             diagnosticsSharingEnabled = DiagnosticsManager.isReportingEnabled(context),
             usageStatisticsEnabled = DiagnosticsManager.isUsageEnabled(context)
@@ -675,6 +691,52 @@ class SettingsViewModel @Inject constructor(
         observeStreamIntegrations()
         initializeUpdaterState()
         checkForAppUpdates(force = false, showNoUpdateFeedback = false)
+        refreshPlaybackCacheInfo()
+    }
+
+    /** Re-reads the playback cache's limit, usage and the space available for it. */
+    fun refreshPlaybackCacheInfo() {
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                runCatching {
+                    val cache = com.arflix.tv.player.cache.PlaybackCache
+                    cache.get(context)
+                    Triple(cache.limitGb(context), cache.usedBytes(), cache.maxAllowedBytes(context))
+                }.getOrNull()
+            } ?: return@launch
+            _uiState.value = _uiState.value.copy(
+                playbackCacheLimitGb = info.first,
+                playbackCacheUsedBytes = info.second,
+                playbackCacheMaxBytes = info.third
+            )
+        }
+    }
+
+    /** Steps the playback cache size to the next choice that fits the free space, and applies it at once. */
+    fun cyclePlaybackCacheSize() {
+        val state = _uiState.value
+        val next = com.arflix.tv.player.cache.PlaybackCache.nextLimitGb(state.playbackCacheLimitGb, state.playbackCacheMaxBytes)
+        _uiState.value = state.copy(playbackCacheLimitGb = next)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { com.arflix.tv.player.cache.PlaybackCache.setLimitGb(context, next) }
+            }
+            refreshPlaybackCacheInfo()
+        }
+    }
+
+    /** Deletes everything in the playback cache. */
+    fun clearPlaybackCache() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { com.arflix.tv.player.cache.PlaybackCache.clear(context) }
+            }
+            _uiState.value = _uiState.value.copy(
+                toastMessage = SettingsMessage.Res(R.string.playback_cache_cleared),
+                toastType = ToastType.SUCCESS
+            )
+            refreshPlaybackCacheInfo()
+        }
     }
 
     private fun observeIptvGroupPrefs() {

@@ -18,6 +18,7 @@
     "test:player-sources-ui": "node scripts/check-player-sources-ui.cjs",
     "test:player-loading-ui": "node scripts/check-player-loading-ui.cjs",
     "test:ui-refinements": "node scripts/check-ui-refinements.cjs",
+    "test:site-diagnostics-ui": "node scripts/check-site-diagnostics-ui.cjs",
     "test:iptv-groups-ui": "node scripts/check-iptv-groups-ui.cjs",
     "test:i18n-ui": "node scripts/check-i18n-ui.cjs",
     "test:partner-ui": "node scripts/check-partner-ui.cjs",

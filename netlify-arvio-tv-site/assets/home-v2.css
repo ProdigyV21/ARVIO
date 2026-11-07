@@ -94,6 +94,11 @@
 #premium .premium li{position:relative;padding-left:26px;line-height:1.6;margin-bottom:9px}#premium .premium li:before{position:absolute;left:0;margin:0}
 .plan-price span{white-space:nowrap}.plan-badge{top:auto;bottom:calc(100% - 11px);max-width:calc(100% - 20px);white-space:normal;line-height:1.35}#premium .premium-copy>.membership-terms a{white-space:nowrap}
 
+.hero-store{display:block;width:184px;max-width:100%;margin-top:12px;border-radius:8px}
+.hero-store img{display:block;width:100%;height:auto}
+.hero-store:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+@media(max-width:850px){.hero-store{margin-inline:auto}}
+
 /* A quiet business invitation below the main product experience. */
 .sponsor-invite{padding-block:8px 64px}
 .sponsor-invite-panel{display:flex;align-items:center;justify-content:space-between;gap:48px;border:1px solid #9efbd51c;border-radius:18px;padding:36px 40px;background:#0c1210}
