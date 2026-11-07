@@ -25,10 +25,17 @@ test('Firebase QR reports include the ARVIO custom-key reference, not a fake eve
   assert.doesNotMatch(text, /sentry\.io/);
 });
 
-test('historical QR reports retain their Sentry link', () => {
-  const text = report('?id=old-event&v=2.0');
+test('historical QR reports retain their Sentry link when provider=sentry is explicit', () => {
+  const text = report('?provider=sentry&id=old-event&v=2.0');
   assert.match(text, /sentry\.io\/issues/);
   assert.doesNotMatch(text, /arvio_report_id/);
+});
+
+test('reports default to Firebase Crashlytics when provider is omitted', () => {
+  const text = report('?id=default-reference&v=2.3');
+  assert.match(text, /project\/arvio-15c5a\/crashlytics/);
+  assert.match(text, /arvio_report_id=default-reference/);
+  assert.doesNotMatch(text, /sentry\.io/);
 });
 
 test('untrusted error text is assigned as text, not HTML', () => {

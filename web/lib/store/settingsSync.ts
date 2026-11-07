@@ -9,9 +9,10 @@ import type { AppSettings } from "../types";
 import { settingsKey } from "./settings";
 import { authClient } from "./clients";
 import type { StoreCore } from "./core";
+import { personalManagedPatch } from "../managedConfiguration";
 
 export function useSettingsAutosave(store: StoreCore) {
-  const { activeProfileId, activeProfileIdRef, cloudProfilesHydrated, lastSyncedSettingsRef, profiles, setSettingsSyncState, setToast, settings } = store;
+  const { activeProfileId, activeProfileIdRef, cloudProfilesHydrated, lastSyncedSettingsRef, profiles, setSettingsSyncState, setToast, personalSettings: settings } = store;
   useEffect(() => {
     saveStored(settingsKey, settings);
     savePlaylists(settings.iptvPlaylists);
@@ -73,10 +74,12 @@ export function useSettingsAutosave(store: StoreCore) {
 }
 
 export function useUpdateSettings(store: StoreCore) {
-  const { activeProfileIdRef, setSettings, setSettingsSyncState, setToast, settingsRef } = store;
+  const { activeProfileIdRef, setSettings, setSettingsSyncState, setToast, settingsRef, personalSettingsRef, managed } = store;
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
-    const previous = settingsRef.current;
-    const next = { ...previous, ...patch };
+    try { managed.recordPreferences(patch); }
+    catch (error) { setToast(error instanceof Error ? error.message : "This preference is managed by your administrator."); return; }
+    const previous = personalSettingsRef.current;
+    const next = { ...previous, ...personalManagedPatch(patch) };
     const profileId = activeProfileIdRef.current;
     // Record the explicit user edit immediately, even before the first cloud
     // pull finishes. The autosave effect cannot queue without a hydrated baseline.
@@ -90,9 +93,10 @@ export function useUpdateSettings(store: StoreCore) {
         setToast(error instanceof Error ? error.message : "Could not save settings");
       }
     }
-    settingsRef.current = next;
+    personalSettingsRef.current = next;
+    settingsRef.current = managed.applySettings(next);
     saveStored(settingsKey, next);
     setSettings(next);
-  }, []);
+  }, [managed.recordPreferences]);
   return { updateSettings };
 }

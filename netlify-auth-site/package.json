@@ -18,6 +18,7 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
     "netlify-cli": "^26.1.0"
   }
 }

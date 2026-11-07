@@ -498,7 +498,7 @@ class CloudSyncRepository @Inject constructor(
         "dnsProvider", "subtitleAiEnabled", "subtitleAiAutoSelect", "subtitleAiFindBestMatch",
         "subtitlePreloadEnabled", "dolbyVisionCompatEnabled", "subtitleAiApiKey",
         "subtitleAiModel", "subtitleRemoveHearingImpaired", "telegramSearchOnClickOnly",
-        "subtitleHearingSyncV2"
+        "subtitleHearingSyncV2", "liveAiSubsEnabled", "liveAiSubsAutoStart"
     )
     // Per-profile fields excluded from the generic merge (handled by their own logic / not values).
     private val profileMergeExclude = setOf("defaultSubtitle", "subtitleSettingsUpdatedAt")
@@ -793,6 +793,9 @@ class CloudSyncRepository @Inject constructor(
         root.put("subtitleAiApiKey", prefs[subtitleAiApiKeyKey] ?: "")
         root.put("subtitleAiModel", prefs[subtitleAiModelKey] ?: "GROQ_LLAMA_70B")
         root.put("subtitleRemoveHearingImpaired", prefs[subtitleRemoveHearingImpairedKey] ?: true)
+        // Live TV AI subtitles (global, like the AI subtitle key they share).
+        root.put("liveAiSubsEnabled", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.ENABLED] ?: false)
+        root.put("liveAiSubsAutoStart", prefs[com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.AUTO_START] ?: false)
         root.put(
             "telegramSearchOnClickOnly",
             prefs[com.arflix.tv.data.telegram.TelegramRepository.KEY_SEARCH_ON_CLICK_ONLY] ?: true
@@ -956,12 +959,12 @@ class CloudSyncRepository @Inject constructor(
 
         // Backward compatibility fields (legacy single-profile clients)
         root.put("addons", JSONArray(gson.toJson(sharedAddons)))
-        root.put("catalogs", JSONArray(gson.toJson(catalogRepository.getCatalogs())))
+        root.put("catalogs", JSONArray(gson.toJson(catalogRepository.getPersonalCatalogs())))
         root.put(
             "hiddenPreinstalledCatalogs",
             JSONArray(gson.toJson(catalogRepository.getHiddenPreinstalledCatalogIdsForActiveProfile()))
         )
-        val iptvConfig = iptvRepository.observeConfig().first()
+        val iptvConfig = iptvRepository.observePersonalConfig().first()
         root.put("iptvM3uUrl", iptvConfig.m3uUrl)
         root.put("iptvEpgUrl", iptvConfig.epgUrl)
         root.put("iptvFavoriteGroups", JSONArray(gson.toJson(iptvRepository.observeFavoriteGroups().first())))
@@ -1863,6 +1866,10 @@ class CloudSyncRepository @Inject constructor(
                 val model = root.optString("subtitleAiModel", "GROQ_LLAMA_70B")
                 if (model.isNotBlank()) prefs[subtitleAiModelKey] = model
                 prefs[subtitleRemoveHearingImpairedKey] = root.optBoolean("subtitleRemoveHearingImpaired", true)
+                // has() guards: backups from versions without Live TV AI subtitles must not reset them.
+                val live = com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs
+                if (root.has("liveAiSubsEnabled")) prefs[live.ENABLED] = root.optBoolean("liveAiSubsEnabled", false)
+                if (root.has("liveAiSubsAutoStart")) prefs[live.AUTO_START] = root.optBoolean("liveAiSubsAutoStart", false)
             }
         }
         if (preservedNewerLocalSubtitle) {
@@ -1988,7 +1995,7 @@ class CloudSyncRepository @Inject constructor(
                     gson.fromJson<List<String>>(j, type) ?: emptyList()
                 }
             }
-            val localIptv = iptvRepository.observeConfig().first()
+            val localIptv = iptvRepository.observePersonalConfig().first()
             val cloudHasIptvData = m3u.isNotBlank() || epg.isNotBlank() || favorites.isNotEmpty() || favoriteChannels.isNotEmpty()
             val localHasIptvData = localIptv.m3uUrl.isNotBlank() || localIptv.epgUrl.isNotBlank()
             var importedLegacyIptv = false

@@ -47,7 +47,8 @@ function ReportContent() {
     }
   }, [timeParam]);
 
-  const firebase = searchParams.get("provider") === "firebase";
+  const isSentry = searchParams.get("provider") === "sentry";
+  const firebase = !isSentry;
   const dashboard = firebase
     ? "https://console.firebase.google.com/project/arvio-15c5a/crashlytics"
     : id !== "N/A" ? `https://sentry.io/issues/?query=id%3A${encodeURIComponent(id)}` : "N/A";

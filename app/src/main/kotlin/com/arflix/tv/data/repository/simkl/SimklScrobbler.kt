@@ -8,7 +8,6 @@ import com.arflix.tv.data.api.SimklScrobbleBody
 import com.arflix.tv.data.api.SimklShowRef
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.util.AppLogger
-import com.arflix.tv.util.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,7 +28,7 @@ class SimklScrobbler @Inject constructor(
 
     private data class Command(
         val action: Action,
-        val authHeader: String,
+        val accountIdentity: String,
         val body: SimklScrobbleBody,
         val mediaType: MediaType,
         val tmdbId: Int,
@@ -41,8 +40,8 @@ class SimklScrobbler @Inject constructor(
         const val WRITE_LOCK_MS = 20_500L
     }
 
-    private val clientId: String get() = Constants.SIMKL_CLIENT_ID
-    private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val clientId: String get() = authManager.effectiveClientId
+    internal var queueScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queueMutex = Mutex()
     private var hasWritten = false
     private var lastWriteAt = 0L
@@ -64,10 +63,9 @@ class SimklScrobbler @Inject constructor(
         isAnime: Boolean = false
     ) {
         val token = authManager.getAccessToken() ?: return
-        val authHeader = "Bearer $token"
         val body = buildScrobbleBody(mediaType, tmdbId, progress, season, episode, isAnime)
 
-        submit(Command(Action.START, authHeader, body, mediaType, tmdbId, season, episode))
+        submit(Command(Action.START, authManager.cacheIdentity(token), body, mediaType, tmdbId, season, episode))
     }
 
     suspend fun scrobblePause(
@@ -79,10 +77,9 @@ class SimklScrobbler @Inject constructor(
         isAnime: Boolean = false
     ) {
         val token = authManager.getAccessToken() ?: return
-        val authHeader = "Bearer $token"
         val body = buildScrobbleBody(mediaType, tmdbId, progress, season, episode, isAnime)
 
-        submit(Command(Action.PAUSE, authHeader, body, mediaType, tmdbId, season, episode))
+        submit(Command(Action.PAUSE, authManager.cacheIdentity(token), body, mediaType, tmdbId, season, episode))
     }
 
     suspend fun scrobbleStop(
@@ -94,14 +91,13 @@ class SimklScrobbler @Inject constructor(
         isAnime: Boolean = false
     ) {
         val token = authManager.getAccessToken() ?: return
-        val authHeader = "Bearer $token"
         val body = buildScrobbleBody(mediaType, tmdbId, progress, season, episode, isAnime)
 
-        submit(Command(Action.STOP, authHeader, body, mediaType, tmdbId, season, episode))
+        submit(Command(Action.STOP, authManager.cacheIdentity(token), body, mediaType, tmdbId, season, episode))
     }
 
     private fun isSameMedia(a: Command, b: Command): Boolean {
-        if (a.mediaType != b.mediaType || a.tmdbId != b.tmdbId) return false
+        if (a.accountIdentity != b.accountIdentity || a.mediaType != b.mediaType || a.tmdbId != b.tmdbId) return false
         return if (a.mediaType == MediaType.TV) {
             a.season == b.season && a.episode == b.episode
         } else {
@@ -174,11 +170,14 @@ class SimklScrobbler @Inject constructor(
     private suspend fun execute(command: Command) {
         try {
             val activeToken = authManager.getAccessToken() ?: return
-            if (command.authHeader != "Bearer $activeToken") return
+            // V2 access tokens rotate. Keep queued events for the same connection,
+            // but never send them after an account/profile connection has changed.
+            if (command.accountIdentity != authManager.cacheIdentity(activeToken)) return
+            val authHeader = "Bearer $activeToken"
             val response = when (command.action) {
-                Action.START -> simklApi.scrobbleStart(command.authHeader, clientId, command.body)
-                Action.PAUSE -> simklApi.scrobblePause(command.authHeader, clientId, command.body)
-                Action.STOP -> simklApi.scrobbleStop(command.authHeader, clientId, command.body)
+                Action.START -> simklApi.scrobbleStart(authHeader, clientId, command.body)
+                Action.PAUSE -> simklApi.scrobblePause(authHeader, clientId, command.body)
+                Action.STOP -> simklApi.scrobbleStop(authHeader, clientId, command.body)
             }
             if (!response.isSuccessful) {
                 AppLogger.e(

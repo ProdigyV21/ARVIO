@@ -210,6 +210,7 @@
     <string name="frame_rate_desc">Off, Seamless, or Always</string>
     <string name="quality_filters_desc">Exclude quality tiers on this device</string>
     <string name="card_layout_desc">Landscape or poster cards</string>
+    <string name="card_layout_netflix_exception_desc">Not used in regular Netflix-style Home rows</string>
     <string name="ui_mode_desc">Force TV, Tablet, or Phone</string>
     <string name="skip_profile_desc">Auto-load last used profile after restart</string>
     <string name="oled_black_background_desc">Use pure black app backgrounds for OLED screens</string>
@@ -566,6 +567,10 @@
     <string name="mdblist_code_expired">MDBList code expired. Please try again.</string>
     <string name="mdblist_code_denied">MDBList authorization denied.</string>
     <string name="mdblist_connect_with_key">Enter API Key manually</string>
+    <string name="mdblist_reconnect_required">MDBList no longer accepts this connection. Connect MDBList again to resume syncing.</string>
+    <string name="mdblist_session_unavailable">MDBList could not be reached, so syncing is paused. ARVIO keeps retrying; reconnect MDBList if this lasts.</string>
+    <string name="mdblist_library_unavailable">MDBList could not be reached right now. Try again in a few minutes.</string>
+    <string name="mdblist_library_load_failed">Could not load this list from MDBList. Try again.</string>
     <!-- Tracking Integrations sub-page -->
     <string name="settings_tracking_integrations">Tracking Integrations</string>
     <string name="settings_connected_as">Connected as %1$s</string>
@@ -594,6 +599,8 @@
     <string name="settings_routing_update_simkl">Update Simkl while watching</string>
     <string name="settings_routing_update_simkl_on">Send progress and watched changes to Simkl.</string>
     <string name="settings_routing_update_simkl_off">Connect Simkl to enable this.</string>
+    <string name="settings_routing_update_wetrakr_on">Send progress and watched changes to WeTrakr.</string>
+    <string name="settings_routing_update_wetrakr_off">Connect WeTrakr to enable this.</string>
     <string name="settings_tracking_mode_automatic">Automatic</string>
 
     <string name="settings_fact_app_language">App language</string>
@@ -932,6 +939,18 @@
     <string name="iptv_account_refresh">Refresh now</string>
     <string name="iptv_account_refreshing">Checking…</string>
     <string name="iptv_account_refresh_failed">The provider did not answer. Please try again in a minute.</string>
+    <string name="iptv_connection_limit_title">Connection limit on this device</string>
+    <string name="iptv_connection_limit_auto">Auto</string>
+    <string name="iptv_connection_limit_no_limit">No limit</string>
+    <string name="iptv_connection_limit_at_a_time">%1$d at a time</string>
+    <string name="iptv_connection_limit_with_effective">%1$s (%2$d at a time)</string>
+    <string name="iptv_provider_allowance">Provider allowance: %1$s</string>
+    <string name="iptv_provider_allowance_not_reported">Provider allowance: not reported</string>
+    <string name="iptv_account_busy_title">This account is full</string>
+    <string name="iptv_account_busy_live_detail">The provider reports %1$d of %2$d streams in use.</string>
+    <string name="iptv_account_busy_vod">The provider reports that all of this account\'s streams are in use. Close one elsewhere and try again.</string>
+    <string name="iptv_account_busy_dismissed_hint">Press OK to try again.</string>
+    <string name="iptv_account_play_anyway">Play anyway</string>
     <string name="settings_cd_edit_stalker_config">Edit Stalker portal</string>
     <string name="settings_section_stalker_portals">STALKER PORTALS</string>
     <string name="settings_add_stalker_portal_button">Add Stalker portal</string>
@@ -1025,8 +1044,11 @@
 
     <!-- Extracted from code: Profile, Login and Collections -->
     <string name="profile_edit_title">Edit Profile</string>
+    <string name="profile_choose_avatar">Choose an avatar</string>
     <string name="profile_name_hint">Profile name</string>
     <string name="profile_lock">Profile Lock</string>
+    <string name="profile_lock_desc">Require a PIN to access this profile</string>
+    <string name="profile_pin_active">PIN protection is active</string>
     <string name="profile_set_pin">Set PIN</string>
     <string name="profile_change_pin">Change PIN</string>
     <string name="profile_remove_pin">Remove PIN</string>
@@ -1537,6 +1559,8 @@
 
     <!-- Extracted from code (data layer): shared labels and errors -->
     <string name="continue_season_episode">Continue S%1$dE%2$d</string>
+    <string name="syncing_progress">Syncing progress…</string>
+    <string name="details_progress_refresh_failed">Could not refresh watch progress. Showing saved progress.</string>
     <string name="play_season_episode">Play S%1$dE%2$d</string>
     <string name="continue_season_episode_at">Continue S%1$dE%2$d at %3$s</string>
     <string name="continue_at">Continue at %1$s</string>
@@ -1601,7 +1625,9 @@
     <string name="settings_community_addons_search">Search addons</string>
     <string name="settings_community_addons_all">All</string>
     <string name="settings_community_addons_empty">No addons match your search</string>
+    <string name="settings_community_addons_clear_filters">Clear search &amp; filters</string>
     <string name="settings_community_addons_failed">Couldn\'t load community addons</string>
+    <string name="settings_copied_url">URL copied to clipboard</string>
     <string name="settings_community_addon_configure">Configure</string>
     <string name="settings_community_addon_configurable">Configurable</string>
     <string name="settings_community_addon_uninstall">Uninstall</string>
@@ -1778,6 +1804,9 @@
     <string name="trakt_not_authenticated">Not authenticated with Trakt</string>
     <string name="trakt_reconnect_required">Your Trakt authorization expired or was revoked. Connect Trakt again to resume syncing.</string>
     <string name="trakt_sync_refresh_failed">History was imported, but Continue Watching could not be fully refreshed. Saved items have been kept; try again later.</string>
+    <string name="trakt_session_unavailable">Trakt could not be reached, so syncing is paused. ARVIO keeps retrying; reconnect Trakt if this lasts.</string>
+    <string name="trakt_library_unavailable">Trakt could not be reached right now. Try again in a few minutes.</string>
+    <string name="trakt_library_load_failed">Could not load this list from Trakt. Try again.</string>
     <string name="sync_supabase_auth_failed">Supabase auth failed</string>
     <string name="launcher_continue_dash">%1$s - %2$s</string>
     <string name="telegram_search_timed_out">Telegram search timed out</string>
@@ -2048,7 +2077,7 @@
     <string name="youtube_collection_full">This collection has reached the limit of %1$d videos. Remove a video before adding another.</string>
     <string name="youtube_parent_approval_required">A correct parent PIN is required to add videos to this kids profile. Set a parent PIN in Manage Profiles if needed.</string>
     <string name="youtube_profile_changed">The profile changed. Please add the video again.</string>
-    <string name="settings_wetrakr_tagline">Watchlists, watched history and playback progress. Connect separately on each device.</string>
+    <string name="settings_wetrakr_tagline">Watchlists, history &amp; playback progress</string>
     <string name="settings_wetrakr_device">Connection for this device and profile</string>
     <string name="settings_wetrakr_update">Update WeTrakr while watching</string>
     <string name="settings_connect_wetrakr">Connect WeTrakr</string>
@@ -2057,11 +2086,28 @@
     <!-- Playback cache (on-disk cache of streamed video for instant rewinds) -->
     <string name="settings_section_playback_cache">PLAYBACK CACHE</string>
     <string name="playback_cache_size">Playback Cache Size</string>
-    <string name="playback_cache_size_desc">Already-watched video kept on this device, so rewinding plays from storage instead of downloading again. Used: %1$s</string>
+    <string name="playback_cache_size_desc">Video saved by cache-enabled playback for local rewinds. Used: %1$s</string>
     <string name="playback_cache_limited">%1$s (free space)</string>
     <string name="clear_playback_cache">Clear Playback Cache</string>
     <string name="clear_playback_cache_desc">Delete all cached video data. Anything playing simply downloads again.</string>
     <string name="playback_cache_cleared">Playback cache cleared</string>
-    <string name="settings_help_playback_cache_desc">Streamed video is kept on this device up to this size, so rewinding to any part already watched is instant. It never grows beyond the free space and always leaves 1 GB free.</string>
-</resources>
+    <string name="settings_help_playback_cache_desc">Cache-enabled playback saves video for local rewinds. Large or remote streams may bypass this cache for performance. The size adapts to available storage, aiming to leave 1 GB free.</string>
 
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">AI subtitles</string>
+    <string name="live_ai_subs_preparing">Preparing subtitles… %1$d s</string>
+    <string name="live_ai_subs_no_key">AI subtitles need a Google Gemini API key (Settings → AI subtitles)</string>
+    <string name="live_ai_subs_invalid_key">AI subtitles: the Gemini API key was rejected</string>
+    <string name="live_ai_subs_quota">AI subtitles paused: Gemini quota reached</string>
+    <string name="live_ai_subs_offline">AI subtitles: no internet connection</string>
+    <string name="live_ai_subs_unsupported">AI subtitles not supported on this channel</string>
+    <string name="live_ai_subs_memory_capped">This channel can\'t be delayed enough; some subtitles may be late</string>
+    <string name="live_ai_subs_title">Live TV AI subtitles</string>
+    <string name="live_ai_subs_desc">Adds AI subtitles to the subtitle menu of live channels: Gemini transcribes and translates into your profile\'s subtitle language. Live TV is delayed a few seconds so lines appear on time.</string>
+    <string name="live_ai_subs_key_valid">Gemini API key works</string>
+    <string name="live_ai_subs_key_rejected">Gemini rejected this API key</string>
+    <string name="live_ai_subs_key_unchecked">Couldn\'t check the API key (offline?)</string>
+    <string name="live_ai_subs_needs_key">Add a Google Gemini API key first</string>
+    <string name="live_ai_subs_auto_title">Auto-translate when a channel starts</string>
+    <string name="live_ai_subs_auto_desc">Every channel starts with AI subtitles on, without picking them in the subtitle menu</string>
+</resources>

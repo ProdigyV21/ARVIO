@@ -181,6 +181,7 @@
     <string name="frame_rate_desc">Desligado, Suave ou Sempre</string>
     <string name="quality_filters_desc">Excluir faixas de qualidade neste dispositivo</string>
     <string name="card_layout_desc">Cards em formato horizontal ou pôster</string>
+    <string name="card_layout_netflix_exception_desc">Não se aplica às fileiras comuns da tela inicial no estilo Netflix</string>
     <string name="ui_mode_desc">Forçar modo TV, Tablet ou Celular</string>
     <string name="skip_profile_desc">Carregar automaticamente o último perfil usado após reiniciar</string>
     <string name="oled_black_background_desc">Usar fundos pretos puros no app para telas OLED</string>
@@ -1550,4 +1551,22 @@
     <string name="settings_stalker_desc">Portal Ministra / Stalker com autenticação por endereço MAC.</string>
     <string name="settings_content_to_import">Conteúdo a importar</string>
     <string name="settings_label_m3u_url">URL da lista M3U</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">Legendas IA</string>
+    <string name="live_ai_subs_preparing">Preparando legendas… %1$d s</string>
+    <string name="live_ai_subs_no_key">As legendas IA precisam de uma chave de API do Google Gemini (Configurações → Legendas IA)</string>
+    <string name="live_ai_subs_invalid_key">Legendas IA: a chave de API do Gemini foi rejeitada</string>
+    <string name="live_ai_subs_quota">Legendas IA em pausa: quota do Gemini atingida</string>
+    <string name="live_ai_subs_offline">Legendas IA: sem conexão com a internet</string>
+    <string name="live_ai_subs_unsupported">Legendas IA não suportadas neste canal</string>
+    <string name="live_ai_subs_memory_capped">Não dá para atrasar este canal o suficiente; algumas legendas podem chegar atrasadas</string>
+    <string name="live_ai_subs_title">Legendas IA na TV ao vivo</string>
+    <string name="live_ai_subs_desc">Adiciona legendas IA ao menu de legendas dos canais ao vivo: o Gemini transcreve e traduz para o idioma de legendas do perfil. A TV ao vivo é atrasada alguns segundos para as linhas aparecerem na hora certa.</string>
+    <string name="live_ai_subs_key_valid">A chave de API do Gemini funciona</string>
+    <string name="live_ai_subs_key_rejected">O Gemini rejeitou esta chave de API</string>
+    <string name="live_ai_subs_key_unchecked">Não foi possível verificar a chave (sem conexão?)</string>
+    <string name="live_ai_subs_needs_key">Adicione primeiro uma chave de API do Google Gemini</string>
+    <string name="live_ai_subs_auto_title">Traduzir automaticamente ao iniciar um canal</string>
+    <string name="live_ai_subs_auto_desc">Cada canal começa com legendas IA, sem escolher no menu de legendas</string>
 </resources>

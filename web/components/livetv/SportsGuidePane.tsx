@@ -13,6 +13,7 @@ import { attachSportsAddonSources, loadSportsAddonEvents, resolveSportsAddon, ty
 import { VirtualList } from "@/components/ui/VirtualList";
 import { ChannelLogo } from "@/components/livetv/ChannelLogo";
 import { channelPlaylistId } from "@/lib/stalkerPortals";
+import { sizedSportsImage } from "@/lib/sportsImageSize";
 
 const NO_ADDONS: InstalledAddon[] = [];
 export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCategories, providerNames = {}, addons = NO_ADDONS, clockFormat }: {
@@ -71,6 +72,9 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
   const [showScore, setShowScore] = useState(false);
   const [rowLimits, setRowLimits] = useState<Record<string, number>>({});
   const [focusedOrder, setFocusedOrder] = useState<{ row: string; ids: string[] } | null>(null);
+  // Rows more than a screen away drop their artwork so decoded bitmaps don't
+  // pile up while scrolling (iOS Safari kills tabs that hold too much image memory).
+  const [nearRows, setNearRows] = useState<Set<string>>(() => new Set());
   const dialog = useRef<HTMLDialogElement>(null);
   const origin = useRef<HTMLButtonElement | null>(null);
   const root = useRef<HTMLElement>(null);
@@ -88,7 +92,11 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
     };
     worker.onerror = () => { setFailed(true); setLoading(false); };
     const broadcasters = new Set(artwork.flatMap(item => item.fixture?.broadcasters.flatMap(b => sportsBroadcasterKeys(b.name, b.country)) ?? []));
-    worker.postMessage({ channels: channels.filter((ch) => Boolean(guide[ch.id]) || broadcasters.has(sportsChannelKey(ch.name))), guide, now: Date.now(), artwork });
+    const scanned = channels.filter((ch) => Boolean(guide[ch.id]) || broadcasters.has(sportsChannelKey(ch.name)));
+    // Copy only the schedules of those channels into the worker, not the whole guide.
+    const scannedGuide: Record<string, IptvNowNext> = {};
+    for (const ch of scanned) if (guide[ch.id]) scannedGuide[ch.id] = guide[ch.id];
+    worker.postMessage({ channels: scanned, guide: scannedGuide, now: Date.now(), artwork });
     return () => worker.terminate();
   }, [channels, guide, scanDay, retry, artwork]);
   const accessibleIds = useMemo(() => new Set(channels.map((ch) => ch.id)), [channels]);
@@ -110,6 +118,18 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
     entered.current = true;
     root.current?.querySelector<HTMLButtonElement>(".tv-event-card")?.focus({ preventScroll: true });
   }, [rows.length]);
+  const rowKey = rows.map(row => row.id).join("|");
+  useEffect(() => {
+    const sections = [...(root.current?.querySelectorAll<HTMLElement>(".tv-sports-section[data-row]") ?? [])];
+    if (typeof IntersectionObserver === "undefined") { setNearRows(new Set(sections.map(section => section.dataset.row!))); return; }
+    const observer = new IntersectionObserver(entries => setNearRows(current => {
+      const next = new Set(current);
+      for (const entry of entries) { const id = (entry.target as HTMLElement).dataset.row!; if (entry.isIntersecting) next.add(id); else next.delete(id); }
+      return next.size === current.size && [...next].every(id => current.has(id)) ? current : next;
+    }), { rootMargin: "100% 0px" });
+    sections.forEach(section => observer.observe(section));
+    return () => observer.disconnect();
+  }, [rowKey]);
   const selected = visibleEvents.find((event) => event.id === selectedId);
   const confirmedChannels = selected ? (isOnAir(selected, now) ? availableEventChannels(selected, now) : selected.channels) : [];
   const possibleChannels = (selected?.possibleChannels ?? []).filter((ch, i, rows) => !confirmedChannels.some(match => match.id === ch.id) && rows.findIndex(other => other.id === ch.id) === i);
@@ -145,7 +165,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
     {!rows.length && <div className="tv-sports-empty" role="status"><Tv size={32} /><p>{loading || metadataLoading || addonLoading ? translateUi("Reading sports schedule") : failed ? translateUi("Schedule unavailable") : visibleEvents.some(e => hasSportsChannels(e, now) && (isOnAir(e, now) || e.programme.startUtcMillis > now)) ? translateUi("Event artwork unavailable") : translateUi("No sources found yet.")}</p>
       {!loading && !metadataLoading && <button type="button" className="secondary" onClick={() => setRetry(value => value + 1)}><RefreshCw size={18} />{translateUi("Retry")}</button>}
       <button type="button" className="secondary" onClick={onOpenCategories}><PanelLeft size={18} />{translateUi("Categories")}</button></div>}
-    {rows.map((row, rowIndex) => <section className={`tv-sports-section${row.id === "more" ? " is-compact" : ""}`} key={row.id} aria-label={row.title}>
+    {rows.map((row, rowIndex) => <section className={`tv-sports-section${row.id === "more" ? " is-compact" : ""}`} key={row.id} data-row={row.id} aria-label={row.title}>
       <div className="tv-sports-row-heading"><h3 title={row.id === "featured" ? translateUi("Ranked by competition priority and broadcast reach, not measured viewers") : undefined}>{row.title}</h3></div>
       <div className="tv-sports-row" onScroll={e => {
         const element = e.currentTarget;
@@ -176,7 +196,7 @@ export function SportsGuidePane({ channels, guide, onPlay, onEnter, onOpenCatego
             next?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
           }}
           onClick={(click) => { origin.current = click.currentTarget; setShowScore(false); setSelectedId(event.id); }}>
-          {scheduleOnly ? <span className="tv-event-schedule-time">{stamp(event)}</span> : <div className="tv-event-art"><EventArtwork event={event} onUnavailable={() => setFailedArtwork(current => new Set([...current, event.id]))} /><span className={`tv-event-stamp${isOnAir(event, now) ? " is-on-air" : ""}`}>{stamp(event)}</span></div>}
+          {scheduleOnly ? <span className="tv-event-schedule-time">{stamp(event)}</span> : <div className="tv-event-art">{(nearRows.has(row.id) || rowIndex < 2) && <EventArtwork event={event} onUnavailable={() => setFailedArtwork(current => new Set([...current, event.id]))} />}<span className={`tv-event-stamp${isOnAir(event, now) ? " is-on-air" : ""}`}>{stamp(event)}</span></div>}
           <strong>{event.title}</strong><small className="tv-event-meta"><span className="tv-event-competition">{[sport.title, event.competition].filter(Boolean).join(" · ")}</span>{isOnAir(event, now) && <span><Tv size={16} />{sportsChannelSummary(event, now)}</span>}</small>
         </button>;
       })}</div>
@@ -229,8 +249,20 @@ function AddonSourceRow({ event, addons, canPlay, onPlay }: { event: SportsAddon
 }
 
 
+// Ask TheSportsDB for a resized copy first; fall back to the original if the
+// resized one is missing.
+function useSizedImage(url: string | undefined, size: "medium" | "small") {
+  const [fallback, setFallback] = useState<string | null>(null);
+  const sized = sizedSportsImage(url, size);
+  const src = fallback === url ? url : sized;
+  return { src, canFallBack: src !== url, fallBack: () => setFallback(url ?? null) };
+}
+
 function EventArtwork({ event, onUnavailable }: { event: SportsGuideEvent; onUnavailable?: () => void }) {
   const translateUi = useTranslation();
+  const banner = useSizedImage(event.artwork, "medium");
+  const home = useSizedImage(event.teamArtwork?.homeBadge, "small");
+  const away = useSizedImage(event.teamArtwork?.awayBadge, "small");
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [badges, setBadges] = useState<string[]>([]);
   const loaded = Boolean(event.artwork) && loadedUrl === event.artwork;
@@ -242,10 +274,10 @@ function EventArtwork({ event, onUnavailable }: { event: SportsGuideEvent; onUna
   const pairLoaded = pair && badges.includes(pair.homeBadge) && badges.includes(pair.awayBadge);
   return <div className="tv-event-image">
     {!loaded && pair && <div className="tv-event-teams" style={{ opacity: pairLoaded ? 1 : 0 }}>
-      <img src={pair.homeBadge} alt={pair.homeTeam ?? ""} loading="lazy" decoding="async" onLoad={() => setBadges(current => [...current, pair.homeBadge])} onError={() => setPairFailed(true)} />
+      <img src={home.src} alt={pair.homeTeam ?? ""} loading="lazy" decoding="async" onLoad={() => setBadges(current => [...current, pair.homeBadge])} onError={() => home.canFallBack ? home.fallBack() : setPairFailed(true)} />
       <strong>{translateUi("VS")}</strong>
-      <img src={pair.awayBadge} alt={pair.awayTeam ?? ""} loading="lazy" decoding="async" onLoad={() => setBadges(current => [...current, pair.awayBadge])} onError={() => setPairFailed(true)} />
+      <img src={away.src} alt={pair.awayTeam ?? ""} loading="lazy" decoding="async" onLoad={() => setBadges(current => [...current, pair.awayBadge])} onError={() => away.canFallBack ? away.fallBack() : setPairFailed(true)} />
     </div>}
-    {event.artwork && <img src={event.artwork} alt="" loading="lazy" decoding="async" style={{ opacity: loaded ? 1 : 0 }} onLoad={() => setLoadedUrl(event.artwork!)} onError={() => { setLoadedUrl(null); setBannerFailed(true); }} />}
+    {event.artwork && <img src={banner.src} alt="" loading="lazy" decoding="async" style={{ opacity: loaded ? 1 : 0 }} onLoad={() => setLoadedUrl(event.artwork!)} onError={() => { setLoadedUrl(null); if (banner.canFallBack) banner.fallBack(); else setBannerFailed(true); }} />}
   </div>;
 }

@@ -16,6 +16,7 @@ import {
 import { useAppPick } from "@/lib/store";
 import type { InstalledAddon } from "@/lib/types";
 import { SortableList } from "../SortableList";
+import { ManagedConnections } from "../ManagedConnections";
 import { Empty, Group, ScopeBadge, SectionHeader, Toggle, safeArray } from "../ui";
 
 function addonTags(addon: InstalledAddon) {
@@ -29,7 +30,7 @@ export function AddonsSection() {
   const translateUi = useTranslation();
   const { addons, removeAddon, setAddonsState, setToast, settings, updateSettings } = useAppPick("addons", "removeAddon", "setAddonsState", "setToast", "settings", "updateSettings");
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
-  const list = safeArray(addons);
+  const list = safeArray(addons).filter(addon => !addon.managedOrganizationId);
 
   const providers = useMemo(() => knownProviders({
     homeServers: settings.homeServers,
@@ -96,6 +97,7 @@ export function AddonsSection() {
   return (
     <>
       <SectionHeader title="Addons" description="Stremio-compatible addons supply catalogs, sources and subtitles. Addons are shared by every profile and every ARVIO app on your account." />
+      <ManagedConnections items={addons.filter(addon => addon.managedOrganizationId)} />
       <Group title="Install an addon">
         <div className="st-addon-installer"><AddonInstaller /></div>
       </Group>

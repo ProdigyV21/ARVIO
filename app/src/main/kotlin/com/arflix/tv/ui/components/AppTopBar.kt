@@ -47,7 +47,7 @@ import com.arflix.tv.ui.theme.AnimationConstants
 import com.arflix.tv.ui.theme.ArflixTypography
 import androidx.compose.ui.res.stringResource
 import com.arflix.tv.R
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

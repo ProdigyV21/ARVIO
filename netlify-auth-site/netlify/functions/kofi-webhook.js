@@ -24,6 +24,7 @@ const {
 const { recordPremiumEvent } = require("./_premium-funnel");
 const { queueForPayment } = require("./_member-emails");
 const { rewardReferralIfDue } = require("./_referrals");
+const { PLANS: PARTNER_PLANS, equal: constantTimeEqual } = require("./_partner-domain");
 
 const PASS_DAYS = 366;
 const MAX_REMEMBERED_PAYMENTS = 40;
@@ -77,8 +78,22 @@ exports.handler = async (event) => {
   }
 
   // Verify this really came from OUR Ko-fi account.
-  if (String(data.verification_token || "") !== expectedToken) {
+  if (!constantTimeEqual(String(data.verification_token || ""), expectedToken)) {
     return json(401, { error: "invalid_verification_token" });
+  }
+
+  // Same Ko-fi account, separate products. Never turn a Partner payment into
+  // a consumer membership, including accidentally renamed Partner tiers.
+  if (Object.hasOwn(PARTNER_PLANS, data.tier_name) || /^arvio\s+partner\b/i.test(String(data.tier_name || ""))) {
+    if (!Object.hasOwn(PARTNER_PLANS, data.tier_name)) return json(400, { error: "unknown_partner_tier" });
+    if (process.env.PARTNER_ENABLED !== "true") return json(503, { error: "partner_not_ready" });
+    try {
+      const { getPool } = require("./_partner-database");
+      const { createService } = require("./_partner-service");
+      return json(200, { ok: true, ...await createService({ pool: getPool() }).payment(data) });
+    } catch (error) {
+      return json(error.statusCode || 500, { error: error.statusCode ? error.message : "partner_payment_failed" });
+    }
   }
 
   const email = normalizeEmail(data.email);
@@ -148,12 +163,16 @@ exports.handler = async (event) => {
     }).catch((error) => console.error("kofi funnel recording failed", error));
 
     // Side effects that must never fail the payment itself.
-    await queueForPayment(event, { email, emailHash, plan, firstPayment: firstPayment || isFirstSub, record })
+    const reward = await rewardReferralIfDue(event, { emailHash, payerHash: emailHash })
+      .catch((error) => {
+        console.error("referral reward failed", error && error.message);
+        return null;
+      });
+    const expiresAt = reward?.rewarded ? reward.expiresAt : record.expiresAt;
+    await queueForPayment(event, { email, emailHash, plan, firstPayment: firstPayment || isFirstSub, record: { ...record, expiresAt } })
       .catch((error) => console.error("member emails not queued", error && error.message));
-    await rewardReferralIfDue(event, { emailHash, payerHash: emailHash })
-      .catch((error) => console.error("referral reward failed", error && error.message));
 
-    return json(200, { ok: true, entitled: true, plan, expiresAt: record.expiresAt });
+    return json(200, { ok: true, entitled: true, plan, expiresAt });
   } catch (error) {
     console.error("kofi-webhook failed", error);
     // 500 → Ko-fi will retry, which is what we want on a transient storage error.

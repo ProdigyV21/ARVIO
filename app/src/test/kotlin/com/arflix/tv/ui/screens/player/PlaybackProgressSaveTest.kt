@@ -17,6 +17,16 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackProgressSaveTest {
+    @Test fun unfinishedPlaybackCloseSurvivesNavigation() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        var saved = false
+        val job = scope.launchPlaybackProgressSave(false, StandardTestDispatcher(testScheduler), closing = true) {
+            delay(5_000); saved = true
+        }
+        runCurrent(); scope.cancel(); advanceTimeBy(5_001); runCurrent()
+        assertTrue(saved)
+        assertTrue(job.isCompleted)
+    }
     @Test fun finalWriteSurvivesNavigationAndTheCallersShortTimeout() = runTest {
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
         var saved = false

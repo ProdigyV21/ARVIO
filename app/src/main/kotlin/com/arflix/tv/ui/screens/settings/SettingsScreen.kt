@@ -152,6 +152,8 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Icon
+import com.arflix.tv.ui.components.CloudEmailPasswordModal
+import com.arflix.tv.ui.components.CloudPairModal
 import com.arflix.tv.ui.components.LoadingIndicator
 import com.arflix.tv.ui.components.DragHandleReorderColumn
 import com.arflix.tv.ui.components.dragReorderItem
@@ -159,6 +161,8 @@ import com.arflix.tv.ui.components.rememberDragReorderState
 import com.arflix.tv.ui.components.MobileSettingsCategory
 import com.arflix.tv.ui.components.MobileSettingsRow
 import com.arflix.tv.ui.components.IptvPlaylistModal
+import com.arflix.tv.ui.components.iptvConnectionLimitLabel
+import com.arflix.tv.ui.components.iptvProviderAllowanceLabel
 import com.arflix.tv.ui.components.IptvSourceType
 import com.arflix.tv.ui.components.QrCodeImage
 import com.arflix.tv.ui.components.Toast
@@ -237,6 +241,7 @@ import com.arflix.tv.data.model.RuntimeKind
 import com.arflix.tv.data.model.StalkerCatalogKind
 import com.arflix.tv.data.repository.HomeServerConnection
 import com.arflix.tv.data.repository.HomeServerKind
+import com.arflix.tv.data.repository.IptvConnectionLimit
 import com.arflix.tv.data.repository.IptvPlaylistEntry
 import com.arflix.tv.data.repository.MAX_IPTV_PLAYLISTS
 import com.arflix.tv.data.repository.StalkerPortalEntry
@@ -327,15 +332,15 @@ private val tvGeneralSectionIds = setOf(
     "network"
 )
 
-private fun tvGeneralRowsForSection(section: String): List<Int> {
+internal fun tvGeneralRowsForSection(section: String): List<Int> {
     return when (section) {
         "language" -> listOf(0, 3, 1, 2)
         // 48 (sync by hearing) only where it exists: the sideload build.
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
-        "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
-        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27, 51, 52)
+        "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
+        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -1085,6 +1090,7 @@ fun SettingsScreen(
     }
 
     BackHandler(enabled = !isTouchDevice && !hasBlockingModal) { goBack() }
+    BackHandler(enabled = isTouchDevice && mobilePage == "MAIN" && currentProfile == null && !hasBlockingModal) { onBack() }
 
     Box(
         modifier = Modifier
@@ -1480,13 +1486,14 @@ fun SettingsScreen(
                                                 31 -> viewModel.setSubtitleRemoveHearingImpaired(!uiState.subtitleRemoveHearingImpaired)
                                                 32 -> showAiApiKeyDialog = true
                                                 33 -> viewModel.startAiKeyServer()
+                                                51, 52 -> onLiveAiSubsRowClick(context, tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                 34 -> viewModel.cycleTrailerDelay()
                                                 47 -> viewModel.cycleGuideRowCount()
                                                 37 -> viewModel.setTrailerInCards(!uiState.trailerInCards)
                                                 49 -> viewModel.setNetflixHomeStyle(!uiState.netflixHomeStyle)
                                                 50 -> viewModel.setWatchlistOnHome(!uiState.watchlistOnHome)
-                                                51 -> viewModel.cyclePlaybackCacheSize()
-                                                52 -> viewModel.clearPlaybackCache()
+                                                53 -> viewModel.cyclePlaybackCacheSize()
+                                                54 -> viewModel.clearPlaybackCache()
                                             }
                                         }
                                         "iptv" -> {
@@ -1788,7 +1795,8 @@ fun SettingsScreen(
                                                     }
                                                 }
                                                 2 -> {
-                                                    if (uiState.isMdbListConnected) {
+                                                    // A rejected connection is replaced by connecting again.
+                                                    if (uiState.isMdbListConnected && !uiState.mdbListReconnectRequired) {
                                                         showMdbListDisconnectConfirm = true
                                                     } else if (uiState.isMdbListPolling) {
                                                         viewModel.cancelMdbListAuth()
@@ -2522,6 +2530,7 @@ fun SettingsScreen(
                             onConnectSimkl = { viewModel.startSimklAuth() },
                             onCancelSimkl = { viewModel.cancelSimklAuth() },
                             onDisconnectSimkl = { viewModel.disconnectSimkl() },
+                            onToggleWeTrakr = { viewModel.toggleWeTrakr() },
                             trackingUiState = uiState,
                             onTrackingReadMode = viewModel::setTrackingReadMode,
                             onTrackingWriteTarget = viewModel::setTrackingWriteTarget,
@@ -2736,6 +2745,8 @@ fun SettingsScreen(
                 else if (isEditingIptv) "iptv_${editingPlaylist.id}"
                 else "iptv_new"
             ) {
+                // Set by the add dialog just before it calls a save callback below.
+                var newSourceConnectionLimit by remember { mutableStateOf(IptvConnectionLimit.AUTO) }
                 IptvPlaylistModal(
                     isEditing = isEditing,
                     initialSourceType = sourceInfo.sourceType,
@@ -2778,7 +2789,7 @@ fun SettingsScreen(
                         } else {
                             updated.add(entry)
                         }
-                        viewModel.saveIptvPlaylists(updated)
+                        viewModel.saveIptvPlaylists(updated, newSourceConnectionLimit)
                         showIptvInput = false
                         showStalkerInput = false
                         editingIptvIndex = -1
@@ -2803,7 +2814,8 @@ fun SettingsScreen(
                                 name.trim(),
                                 importLiveTv,
                                 importVod,
-                                importSeries
+                                importSeries,
+                                connectionLimit = newSourceConnectionLimit
                             )
                         }
                         showIptvInput = false
@@ -2819,7 +2831,13 @@ fun SettingsScreen(
                     },
                     accountCheckedAtLabel = accountCheckedAtLabel,
                     isAccountRefreshing = accountSourceId != null && accountSourceId in uiState.iptvAccountInfoRefreshing,
-                    onRefreshAccount = accountSourceId?.let { id -> { viewModel.refreshIptvAccountInfo(id) } }
+                    onRefreshAccount = accountSourceId?.let { id -> { viewModel.refreshIptvAccountInfo(id) } },
+                    providerAllowanceLabel = if (accountSourceId != null && sourceInfo.sourceType == IptvSourceType.XTREAM) {
+                        iptvProviderAllowanceLabel(accountInfo?.maxConnections)
+                    } else null,
+                    connectionLimitLabel = iptvConnectionLimitLabel(uiState.iptvConnectionLimits[accountSourceId]),
+                    onStepConnectionLimit = accountSourceId?.let { id -> { viewModel.stepIptvConnectionLimit(id) } },
+                    onNewSourceConnectionLimit = { newSourceConnectionLimit = it }
                 )
             }
         }
@@ -3287,15 +3305,22 @@ fun SettingsScreen(
         uiState.weTrakrCode?.let { code ->
             val clipboardManager = LocalClipboardManager.current
             TraktActivationModal(
-                verificationUrl = code.verificationUrl, userCode = code.userCode,
+                verificationUrl = code.verificationUrl,
+                userCode = code.userCode,
                 title = stringResource(R.string.settings_connect_wetrakr),
-                instruction = stringResource(R.string.settings_activation_visit_instruction, code.verificationUrl),
+                instruction = if (LocalDeviceType.current.isTouchDevice()) {
+                    stringResource(R.string.settings_activation_visit_instruction, code.verificationUrl)
+                } else {
+                    stringResource(R.string.settings_activation_instruction_tv, code.verificationUrl)
+                },
                 onOpenUrl = {
                     clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(code.userCode))
                     openExternalUrl(context, code.verificationUrl)
                 },
                 openUrlLabel = stringResource(R.string.settings_wetrakr_copy_open),
-                expiresAtMillis = code.expiresAt, onDismiss = viewModel::toggleWeTrakr
+                qrData = code.verificationUrl,
+                expiresAtMillis = code.expiresAt,
+                onDismiss = viewModel::toggleWeTrakr
             )
         }
 
@@ -3869,591 +3894,6 @@ private fun QualityFilterEditorModal(
                     )
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun CloudEmailPasswordModal(
-    email: String,
-    password: String,
-    onEmailChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onSignIn: () -> Unit,
-    onCreateAccount: () -> Unit,
-    onOpenPrivacy: () -> Unit
-) {
-    // Focus order: 0 email, 1 password, 2 cancel, 3 sign in, 4 create, 5 privacy
-    var focusedIndex by remember { mutableIntStateOf(0) }
-    val emailRequester = remember { FocusRequester() }
-    val passwordRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) { emailRequester.requestFocus() }
-    LaunchedEffect(focusedIndex) {
-        when (focusedIndex) {
-            0 -> emailRequester.requestFocus()
-            1 -> passwordRequester.requestFocus()
-        }
-    }
-
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        ModalScrim(onDismiss = onDismiss) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth(if (LocalDeviceType.current.isTouchDevice()) 0.92f else 1f)
-                    .widthIn(max = 600.dp)
-                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
-                    .padding(if (LocalDeviceType.current.isTouchDevice()) 20.dp else 32.dp)
-                    .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown) {
-                            when (event.key) {
-                                Key.Back, Key.Escape -> {
-                                    onDismiss()
-                                    true
-                                }
-                                Key.DirectionUp -> {
-                                    focusedIndex = when (focusedIndex) {
-                                        1 -> 0
-                                        2, 3, 4 -> 1
-                                        5 -> 3
-                                        else -> focusedIndex
-                                    }
-                                    true
-                                }
-                                Key.DirectionDown -> {
-                                    focusedIndex = when (focusedIndex) {
-                                        0 -> 1
-                                        1 -> 2
-                                        2, 3, 4 -> 5
-                                        else -> focusedIndex
-                                    }
-                                    true
-                                }
-                                Key.DirectionLeft -> {
-                                    focusedIndex = when (focusedIndex) {
-                                        4 -> 3
-                                        3 -> 2
-                                        else -> focusedIndex
-                                    }
-                                    true
-                                }
-                                Key.DirectionRight -> {
-                                    focusedIndex = when (focusedIndex) {
-                                        2 -> 3
-                                        3 -> 4
-                                        else -> focusedIndex
-                                    }
-                                    true
-                                }
-                                Key.Enter, Key.DirectionCenter -> {
-                                    when (focusedIndex) {
-                                        2 -> { onDismiss(); true }
-                                        3 -> { onSignIn(); true }
-                                        4 -> { onCreateAccount(); true }
-                                        5 -> { onOpenPrivacy(); true }
-                                        else -> false
-                                    }
-                                }
-                                else -> false
-                            }
-                        } else false
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(R.string.settings_cloud_signin_title),
-                    style = ArflixTypography.sectionTitle,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
-
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.settings_label_email),
-                        style = ArflixTypography.caption,
-                        color = if (focusedIndex == 0) Pink else TextSecondary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    androidx.compose.material3.TextField(
-                        value = email,
-                        onValueChange = onEmailChange,
-                        singleLine = true,
-                        textStyle = ArflixTypography.body.copy(color = TextPrimary),
-                        colors = androidx.compose.material3.TextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                            unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
-                            focusedIndicatorColor = Pink,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Pink
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(emailRequester)
-                            .border(
-                                width = if (focusedIndex == 0) 2.dp else 1.dp,
-                                color = if (focusedIndex == 0) Pink else Color.White.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.settings_label_password),
-                        style = ArflixTypography.caption,
-                        color = if (focusedIndex == 1) Pink else TextSecondary,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    androidx.compose.material3.TextField(
-                        value = password,
-                        onValueChange = onPasswordChange,
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        textStyle = ArflixTypography.body.copy(color = TextPrimary),
-                        colors = androidx.compose.material3.TextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                            unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
-                            focusedIndicatorColor = Pink,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Pink
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(passwordRequester)
-                            .border(
-                                width = if (focusedIndex == 1) 2.dp else 1.dp,
-                                color = if (focusedIndex == 1) Pink else Color.White.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    val isCancelFocused = focusedIndex == 2
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(
-                                color = if (isCancelFocused) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)
-                            )
-                            .clickable { onDismiss() }
-                            .border(
-                                width = if (isCancelFocused) 2.dp else 0.dp,
-                                color = if (isCancelFocused) Pink else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cancel),
-                            style = ArflixTypography.button,
-                            color = if (isCancelFocused) TextPrimary else TextSecondary
-                        )
-                    }
-
-                    val isSignInFocused = focusedIndex == 3
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(
-                                color = if (isSignInFocused) SuccessGreen else Pink.copy(alpha = 0.6f)
-                            )
-                            .clickable { onSignIn() }
-                            .border(
-                                width = if (isSignInFocused) 2.dp else 0.dp,
-                                color = if (isSignInFocused) SuccessGreen.copy(alpha = 0.5f) else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.sign_in),
-                            style = ArflixTypography.button,
-                            color = if (isSignInFocused) Color.White else Color.Black
-                        )
-                    }
-
-                    val isCreateFocused = focusedIndex == 4
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(
-                                color = if (isCreateFocused) SuccessGreen else Color.White.copy(alpha = 0.08f)
-                            )
-                            .clickable { onCreateAccount() }
-                            .border(
-                                width = if (isCreateFocused) 2.dp else 0.dp,
-                                color = if (isCreateFocused) SuccessGreen.copy(alpha = 0.5f) else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.settings_btn_create),
-                            style = ArflixTypography.button,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.login_privacy_notice),
-                    style = ArflixTypography.caption,
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenPrivacy)
-                        .border(
-                            width = if (focusedIndex == 5) 2.dp else 1.dp,
-                            color = if (focusedIndex == 5) Pink else Color.White.copy(alpha = 0.14f),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.login_read_privacy_policy),
-                        style = ArflixTypography.button,
-                        color = if (focusedIndex == 5) TextPrimary else TextSecondary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = if (LocalDeviceType.current.isTouchDevice()) stringResource(R.string.settings_cloud_signin_hint_touch) else stringResource(R.string.settings_cloud_signin_hint_tv),
-                    style = ArflixTypography.caption,
-                    color = TextSecondary.copy(alpha = 0.5f)
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun CloudPairModal(
-    verificationUrl: String,
-    userCode: String,
-    isWorking: Boolean,
-    onDismiss: () -> Unit,
-    onUseEmailPassword: () -> Unit,
-) {
-    val effectiveVerificationUrl = remember(verificationUrl, userCode) {
-        verificationUrl.ifBlank {
-            userCode.takeIf { it.isNotBlank() }?.let { code ->
-                "https://auth.arvio.tv/?code=$code"
-            }.orEmpty()
-        }
-    }
-    // Focus order: 0 cancel, 1 email/password
-    var focusedIndex by remember { mutableIntStateOf(1) }
-    val modalFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        modalFocusRequester.requestFocus()
-    }
-
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        val isMobile = LocalDeviceType.current.isTouchDevice()
-        ModalScrim(onDismiss = onDismiss) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            val modalWidth = if (isMobile) maxWidth else (maxWidth * 0.62f).coerceIn(520.dp, 760.dp)
-            val qrContainerSize = (modalWidth * 0.42f).coerceIn(190.dp, 260.dp)
-            val qrBitmapSizePx = ((qrContainerSize.value * 3.2f).toInt()).coerceIn(512, 900)
-
-            Column(
-                modifier = Modifier
-                    .then(
-                        if (isMobile) Modifier.fillMaxWidth(0.92f).widthIn(max = 600.dp)
-                        else Modifier.widthIn(max = modalWidth).fillMaxWidth(0.62f)
-                    )
-                    .background(BackgroundElevated, RoundedCornerShape(16.dp))
-                    .padding(horizontal = if (isMobile) 20.dp else 24.dp, vertical = if (isMobile) 24.dp else 20.dp)
-                    .focusRequester(modalFocusRequester)
-                    .focusable()
-                    .onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown) {
-                            when (event.key) {
-                                Key.Back, Key.Escape -> {
-                                    onDismiss()
-                                    true
-                                }
-                                Key.DirectionLeft -> {
-                                    focusedIndex = 0
-                                    true
-                                }
-                                Key.DirectionRight -> {
-                                    focusedIndex = 1
-                                    true
-                                }
-                                Key.Enter, Key.DirectionCenter -> {
-                                    when (focusedIndex) {
-                                        0 -> { onDismiss(); true }
-                                        1 -> { onUseEmailPassword(); true }
-                                        else -> false
-                                    }
-                                }
-                                else -> false
-                            }
-                        } else false
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = stringResource(R.string.settings_cloud_pairing_title),
-                    style = ArflixTypography.sectionTitle,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(bottom = 10.dp)
-                )
-
-                if (isMobile) {
-                    // On mobile, skip QR (can't scan own screen) and prompt email/password
-                    Text(
-                        text = stringResource(R.string.settings_pair_signin_link_device),
-                        style = ArflixTypography.body,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.settings_pair_scan_qr_link_tv),
-                        style = ArflixTypography.body,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                }
-
-                // QR code section - only shown on TV (phones can't scan their own screen)
-                if (!isMobile && effectiveVerificationUrl.isNotBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .size(qrContainerSize)
-                            .background(appBackgroundDark().copy(alpha = 0.92f), RoundedCornerShape(16.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White)
-                                .padding(10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            QrCodeImage(
-                                data = effectiveVerificationUrl,
-                                sizePx = qrBitmapSizePx,
-                                modifier = Modifier.fillMaxSize(),
-                                foreground = android.graphics.Color.BLACK,
-                                background = android.graphics.Color.WHITE,
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                if (userCode.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.settings_pair_code, userCode),
-                            style = ArflixTypography.body,
-                            color = TextPrimary
-                        )
-                    }
-                }
-
-                if (isWorking) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        LoadingIndicator(size = 20.dp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.settings_waiting_for_approval),
-                            style = ArflixTypography.body,
-                            color = TextSecondary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (isMobile) {
-                    // On mobile, show "Use Email/Password" prominently as the primary action
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    color = SuccessGreen,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { onUseEmailPassword() }
-                                .padding(vertical = 14.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Link,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = stringResource(R.string.settings_use_email_password),
-                                    style = ArflixTypography.button,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    color = Color.White.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { onDismiss() }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.cancel),
-                                style = ArflixTypography.button,
-                                color = TextSecondary
-                            )
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        val isCancelFocused = focusedIndex == 0
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    color = if (isCancelFocused) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .border(
-                                    width = if (isCancelFocused) 2.dp else 0.dp,
-                                    color = if (isCancelFocused) Pink else Color.Transparent,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { onDismiss() }
-                                .padding(vertical = 12.dp, horizontal = 14.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.LinkOff,
-                                    contentDescription = null,
-                                    tint = if (isCancelFocused) TextPrimary else TextSecondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = stringResource(R.string.cancel),
-                                    style = ArflixTypography.button,
-                                    color = if (isCancelFocused) TextPrimary else TextSecondary
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        val isFallbackFocused = focusedIndex == 1
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    color = if (isFallbackFocused) SuccessGreen else Pink.copy(alpha = 0.6f),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .border(
-                                    width = if (isFallbackFocused) 2.dp else 0.dp,
-                                    color = if (isFallbackFocused) SuccessGreen.copy(alpha = 0.5f) else Color.Transparent,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { onUseEmailPassword() }
-                                .padding(vertical = 12.dp, horizontal = 14.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Link,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = stringResource(R.string.settings_use_email_password_short),
-                                    style = ArflixTypography.button,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
         }
     }
 }
@@ -5596,6 +5036,7 @@ private fun MobileSettingsMainPage(
                         uiState.isTraktAuthenticated -> "Trakt"
                         uiState.isMdbListConnected -> "MDBList"
                         uiState.isSimklConnected -> "Simkl"
+                        uiState.isWeTrakrConnected -> "WeTrakr"
                         else -> ""
                     },
                     isFocused = false,
@@ -5604,7 +5045,14 @@ private fun MobileSettingsMainPage(
                 MobileSettingsRow(
                     iconRes = R.drawable.ic_telegram,
                     title = "Telegram",
-                    value = "",
+                    subtitle = when {
+                        uiState.isTelegramConnected && !uiState.telegramUserName.isNullOrBlank() ->
+                            stringResource(R.string.settings_connected_as, uiState.telegramUserName.orEmpty())
+                        uiState.isTelegramConnected ->
+                            stringResource(R.string.connected)
+                        else -> ""
+                    },
+                    value = if (uiState.isTelegramConnected) stringResource(R.string.connected) else stringResource(R.string.connect),
                     isExternalLink = false,
                     isFocused = false,
                     onClick = { onNavigate("Telegram") }
@@ -6100,6 +5548,7 @@ private fun MobileSettingsSubPage(
                         showDivider = false,
                         onClick = onSubtitleAiQrClick
                     )
+                    LiveAiSubsMobileRows()
                     if (uiState.subtitleAiEnabled) {
                         Text(
                             text = when (uiState.subtitleAiModel) {
@@ -6362,6 +5811,7 @@ private fun MobileSettingsSubPage(
                     onConnectSimkl = onConnectSimkl,
                     onCancelSimkl = onCancelSimkl,
                     onDisconnectSimkl = onDisconnectSimkl,
+                    onToggleWeTrakr = { viewModel.toggleWeTrakr() },
                     onReadMode = { feature, mode -> viewModel.setTrackingReadMode(feature, mode) },
                     onWriteTarget = { provider, enabled ->
                         viewModel.setTrackingWriteTarget(provider, enabled)
@@ -7262,11 +6712,26 @@ private fun tvSettingsFocusedHelp(section: String, focusedIndex: Int): TvSetting
         "accounts" -> when (focusedIndex) {
             0 -> TvSettingsHelp(stringResource(R.string.cloud_account), stringResource(R.string.settings_help_cloud_account_desc))
             1 -> TvSettingsHelp(stringResource(R.string.settings_help_trakt), stringResource(R.string.settings_help_trakt_desc))
-            10 -> TvSettingsHelp("Discord RPC", stringResource(R.string.discord_rpc_help_desc))
-            11 -> TvSettingsHelp(stringResource(R.string.force_cloud_sync), stringResource(R.string.settings_help_force_sync_desc))
-            12 -> TvSettingsHelp(stringResource(R.string.settings_help_app_updates), stringResource(R.string.settings_help_app_updates_desc))
-            13 -> TvSettingsHelp(stringResource(R.string.settings_diagnostics_sharing), stringResource(R.string.settings_diagnostics_sharing_desc))
-            14 -> TvSettingsHelp(stringResource(R.string.settings_privacy_policy), stringResource(R.string.settings_privacy_policy_desc))
+            2 -> TvSettingsHelp(stringResource(R.string.mdblist_account), stringResource(R.string.settings_mdblist_tagline))
+            3 -> TvSettingsHelp("Simkl", stringResource(R.string.settings_simkl_tagline))
+            4 -> TvSettingsHelp("WeTrakr", stringResource(R.string.settings_wetrakr_tagline))
+            5 -> TvSettingsHelp(stringResource(R.string.settings_routing_watchlist_source), stringResource(R.string.settings_routing_watchlist_source_desc))
+            6 -> TvSettingsHelp(stringResource(R.string.settings_routing_continue_source), stringResource(R.string.settings_routing_continue_source_desc))
+            7 -> TvSettingsHelp(stringResource(R.string.settings_routing_watched_source), stringResource(R.string.settings_routing_watched_source_desc))
+            8 -> TvSettingsHelp(stringResource(R.string.settings_routing_update_trakt), stringResource(R.string.settings_routing_update_trakt_on))
+            9 -> TvSettingsHelp(stringResource(R.string.settings_routing_update_simkl), stringResource(R.string.settings_routing_update_simkl_on))
+            10 -> TvSettingsHelp(stringResource(R.string.settings_wetrakr_update), stringResource(R.string.settings_routing_update_wetrakr_on))
+            11 -> TvSettingsHelp("Telegram", stringResource(R.string.settings_telegram_desc))
+            12 -> TvSettingsHelp("Discord RPC", stringResource(R.string.discord_rpc_help_desc))
+            13 -> TvSettingsHelp(stringResource(R.string.force_cloud_sync), stringResource(R.string.settings_help_force_sync_desc))
+            14 -> TvSettingsHelp(stringResource(R.string.settings_force_trakt_sync), stringResource(R.string.settings_force_trakt_sync_desc))
+            15 -> TvSettingsHelp(stringResource(R.string.settings_help_app_updates), stringResource(R.string.settings_help_app_updates_desc))
+            16 -> TvSettingsHelp(stringResource(R.string.settings_quiet_update_notifications), stringResource(R.string.settings_quiet_update_notifications_desc))
+            17 -> TvSettingsHelp(stringResource(R.string.settings_diagnostics_sharing), stringResource(R.string.settings_diagnostics_sharing_desc))
+            18 -> TvSettingsHelp(stringResource(R.string.settings_privacy_policy), stringResource(R.string.settings_privacy_policy_desc))
+            19 -> TvSettingsHelp(stringResource(R.string.settings_account_data_deletion), stringResource(R.string.settings_account_data_deletion_desc))
+            20 -> TvSettingsHelp(stringResource(R.string.about_credits), stringResource(R.string.about_credits_description))
+            21 -> TvSettingsHelp(stringResource(R.string.settings_usage_statistics), stringResource(R.string.settings_usage_statistics_desc))
             else -> TvSettingsHelp(stringResource(R.string.settings_help_account_data), stringResource(R.string.settings_help_account_data_desc))
         }
         else -> TvSettingsHelp(stringResource(R.string.settings_help_setting), stringResource(R.string.settings_help_setting_desc))
@@ -7450,7 +6915,17 @@ private fun TvGeneralSettingsRows(
                 14 -> SettingsToggleRow(stringResource(R.string.trailer_sound), stringResource(R.string.trailer_sound_desc), trailerSoundEnabled, focusedIndex == localIndex, onTrailerSoundEnabledToggle, Modifier.settingsFocusSlot(localIndex))
                 15 -> SettingsRow(Icons.Default.Movie, stringResource(R.string.frame_rate), stringResource(R.string.frame_rate_desc), frameRateMatchingMode, focusedIndex == localIndex, onFrameRateMatchingClick, Modifier.settingsFocusSlot(localIndex))
                 16 -> SettingsRow(Icons.Default.HighQuality, stringResource(R.string.quality_filters), stringResource(R.string.quality_filters_desc), qualityFilterValue, focusedIndex == localIndex, onQualityFiltersClick, Modifier.settingsFocusSlot(localIndex))
-                17 -> SettingsRow(Icons.Default.Widgets, stringResource(R.string.card_layout), stringResource(R.string.card_layout_desc), cardLayoutMode, focusedIndex == localIndex, onCardLayoutToggle, Modifier.settingsFocusSlot(localIndex))
+                17 -> SettingsRow(
+                    icon = Icons.Default.Widgets,
+                    title = stringResource(R.string.card_layout),
+                    subtitle = stringResource(
+                        if (netflixHomeStyle) R.string.card_layout_netflix_exception_desc else R.string.card_layout_desc
+                    ),
+                    value = cardLayoutMode,
+                    isFocused = focusedIndex == localIndex,
+                    onClick = onCardLayoutToggle,
+                    modifier = Modifier.settingsFocusSlot(localIndex)
+                )
                 18 -> SettingsRow(
                     icon = Icons.Default.Settings,
                     title = stringResource(R.string.ui_mode),
@@ -7526,7 +7001,7 @@ private fun TvGeneralSettingsRows(
                 37 -> SettingsToggleRow(stringResource(R.string.trailer_in_cards), stringResource(R.string.trailer_in_cards_desc), trailerInCards, focusedIndex == localIndex, onTrailerInCardsToggle, Modifier.settingsFocusSlot(localIndex))
                 49 -> SettingsToggleRow(stringResource(R.string.netflix_home_style), stringResource(R.string.netflix_home_style_desc), netflixHomeStyle, focusedIndex == localIndex, onNetflixHomeStyleToggle, Modifier.settingsFocusSlot(localIndex))
                 50 -> SettingsToggleRow(stringResource(R.string.watchlist_on_home), stringResource(R.string.watchlist_on_home_desc), watchlistOnHome, focusedIndex == localIndex, onWatchlistOnHomeToggle, Modifier.settingsFocusSlot(localIndex))
-                51 -> SettingsRow(
+                53 -> SettingsRow(
                     icon = Icons.Default.Storage,
                     title = stringResource(R.string.playback_cache_size),
                     subtitle = stringResource(R.string.playback_cache_size_desc, formatPlaybackCacheBytes(playbackCacheUsedBytes)),
@@ -7535,7 +7010,7 @@ private fun TvGeneralSettingsRows(
                     onClick = onPlaybackCacheSizeClick,
                     modifier = Modifier.settingsFocusSlot(localIndex)
                 )
-                52 -> SettingsRow(
+                54 -> SettingsRow(
                     icon = Icons.Default.Delete,
                     title = stringResource(R.string.clear_playback_cache),
                     subtitle = stringResource(R.string.clear_playback_cache_desc),
@@ -7544,6 +7019,7 @@ private fun TvGeneralSettingsRows(
                     onClick = onClearPlaybackCacheClick,
                     modifier = Modifier.settingsFocusSlot(localIndex)
                 )
+                in LIVE_AI_SUBS_ROWS -> LiveAiSubsTvRow(rowId, focusedIndex == localIndex, Modifier.settingsFocusSlot(localIndex))
             }
         }
     }
@@ -10778,6 +10254,7 @@ private fun AccountsSettings(
     onConnectSimkl: () -> Unit = {},
     onCancelSimkl: () -> Unit = {},
     onDisconnectSimkl: () -> Unit = {},
+    onToggleWeTrakr: () -> Unit = {},
     trackingUiState: SettingsUiState,
     onTrackingReadMode: (
         com.arflix.tv.data.repository.sync.TrackingFeature,
@@ -10810,7 +10287,6 @@ private fun AccountsSettings(
     onOpenCredits: () -> Unit,
     onNavigateToTelegram: () -> Unit = {}
 ) {
-    val integrationsViewModel: SettingsViewModel = hiltViewModel()
     Column {
         if (LocalDeviceType.current.isTouchDevice()) {
             Text(
@@ -10842,7 +10318,13 @@ private fun AccountsSettings(
         // Trakt.tv
         AccountRow(
             name = "Trakt.tv",
-            description = stringResource(if (trackingUiState.traktReconnectRequired) R.string.trakt_reconnect_required else R.string.settings_trakt_desc),
+            description = when {
+                trackingUiState.traktReconnectRequired -> stringResource(R.string.trakt_reconnect_required)
+                isTraktAuthenticated && trackingUiState.traktUnavailable -> stringResource(R.string.trakt_session_unavailable)
+                isTraktAuthenticated && !trackingUiState.traktUsername.isNullOrBlank() ->
+                    stringResource(R.string.settings_connected_as, "@${trackingUiState.traktUsername}")
+                else -> stringResource(R.string.settings_trakt_desc)
+            },
             isConnected = isTraktAuthenticated,
             isWorking = trackingUiState.isTraktAuthStarting || trackingUiState.isTraktPolling,
             authCode = trackingUiState.traktCode?.userCode,
@@ -10859,8 +10341,14 @@ private fun AccountsSettings(
         // MDBList (per-profile alternative to Trakt)
         AccountRow(
             name = stringResource(R.string.mdblist_account),
-            description = stringResource(R.string.settings_mdblist_tagline),
-            isConnected = isMdbListConnected,
+            description = when {
+                isMdbListConnected && trackingUiState.mdbListReconnectRequired -> stringResource(R.string.mdblist_reconnect_required)
+                isMdbListConnected && trackingUiState.mdbListUnavailable -> stringResource(R.string.mdblist_session_unavailable)
+                isMdbListConnected && !trackingUiState.mdbListUsername.isNullOrBlank() ->
+                    stringResource(R.string.settings_connected_as, "@${trackingUiState.mdbListUsername}")
+                else -> stringResource(R.string.settings_mdblist_tagline)
+            },
+            isConnected = isMdbListConnected && !trackingUiState.mdbListReconnectRequired,
             isWorking = trackingUiState.mdbListConnecting || trackingUiState.isMdbListPolling,
             authCode = trackingUiState.mdbListCode,
             authUrl = trackingUiState.mdbListUrl,
@@ -10898,8 +10386,8 @@ private fun AccountsSettings(
             authCode = trackingUiState.weTrakrCode?.userCode,
             authUrl = trackingUiState.weTrakrCode?.verificationUrl,
             isFocused = focusedIndex == 4,
-            onConnect = integrationsViewModel::toggleWeTrakr,
-            onDisconnect = integrationsViewModel::toggleWeTrakr,
+            onConnect = onToggleWeTrakr,
+            onDisconnect = onToggleWeTrakr,
             modifier = Modifier.settingsFocusSlot(4)
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -10976,7 +10464,7 @@ private fun AccountsSettings(
 
         SettingsToggleRow(
             title = stringResource(R.string.settings_wetrakr_update),
-            subtitle = stringResource(R.string.settings_wetrakr_device),
+            subtitle = stringResource(if (trackingUiState.isWeTrakrConnected) R.string.settings_routing_update_wetrakr_on else R.string.settings_routing_update_wetrakr_off),
             isEnabled = trackingUiState.isWeTrakrConnected && trackingUiState.trackingWriteToWeTrakr,
             isFocused = focusedIndex == 10,
             onToggle = { if (trackingUiState.isWeTrakrConnected) onTrackingWriteTarget(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, it) },
@@ -10986,8 +10474,14 @@ private fun AccountsSettings(
         // Telegram
         SettingsActionRow(
             title = "Telegram",
-            description = stringResource(R.string.settings_telegram_desc),
-            actionLabel = stringResource(R.string.settings_badge_open),
+            description = when {
+                trackingUiState.isTelegramConnected && !trackingUiState.telegramUserName.isNullOrBlank() ->
+                    stringResource(R.string.settings_connected_as, trackingUiState.telegramUserName.orEmpty())
+                trackingUiState.isTelegramConnected ->
+                    stringResource(R.string.connected)
+                else -> stringResource(R.string.settings_telegram_desc)
+            },
+            actionLabel = if (trackingUiState.isTelegramConnected) stringResource(R.string.connected) else stringResource(R.string.settings_badge_open),
             isFocused = focusedIndex == 11,
             onClick = onNavigateToTelegram,
             modifier = Modifier.settingsFocusSlot(11)
@@ -11368,6 +10862,7 @@ private fun TrackingIntegrationsPage(
     onConnectSimkl: () -> Unit = {},
     onCancelSimkl: () -> Unit = {},
     onDisconnectSimkl: () -> Unit = {},
+    onToggleWeTrakr: () -> Unit = {},
     onReadMode: (
         com.arflix.tv.data.repository.sync.TrackingFeature,
         com.arflix.tv.data.repository.sync.TrackingReadMode
@@ -11404,6 +10899,7 @@ private fun TrackingIntegrationsPage(
         if (uiState.isTraktAuthenticated) add("Trakt")
         if (uiState.isMdbListConnected) add("MDBList")
         if (uiState.isSimklConnected) add("Simkl")
+        if (uiState.isWeTrakrConnected) add("WeTrakr")
     }
     val activeProvider = if (activeProviders.isNotEmpty()) {
         activeProviders.joinToString(", ")
@@ -11482,7 +10978,11 @@ private fun TrackingIntegrationsPage(
             TrackingServiceRow(
                 iconRes = R.drawable.ic_trakt,
                 title = "Trakt",
-                tagline = stringResource(if (uiState.traktReconnectRequired) R.string.trakt_reconnect_required else R.string.settings_trakt_tagline),
+                tagline = stringResource(when {
+                    uiState.traktReconnectRequired -> R.string.trakt_reconnect_required
+                    uiState.isTraktAuthenticated && uiState.traktUnavailable -> R.string.trakt_session_unavailable
+                    else -> R.string.settings_trakt_tagline
+                }),
                 isConnected = uiState.isTraktAuthenticated,
                 isWorking = uiState.isTraktPolling || uiState.isTraktAuthStarting,
                 connectedAs = uiState.traktUsername,
@@ -11501,8 +11001,12 @@ private fun TrackingIntegrationsPage(
             TrackingServiceRow(
                 iconRes = R.drawable.ic_mdblist,
                 title = "MDBList",
-                tagline = stringResource(R.string.settings_mdblist_tagline),
-                isConnected = uiState.isMdbListConnected,
+                tagline = stringResource(when {
+                    uiState.isMdbListConnected && uiState.mdbListReconnectRequired -> R.string.mdblist_reconnect_required
+                    uiState.isMdbListConnected && uiState.mdbListUnavailable -> R.string.mdblist_session_unavailable
+                    else -> R.string.settings_mdblist_tagline
+                }),
+                isConnected = uiState.isMdbListConnected && !uiState.mdbListReconnectRequired,
                 isWorking = uiState.mdbListConnecting || uiState.isMdbListPolling,
                 connectedAs = if (uiState.isMdbListConnected) (uiState.mdbListUsername ?: stringResource(R.string.connected)) else null,
                 showDivider = true,
@@ -11525,7 +11029,7 @@ private fun TrackingIntegrationsPage(
                 isWorking = uiState.isSimklAuthStarting || uiState.isSimklPolling,
                 connectedAs = if (uiState.isSimklConnected) (uiState.simklUsername ?: stringResource(R.string.connected)) else null,
                 comingSoon = false,
-                showDivider = false,
+                showDivider = true,
                 onConnect = {
                     if (uiState.isSimklPolling || uiState.isSimklConnected) {
                         onCancelSimkl()
@@ -11535,19 +11039,20 @@ private fun TrackingIntegrationsPage(
                 },
                 onDisconnect = onDisconnectSimkl
             )
-        }
 
-        val integrationsViewModel: SettingsViewModel = hiltViewModel()
-        MobileSettingsCategory(title = "WeTrakr") {
-            AccountRow(name = "WeTrakr", description = stringResource(R.string.settings_wetrakr_tagline),
-                isConnected = uiState.isWeTrakrConnected, isWorking = uiState.weTrakrBusy,
-                authCode = uiState.weTrakrCode?.userCode, authUrl = uiState.weTrakrCode?.verificationUrl,
-                isFocused = false, onConnect = integrationsViewModel::toggleWeTrakr, onDisconnect = integrationsViewModel::toggleWeTrakr)
-            if (uiState.isWeTrakrConnected) TrackingRoutingRow(
-                title = stringResource(R.string.settings_wetrakr_update),
-                value = stringResource(if (uiState.trackingWriteToWeTrakr) R.string.on else R.string.off),
+            // WeTrakr
+            TrackingServiceRow(
+                iconRes = R.drawable.ic_wetrakr,
+                title = "WeTrakr",
+                tagline = stringResource(R.string.settings_wetrakr_tagline),
+                isConnected = uiState.isWeTrakrConnected,
+                isWorking = uiState.weTrakrBusy,
+                connectedAs = null,
+                comingSoon = false,
                 showDivider = false,
-                onClick = { onWriteTarget(com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR, !uiState.trackingWriteToWeTrakr) })
+                onConnect = onToggleWeTrakr,
+                onDisconnect = onToggleWeTrakr
+            )
         }
 
         if (uiState.isTraktAuthenticated || uiState.isSimklConnected || uiState.isMdbListConnected || uiState.isWeTrakrConnected) {
@@ -11577,7 +11082,7 @@ private fun TrackingIntegrationsPage(
                 TrackingRoutingRow(
                     title = stringResource(R.string.settings_routing_watched_source),
                     value = trackingModeLabel(uiState.trackingWatchedReadMode),
-                    showDivider = uiState.isTraktAuthenticated || uiState.isSimklConnected,
+                    showDivider = uiState.isTraktAuthenticated || uiState.isSimklConnected || uiState.isWeTrakrConnected,
                     onClick = {
                         onReadMode(
                             com.arflix.tv.data.repository.sync.TrackingFeature.WATCHED,
@@ -11589,7 +11094,7 @@ private fun TrackingIntegrationsPage(
                     TrackingRoutingRow(
                         title = stringResource(R.string.settings_routing_update_trakt),
                         value = stringResource(if (uiState.trackingWriteToTrakt) R.string.on else R.string.off),
-                        showDivider = uiState.isSimklConnected,
+                        showDivider = uiState.isSimklConnected || uiState.isWeTrakrConnected,
                         onClick = {
                             onWriteTarget(
                                 com.arflix.tv.data.repository.sync.SyncProvider.TRAKT,
@@ -11602,11 +11107,24 @@ private fun TrackingIntegrationsPage(
                     TrackingRoutingRow(
                         title = stringResource(R.string.settings_routing_update_simkl),
                         value = stringResource(if (uiState.trackingWriteToSimkl) R.string.on else R.string.off),
-                        showDivider = false,
+                        showDivider = uiState.isWeTrakrConnected,
                         onClick = {
                             onWriteTarget(
                                 com.arflix.tv.data.repository.sync.SyncProvider.SIMKL,
                                 !uiState.trackingWriteToSimkl
+                            )
+                        }
+                    )
+                }
+                if (uiState.isWeTrakrConnected) {
+                    TrackingRoutingRow(
+                        title = stringResource(R.string.settings_wetrakr_update),
+                        value = stringResource(if (uiState.trackingWriteToWeTrakr) R.string.on else R.string.off),
+                        showDivider = false,
+                        onClick = {
+                            onWriteTarget(
+                                com.arflix.tv.data.repository.sync.SyncProvider.WETRAKR,
+                                !uiState.trackingWriteToWeTrakr
                             )
                         }
                     )

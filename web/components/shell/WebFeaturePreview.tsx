@@ -3,7 +3,9 @@ import "@/app/premium.css";
 
 import { useState, type ReactNode } from "react";
 import { ArrowRight, Check, Cloud, Download, Layers, LockKeyhole, LogOut, Monitor, Server, ShieldCheck, Tv } from "lucide-react";
+import { kofiYearlyUrl } from "@/lib/entitlement";
 import { useTranslation } from "@/lib/i18n";
+import { REGIONAL_YEARLY_PRICE, STANDARD_YEARLY_PRICE, useRegionalYearly } from "@/lib/regionalPricing";
 import { AndroidAppNote, PremiumPlans } from "./PremiumPlans";
 
 // A public product preview, not a second app mode. Only static screenshots and
@@ -16,6 +18,8 @@ export function WebFeaturePreview({ checkout, isSignedIn, expired = false, onCon
   onSignOut: () => void;
 }) {
   const translateUi = useTranslation();
+  const regional = useRegionalYearly();
+  const yearlyPrice = regional ? REGIONAL_YEARLY_PRICE : STANDARD_YEARLY_PRICE;
   const [screen, setScreen] = useState("home");
   const screens = [["home", "Home"], ["tv", "Live TV"], ["library", "Library"], ["homeserver", "Home Server"], ["sports", "Sports"]];
   const selectedLabel = screens.find(([id]) => id === screen)?.[1] ?? "Home";
@@ -38,7 +42,11 @@ export function WebFeaturePreview({ checkout, isSignedIn, expired = false, onCon
           <p className="web-preview-lead">{translateUi("Take your existing ARVIO setup to Windows, Mac, iPhone, iPad and smart-TV browsers. Your profiles, libraries, addons and progress stay connected through ARVIO Cloud.")}</p>
           <div className="web-preview-platforms"><Monitor size={16} /><span>Windows · Mac · Linux · iPhone · iPad · {translateUi("Smart-TV browsers")}</span></div>
           {/* Phones: the main action without scrolling past the screenshots. */}
-          <div className="web-preview-hero-cta">{checkout}<p>{translateUi("From $2.99 a month or $20 for 12 months.")} {translateUi("You only pay when you press Play.")}</p></div>
+          <div className="web-preview-hero-cta">{checkout}<p>
+            {translateUi("Monthly · $2.99")}
+            {kofiYearlyUrl() && <> / {translateUi("12-month pass · {value0}", { value0: yearlyPrice })}</>}
+            {". "}{translateUi("You only pay when you press Play.")}
+          </p></div>
           <AndroidAppNote />
         </section>
 

@@ -1561,5 +1561,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "Zvuk tohto zdroja sa v tomto prehliadači nedá prehrať. Vyberte iný zdroj alebo použite externý prehrávač.",
   "Converting the audio for your browser…": "Konvertujeme zvuk pre váš prehliadač…",
   "Picking the best source…": "Vyberáme najlepší zdroj…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi účtuje v amerických dolároch; vaša banka sumu automaticky prepočíta."
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi účtuje v amerických dolároch; vaša banka sumu automaticky prepočíta.",
+  "Maximum of 10 IPTV playlists reached": "Dosiahlo sa maximum 10 zoznamov IPTV",
+  "Regional price · save {value0} vs. 12 monthly payments": "Regionálna cena · ušetríte {value0} v porovnaní s 12 mesačnými platbami",
+  "One payment, no automatic renewal. About {value0} a month.": "Jedna platba, žiadne automatické obnovenie. Približne {value0} mesačne.",
+  "12-month pass · {value0}": "Ročné predplatné · {value0}"
 }

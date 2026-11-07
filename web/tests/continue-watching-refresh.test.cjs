@@ -59,6 +59,7 @@ function harness(options = {}) {
   const tracker = { setProfile() {}, restoreSession: async () => {}, isConnected: true, hiddenProgressShowIds: options.hidden ?? (async () => new Set()), continueWatchingActivity: options.activity ?? (async () => null) };
   const noop = () => {};
   const globals = {
+    managed: { applySettings: value => value },
     episodeAvailabilityKey: availability.episodeAvailabilityKey,
     validateContinueWatchingEpisodes: availability.createEpisodeValidator(options.episodeLookup ?? (async () => ({ exists: true, airDate: '2020-01-01' }))),
     ...cw, activeProfileId: 'a', activeProfileIdRef: { current: 'a' },

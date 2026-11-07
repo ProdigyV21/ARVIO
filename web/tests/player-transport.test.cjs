@@ -592,3 +592,28 @@ test('MPEG-TS errors carry the provider status, tell "not TS at all" apart, and 
   assert.equal(errors[2].mediaInfo.videoCodec, 'avc1.42c00c');
   handle();
 });
+
+test('a live MPEG-TS stream that ends is a dropped connection, not a frozen picture; a VOD TS file may end', async () => {
+  for (const signal of ['loading_complete', 'ended']) {
+    const e = environment(); const errors = [];
+    e.mpegts.Events.LOADING_COMPLETE = 'loading_complete';
+    const video = new Video();
+    const handle = e.attachPlayback(video, '/live/u/p/1.ts', { live: true, onError: (error) => errors.push(error) }); await flush();
+    if (signal === 'ended') { video.ended = true; video.emit('ended'); } else e.ts[0].emit('loading_complete');
+    e.ts[0].emit('loading_complete'); // reported once
+    await flush();
+    assert.equal(errors.length, 1, signal);
+    assert.equal(errors[0].kind, 'network');
+    assert.equal(errors[0].retryable, true);
+    assert.equal(errors[0].code, 'LIVE_STREAM_ENDED');
+    handle();
+  }
+  const e = environment(); const errors = [];
+  e.mpegts.Events.LOADING_COMPLETE = 'loading_complete';
+  const video = new Video();
+  const handle = e.attachPlayback(video, '/movie/u/p/1.ts', { onError: (error) => errors.push(error) }); await flush();
+  e.ts[0].emit('loading_complete'); video.emit('ended');
+  await flush();
+  assert.deepEqual(errors, []);
+  handle();
+});

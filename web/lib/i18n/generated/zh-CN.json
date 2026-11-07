@@ -1557,5 +1557,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "此来源的音频无法在此浏览器中播放。请选择其他来源或使用外部播放器。",
   "Converting the audio for your browser…": "正在为您的浏览器转换音频…",
   "Picking the best source…": "正在选择最佳来源…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi 以美元收费，您的银行会自动换算金额。"
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi 以美元收费，您的银行会自动换算金额。",
+  "Maximum of 10 IPTV playlists reached": "已达到 IPTV 播放列表上限（10 个）",
+  "Regional price · save {value0} vs. 12 monthly payments": "地区价格 · 与按月支付 12 次相比节省 {value0}",
+  "One payment, no automatic renewal. About {value0} a month.": "一次性付款，不会自动续订。约合每月 {value0}。",
+  "12-month pass · {value0}": "12 个月通行证 · {value0}"
 }

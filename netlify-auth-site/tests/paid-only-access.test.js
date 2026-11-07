@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const { evaluateEntitlement, buildPaidRecord } = require('../netlify/functions/_entitlements');
 const trialEmails = require('../netlify/functions/_trial-emails');
 
-function fixture(record = null) {
+function fixture(record = null, managed = null) {
   const records = new Map(record ? [['account@example.test', record]] : []);
   const events = [];
   let writes = 0;
@@ -24,6 +24,7 @@ function fixture(record = null) {
       evaluateEntitlement
     },
     './_premium-funnel': { recordPremiumEvent: async (_event, value) => events.push(value) },
+    './_partner-entitlement': { partnerEntitlement: async () => managed },
     './_trial-emails': { queueTrialEmails: async () => { queuedEmails++; } },
     './_referrals': { rewardReferralIfDue: async () => ({ rewarded: false }) }
   };
@@ -37,6 +38,18 @@ function fixture(record = null) {
 
 const paid = { status: 'active', source: 'kofi', expiresAt: '2099-01-01', tier: 'Premium', trialUsed: false };
 const trial = { status: 'active', source: 'trial', expiresAt: '2099-01-01', trialUsed: true };
+
+test('managed Premium supplements access without writing or downgrading a personal membership', async () => {
+  const managed = { entitled: true, reason: 'partner', source: 'partner' };
+  const f = fixture(null, managed);
+  assert.equal((await f.request()).body.reason, 'partner');
+  assert.equal(f.writes(), 0);
+  assert.equal(f.events.length, 0);
+  const personal = fixture(paid, managed);
+  assert.equal((await personal.request()).body.reason, 'subscription');
+  assert.equal(personal.writes(), 0);
+  assert.equal((await fixture(null).request()).body.entitled, false);
+});
 
 test('no account, active trial, expired trial or malformed trial grants hosted access', () => {
   for (const record of [null, trial, { ...trial, expiresAt: '2000-01-01' }, { ...trial, expiresAt: null }, { ...trial, expiresAt: 'broken' }]) {

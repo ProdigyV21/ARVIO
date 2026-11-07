@@ -6,6 +6,7 @@ import { Smartphone } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { kofiSubscribeUrl, kofiYearlyUrl } from "@/lib/entitlement";
 import { isTvBrowser } from "@/lib/tvNav";
+import { REGIONAL_YEARLY_PER_MONTH, REGIONAL_YEARLY_PRICE, REGIONAL_YEARLY_SAVING, STANDARD_YEARLY_PRICE, useRegionalYearly } from "@/lib/regionalPricing";
 
 export const DISCORD_URL = "https://discord.gg/UavuEYMfQ4";
 export const ANDROID_APP_URL = "https://arvio.tv/";
@@ -20,13 +21,14 @@ export type PremiumPlanId = "yearly" | "monthly";
  */
 export function PremiumPlans({ action, compact = false }: { action?: (plan: PremiumPlanId) => ReactNode; compact?: boolean }) {
   const translateUi = useTranslation();
+  const regional = useRegionalYearly();
   const yearly = Boolean(kofiYearlyUrl());
   return <div className={`premium-plans${compact ? " is-compact" : ""}`}>
     <div className={`premium-offer-plans${yearly ? "" : " single"}`}>
       {yearly && <div className="premium-offer-plan best">
-        <p className="premium-offer-badge">{translateUi("Best value · save 44%")}</p>
-        <p className="premium-offer-price"><strong>$20</strong> <span>{translateUi("/ 12 months")}</span></p>
-        <p className="premium-offer-terms">{translateUi("One payment, no automatic renewal. About $1.67 a month.")}</p>
+        <p className="premium-offer-badge">{regional ? translateUi("Regional price · save {value0} vs. 12 monthly payments", { value0: REGIONAL_YEARLY_SAVING }) : translateUi("Best value · save 44%")}</p>
+        <p className="premium-offer-price">{regional && <s className="premium-offer-was">{STANDARD_YEARLY_PRICE}</s>} <strong>{regional ? REGIONAL_YEARLY_PRICE : STANDARD_YEARLY_PRICE}</strong> <span>{translateUi("/ 12 months")}</span></p>
+        <p className="premium-offer-terms">{regional ? translateUi("One payment, no automatic renewal. About {value0} a month.", { value0: REGIONAL_YEARLY_PER_MONTH }) : translateUi("One payment, no automatic renewal. About $1.67 a month.")}</p>
         {action?.("yearly")}
       </div>}
       <div className="premium-offer-plan">
@@ -55,6 +57,7 @@ export function isAndroidBrowser(): boolean {
 /** A QR code that opens the same Ko-fi checkout on a phone. */
 export function PayOnPhone({ email }: { email?: string | null }) {
   const translateUi = useTranslation();
+  const regional = useRegionalYearly();
   const yearly = kofiYearlyUrl();
   const [plan, setPlan] = useState<PremiumPlanId>(yearly ? "yearly" : "monthly");
   const [qr, setQr] = useState("");
@@ -73,7 +76,7 @@ export function PayOnPhone({ email }: { email?: string | null }) {
       {email && <p className="premium-pay-email">{translateUi("Use this email at checkout")} <strong>{email}</strong></p>}
       <p className="premium-pay-currency">{translateUi("Ko-fi charges in US dollars; your bank converts the amount automatically.")}</p>
       {yearly && <div className="premium-pay-plans" role="group" aria-label={translateUi("Plan")}>
-        <button type="button" aria-pressed={plan === "yearly"} onClick={() => setPlan("yearly")}>{translateUi("12-month pass · $20")}</button>
+        <button type="button" aria-pressed={plan === "yearly"} onClick={() => setPlan("yearly")}>{regional ? translateUi("12-month pass · {value0}", { value0: REGIONAL_YEARLY_PRICE }) : translateUi("12-month pass · $20")}</button>
         <button type="button" aria-pressed={plan === "monthly"} onClick={() => setPlan("monthly")}>{translateUi("Monthly · $2.99")}</button>
       </div>}
     </div>

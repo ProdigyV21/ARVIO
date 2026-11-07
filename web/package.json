@@ -21,6 +21,8 @@
     "test:iptv-groups-ui": "node scripts/check-iptv-groups-ui.cjs",
     "test:i18n-ui": "node scripts/check-i18n-ui.cjs",
     "test:partner-ui": "node scripts/check-partner-ui.cjs",
+    "test:partner-management-ui": "node scripts/check-partner-management-ui.cjs",
+    "preview:partner-management": "node scripts/check-partner-management-ui.cjs --serve",
     "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "next lint"

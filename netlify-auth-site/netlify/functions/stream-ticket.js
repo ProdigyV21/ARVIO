@@ -13,18 +13,30 @@ const crypto = require("crypto");
 const { json, options, resolveIdentity, normalizeEmail, sha256, privacyHash } = require("./_backend");
 const { entitlementsStore, readEntitlement, evaluateEntitlement } = require("./_entitlements");
 const { streamKeysStore, signTicketV2 } = require("./_stream-keys");
+const { partnerEntitlement } = require("./_partner-entitlement");
 
 // Long enough for a paused download or a tab left open for days; refreshed by
 // the web app well before it runs out.
 const TICKET_TTL_SECONDS = 14 * 24 * 60 * 60;
+// Relay URLs are fixed for a playback session, including nested HLS requests.
+// Allow normal long-form playback; revocation stops new tickets, while already
+// issued Partner relay leases expire within a day (or the paid grace deadline).
+const PARTNER_TICKET_TTL_SECONDS = 24 * 60 * 60;
+
+function ticketLifetime(state, now = Date.now()) {
+  if (state.source !== "partner") return TICKET_TTL_SECONDS;
+  const deadline = Date.parse(state.graceEndsAt || state.expiresAt || "");
+  if (!Number.isFinite(deadline)) return 0;
+  return Math.max(0, Math.min(PARTNER_TICKET_TTL_SECONDS, Math.floor((deadline - now) / 1000)));
+}
 
 function ticketSecret() {
   const secret = process.env.STREAM_TICKET_SECRET || "";
   return secret.length >= 32 ? secret : "";
 }
 
-function signTicket(secret, accountTag, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const expiry = nowSeconds + TICKET_TTL_SECONDS;
+function signTicket(secret, accountTag, nowSeconds = Math.floor(Date.now() / 1000), ttlSeconds = TICKET_TTL_SECONDS) {
+  const expiry = nowSeconds + ttlSeconds;
   const body = `v1.${expiry}.${accountTag}`;
   const signature = crypto.createHmac("sha256", secret).update(body).digest("base64url");
   return { ticket: `${body}.${signature}`, expiresAt: new Date(expiry * 1000).toISOString() };
@@ -57,14 +69,17 @@ exports.handler = async (event) => {
     if (!state.entitled && record && record.linkedFrom) {
       state = evaluateEntitlement(await readEntitlement(store, sha256(normalizeEmail(record.linkedFrom))));
     }
+    if (!state.entitled) state = await partnerEntitlement(identity) || state;
     if (!state.entitled) return json(403, { error: "premium_required" });
+    const ttl = ticketLifetime(state);
+    if (!ttl) return json(403, { error: "premium_required" });
     const accountTag = privacyHash("stream-ticket", email).slice(0, 10);
-    if (secret) return json(200, signTicket(secret, accountTag));
-    return json(200, await signTicketV2(streamKeysStore(event), accountTag, TICKET_TTL_SECONDS));
+    if (secret) return json(200, signTicket(secret, accountTag, Math.floor(Date.now() / 1000), ttl));
+    return json(200, await signTicketV2(streamKeysStore(event), accountTag, ttl));
   } catch (error) {
     console.error("stream-ticket failed", error && error.message);
     return json(500, { error: "stream_ticket_failed" });
   }
 };
 
-exports._test = { signTicket, verifyTicket, TICKET_TTL_SECONDS };
+exports._test = { signTicket, verifyTicket, ticketLifetime, TICKET_TTL_SECONDS, PARTNER_TICKET_TTL_SECONDS };

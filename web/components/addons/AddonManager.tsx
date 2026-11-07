@@ -199,9 +199,9 @@ export function AddonList() {
         <div className="addon-item-main">
           <span className="addon-item-title"><strong>{addon.name}</strong><span className="addon-version">v{addon.version || "1.0.0"}</span>{off && <span className="addon-off">{translateUi("Off")}</span>}</span>
           <Capabilities addon={addon} />
-          <MaskedAddonUrl url={addon.manifestUrl} />
+          {addon.managedOrganizationId ? <a href="/partner/account">Managed connection</a> : <MaskedAddonUrl url={addon.manifestUrl} />}
         </div>
-        {confirm === addon.id ? <div className="addon-confirm" role="group" aria-label={translateUi("Remove {value0}?", { value0: addon.name })}>
+        {addon.managedOrganizationId ? null : confirm === addon.id ? <div className="addon-confirm" role="group" aria-label={translateUi("Remove {value0}?", { value0: addon.name })}>
           <span>{translateUi("Remove {value0} from every device and profile?", { value0: addon.name })}</span>
           <button type="button" className="danger" autoFocus onClick={() => { setConfirm(null); void removeAddon(addon).catch((error) => setToast(error instanceof Error ? error.message : "Could not remove addon.")); }}>{translateUi("Remove")}</button>
           <button type="button" className="secondary" onClick={() => setConfirm(null)}><X size={15} /> {translateUi("Cancel")}</button>

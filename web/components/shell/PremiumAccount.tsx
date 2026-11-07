@@ -1,5 +1,6 @@
 "use client";
 import { useTranslation } from "@/lib/i18n";
+import { REGIONAL_YEARLY_PRICE, STANDARD_YEARLY_PRICE, useRegionalYearly } from "@/lib/regionalPricing";
 
 import { BadgeCheck, Copy, ExternalLink, Gift } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -51,9 +52,11 @@ export function PremiumAccount() {
   const [state, setState] = useState(entitlement);
   const [message, setMessage] = useState("");
   useEffect(() => { setState(entitlement); setMessage(""); }, [auth?.userId, entitlement]);
+  const regional = useRegionalYearly();
   if (!config.paywallEnabled || !auth) return null;
   const paid = Boolean(state?.entitled);
   const yearly = kofiYearlyUrl();
+  const yearlyPrice = regional ? REGIONAL_YEARLY_PRICE : STANDARD_YEARLY_PRICE;
   const end = accessEndsAt(state);
   const applied = (next: EntitlementState) => {
     if (!next.entitled || next.reason !== "subscription" || next.source === "trial") return;
@@ -70,7 +73,7 @@ export function PremiumAccount() {
     <p>{translateUi("Browser access on iPhone, iPad, Windows, Mac and Linux. The Android app and Cloud dashboard remain free.")}</p>
     <div className="premium-account-actions">
       {yearly && state?.plan !== "yearly" && <MembershipCheckout className="paywall-primary" entry="account_settings_yearly" href={yearly} onEntitled={applied} activeWhen={paid ? (next) => next.plan === "yearly" : undefined}>
-        {translateUi(paid ? "Switch to the 12-month pass - $20" : "Get the 12-month pass - $20")} <ExternalLink size={15} />
+        {translateUi("Get the 12-month pass")} · {yearlyPrice} <ExternalLink size={15} />
       </MembershipCheckout>}
       {!paid && <MembershipCheckout className={yearly ? "paywall-trial" : "paywall-primary"} entry="account_settings" onEntitled={applied} showEmailHint>
         {translateUi("Keep Premium - $2.99/month ")}<ExternalLink size={15} />

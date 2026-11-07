@@ -112,7 +112,7 @@ test('review fixes stay in place: error card, upgrades, external players, ticket
   const account = read('components/shell/PremiumAccount.tsx');
   assert.match(account, /activeWhen=\{paid \? \(next\) => next\.plan === "yearly" : undefined\}/, 'switching to the pass waits for the pass');
   const checkout = read('components/shell/MembershipCheckout.tsx');
-  assert.match(checkout, /rawResult === "active" && state && done\.current && !done\.current\(state\) \? "pending"/);
+  assert.match(checkout, /activeWhen: state => done\.current\?\.\(state\) \?\? true/, 'recovery checks for the annual upgrade before stopping');
   const store = read('lib/store.tsx');
   assert.match(store, /premiumAllows\("play", headedExternal \? undefined : \(\) => playStream\(stream, options\)\)/, 'VLC/Infuse is not opened outside the tap');
   const proxy = read('app/api/proxy/route.ts');

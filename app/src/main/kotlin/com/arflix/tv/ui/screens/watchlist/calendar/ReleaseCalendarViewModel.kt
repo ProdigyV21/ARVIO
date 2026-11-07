@@ -18,7 +18,7 @@ import com.arflix.tv.data.repository.ReleaseCalendarRepository
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.data.repository.mergeCalendarWatchlists
 import com.arflix.tv.util.traktDataStore
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.ContentRating
 import dagger.hilt.android.lifecycle.HiltViewModel

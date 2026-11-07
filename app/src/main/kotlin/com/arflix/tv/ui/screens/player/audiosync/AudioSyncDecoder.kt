@@ -34,6 +34,11 @@ internal class AudioSyncDecoder(
      * next to the look-ahead one, which keep to platform software decoders and FFmpeg.
      */
     private val allowVendorDecoders: Boolean = true,
+    /**
+     * Priority of the decoding thread. Background by default; Live TV subtitles run a little
+     * higher, since a starved thread there makes every subtitle late.
+     */
+    private val threadPriority: Int = Process.THREAD_PRIORITY_BACKGROUND,
     /** Called once per audio format that has no usable decoder. */
     private val onUnsupportedFormat: (mimeType: String) -> Unit = {},
 ) {
@@ -144,7 +149,7 @@ internal class AudioSyncDecoder(
     }
 
     private fun runLoop() {
-        Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+        Process.setThreadPriority(threadPriority)
         try {
             while (true) {
                 val item = synchronized(lock) {

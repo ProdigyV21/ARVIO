@@ -13,6 +13,7 @@ import com.arflix.tv.data.repository.MediaRepository
 import com.arflix.tv.data.repository.StreamIntegrationRepository
 import com.arflix.tv.data.repository.StreamRepository
 import com.arflix.tv.data.repository.WatchlistRepository
+import com.arflix.tv.data.repository.effectiveSettingsDataStore
 import com.arflix.tv.data.repository.sync.RemoteSyncManager
 import com.arflix.tv.network.TmdbPriorityDispatcher
 import com.arflix.tv.util.settingsDataStore
@@ -67,6 +68,8 @@ class DetailsWatchlistToggleTest {
         }
         mockkStatic("com.arflix.tv.util.DataStoresKt")
         every { any<Context>().settingsDataStore } returns settings
+        mockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
+        every { any<Context>().effectiveSettingsDataStore } returns settings
 
         media = mockk(relaxed = true)
         every { media.episodeRatingsUpdated } returns MutableSharedFlow<Pair<Int, Int>>()
@@ -84,6 +87,7 @@ class DetailsWatchlistToggleTest {
     fun tearDown() {
         store.clear()
         Dispatchers.resetMain()
+        unmockkStatic("com.arflix.tv.data.repository.PartnerPreferencesKt")
         unmockkStatic("com.arflix.tv.util.DataStoresKt")
         unmockkStatic(Log::class)
     }
@@ -113,7 +117,7 @@ class DetailsWatchlistToggleTest {
             streamIntegrationRepository = integrations,
             recentPlayedSourceRepository = mockk(relaxed = true),
             personalListsRepository = mockk(relaxed = true),
-            kidsContentFilter = mockk(relaxed = true)
+            kidsContentFilter = mockk(relaxed = true), idleReturnCoordinator = com.arflix.tv.data.repository.IdleReturnCoordinator(mockk(relaxed = true), mockk(relaxed = true))
         )
         store.put("details", model)
         model.loadDetails(MediaType.MOVIE, movie.id)

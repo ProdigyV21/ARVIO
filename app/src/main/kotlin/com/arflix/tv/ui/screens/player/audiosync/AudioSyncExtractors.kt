@@ -69,7 +69,7 @@ private class AudioTapExtractor(
     override fun getUnderlyingImplementation(): Extractor = delegate.underlyingImplementation
 }
 
-private class AudioTapExtractorOutput(
+internal class AudioTapExtractorOutput(
     private val delegate: ExtractorOutput,
     private val sink: AudioSampleSink,
 ) : ExtractorOutput {
@@ -91,7 +91,7 @@ private class AudioTapExtractorOutput(
  * report its metadata later (with [offset] bytes of following samples already written), so the
  * pending bytes are kept until [sampleMetadata] identifies the sample.
  */
-private class AudioTapTrackOutput(
+internal class AudioTapTrackOutput(
     private val delegate: TrackOutput,
     private val sink: AudioSampleSink,
 ) : TrackOutput {

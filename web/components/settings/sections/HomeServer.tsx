@@ -9,6 +9,8 @@ import { useState } from "react";
 import { useTranslation } from "@/lib/i18n";
 import { moveIndex } from "@/lib/ordering";
 import { useAppPick } from "@/lib/store";
+import { isManagedId } from "@/lib/managedConfiguration";
+import { ManagedConnections } from "../ManagedConnections";
 import type { HomeServerCollectionConfig, HomeServerConfig } from "@/lib/types";
 import { SortableList } from "../SortableList";
 import { Empty, Group, ScopeBadge, SectionHeader, Segmented, Toggle, safeArray } from "../ui";
@@ -38,7 +40,7 @@ export function HomeServerSection() {
   const [testing, setTesting] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const servers = safeArray(settings.homeServers);
+  const servers = safeArray(settings.homeServers).filter(server => !isManagedId(server.id));
   const update = (next: HomeServerConfig[]) => updateSettings({ homeServers: next });
   const editingServer = servers.find((server) => server.id === editing) ?? null;
 
@@ -84,6 +86,7 @@ export function HomeServerSection() {
   return (
     <>
       <SectionHeader title="Home server" description="Connect Plex, Jellyfin or Emby. Matching movies and episodes appear as sources, and the connection syncs to this profile on your other ARVIO apps." />
+      <ManagedConnections items={settings.homeServers.filter(server => isManagedId(server.id))} />
       <Group title={`${translateUi("Servers")} · ${servers.length}`}
         description={<>{translateUi("When several servers have the same title, the one higher in the list is used first.")} <ScopeBadge scope="all" /></>}>
         {servers.length === 0 ? <Empty>{translateUi("No home servers configured.")}</Empty> : (

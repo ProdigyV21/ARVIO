@@ -1559,5 +1559,9 @@
   "This source's audio can't play in this browser. Choose another source or use an external player.": "Звукът на този източник не може да се възпроизведе в този браузър. Изберете друг източник или използвайте външен плейър.",
   "Converting the audio for your browser…": "Преобразуваме звука за браузъра ви…",
   "Picking the best source…": "Избираме най-добрия източник…",
-  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi таксува в щатски долари; вашата банка превалутира сумата автоматично."
+  "Ko-fi charges in US dollars; your bank converts the amount automatically.": "Ko-fi таксува в щатски долари; вашата банка превалутира сумата автоматично.",
+  "Maximum of 10 IPTV playlists reached": "Достигнат е максимумът от 10 IPTV плейлисти",
+  "Regional price · save {value0} vs. 12 monthly payments": "Регионална цена · спестявате {value0} спрямо 12 месечни плащания",
+  "One payment, no automatic renewal. About {value0} a month.": "Еднократно плащане, без автоматично подновяване. Около {value0} на месец.",
+  "12-month pass · {value0}": "Пропуск за 12 месеца · {value0}"
 }

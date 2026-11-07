@@ -426,7 +426,8 @@ class SimklIntegrationTest {
         assertEquals(2, items.size)
         val movie = items.first { it.id == 100 }
         assertEquals(42, movie.progress)
-        assertEquals(3_024L, movie.resumePositionSeconds)
+        // Preserve SIMKL's 42.5%, even though the card's percentage is an integer.
+        assertEquals(3_060L, movie.resumePositionSeconds)
         assertFalse(syncService.getWatchedMovies().contains(100))
         val show = items.first { it.id == 200 }
         assertTrue(show.isUpNext)

@@ -122,7 +122,7 @@ export function xtreamInfoFromUrl(url: string): XtreamInfo | null {
   return xtreamInfoFromPlaylist(normalizeIptvInput(url));
 }
 
-export { buildXtreamPlayerApiUrl, playlistProxyHeaders, fetchXtreamJson };
+export { buildXtreamPlayerApiUrl, playlistProxyHeaders, fetchXtreamJson, fetchXtreamAccountUsage };
 
 type XtreamCategory = {
   category_id?: string | number;
@@ -177,7 +177,7 @@ export async function loadIptvSnapshot(
   options: IptvLoadOptions = {}
 ): Promise<IptvSnapshot> {
   const normalizedPlaylists = normalizeIptvPlaylists(playlists);
-  const enabled = normalizedPlaylists.filter((playlist) => playlist.enabled && playlist.m3uUrl.trim());
+  const enabled = normalizedPlaylists.filter((playlist) => playlist.enabled && playlist.importLiveTv !== false && playlist.m3uUrl.trim());
   const playlistWarnings: string[] = [];
   const playlistErrors: NonNullable<IptvSnapshot["playlistErrors"]> = [];
   const channelSets = await Promise.all(
@@ -214,7 +214,9 @@ export async function loadIptvSnapshot(
   );
   // Portals after the playlists, as the single portal always was.
   channelSets.push(...await loadPortals(portalsOf(options), Boolean(options.freshPortals), playlistErrors, playlistWarnings));
-  const allChannels = channelSets.flat();
+  const catchupDisabled = new Set(enabled.filter(p => p.enableCatchup === false).map(p => p.id));
+  const allChannels = channelSets.flat().map(channel => catchupDisabled.has(channel.id.split(':')[0])
+    ? { ...channel, catchupDays: undefined, catchupType: undefined, catchupSource: undefined, catchupAvailable: false } : channel);
   const channels = accessibleChannels(allChannels, hiddenGroups);
   // Xtream channels get now/next on demand from the panel's JSON EPG (fast,
   // per-channel); only non-Xtream channels need the upfront XMLTV pass.
@@ -254,7 +256,7 @@ export async function loadIptvSnapshot(
 export async function loadIptvGuideForChannels(playlists: IptvPlaylistEntry[], channels: IptvChannel[]) {
   if (!channels.length) return {} as Record<string, IptvNowNext>;
   const normalizedPlaylists = normalizeIptvPlaylists(playlists);
-  const enabled = normalizedPlaylists.filter((playlist) => playlist.enabled && playlist.m3uUrl.trim());
+  const enabled = normalizedPlaylists.filter((playlist) => playlist.enabled && playlist.importLiveTv !== false && playlist.enableEpg !== false && playlist.m3uUrl.trim());
   if (!enabled.length) return loadStalkerGuide(channels);
 
   // Xtream channels get their guide from the panel's own per-channel EPG API —
@@ -265,6 +267,7 @@ export async function loadIptvGuideForChannels(playlists: IptvPlaylistEntry[], c
   const xmltvChannels: IptvChannel[] = [];
   for (const channel of channels) {
     const playlist = byPlaylist.get(channel.id.split(":")[0] ?? "");
+    if (!playlist) continue;
     const info = playlist ? xtreamInfoFromPlaylist(playlist.m3uUrl) : null;
     const streamId = info ? xtreamStreamIdFromUrl(channel.streamUrl) : null;
     if (info && streamId) xtreamChannels.push({ info, channel, streamId });
@@ -342,7 +345,7 @@ export type CatchupProgram = IptvProgram & { hasArchive: boolean };
 
 function xtreamInfoForChannel(playlists: IptvPlaylistEntry[], channel: IptvChannel) {
   const playlistId = channel.id.split(":")[0] ?? "";
-  const playlist = normalizeIptvPlaylists(playlists).find((entry) => entry.id === playlistId);
+  const playlist = normalizeIptvPlaylists(playlists).find((entry) => entry.id === playlistId && entry.enabled && entry.importLiveTv !== false && entry.enableEpg !== false && entry.enableCatchup !== false);
   return playlist ? xtreamInfoFromPlaylist(playlist.m3uUrl) : null;
 }
 
@@ -469,7 +472,12 @@ export function normalizeIptvPlaylist(playlist: IptvPlaylistEntry, index = 0): I
     m3uUrl,
     epgUrl: epgUrls[0] ?? "",
     epgUrls,
-    enabled: playlist.enabled !== false
+    enabled: playlist.enabled !== false,
+    ...(playlist.importLiveTv !== undefined ? { importLiveTv: playlist.importLiveTv } : {}),
+    ...(playlist.importVod !== undefined ? { importVod: playlist.importVod } : {}),
+    ...(playlist.importSeries !== undefined ? { importSeries: playlist.importSeries } : {}),
+    ...(playlist.enableEpg !== undefined ? { enableEpg: playlist.enableEpg } : {}),
+    ...(playlist.enableCatchup !== undefined ? { enableCatchup: playlist.enableCatchup } : {})
   };
 }
 
@@ -678,17 +686,7 @@ async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) 
   const existing = apiInFlight.get(key);
   if (existing) return existing as Promise<T>;
   const task = (async () => {
-    const load = async () => {
-      try {
-        const text = await providerTextRequest(url, url);
-        jsonFromText(text);
-        return text;
-      } catch {
-        const text = await providerTextRequest(url, playlistTextUrl(url, headers));
-        jsonFromText(text);
-        return text;
-      }
-    };
+    const load = () => xtreamApiText(url, headers);
     const action = new URL(url).searchParams.get("action");
     const guide = action === "get_short_epg" || action === "get_simple_data_table";
     const text = guide ? await load() : await cachedRemoteText(`api:${key}`, PLAYLIST_TTL_MS, load);
@@ -699,6 +697,39 @@ async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) 
       while (guideApiCache.size > 128) guideApiCache.delete(guideApiCache.keys().next().value!);
     }
     return data;
+  })();
+  apiInFlight.set(key, task);
+  try { return await task; } finally { if (apiInFlight.get(key) === task) apiInFlight.delete(key); }
+}
+
+/** player_api.php text, directly and then through the app proxy (panels without CORS), both behind the provider request guard. */
+async function xtreamApiText(url: string, headers: Record<string, string>) {
+  try {
+    const text = await providerTextRequest(url, url);
+    jsonFromText(text);
+    return text;
+  } catch {
+    const text = await providerTextRequest(url, playlistTextUrl(url, headers));
+    jsonFromText(text);
+    return text;
+  }
+}
+
+/**
+ * The line's connection count from player_api.php user_info, which opens no
+ * stream. Never cached (the numbers change by the second); asks made at the
+ * same time share one request. Null when the panel does not say.
+ */
+async function fetchXtreamAccountUsage(info: XtreamInfo, headers: Record<string, string>): Promise<{ active: number; max: number } | null> {
+  const url = buildXtreamPlayerApiUrl(info.baseUrl, info.username, info.password);
+  const key = `usage|${url}`;
+  const existing = apiInFlight.get(key);
+  if (existing) return existing as Promise<{ active: number; max: number } | null>;
+  const task = (async () => {
+    const user = jsonFromText<{ user_info?: { active_cons?: unknown; max_connections?: unknown } }>(await xtreamApiText(url, headers))?.user_info;
+    const active = Number(user?.active_cons);
+    const max = Number(user?.max_connections);
+    return user && Number.isFinite(active) && Number.isFinite(max) ? { active, max } : null;
   })();
   apiInFlight.set(key, task);
   try { return await task; } finally { if (apiInFlight.get(key) === task) apiInFlight.delete(key); }
@@ -1195,7 +1226,7 @@ function rol(value: number, bits: number) {
  */
 export function iptvPlaylistSignature(playlists: IptvPlaylistEntry[]): string {
   return playlists
-    .map((playlist) => `${playlist.id}:${playlist.enabled}:${playlist.m3uUrl}:${playlist.epgUrl ?? ""}:${playlist.epgUrls?.join("|") ?? ""}`)
+    .map((playlist) => `${playlist.id}:${playlist.enabled}:${playlist.m3uUrl}:${playlist.epgUrl ?? ""}:${playlist.epgUrls?.join("|") ?? ""}:${playlist.importLiveTv !== false}:${playlist.importVod !== false}:${playlist.importSeries !== false}:${playlist.enableEpg !== false}:${playlist.enableCatchup !== false}`)
     .join("||");
 }
 

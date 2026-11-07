@@ -5,7 +5,7 @@ import { config } from "../config";
 import { loadStored, saveStored } from "../storage";
 import type { Profile } from "../types";
 import { authClient } from "./clients";
-import { ACTIVE_PROFILE_KEY, PROFILES_KEY, currentAccountEmail, makeProfile, randomProfileColor } from "./profiles";
+import { ACTIVE_PROFILE_KEY, PROFILES_KEY, resetDifferentAccount } from "./profiles";
 import type { StoreCore } from "./core";
 import type { useRefreshData } from "./refresh";
 
@@ -33,11 +33,12 @@ export function useAuthCallback(store: StoreCore) {
             accessToken: access_token,
             refreshToken: refresh_token,
             userId,
-            email,
+            email: typeof payload.email === "string" ? payload.email : email,
             expiresAt: Date.now() + expires_in * 1000,
             provider
           };
 
+          resetDifferentAccount(store, session.email);
           saveStored(SESSION_KEY, session);
           authClient.session = session;
           setAuth(session);
@@ -66,29 +67,19 @@ export function useAuthCallback(store: StoreCore) {
 }
 
 export function useAccountActions(store: StoreCore & Pick<ReturnType<typeof useRefreshData>, "refreshData">) {
-  const { activeProfileId, cwSourceRef, refreshData, setActiveProfileId, setAuth, setBusy, setCategories, setCloudProfilesHydrated, setContinueWatching, setProfiles, setToast, setWatchedKeys, setWatchlist } = store;
+  const { activeProfileId, refreshData, setAuth, setBusy, setCloudProfilesHydrated, setToast } = store;
   const signIn = useCallback(async (email: string, password: string, mode: "sign-in" | "sign-up") => {
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) throw new Error("Enter your email and password.");
     setBusy(mode === "sign-up" ? "Creating account" : "Signing in");
     setToast(null);
     try {
-      const previousEmail = currentAccountEmail();
       const session = mode === "sign-up" ? await authClient.signUp(trimmedEmail, password) : await authClient.signIn(trimmedEmail, password);
       // Signing into a DIFFERENT account on this browser: drop the previous
       // account's in-memory + cached profiles so they don't show through while
       // the new account's cloud profiles load. A brand-new account then starts
       // with one clean profile instead of inheriting the old ones.
-      if (previousEmail && previousEmail !== trimmedEmail.toLowerCase()) {
-        const fresh = [makeProfile("Profile 1", randomProfileColor(), 0)];
-        setProfiles(fresh);
-        setActiveProfileId(fresh[0].id);
-        setContinueWatching([]);
-        setWatchlist([]);
-        setCategories([]);
-        setWatchedKeys(new Set());
-        cwSourceRef.current = "none";
-      }
+      resetDifferentAccount(store, session.email);
       setCloudProfilesHydrated(false);
       setAuth(session);
     } catch (error) {

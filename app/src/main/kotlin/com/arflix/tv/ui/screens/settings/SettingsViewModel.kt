@@ -50,6 +50,8 @@ import com.arflix.tv.data.repository.HomeServerRepository
 import com.arflix.tv.data.repository.PlexPinAuthSession
 import com.arflix.tv.data.repository.IptvAccountInfo
 import com.arflix.tv.data.repository.IptvAccountInfoParser
+import com.arflix.tv.data.repository.IptvConnectionLimit
+import com.arflix.tv.data.repository.IptvConnectionLimitState
 import com.arflix.tv.data.repository.IptvConfig
 import com.arflix.tv.data.repository.IptvRepository
 import com.arflix.tv.data.repository.MAX_STALKER_PORTALS
@@ -94,7 +96,7 @@ import com.arflix.tv.util.resolveAppLanguage
 import com.arflix.tv.util.IPTV_EPG_VOD_ACTIONS_ENABLED_KEY
 import com.arflix.tv.util.IPTV_VOD_SEARCH_ENABLED_KEY
 import com.arflix.tv.util.IPTV_FALLBACK_LOGOS_ENABLED_KEY
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import com.arflix.tv.util.withItemMoved
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -111,6 +113,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -271,6 +275,8 @@ data class SettingsUiState(
     // Trakt
     val isTraktAuthenticated: Boolean = false,
     val traktReconnectRequired: Boolean = false,
+    /** Stored session exists but Trakt could not confirm it (offline, server error, expired token). */
+    val traktUnavailable: Boolean = false,
     val traktCode: TraktDeviceCode? = null,
     /** Wall clock time the current activation code dies, so the dialog can count down. */
     val traktCodeExpiresAtMillis: Long? = null,
@@ -287,6 +293,10 @@ data class SettingsUiState(
     val mdbListCode: String? = null,
     val mdbListUrl: String? = null,
     val mdbListUsername: String? = null,
+    /** MDBList rejected the stored credential; the user has to connect it again. */
+    val mdbListReconnectRequired: Boolean = false,
+    /** Stored credential exists but MDBList could not confirm it (offline, server error). */
+    val mdbListUnavailable: Boolean = false,
     val showMdbListApiKeyDialog: Boolean = false,
     val mdbListConnecting: Boolean = false,
     // Simkl (alternative remote sync provider)
@@ -323,6 +333,7 @@ data class SettingsUiState(
     val iptvStalkerPortals: List<StalkerPortalEntry> = emptyList(),
     /** Subscription end and stream limit per playlist / portal id, as last asked. */
     val iptvAccountInfo: Map<String, IptvAccountInfo> = emptyMap(),
+    val iptvConnectionLimits: Map<String, IptvConnectionLimitState> = emptyMap(),
     /** Source ids whose account details are being asked right now. */
     val iptvAccountInfoRefreshing: Set<String> = emptySet(),
     val iptvSortOrder: String = "provider",
@@ -431,7 +442,8 @@ data class SettingsUiState(
     val streamProviderItems: List<StreamProviderItem> = emptyList(),
     val streamSearchMode: StreamSearchMode = StreamSearchMode.PARALLEL,
     val pluginsCount: Int = 0,
-    val isTelegramConnected: Boolean = false
+    val isTelegramConnected: Boolean = false,
+    val telegramUserName: String? = null
 )
 
 @HiltViewModel
@@ -466,7 +478,8 @@ class SettingsViewModel @Inject constructor(
     private val pluginManager: PluginManager,
     private val telegramRepository: TelegramRepository,
     private val communityAddonRepository: CommunityAddonRepository,
-    private val traktManualSync: com.arflix.tv.data.repository.TraktManualSync
+    private val traktManualSync: com.arflix.tv.data.repository.TraktManualSync,
+    private val partnerDelivery: dagger.Lazy<com.arflix.tv.data.repository.PartnerDeliveryRepository>? = null
 ) : ViewModel() {
     private fun visibleCatalogs(catalogs: List<CatalogConfig>): List<CatalogConfig> {
         return catalogs.filter { config ->
@@ -480,6 +493,22 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    private fun managedPermissions() = if (com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
+        partnerDelivery?.get()?.activeDelivery()?.permissions else null
+
+    private fun canManage(permission: String): Boolean {
+        val permissions = managedPermissions() ?: return true
+        val allowed = when (permission) {
+            "catalogs" -> permissions.editCatalogs
+            "connections" -> permissions.addConnections
+            "appearance" -> permissions.editAppearance
+            "metadata" -> permissions.editMetadata
+            else -> permissions.editPlayback
+        }
+        if (!allowed) _uiState.value = _uiState.value.copy(
+            toastMessage = SettingsMessage.Raw("This setting is managed by your administrator."), toastType = ToastType.ERROR)
+        return allowed
+    }
     private val preferenceWriter by lazy {
         SettingsPreferenceWriter(context.settingsDataStore, _uiState, viewModelScope,
             profileId = profileManager::getProfileIdSync,
@@ -633,6 +662,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     init {
+        // Live TV AI subtitles settings are written by their own rows (LiveAiSubsSettingsRows);
+        // push them to the cloud like every other setting, once they settle.
+        viewModelScope.launch {
+            com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.flow(context)
+                .map { listOf(it.enabled, it.autoStart) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { syncLocalStateToCloud(silent = true) }
+        }
         _uiState.value = _uiState.value.copy(
             diagnosticsSharingEnabled = DiagnosticsManager.isReportingEnabled(context),
             usageStatisticsEnabled = DiagnosticsManager.isUsageEnabled(context)
@@ -644,6 +682,7 @@ class SettingsViewModel @Inject constructor(
         observeHomeServer()
         observeSyncState()
         observeTraktConnection()
+        observeMdbListConnection()
         observeAuthState()
         observeIptvConfig()
         observeIptvGroupPrefs()
@@ -1026,36 +1065,32 @@ class SettingsViewModel @Inject constructor(
         integrationMetadataJob = viewModelScope.launch {
             if (isTraktConnected) {
                 launch {
-                    val username = try {
-                        withTimeoutOrNull(5_000L) { traktRepository.fetchUsername() }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
+                    // A slow answer is not a failure; only a real error marks the session unavailable.
+                    val session = withTimeoutOrNull(5_000L) { traktRepository.checkSession() }
                     if (
                         profileManager.getProfileIdSync() == profileId &&
                         _uiState.value.isTraktAuthenticated
                     ) {
-                        _uiState.value = _uiState.value.copy(traktUsername = username)
+                        _uiState.value = _uiState.value.copy(
+                            traktUsername = session?.getOrNull(),
+                            traktUnavailable = session?.isFailure == true
+                        )
                     }
                 }
             }
 
             if (isMdbListConnected) {
                 launch {
-                    val username = try {
-                        withTimeoutOrNull(5_000L) { mdbListRepository.fetchUsername() }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null
-                    }
+                    // A slow answer is not a failure; only a real error marks the connection unavailable.
+                    val session = withTimeoutOrNull(5_000L) { mdbListRepository.checkSession() }
                     if (
                         profileManager.getProfileIdSync() == profileId &&
                         _uiState.value.isMdbListConnected
                     ) {
-                        _uiState.value = _uiState.value.copy(mdbListUsername = username)
+                        _uiState.value = _uiState.value.copy(
+                            mdbListUsername = session?.getOrNull(),
+                            mdbListUnavailable = session?.isFailure == true
+                        )
                     }
                 }
             }
@@ -1163,7 +1198,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeAddons() {
         viewModelScope.launch {
-            streamRepository.installedAddons.collect { addons ->
+            streamRepository.personalAddons.collect { addons ->
                 runCatching {
                     withContext(Dispatchers.Default) { catalogRepository.syncAddonCatalogs(addons) }
                 }
@@ -1186,7 +1221,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeHomeServer() {
         viewModelScope.launch {
-            homeServerRepository.connections.collect { connections ->
+            homeServerRepository.personalConnections.collect { connections ->
                 _uiState.value = _uiState.value.copy(
                     homeServerConnection = connections.firstOrNull(),
                     homeServerConnections = connections
@@ -1218,7 +1253,10 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             telegramRepository.authState.collect { authState ->
-                _uiState.value = _uiState.value.copy(isTelegramConnected = authState is TelegramAuthState.Ready)
+                _uiState.value = _uiState.value.copy(
+                    isTelegramConnected = authState is TelegramAuthState.Ready,
+                    telegramUserName = (authState as? TelegramAuthState.Ready)?.firstName?.takeIf { it.isNotBlank() }
+                )
             }
         }
     }
@@ -1252,7 +1290,20 @@ class SettingsViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isTraktAuthenticated = connection.connected,
                     traktReconnectRequired = connection.reconnectRequired,
-                    traktUsername = _uiState.value.traktUsername.takeIf { connection.connected }
+                    traktUsername = _uiState.value.traktUsername.takeIf { connection.connected },
+                    traktUnavailable = _uiState.value.traktUnavailable && connection.connected
+                )
+            }
+        }
+    }
+
+    private fun observeMdbListConnection() {
+        viewModelScope.launch {
+            mdbListRepository.connection.collect { connection ->
+                if (connection.profileId != profileManager.getProfileIdSync()) return@collect
+                _uiState.value = _uiState.value.copy(
+                    mdbListReconnectRequired = connection.connected && connection.reconnectRequired,
+                    mdbListUnavailable = _uiState.value.mdbListUnavailable && connection.connected
                 )
             }
         }
@@ -1803,6 +1854,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoPlayNext(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(autoPlayNextKey(), enabled, { it.autoPlayNext }, { state, value -> state.copy(autoPlayNext = value) }) {
             syncLocalStateToCloud(silent = true)
             authRepository.saveAutoPlayNextToProfile(enabled)
@@ -1810,6 +1862,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setAutoPlaySingleSource(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(autoPlaySingleSourceKey(), enabled, { it.autoPlaySingleSource }, { state, value -> state.copy(autoPlaySingleSource = value) })
     }
 
@@ -1832,6 +1885,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleAutoPlayMinQuality() {
+        if (!canManage("playback")) return
         val current = normalizeAutoPlayMinQuality(_uiState.value.autoPlayMinQuality)
         val maximum = AutoplayLimits(_uiState.value.autoPlayMaxQuality).qualityScore
         val options = listOf("Any", "720p", "1080p", "4K").filter {
@@ -1841,6 +1895,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleAutoPlayMaxQuality() {
+        if (!canManage("playback")) return
         val options = AutoplayLimits.qualityOptions
         val next = options[(options.indexOf(_uiState.value.autoPlayMaxQuality) + 1) % options.size]
         val key = profileManager.profileStringKey("auto_play_max_quality")
@@ -1860,6 +1915,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleAutoPlayMaxSize() {
+        if (!canManage("playback")) return
         val options = AutoplayLimits.sizeOptionsGb
         val next = options[(options.indexOf(_uiState.value.autoPlayMaxSizeGb) + 1) % options.size]
         val key = profileManager.profileIntKey("auto_play_max_size_gb")
@@ -1903,6 +1959,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setCardLayoutMode(mode: String) {
+        if (!canManage("appearance")) return
         val normalized = normalizeCardLayoutMode(mode)
         viewModelScope.launch {
             context.settingsDataStore.edit { prefs ->
@@ -1953,6 +2010,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setOledBlackBackground(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(com.arflix.tv.util.OLED_BLACK_BACKGROUND_KEY, enabled, { it.oledBlackBackground }, { state, value -> state.copy(oledBlackBackground = value) })
     }
 
@@ -1967,6 +2025,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setFrameRateMatchingMode(mode: String) {
+        if (!canManage("playback")) return
         val normalized = normalizeFrameRateMode(mode)
         preferenceWriter.save(frameRateMatchingModeKey(), normalized, { it.frameRateMatchingMode }, { state, value -> state.copy(frameRateMatchingMode = value) })
     }
@@ -1991,30 +2050,37 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setSpoilerBlurEnabled(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(spoilerBlurKey(), enabled, { it.spoilerBlurEnabled }, { state, value -> state.copy(spoilerBlurEnabled = value) })
     }
 
     fun setTrailerAutoPlay(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(trailerAutoPlayKey(), enabled, { it.trailerAutoPlay }, { state, value -> state.copy(trailerAutoPlay = value) })
     }
 
     fun setTrailerSoundEnabled(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(trailerSoundEnabledKey(), enabled, { it.trailerSoundEnabled }, { state, value -> state.copy(trailerSoundEnabled = value) })
     }
 
     fun setTrailerInCards(enabled: Boolean) {
+        if (!canManage("playback")) return
         preferenceWriter.save(trailerInCardsKey(), enabled, { it.trailerInCards }, { state, value -> state.copy(trailerInCards = value) })
     }
 
     fun setNetflixHomeStyle(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(netflixHomeStyleKey(), enabled, { it.netflixHomeStyle }, { state, value -> state.copy(netflixHomeStyle = value) })
     }
 
     fun setWatchlistOnHome(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(watchlistOnHomeKey(), enabled, { it.watchlistOnHome }, { state, value -> state.copy(watchlistOnHome = value) })
     }
 
     fun cycleGuideRowCount() {
+        if (!canManage("appearance")) return
         val next = when (val n = _uiState.value.guideRowCount) {
             in 6..9 -> n + 1
             10 -> 0
@@ -2024,6 +2090,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleTrailerDelay() {
+        if (!canManage("playback")) return
         val next = when (_uiState.value.trailerDelaySeconds) {
             0 -> 1
             1 -> 2
@@ -2035,18 +2102,22 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setShowBudget(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(showBudgetKey(), enabled, { it.showBudget }, { state, value -> state.copy(showBudget = value) })
     }
 
     fun setIptvFavoritesOnHome(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(iptvFavoritesOnHomeKey(), enabled, { it.iptvFavoritesOnHome }, { state, value -> state.copy(iptvFavoritesOnHome = value) })
     }
 
     fun setShowEpisodeRatings(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(showEpisodeRatingsKey(), enabled, { it.showEpisodeRatings }, { state, value -> state.copy(showEpisodeRatings = value) })
     }
 
     fun setAnimeStructuringStyle(style: AnimeStructuringStyle) {
+        if (!canManage("metadata")) return
         viewModelScope.launch {
             context.settingsDataStore.edit { it[animeStructuringStyleKey()] = style.id }
             _uiState.value = _uiState.value.copy(animeStructuringStyle = style)
@@ -2061,6 +2132,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setSmoothScrolling(enabled: Boolean) {
+        if (!canManage("appearance")) return
         preferenceWriter.save(smoothScrollingKey(), enabled, { it.smoothScrolling }, { state, value -> state.copy(smoothScrolling = value) })
     }
 
@@ -2081,6 +2153,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun cycleClockFormat() {
+        if (!canManage("appearance")) return
         val next = if (_uiState.value.clockFormat == "24h") "12h" else "24h"
         preferenceWriter.save(clockFormatKey(), next, { it.clockFormat }, { state, value -> state.copy(clockFormat = value) })
     }
@@ -2090,6 +2163,7 @@ class SettingsViewModel @Inject constructor(
      * Order: White → Red → Orange → Yellow → Green → Blue → Indigo → Violet → White
      */
     fun cycleAccentColor() {
+        if (!canManage("appearance")) return
         val colors = listOf("White", "Red", "Orange", "Yellow", "Green", "Blue", "Indigo", "Violet")
         val current = _uiState.value.accentColor
         val nextIndex = (colors.indexOf(current) + 1) % colors.size
@@ -2339,6 +2413,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setIncludeSpecials(enabled: Boolean) {
+        if (!canManage("playback")) return
         viewModelScope.launch {
             context.settingsDataStore.edit { prefs ->
                 prefs[includeSpecialsKey()] = enabled
@@ -2468,6 +2543,7 @@ class SettingsViewModel @Inject constructor(
     // ========== Addon Management ==========
 
     fun moveStreamIntegrationUp(type: StreamIntegrationType) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveIntegrationUp(type)
             syncLocalStateToCloud(silent = true)
@@ -2475,6 +2551,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveStreamIntegrationDown(type: StreamIntegrationType) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveIntegrationDown(type)
             syncLocalStateToCloud(silent = true)
@@ -2482,6 +2559,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleStreamIntegration(type: StreamIntegrationType) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.toggleIntegration(type)
             syncLocalStateToCloud(silent = true)
@@ -2489,6 +2567,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveStreamProviderUp(id: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveProviderItemUp(id)
             syncLocalStateToCloud(silent = true)
@@ -2496,6 +2575,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveStreamProviderDown(id: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.moveProviderItemDown(id)
             syncLocalStateToCloud(silent = true)
@@ -2511,6 +2591,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleStreamProvider(id: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamIntegrationRepository.toggleProviderItem(id)
             syncLocalStateToCloud(silent = true)
@@ -2518,6 +2599,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setStreamSearchMode(mode: StreamSearchMode) {
+        if (!canManage("playback")) return
         viewModelScope.launch {
             streamIntegrationRepository.setSearchMode(mode)
             syncLocalStateToCloud(silent = true)
@@ -2526,6 +2608,7 @@ class SettingsViewModel @Inject constructor(
 
     @Deprecated("Addon ordering is now managed via StreamIntegrationsScreen.")
     fun moveAddonUp(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.moveAddonUp(addonId)
         }
@@ -2533,12 +2616,14 @@ class SettingsViewModel @Inject constructor(
 
     @Deprecated("Addon ordering is now managed via StreamIntegrationsScreen.")
     fun moveAddonDown(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.moveAddonDown(addonId)
         }
     }
 
     fun toggleAddon(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             val addon = streamRepository.installedAddons.first().firstOrNull { it.id == addonId }
             if (addon != null && addon.needsConfiguration && !addon.isEnabled) {
@@ -2558,6 +2643,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addCustomAddon(url: String) {
+        if (!canManage("connections")) return
         requestAddonInstall(url, fromLink = false)
     }
 
@@ -2568,6 +2654,7 @@ class SettingsViewModel @Inject constructor(
      * first; so does any install that would add a second setup of an addon already installed.
      */
     fun requestAddonInstall(url: String, fromLink: Boolean) {
+        if (!canManage("connections")) return
         addonInstallJob?.cancel()
         addonInstallJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -2604,6 +2691,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Install the pending addon; [replaceExisting] removes the older setups of it. */
     fun confirmAddonInstall(replaceExisting: Boolean) {
+        if (!canManage("connections")) return
         val pending = _uiState.value.pendingAddonInstall ?: return
         _uiState.value = _uiState.value.copy(pendingAddonInstall = null)
         viewModelScope.launch {
@@ -2625,6 +2713,9 @@ class SettingsViewModel @Inject constructor(
                 val currentAddons = streamRepository.installedAddons.first()
                 val importedCatalogs = addon.manifest?.catalogs?.size ?: 0
                 runCatching {
+                    // Installing is a request to see the addon's rows, including any the
+                    // user deleted under an earlier install of it.
+                    catalogRepository.restoreHiddenAddonCatalogs(addon)
                     catalogRepository.syncAddonCatalogs(currentAddons)
                 }
                 _uiState.value = _uiState.value.copy(
@@ -2676,6 +2767,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Install a community addon straight away: it was picked from a list, not opened from a link. */
     fun installCommunityAddon(entry: CommunityAddon) {
+        if (!canManage("connections")) return
         if (!markCommunityAddonBusy(entry)) return
         viewModelScope.launch {
             try {
@@ -2697,6 +2789,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Remove every installed setup of a community addon. */
     fun uninstallCommunityAddon(entry: CommunityAddon) {
+        if (!canManage("connections")) return
         if (!markCommunityAddonBusy(entry)) return
         viewModelScope.launch {
             try {
@@ -2820,8 +2913,15 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            iptvRepository.observeConnectionLimits().flowOn(Dispatchers.IO).collect { limits ->
+                if (_uiState.value.iptvConnectionLimits != limits) {
+                    _uiState.value = _uiState.value.copy(iptvConnectionLimits = limits)
+                }
+            }
+        }
+        viewModelScope.launch {
             // Parsing stored playlists includes keystore decryption; never do it on the input thread.
-            iptvRepository.observeConfig().distinctUntilChanged().flowOn(Dispatchers.IO).collect { config ->
+            iptvRepository.observePersonalConfig().distinctUntilChanged().flowOn(Dispatchers.IO).collect { config ->
                 val current = _uiState.value
                 val stalkerConfigured = config.stalkerPortals.any { it.portalUrl.isNotBlank() }
                 if (current.iptvM3uUrl != config.m3uUrl || current.iptvEpgUrl != config.epgUrl || current.iptvStalkerPortals != config.stalkerPortals || current.iptvPlaylists != config.playlists || current.iptvSortOrder != config.sortOrder) {
@@ -2883,7 +2983,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeCatalogs() {
         viewModelScope.launch {
-            catalogRepository.observeCatalogs().collect { catalogs ->
+            catalogRepository.observePersonalCatalogs().collect { catalogs ->
                 val visible = visibleCatalogs(catalogs)
                 if (_uiState.value.catalogs != visible) {
                     _uiState.value = _uiState.value.copy(catalogs = visible)
@@ -2901,6 +3001,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun loadPackManifest(url: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isPackLoading = true,
@@ -2961,6 +3062,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun confirmInstallPack(url: String) {
+        if (!canManage("catalogs")) return
         val manifest = _uiState.value.pendingPackManifest
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -2992,6 +3094,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun toggleBuiltInCollections() {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val enabled = !catalogRepository.isBuiltInCollectionsEnabled()
             catalogRepository.setBuiltInCollectionsEnabled(enabled)
@@ -3001,6 +3104,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun removeCatalogPack(packId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val result = catalogRepository.removeCatalogPack(packId)
             result.onSuccess {
@@ -3021,6 +3125,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addCatalog(url: String) {
+        if (!canManage("catalogs")) return
         // An addon manifest also brings catalogs, so it is a natural thing to paste
         // here. Install it as an addon rather than rejecting it as a bad catalog URL.
         if (CatalogUrlParser.isStremioManifestUrl(url)) {
@@ -3055,6 +3160,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addYouTubeVideo(url: String) {
+        if (!canManage("catalogs")) return
         val profileId = profileManager.getProfileIdSync()
         viewModelScope.launch {
             val profile = profileRepository.getActiveProfile()
@@ -3076,6 +3182,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun confirmYouTubeAddition(pin: String) {
+        if (!canManage("catalogs")) return
         val state = _uiState.value
         val url = state.pendingYouTubeUrl ?: return
         val profileId = state.youTubeApprovalProfileId ?: return
@@ -3198,6 +3305,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun addDiscoveredCatalog(result: CatalogDiscoveryResult) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val addResult = catalogRepository.addCustomCatalog(result.sourceUrl)
             addResult.onSuccess { catalog ->
@@ -3221,6 +3329,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateCatalog(catalogId: String, url: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val result = catalogRepository.updateCustomCatalog(catalogId, url)
             result.onSuccess { catalog ->
@@ -3244,6 +3353,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun removeCatalog(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val result = catalogRepository.removeCustomCatalog(catalogId)
             result.onSuccess {
@@ -3267,6 +3377,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun unpackCatalog(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val current = catalogRepository.getCatalogs()
             val index = current.indexOfFirst { it.id == catalogId }
@@ -3291,6 +3402,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun renameCatalog(catalogId: String, newTitle: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             val success = catalogRepository.renameCatalog(catalogId, newTitle)
             if (success) {
@@ -3300,6 +3412,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveCatalogUp(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             catalogRepository.moveCatalogUp(catalogId)
             syncLocalStateToCloud(silent = true)
@@ -3307,6 +3420,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun moveCatalogDown(catalogId: String) {
+        if (!canManage("catalogs")) return
         viewModelScope.launch {
             catalogRepository.moveCatalogDown(catalogId)
             syncLocalStateToCloud(silent = true)
@@ -3322,6 +3436,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun saveIptvConfig(m3uUrl: String, epgUrl: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             val trimmedM3u = m3uUrl.trim()
             val trimmedEpg = epgUrl.trim()
@@ -3355,8 +3470,10 @@ class SettingsViewModel @Inject constructor(
         name: String? = null,
         importLiveTv: Boolean = true,
         importVod: Boolean = true,
-        importSeries: Boolean = true
+        importSeries: Boolean = true,
+        connectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO
     ) {
+        if (!canManage("connections")) return
         val trimmedUrl = portalUrl.trim().trimEnd('/')
         val trimmedMac = macAddress.trim().uppercase()
         if (trimmedUrl.isBlank() || trimmedMac.isBlank()) {
@@ -3388,7 +3505,7 @@ class SettingsViewModel @Inject constructor(
             importVod = importVod,
             importSeries = importSeries
         )
-        persistStalkerPortals(current + portal)
+        persistStalkerPortals(current + portal, connectionLimit)
     }
 
     /**
@@ -3407,6 +3524,7 @@ class SettingsViewModel @Inject constructor(
         importVod: Boolean? = null,
         importSeries: Boolean? = null
     ) {
+        if (!canManage("connections")) return
         val trimmedUrl = portalUrl.trim().trimEnd('/')
         val trimmedMac = macAddress.trim().uppercase()
         if (trimmedUrl.isBlank() || trimmedMac.isBlank()) {
@@ -3434,6 +3552,7 @@ class SettingsViewModel @Inject constructor(
      * Rename a portal without touching its URL/MAC.
      */
     fun onRenameStalkerPortal(portalId: String, name: String) {
+        if (!canManage("connections")) return
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
         val updated = _uiState.value.iptvStalkerPortals.map { portal ->
@@ -3449,6 +3568,7 @@ class SettingsViewModel @Inject constructor(
 
     /** Enable / disable a portal. */
     fun onToggleStalkerPortal(portalId: String) {
+        if (!canManage("connections")) return
         val updated = _uiState.value.iptvStalkerPortals.map { portal ->
             if (portal.id == portalId) portal.copy(enabled = !portal.enabled) else portal
         }
@@ -3457,6 +3577,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onMoveStalkerPortalUp(portalId: String) {
+        if (!canManage("connections")) return
         val current = _uiState.value.iptvStalkerPortals.toMutableList()
         val idx = current.indexOfFirst { it.id == portalId }
         if (idx <= 0) return
@@ -3466,6 +3587,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onMoveStalkerPortalDown(portalId: String) {
+        if (!canManage("connections")) return
         val current = _uiState.value.iptvStalkerPortals.toMutableList()
         val idx = current.indexOfFirst { it.id == portalId }
         if (idx !in 0 until current.lastIndex) return
@@ -3494,6 +3616,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onRemoveStalkerPortal(portalId: String) {
+        if (!canManage("connections")) return
         val updated = _uiState.value.iptvStalkerPortals.filterNot { it.id == portalId }
         if (updated == _uiState.value.iptvStalkerPortals) return
         persistStalkerPortals(updated)
@@ -3526,12 +3649,16 @@ class SettingsViewModel @Inject constructor(
         setIptvSelectedPlaylistId(portalId)
     }
 
-    private fun persistStalkerPortals(portals: List<StalkerPortalEntry>) {
+    private fun persistStalkerPortals(
+        portals: List<StalkerPortalEntry>,
+        newSourceConnectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO,
+    ) {
         val previous = _uiState.value.iptvStalkerPortals
         viewModelScope.launch {
             iptvRepository.saveStalkerPortals(portals)
             // Compare what was actually stored: saving normalizes entries.
-            val stored = iptvRepository.observeConfig().first()
+            val stored = iptvRepository.observePersonalConfig().first()
+            saveNewSourceConnectionLimit(previous.map { it.id }, stored.stalkerPortals.map { it.id }, newSourceConnectionLimit)
             onIptvSourcesSaved(
                 changedIds = changedAccountSources(previous, stored.stalkerPortals, { p: StalkerPortalEntry -> p.id }, { p: StalkerPortalEntry -> IptvAccountInfoParser.fingerprint(p) }),
                 playlists = stored.playlists,
@@ -3558,9 +3685,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Account details are asked only when a source is added or edited, and via
-     * [refreshIptvAccountInfo] - never on start-up or in the background, to keep
-     * the requests a provider sees to the minimum.
+     * Account details are asked when a source is added or edited, via
+     * [refreshIptvAccountInfo], and once per process when a user-started Xtream play
+     * finds none stored ([IptvRepository.bootstrapAccountAllowance]) - never on start-up
+     * or while browsing, to keep the requests a provider sees to the minimum.
      */
     private fun onIptvSourcesSaved(
         changedIds: Set<String>,
@@ -3586,6 +3714,22 @@ class SettingsViewModel @Inject constructor(
         (playlists.map { it.id } + portals.map { it.id }).forEach {
             refreshIptvAccountInfo(it, playlists, portals, automatic = true)
         }
+    }
+
+    /** The row belongs to this device, so unlike a source edit it syncs and reloads nothing. */
+    fun stepIptvConnectionLimit(sourceId: String) {
+        if (!canManage("connections")) return
+        viewModelScope.launch { iptvRepository.stepConnectionLimit(sourceId) }
+    }
+
+    /**
+     * The limit chosen while adding a source goes to the id its save assigned, on this
+     * device only like [stepIptvConnectionLimit]. Auto is the absence of an entry.
+     */
+    private suspend fun saveNewSourceConnectionLimit(previousIds: List<String>, storedIds: List<String>, limit: IptvConnectionLimit) {
+        if (limit == IptvConnectionLimit.AUTO) return
+        val newId = (storedIds - previousIds.toSet()).singleOrNull() ?: return
+        iptvRepository.saveConnectionLimit(newId, limit)
     }
 
     /** "Refresh now" in the edit dialog of a playlist or portal. */
@@ -3661,6 +3805,7 @@ class SettingsViewModel @Inject constructor(
         xtreamUsername: String,
         xtreamPassword: String
     ) {
+        if (!canManage("connections")) return
         val host = sourceOrHost.trim()
         val epg = epgUrl.trim()
         val user = xtreamUsername.trim()
@@ -3686,7 +3831,11 @@ class SettingsViewModel @Inject constructor(
         saveIptvConfig(m3uInput, epgInput)
     }
 
-    fun saveIptvPlaylists(playlists: List<IptvPlaylistEntry>) {
+    fun saveIptvPlaylists(
+        playlists: List<IptvPlaylistEntry>,
+        newSourceConnectionLimit: IptvConnectionLimit = IptvConnectionLimit.AUTO,
+    ) {
+        if (!canManage("connections")) return
         if (playlists.count { it.m3uUrl.isNotBlank() } > com.arflix.tv.data.repository.MAX_IPTV_PLAYLISTS) {
             _uiState.value = _uiState.value.copy(toastMessage = SettingsMessage.Res(R.string.settings_iptv_max_reached), toastType = ToastType.ERROR)
             return
@@ -3696,7 +3845,8 @@ class SettingsViewModel @Inject constructor(
             iptvRepository.savePlaylists(playlists)
             // Compare what was actually stored: saving rewrites "host user pass"
             // into a get.php address, so the entry as typed never matches a row.
-            val stored = iptvRepository.observeConfig().first()
+            val stored = iptvRepository.observePersonalConfig().first()
+            saveNewSourceConnectionLimit(previous.map { it.id }, stored.playlists.map { it.id }, newSourceConnectionLimit)
             onIptvSourcesSaved(
                 changedIds = changedAccountSources(previous, stored.playlists, { p: IptvPlaylistEntry -> p.id }, { p: IptvPlaylistEntry -> IptvAccountInfoParser.fingerprint(p) }),
                 playlists = stored.playlists,
@@ -3712,7 +3862,7 @@ class SettingsViewModel @Inject constructor(
 
     fun refreshIptv(showToast: Boolean = true, configured: Boolean = false, force: Boolean = true) {
         viewModelScope.launch {
-            val currentConfig = iptvRepository.observeConfig().first()
+            val currentConfig = iptvRepository.observePersonalConfig().first()
             // Check legacy m3uUrl, multi-playlist entries, and Stalker portals
             val hasPlaylists = currentConfig.playlists.any { it.m3uUrl.isNotBlank() && it.enabled }
             val hasStalker = currentConfig.stalkerPortals.any { it.portalUrl.isNotBlank() }
@@ -3866,6 +4016,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun clearIptvConfig() {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             iptvLoadJob?.cancel()
             iptvRepository.clearConfig()
@@ -3885,6 +4036,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun removeAddon(addonId: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.removeAddon(addonId)
             val addonsAfterRemove = streamRepository.installedAddons.first()
@@ -3896,6 +4048,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setTorrServerBaseUrl(url: String) {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             streamRepository.setTorrServerBaseUrl(url)
             syncLocalStateToCloud(silent = true)
@@ -4216,6 +4369,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun connectHomeServer(serverUrl: String, username: String, password: String, displayName: String = "") {
+        if (!canManage("connections")) return
         if (_uiState.value.isHomeServerConnecting) return
         viewModelScope.launch {
             cancelPlexHomeServerAuth(updateState = false)
@@ -4227,7 +4381,7 @@ class SettingsViewModel @Inject constructor(
             )
             val result = homeServerRepository.connect(serverUrl, username, password, displayName)
             result.onSuccess { connection ->
-                val connections = homeServerRepository.currentConnections()
+                val connections = homeServerRepository.personalConnections.first()
                 _uiState.value = _uiState.value.copy(
                     isHomeServerConnecting = false,
                     homeServerConnection = connection,
@@ -4260,6 +4414,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun startPlexHomeServerAuth(serverUrl: String, displayName: String = "") {
+        if (!canManage("connections")) return
         if (_uiState.value.isHomeServerConnecting || _uiState.value.isPlexHomeServerPolling) return
         val trimmedUrl = serverUrl.trim()
 
@@ -4332,7 +4487,7 @@ class SettingsViewModel @Inject constructor(
                 )
                 runCatching {
                     syncHomeServerCatalogsFromConnections()
-                    val connections = homeServerRepository.currentConnections()
+                    val connections = homeServerRepository.personalConnections.first()
                     plexHomeServerUrl = null
                     plexHomeServerDisplayName = null
                     _uiState.value = _uiState.value.copy(
@@ -4432,6 +4587,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun disconnectHomeServer() {
+        if (!canManage("connections")) return
         viewModelScope.launch {
             cancelPlexHomeServerAuth(updateState = false)
             homeServerRepository.disconnect()

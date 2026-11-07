@@ -81,11 +81,16 @@ export function AppProvider({
   } = useProfileActions({ ...core, refreshData });
   const { activeContextMenu, openContextMenu, closeContextMenu } = useContextMenu();
   const { toggleWatchlist, toggleWatched, removeFromContinueWatching } = useLibraryActions({ ...core, isWatched, markWatchedLocally });
+  const managedStatus = useMemo(() => {
+    const delivery = core.managed.delivery;
+    return delivery ? { managed: delivery.managed, active: delivery.active, name: delivery.name, permissions: delivery.permissions, reason: delivery.reason } : null;
+  }, [core.managed.delivery]);
 
   const value = useMemo<AppStore>(() => ({
     view,
     partnerLinkReady: view === "app" && Boolean(activeProfile) && (!auth || cloudProfilesHydrated),
     cloudLoginRequired,
+    managedStatus,
     profiles,
     activeProfile,
     avatarImages,
@@ -173,7 +178,7 @@ export function AppProvider({
     openContextMenu,
     closeContextMenu
   }), [
-    view, cloudProfilesHydrated, cloudLoginRequired, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
+    view, cloudProfilesHydrated, cloudLoginRequired, managedStatus, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
     selectProfile, createProfile, updateProfileAction, deleteProfileAction, switchProfile, goToLogin, backToProfiles,
     section, categories, catalogConfigs, loadCatalogRow, homeServerRows, continueWatching, watchlist, isWatched, selected, streams, selectedEpisode, loadEpisodeStreams, advanceEpisode, activeStream, activeChannel,
     addons, addonsReady, iptvSnapshot, query, results, searchState, settingsSyncState, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, busy, toast,

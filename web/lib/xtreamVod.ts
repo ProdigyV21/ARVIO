@@ -44,6 +44,7 @@ type XtreamSeriesInfo = {
 
 const VOD_CACHE = new Map<string, { at: number; movies: XtreamVodStream[]; series: XtreamSeries[] }>();
 const VOD_TTL_MS = 30 * 60 * 1000;
+const VOD_IN_FLIGHT = new Map<string, Promise<{ at: number; movies: XtreamVodStream[]; series: XtreamSeries[] }>>();
 
 function normalizeTitle(value: string) {
   return value
@@ -74,31 +75,49 @@ function imdbOf(entry: { imdb?: string; imdb_id?: string }): string {
   return /^tt\d+$/.test(raw) ? raw : "";
 }
 
-function xtreamInfoFromPlaylists(playlists: IptvPlaylistEntry[]): XtreamInfo | null {
+function xtreamProviders(playlists: IptvPlaylistEntry[], kind: "movies" | "series") {
+  const providers: Array<{ info: XtreamInfo; name: string }> = [];
+  const seen = new Set<string>();
   for (const playlist of playlists) {
-    if (playlist.enabled === false) continue;
-    const info = xtreamInfoFromUrl(playlist.epgUrl ?? "") ?? xtreamInfoFromUrl(playlist.m3uUrl ?? "");
-    if (info) return info;
+    if (playlist.enabled === false || (kind === "movies" ? playlist.importVod : playlist.importSeries) === false) continue;
+    const info = xtreamInfoFromUrl(playlist.m3uUrl ?? "") ?? xtreamInfoFromUrl(playlist.epgUrl ?? "");
+    if (!info) continue;
+    const key = JSON.stringify(info);
+    if (!seen.has(key)) { seen.add(key); providers.push({ info, name: playlist.name }); }
   }
-  return null;
+  return providers;
 }
 
-async function loadVodCatalog(info: XtreamInfo, userAgent?: string) {
-  const cacheKey = `${info.baseUrl}|${info.username}`;
+async function loadVodCatalog(info: XtreamInfo, kind: "movies" | "series", userAgent?: string) {
+  const cacheKey = JSON.stringify([info.baseUrl, info.username, info.password, kind, userAgent]);
   const cached = VOD_CACHE.get(cacheKey);
   if (cached && Date.now() - cached.at < VOD_TTL_MS) return cached;
-  const headers = playlistProxyHeaders(userAgent);
-  const [movies, series] = await Promise.all([
-    fetchXtreamJson<XtreamVodStream[]>(buildXtreamPlayerApiUrl(info.baseUrl, info.username, info.password, "get_vod_streams"), headers).catch(() => []),
-    fetchXtreamJson<XtreamSeries[]>(buildXtreamPlayerApiUrl(info.baseUrl, info.username, info.password, "get_series"), headers).catch(() => [])
-  ]);
-  const entry = {
-    at: Date.now(),
-    movies: Array.isArray(movies) ? movies : [],
-    series: Array.isArray(series) ? series : []
-  };
-  VOD_CACHE.set(cacheKey, entry);
-  return entry;
+  const pending = VOD_IN_FLIGHT.get(cacheKey);
+  if (pending) return pending;
+  const task = (async () => {
+    const data = await fetchXtreamJson<XtreamVodStream[] & XtreamSeries[]>(buildXtreamPlayerApiUrl(info.baseUrl, info.username, info.password, kind === "movies" ? "get_vod_streams" : "get_series"), playlistProxyHeaders(userAgent));
+    if (!Array.isArray(data)) throw new Error("IPTV provider returned an invalid VOD catalog");
+    const entry = { at: Date.now(), movies: kind === "movies" ? data : [], series: kind === "series" ? data : [] };
+    VOD_CACHE.set(cacheKey, entry);
+    while (VOD_CACHE.size > 32) VOD_CACHE.delete(VOD_CACHE.keys().next().value!);
+    return entry;
+  })();
+  VOD_IN_FLIGHT.set(cacheKey, task);
+  try { return await task; } finally { VOD_IN_FLIGHT.delete(cacheKey); }
+}
+
+async function fromProviders(playlists: IptvPlaylistEntry[], kind: "movies" | "series", resolve: (info: XtreamInfo) => Promise<StreamSource[]>) {
+  const providers = xtreamProviders(playlists, kind);
+  const results: StreamSource[][] = new Array(providers.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(2, providers.length) }, async () => {
+    while (next < providers.length) {
+      const index = next++;
+      results[index] = (await resolve(providers[index].info).catch(() => []))
+        .map(source => ({ ...source, addonName: providers[index].name ? `${source.addonName} - ${providers[index].name}` : source.addonName }));
+    }
+  }));
+  return [...new Map(results.flat().map(source => [source.url, source])).values()];
 }
 
 function movieVodUrl(info: XtreamInfo, streamId: string | number, ext?: string) {
@@ -145,9 +164,11 @@ export async function findMovieVodSources(
   item: MediaItem,
   userAgent?: string
 ): Promise<StreamSource[]> {
-  const info = xtreamInfoFromPlaylists(playlists);
-  if (!info) return [];
-  const { movies } = await loadVodCatalog(info, userAgent);
+  return fromProviders(playlists, "movies", info => matchMovie(info, item, userAgent));
+}
+
+async function matchMovie(info: XtreamInfo, item: MediaItem, userAgent?: string): Promise<StreamSource[]> {
+  const { movies } = await loadVodCatalog(info, "movies", userAgent);
   if (!movies.length) return [];
 
   const wantTmdb = String(item.id);
@@ -185,9 +206,11 @@ export async function findEpisodeVodSource(
   episode: number,
   userAgent?: string
 ): Promise<StreamSource[]> {
-  const info = xtreamInfoFromPlaylists(playlists);
-  if (!info) return [];
-  const { series } = await loadVodCatalog(info, userAgent);
+  return fromProviders(playlists, "series", info => matchEpisode(info, item, season, episode, userAgent));
+}
+
+async function matchEpisode(info: XtreamInfo, item: MediaItem, season: number, episode: number, userAgent?: string): Promise<StreamSource[]> {
+  const { series } = await loadVodCatalog(info, "series", userAgent);
   if (!series.length) return [];
 
   const wantTmdb = String(item.id);

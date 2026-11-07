@@ -350,7 +350,8 @@ class StreamRepository @Inject constructor(
     private val invalidationBus: CloudSyncInvalidationBus,
     private val telegramSourceResolver: TelegramSourceResolver,
     private val streamIntegrationRepository: StreamIntegrationRepository,
-    private val youTubeExtractor: InAppYouTubeExtractor = InAppYouTubeExtractor()
+    private val youTubeExtractor: InAppYouTubeExtractor = InAppYouTubeExtractor(),
+    private val partnerDelivery: dagger.Lazy<PartnerDeliveryRepository>? = null
 ) {
     private val gson = Gson()
     private val TAG = "StreamRepository"
@@ -647,11 +648,17 @@ class StreamRepository @Inject constructor(
 
     // ========== Addon Management ==========
 
-    val installedAddons: Flow<List<Addon>> =
+    val personalAddons: Flow<List<Addon>> =
         context.streamDataStore.data.map { prefs ->
             val addons = readSharedOrLegacyAddons(prefs) ?: getDefaultAddonList()
             enforceOpenSubtitles(addons).map { sanitizeAddonDisplayName(it) }
         }
+
+    val installedAddons: Flow<List<Addon>> = if (!com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED || partnerDelivery == null) {
+        personalAddons
+    } else kotlinx.coroutines.flow.combine(personalAddons, partnerDelivery.get().deliveries) { personal, delivery ->
+        personal.filterNot { PartnerCatalogs.isManaged(it.id) } + delivery?.addons.orEmpty()
+    }
 
     private fun readSharedOrLegacyAddons(prefs: Preferences): List<Addon>? {
         parseAddons(prefs[sharedAddonsKey])?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -1260,11 +1267,13 @@ class StreamRepository @Inject constructor(
         addedIds: Set<String> = emptySet(),
         transform: (List<Addon>) -> List<Addon>
     ) {
+        if (stampChange && com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED &&
+            partnerDelivery?.get()?.activeDelivery()?.permissions?.addConnections == false) return
         // Save locally to the shared account-level addon list. Mirror to the
         // active profile key so older builds/cloud payloads can still recover it.
         context.streamDataStore.edit { prefs ->
             val previous = addonCloudState(prefs)
-            val addons = transform(previous.addons)
+            val addons = transform(previous.addons).filterNot { PartnerCatalogs.isManaged(it.id) }
             if (stampChange && addons == previous.addons && addedIds.isEmpty() && removedIds.isEmpty()) return@edit
             if (stampChange) {
                 val timestamp = maxOf(System.currentTimeMillis(), previous.updatedAt + 1)
@@ -4283,14 +4292,33 @@ class StreamRepository @Inject constructor(
         return textContainsAny(descriptor, SIDE_EFFECT_PRONE_PREWARM_TEXT_MARKERS)
     }
 
-    fun canPrewarmWithoutSideEffects(stream: StreamSource): Boolean {
+    /** The one warm-up gate: an IPTV VOD row also needs the user's explicit No limit, because any request can spend the account's allowance. */
+    suspend fun canPrewarmWithoutSideEffects(stream: StreamSource): Boolean {
         val rawUrl = stream.url?.trim().orEmpty()
         if (rawUrl.isBlank()) return false
         if (rawUrl.startsWith("magnet:", ignoreCase = true)) return false
         if (!rawUrl.startsWith("http://", ignoreCase = true) && !rawUrl.startsWith("https://", ignoreCase = true)) {
             return false
         }
-        return !isSideEffectPronePrewarmSource(rawUrl, stream)
+        if (isSideEffectPronePrewarmSource(rawUrl, stream)) return false
+        if (!IptvVodSourceIds.isIptvVodAddonId(stream.addonId)) return true
+        return try {
+            iptvRepository.isExplicitlyUnlimited(stream)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            false
+        }
+    }
+
+    internal suspend fun iptvStreamPolicyFor(stream: StreamSource): IptvStreamPolicy? =
+        iptvRepository.streamPolicyFor(stream)
+
+    internal suspend fun iptvAccountUsage(account: com.arflix.tv.network.IptvProviderAccount): com.arflix.tv.network.IptvAccountUsage? =
+        iptvRepository.fetchAccountUsage(account)
+
+    /** Never waits: playback must not depend on the answer. */
+    internal fun bootstrapIptvAllowance(stream: StreamSource) {
+        stream.iptvSourceId?.let { iptvRepository.bootstrapAccountAllowance(it) }
     }
 
     private suspend fun warmHttpConnection(stream: StreamSource) {
@@ -4444,10 +4472,14 @@ class StreamRepository @Inject constructor(
         limit: Int = 3,
         allowNetworkWarmup: Boolean = true
     ) = withContext(Dispatchers.IO) {
-        streams.asSequence()
-            .filter { !it.url.isNullOrBlank() }
-            .filter { canPrewarmWithoutSideEffects(it) }
-            .take(limit.coerceAtLeast(0))
+        // Stops at the limit: the gate can read stored settings, so rows past it must not pay for that.
+        val wanted = limit.coerceAtLeast(0)
+        val warmable = ArrayList<StreamSource>(wanted)
+        for (stream in streams) {
+            if (warmable.size >= wanted) break
+            if (!stream.url.isNullOrBlank() && canPrewarmWithoutSideEffects(stream)) warmable.add(stream)
+        }
+        warmable
             .map { stream ->
                 async {
                     runCatching {
@@ -4455,7 +4487,6 @@ class StreamRepository @Inject constructor(
                     }
                 }
             }
-            .toList()
             .awaitAll()
     }
 
@@ -4479,7 +4510,10 @@ class StreamRepository @Inject constructor(
             val playable = direct.startsWith("http://", ignoreCase = true) ||
                 direct.startsWith("https://", ignoreCase = true)
             if (!playable) return null
-            return stream.copy(url = direct)
+            return stream.copy(
+                url = direct,
+                iptvSourceId = stream.iptvSourceId ?: StalkerVodLink.parseMarker(url)?.portalId
+            )
         }
 
         val normalizedUrl = when {

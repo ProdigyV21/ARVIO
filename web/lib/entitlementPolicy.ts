@@ -16,7 +16,7 @@ export function currentEntitlement(state: EntitlementState | null, now = Date.no
 // after a renewal that did not come through yet.
 export function accessEndsAt(state: EntitlementState | null): string | null {
   if (!state) return null;
-  return state.reason === "grace" && state.graceEndsAt ? state.graceEndsAt : state.expiresAt;
+  return (state.reason === "grace" || state.reason === "partner") && state.graceEndsAt ? state.graceEndsAt : state.expiresAt;
 }
 
 // Recheck expiry even if the tab stays focused for the whole trial. Cap long

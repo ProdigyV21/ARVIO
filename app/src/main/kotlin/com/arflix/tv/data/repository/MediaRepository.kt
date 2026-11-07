@@ -161,6 +161,7 @@ class MediaRepository @Inject constructor(
         synchronized(seasonEpisodesCache) { seasonEpisodesCache.clear() }
         collectionRefsCache.clear()
         tmdbCatalogRefsCache.clear()
+        mdblistCollectionRefsCache.clear()
     }
 
     private data class MediaCacheEntry(val item: MediaItem, val timestamp: Long, val complete: Boolean)
@@ -182,6 +183,7 @@ class MediaRepository @Inject constructor(
     private val homeServerLogoRefCache = ConcurrentHashMap<String, CacheEntry<Pair<MediaType, Int>?>>()
     private val collectionRefsCache = ConcurrentHashMap<String, CacheEntry<CollectionRefs>>()
     private val tmdbCatalogRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
+    private val mdblistCollectionRefsCache = ConcurrentHashMap<String, CacheEntry<List<Pair<MediaType, Int>>>>()
     private val _episodeRatingsUpdated = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = 64)
     val episodeRatingsUpdated = _episodeRatingsUpdated.asSharedFlow()
 
@@ -331,7 +333,9 @@ class MediaRepository @Inject constructor(
                 null
             } else when (source.kind) {
                 CollectionSourceKind.ADDON_CATALOG -> 120
-                CollectionSourceKind.MDBLIST_PUBLIC -> 96
+                // Public lists can contain thousands of titles. Only the requested
+                // page is hydrated; a preview budget must not end View All.
+                CollectionSourceKind.MDBLIST_PUBLIC -> null
                 else -> 72
             }
         }
@@ -995,6 +999,11 @@ class MediaRepository @Inject constructor(
     }
 
     suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 40): Category? = coroutineScope {
+        if (catalog.sourceType == CatalogSourceType.PREINSTALLED && catalog.kind == CatalogKind.STANDARD &&
+            PartnerCatalogs.isManaged(catalog.id)) {
+            val page = loadManagedBuiltInPage(catalog, 0, maxItems)
+            return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+        }
         if (catalog.kind == CatalogKind.COLLECTION) {
             val page = loadCollectionCatalogPage(catalog = catalog, offset = 0, limit = maxItems)
             return@coroutineScope if (page.items.isEmpty()) null else Category(catalog.id, catalog.title, page.items)
@@ -1046,6 +1055,9 @@ class MediaRepository @Inject constructor(
             return@coroutineScope loadCollectionCatalogPage(catalog, offset, limit)
         }
         if (limit <= 0 || offset < 0) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
+        if (catalog.sourceType == CatalogSourceType.PREINSTALLED && PartnerCatalogs.isManaged(catalog.id)) {
+            return@coroutineScope loadManagedBuiltInPage(catalog, offset, limit)
+        }
         val rankedCatalogLimit = if (catalog.isTop10Catalog()) 10 else Int.MAX_VALUE
         if (offset >= rankedCatalogLimit) {
             return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
@@ -1109,6 +1121,26 @@ class MediaRepository @Inject constructor(
             hasMore = hasMore,
             nextOffset = sourceNextOffset ?: (offset + pageRefs.size)
         )
+    }
+
+    private suspend fun loadManagedBuiltInPage(catalog: CatalogConfig, offset: Int, limit: Int): CategoryPageResult {
+        val source = catalog.sourceRef ?: return CategoryPageResult(emptyList(), false)
+        if (source !in setOf("trending_movies", "trending_tv", "trending_anime") || offset < 0 || limit <= 0) {
+            return CategoryPageResult(emptyList(), false)
+        }
+        val items = mutableListOf<MediaItem>()
+        var position = offset
+        var more = true
+        while (items.size < limit.coerceAtMost(200) && more) {
+            val page = loadHomeCategoryPage(source, position / 20 + 1)
+            val skip = position % 20
+            val selected = page.items.drop(skip).take(limit.coerceAtMost(200) - items.size)
+            items += selected
+            position += selected.size
+            more = skip + selected.size < page.items.size || page.hasMore
+            if (selected.isEmpty()) break
+        }
+        return CategoryPageResult(items, more, nextOffset = position)
     }
 
     /** The videos of the user's YouTube row (see [YouTubeCollection]), as native addon items, in the user's order. */
@@ -1477,6 +1509,12 @@ class MediaRepository @Inject constructor(
     ): List<Pair<MediaType, Int>> {
         val slug = source.mdblistSlug?.trim()?.trim('/').orEmpty()
         if (slug.isBlank()) return emptyList()
+        val cached = mdblistCollectionRefsCache[slug]
+        if (cached != null && System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS) {
+            return cached.data.asSequence().filter { mediaType == null || it.first == mediaType }.take(limit).toList()
+        }
+        // The anonymous endpoint returns a complete ID list. Keep these small
+        // references across pages and tabs, never hydrate the whole list at once.
         val body = withContext(Dispatchers.IO) {
             fetchUrl(withListFreshness("https://mdblist.com/lists/$slug/json"))
         } ?: throw java.io.IOException("Collection list could not be loaded")
@@ -1490,11 +1528,12 @@ class MediaRepository @Inject constructor(
                 "show", "series", "tv" -> MediaType.TV
                 else -> continue
             }
-            if (mediaType != null && type != mediaType) continue
             refs.add(type to id)
-            if (refs.size >= limit) break
         }
-        return refs
+        val unique = refs.distinct()
+        mdblistCollectionRefsCache.entries.removeIf { System.currentTimeMillis() - it.value.timestamp >= CACHE_TTL_MS }
+        mdblistCollectionRefsCache[slug] = CacheEntry(unique, System.currentTimeMillis())
+        return unique.asSequence().filter { mediaType == null || it.first == mediaType }.take(limit).toList()
     }
 
     /**
@@ -1684,7 +1723,8 @@ class MediaRepository @Inject constructor(
      * Streaming-service trending via `with_watch_providers`. Used for services
      * that don't have a dedicated addon catalog (Apple TV+, Paramount+, Hulu,
      * Peacock). Region defaults to US if not provided — TMDB requires a region
-     * for watch-provider queries.
+     * for watch-provider queries. [CollectionSourceConfig.tmdbGenreId], set by
+     * a service page's genre filter, narrows it to one genre of that media type.
      */
     private suspend fun loadCollectionWatchProviderRefs(
         source: CollectionSourceConfig,
@@ -1693,6 +1733,7 @@ class MediaRepository @Inject constructor(
         val providerId = source.tmdbWatchProviderId ?: return emptyList()
         val region = source.watchRegion?.takeIf { it.isNotBlank() } ?: "US"
         val sortBy = source.sortBy ?: "popularity.desc"
+        val genres = source.tmdbGenreId?.toString()
         return when (source.mediaType?.lowercase(Locale.US)) {
             "movie" -> loadPagedTmdbDiscoverRefs(
                 mediaType = MediaType.MOVIE,
@@ -1700,6 +1741,7 @@ class MediaRepository @Inject constructor(
             ) { page ->
                 tmdbApi.discoverMovies(
                     apiKey,
+                    genres = genres,
                     watchProviders = providerId,
                     watchRegion = region,
                     sortBy = sortBy,
@@ -1715,6 +1757,7 @@ class MediaRepository @Inject constructor(
                     apiKey,
                     watchProviders = providerId,
                     watchRegion = region,
+                    genres = genres,
                     sortBy = sortBy,
                     language = contentLanguage,
                     page = page

@@ -57,13 +57,15 @@ import com.arflix.tv.util.AnimeMapper
 import com.arflix.tv.util.AnimeSeasonStructure
 import com.arflix.tv.util.Constants
 import com.arflix.tv.util.EpisodeAvailability
-import com.arflix.tv.util.settingsDataStore
+import com.arflix.tv.data.repository.effectiveSettingsDataStore as settingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -71,6 +73,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -149,6 +153,11 @@ data class DetailsUiState(
     val playTmdbEpisode: Int? = null,
     val playLabel: String? = null,
     val playPositionMs: Long? = null,
+    /** Pulling other devices' progress after a long idle; the play target may be stale. */
+    val isSyncingProgress: Boolean = false,
+    val idleSyncRevision: Long = 0L,
+    // Cached metadata can render before resume history and episode progress have resolved.
+    val isPlaybackTargetReady: Boolean = false,
     val autoPlaySingleSource: Boolean = true,
     val autoPlayMinQuality: String = "Any",
     val animeStructuringStyle: AnimeStructuringStyle = AnimeStructuringStyle.BROADCAST,
@@ -269,7 +278,8 @@ class DetailsViewModel @Inject constructor(
     private val streamIntegrationRepository: StreamIntegrationRepository,
     private val recentPlayedSourceRepository: RecentPlayedSourceRepository,
     personalListsRepository: PersonalListsRepository,
-    private val kidsContentFilter: KidsContentFilter
+    private val kidsContentFilter: KidsContentFilter,
+    private val idleReturnCoordinator: com.arflix.tv.data.repository.IdleReturnCoordinator
 ) : ViewModel() {
 
     /** "Add to list" from the action row; the result shows as a Details toast. */
@@ -319,6 +329,9 @@ class DetailsViewModel @Inject constructor(
     }
 
     private val _uiState = MutableStateFlow(DetailsUiState())
+    private var appliedIdleSyncRevision = idleReturnCoordinator.syncCompleted.value
+    private var resumeRefreshJob: Job? = null
+    private var resumeRefreshRevision: Long? = null
     val uiState: StateFlow<DetailsUiState> = _uiState.asStateFlow()
 
     private var currentMediaType: MediaType = MediaType.MOVIE
@@ -363,6 +376,33 @@ class DetailsViewModel @Inject constructor(
     private enum class WatchlistWrite { SAVED, UNCHANGED, FAILED }
 
     init {
+        viewModelScope.launch {
+            idleReturnCoordinator.isSyncing.collect { syncing ->
+                if (syncing) {
+                    resumeRefreshJob?.cancel()
+                    _uiState.value = _uiState.value.copy(isSyncingProgress = true)
+                } else if (idleReturnCoordinator.syncCompleted.value > appliedIdleSyncRevision) {
+                    refreshAfterPlayerReturn(fullResume = true)
+                }
+            }
+        }
+        viewModelScope.launch {
+            // Another device may have moved this show on while this one sat idle; once its
+            // progress is pulled, rebuild the target from the synced sources.
+            idleReturnCoordinator.syncCompleted.collect { revision ->
+                if (revision > appliedIdleSyncRevision) {
+                    _uiState.value = _uiState.value.copy(isSyncingProgress = true)
+                    refreshAfterPlayerReturn(fullResume = true)
+                }
+            }
+        }
+        viewModelScope.launch {
+            _uiState.map { it.isPlaybackTargetReady && !it.isLoading }.distinctUntilChanged().collect { ready ->
+                if (ready && initialLoadComplete && idleReturnCoordinator.syncCompleted.value > appliedIdleSyncRevision) {
+                    refreshAfterPlayerReturn(fullResume = true)
+                }
+            }
+        }
         viewModelScope.launch {
             mediaRepository.episodeRatingsUpdated.collect { (tvId, seasonNumber) ->
                 if (tvId == currentMediaId && currentMediaType == MediaType.TV) {
@@ -477,11 +517,13 @@ class DetailsViewModel @Inject constructor(
     }
 
     fun loadDetails(mediaType: MediaType, mediaId: Int, initialSeason: Int? = null, initialEpisode: Int? = null) {
+        resumeRefreshJob?.cancel()
         currentMediaType = mediaType
         currentMediaId = mediaId
         animeSeasonStructure = null
         availableAnimeStructure = null
         initialLoadComplete = false
+        _uiState.value = _uiState.value.copy(isPlaybackTargetReady = false)
         vodAppendJob?.cancel()
         homeServerAppendJob?.cancel()
         streamListPrewarmJob?.cancel()
@@ -569,6 +611,11 @@ class DetailsViewModel @Inject constructor(
                     logoUrl = cachedLogoUrl,
                     episodes = cachedEpisodes ?: emptyList(),
                     currentSeason = seasonToLoad,
+                    initialSeasonIndex = (seasonToLoad - 1).coerceAtLeast(0),
+                    initialEpisodeIndex = if (reentry) {
+                        detailEpisodeReturnIndex(cachedEpisodes.orEmpty(), playedIdentity)
+                            ?: previousState.initialEpisodeIndex
+                    } else 0,
                     totalSeasons = cachedTotalSeasons,
                     playSeason = initialSeason,
                     playEpisode = initialEpisode,
@@ -582,7 +629,10 @@ class DetailsViewModel @Inject constructor(
                     showEpisodeRatings = showEpisodeRatings,
                     preferredAudioLanguage = preferredAudioLanguage,
                     autoPlaySingleSource = autoPlaySingleSource,
-                    autoPlayMinQuality = autoPlayMinQuality
+                    autoPlayMinQuality = autoPlayMinQuality,
+                    isSyncingProgress = idleReturnCoordinator.isSyncing.value ||
+                        idleReturnCoordinator.syncCompleted.value > appliedIdleSyncRevision,
+                    idleSyncRevision = appliedIdleSyncRevision,
                 )
 
                 fun logDetailsLoadFailure(label: String, throwable: Throwable) {
@@ -1054,7 +1104,10 @@ class DetailsViewModel @Inject constructor(
                             }
                         }
 
-                        val targetEpisodeForRow = if (initialSeason == seasonToLoad) initialEpisode else null
+                        val targetIdentityForRow = if (initialSeason != null && initialEpisode != null) {
+                            EpisodeIdentity.canonical(initialSeason, initialEpisode)
+                        } else null
+                        val targetIndexForRow = detailEpisodeReturnIndex(decoratedEpisodes, targetIdentityForRow)
                         val nextUnwatchedEpisode = decoratedEpisodes.firstOrNull { !it.isWatched }
                         // Focus the explicit target episode if the caller passed one (deeplink /
                         // Continue Watching tile), otherwise focus the first unwatched episode so
@@ -1063,8 +1116,7 @@ class DetailsViewModel @Inject constructor(
                         // the first episode (index 0) — from there the user can jump to the next
                         // season via the season selector. See issue #117.
                         val initialEpisodeIndex = when {
-                            targetEpisodeForRow != null ->
-                                decoratedEpisodes.indexOfFirst { it.episodeNumber == targetEpisodeForRow }.coerceAtLeast(0)
+                            targetIndexForRow != null -> targetIndexForRow
                             nextUnwatchedEpisode != null ->
                                 decoratedEpisodes.indexOf(nextUnwatchedEpisode).coerceAtLeast(0)
                             else -> 0
@@ -1175,7 +1227,8 @@ class DetailsViewModel @Inject constructor(
                                 playLabel = displayTarget?.let {
                                     context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
                                 } ?: matchedResume?.label ?: context.getString(R.string.continue_season_episode, initialSeason, initialEpisode),
-                                playPositionMs = matchedResume?.positionMs
+                                playPositionMs = matchedResume?.positionMs,
+                                isPlaybackTargetReady = true
                             )
                         }
                         return@launch
@@ -1201,7 +1254,8 @@ class DetailsViewModel @Inject constructor(
                                         context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
                                     }
                                 } ?: playTarget?.label,
-                                playPositionMs = playTarget?.positionMs
+                                playPositionMs = playTarget?.positionMs,
+                                isPlaybackTargetReady = true
                             )
                         }
                     } else {
@@ -1225,7 +1279,8 @@ class DetailsViewModel @Inject constructor(
                                         context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
                                     }
                                 } ?: playTarget?.label,
-                                playPositionMs = playTarget?.positionMs
+                                playPositionMs = playTarget?.positionMs,
+                                isPlaybackTargetReady = true
                             )
                         }
                     }
@@ -1670,113 +1725,159 @@ class DetailsViewModel @Inject constructor(
      * Refresh watched badges and continue target when returning from Player.
      * Uses local caches/history first for near-instant UI updates.
      */
-    fun refreshAfterPlayerReturn() {
+    fun canStartPlayback(visibleIdleSyncRevision: Long = _uiState.value.idleSyncRevision): Boolean =
+        !idleReturnCoordinator.isSyncing.value &&
+            idleReturnCoordinator.syncCompleted.value <= appliedIdleSyncRevision &&
+            !_uiState.value.isSyncingProgress && visibleIdleSyncRevision == _uiState.value.idleSyncRevision
+
+    fun refreshAfterPlayerReturn(fullResume: Boolean = false) {
         val tmdbId = currentMediaId
         if (tmdbId == 0) return
+        // A post-idle pull is running; its completion refreshes with the synced data.
+        if (idleReturnCoordinator.isSyncing.value) return
         // Don't run during initial load — would overwrite episodes/seasonProgress with empty data.
         // The isLoading guard alone is insufficient: cached items set isLoading=false immediately,
         // but episodes haven't been populated yet. Wait for the episodes coroutine to finish.
-        if (_uiState.value.isLoading || !initialLoadComplete) return
+        if (_uiState.value.isLoading || !initialLoadComplete || !_uiState.value.isPlaybackTargetReady) return
         val mediaType = currentMediaType
+        val revision = idleReturnCoordinator.syncCompleted.value
+        val useFullResume = fullResume || revision > appliedIdleSyncRevision
+        if (useFullResume && resumeRefreshJob?.isActive == true && resumeRefreshRevision == revision) return
+        resumeRefreshJob?.cancel()
+        resumeRefreshRevision = revision.takeIf { useFullResume }
+        if (useFullResume) _uiState.value = _uiState.value.copy(isSyncingProgress = true)
 
-        viewModelScope.launch {
-            // Force-refresh watched episodes from backend (not just in-memory cache)
-            // to pick up episodes marked watched during playback.
-            val watchedKeys = if (mediaType == MediaType.TV) {
-                try {
-                    traktRepository.getWatchedEpisodesForShow(tmdbId)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    traktRepository.getWatchedEpisodesFromCache()
-                }
-            } else {
-                emptySet()
-            }
-
-            // Build all updates in one shot to avoid partial state writes
-            val currentState = _uiState.value
-
-            // 1. Update main item watched status
-            val updatedItem = currentState.item?.let { currentItem ->
-                val watched = if (mediaType == MediaType.MOVIE) {
-                    traktRepository.isMovieWatched(tmdbId)
+        resumeRefreshJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            suspend fun refreshTarget() {
+                // Force-refresh watched episodes from backend (not just in-memory cache)
+                // to pick up episodes marked watched during playback.
+                val watchedKeys = if (mediaType == MediaType.TV) {
+                    try {
+                        traktRepository.getWatchedEpisodesForShow(tmdbId)
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        traktRepository.getWatchedEpisodesFromCache()
+                    }
                 } else {
-                    traktRepository.hasWatchedEpisodes(tmdbId) ||
-                        watchedKeys.any { it.startsWith("show_tmdb:$tmdbId:") }
+                    emptySet()
                 }
-                currentItem.copy(isWatched = watched)
-            }
 
-            // 2. Update episode watched badges and season progress
-            // Read the LATEST state for episodes — the snapshot captured above may be stale
-            // if loadDetails() child coroutines populated episodes after we started.
-            val latestForEpisodes = _uiState.value
-            var updatedEpisodes = latestForEpisodes.episodes
-            var updatedProgress = latestForEpisodes.seasonProgress
-            if (mediaType == MediaType.TV && latestForEpisodes.episodes.isNotEmpty()) {
-                val prefix = "show_tmdb:$tmdbId:"
-                if (watchedKeys.any { it.startsWith(prefix) }) {
-                    updatedEpisodes = latestForEpisodes.episodes.map { ep ->
-                        val key = "show_tmdb:$tmdbId:${ep.tmdbSeasonNumber}:${ep.tmdbEpisodeNumber}"
-                        ep.copy(isWatched = ep.isWatched || watchedKeys.contains(key))
-                    }
-                    val season = latestForEpisodes.currentSeason
-                    val progress = latestForEpisodes.seasonProgress.toMutableMap()
-                    progress[season] = Pair(updatedEpisodes.count { it.isWatched }, updatedEpisodes.size)
-                    updatedProgress = progress
-                }
-            }
+                // Build all updates in one shot to avoid partial state writes
+                val currentState = _uiState.value
 
-            // 3. Re-derive play target: try resume info first, then next unwatched episode
-            val quickResume = fetchResumeInfoFromHistoryOnly(tmdbId, mediaType)
-            val playTarget = if (quickResume != null) {
-                PlayTarget(
-                    season = quickResume.season,
-                    episode = quickResume.episode,
-                    label = quickResume.label,
-                    positionMs = quickResume.positionMs
-                )
-            } else if (mediaType == MediaType.TV) {
-                // No resume point (episode was finished) — find the next unwatched episode
-                deriveNextUnwatchedPlayTarget(tmdbId, watchedKeys)
-            } else {
-                null
-            }
-
-            // Read latest state to avoid overwriting concurrent updates (e.g. seasonProgress)
-            val latestState = _uiState.value
-            val playbackProgress = if (mediaType == MediaType.TV) {
-                fetchEpisodePlaybackProgress(tmdbId, updatedEpisodes)
-            } else {
-                emptyMap()
-            }
-            val displayPlayTarget = playTarget?.let { target ->
-                val season = target.season ?: return@let null
-                val episode = target.episode ?: return@let null
-                animeSeasonStructure?.identityForTmdb(season, episode)
-            }
-            _uiState.value = latestState.copy(
-                item = updatedItem ?: latestState.item,
-                // Only overwrite episodes if we actually computed watched badges;
-                // otherwise keep the latest (avoids blanking if episodes were populated concurrently)
-                episodes = if (updatedEpisodes.isNotEmpty()) updatedEpisodes else latestState.episodes,
-                episodePlaybackProgress = playbackProgress,
-                // Only update seasonProgress if we actually computed new data; preserve existing otherwise
-                seasonProgress = if (updatedProgress !== latestForEpisodes.seasonProgress) updatedProgress else latestState.seasonProgress,
-                playSeason = displayPlayTarget?.displaySeason ?: playTarget?.season ?: latestState.playSeason,
-                playEpisode = displayPlayTarget?.displayEpisode ?: playTarget?.episode ?: latestState.playEpisode,
-                playTmdbSeason = playTarget?.season ?: latestState.playTmdbSeason,
-                playTmdbEpisode = playTarget?.episode ?: latestState.playTmdbEpisode,
-                playLabel = displayPlayTarget?.let {
-                    if (playTarget?.label == context.getString(R.string.play_start_s1e1)) {
-                        context.getString(R.string.play_start_s1e1)
+                // 1. Update main item watched status
+                val updatedItem = currentState.item?.let { currentItem ->
+                    val watched = if (mediaType == MediaType.MOVIE) {
+                        traktRepository.isMovieWatched(tmdbId)
                     } else {
-                        context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
+                        traktRepository.hasWatchedEpisodes(tmdbId) ||
+                            watchedKeys.any { it.startsWith("show_tmdb:$tmdbId:") }
                     }
-                } ?: playTarget?.label ?: latestState.playLabel,
-                playPositionMs = playTarget?.positionMs ?: 0L
-            )
+                    currentItem.copy(isWatched = watched)
+                }
+
+                // 2. Update episode watched badges and season progress
+                // Read the LATEST state for episodes — the snapshot captured above may be stale
+                // if loadDetails() child coroutines populated episodes after we started.
+                val latestForEpisodes = _uiState.value
+                var updatedEpisodes = latestForEpisodes.episodes
+                var updatedProgress = latestForEpisodes.seasonProgress
+                if (mediaType == MediaType.TV && latestForEpisodes.episodes.isNotEmpty()) {
+                    val prefix = "show_tmdb:$tmdbId:"
+                    if (watchedKeys.any { it.startsWith(prefix) }) {
+                        updatedEpisodes = latestForEpisodes.episodes.map { ep ->
+                            val key = "show_tmdb:$tmdbId:${ep.tmdbSeasonNumber}:${ep.tmdbEpisodeNumber}"
+                            ep.copy(isWatched = ep.isWatched || watchedKeys.contains(key))
+                        }
+                        val season = latestForEpisodes.currentSeason
+                        val progress = latestForEpisodes.seasonProgress.toMutableMap()
+                        progress[season] = Pair(updatedEpisodes.count { it.isWatched }, updatedEpisodes.size)
+                        updatedProgress = progress
+                    }
+                }
+
+                // 3. Re-derive play target: try resume info first, then next unwatched episode
+                val quickResume = if (useFullResume) {
+                    fetchResumeInfo(tmdbId, mediaType)
+                } else {
+                    fetchResumeInfoFromHistoryOnly(tmdbId, mediaType)
+                        ?: if (appliedIdleSyncRevision > 0L) fetchResumeInfo(tmdbId, mediaType) else null
+                }
+                val playTarget = if (quickResume != null) {
+                    PlayTarget(
+                        season = quickResume.season,
+                        episode = quickResume.episode,
+                        label = quickResume.label,
+                        positionMs = quickResume.positionMs
+                    )
+                } else if (mediaType == MediaType.TV) {
+                    // No resume point (episode was finished) — find the next unwatched episode
+                    deriveNextUnwatchedPlayTarget(tmdbId, watchedKeys)
+                } else {
+                    null
+                }
+
+                // Read latest state to avoid overwriting concurrent updates (e.g. seasonProgress)
+                val playbackProgress = if (mediaType == MediaType.TV) {
+                    fetchEpisodePlaybackProgress(tmdbId, updatedEpisodes)
+                } else {
+                    emptyMap()
+                }
+                val displayPlayTarget = playTarget?.let { target ->
+                    val season = target.season ?: return@let null
+                    val episode = target.episode ?: return@let null
+                    animeSeasonStructure?.identityForTmdb(season, episode)
+                }
+                if (!currentCoroutineContext().isActive || currentMediaId != tmdbId || currentMediaType != mediaType ||
+                    idleReturnCoordinator.isSyncing.value || idleReturnCoordinator.syncCompleted.value != revision) return
+                val latestState = _uiState.value
+                val previousTarget = latestState.takeUnless { useFullResume }
+                _uiState.value = latestState.copy(
+                    item = updatedItem ?: latestState.item,
+                    // Only overwrite episodes if we actually computed watched badges;
+                    // otherwise keep the latest (avoids blanking if episodes were populated concurrently)
+                    episodes = if (updatedEpisodes.isNotEmpty()) updatedEpisodes else latestState.episodes,
+                    episodePlaybackProgress = playbackProgress,
+                    // Only update seasonProgress if we actually computed new data; preserve existing otherwise
+                    seasonProgress = if (updatedProgress !== latestForEpisodes.seasonProgress) updatedProgress else latestState.seasonProgress,
+                    playSeason = displayPlayTarget?.displaySeason ?: playTarget?.season ?: previousTarget?.playSeason,
+                    playEpisode = displayPlayTarget?.displayEpisode ?: playTarget?.episode ?: previousTarget?.playEpisode,
+                    playTmdbSeason = playTarget?.season ?: previousTarget?.playTmdbSeason,
+                    playTmdbEpisode = playTarget?.episode ?: previousTarget?.playTmdbEpisode,
+                    playLabel = displayPlayTarget?.let {
+                        if (playTarget?.label == context.getString(R.string.play_start_s1e1)) {
+                            context.getString(R.string.play_start_s1e1)
+                        } else {
+                            context.getString(R.string.continue_season_episode, it.displaySeason, it.displayEpisode)
+                        }
+                    } ?: playTarget?.label ?: previousTarget?.playLabel,
+                    playPositionMs = playTarget?.positionMs ?: 0L
+                )
+            }
+            try {
+                if (useFullResume) {
+                    val refreshed = withTimeoutOrNull(com.arflix.tv.data.repository.IdleReturnCoordinator.SYNC_TIMEOUT_MS) {
+                        refreshTarget()
+                        true
+                    } ?: false
+                    if (!refreshed) showToast(context.getString(R.string.details_progress_refresh_failed), ToastType.ERROR)
+                } else {
+                    refreshTarget()
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                Log.w(TAG, "Failed to refresh playback target", error)
+                if (useFullResume) showToast(context.getString(R.string.details_progress_refresh_failed), ToastType.ERROR)
+            } finally {
+                if (useFullResume && currentCoroutineContext().isActive &&
+                    currentMediaId == tmdbId && currentMediaType == mediaType &&
+                    !idleReturnCoordinator.isSyncing.value && idleReturnCoordinator.syncCompleted.value == revision) {
+                    appliedIdleSyncRevision = revision
+                    _uiState.value = _uiState.value.copy(isSyncingProgress = false, idleSyncRevision = revision)
+                }
+            }
         }
+        resumeRefreshJob?.start()
     }
 
     /**
@@ -2093,6 +2194,7 @@ class DetailsViewModel @Inject constructor(
     }
 
     fun loadStreams(imdbId: String?, identity: EpisodeIdentity? = null) {
+        if (!canStartPlayback()) return
         val requestId = ++loadStreamsRequestId
         loadStreamsJob?.cancel()
         focusedStreamPrewarmJob?.cancel()

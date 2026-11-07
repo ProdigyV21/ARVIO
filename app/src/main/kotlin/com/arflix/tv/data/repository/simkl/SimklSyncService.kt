@@ -761,7 +761,7 @@ class SimklSyncService @Inject constructor(
                     title = movie.title.orEmpty(),
                     mediaType = MediaType.MOVIE,
                     progress = progress,
-                    resumePositionSeconds = durationSeconds * progress / 100L,
+                    resumePositionSeconds = (durationSeconds * row.progress / 100.0).toLong(),
                     durationSeconds = durationSeconds,
                     year = movie.year?.toString().orEmpty(),
                     updatedAtMs = parseTimestamp(row.pausedAt)
@@ -785,7 +785,7 @@ class SimklSyncService @Inject constructor(
                 title = show.title.orEmpty(),
                 mediaType = MediaType.TV,
                 progress = progress,
-                resumePositionSeconds = durationSeconds * progress / 100L,
+                resumePositionSeconds = (durationSeconds * row.progress / 100.0).toLong(),
                 durationSeconds = durationSeconds,
                 season = season,
                 episode = episode,
@@ -1039,13 +1039,25 @@ class SimklSyncService @Inject constructor(
                 if (!item.isUpNext && (localOnlyWatched || isCompletedPause(watchedKey, item.updatedAtMs, false))) upNext[key]
                     else item
             }
-            ContinueWatchingSnapshot(activeTokenScope, candidates, upNext,
+            val resumed = candidates.map { item ->
+                val previous = validatedContinueWatching[item.mediaType to item.id]
+                    ?.takeIf { it.season == item.season && it.episode == item.episode }
+                withPlaybackRuntime(item, previous?.durationSeconds ?: 0L)
+            }
+            ContinueWatchingSnapshot(activeTokenScope, resumed, upNext,
                 cachedWatchedEpisodes.toSet() + localWatchedEpisodes + recentCompletions.keys.filter { it.startsWith("show_tmdb:") })
         }
         val reads = coroutineScope {
             snapshot.items.map { item -> async {
                 try {
-                    Result.success(if (item.mediaType != MediaType.TV) item else episodeLookups.withPermit {
+                    Result.success(if (item.mediaType != MediaType.TV) episodeLookups.withPermit {
+                        if (item.isUpNext || item.durationSeconds > 0L) item else {
+                            val runtime = optionalPlaybackRuntime {
+                                tmdbApi.getMovieDetails(item.id, Constants.TMDB_API_KEY).runtime ?: 0
+                            }
+                            withPlaybackRuntime(item, runtime * 60L)
+                        }
+                    } else episodeLookups.withPermit {
                         validateNextEpisode(item, snapshot.watched) ?: if (!item.isUpNext) {
                             snapshot.upNext[item.mediaType to item.id]?.let { validateNextEpisode(it, snapshot.watched) }
                         } else null
@@ -1099,7 +1111,13 @@ class SimklSyncService @Inject constructor(
         val episodes = seasonEpisodes(item.id, season).episodes.sortedBy { it.episodeNumber }
         // Never manufacture episode N+1 from totals or accept a pointer outside a real season.
         if (episodes.none { it.episodeNumber == number }) return null
-        if (!item.isUpNext) return item
+        if (!item.isUpNext) {
+            val runtime = episodes.firstOrNull { it.episodeNumber == number }?.runtime?.takeIf { it > 0 }
+                ?: if (item.durationSeconds <= 0L) optionalPlaybackRuntime {
+                    tmdbApi.getTvDetails(item.id, Constants.TMDB_API_KEY).episodeRunTime.firstOrNull { it > 0 } ?: 0
+                } else null
+            return withPlaybackRuntime(item, runtime?.times(60L) ?: item.durationSeconds)
+        }
         suspend fun firstUnwatched(seasonNumber: Int, rows: List<com.arflix.tv.data.api.TmdbEpisode>, start: Int): ContinueWatchingItem? {
             val episode = rows.sortedBy { it.episodeNumber }.firstOrNull {
                 it.episodeNumber >= start && episodeKey(item.id, seasonNumber, it.episodeNumber) !in watched
@@ -1119,6 +1137,23 @@ class SimklSyncService @Inject constructor(
             if (rows.any { episodeKey(item.id, nextSeason, it.episodeNumber) !in watched }) return null
         }
         return null
+    }
+
+    private fun withPlaybackRuntime(item: ContinueWatchingItem, runtimeSeconds: Long): ContinueWatchingItem {
+        if (item.isUpNext || runtimeSeconds <= 0L) return item
+        val duration = item.durationSeconds.takeIf { it > 0L } ?: runtimeSeconds
+        return item.copy(durationSeconds = duration,
+            resumePositionSeconds = item.resumePositionSeconds.takeIf { it > 0L }
+                ?: (duration * item.progress / 100L))
+    }
+
+    private suspend fun optionalPlaybackRuntime(read: suspend () -> Int): Int = try {
+        read()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        // Missing optional metadata must not remove an otherwise valid pause.
+        0
     }
 
     suspend fun addToWatchlist(mediaType: MediaType, tmdbId: Int, isAnime: Boolean = false): Boolean {

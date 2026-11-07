@@ -13,6 +13,7 @@ const {
 } = require("./_entitlements");
 const { recordPremiumEvent } = require("./_premium-funnel");
 const { rewardReferralIfDue } = require("./_referrals");
+const { partnerEntitlement } = require("./_partner-entitlement");
 
 function requestAction(event) {
   let raw = event.body;
@@ -101,9 +102,8 @@ exports.handler = async (event) => {
       }
     }
 
-    // Invites are rewarded once the invited account has been paying for 7
-    // days (past the refund window); a paying member opening ARVIO Web is the
-    // moment to check. Bonuses land on the billing record.
+    // Catch payments that arrived under a different, subsequently verified
+    // billing email, and referrals still pending from before instant rewards.
     if (state.entitled && state.reason === "subscription" && record && record.source !== "referral") {
       const reward = await rewardReferralIfDue(event, { emailHash, payerHash }).catch((error) => {
         console.error("referral reward check failed", error && error.message);
@@ -126,6 +126,7 @@ exports.handler = async (event) => {
       await recordPremiumEvent(event, { email, eventName: "paid_access_observed", metadata: { source: state.source || "unknown" } })
         .catch(() => console.error("Paid access analytics temporarily unavailable"));
     }
+    if (!state.entitled) state = await partnerEntitlement(identity) || state;
     return json(200, state);
   } catch (error) {
     console.error("entitlement-status failed", error);
