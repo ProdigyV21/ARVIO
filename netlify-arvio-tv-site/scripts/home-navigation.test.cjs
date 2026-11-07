@@ -6,6 +6,16 @@ const path = require('node:path');
 const site = path.resolve(__dirname, '..');
 
 for (const file of ['index.html', 'es/index.html', 'pt-br/index.html']) {
+  test(`${file}: hero promotes the current release and Google Play`, () => {
+    const html = fs.readFileSync(path.join(site, file), 'utf8');
+    assert.match(html, /class="release" href="https:\/\/github\.com\/ProdigyV21\/ARVIO\/releases\/tag\/v2\.3\.1"/u);
+    assert.doesNotMatch(html, /releases\/tag\/v2\.0\.0/u);
+    const store = html.match(/<a class="hero-store"[^>]*>[\s\S]*?<\/a>/u)?.[0];
+    assert.ok(store, 'Google Play must be visible in the hero');
+    assert.match(store, /href="https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.arvio\.tv"/u);
+    assert.match(store, /<img src="\/assets\/badge-google-play.png" width="646" height="250" alt="[^"]+"/u);
+    assert.ok(fs.existsSync(path.join(site, 'assets/badge-google-play.png')));
+  });
   test(`${file}: the free APK and ARVIO Web stay together in the header`, () => {
     const html = fs.readFileSync(path.join(site, file), 'utf8');
     const header = html.match(/<header\b[^>]*>([\s\S]*?)<\/header>/u)?.[1];
