@@ -2083,6 +2083,15 @@
     <string name="settings_connect_wetrakr">Connect WeTrakr</string>
     <string name="settings_wetrakr_copy_open">Copy code and open WeTrakr</string>
     <string name="settings_iptv_max_reached">Maximum of 10 IPTV playlists reached</string>
+    <!-- Playback cache (on-disk cache of streamed video for instant rewinds) -->
+    <string name="settings_section_playback_cache">PLAYBACK CACHE</string>
+    <string name="playback_cache_size">Playback Cache Size</string>
+    <string name="playback_cache_size_desc">Video saved by cache-enabled playback for local rewinds. Used: %1$s</string>
+    <string name="playback_cache_limited">%1$s (free space)</string>
+    <string name="clear_playback_cache">Clear Playback Cache</string>
+    <string name="clear_playback_cache_desc">Delete all cached video data. Anything playing simply downloads again.</string>
+    <string name="playback_cache_cleared">Playback cache cleared</string>
+    <string name="settings_help_playback_cache_desc">Cache-enabled playback saves video for local rewinds. Large or remote streams may bypass this cache for performance. The size adapts to available storage, aiming to leave 1 GB free.</string>
 
     <!-- Live TV AI subtitles -->
     <string name="live_ai_subtitles">AI subtitles</string>
