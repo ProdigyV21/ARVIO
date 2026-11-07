@@ -12,7 +12,7 @@ import androidx.media3.common.Player
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.ByteArrayDataSource
 import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.DummyDataSource
+import androidx.media3.datasource.PlaceholderDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.SimpleCache
@@ -67,7 +67,7 @@ class PlaybackCacheDeviceTest {
             assertEquals(3L * bytes.size, reopened.cacheSpace)
             assertEquals((300L shl 20) + reopened.cacheSpace, reopenedEvictor.maxBytes)
             val readerFactory = CacheDataSource.Factory().setCache(reopened)
-                .setUpstreamDataSourceFactory(DummyDataSource.FACTORY)
+                .setUpstreamDataSourceFactory(PlaceholderDataSource.FACTORY)
             for (index in 0..2) {
                 val reader = readerFactory.createDataSource()
                 val read = ArrayList<Byte>()
@@ -92,7 +92,8 @@ class PlaybackCacheDeviceTest {
     @Test fun highBitratePlaybackAndTenSecondRewindRemainPlayable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val file = File(context.getExternalFilesDir(null), "pr820-high-bitrate.mp4")
-        check(file.isFile) { "Supply the generated 80 Mbps fixture before running this test" }
+        org.junit.Assume.assumeTrue("Supply the generated 25-second 80 Mbps fixture", file.isFile)
+        assertTrue("The stress fixture must contain at least 200 MiB of media", file.length() > (200L shl 20))
         val requests = AtomicInteger()
         val server = object : NanoHTTPD("127.0.0.1", 0) {
             override fun serve(session: IHTTPSession): Response {

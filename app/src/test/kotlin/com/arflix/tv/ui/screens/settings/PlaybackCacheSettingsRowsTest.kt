@@ -1,9 +1,17 @@
 package com.arflix.tv.ui.screens.settings
 
+import android.app.Application
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], application = Application::class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class PlaybackCacheSettingsRowsTest {
     @Test
     fun `cache actions do not reuse live AI subtitle actions`() {
