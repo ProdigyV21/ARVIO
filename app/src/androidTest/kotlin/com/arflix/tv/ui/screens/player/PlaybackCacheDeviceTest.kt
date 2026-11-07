@@ -27,6 +27,7 @@ import com.arflix.tv.ui.theme.ArflixTvTheme
 import com.arflix.tv.util.DeviceType
 import com.arflix.tv.util.LocalDeviceType
 import fi.iki.elonen.NanoHTTPD
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -124,6 +125,7 @@ class PlaybackCacheDeviceTest {
         every { idle.idleThresholdMs } returns 900_000L
         every { idle.shouldDiscardPlayer } returns false
         every { model.idleReturnCoordinator } returns idle
+        coEvery { model.iptvVodPolicy(any()) } returns null
         val source = StreamSource("High bitrate fixture", "Fixture", "fixture", "1080p", "",
             url = "http://127.0.0.1:${server.listeningPort}/video.mp4")
         every { model.uiState } returns MutableStateFlow(PlayerUiState(
