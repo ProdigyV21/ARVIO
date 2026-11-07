@@ -80,7 +80,7 @@ export function PartnerDashboard() {
   const signOut = () => { partnerAuth.signOut(); setSignedIn(false); setProof(""); setOrg(null); setLoaded(false); setCodeSent(false); };
 
   if (!signedIn || !proof || !loaded || !org) return <main className="partner-app partner-auth">
-    <a className="partner-wordmark" href="/"><img src="/arvio-icon-192.png" alt="" />ARVIO <span>Partner</span></a>
+    <a className="partner-wordmark" href="/"><img src="/arvio-icon-192.png" alt="" /><img className="partner-logo-wordmark" src="/arvio-wordmark.svg" alt="ARVIO" /> <span>Partner</span></a>
     <section className="partner-auth-form">
       <ShieldCheck size={28} className="partner-accent" />
       <h1>{!signedIn ? "Partner sign-in" : !proof ? "Verify your sign-in" : !loaded ? "Loading workspace" : "Create your workspace"}</h1>
@@ -116,7 +116,7 @@ export function PartnerDashboard() {
   </>;
   return <div className="partner-app partner-shell">
     <aside className="partner-sidebar">
-      <a href="/partner" className="partner-wordmark"><img src="/arvio-icon-192.png" alt="" />ARVIO <span>Partner</span></a>
+      <a href="/partner" className="partner-wordmark"><img src="/arvio-icon-192.png" alt="" /><img className="partner-logo-wordmark" src="/arvio-wordmark.svg" alt="ARVIO" /> <span>Partner</span></a>
       <div className="partner-workspace"><span className="partner-avatar">{org.name.slice(0, 1).toUpperCase()}</span><div><strong>{org.name}</strong><small>Administrator workspace</small></div></div>
       <nav aria-label="Partner navigation">{sections.map(([name, Icon]) => <button key={name} aria-current={section === name ? "page" : undefined} onClick={() => { setSection(name); setQuery(""); setFilter("all"); setSelected([]); }}><Icon size={18} /><span>{name}</span>{name === "Customers" && <small>{org.customers.length}</small>}</button>)}</nav>
       <div className="partner-sidebar-bottom"><Badge status={org.billing.status}>{org.billing.source === "pilot" ? "Private pilot" : org.billing.status === "active" ? "Membership active" : org.billing.status === "grace" ? "Payment overdue" : "Membership required"}</Badge><small>{partnerAuth.session?.email}</small><button className="partner-text" onClick={signOut}><LogOut size={16} />Sign out</button></div>

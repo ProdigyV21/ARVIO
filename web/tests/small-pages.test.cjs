@@ -27,6 +27,10 @@ test('/report says Copied only when copying worked, and explains a bare visit', 
   assert.match(source, /setCopied\(ok \? "copied" : "failed"\)/);
   assert.match(source, /if \(ok\) setTimeout/);
   assert.match(source, /const bare = /);
+  assert.match(source, /copied === "failed"/);
+  assert.match(source, /role="alert"/);
+  assert.match(source, /aria-label=\{translateUi\("Report text"\)\}/);
+  assert.match(source, /currentTarget\.select\(\)/);
   assert.doesNotMatch(source, /phone clipboard/);
   assert.match(read('app/report/layout.tsx'), /title:/);
 });

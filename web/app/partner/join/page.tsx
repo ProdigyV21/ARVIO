@@ -30,7 +30,7 @@ export default function JoinPartner() {
     catch (caught) { setError(caught instanceof Error ? caught.message : "Sign-in failed"); }
     finally { setBusy(false); }
   }
-  return <main className="partner-app partner-auth"><a href="/" className="partner-wordmark"><img src="/arvio-icon-192.png" alt="" />ARVIO <span>Invitation</span></a><section className="partner-auth-form">
+  return <main className="partner-app partner-auth"><a href="/" className="partner-wordmark"><img src="/arvio-icon-192.png" alt="" /><img className="partner-logo-wordmark" src="/arvio-wordmark.svg" alt="ARVIO" /> <span>Invitation</span></a><section className="partner-auth-form">
     {accepted ? <><Check size={30} className="partner-accent" /><h1>You are connected</h1><p>Your compatible ARVIO devices will receive your managed configuration after signing in. Your personal lists and history remain yours.</p><a className="partner-primary partner-secondary" href="/">Open ARVIO</a></> : <>
       <ShieldCheck size={30} className="partner-accent" /><h1>{details ? `Join ${details.name}` : "Your ARVIO invitation"}</h1>
       {error && <div role="alert" className="partner-message error">{error}</div>}
