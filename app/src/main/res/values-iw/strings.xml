@@ -2083,4 +2083,31 @@
     <string name="settings_connect_wetrakr">חיבור WeTrakr</string>
     <string name="settings_wetrakr_copy_open">העתקת קוד ופתיחת WeTrakr</string>
     <string name="settings_iptv_max_reached">הושג המקסימום של 10 רשימות IPTV</string>
+    <!-- Playback cache (on-disk cache of streamed video for instant rewinds) -->
+    <string name="settings_section_playback_cache">מטמון הפעלה</string>
+    <string name="playback_cache_size">גודל מטמון ההפעלה</string>
+    <string name="playback_cache_size_desc">וידאו שנשמר על ידי הפעלה עם מטמון לצורך הרצה לאחור מקומית. בשימוש: %1$s</string>
+    <string name="playback_cache_limited">%1$s (שטח פנוי)</string>
+    <string name="clear_playback_cache">ניקוי מטמון ההפעלה</string>
+    <string name="clear_playback_cache_desc">מחיקת כל נתוני הווידאו שבמטמון. תוכן שמופעל כעת פשוט יורד מחדש.</string>
+    <string name="playback_cache_cleared">מטמון ההפעלה נוקה</string>
+    <string name="settings_help_playback_cache_desc">הפעלה עם מטמון שומרת וידאו לצורך הרצה לאחור מקומית. סטרימים גדולים או מרוחקים עשויים לעקוף את המטמון לשיפור הביצועים. הגודל מותאם לאחסון הזמין, במטרה להשאיר 1 GB פנוי.</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">כתוביות AI</string>
+    <string name="live_ai_subs_preparing">מכין כתוביות… %1$d שנ׳</string>
+    <string name="live_ai_subs_no_key">כתוביות AI דורשות מפתח API של Google Gemini (הגדרות ← כתוביות AI)</string>
+    <string name="live_ai_subs_invalid_key">כתוביות AI: מפתח ה-API של Gemini נדחה</string>
+    <string name="live_ai_subs_quota">כתוביות AI הושהו: מכסת Gemini מוצתה</string>
+    <string name="live_ai_subs_offline">כתוביות AI: אין חיבור לאינטרנט</string>
+    <string name="live_ai_subs_unsupported">כתוביות AI אינן נתמכות בערוץ זה</string>
+    <string name="live_ai_subs_memory_capped">לא ניתן לעכב ערוץ זה מספיק; ייתכן שחלק מהכתוביות יופיעו באיחור</string>
+    <string name="live_ai_subs_title">כתוביות AI לשידור חי</string>
+    <string name="live_ai_subs_desc">מוסיף כתוביות AI לתפריט הכתוביות של ערוצי שידור חי: Gemini מתמלל ומתרגם לשפת הכתוביות של הפרופיל שלך. השידור החי מתעכב בכמה שניות כדי שהשורות יופיעו בזמן.</string>
+    <string name="live_ai_subs_key_valid">מפתח ה-API של Gemini תקין</string>
+    <string name="live_ai_subs_key_rejected">Gemini דחה את מפתח ה-API הזה</string>
+    <string name="live_ai_subs_key_unchecked">לא ניתן לבדוק את מפתח ה-API (אין חיבור?)</string>
+    <string name="live_ai_subs_needs_key">יש להוסיף תחילה מפתח API של Google Gemini</string>
+    <string name="live_ai_subs_auto_title">תרגום אוטומטי בתחילת ערוץ</string>
+    <string name="live_ai_subs_auto_desc">כל ערוץ מתחיל עם כתוביות AI מופעלות, ללא צורך לבחור בהן בתפריט הכתוביות</string>
 </resources>
