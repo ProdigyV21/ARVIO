@@ -1639,4 +1639,22 @@
     <string name="discord_rpc_help_desc">Muestra tu estado de visionado en tu perfil de Discord.</string>
     <string name="live_sources_empty">No se encontraron otras fuentes para este canal.</string>
     <string name="live_sources_failed">No se pudieron cargar las fuentes. Por favor, inténtalo de nuevo.</string>
+
+    <!-- Live TV AI subtitles -->
+    <string name="live_ai_subtitles">Subtítulos IA</string>
+    <string name="live_ai_subs_preparing">Preparando subtítulos… %1$d s</string>
+    <string name="live_ai_subs_no_key">Los subtítulos IA necesitan una clave de API de Google Gemini (Ajustes → Subtítulos IA)</string>
+    <string name="live_ai_subs_invalid_key">Subtítulos IA: se rechazó la clave de API de Gemini</string>
+    <string name="live_ai_subs_quota">Subtítulos IA en pausa: se alcanzó la cuota de Gemini</string>
+    <string name="live_ai_subs_offline">Subtítulos IA: sin conexión a internet</string>
+    <string name="live_ai_subs_unsupported">Subtítulos IA no disponibles en este canal</string>
+    <string name="live_ai_subs_memory_capped">Este canal no se puede retrasar lo suficiente; algunos subtítulos pueden llegar tarde</string>
+    <string name="live_ai_subs_title">Subtítulos IA en TV en directo</string>
+    <string name="live_ai_subs_desc">Añade subtítulos IA al menú de subtítulos de los canales en directo: Gemini transcribe y traduce al idioma de subtítulos del perfil. La TV en directo se retrasa unos segundos para que las líneas lleguen a tiempo.</string>
+    <string name="live_ai_subs_key_valid">La clave de API de Gemini funciona</string>
+    <string name="live_ai_subs_key_rejected">Gemini rechazó esta clave de API</string>
+    <string name="live_ai_subs_key_unchecked">No se pudo comprobar la clave (¿sin conexión?)</string>
+    <string name="live_ai_subs_needs_key">Primero añade una clave de API de Google Gemini</string>
+    <string name="live_ai_subs_auto_title">Traducir automáticamente al iniciar un canal</string>
+    <string name="live_ai_subs_auto_desc">Cada canal empieza con subtítulos IA, sin elegirlos en el menú de subtítulos</string>
 </resources>

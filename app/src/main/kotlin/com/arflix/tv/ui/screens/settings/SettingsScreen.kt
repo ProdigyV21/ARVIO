@@ -339,7 +339,7 @@ private fun tvGeneralRowsForSection(section: String): List<Int> {
         "subtitles" -> listOf(4, 5, 6, 7, 42, 8, 38) +
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
-        "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33)
+        "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
         "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
@@ -1486,6 +1486,7 @@ fun SettingsScreen(
                                                 31 -> viewModel.setSubtitleRemoveHearingImpaired(!uiState.subtitleRemoveHearingImpaired)
                                                 32 -> showAiApiKeyDialog = true
                                                 33 -> viewModel.startAiKeyServer()
+                                                51, 52 -> onLiveAiSubsRowClick(context, tvGeneralRowsForSection(currentSection)[contentFocusIndex])
                                                 34 -> viewModel.cycleTrailerDelay()
                                                 47 -> viewModel.cycleGuideRowCount()
                                                 37 -> viewModel.setTrailerInCards(!uiState.trailerInCards)
@@ -5521,6 +5522,7 @@ private fun MobileSettingsSubPage(
                         showDivider = false,
                         onClick = onSubtitleAiQrClick
                     )
+                    LiveAiSubsMobileRows()
                     if (uiState.subtitleAiEnabled) {
                         Text(
                             text = when (uiState.subtitleAiModel) {
@@ -6967,6 +6969,7 @@ private fun TvGeneralSettingsRows(
                 37 -> SettingsToggleRow(stringResource(R.string.trailer_in_cards), stringResource(R.string.trailer_in_cards_desc), trailerInCards, focusedIndex == localIndex, onTrailerInCardsToggle, Modifier.settingsFocusSlot(localIndex))
                 49 -> SettingsToggleRow(stringResource(R.string.netflix_home_style), stringResource(R.string.netflix_home_style_desc), netflixHomeStyle, focusedIndex == localIndex, onNetflixHomeStyleToggle, Modifier.settingsFocusSlot(localIndex))
                 50 -> SettingsToggleRow(stringResource(R.string.watchlist_on_home), stringResource(R.string.watchlist_on_home_desc), watchlistOnHome, focusedIndex == localIndex, onWatchlistOnHomeToggle, Modifier.settingsFocusSlot(localIndex))
+                in LIVE_AI_SUBS_ROWS -> LiveAiSubsTvRow(rowId, focusedIndex == localIndex, Modifier.settingsFocusSlot(localIndex))
             }
         }
     }

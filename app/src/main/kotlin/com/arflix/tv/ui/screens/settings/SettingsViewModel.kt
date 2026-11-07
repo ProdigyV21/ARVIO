@@ -113,6 +113,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -655,6 +657,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     init {
+        // Live TV AI subtitles settings are written by their own rows (LiveAiSubsSettingsRows);
+        // push them to the cloud like every other setting, once they settle.
+        viewModelScope.launch {
+            com.arflix.tv.ui.screens.tv.live.aisubs.LiveAiSubsPrefs.flow(context)
+                .map { listOf(it.enabled, it.autoStart) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { syncLocalStateToCloud(silent = true) }
+        }
         _uiState.value = _uiState.value.copy(
             diagnosticsSharingEnabled = DiagnosticsManager.isReportingEnabled(context),
             usageStatisticsEnabled = DiagnosticsManager.isUsageEnabled(context)
