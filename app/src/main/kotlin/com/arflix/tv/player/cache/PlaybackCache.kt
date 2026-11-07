@@ -41,34 +41,16 @@ object PlaybackCache {
     fun get(context: Context): SimpleCache = instance ?: synchronized(this) {
         instance ?: run {
             val cacheDir = dir(context)
-            val existingBytes = calculateInitialCacheBytes(cacheDir)
+            val limitGb = limitGb(context)
             val e = AdjustableLruCacheEvictor(
-                maxBytes = effectiveLimitBytes(
-                    limitGb = limitGb(context),
-                    freeBytes = runCatching { cacheDir.usableSpace }.getOrDefault(0L),
-                    usedBytes = existingBytes
-                ),
-                userLimitGb = limitGb(context),
+                maxBytes = limitGb.toLong() shl 30,
+                userLimitGb = limitGb,
                 cacheDir = cacheDir
             )
             evictor = e
             SimpleCache(cacheDir, e, StandaloneDatabaseProvider(context.applicationContext)).also { instance = it }
         }
     }
-
-    /**
-     * Inspects existing cache file sizes before SimpleCache opens, so startup does not underestimate
-     * used bytes when calculating free space limits.
-     */
-    internal fun calculateInitialCacheBytes(cacheDir: File): Long = runCatching {
-        var size = 0L
-        cacheDir.listFiles()?.forEach { file ->
-            if (file.isFile && !file.name.endsWith(".uid")) {
-                size += file.length()
-            }
-        }
-        size
-    }.getOrDefault(0L)
 
     fun limitGb(context: Context): Int =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY_LIMIT_GB, DEFAULT_LIMIT_GB)
@@ -136,9 +118,13 @@ object PlaybackCache {
 class AdjustableLruCacheEvictor(
     @Volatile var maxBytes: Long = PlaybackCache.MIN_BYTES,
     @Volatile var userLimitGb: Int = PlaybackCache.DEFAULT_LIMIT_GB,
-    private val cacheDir: File? = null
+    cacheDir: File? = null,
+    private val freeBytes: (() -> Long)? = cacheDir?.let { dir -> { dir.usableSpace } },
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) : CacheEvictor {
-    private var lastStorageCheckTimeMs = 0L
+    private var lastStorageCheckTimeMs: Long? = null
+    private var initialized = false
+    private var initializingCache: Cache? = null
 
     companion object {
         internal const val STORAGE_CHECK_INTERVAL_MS = 5_000L
@@ -151,16 +137,29 @@ class AdjustableLruCacheEvictor(
     private var currentSize = 0L
 
     override fun requiresCacheSpanTouches(): Boolean = true
-    override fun onCacheInitialized() {}
+    override fun onCacheInitialized() {
+        initialized = true
+        // SimpleCache reports all valid spans (including its numbered subdirectories) before
+        // this callback. Trimming while those callbacks are still arriving undercounts usage.
+        initializingCache?.let { cache ->
+            checkAndRefreshLimit(force = true)
+            evict(cache, 0)
+        }
+        initializingCache = null
+    }
 
     override fun onStartFile(cache: Cache, key: String, position: Long, length: Long) {
         checkAndRefreshLimit()
-        if (length != C.LENGTH_UNSET.toLong()) evict(cache, length)
+        evict(cache, if (length != C.LENGTH_UNSET.toLong()) length else 0)
     }
 
     override fun onSpanAdded(cache: Cache, span: CacheSpan) {
         spans.add(span)
         currentSize += span.length
+        if (!initialized) {
+            initializingCache = cache
+            return
+        }
         checkAndRefreshLimit()
         evict(cache, 0)
     }
@@ -182,11 +181,12 @@ class AdjustableLruCacheEvictor(
      * consumption from other apps enforces the 1 GB reserve during continuous cache usage.
      * Throttle checks to avoid frequent disk stats calls on hot loops.
      */
-    internal fun checkAndRefreshLimit(nowMs: Long = System.currentTimeMillis()) {
-        val dir = cacheDir ?: return
-        if (nowMs - lastStorageCheckTimeMs < STORAGE_CHECK_INTERVAL_MS) return
+    internal fun checkAndRefreshLimit(nowMs: Long = clockMs(), force: Boolean = false) {
+        val available = freeBytes ?: return
+        if (!initialized) return
+        if (!force && lastStorageCheckTimeMs?.let { nowMs - it < STORAGE_CHECK_INTERVAL_MS } == true) return
         lastStorageCheckTimeMs = nowMs
-        val free = runCatching { dir.usableSpace }.getOrDefault(0L)
+        val free = runCatching { available() }.getOrDefault(0L)
         maxBytes = PlaybackCache.effectiveLimitBytes(
             limitGb = userLimitGb,
             freeBytes = free,

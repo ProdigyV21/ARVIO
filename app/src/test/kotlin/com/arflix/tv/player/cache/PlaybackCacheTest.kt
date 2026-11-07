@@ -92,6 +92,7 @@ class PlaybackCacheTest {
     @Test
     fun `evictor removes least recently used spans when over the limit`() {
         val evictor = AdjustableLruCacheEvictor(maxBytes = 300)
+        evictor.onCacheInitialized()
         val cache = FakeCache().apply { this.evictor = evictor }
         val oldest = span(position = 0, length = 100, touched = 1)
         val middle = span(position = 100, length = 100, touched = 2)
@@ -108,6 +109,7 @@ class PlaybackCacheTest {
     @Test
     fun `shrinking the limit trims at once`() {
         val evictor = AdjustableLruCacheEvictor(maxBytes = 1_000)
+        evictor.onCacheInitialized()
         val cache = FakeCache().apply { this.evictor = evictor }
         val a = span(position = 0, length = 100, touched = 1)
         val b = span(position = 100, length = 100, touched = 2)
@@ -122,6 +124,7 @@ class PlaybackCacheTest {
     @Test
     fun `touching a span makes it most recently used`() {
         val evictor = AdjustableLruCacheEvictor(maxBytes = 200)
+        evictor.onCacheInitialized()
         val cache = FakeCache().apply { this.evictor = evictor }
         val a = span(position = 0, length = 100, touched = 1)
         val b = span(position = 100, length = 100, touched = 2)
@@ -136,77 +139,49 @@ class PlaybackCacheTest {
 
     @Test
     fun `restarting with populated cache accounts for existing size when calculating startup limit`() {
-        val tempDir = java.nio.file.Files.createTempDirectory("cache_test").toFile()
-        try {
-            // Create dummy cache files totaling 3 KB
-            val file1 = java.io.File(tempDir, "0.1.v3.exo").apply {
-                writeBytes(ByteArray(1024))
-            }
-            val file2 = java.io.File(tempDir, "1.1.v3.exo").apply {
-                writeBytes(ByteArray(2048))
-            }
-            // Ignored UID file
-            java.io.File(tempDir, "cache.uid").apply {
-                writeBytes(ByteArray(512))
-            }
-
-            val measured = PlaybackCache.calculateInitialCacheBytes(tempDir)
-            assertEquals(3072L, measured)
-
-            // Simulate scenario from review: 8 GB already cached, 3 GB free, 10 GB user limit
-            // Without existing cache counted: effective limit would be (3 GB + 0 - 1 GB) = 2 GB (wrongly evicting 6 GB)
-            // With existing cache counted: maxAllowed = 3 GB + 8 GB - 1 GB = 10 GB, effectiveLimit = 10 GB
-            val initialLimit = PlaybackCache.effectiveLimitBytes(
-                limitGb = 10,
-                freeBytes = 3 * gb,
-                usedBytes = 8 * gb
-            )
-            assertEquals(10 * gb, initialLimit)
-        } finally {
-            tempDir.deleteRecursively()
+        var reads = 0
+        val evictor = AdjustableLruCacheEvictor(
+            maxBytes = 10 * gb,
+            userLimitGb = 10,
+            freeBytes = { reads++; 3 * gb },
+            clockMs = { 10_000L },
+        )
+        val cache = FakeCache().apply { this.evictor = evictor }
+        repeat(8) { index ->
+            evictor.onSpanAdded(cache, span(index * gb, gb, index.toLong()))
+            assertTrue(cache.removed.isEmpty())
         }
+        assertEquals(0, reads)
+        evictor.onCacheInitialized()
+        assertEquals(1, reads)
+        assertEquals(10 * gb, evictor.maxBytes)
+        assertTrue(cache.removed.isEmpty())
     }
 
     @Test
     fun `evictor updates limit when free space decreases during normal playback use`() {
-        val tempDir = java.nio.file.Files.createTempDirectory("cache_evictor_test").toFile()
-        try {
-            val cache = FakeCache()
-            cache.evictor = null
+        var free = 12 * gb
+        var now = 10_000L
+        var reads = 0
+        val evictor = AdjustableLruCacheEvictor(
+            maxBytes = 10 * gb, userLimitGb = 10,
+            freeBytes = { reads++; free }, clockMs = { now },
+        )
+        val cache = FakeCache().apply { this.evictor = evictor }
+        val oldest = span(0, gb, 1)
+        evictor.onSpanAdded(cache, oldest)
+        evictor.onSpanAdded(cache, span(gb, gb, 2))
+        evictor.onCacheInitialized()
+        assertEquals(10 * gb, evictor.maxBytes)
 
-            // Initially user selected 10 GB limit, plenty of space available
-            val evictor = AdjustableLruCacheEvictor(
-                maxBytes = 10 * gb,
-                userLimitGb = 10,
-                cacheDir = tempDir
-            )
-
-            val a = span(position = 0, length = 100, touched = 1)
-            val b = span(position = 100, length = 100, touched = 2)
-            evictor.onSpanAdded(cache, a)
-            evictor.onSpanAdded(cache, b)
-            assertTrue(cache.removed.isEmpty())
-
-            // Simulate external storage consumption dropping free space to 500 MB (below 1 GB reserve)
-            // Effective limit calculation with usedBytes=200, freeBytes=500 MB:
-            // maxAllowed = (500 MB + 200 - 1 GB) -> below MIN_BYTES -> coerced to MIN_BYTES (256 MB)
-            val freeBytesReduced = 500L * 1024L * 1024L
-            val newLimit = PlaybackCache.effectiveLimitBytes(
-                limitGb = evictor.userLimitGb,
-                freeBytes = freeBytesReduced,
-                usedBytes = 200L
-            )
-            assertEquals(PlaybackCache.MIN_BYTES, newLimit)
-
-            // Direct check that checkAndRefreshLimit updates maxBytes
-            // When free space shrinks such that limit drops to 150 bytes:
-            cache.evictor = evictor
-            evictor.maxBytes = 150
-            evictor.trim(cache)
-            assertEquals(listOf(a), cache.removed)
-        } finally {
-            tempDir.deleteRecursively()
-        }
+        free = gb / 2
+        now += AdjustableLruCacheEvictor.STORAGE_CHECK_INTERVAL_MS
+        evictor.onStartFile(cache, "key", 2 * gb, androidx.media3.common.C.LENGTH_UNSET.toLong())
+        assertEquals(3 * gb / 2, evictor.maxBytes)
+        assertEquals(listOf(oldest), cache.removed)
+        assertEquals(2, reads)
+        evictor.onStartFile(cache, "key", 2 * gb, 1L)
+        assertEquals(2, reads)
     }
 
     private fun span(position: Long, length: Long, touched: Long) =
