@@ -120,7 +120,7 @@ ${firebase ? `**Report reference:** \`arvio_report_id=${id}\`` : ""}
                 aria-label={translateUi("Report text")}
                 value={reportText}
                 onFocus={(event) => event.currentTarget.select()}
-                style={{ width: "100%", boxSizing: "border-box", minHeight: "180px", marginBottom: "20px", padding: "12px", border: "1px solid #373d40", borderRadius: "7px", background: "#000", color: "#f6f7f7", fontSize: "13px" }}
+                style={{ width: "100%", boxSizing: "border-box", minHeight: "180px", marginBottom: "20px", padding: "12px", border: "1px solid #373d40", borderRadius: "7px", background: "#000", color: "#f6f7f7", fontSize: "16px" }}
               />
             </>}
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>

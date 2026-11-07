@@ -228,7 +228,7 @@ export default function NotFound() {
                 textDecoration: "none"
               }}
             >
-              Discord Community <span aria-hidden="true">&nearr;</span>
+              Discord Community <span aria-hidden="true">&#8599;</span>
             </a>
           </div>
 

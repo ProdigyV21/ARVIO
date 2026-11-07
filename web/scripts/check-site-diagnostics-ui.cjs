@@ -126,6 +126,7 @@ async function main() {
         const response = await page.goto(base + '/pr877-unknown-route', { waitUntil: 'load' });
         assert.equal(response.status(), 404);
         assert.ok((await page.getByRole('heading', { level: 1 }).innerText()).trim());
+        assert.doesNotMatch(await page.locator('body').innerText(), /&nearr;/);
         await fit(page);
         await page.screenshot({ path: path.join(evidence, `${name}-${surface}-404.png`), fullPage: true });
       }
