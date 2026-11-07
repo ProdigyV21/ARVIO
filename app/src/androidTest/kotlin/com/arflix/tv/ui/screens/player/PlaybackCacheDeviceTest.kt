@@ -20,6 +20,7 @@ import androidx.media3.ui.PlayerView
 import androidx.test.platform.app.InstrumentationRegistry
 import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StreamSource
+import com.arflix.tv.data.repository.IdleReturnCoordinator
 import com.arflix.tv.player.cache.AdjustableLruCacheEvictor
 import com.arflix.tv.player.cache.PlaybackCache
 import com.arflix.tv.ui.theme.ArflixTvTheme
@@ -118,6 +119,11 @@ class PlaybackCacheDeviceTest {
             }
         }.apply { start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
         val model = mockk<PlayerViewModel>(relaxed = true)
+        val idle = mockk<IdleReturnCoordinator>(relaxed = true)
+        every { idle.idleReturns } returns MutableStateFlow(0L)
+        every { idle.idleThresholdMs } returns 900_000L
+        every { idle.shouldDiscardPlayer } returns false
+        every { model.idleReturnCoordinator } returns idle
         val source = StreamSource("High bitrate fixture", "Fixture", "fixture", "1080p", "",
             url = "http://127.0.0.1:${server.listeningPort}/video.mp4")
         every { model.uiState } returns MutableStateFlow(PlayerUiState(
