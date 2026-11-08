@@ -720,7 +720,9 @@ class CatalogRepository @Inject constructor(
             addonId = addonId,
             addonCatalogType = normalizedType,
             addonCatalogId = catalogId,
-            addonName = addon.name
+            addonName = addon.name,
+            clientDelegate = catalog.clientDelegate,
+            clientFilter = catalog.clientFilter
         )
     }
 

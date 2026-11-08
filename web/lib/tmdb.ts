@@ -369,7 +369,7 @@ async function loadCatalogUnlimited(
   }
 
   if (catalog.sourceType === "addon") {
-    const items = await loadAddonCatalog(catalog, addons, language, limit);
+    const items = await loadAddonCatalog(catalog, addons, language, limit, homeServers);
     return {
       id: catalog.id,
       title: catalog.name,
@@ -768,15 +768,29 @@ type StremioMeta = {
   year?: string | number;
 };
 
-async function loadAddonCatalog(catalog: CatalogConfig, addons: InstalledAddon[], language: string, limit?: number) {
+async function loadAddonCatalog(
+  catalog: CatalogConfig,
+  addons: InstalledAddon[],
+  language: string,
+  limit?: number,
+  homeServers: HomeServerConfig[] = []
+) {
   const addon = addons.find((candidate) =>
     candidate.id === catalog.addonId ||
     candidate.name === catalog.addonName ||
     candidate.manifestUrl === catalog.sourceUrl
   );
-  const manifestUrl = addon?.manifestUrl || catalog.sourceUrl;
   const requestedType = catalog.addonCatalogType || (catalog.mediaType === "tv" ? "series" : catalog.mediaType === "movie" ? "movie" : "movie");
   const catalogId = catalog.addonCatalogId || catalog.sourceRef || catalog.id;
+
+  // Generic Client-Side Delegation resolution
+  const catalogDecl = (addon?.catalogs ?? []).find(c => c.id === catalogId);
+  const delegateUri = catalog.clientDelegate || catalogDecl?.clientDelegate;
+  if (delegateUri) {
+    return loadClientDelegatedCatalog(delegateUri, catalog, language, limit, homeServers);
+  }
+
+  const manifestUrl = addon?.manifestUrl || catalog.sourceUrl;
   // Addons route by the manifest's exact spelling ("Live Docs"); collections may lower-case it.
   const catalogType = (addon?.catalogs ?? []).find(c => c.id === catalogId &&
     String(c.type).toLowerCase() === requestedType.toLowerCase())?.type || requestedType;
@@ -789,6 +803,62 @@ async function loadAddonCatalog(catalog: CatalogConfig, addons: InstalledAddon[]
   const metas = (payload.metas ?? []).slice(0, limit ?? Infinity);
   const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon, addons, catalogType).catch(() => null)));
   return hydrated.filter((item): item is MediaItem => Boolean(item));
+}
+
+async function loadClientDelegatedCatalog(
+  delegateUri: string,
+  catalog: CatalogConfig,
+  language: string,
+  limit?: number,
+  homeServers: HomeServerConfig[] = []
+): Promise<MediaItem[]> {
+  try {
+    const raw = delegateUri.trim();
+    const scheme = raw.split(":")[0]?.toLowerCase();
+    const rest = raw.slice(scheme.length + 1);
+    const [action, queryStr] = rest.split("?");
+    const params = new URLSearchParams(queryStr || "");
+    const typeParam = params.get("type")?.toLowerCase() || (catalog.mediaType === "tv" ? "tv" : "movie");
+    const mediaType: MediaType = typeParam === "tv" || typeParam === "series" ? "tv" : "movie";
+
+    if (scheme === "trakt") {
+      if (action === "watchlist") {
+        const { getWatchlist } = await import("./cloud");
+        const items = await getWatchlist(language).catch(() => []);
+        const filtered = items.filter(i => typeParam === "all" || i.mediaType === mediaType);
+        return limit ? filtered.slice(0, limit) : filtered;
+      }
+    }
+
+    if (scheme === "simkl") {
+      if (action === "plantowatch" || action === "plan") {
+        const { getWatchlist } = await import("./cloud");
+        const items = await getWatchlist(language).catch(() => []);
+        const filtered = items.filter(i => typeParam === "all" || i.mediaType === mediaType);
+        return limit ? filtered.slice(0, limit) : filtered;
+      }
+    }
+
+    if (scheme === "homeserver") {
+      const { loadHomeServerRows, loadHomeServerLibraryItems } = await import("./homeserver");
+      if (catalog.sourceUrl?.startsWith("hslib:")) {
+        return await loadHomeServerLibraryItems(homeServers, catalog.sourceUrl);
+      }
+      const rows = await loadHomeServerRows(homeServers);
+      const row = rows.find(r => r.title.toLowerCase().includes(typeParam) || r.id.toLowerCase().includes(typeParam));
+      return row?.items ?? [];
+    }
+
+    if (scheme === "hybrid") {
+      const { getWatchlist } = await import("./cloud");
+      const items = await getWatchlist(language).catch(() => []);
+      const filtered = items.filter(i => typeParam === "all" || i.mediaType === mediaType);
+      return limit ? filtered.slice(0, limit) : filtered;
+    }
+  } catch (e) {
+    console.warn("Client delegation resolution error:", e);
+  }
+  return [];
 }
 
 async function hydrateAddonMeta(

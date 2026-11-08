@@ -172,6 +172,8 @@ export interface CatalogConfig {
   collectionHideTitle?: boolean;
   collectionSources?: CollectionSourceConfig[];
   requiredAddonUrls?: string[];
+  clientDelegate?: string | null;
+  clientFilter?: string | null;
 }
 
 export interface CollectionSourceConfig {
@@ -287,6 +289,8 @@ export interface AddonCatalog {
   id: string;
   name: string;
   extra?: Array<{ name: string; isRequired?: boolean; options?: string[] }>;
+  clientDelegate?: string;
+  clientFilter?: string;
 }
 
 export interface AuthSession {

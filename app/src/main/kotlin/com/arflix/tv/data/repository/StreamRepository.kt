@@ -1119,7 +1119,9 @@ class StreamRepository @Inject constructor(
                         isRequired = extra.isRequired ?: false,
                         options = extra.options
                     )
-                }
+                },
+                clientDelegate = catalog.clientDelegate,
+                clientFilter = catalog.clientFilter
             )
         } ?: emptyList()
 

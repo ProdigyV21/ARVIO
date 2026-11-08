@@ -127,7 +127,9 @@ data class CatalogConfig(
     // Rail grouping key for user-imported collections. Built-in collections leave
     // it null and group by `collectionGroup`; imported ones get one rail per
     // imported collection, so they can't be squeezed into the fixed enum.
-    val collectionRailKey: String? = null
+    val collectionRailKey: String? = null,
+    val clientDelegate: String? = null,
+    val clientFilter: String? = null
 ) : Serializable
 
 /** Key that ties collection tiles to their rail: the imported rail key, else the built-in group. */
