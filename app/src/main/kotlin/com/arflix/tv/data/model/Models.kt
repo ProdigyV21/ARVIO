@@ -367,7 +367,9 @@ data class AddonCatalog(
     val id: String,                                // catalog ID
     val name: String = "",
     val genres: List<String>? = null,
-    val extra: List<AddonCatalogExtra>? = null
+    val extra: List<AddonCatalogExtra>? = null,
+    val clientDelegate: String? = null,
+    val clientFilter: String? = null
 ) : Serializable
 
 data class AddonCatalogExtra(
