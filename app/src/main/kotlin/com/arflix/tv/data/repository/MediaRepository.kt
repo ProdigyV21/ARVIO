@@ -1,7 +1,6 @@
 package com.arflix.tv.data.repository
 
 import android.content.Context
-import android.net.Uri
 import com.arflix.tv.R
 import com.arflix.tv.data.api.TmdbApi
 import com.arflix.tv.data.api.TmdbCastMember
@@ -1001,6 +1000,7 @@ class MediaRepository @Inject constructor(
     }
 
     suspend fun loadCustomCatalog(catalog: CatalogConfig, maxItems: Int = 40): Category? = coroutineScope {
+        if (maxItems <= 0) return@coroutineScope null
         if (catalog.sourceType == CatalogSourceType.PREINSTALLED && catalog.kind == CatalogKind.STANDARD &&
             PartnerCatalogs.isManaged(catalog.id)) {
             val page = loadManagedBuiltInPage(catalog, 0, maxItems)
@@ -1018,6 +1018,12 @@ class MediaRepository @Inject constructor(
         if (catalog.sourceType == CatalogSourceType.YOUTUBE) {
             val items = youTubeCatalogItems(catalog).take(effectiveMaxItems)
             return@coroutineScope if (items.isEmpty()) null else Category(catalog.id, catalog.title, items)
+        }
+        if (catalog.sourceType == CatalogSourceType.ADDON) {
+            resolveAddonClientCatalog(catalog)?.let { delegated ->
+                val page = loadDelegatedCatalogPage(delegated, 0, effectiveMaxItems)
+                return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+            }
         }
         val mediaRefs = when (catalog.sourceType) {
             CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
@@ -1080,6 +1086,9 @@ class MediaRepository @Inject constructor(
                 nextOffset = offset + items.size
             )
         } else if (catalog.sourceType == CatalogSourceType.ADDON) {
+            resolveAddonClientCatalog(catalog)?.let { delegated ->
+                return@coroutineScope loadDelegatedCatalogPage(delegated, offset, effectiveLimit)
+            }
             val page = loadAddonCatalogRefsPage(catalog, offset, effectiveLimit)
             pageRefs = page.refs
             sourceNextOffset = page.nextOffset
@@ -1974,131 +1983,89 @@ class MediaRepository @Inject constructor(
         val nextOffset: Int
     )
 
-    private suspend fun resolveAddonClientDelegate(catalog: CatalogConfig): String? {
-        val descriptor = resolveAddonCatalogDescriptor(catalog) ?: return null
-        val installed = installedAddonsSnapshot()
-        val addon = installed.firstOrNull { it.id == descriptor.addonId } ?: return null
-        return addon.manifest?.catalogs?.firstOrNull { it.id == descriptor.catalogId }?.clientDelegate
+    private suspend fun resolveAddonClientCatalog(catalog: CatalogConfig): CatalogConfig? {
+        val descriptor = resolveAddonCatalogDescriptor(catalog)
+        val declaration = descriptor?.let { ref ->
+            installedAddonsSnapshot().firstOrNull { it.id == ref.addonId && it.isEnabled }
+                ?.manifest?.catalogs?.firstOrNull {
+                    it.id == ref.catalogId && it.type.equals(ref.catalogType, ignoreCase = true)
+                }
+        }
+        val delegate = catalog.clientDelegate ?: declaration?.clientDelegate ?: return null
+        return catalog.copy(clientDelegate = delegate, clientFilter = catalog.clientFilter ?: declaration?.clientFilter)
     }
 
-    private suspend fun loadDelegatedCatalogRefsPage(
-        delegateUri: String,
+    private suspend fun delegatedHomeSource(request: ClientCatalogRequest, catalog: CatalogConfig): String? {
+        val source = request.source ?: listOfNotNull(catalog.sourceRef, catalog.sourceUrl).firstOrNull {
+            it.startsWith("hslib:") || it.startsWith(HomeServerRepository.CATALOG_SOURCE_REF_PREFIX)
+        } ?: throw IllegalArgumentException("Home-server delegation requires an explicit library source")
+        if (source.startsWith(HomeServerRepository.CATALOG_SOURCE_REF_PREFIX)) {
+            require(HomeServerRepository.parseCatalogSourceRef(source) != null) { "Invalid home-server library source" }
+            return source
+        }
+        val parts = source.removePrefix("hslib:").split(":", limit = 2)
+        require(source.startsWith("hslib:") && parts.size == 2) { "Invalid home-server library source" }
+        val server = URLDecoder.decode(parts[0], "UTF-8")
+        val library = URLDecoder.decode(parts[1], "UTF-8")
+        require(server.isNotBlank() && library.isNotBlank())
+        val connection = homeServerRepository.currentConnections().firstOrNull {
+            it.serverId == server || it.connectionId == server
+        } ?: return null
+        return HomeServerRepository.CATALOG_SOURCE_REF_PREFIX +
+            listOf(HomeServerRepository.catalogServerKey(connection), library, "").joinToString("|") {
+                java.net.URLEncoder.encode(it, "UTF-8")
+            }
+    }
+
+    private suspend fun loadDelegatedCatalogPage(
         catalog: CatalogConfig,
         offset: Int,
         limit: Int
-    ): AddonCatalogRefsPage = coroutineScope {
-        val parsedUri = try { Uri.parse(delegateUri) } catch (_: Exception) { null }
-        val scheme = parsedUri?.scheme?.lowercase(Locale.US) ?: ""
-        val targetType = parsedUri?.getQueryParameter("type")?.lowercase(Locale.US)
-
-        val refs: List<Pair<MediaType, Int>> = when (scheme) {
-            "trakt" -> {
-                val action = parsedUri?.schemeSpecificPart?.substringBefore('?')?.trim().orEmpty()
-                when (action) {
-                    "watchlist" -> {
-                        val watchlist = runCatching { traktRepository.getWatchlist() }.getOrDefault(emptyList())
-                        val filtered = when (targetType) {
-                            "movie", "movies" -> watchlist.filter { it.mediaType == MediaType.MOVIE }
-                            "tv", "series", "shows" -> watchlist.filter { it.mediaType == MediaType.TV }
-                            else -> watchlist
-                        }
-                        filtered.map { it.mediaType to it.id }
-                    }
-                    "watched" -> {
-                        val watchedMovies = traktRepository.getWatchedMoviesFromCache()
-                            .map { MediaType.MOVIE to it }
-                        val watchedEpisodes = traktRepository.getWatchedEpisodesFromCache()
-                        val watchedShows = watchedEpisodes.mapNotNull { key ->
-                            val parts = key.split(":")
-                            if (parts.size >= 2 && parts[0] == "show_tmdb") {
-                                parts[1].toIntOrNull()?.let { MediaType.TV to it }
-                            } else null
-                        }.distinct()
-
-                        when (targetType) {
-                            "movie", "movies" -> watchedMovies
-                            "tv", "series", "shows" -> watchedShows
-                            else -> watchedMovies + watchedShows
-                        }
-                    }
-                    else -> emptyList()
-                }
+    ): CategoryPageResult = coroutineScope {
+        val request = ClientCatalogRequest.parse(requireNotNull(catalog.clientDelegate), catalog.addonCatalogType)
+        val filter = ClientCatalogFilter.parse(catalog.clientFilter)
+        if (request.provider == "homeserver") {
+            val source = delegatedHomeSource(request, catalog)
+                ?: return@coroutineScope CategoryPageResult(emptyList(), false)
+            return@coroutineScope clientCatalogPage(offset, limit, request.mediaType, filter) { start, size ->
+                loadHomeServerCatalogPage(catalog.copy(sourceRef = source), start, size)
             }
-            "simkl" -> {
-                val action = parsedUri?.schemeSpecificPart?.substringBefore('?')?.trim().orEmpty()
-                when (action) {
-                    "plantowatch", "plan" -> {
-                        val items = runCatching { simklSyncService?.getWatchlistItems() }.getOrNull().orEmpty()
-                        val filtered = when (targetType) {
-                            "movie", "movies" -> items.filter { it.isMovie }
-                            "tv", "series", "shows", "anime" -> items.filter { !it.isMovie }
-                            else -> items
-                        }
-                        filtered.map { (if (it.isMovie) MediaType.MOVIE else MediaType.TV) to it.id }
-                    }
-                    "completed" -> {
-                        val watchedMovies = runCatching { simklSyncService?.getWatchedMovies() }.getOrNull().orEmpty()
-                            .map { MediaType.MOVIE to it }
-                        val watchedEpisodes = runCatching { simklSyncService?.getWatchedEpisodes() }.getOrNull().orEmpty()
-                        val watchedShows = watchedEpisodes.mapNotNull { key ->
-                            val parts = key.split(":")
-                            if (parts.size >= 2 && parts[0] == "show_tmdb") {
-                                parts[1].toIntOrNull()?.let { MediaType.TV to it }
-                            } else null
-                        }.distinct()
-                        when (targetType) {
-                            "movie", "movies" -> watchedMovies
-                            "tv", "series", "shows" -> watchedShows
-                            else -> watchedMovies + watchedShows
-                        }
-                    }
-                    else -> emptyList()
-                }
-            }
-            "homeserver" -> {
-                val page = runCatching {
-                    homeServerRepository.loadCatalogItems(
-                        sourceRef = catalog.sourceRef,
-                        offset = offset,
-                        limit = limit
-                    )
-                }.getOrNull()
-                val items = page?.items.orEmpty()
-                val mapped = items.mapNotNull { serverItem ->
-                    serverItem.tmdbId?.let { tmdbId ->
-                        val mType = if (serverItem.mediaType == "tv" || serverItem.mediaType == "series") MediaType.TV else MediaType.MOVIE
-                        mType to tmdbId
-                    }
-                }
-                return@coroutineScope AddonCatalogRefsPage(
-                    refs = mapped,
-                    hasMore = page?.hasMore ?: false,
-                    nextOffset = page?.nextOffset ?: (offset + mapped.size)
-                )
-            }
-            "hybrid" -> {
-                val sourceTracker = parsedUri?.getQueryParameter("tracker") ?: "trakt"
-                val baseItems: List<Pair<MediaType, Int>> = if (sourceTracker == "trakt") {
-                    val watchlist = runCatching { traktRepository.getWatchlist() }.getOrDefault(emptyList())
-                    val filtered = when (targetType) {
-                        "movie", "movies" -> watchlist.filter { it.mediaType == MediaType.MOVIE }
-                        "tv", "series", "shows" -> watchlist.filter { it.mediaType == MediaType.TV }
-                        else -> watchlist
-                    }
-                    filtered.map { it.mediaType to it.id }
-                } else emptyList()
-
-                baseItems
-            }
-            else -> emptyList()
         }
+        val seeds = when (request.provider) {
+            "trakt" -> when (request.action) {
+                "watchlist" -> traktRepository.getWatchlist()
+                else -> {
+                    val movies = if (request.mediaType != MediaType.TV) traktRepository.getWatchedMovies()
+                        .filter { it > 0 }.map { MediaItem(it, "", mediaType = MediaType.MOVIE) } else emptyList()
+                    val shows = if (request.mediaType != MediaType.MOVIE) traktRepository.getWatchedEpisodes()
+                        .mapNotNull { key ->
+                            key.takeIf { it.startsWith("show_tmdb:") }?.split(":")?.getOrNull(1)
+                                ?.toIntOrNull()?.takeIf { it > 0 }?.let { MediaItem(it, "", mediaType = MediaType.TV) }
+                        } else emptyList()
+                    movies + shows
+                }
+            }
+            "simkl" -> requireNotNull(simklSyncService) { "Simkl is unavailable" }.getLibraryItems(request.action)
+            else -> error("Unsupported client delegate")
+        }.filter { it.id > 0 && (request.mediaType == null || it.mediaType == request.mediaType) }
+            .distinctBy { it.mediaType to it.id }
 
-        val paged = refs.drop(offset).take(limit)
-        AddonCatalogRefsPage(
-            refs = paged,
-            hasMore = offset + paged.size < refs.size,
-            nextOffset = offset + paged.size
-        )
+        clientCatalogPage(offset, limit, request.mediaType, filter) { start, size ->
+            val selected = seeds.drop(start).take(size)
+            val permits = Semaphore(6)
+            val items = selected.map { seed -> async {
+                permits.withPermit {
+                    try {
+                        catalogItemFor(seed.mediaType, seed.id)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            } }.awaitAll().filterNotNull()
+            CategoryPageResult(items, start + selected.size < seeds.size, start + selected.size)
+        }
     }
 
     private suspend fun loadAddonCatalogRefsPage(
@@ -2106,11 +2073,6 @@ class MediaRepository @Inject constructor(
         offset: Int,
         limit: Int
     ): AddonCatalogRefsPage = coroutineScope {
-        val clientDelegate = catalog.clientDelegate ?: resolveAddonClientDelegate(catalog)
-        if (clientDelegate != null) {
-            return@coroutineScope loadDelegatedCatalogRefsPage(clientDelegate, catalog, offset, limit)
-        }
-
         val descriptor = resolveAddonCatalogDescriptor(catalog)
             ?: return@coroutineScope AddonCatalogRefsPage(emptyList(), hasMore = false, nextOffset = offset)
 

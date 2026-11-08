@@ -242,7 +242,10 @@ export async function installAddon(rawUrl: string) {
       catalogs: (Array.isArray(manifest.catalogs) ? manifest.catalogs : []).map((catalog) => ({
         type: String((catalog as { type?: string })?.type ?? "movie"),
         id: String((catalog as { id?: string })?.id ?? ""),
-        name: String((catalog as { name?: string })?.name ?? (catalog as { id?: string })?.id ?? "")
+        name: String((catalog as { name?: string })?.name ?? (catalog as { id?: string })?.id ?? ""),
+        extra: catalog.extra,
+        clientDelegate: typeof catalog.clientDelegate === 'string' ? catalog.clientDelegate : undefined,
+        clientFilter: typeof catalog.clientFilter === 'string' ? catalog.clientFilter : undefined
       })),
       // Same booleans as Android's AddonBehaviorHints; "configurable" drives the Configure link.
       behaviorHints: {
