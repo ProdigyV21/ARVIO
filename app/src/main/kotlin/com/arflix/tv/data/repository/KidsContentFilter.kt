@@ -42,12 +42,15 @@ import javax.inject.Singleton
  *
  * Minimum ages are kept on disk per country, so a kids home opens filtered at once
  * after the first visit instead of re-asking TMDB for every card.
+ *
+ * Titles of the list rows a parent added to the profile ([KidsTrustedTitles]) always pass.
  */
 @Singleton
 class KidsContentFilter @Inject constructor(
     @ApplicationContext context: Context,
     private val tmdbApi: TmdbApi,
     private val profileRepository: ProfileRepository,
+    private val trustedTitles: KidsTrustedTitles,
     // Provider: MediaRepository is heavy and only its content language is needed here.
     private val mediaRepository: Provider<MediaRepository>
 ) {
@@ -55,7 +58,9 @@ class KidsContentFilter @Inject constructor(
     data class State(
         val level: KidsAgeLevel?,
         val region: String,
-        val ages: Map<String, Int>
+        val ages: Map<String, Int>,
+        /** [KidsTrustedTitles.key]s that pass whatever their rating. */
+        val trusted: Set<String> = emptySet()
     ) {
         val isActive: Boolean get() = level != null
 
@@ -66,6 +71,7 @@ class KidsContentFilter @Inject constructor(
             // A parent picked every video of the profile's own YouTube row; there is no rating to look up.
             if (item.addonNativeAddonId == YouTubeCollection.ADDON_ID) return true
             if (item.id <= 0) return false
+            if (KidsTrustedTitles.key(item.mediaType, item.id) in trusted) return true
             val age = ages[key(region, item.mediaType, item.id)] ?: return false
             return age != UNRATED && age <= cap.maxAge
         }
@@ -73,6 +79,7 @@ class KidsContentFilter @Inject constructor(
         /** True when [item] still waits for a lookup, i.e. hidden only for now. */
         fun isUnknown(item: MediaItem): Boolean =
             level != null && item.id > 0 && !item.isPlaceholder && !isCollectionTile(item) &&
+                KidsTrustedTitles.key(item.mediaType, item.id) !in trusted &&
                 key(region, item.mediaType, item.id) !in ages
     }
 
@@ -88,17 +95,22 @@ class KidsContentFilter @Inject constructor(
      * null start would show that screen unfiltered until the profile store answers, and
      * Home's billboard keeps whatever title it picks in that moment.
      */
-    private val initialLevel: KidsAgeLevel? = runBlocking(Dispatchers.IO) {
-        withTimeoutOrNull(INITIAL_READ_TIMEOUT_MS) { profileRepository.getActiveProfile()?.kidsLevel }
+    private val initialProfile = runBlocking(Dispatchers.IO) {
+        withTimeoutOrNull(INITIAL_READ_TIMEOUT_MS) { profileRepository.getActiveProfile() }
     }
+    private val initialLevel: KidsAgeLevel? = initialProfile?.kidsLevel
 
     private val level: StateFlow<KidsAgeLevel?> = profileRepository.activeProfile
         .map { it?.kidsLevel }
         .stateIn(scope, SharingStarted.Eagerly, initialLevel)
 
-    val state: StateFlow<State> = combine(level, ages) { level, ages ->
-        State(level, region(), ages)
-    }.stateIn(scope, SharingStarted.Eagerly, State(initialLevel, region(), ages.value))
+    val state: StateFlow<State> = combine(level, ages, trustedTitles.activeKeys) { level, ages, trusted ->
+        State(level, region(), ages, trusted)
+    }.stateIn(
+        scope,
+        SharingStarted.Eagerly,
+        State(initialLevel, region(), ages.value, trustedTitles.keysFor(initialProfile?.id))
+    )
 
     init {
         scope.launch { runLookups() }
@@ -121,6 +133,7 @@ class KidsContentFilter @Inject constructor(
             return true
         }
         if (tmdbId <= 0) return false
+        if (trustedTitles.isTrusted(mediaType, tmdbId)) return true
         val region = region()
         val key = key(region, mediaType, tmdbId)
         val age = ages.value[key] ?: fetchAge(mediaType, tmdbId, region)?.also { record(key, it) }

@@ -114,7 +114,8 @@ class MediaRepository @Inject constructor(
     private val streamRepository: StreamRepository,
     private val homeServerRepository: HomeServerRepository,
     private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null,
-    private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService? = null
+    private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService? = null,
+    private val kidsTrustedTitles: KidsTrustedTitles? = null
 ) {
 
     data class CategoryPageResult(
@@ -1035,6 +1036,7 @@ class MediaRepository @Inject constructor(
             CatalogSourceType.HOME_SERVER -> emptyList()
             CatalogSourceType.YOUTUBE -> emptyList()
         }
+        kidsTrustedTitles?.record(catalog, mediaRefs)
         if (mediaRefs.isEmpty()) return@coroutineScope null
 
         val semaphore = Semaphore(6)
@@ -1104,6 +1106,7 @@ class MediaRepository @Inject constructor(
                 CatalogSourceType.HOME_SERVER -> emptyList()
                 CatalogSourceType.YOUTUBE -> emptyList()
             }.distinct()
+            kidsTrustedTitles?.record(catalog, mediaRefs)
 
             if (mediaRefs.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
 
