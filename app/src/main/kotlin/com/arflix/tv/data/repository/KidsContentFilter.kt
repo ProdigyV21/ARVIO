@@ -11,8 +11,10 @@ import com.arflix.tv.util.Constants
 import com.arflix.tv.util.ContentRating
 import com.arflix.tv.util.KidsCertification
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -20,8 +22,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -43,14 +50,15 @@ import javax.inject.Singleton
  * Minimum ages are kept on disk per country, so a kids home opens filtered at once
  * after the first visit instead of re-asking TMDB for every card.
  *
- * Titles of the list rows a parent added to the profile ([KidsTrustedTitles]) always pass.
+ * A parent can approve an individual list title with no certification. A known
+ * age limit, an unreadable certification, or a failed lookup cannot be overridden.
  */
 @Singleton
 class KidsContentFilter @Inject constructor(
     @ApplicationContext context: Context,
     private val tmdbApi: TmdbApi,
     private val profileRepository: ProfileRepository,
-    private val trustedTitles: KidsTrustedTitles,
+    private val catalogRepository: CatalogRepository,
     // Provider: MediaRepository is heavy and only its content language is needed here.
     private val mediaRepository: Provider<MediaRepository>
 ) {
@@ -59,27 +67,25 @@ class KidsContentFilter @Inject constructor(
         val level: KidsAgeLevel?,
         val region: String,
         val ages: Map<String, Int>,
-        /** [KidsTrustedTitles.key]s that pass whatever their rating. */
+        /** [KidsTrustedTitles.key]s approved only when no certification exists. */
         val trusted: Set<String> = emptySet()
     ) {
         val isActive: Boolean get() = level != null
 
-        /** True when [item] may be shown. Never true for an unknown or unrated title. */
+        /** True when [item] may be shown. Unknown titles never pass. */
         fun allows(item: MediaItem): Boolean {
             val cap = level ?: return true
             if (item.isPlaceholder || isCollectionTile(item)) return true
             // A parent picked every video of the profile's own YouTube row; there is no rating to look up.
             if (item.addonNativeAddonId == YouTubeCollection.ADDON_ID) return true
             if (item.id <= 0) return false
-            if (KidsTrustedTitles.key(item.mediaType, item.id) in trusted) return true
             val age = ages[key(region, item.mediaType, item.id)] ?: return false
-            return age != UNRATED && age <= cap.maxAge
+            return allowsAge(age, cap, KidsTrustedTitles.key(item.mediaType, item.id) in trusted)
         }
 
         /** True when [item] still waits for a lookup, i.e. hidden only for now. */
         fun isUnknown(item: MediaItem): Boolean =
             level != null && item.id > 0 && !item.isPlaceholder && !isCollectionTile(item) &&
-                KidsTrustedTitles.key(item.mediaType, item.id) !in trusted &&
                 key(region, item.mediaType, item.id) !in ages
     }
 
@@ -95,22 +101,21 @@ class KidsContentFilter @Inject constructor(
      * null start would show that screen unfiltered until the profile store answers, and
      * Home's billboard keeps whatever title it picks in that moment.
      */
-    private val initialProfile = runBlocking(Dispatchers.IO) {
-        withTimeoutOrNull(INITIAL_READ_TIMEOUT_MS) { profileRepository.getActiveProfile() }
+    private val initialLevel = runBlocking(Dispatchers.IO) {
+        withTimeoutOrNull(INITIAL_READ_TIMEOUT_MS) { profileRepository.getActiveProfile()?.kidsLevel }
     }
-    private val initialLevel: KidsAgeLevel? = initialProfile?.kidsLevel
 
-    private val level: StateFlow<KidsAgeLevel?> = profileRepository.activeProfile
-        .map { it?.kidsLevel }
-        .stateIn(scope, SharingStarted.Eagerly, initialLevel)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val policy = profileRepository.activeProfile.flatMapLatest { profile ->
+        val level = profile?.kidsLevel
+        if (profile == null || level == null) flowOf(null to emptySet<String>())
+        else catalogRepository.observeKidsListApprovals(profile.id).map { level to it }
+            .onStart { emit(level to emptySet()) }
+    }
 
-    val state: StateFlow<State> = combine(level, ages, trustedTitles.activeKeys) { level, ages, trusted ->
-        State(level, region(), ages, trusted)
-    }.stateIn(
-        scope,
-        SharingStarted.Eagerly,
-        State(initialLevel, region(), ages.value, trustedTitles.keysFor(initialProfile?.id))
-    )
+    val state: StateFlow<State> = combine(policy, ages) { (level, approved), ages ->
+        State(level, region(), ages, approved)
+    }.stateIn(scope, SharingStarted.Eagerly, State(initialLevel, region(), ages.value))
 
     init {
         scope.launch { runLookups() }
@@ -128,17 +133,41 @@ class KidsContentFilter @Inject constructor(
      * lookup instead of hiding, so a title opened from anywhere is judged before it plays.
      */
     suspend fun isAllowed(mediaType: MediaType, tmdbId: Int): Boolean {
-        val cap = activeLevel() ?: return true
+        val profile = profileRepository.getActiveProfile()
+        val cap = profile?.kidsLevel ?: return true
         if (tmdbId < 0 && mediaRepository.get().addonNativeCard(mediaType, tmdbId)?.addonNativeAddonId == YouTubeCollection.ADDON_ID) {
             return true
         }
         if (tmdbId <= 0) return false
-        if (trustedTitles.isTrusted(mediaType, tmdbId)) return true
         val region = region()
         val key = key(region, mediaType, tmdbId)
-        val age = ages.value[key] ?: fetchAge(mediaType, tmdbId, region)?.also { record(key, it) }
+        val titleKey = KidsTrustedTitles.key(mediaType, tmdbId)
+        val approved = titleKey in catalogRepository.observeKidsListApprovals(profile.id).first()
+        val cached = ages.value[key]
+        // Recheck an exception when opening a title. A stale "unrated" result must
+        // not override a certification added since the parent approved it.
+        val age = (if (approved && (cached == NO_CERTIFICATION || cached == UNRATED)) null else cached)
+            ?: fetchAge(mediaType, tmdbId, region)?.also { record(key, it) }
             ?: return false
-        return age != UNRATED && age <= cap.maxAge
+        val current = profileRepository.getActiveProfile()
+        if (current?.id != profile.id || current.kidsLevel != cap) return false
+        return allowsAge(age, cap, approved && age == NO_CERTIFICATION &&
+            titleKey in catalogRepository.observeKidsListApprovals(profile.id).first())
+    }
+
+    internal suspend fun approveListTitle(session: KidsListApprovalSession, item: MediaItem) {
+        catalogRepository.checkKidsListApproval(session)
+        val refs = mediaRepository.get().loadExternalListRefs(session.catalog)
+            ?: throw CatalogException(com.arflix.tv.R.string.kids_list_approval_unavailable)
+        if (item.id <= 0 || (item.mediaType to item.id) !in refs) {
+            throw CatalogException(com.arflix.tv.R.string.kids_list_approval_changed)
+        }
+        val region = region()
+        val age = fetchAge(item.mediaType, item.id, region)
+            ?: throw CatalogException(com.arflix.tv.R.string.kids_list_approval_unavailable)
+        record(key(region, item.mediaType, item.id), age)
+        if (age != NO_CERTIFICATION) throw CatalogException(com.arflix.tv.R.string.kids_list_approval_rated)
+        catalogRepository.saveKidsListApproval(session, item.mediaType, item.id)
     }
 
     /** Filters [items] with the current state and queues lookups for the unknown ones. */
@@ -194,28 +223,34 @@ class KidsContentFilter @Inject constructor(
             if (pending.isEmpty()) continue
             val batch = HashMap(pending)
             batch.keys.forEach(pending::remove)
-            ages.value = ages.value + batch
+            ages.update { it + batch }
             persist(batch)
         }
     }
 
     private fun record(key: String, age: Int) {
-        ages.value = ages.value + (key to age)
+        ages.update { it + (key to age) }
         persist(mapOf(key to age))
     }
 
-    /** The minimum age, [UNRATED] when TMDB has no readable rating, null when the request failed. */
+    /** Null means unavailable; [NO_CERTIFICATION] means a successful response with no certification. */
     private suspend fun fetchAge(mediaType: MediaType, id: Int, region: String): Int? = try {
-        val age = when (mediaType) {
-            MediaType.MOVIE -> KidsCertification.forMovie(
-                tmdbApi.getMovieReleaseDates(id, Constants.TMDB_API_KEY), region
-            )
-            MediaType.TV -> KidsCertification.forTv(
-                tmdbApi.getTvContentRatings(id, Constants.TMDB_API_KEY), region
-            )
+        when (mediaType) {
+            MediaType.MOVIE -> {
+                val response = tmdbApi.getMovieReleaseDates(id, Constants.TMDB_API_KEY)
+                KidsCertification.forMovie(response, region) ?: if (response.results.any { country ->
+                    country.releaseDates.any { !it.certification.isNullOrBlank() }
+                }) UNRATED else NO_CERTIFICATION
+            }
+            MediaType.TV -> {
+                val response = tmdbApi.getTvContentRatings(id, Constants.TMDB_API_KEY)
+                KidsCertification.forTv(response, region) ?: if (response.results.any { !it.rating.isNullOrBlank() }) {
+                    UNRATED
+                } else NO_CERTIFICATION
+            }
         }
-        age ?: UNRATED
     } catch (e: Exception) {
+        if (e is CancellationException) throw e
         AppLogger.w(TAG, "Rating lookup failed for $mediaType $id: ${e.message}")
         null
     }
@@ -243,6 +278,10 @@ class KidsContentFilter @Inject constructor(
         private const val MAX_STORED = 20_000
         private const val INITIAL_READ_TIMEOUT_MS = 1_000L
         const val UNRATED = -1
+        internal const val NO_CERTIFICATION = -2
+
+        private fun allowsAge(age: Int, cap: KidsAgeLevel, approved: Boolean): Boolean =
+            age in 0..cap.maxAge || (age == NO_CERTIFICATION && approved)
 
         fun key(region: String, mediaType: MediaType, id: Int): String =
             "$region/${mediaType.name}/$id"

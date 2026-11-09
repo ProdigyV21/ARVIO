@@ -115,7 +115,7 @@ class MediaRepository @Inject constructor(
     private val homeServerRepository: HomeServerRepository,
     private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null,
     private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService? = null,
-    private val kidsTrustedTitles: KidsTrustedTitles? = null
+    private val catalogRepository: CatalogRepository? = null
 ) {
 
     data class CategoryPageResult(
@@ -1027,16 +1027,14 @@ class MediaRepository @Inject constructor(
             }
         }
         val mediaRefs = when (catalog.sourceType) {
-            CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            CatalogSourceType.TRAKT, CatalogSourceType.MDBLIST -> loadListCatalogRefs(catalog)
             CatalogSourceType.SIMKL -> loadSimklCatalogRefs(catalog, effectiveMaxItems)
-            CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
             CatalogSourceType.TMDB -> loadTmdbCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
             CatalogSourceType.ADDON -> loadAddonCatalogRefsPage(catalog, offset = 0, limit = effectiveMaxItems).refs
             CatalogSourceType.PREINSTALLED -> emptyList()
             CatalogSourceType.HOME_SERVER -> emptyList()
             CatalogSourceType.YOUTUBE -> emptyList()
         }
-        kidsTrustedTitles?.record(catalog, mediaRefs)
         if (mediaRefs.isEmpty()) return@coroutineScope null
 
         val semaphore = Semaphore(6)
@@ -1097,16 +1095,14 @@ class MediaRepository @Inject constructor(
             hasMore = page.hasMore && page.nextOffset < rankedCatalogLimit
         } else {
             val mediaRefs = when (catalog.sourceType) {
-                CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+                CatalogSourceType.TRAKT, CatalogSourceType.MDBLIST -> loadListCatalogRefs(catalog)
                 CatalogSourceType.SIMKL -> loadSimklCatalogRefs(catalog, offset + effectiveLimit + 1)
-                CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
                 CatalogSourceType.TMDB -> loadTmdbCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
                 CatalogSourceType.ADDON -> emptyList()
                 CatalogSourceType.PREINSTALLED -> emptyList()
                 CatalogSourceType.HOME_SERVER -> emptyList()
                 CatalogSourceType.YOUTUBE -> emptyList()
             }.distinct()
-            kidsTrustedTitles?.record(catalog, mediaRefs)
 
             if (mediaRefs.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), hasMore = false)
 
@@ -3616,25 +3612,38 @@ class MediaRepository @Inject constructor(
         (direct + resolved).distinct()
     }
 
-    private suspend fun loadMdblistCatalogRefs(sourceUrl: String?, sourceRef: String? = null): List<Pair<MediaType, Int>> {
-        if (!sourceRef.isNullOrBlank() && sourceRef.startsWith("mdblist_trakt:")) {
-            val traktUrl = sourceRef.removePrefix("mdblist_trakt:").trim()
-            if (traktUrl.isNotBlank()) {
-                val fromTraktRef = loadTraktCatalogRefs(traktUrl, null)
-                if (fromTraktRef.isNotEmpty()) return fromTraktRef
-            }
+    private suspend fun loadListCatalogRefs(catalog: CatalogConfig): List<Pair<MediaType, Int>> {
+        val refresh = catalogRepository?.beginKidsListRefresh(catalog)
+        val refs = loadExternalListRefs(catalog) ?: return emptyList()
+        if (refresh != null) catalogRepository?.finishKidsListRefresh(refresh, catalog, refs)
+        return refs
+    }
+
+    internal suspend fun loadExternalListRefs(catalog: CatalogConfig): List<Pair<MediaType, Int>>? = withContext(Dispatchers.IO) {
+        when (catalog.sourceType) {
+            CatalogSourceType.TRAKT -> loadTraktCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            CatalogSourceType.MDBLIST -> loadMdblistCatalogRefs(catalog.sourceUrl, catalog.sourceRef)
+            else -> null
         }
-        val url = sourceUrl ?: return emptyList()
+    }
+
+    private suspend fun loadMdblistCatalogRefs(sourceUrl: String?, sourceRef: String? = null): List<Pair<MediaType, Int>>? {
+        val linkedTrakt = sourceRef?.takeIf { it.startsWith("mdblist_trakt:") }
+            ?.removePrefix("mdblist_trakt:")?.trim()?.takeIf { CatalogUrlParser.parseTrakt(it) != null }
+        val linkedRefs = linkedTrakt?.let { loadTraktCatalogRefs(it) }
+        if (!linkedRefs.isNullOrEmpty()) return linkedRefs
+        val url = sourceUrl ?: return linkedRefs
 
         val jsonUrl = withListFreshness("${url.removeSuffix("/")}/json")
         val fromJson = fetchUrl(jsonUrl)?.let { payload ->
             parseMdblistJson(payload)
-        } ?: emptyList()
-        if (fromJson.isNotEmpty()) return fromJson
+        }
+        // A valid empty array is authoritative; malformed/unavailable data is not.
+        if (fromJson != null) return fromJson
 
-        val html = fetchUrl(url) ?: return emptyList()
+        val html = fetchUrl(url) ?: return linkedRefs
         val traktLink = MediaRegexes.TRAKT_URL_REGEX.find(html)?.value
-        return if (traktLink != null) loadTraktCatalogRefs(traktLink) else emptyList()
+        return traktLink?.takeIf { it != linkedTrakt }?.let { loadTraktCatalogRefs(it) } ?: linkedRefs
     }
 
     private fun parseTraktRef(sourceRef: String?): ParsedCatalogUrl? {
@@ -3660,13 +3669,13 @@ class MediaRepository @Inject constructor(
         }
     }
 
-    private fun parseMdblistJson(payload: String): List<Pair<MediaType, Int>> {
+    private fun parseMdblistJson(payload: String): List<Pair<MediaType, Int>>? {
         val type = TypeToken.getParameterized(List::class.java, TypeToken.getParameterized(Map::class.java, String::class.java, Any::class.java).type).type
         val rows = try {
             gson.fromJson<List<Map<String, Any?>>>(payload, type)
         } catch (_: Exception) {
             null
-        } ?: return emptyList()
+        } ?: return null
 
         return rows.mapNotNull { row ->
             val tmdbId = sequenceOf("tmdb_id", "tmdb", "tmdbId", "id")

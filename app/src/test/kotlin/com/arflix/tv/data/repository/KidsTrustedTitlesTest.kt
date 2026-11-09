@@ -34,31 +34,48 @@ class KidsTrustedTitlesTest {
     }
 
     @Test
-    fun `trusted keys are the union of one profile's rows`() {
-        val all = mapOf(
-            "kid" to mapOf("a" to setOf("TV/1"), "b" to setOf("MOVIE/2", "TV/1")),
-            "adult" to mapOf("c" to setOf("MOVIE/3"))
-        )
-        assertEquals(setOf("TV/1", "MOVIE/2"), KidsTrustedTitles.keysIn(all, "kid"))
-        assertEquals(emptySet<String>(), KidsTrustedTitles.keysIn(all, "other"))
-        assertEquals(emptySet<String>(), KidsTrustedTitles.keysIn(all, null))
+    fun `row removal or source replacement revokes only its approvals`() {
+        val list = row(CatalogSourceType.MDBLIST)
+        val other = row(CatalogSourceType.TRAKT).copy(id = "other")
+        val entries = setOf(KidsTrustedTitles.entry(list, MediaType.TV, 1), KidsTrustedTitles.entry(other, MediaType.MOVIE, 2))
+        val remaining = setOf("MOVIE/2")
+        assertEquals(remaining, KidsTrustedTitles.keys(KidsTrustedTitles.retainRows(entries, listOf(other))))
+        assertEquals(remaining, KidsTrustedTitles.keys(KidsTrustedTitles.retainRows(
+            entries, listOf(other, list.copy(sourceRef = "replacement"))
+        )))
+        assertEquals(entries, KidsTrustedTitles.retainRows(entries, listOf(other, list.copy(title = "Renamed"))))
+        assertFalse(KidsTrustedTitles.preferenceKey("one") == KidsTrustedTitles.preferenceKey("two"))
     }
 
     @Test
-    fun `a trusted unrated title passes and is not looked up`() {
+    fun `refresh only revokes missing members including a successful empty list`() {
+        val list = row(CatalogSourceType.TRAKT)
+        val old = setOf(KidsTrustedTitles.entry(list, MediaType.TV, 1))
+        val newerApproval = KidsTrustedTitles.entry(list, MediaType.TV, 2)
+        val current = old + newerApproval
+        assertEquals(setOf(newerApproval), KidsTrustedTitles.retainMembers(current, list, old, emptyList()))
+        assertEquals(old, KidsTrustedTitles.retainMembers(old, list, old, listOf(MediaType.TV to 1, MediaType.TV to 2)))
+        assertTrue(KidsTrustedTitles.retainMembers(old, list, old, emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `approval only exempts a verified missing certification`() {
         val unrated = MediaItem(id = 10, title = "unrated show", mediaType = MediaType.TV)
         val sameIdMovie = MediaItem(id = 10, title = "other", mediaType = MediaType.MOVIE)
-        val ages = mapOf(KidsContentFilter.key("US", MediaType.TV, 10) to KidsContentFilter.UNRATED)
         val trusted = setOf(KidsTrustedTitles.key(MediaType.TV, 10))
-
-        val plain = KidsContentFilter.State(KidsAgeLevel.DEFAULT, "US", ages)
-        assertFalse(plain.allows(unrated))
-
-        val withTrust = KidsContentFilter.State(KidsAgeLevel.DEFAULT, "US", emptyMap(), trusted)
+        val key = KidsContentFilter.key("US", MediaType.TV, 10)
+        val ages = mapOf(key to KidsContentFilter.NO_CERTIFICATION)
+        assertFalse(KidsContentFilter.State(KidsAgeLevel.DEFAULT, "US", ages).allows(unrated))
+        val withTrust = KidsContentFilter.State(KidsAgeLevel.DEFAULT, "US", ages, trusted)
         assertTrue(withTrust.allows(unrated))
         assertFalse(withTrust.isUnknown(unrated))
         // Trust is per media type: a movie sharing the TMDB id is still judged by its rating.
         assertFalse(withTrust.allows(sameIdMovie))
         assertTrue(withTrust.isUnknown(sameIdMovie))
+        for (blockedAge in listOf(17, KidsContentFilter.UNRATED)) {
+            assertFalse(withTrust.copy(ages = mapOf(key to blockedAge)).allows(unrated))
+        }
+        assertFalse(withTrust.copy(ages = emptyMap()).allows(unrated))
+        assertTrue(withTrust.copy(ages = emptyMap()).isUnknown(unrated))
     }
 }
