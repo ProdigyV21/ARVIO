@@ -30,9 +30,10 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35"
       - name: Install test dependencies
         run: |
-          sdkmanager "platforms;android-35"
           npm ci --prefix web
           node web/node_modules/playwright/cli.js install webkit
           mkdir -p artifacts/cloudstream-poc
