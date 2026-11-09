@@ -52,7 +52,7 @@ const bridge = 'http://127.0.0.1:8950';
       }
       await fetch(`${bridge}/catalog/movie/streamplay/search=Sintel.json`);
     }, bridge);
-    await page.goto(base);
+    await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.locator('button[data-profile-id]').first().click({ timeout: 30000 });
     await page.getByText('Sintel', { exact: true }).first().click({ timeout: 30000 });
     await page.waitForFunction(() => /[1-9]\d* sources/.test(document.body.innerText), {}, { timeout: 60000 });
@@ -96,9 +96,10 @@ const bridge = 'http://127.0.0.1:8950';
     fs.writeFileSync(path.join(evidence, `${prefix}web-playback-result.json`), JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result));
   } catch (error) {
-    console.log(await page.evaluate(() => ({ text: document.body.innerText.slice(-1400),
+    console.error(error.message);
+    console.log(await page.evaluate(() => ({ text: document.body?.innerText.slice(-1400),
       registry: JSON.parse(localStorage.getItem('arvio.web.addonNativeItems.v1') || '{}'),
-      rows: JSON.parse(localStorage.getItem('arvio.web.catalogRows.v3') || '{}') })));
+      rows: JSON.parse(localStorage.getItem('arvio.web.catalogRows.v3') || '{}') })).catch(() => ({ diagnostic: 'Page unavailable' })));
     throw error;
   } finally { await browser.close(); }
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
