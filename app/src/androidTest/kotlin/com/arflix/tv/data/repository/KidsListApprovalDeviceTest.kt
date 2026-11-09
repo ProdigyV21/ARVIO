@@ -8,14 +8,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.test.platform.app.InstrumentationRegistry
 import com.arflix.tv.R
@@ -51,6 +54,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -78,6 +82,7 @@ class KidsListApprovalDeviceTest {
         val mature = MediaItem(882002, "Restricted film")
         val newTitle = MediaItem(882003, "New list member")
         val listBody = AtomicReference<String?>(null)
+        val onNextListRequest = AtomicReference<(() -> Unit)?>(null)
         val certification = AtomicReference<String?>(null)
         val traktMembers = AtomicReference<List<TraktPublicListItem>>(emptyList())
         private val tmdb = mockk<TmdbApi>()
@@ -94,6 +99,7 @@ class KidsListApprovalDeviceTest {
             every { getProfileIdSync() } answers { active.value?.id ?: "default" }
         }
         private val http = OkHttpClient.Builder().addInterceptor { chain ->
+            onNextListRequest.getAndSet(null)?.invoke()
             val body = listBody.get()
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
                 .code(if (body != null) 200 else 503).message("Fixture")
@@ -156,6 +162,8 @@ class KidsListApprovalDeviceTest {
         f.filter.approveListTitle(session, f.unrated)
         assertTrue(f.allowed(f.unrated))
         assertFalse(f.allowed(f.mature))
+        val visible = withTimeout(5_000) { f.filter.state.first { it.allows(f.unrated) } }
+        assertFalse(visible.allows(f.mature))
         f.setMembers(f.unrated, f.mature, f.newTitle)
         f.media.loadCustomCatalogPage(f.catalog, 0, 24)
         assertFalse(f.allowed(f.newTitle))
@@ -171,11 +179,18 @@ class KidsListApprovalDeviceTest {
         val refresh = requireNotNull(f.catalogs.beginKidsListRefresh(f.catalog))
         f.active.value = f.other
         f.catalogs.finishKidsListRefresh(refresh, f.catalog, emptyList())
+        withTimeout(5_000) { f.filter.state.first { it.isActive && !it.allows(f.unrated) } }
         assertFalse(f.allowed(f.unrated))
         assertTrue(f.approved(f.other.id).isEmpty())
         rejected(R.string.kids_list_approval_changed) { f.filter.approveListTitle(session, f.unrated) }
         f.active.value = f.profile
         assertTrue(f.allowed(f.unrated))
+        f.setMembers(f.unrated, f.newTitle)
+        f.onNextListRequest.set { f.active.value = f.other }
+        rejected(R.string.kids_list_approval_changed) { f.filter.approveListTitle(session, f.newTitle) }
+        assertTrue(f.approved(f.other.id).isEmpty())
+        assertEquals(setOf(KidsTrustedTitles.key(MediaType.MOVIE, f.unrated.id)), f.approved())
+        f.active.value = f.profile
         f.listBody.set(null)
         f.media.loadCustomCatalogPage(f.catalog, 0, 24)
         assertTrue("A failed request is not an authoritative empty list", f.allowed(f.unrated))
@@ -253,14 +268,24 @@ class KidsListApprovalDeviceTest {
             .performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithText(approve).assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
         fun submitPin(pin: String) {
-            pin.forEach { compose.onNodeWithText(it.toString(), useUnmergedTree = true).performClick() }
-            compose.onNodeWithText(f.context.getString(R.string.confirm)).performClick()
+            pin.forEach { digit ->
+                compose.onNodeWithText(digit.toString()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+            }
+            compose.onNodeWithText(f.context.getString(R.string.confirm))
+                .performSemanticsAction(SemanticsActions.OnClick) { it() }
         }
         submitPin("9999")
         compose.waitUntil(10_000) { compose.onAllNodesWithText(wrongPin).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(wrongPin).assertIsDisplayed()
         submitPin("1234")
-        compose.waitUntil(20_000) { compose.onAllNodesWithText(f.unrated.title).fetchSemanticsNodes().isNotEmpty() }
+        val focusedTitle = hasText(f.unrated.title) and isFocused()
+        compose.waitUntil(20_000) { compose.onAllNodes(focusedTitle).fetchSemanticsNodes().isNotEmpty() }
+        InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { screenshot ->
+            java.io.File(f.context.cacheDir, "kids-list-approval.png").outputStream().use {
+                screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+            screenshot.recycle()
+        }
         compose.onNodeWithText(f.unrated.title).assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitUntil(20_000) { compose.onAllNodesWithText(f.unrated.title).fetchSemanticsNodes().isEmpty() }
         runBlocking {
