@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
-const homes = { de: 'de', fr: 'fr', nl: 'nl', it: 'it', sv: 'sv', da: 'da', nb: 'no', fi: 'fi', hi: 'hi' };
+const homes = { de: 'de', fr: 'fr', nl: 'nl', it: 'it', sv: 'sv', da: 'da', nb: 'no', fi: 'fi', hi: 'hi', he: 'he' };
 
 for (const [key, dir] of Object.entries(homes)) {
   test(`${dir}/ homepage has the device-aware hero`, () => {
