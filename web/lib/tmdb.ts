@@ -804,8 +804,11 @@ async function loadAddonCatalog(
   if (!manifestUrl || !catalogId) return [];
   const base = manifestUrl.replace(/\/manifest\.json$/, "").replace(/\/+$/, "");
   const extra = catalog.addonGenre ? `/genre=${encodeURIComponent(catalog.addonGenre)}` : "";
-  const url = proxiedUrl(`${base}/catalog/${encodeURIComponent(catalogType)}/${encodeURIComponent(catalogId)}${extra}.json`);
-  const payload = await jsonRequest<{ metas?: StremioMeta[] }>(url);
+  const url = `${base}/catalog/${encodeURIComponent(catalogType)}/${encodeURIComponent(catalogId)}${extra}.json`;
+  // Like manifests, metadata and streams, try the addon's own CORS endpoint first.
+  // A user's local bridge is reachable by their browser, never by a hosted proxy.
+  const payload = await jsonRequest<{ metas?: StremioMeta[] }>(url)
+    .catch(() => jsonRequest<{ metas?: StremioMeta[] }>(proxiedUrl(url)));
   // Each meta may cost a TMDB call: a Home row hydrates only what it shows.
   const metas = (payload.metas ?? []).slice(0, limit ?? Infinity);
   const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon, addons, catalogType).catch(() => null)));

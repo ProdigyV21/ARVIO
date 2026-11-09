@@ -1,0 +1,12 @@
+// External harness, compiled against a separately downloaded, pinned upstream runtime.
+gradle.projectsEvaluated {
+    def server = gradle.rootProject.project(':server')
+    server.kotlin.sourceSets.main.kotlin.srcDir(System.getenv('ARVIO_CS_POC_SOURCE'))
+    server.tasks.register('runArvioPoc', JavaExec) {
+        dependsOn(server.tasks.named('classes'))
+        classpath = server.sourceSets.main.runtimeClasspath
+        mainClass = 'arvio.poc.ArvioCloudstreamPocKt'
+        maxHeapSize = System.getenv('ARVIO_CS_HEAP') ?: '3g'
+        workingDir = gradle.rootProject.projectDir
+    }
+}

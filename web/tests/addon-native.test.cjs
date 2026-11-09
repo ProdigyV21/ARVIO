@@ -24,14 +24,14 @@ const meta = {
   ]
 };
 
-function fixture() {
+function fixture(streamOverrides = {}) {
   const calls = [];
   const http = {
     proxiedUrl: url => `proxy:${url}`,
     jsonRequest: async url => {
       calls.push(url);
       if (url.includes('/meta/series/')) return { meta };
-      if (url.includes('/stream/series/')) return { streams: [{ name: 'HD', url: 'https://vod.example.test/key/vodplay/x.m3u8' }] };
+      if (url.includes('/stream/series/')) return { streams: [{ name: 'HD', url: 'https://vod.example.test/key/vodplay/x.m3u8', ...streamOverrides }] };
       if (url.includes('/subtitles/')) return { subtitles: [] };
       return {};
     }
@@ -120,6 +120,38 @@ test('native episodes request streams from the owning addon by the video id', as
   assert.deepEqual(plain(streamCalls), ['https://vod.example.test/key/stream/series/exvod%3Anews%3Ashow%3A1%3A2.json']);
   assert.equal(calls.some(url => url.includes('opensubtitles')), false);
   assert.deepEqual(plain(await addons.getStreamsProgressive([owner], card, 9, 9)), []);
+});
+
+test('extensionless addon streams preserve validated HLS transport hints', async () => {
+  for (const hint of ['hls', 'dash', 'file', 'mpegts', 'invalid']) {
+    const { native, addons } = fixture({ url: 'https://media.example/manifest?token=test', transport: hint });
+    const owner = addons.normalizeAddon(androidAddon);
+    const card = native.registerNativeItem(owner, meta, 'tv');
+    const streams = await addons.getStreamsProgressive([owner], card, 1, 2);
+    assert.equal(streams[0].transport, hint === 'invalid' ? undefined : hint);
+  }
+});
+
+test('catalogs load directly first, falling back to the proxy only on failure', async () => {
+  const { addons } = fixture();
+  for (const blocked of [false, true]) {
+    const calls = [];
+    const http = { proxiedUrl: url => `proxy:${url}`, apiProxiedUrl: url => url,
+      jsonRequest: async url => {
+        calls.push(url);
+        if (blocked && !url.startsWith('proxy:')) throw new Error('CORS');
+        return { metas: [{ id: 'exvod:news:show', type: 'series', name: 'Show' }] };
+      } };
+    const api = load('lib/tmdb.ts', {
+      './config': { config: {} }, './storage': storage(), './http': http,
+      './metadata/anizip': {}, './metadata/dispatcher': {}, './mediaImages': { tmdbImageUrl: () => '' }
+    }, { window: { location: { origin: 'https://web.invalid' } } });
+    const items = await api.loadCollectionSource({ kind: 'ADDON_CATALOG', mediaType: 'tv', addonId: 'example.vod', addonCatalogType: 'series', addonCatalogId: 'ex-news' }, 'en', [addons.normalizeAddon(androidAddon)]);
+    assert.equal(items.length, 1);
+    assert.equal(calls[0], 'https://vod.example.test/key/catalog/series/ex-news.json');
+    assert.equal(calls.length, blocked ? 2 : 1);
+    if (blocked) assert.equal(calls[1], `proxy:${calls[0]}`);
+  }
 });
 
 // A broadcaster addon with addon-defined types and no movie type (live channels are "tv").

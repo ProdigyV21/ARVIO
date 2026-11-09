@@ -31,7 +31,7 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
   onViewAll?: (catalog: CatalogConfig, category: Category) => void;
   limit?: number;
 }) {
-  const { addons, settings } = useAppPick("addons", "settings");
+  const { addons, addonsReady, settings } = useAppPick("addons", "addonsReady", "settings");
   const translateUi = useTranslation();
   const sources = useRef({ addons, homeServers: settings.homeServers });
   sources.current = { addons, homeServers: settings.homeServers };
@@ -56,6 +56,9 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
 
   useEffect(() => {
     if (startedRef.current) return undefined;
+    // The provider manifest owns native IDs. Loading before account/profile
+    // addons hydrate turns native titles into generic TMDB guesses and caches them.
+    if (catalog.sourceType === "addon" && !addonsReady) return undefined;
 
     const load = () => {
       if (startedRef.current) return;
@@ -103,7 +106,7 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
       window.removeEventListener("resize", check);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey, catalog.id, eager, attempt]);
+  }, [cacheKey, catalog.id, eager, attempt, addonsReady]);
 
   const title = catalog.isPreinstalled ? translateUi(catalog.name) : catalog.name;
   if (category) {

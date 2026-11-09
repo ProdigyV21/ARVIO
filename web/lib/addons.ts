@@ -25,6 +25,7 @@ type RawManifest = {
 };
 
 type RawStream = {
+  transport?: StreamSource["transport"];
   name?: string;
   title?: string;
   url?: string;
@@ -528,6 +529,8 @@ function normalizeStream(stream: RawStream, addon: InstalledAddon): StreamSource
     size: size ?? sizeLabel(stream.sizeBytes ?? stream.behaviorHints?.videoSize ?? null),
     sizeBytes: stream.sizeBytes ?? stream.behaviorHints?.videoSize ?? null,
     url,
+    // Signed manifest endpoints need not have an .m3u8/.mpd pathname.
+    transport: ["hls", "dash", "file", "mpegts"].includes(stream.transport ?? "") ? stream.transport : undefined,
     infoHash: stream.infoHash ?? null,
     fileIdx: stream.fileIdx ?? null,
     behaviorHints: {
