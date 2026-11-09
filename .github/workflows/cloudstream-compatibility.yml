@@ -1,0 +1,72 @@
+name: Cloudstream browser compatibility (isolated)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/cloudstream-web-direct]
+    paths: ["tools/cloudstream-poc/**", ".github/workflows/cloudstream-compatibility.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  apple-webkit:
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SELF_HOSTED: "true"
+      NEXT_PUBLIC_PAYWALL_ENABLED: "false"
+      NEXT_PUBLIC_TELEGRAM_ENABLED: "false"
+      ARVIO_TEST_BROWSER: webkit
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install test dependencies
+        run: |
+          sdkmanager "platforms;android-35"
+          npm ci --prefix web
+          node web/node_modules/playwright/cli.js install webkit
+          mkdir -p artifacts/cloudstream-poc
+      - name: Prepare pinned Phisher StreamPlay runtime
+        shell: pwsh
+        run: |
+          ./tools/cloudstream-poc/setup.ps1 -RuntimePath "$env:RUNNER_TEMP/cs-runtime" -DataPath "$env:RUNNER_TEMP/cs-data" -AndroidSdk $env:ANDROID_HOME
+      - name: Start isolated services
+        shell: bash
+        run: |
+          export ARVIO_CS_WORKER_TOKEN="$(cat "$RUNNER_TEMP/cs-data/worker-token.txt")"
+          node tools/cloudstream-poc/bridge.mjs > "$RUNNER_TEMP/bridge.log" 2>&1 &
+          pwsh -File tools/cloudstream-poc/run-worker.ps1 -RuntimePath "$RUNNER_TEMP/cs-runtime" -DataPath "$RUNNER_TEMP/cs-data" -Heap 3g > "$RUNNER_TEMP/runtime.log" 2>&1 &
+          cd web
+          node node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 8876 > "$RUNNER_TEMP/web.log" 2>&1 &
+      - name: Wait for pinned provider
+        shell: bash
+        run: |
+          for attempt in {1..150}; do
+            if curl -fsS http://127.0.0.1:8950/health | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["runtime"]["provider"] == "StreamPlay"' 2>/dev/null; then exit 0; fi
+            sleep 5
+          done
+          # Do not publish runtime logs: third-party extractors may log signed URLs.
+          echo "Pinned StreamPlay runtime did not become ready"
+          exit 1
+      - name: Test real ARVIO playback in Apple WebKit
+        run: node tools/cloudstream-poc/web-smoke.cjs
+      - name: Save sanitized test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-webkit-playback
+          path: |
+            artifacts/cloudstream-poc/webkit-web-playback-result.json
+            artifacts/cloudstream-poc/webkit-actual-web-playback.png
+          if-no-files-found: ignore
+          retention-days: 7
