@@ -39,6 +39,9 @@ const bridge = 'http://127.0.0.1:8950';
     if (appleTest) assert.ok(capabilities.nativeHls, 'This WebKit installation cannot test Apple native HLS; use a macOS runner');
     await page.evaluate(async bridge => {
       // Isolated test profile only. Real catalog/metadata/source responses, no mock media.
+      // Installation UI has its own check; keep playback setup independent of saved routes.
+      const manifest = await fetch(`${bridge}/manifest.json`).then(r => r.json());
+      localStorage.setItem('arvio.web.installed.addons', JSON.stringify([{ ...manifest, manifest, manifestUrl: `${bridge}/manifest.json`, enabled: true }]));
       const settings = JSON.parse(localStorage.getItem('arvio.web.settings') || '{}');
       settings.catalogs = [{ id: 'cs-poc-movies', name: 'StreamPlay movies', sourceType: 'addon', mediaType: 'movie',
         addonId: 'arvio.local.cloudstream.streamplay.poc', addonCatalogId: 'streamplay', addonCatalogType: 'movie', sourceUrl: `${bridge}/manifest.json`, enabled: true }];
@@ -49,19 +52,8 @@ const bridge = 'http://127.0.0.1:8950';
       }
       await fetch(`${bridge}/catalog/movie/streamplay/search=Sintel.json`);
     }, bridge);
-    await page.reload();
+    await page.goto(base);
     await page.locator('button[data-profile-id]').first().click({ timeout: 30000 });
-    if (!fs.existsSync(state)) {
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      await page.getByRole('button', { name: 'Addons', exact: true }).click();
-      await page.getByLabel('Addon link', { exact: true }).fill(`${bridge}/manifest.json`);
-      await page.getByRole('button', { name: 'Continue', exact: true }).click();
-      await page.getByRole('button', { name: 'Install', exact: true }).click();
-      await page.waitForFunction(() => (localStorage.getItem('arvio.web.installed.addons') || '').includes('arvio.local.cloudstream.streamplay.poc'));
-      await page.evaluate(() => localStorage.removeItem('arvio.web.catalogRows.v3'));
-      await page.reload();
-      await page.locator('button[data-profile-id]').first().click({ timeout: 30000 });
-    }
     await page.getByText('Sintel', { exact: true }).first().click({ timeout: 30000 });
     await page.waitForFunction(() => /[1-9]\d* sources/.test(document.body.innerText), {}, { timeout: 60000 });
     const start = Date.now();
