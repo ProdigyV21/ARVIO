@@ -57,17 +57,28 @@ const bridge = 'http://127.0.0.1:8950';
       await page.getByLabel('Addon link', { exact: true }).fill(`${bridge}/manifest.json`);
       await page.getByRole('button', { name: 'Continue', exact: true }).click();
       await page.getByRole('button', { name: 'Install', exact: true }).click();
-      await page.getByRole('button', { name: 'Home', exact: true }).click();
+      await page.waitForFunction(() => (localStorage.getItem('arvio.web.installed.addons') || '').includes('arvio.local.cloudstream.streamplay.poc'));
+      await page.evaluate(() => localStorage.removeItem('arvio.web.catalogRows.v3'));
+      await page.reload();
+      await page.locator('button[data-profile-id]').first().click({ timeout: 30000 });
     }
     await page.getByText('Sintel', { exact: true }).first().click({ timeout: 30000 });
     await page.waitForFunction(() => /[1-9]\d* sources/.test(document.body.innerText), {}, { timeout: 60000 });
     const start = Date.now();
     playing = true;
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    const playButton = page.getByRole('button', { name: 'Play', exact: true });
+    if (appleTest) await playButton.tap(); else await playButton.click();
+    await page.locator('video').waitFor({ state: 'attached' });
+    await page.evaluate(() => {
+      const v = document.querySelector('video');
+      window.__qaPresentedFrames = 0;
+      const tick = () => { window.__qaPresentedFrames++; v.requestVideoFrameCallback(tick); };
+      v.requestVideoFrameCallback(tick);
+    });
     await page.waitForFunction(() => { const v = document.querySelector('video'); return v && v.currentTime > 3 && v.videoWidth > 0; }, {}, { timeout: 45000 });
     const sample = () => page.evaluate(() => { const v = document.querySelector('video'), q = v.getVideoPlaybackQuality();
       return { time: v.currentTime, width: v.videoWidth, height: v.videoHeight, frames: q.totalVideoFrames, dropped: q.droppedVideoFrames,
-        audioBytes: v.webkitAudioDecodedByteCount, audioTracks: v.audioTracks?.length, paused: v.paused,
+        audioBytes: v.webkitAudioDecodedByteCount, audioTracks: v.audioTracks?.length, presentedFrames: window.__qaPresentedFrames, paused: v.paused,
         directNativeHost: v.currentSrc.startsWith('https:') ? new URL(v.currentSrc).hostname : null }; });
     const first = await sample(), timeToThreeSecondsMs = Date.now() - start;
     assert.ok(first.frames > 0 && (first.audioBytes > 0 || appleTest && first.audioTracks > 0), 'decoded picture and audio indicator');
@@ -75,8 +86,11 @@ const bridge = 'http://127.0.0.1:8950';
     await page.evaluate(() => { document.querySelector('video').currentTime = 120; });
     await page.waitForFunction(() => { const v = document.querySelector('video'); return v.currentTime > 122 && !v.seeking; }, {}, { timeout: 30000 });
     const afterSeek = await sample(), seekToTwoSecondsMs = Date.now() - seekStart;
-    assert.ok(afterSeek.frames > first.frames && !afterSeek.paused);
-    if (first.audioBytes !== undefined) assert.ok(afterSeek.audioBytes > first.audioBytes);
+    console.log(JSON.stringify({ first, afterSeek }));
+    // Native Apple HLS can reset decoded-byte/frame counters on a seek.
+    // A separate presented-frame callback count proves new pictures arrived.
+    assert.ok(afterSeek.presentedFrames > first.presentedFrames && !afterSeek.paused);
+    if (first.audioBytes !== undefined) assert.ok(afterSeek.audioBytes > 0);
     assert.ok(media.length > 0 || afterSeek.directNativeHost, 'real remote source responses or native HTTPS media');
     assert.ok(media.every(r => !['127.0.0.1', 'localhost'].includes(r.host)), 'no ARVIO video relay');
     assert.deepEqual(relayRequests, [], 'no ARVIO proxy or remux requests');
