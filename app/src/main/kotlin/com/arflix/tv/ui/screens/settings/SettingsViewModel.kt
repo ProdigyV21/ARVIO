@@ -79,6 +79,10 @@ import com.arflix.tv.data.repository.TraktSyncService
 import com.arflix.tv.data.repository.WatchlistRepository
 import com.arflix.tv.network.OkHttpProvider
 import com.arflix.tv.data.repository.CatalogException
+import com.arflix.tv.data.repository.KidsContentFilter
+import com.arflix.tv.data.repository.KidsListApprovalSession
+import com.arflix.tv.data.repository.KidsTrustedTitles
+import com.arflix.tv.data.model.MediaItem
 import com.arflix.tv.data.repository.SyncProgress
 import com.arflix.tv.data.repository.SyncStatus
 import com.arflix.tv.data.repository.SyncResult
@@ -115,6 +119,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -374,6 +379,8 @@ data class SettingsUiState(
     val showUnknownSourcesDialog: Boolean = false,
     // Catalogs
     val catalogs: List<CatalogConfig> = emptyList(),
+    val isKidsProfile: Boolean = false,
+    val kidsListApproval: KidsListApprovalUi? = null,
     val pendingYouTubeUrl: String? = null,
     val youTubeApprovalProfileId: String? = null,
     val youTubeApprovalError: SettingsMessage? = null,
@@ -446,6 +453,17 @@ data class SettingsUiState(
     val telegramUserName: String? = null
 )
 
+data class KidsListApprovalUi(
+    val profileId: String,
+    val catalog: CatalogConfig,
+    val needsPin: Boolean = true,
+    val pinAttempts: Int = 0,
+    val loading: Boolean = false,
+    val items: List<MediaItem> = emptyList(),
+    val nextOffset: Int? = null,
+    val error: SettingsMessage? = null
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -479,7 +497,8 @@ class SettingsViewModel @Inject constructor(
     private val telegramRepository: TelegramRepository,
     private val communityAddonRepository: CommunityAddonRepository,
     private val traktManualSync: com.arflix.tv.data.repository.TraktManualSync,
-    private val partnerDelivery: dagger.Lazy<com.arflix.tv.data.repository.PartnerDeliveryRepository>? = null
+    private val partnerDelivery: dagger.Lazy<com.arflix.tv.data.repository.PartnerDeliveryRepository>? = null,
+    private val kidsContentFilter: KidsContentFilter? = null
 ) : ViewModel() {
     private fun visibleCatalogs(catalogs: List<CatalogConfig>): List<CatalogConfig> {
         return catalogs.filter { config ->
@@ -493,6 +512,8 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    private var kidsListApprovalJob: Job? = null
+    private var kidsListApprovalSession: KidsListApprovalSession? = null
     private fun managedPermissions() = if (com.arflix.tv.BuildConfig.PARTNER_MANAGEMENT_ENABLED)
         partnerDelivery?.get()?.activeDelivery()?.permissions else null
 
@@ -1166,10 +1187,16 @@ class SettingsViewModel @Inject constructor(
 
     private fun observeProfileChanges() {
         viewModelScope.launch {
+            profileRepository.activeProfile.map { it?.isKidsProfile == true }.distinctUntilChanged().collect { isKids ->
+                _uiState.update { it.copy(isKidsProfile = isKids) }
+            }
+        }
+        viewModelScope.launch {
             profileManager.activeProfileId.collect { profileId ->
                 if (observedProfileId == profileId) return@collect
                 observedProfileId = profileId
                 dismissYouTubeApproval()
+                dismissKidsListApproval()
                 cancelMdbListAuth()
                 hasObservedIptvConfig = false
                 lastObservedIptvConfigSignature = null
@@ -3173,6 +3200,80 @@ class SettingsViewModel @Inject constructor(
                 )
             } else {
                 performYouTubeAddition(url, profileId)
+            }
+        }
+    }
+
+    fun requestKidsListApproval(catalog: CatalogConfig) {
+        if (!_uiState.value.isKidsProfile || !KidsTrustedTitles.isTrustedSource(catalog) || !canManage("catalogs")) return
+        dismissKidsListApproval()
+        _uiState.update { it.copy(kidsListApproval = KidsListApprovalUi(profileManager.getProfileIdSync(), catalog)) }
+    }
+
+    fun dismissKidsListApproval() {
+        kidsListApprovalJob?.cancel()
+        kidsListApprovalJob = null
+        kidsListApprovalSession = null
+        _uiState.update { it.copy(kidsListApproval = null) }
+    }
+
+    fun confirmKidsListPin(pin: String) {
+        val request = _uiState.value.kidsListApproval?.takeIf { it.needsPin && !it.loading } ?: return
+        runKidsListApproval(request) {
+            val session = catalogRepository.beginKidsListApproval(request.profileId, request.catalog, pin)
+            kidsListApprovalSession = session
+            loadKidsApprovalPage(session, request.copy(needsPin = false), 0)
+        }
+    }
+
+    fun loadMoreKidsListTitles() {
+        val request = _uiState.value.kidsListApproval?.takeIf { !it.loading } ?: return
+        val session = kidsListApprovalSession ?: return
+        val offset = request.nextOffset ?: return
+        runKidsListApproval(request) { loadKidsApprovalPage(session, request, offset) }
+    }
+
+    private suspend fun loadKidsApprovalPage(session: KidsListApprovalSession, request: KidsListApprovalUi, offset: Int) {
+        catalogRepository.checkKidsListApproval(session)
+        val page = mediaRepository.loadCustomCatalogPage(session.catalog, offset, 24)
+        catalogRepository.checkKidsListApproval(session)
+        _uiState.update { state ->
+            state.copy(kidsListApproval = request.copy(
+                items = (request.items + page.items).distinctBy { it.mediaType to it.id },
+                nextOffset = page.nextOffset?.takeIf { page.hasMore && it > offset },
+                error = null
+            ))
+        }
+    }
+
+    fun approveKidsListTitle(item: MediaItem) {
+        val request = _uiState.value.kidsListApproval?.takeIf { !it.needsPin && !it.loading && item in it.items } ?: return
+        val session = kidsListApprovalSession ?: return
+        val filter = kidsContentFilter ?: return
+        runKidsListApproval(request) {
+            filter.approveListTitle(session, item)
+            kidsListApprovalSession = null
+            _uiState.update { it.copy(
+                kidsListApproval = null,
+                toastMessage = SettingsMessage.Res(R.string.kids_list_title_approved, listOf(item.title)),
+                toastType = ToastType.SUCCESS
+            ) }
+        }
+    }
+
+    private fun runKidsListApproval(request: KidsListApprovalUi, action: suspend () -> Unit) {
+        _uiState.update { it.copy(kidsListApproval = request.copy(loading = true, error = null)) }
+        kidsListApprovalJob = viewModelScope.launch {
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (request.needsPin) kidsListApprovalSession = null
+                _uiState.update { it.copy(kidsListApproval = request.copy(
+                    pinAttempts = request.pinAttempts + 1,
+                    error = e.orCatalogMessage(SettingsMessage.Res(R.string.kids_list_approval_unavailable))
+                )) }
             }
         }
     }

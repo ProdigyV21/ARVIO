@@ -1655,6 +1655,14 @@
     <string name="settings_catalog_added">Added %1$s</string>
     <string name="settings_catalog_updated">Updated %1$s</string>
     <string name="settings_catalog_removed">Catalog removed</string>
+    <string name="kids_list_approve_title">Approve an unrated title</string>
+    <string name="kids_list_approval_pin_required">Incorrect parent PIN. Set a parent PIN in Manage Profiles if needed.</string>
+    <string name="kids_list_approval_changed">The profile or list changed. Open the approval again.</string>
+    <string name="kids_list_approval_unavailable">The list or rating could not be verified. No approval was saved.</string>
+    <string name="kids_list_approval_rated">This title has a certification. The age filter still applies.</string>
+    <string name="kids_list_approval_empty">No titles available in this list.</string>
+    <string name="kids_list_more_titles">More titles</string>
+    <string name="kids_list_title_approved">Approved %1$s</string>
     <string name="settings_catalog_unpacked">Catalog row extracted from pack</string>
     <string name="settings_catalog_search_min_chars">Type at least 2 characters</string>
     <string name="settings_catalog_search_no_lists">No public Trakt lists found</string>

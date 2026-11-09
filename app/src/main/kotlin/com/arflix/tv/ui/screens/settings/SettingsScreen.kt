@@ -655,6 +655,7 @@ fun SettingsScreen(
     var showIptvCategoriesSettings by remember { mutableStateOf(false) }
     // Rename dialog state
     var showCatalogRename by remember { mutableStateOf(false) }
+    var kidsCatalogOptions by remember { mutableStateOf<CatalogConfig?>(null) }
     var youTubeManagerCatalogId by remember { mutableStateOf<String?>(null) }
     var showYouTubeAddInput by remember { mutableStateOf(false) }
     var youTubeAddUrl by remember { mutableStateOf("") }
@@ -992,6 +993,16 @@ fun SettingsScreen(
         }
     }
 
+    fun openCatalogEditor(catalog: CatalogConfig) {
+        if (uiState.isKidsProfile && com.arflix.tv.data.repository.KidsTrustedTitles.isTrustedSource(catalog)) {
+            kidsCatalogOptions = catalog
+        } else {
+            renameCatalogId = catalog.id
+            renameCatalogTitle = catalog.title
+            showCatalogRename = true
+        }
+    }
+
     val hasBlockingModal by remember { derivedStateOf {
         showCustomAddonInput ||
         showCommunityAddons ||
@@ -1002,6 +1013,8 @@ fun SettingsScreen(
         showPlexHomeServerInput ||
         showCatalogInput ||
         showCatalogRename ||
+        kidsCatalogOptions != null ||
+        uiState.kidsListApproval != null ||
         youTubeManagerCatalogId != null ||
         showYouTubeAddInput ||
         uiState.pendingYouTubeUrl != null ||
@@ -1719,9 +1732,7 @@ fun SettingsScreen(
                                                             if (catalog.sourceType == CatalogSourceType.YOUTUBE) {
                                                                 youTubeManagerCatalogId = catalog.id
                                                             } else {
-                                                                renameCatalogId = catalog.id
-                                                                renameCatalogTitle = catalog.title
-                                                                showCatalogRename = true
+                                                                openCatalogEditor(catalog)
                                                             }
                                                         }
                                                         1 -> viewModel.moveCatalogUp(catalog.id)
@@ -1919,9 +1930,7 @@ fun SettingsScreen(
                     if (catalog.sourceType == CatalogSourceType.YOUTUBE) {
                         youTubeManagerCatalogId = catalog.id
                     } else {
-                        renameCatalogId = catalog.id
-                        renameCatalogTitle = catalog.title
-                        showCatalogRename = true
+                        openCatalogEditor(catalog)
                     }
                 },
                 onDeleteCatalogClick = { catalog ->
@@ -2457,9 +2466,7 @@ fun SettingsScreen(
                                 if (catalog.sourceType == CatalogSourceType.YOUTUBE) {
                                     youTubeManagerCatalogId = catalog.id
                                 } else {
-                                    renameCatalogId = catalog.id
-                                    renameCatalogTitle = catalog.title
-                                    showCatalogRename = true
+                                    openCatalogEditor(catalog)
                                 }
                             },
                             onMoveCatalogUp = { catalog -> viewModel.moveCatalogUp(catalog.id) },
@@ -2930,6 +2937,44 @@ fun SettingsScreen(
                     onPinConfirmed = viewModel::confirmYouTubeAddition,
                     onDismiss = viewModel::dismissYouTubeApproval,
                     pinError = uiState.youTubeApprovalError?.localizedText().orEmpty()
+                )
+            }
+        }
+
+        kidsCatalogOptions?.let { catalog ->
+            KidsListOptionsDialog(
+                title = catalog.title,
+                onRename = {
+                    kidsCatalogOptions = null
+                    renameCatalogId = catalog.id
+                    renameCatalogTitle = catalog.title
+                    showCatalogRename = true
+                },
+                onApprove = {
+                    kidsCatalogOptions = null
+                    viewModel.requestKidsListApproval(catalog)
+                },
+                onDismiss = { kidsCatalogOptions = null }
+            )
+        }
+
+        uiState.kidsListApproval?.let { approval ->
+            if (approval.needsPin) {
+                androidx.compose.runtime.key(approval.pinAttempts) {
+                    com.arflix.tv.ui.screens.profile.PinEntryDialog(
+                        title = stringResource(R.string.profile_parent_pin_enter),
+                        onPinConfirmed = viewModel::confirmKidsListPin,
+                        onDismiss = viewModel::dismissKidsListApproval,
+                        pinError = approval.error?.localizedText().orEmpty()
+                    )
+                }
+            } else {
+                KidsListTitleDialog(
+                    approval = approval,
+                    error = approval.error?.localizedText(),
+                    onApprove = viewModel::approveKidsListTitle,
+                    onMore = viewModel::loadMoreKidsListTitles,
+                    onDismiss = viewModel::dismissKidsListApproval
                 )
             }
         }

@@ -109,6 +109,7 @@ class CatalogRepository @Inject constructor(
         val key = catalogFieldKey(profileId, field)
         if (prefs[key] == json) return
         prefs[key] = json
+        if (field == "catalogsByProfile") pruneKidsListApprovals(prefs, profileId, json)
         if (stampChange) CatalogCloudFields.stamp(prefs, profileId, field, json)
     }
 
@@ -134,7 +135,7 @@ class CatalogRepository @Inject constructor(
                 } else {
                     gson.toJson(gson.fromJson<List<String>>(json, hiddenListType).orEmpty().distinct())
                 }
-                prefs[catalogFieldKey(profileId, field)] = normalized
+                writeCatalogField(prefs, profileId, field, normalized, stampChange = false)
                 CatalogCloudFields.recordRemote(prefs, profileId, field, normalized, timestamps)
             }
         }
@@ -247,6 +248,74 @@ class CatalogRepository @Inject constructor(
         val safeProfileId = profileId.trim().ifBlank { "default" }
         val prefs = context.settingsDataStore.data.first()
         return sanitizeCollectionCatalogs(readCatalogsFromPrefs(safeProfileId, prefs))
+    }
+
+    private fun pruneKidsListApprovals(prefs: MutablePreferences, profileId: String, catalogsJson: String) {
+        val key = KidsTrustedTitles.preferenceKey(profileId)
+        val approved = prefs[key] ?: return
+        val remaining = KidsTrustedTitles.retainRows(approved, parseCatalogsJson(catalogsJson))
+        if (remaining != approved) prefs[key] = remaining
+    }
+
+    internal fun observeKidsListApprovals(profileId: String): Flow<Set<String>> {
+        val key = KidsTrustedTitles.preferenceKey(profileId)
+        return context.settingsDataStore.data.map { it[key].orEmpty() }.distinctUntilChanged().map(KidsTrustedTitles::keys)
+    }
+
+    internal suspend fun beginKidsListRefresh(catalog: CatalogConfig): KidsListRefresh? {
+        if (!KidsTrustedTitles.isTrustedSource(catalog)) return null
+        val profile = profileManager.getActiveProfile()?.takeIf { it.isKidsProfile } ?: return null
+        val entries = context.settingsDataStore.data.first()[KidsTrustedTitles.preferenceKey(profile.id)].orEmpty()
+        val approved = KidsTrustedTitles.forRow(entries, catalog)
+        return approved.takeIf { it.isNotEmpty() }?.let { KidsListRefresh(profile.id, it) }
+    }
+
+    internal suspend fun finishKidsListRefresh(
+        refresh: KidsListRefresh, catalog: CatalogConfig, refs: List<Pair<com.arflix.tv.data.model.MediaType, Int>>
+    ) {
+        if (profileManager.getActiveProfile()?.id != refresh.profileId) return
+        val key = KidsTrustedTitles.preferenceKey(refresh.profileId)
+        context.settingsDataStore.edit { prefs ->
+            val approved = prefs[key].orEmpty()
+            val remaining = KidsTrustedTitles.retainMembers(approved, catalog, refresh.previouslyApproved, refs)
+            if (approved != remaining) prefs[key] = remaining
+        }
+    }
+
+    internal suspend fun beginKidsListApproval(profileId: String, catalog: CatalogConfig, pin: String): KidsListApprovalSession {
+        val profile = profileManager.getActiveProfile()
+        if (profile?.id != profileId || !profile.isKidsProfile) throw CatalogException(R.string.kids_list_approval_changed)
+        val hash = profile.parentPin
+        if (hash.isNullOrBlank() || !com.arflix.tv.util.PinUtil.verifyPin(pin, hash)) {
+            throw CatalogException(R.string.kids_list_approval_pin_required)
+        }
+        val session = KidsListApprovalSession(profileId, catalog, hash)
+        checkKidsListApproval(session)
+        return session
+    }
+
+    internal suspend fun checkKidsListApproval(session: KidsListApprovalSession) {
+        val profile = profileManager.getActiveProfile()
+        if (profile?.id != session.profileId || !profile.isKidsProfile || profile.parentPin != session.parentPinHash ||
+            managedDelivery()?.permissions?.editCatalogs == false ||
+            !hasKidsApprovalRow(getCatalogsForProfile(session.profileId), session.catalog)) {
+            throw CatalogException(R.string.kids_list_approval_changed)
+        }
+    }
+
+    private fun hasKidsApprovalRow(catalogs: List<CatalogConfig>, expected: CatalogConfig): Boolean {
+        val row = KidsTrustedTitles.rowKey(expected)
+        return catalogs.any { KidsTrustedTitles.isTrustedSource(it) && KidsTrustedTitles.rowKey(it) == row }
+    }
+
+    internal suspend fun saveKidsListApproval(session: KidsListApprovalSession, type: com.arflix.tv.data.model.MediaType, id: Int) {
+        checkKidsListApproval(session)
+        context.settingsDataStore.edit { prefs ->
+            val catalogs = readCatalogsFromPrefs(session.profileId, prefs)
+            if (!hasKidsApprovalRow(catalogs, session.catalog)) throw CatalogException(R.string.kids_list_approval_changed)
+            val key = KidsTrustedTitles.preferenceKey(session.profileId)
+            prefs[key] = prefs[key].orEmpty() + KidsTrustedTitles.entry(session.catalog, type, id)
+        }
     }
 
     private fun isBundledPreinstalledCatalogId(catalogId: String): Boolean {
