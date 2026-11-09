@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   apple-webkit:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 30
     env:
       NEXT_PUBLIC_SELF_HOSTED: "true"
@@ -43,7 +43,8 @@ jobs:
       - name: Start isolated services
         shell: bash
         run: |
-          export ARVIO_CS_WORKER_TOKEN="$(cat "$RUNNER_TEMP/cs-data/worker-token.txt")"
+          ARVIO_CS_WORKER_TOKEN="$(cat "$RUNNER_TEMP/cs-data/worker-token.txt")"
+          export ARVIO_CS_WORKER_TOKEN
           node tools/cloudstream-poc/bridge.mjs > "$RUNNER_TEMP/bridge.log" 2>&1 &
           pwsh -File tools/cloudstream-poc/run-worker.ps1 -RuntimePath "$RUNNER_TEMP/cs-runtime" -DataPath "$RUNNER_TEMP/cs-data" -Heap 3g > "$RUNNER_TEMP/runtime.log" 2>&1 &
           cd web
@@ -51,7 +52,7 @@ jobs:
       - name: Wait for pinned provider
         shell: bash
         run: |
-          for attempt in {1..150}; do
+          for _attempt in {1..150}; do
             if curl -fsS http://127.0.0.1:8950/health | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["runtime"]["provider"] == "StreamPlay"' 2>/dev/null; then exit 0; fi
             sleep 5
           done
