@@ -10,13 +10,24 @@ if (!appleTest && (!executablePath || !/^chrome-headless-shell(?:\.exe)?$/i.test
 }
 const evidence = path.resolve(__dirname, '../../artifacts/cloudstream-poc');
 fs.mkdirSync(evidence, { recursive: true });
-const state = path.join(evidence, 'browser-state.json');
 const base = 'http://127.0.0.1:8876';
 const bridge = 'http://127.0.0.1:8950';
 (async () => {
+  // Seed before React mounts: changing storage underneath a mounted app races
+  // profile hydration/persistence. Only the live manifest and test preferences
+  // are seeded; catalogs, metadata, source resolution and media remain real.
+  const manifest = await fetch(`${bridge}/manifest.json`).then(r => r.json());
+  const profile = { id: 'cloudstream-qa', name: 'Test profile', avatarColor: 4293200148, avatarId: 0, isKidsProfile: false, isLocked: false, createdAt: Date.now() };
+  const settings = { catalogs: [{ id: 'cs-poc-movies', name: 'StreamPlay movies', sourceType: 'addon', mediaType: 'movie',
+    addonId: manifest.id, addonCatalogId: 'streamplay', addonCatalogType: 'movie', sourceUrl: `${bridge}/manifest.json`, enabled: true }] };
+  const testStorage = { cookies: [], origins: [{ origin: base, localStorage: [
+    { name: 'arvio.web.profiles', value: JSON.stringify([profile]) },
+    { name: 'arvio.web.settings', value: JSON.stringify(settings) },
+    { name: 'arvio.web.installed.addons', value: JSON.stringify([{ ...manifest, manifest, manifestUrl: `${bridge}/manifest.json`, enabled: true }]) }
+  ] }] };
   const browser = await (appleTest ? webkit : chromium).launch({ ...(appleTest ? {} : { executablePath }), headless: true });
   const context = await browser.newContext({ ...(appleTest ? devices['iPad Pro 11 landscape'] : { viewport: { width: 1440, height: 900 } }),
-    ...(fs.existsSync(state) ? { storageState: state } : {}) });
+    storageState: testStorage });
   const page = await context.newPage();
   const media = [], errors = [], relayRequests = [];
   page.on('pageerror', error => errors.push(error.message.slice(0, 180)));
@@ -37,22 +48,6 @@ const bridge = 'http://127.0.0.1:8950';
     await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 90000 });
     const capabilities = await page.evaluate(() => ({ nativeHls: !!document.createElement('video').canPlayType('application/vnd.apple.mpegurl'), mse: typeof MediaSource !== 'undefined' }));
     if (appleTest) assert.ok(capabilities.nativeHls, 'This WebKit installation cannot test Apple native HLS; use a macOS runner');
-    await page.evaluate(async bridge => {
-      // Isolated test profile only. Real catalog/metadata/source responses, no mock media.
-      // Installation UI has its own check; keep playback setup independent of saved routes.
-      const manifest = await fetch(`${bridge}/manifest.json`).then(r => r.json());
-      localStorage.setItem('arvio.web.installed.addons', JSON.stringify([{ ...manifest, manifest, manifestUrl: `${bridge}/manifest.json`, enabled: true }]));
-      const settings = JSON.parse(localStorage.getItem('arvio.web.settings') || '{}');
-      settings.catalogs = [{ id: 'cs-poc-movies', name: 'StreamPlay movies', sourceType: 'addon', mediaType: 'movie',
-        addonId: 'arvio.local.cloudstream.streamplay.poc', addonCatalogId: 'streamplay', addonCatalogType: 'movie', sourceUrl: `${bridge}/manifest.json`, enabled: true }];
-      localStorage.setItem('arvio.web.settings', JSON.stringify(settings));
-      localStorage.removeItem('arvio.web.catalogRows.v3');
-      if (!localStorage.getItem('arvio.web.profiles')) {
-        localStorage.setItem('arvio.web.profiles', JSON.stringify([{ id: 'cloudstream-qa', name: 'Test profile', avatarColor: 4293200148, avatarId: 0, isKidsProfile: false, isLocked: false, createdAt: Date.now() }]));
-      }
-      await fetch(`${bridge}/catalog/movie/streamplay/search=Sintel.json`);
-    }, bridge);
-    await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.locator('button[data-profile-id]').first().click({ timeout: 30000 });
     await page.getByText('Sintel', { exact: true }).first().click({ timeout: 30000 });
     await page.waitForFunction(() => /[1-9]\d* sources/.test(document.body.innerText), {}, { timeout: 60000 });
