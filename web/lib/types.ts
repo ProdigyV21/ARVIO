@@ -276,6 +276,8 @@ export interface InstalledAddon {
   logo?: string | null;
   background?: string | null;
   enabled?: boolean;
+  setupUpdatedAt?: number;
+  metadataUpdatedAt?: number;
 }
 
 export interface AddonResource {

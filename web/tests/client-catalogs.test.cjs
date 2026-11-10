@@ -110,3 +110,85 @@ test('the actual catalog path resolves manifest delegation and inherited filters
   assert.equal(row.hasMore, true);
   assert.ok(requests.length && requests.every(url => !url.includes('addon.invalid')));
 });
+
+
+test('parseClientDelegate parses vod recent/categories and parseClientFilter parses availableOn', () => {
+  const testAssert = require('node:assert/strict');
+  const { load: loadModule } = require('./load.cjs');
+  const clientCatalog = loadModule('lib/clientCatalog.ts');
+
+  const recentVod = clientCatalog.parseClientDelegate('vod:recent?type=movie');
+  testAssert.equal(recentVod.provider, 'vod');
+  testAssert.equal(recentVod.action, 'recent');
+  testAssert.equal(recentVod.mediaType, 'movie');
+  testAssert.equal(recentVod.source, undefined);
+  testAssert.equal(recentVod.category, undefined);
+
+  const catVod = clientCatalog.parseClientDelegate('vod:categories?type=series&category=Action%20%26%20Sci-Fi');
+  testAssert.equal(catVod.provider, 'vod');
+  testAssert.equal(catVod.action, 'categories');
+  testAssert.equal(catVod.mediaType, 'tv');
+  testAssert.equal(catVod.category, 'Action & Sci-Fi');
+
+  const vodFilter = clientCatalog.parseClientFilter('{"availableOn":"vod","minYear":2020}');
+  testAssert.equal(vodFilter.availableOn, 'vod');
+  testAssert.equal(vodFilter.minYear, 2020);
+  const hsFilter = clientCatalog.parseClientFilter('{"availableOn":"homeserver"}');
+  testAssert.equal(hsFilter.availableOn, 'homeserver');
+});
+
+test('loadClientDelegatedCatalog handles vod:recent, hybrid availableOn=vod, and filterClientCatalogItems', async () => {
+  const testAssert = require('node:assert/strict');
+  const { load: loadModule } = require('./load.cjs');
+  const clientCatalog = loadModule('lib/clientCatalog.ts');
+  const loader = loadModule('lib/clientCatalogLoader.ts', { './clientCatalog': clientCatalog });
+
+  const movieA = { id: 101, mediaType: 'movie', title: 'Alpha VOD', tmdbId: 101, year: '2025' };
+  const movieB = { id: 202, mediaType: 'movie', title: 'Beta Not On Server', tmdbId: 202, year: '2024' };
+
+  const fakeServices = {
+    tracker: async () => ({ items: [movieA, movieB], isCurrent: () => true }),
+    homePage: async () => ({ items: [] }),
+    vodSeeds: async () => [movieA],
+    hasVodMatch: async (item) => item.id === 101,
+    hasHomeServerMatch: async (item) => item.id === 202
+  };
+
+  const vodItems = await loader.loadClientDelegatedCatalog(
+    'vod:recent?type=movie',
+    { id: 'vod-recent-movies', sourceType: 'addon', name: 'Recent VOD', mediaType: 'movie', addonCatalogType: 'movie' },
+    [],
+    20,
+    async (item) => ({ ...item, posterPath: '/hydrated.jpg' }),
+    fakeServices
+  );
+  testAssert.equal(vodItems.length, 1);
+  testAssert.equal(vodItems[0].id, 101);
+  testAssert.equal(vodItems[0].posterPath, '/hydrated.jpg');
+
+  const hybridVod = await loader.loadClientDelegatedCatalog(
+    'trakt:watchlist?type=movie',
+    {
+      id: 'hybrid-watchlist-vod',
+      sourceType: 'addon',
+      name: 'Watchlist On VOD',
+      mediaType: 'movie',
+      addonCatalogType: 'movie',
+      clientFilter: '{"availableOn":"vod"}'
+    },
+    [],
+    20,
+    async (item) => item,
+    fakeServices
+  );
+  testAssert.deepEqual([...hybridVod.map((i) => i.id)], [101]);
+
+  const filteredHttpServer = await loader.filterClientCatalogItems(
+    [movieA, movieB],
+    '{"availableOn":"homeserver"}',
+    [{ id: 'hs-1', name: 'NAS', url: 'http://nas', enabled: true }],
+    20,
+    fakeServices
+  );
+  testAssert.deepEqual([...filteredHttpServer.map((i) => i.id)], [202]);
+});

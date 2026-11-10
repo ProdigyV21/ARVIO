@@ -13,6 +13,7 @@ import com.arflix.tv.data.model.DrmInfo
 import com.arflix.tv.data.model.IptvNowNext
 import com.arflix.tv.data.model.IptvProgram
 import com.arflix.tv.data.model.IptvSnapshot
+import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StalkerVodLink
 import com.arflix.tv.data.model.StreamBehaviorHints
 import com.arflix.tv.data.model.StreamSource
@@ -5386,6 +5387,16 @@ class IptvRepository @Inject constructor(
         @SerializedName("tv_archive_duration") val tvArchiveDuration: Int? = null
     )
 
+    data class VodCatalogSeed(
+        val mediaType: MediaType,
+        val tmdbId: Int?,
+        val imdbId: String?,
+        val title: String,
+        val year: Int?,
+        val categoryId: String?,
+        val addedEpochSec: Long
+    )
+
     private data class XtreamVodStream(
         @SerializedName("stream_id") val streamId: Int? = null,
         val name: String? = null,
@@ -5393,15 +5404,18 @@ class IptvRepository @Inject constructor(
         @SerializedName("container_extension") val containerExtension: String? = null,
         @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
         @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        @SerializedName("added") val added: String? = null
     )
 
     private data class XtreamSeriesItem(
         @SerializedName(value = "series_id", alternate = ["seriesid", "id"]) val seriesId: Int? = null,
         val name: String? = null,
+        val year: String? = null,
         @SerializedName(value = "imdb", alternate = ["imdb_id", "imdbid"]) val imdb: String? = null,
         @SerializedName(value = "tmdb", alternate = ["tmdb_id", "tmdbid"]) val tmdb: String? = null,
-        @SerializedName("category_id") val categoryId: String? = null
+        @SerializedName("category_id") val categoryId: String? = null,
+        @SerializedName("last_modified") val lastModified: String? = null
     )
 
     private data class XtreamSeriesEpisode(
@@ -12603,6 +12617,152 @@ class IptvRepository @Inject constructor(
         val creds = xtreamCredentialsForSeriesImport(config).firstOrNull() ?: return emptyList()
         return loadXtreamSeriesCategoriesInternal(creds, allowNetwork = false)
             .mapNotNull { it.toInfoOrNull() }
+    }
+
+    /**
+     * Returns recently added Xtream VOD movies and/or series as lightweight catalog seeds
+     * for on-device client delegation (`vod:recent`, `vod:categories`).
+     */
+    suspend fun getDelegatedVodCatalogSeeds(
+        mediaType: MediaType? = null,
+        categoryFilter: String? = null,
+        allowNetwork: Boolean = true
+    ): List<VodCatalogSeed> = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val filterNorm = categoryFilter?.trim()?.lowercase(Locale.US)?.takeIf { it.isNotBlank() }
+        val results = mutableListOf<VodCatalogSeed>()
+
+        if (mediaType != MediaType.TV) {
+            val movieCreds = xtreamCredentialsForVodImport(config)
+            for (creds in movieCreds) {
+                val streams = runCatching { getXtreamVodStreams(creds, allowNetwork = allowNetwork, fast = true) }
+                    .getOrDefault(emptyList())
+                if (streams.isEmpty()) continue
+                val matchingCategoryIds = if (filterNorm != null) {
+                    loadXtreamVodCategoriesInternal(creds, allowNetwork = allowNetwork)
+                        .filter { cat ->
+                            cat.categoryId?.trim()?.lowercase(Locale.US) == filterNorm ||
+                                cat.categoryName?.trim()?.lowercase(Locale.US)?.contains(filterNorm) == true
+                        }
+                        .mapNotNull { it.categoryId?.trim() }
+                        .toSet()
+                } else emptySet()
+
+                for (item in streams) {
+                    val catId = item.categoryId?.trim()
+                    if (filterNorm != null && catId != filterNorm && catId !in matchingCategoryIds) continue
+                    val rawTitle = item.name?.trim().orEmpty()
+                    if (rawTitle.isBlank()) continue
+                    val tmdb = normalizeTmdbId(item.tmdb)?.toIntOrNull()?.takeIf { it > 0 }
+                    val imdb = normalizeImdbId(item.imdb)?.takeIf { it != IptvIdSentinels.IMDB_NONE }
+                    val added = item.added?.trim()?.toLongOrNull() ?: (item.streamId?.toLong() ?: 0L)
+                    results += VodCatalogSeed(
+                        mediaType = MediaType.MOVIE,
+                        tmdbId = tmdb,
+                        imdbId = imdb,
+                        title = rawTitle,
+                        year = parseYear(item.year ?: rawTitle),
+                        categoryId = catId,
+                        addedEpochSec = added
+                    )
+                }
+            }
+        }
+
+        if (mediaType != MediaType.MOVIE) {
+            val seriesCreds = xtreamCredentialsForSeriesImport(config)
+            for (creds in seriesCreds) {
+                val series = runCatching { getXtreamSeriesList(creds, allowNetwork = allowNetwork, fast = true) }
+                    .getOrDefault(emptyList())
+                if (series.isEmpty()) continue
+                val matchingCategoryIds = if (filterNorm != null) {
+                    loadXtreamSeriesCategoriesInternal(creds, allowNetwork = allowNetwork)
+                        .filter { cat ->
+                            cat.categoryId?.trim()?.lowercase(Locale.US) == filterNorm ||
+                                cat.categoryName?.trim()?.lowercase(Locale.US)?.contains(filterNorm) == true
+                        }
+                        .mapNotNull { it.categoryId?.trim() }
+                        .toSet()
+                } else emptySet()
+
+                for (item in series) {
+                    val catId = item.categoryId?.trim()
+                    if (filterNorm != null && catId != filterNorm && catId !in matchingCategoryIds) continue
+                    val rawTitle = item.name?.trim().orEmpty()
+                    if (rawTitle.isBlank()) continue
+                    val tmdb = normalizeTmdbId(item.tmdb)?.toIntOrNull()?.takeIf { it > 0 }
+                    val imdb = normalizeImdbId(item.imdb)?.takeIf { it != IptvIdSentinels.IMDB_NONE }
+                    val added = item.lastModified?.trim()?.toLongOrNull() ?: (item.seriesId?.toLong() ?: 0L)
+                    results += VodCatalogSeed(
+                        mediaType = MediaType.TV,
+                        tmdbId = tmdb,
+                        imdbId = imdb,
+                        title = rawTitle,
+                        year = parseYear(item.year ?: rawTitle),
+                        categoryId = catId,
+                        addedEpochSec = added
+                    )
+                }
+            }
+        }
+
+        results
+            .sortedByDescending { it.addedEpochSec }
+            .distinctBy { seed ->
+                when {
+                    seed.tmdbId != null -> "${seed.mediaType.name}:tmdb:${seed.tmdbId}"
+                    !seed.imdbId.isNullOrBlank() -> "${seed.mediaType.name}:imdb:${seed.imdbId}"
+                    else -> "${seed.mediaType.name}:title:${normalizeLookupText(seed.title)}"
+                }
+            }
+    }
+
+    /**
+     * Checks whether a title is present in the profile's connected Xtream VOD / Series catalogs.
+     */
+    suspend fun hasVodMatch(
+        mediaType: MediaType,
+        tmdbId: Int?,
+        imdbId: String?,
+        title: String,
+        year: Int? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val config = observeConfig().first()
+        val normTmdb = normalizeTmdbId(tmdbId)
+        val normImdb = normalizeImdbId(imdbId)?.takeIf { it != IptvIdSentinels.IMDB_NONE }
+        val canonicalTitle = toCanonicalTitleKey(normalizeLookupText(title))
+
+        if (mediaType == MediaType.MOVIE) {
+            for (creds in xtreamCredentialsForVodImport(config)) {
+                val vod = runCatching { getXtreamVodStreams(creds, allowNetwork = true, fast = true) }
+                    .getOrDefault(emptyList())
+                if (vod.isEmpty()) continue
+                val index = ensureVodCatalogIndex(vod)
+                if (!normTmdb.isNullOrBlank() && index.tmdbMap.containsKey(normTmdb)) return@withContext true
+                if (!normImdb.isNullOrBlank() && index.imdbMap.containsKey(normImdb)) return@withContext true
+                if (canonicalTitle.isNotBlank() && index.canonicalTitleMap.containsKey(canonicalTitle)) {
+                    val candidates = index.canonicalTitleMap[canonicalTitle].orEmpty().map { index.items[it] }
+                    if (year == null || candidates.any { parseYear(it.year ?: it.name.orEmpty()) in listOf(null, year, year - 1, year + 1) }) {
+                        return@withContext true
+                    }
+                }
+            }
+            return@withContext false
+        }
+
+        for (creds in xtreamCredentialsForSeriesImport(config)) {
+            val series = runCatching { getXtreamSeriesList(creds, allowNetwork = true, fast = true) }
+                .getOrDefault(emptyList())
+            for (item in series) {
+                if (!normTmdb.isNullOrBlank() && normalizeTmdbId(item.tmdb) == normTmdb) return@withContext true
+                if (!normImdb.isNullOrBlank() && normalizeImdbId(item.imdb) == normImdb) return@withContext true
+                if (canonicalTitle.isNotBlank()) {
+                    val itemCanonical = toCanonicalTitleKey(normalizeLookupText(item.name.orEmpty()))
+                    if (itemCanonical == canonicalTitle) return@withContext true
+                }
+            }
+        }
+        false
     }
 
     private fun XtreamVodCategoryWire.toInfoOrNull(): XtreamVodCategoryInfo? {

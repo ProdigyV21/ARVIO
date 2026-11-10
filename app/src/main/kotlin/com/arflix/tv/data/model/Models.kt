@@ -404,7 +404,9 @@ data class Addon(
     val transportUrl: String? = null,              // Base URL for API calls (without manifest.json)
     // The addon's own settings page. Kept separately from the manifest because a configured
     // addon usually stops advertising `configurable` (see AddonSetup.kt).
-    val configureUrl: String? = null
+    val configureUrl: String? = null,
+    val setupUpdatedAt: Long = 0L,
+    val metadataUpdatedAt: Long = 0L
 )
 
 enum class AddonType {

@@ -3069,6 +3069,25 @@ class HomeViewModel @Inject constructor(
                             CollectionTemplateManifest.autoInstalledAddonUrls() +
                                 listOf(MediaRepository.STREAMING_COLLECTION_ADDON_URL)
                         )
+                        if (streamRepository.needsImmediateAddonManifestRefresh()) {
+                            runCatching {
+                                withTimeoutOrNull(6_000L) {
+                                    streamRepository.refreshInstalledAddonsIfNeeded(force = true)
+                                }
+                            }
+                        } else {
+                            viewModelScope.launch(Dispatchers.IO) {
+                                val report = runCatching { streamRepository.refreshInstalledAddonsIfNeeded() }.getOrNull()
+                                if (report != null && report.refreshed > 0) {
+                                    val changed = runCatching {
+                                        catalogRepository.syncAddonCatalogs(streamRepository.installedAddons.first())
+                                    }.getOrDefault(false)
+                                    if (changed) {
+                                        loadHomeData()
+                                    }
+                                }
+                            }
+                        }
                         val addons = streamRepository.installedAddons.first()
                         catalogRepository.syncAddonCatalogs(addons)
                         catalogRepository.syncHomeServerCatalogs(homeServerRepository.getCatalogCandidates())

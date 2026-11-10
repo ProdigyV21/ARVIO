@@ -130,3 +130,117 @@ test("shared addon toggle is not overwritten by an older profile copy", () => {
   assert.equal(payload.addons.find(a => a.id === "a").isEnabled, false);
   for (const list of Object.values(payload.addonsByProfile)) assert.equal(list.find(a => a.id === "a").isEnabled, false);
 });
+
+test("older client omitting clientDelegate and clientFilter preserves newer manifest metadata and separate cache", () => {
+  const richAddon = {
+    id: "tv.arvio.discover",
+    name: "ARVIO Discover",
+    url: "https://addon.example/p/p1/manifest.json",
+    manifestUrl: "https://addon.example/p/p1/manifest.json",
+    isEnabled: true,
+    setupUpdatedAt: 1000,
+    metadataUpdatedAt: 1500,
+    manifest: {
+      id: "tv.arvio.discover",
+      catalogs: [
+        { id: "simkl-plan", type: "movie", name: "Plan", clientDelegate: "simkl:plantowatch?type=movie", clientFilter: "{\"minYear\":2020}" }
+      ]
+    },
+    catalogs: [
+      { id: "simkl-plan", type: "movie", name: "Plan", clientDelegate: "simkl:plantowatch?type=movie", clientFilter: "{\"minYear\":2020}" }
+    ]
+  };
+  const existing = {
+    payload: {
+      addons: [addon("opensubtitles"), richAddon],
+      addonsByProfile: { p1: [addon("opensubtitles"), richAddon] },
+      addonsUpdatedAt: 1000,
+      addonChanges: {}
+    }
+  };
+  // Legacy mobile client toggles/saves with a newer addonsUpdatedAt, stripping clientDelegate/clientFilter and omitting addonMetadataByKey
+  const legacyIncoming = {
+    addons: [
+      addon("opensubtitles"),
+      {
+        id: "tv.arvio.discover",
+        name: "ARVIO Discover",
+        url: "https://addon.example/p/p1/manifest.json",
+        manifest: {
+          id: "tv.arvio.discover",
+          catalogs: [{ id: "simkl-plan", type: "movie", name: "Plan" }]
+        }
+      }
+    ],
+    addonsByProfile: {
+      p1: [
+        addon("opensubtitles"),
+        {
+          id: "tv.arvio.discover",
+          name: "ARVIO Discover",
+          url: "https://addon.example/p/p1/manifest.json",
+          manifest: {
+            id: "tv.arvio.discover",
+            catalogs: [{ id: "simkl-plan", type: "movie", name: "Plan" }]
+          }
+        }
+      ]
+    },
+    addonsUpdatedAt: 2500,
+    addonChanges: {}
+  };
+
+  const { payload } = guard(existing, legacyIncoming);
+  const kept = payload.addons.find(a => a.id === "tv.arvio.discover");
+  assert.equal(kept.manifest.catalogs[0].clientDelegate, "simkl:plantowatch?type=movie");
+  assert.equal(kept.manifest.catalogs[0].clientFilter, "{\"minYear\":2020}");
+  assert.equal(kept.catalogs[0].clientDelegate, "simkl:plantowatch?type=movie");
+  assert.ok(payload.addonMetadataByKey["https://addon.example/p/p1"]);
+  assert.equal(payload.addonMetadataByKey["https://addon.example/p/p1"].manifest.catalogs[0].clientDelegate, "simkl:plantowatch?type=movie");
+});
+
+test("generic addon URL never overwrites configured URL unless setupUpdatedAt is newer", () => {
+  const configured = {
+    id: "tv.arvio.discover",
+    name: "ARVIO Discover",
+    url: "https://addon.example/p/p1/manifest.json",
+    manifestUrl: "https://addon.example/p/p1/manifest.json",
+    setupUpdatedAt: 1000
+  };
+  const existing = {
+    payload: {
+      addons: [addon("opensubtitles"), configured],
+      addonsByProfile: { p1: [addon("opensubtitles"), configured] },
+      addonsUpdatedAt: 1000,
+      addonChanges: {}
+    }
+  };
+  const genericIncoming = {
+    addons: [
+      addon("opensubtitles"),
+      { id: "tv.arvio.discover", name: "ARVIO Discover", url: "https://addon.example/manifest.json", manifestUrl: "https://addon.example/manifest.json" }
+    ],
+    addonsByProfile: {
+      p1: [
+        addon("opensubtitles"),
+        { id: "tv.arvio.discover", name: "ARVIO Discover", url: "https://addon.example/manifest.json", manifestUrl: "https://addon.example/manifest.json" }
+      ]
+    },
+    addonsUpdatedAt: 2000,
+    addonChanges: {}
+  };
+
+  const preserved = guard(existing, genericIncoming).payload;
+  assert.equal(preserved.addons.find(a => a.id === "tv.arvio.discover").url, "https://addon.example/p/p1/manifest.json");
+
+  // Explicit setupUpdatedAt edit changes the URL and setup intentionally
+  const explicitReset = {
+    ...genericIncoming,
+    addons: [addon("opensubtitles"), { ...genericIncoming.addons[1], url: "https://addon.example/p/p2/manifest.json", manifestUrl: "https://addon.example/p/p2/manifest.json", setupUpdatedAt: 3000 }],
+    addonsByProfile: {
+      p1: [addon("opensubtitles"), { ...genericIncoming.addons[1], url: "https://addon.example/p/p2/manifest.json", manifestUrl: "https://addon.example/p/p2/manifest.json", setupUpdatedAt: 3000 }]
+    }
+  };
+  const updated = guard({ payload: preserved }, explicitReset).payload;
+  assert.equal(updated.addons.find(a => a.id === "tv.arvio.discover").url, "https://addon.example/p/p2/manifest.json");
+});

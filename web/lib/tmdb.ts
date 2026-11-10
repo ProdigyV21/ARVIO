@@ -786,9 +786,10 @@ async function loadAddonCatalog(
   // Generic Client-Side Delegation resolution
   const catalogDecl = (addon?.catalogs ?? []).find(c => c.id === catalogId && String(c.type).toLowerCase() === requestedType.toLowerCase());
   const delegateUri = catalog.clientDelegate || catalogDecl?.clientDelegate;
+  const effectiveFilter = catalog.clientFilter ?? catalogDecl?.clientFilter;
   if (delegateUri) {
     const { loadClientDelegatedCatalog } = await import('./clientCatalogLoader');
-    return loadClientDelegatedCatalog(delegateUri, { ...catalog, clientFilter: catalog.clientFilter ?? catalogDecl?.clientFilter }, homeServers, limit, async seed => {
+    return loadClientDelegatedCatalog(delegateUri, { ...catalog, clientFilter: effectiveFilter }, homeServers, limit, async seed => {
       const id = seed.id > 0 ? seed.id : await resolveTmdbId({ mediaType: seed.mediaType, imdbId: seed.imdbId, title: seed.title, year: seed.year }).catch(() => null);
       if (!id) return null;
       const details = await getBasicItem(seed.mediaType, id, language).catch(() => null);
@@ -806,10 +807,16 @@ async function loadAddonCatalog(
   const extra = catalog.addonGenre ? `/genre=${encodeURIComponent(catalog.addonGenre)}` : "";
   const url = proxiedUrl(`${base}/catalog/${encodeURIComponent(catalogType)}/${encodeURIComponent(catalogId)}${extra}.json`);
   const payload = await jsonRequest<{ metas?: StremioMeta[] }>(url);
-  // Each meta may cost a TMDB call: a Home row hydrates only what it shows.
-  const metas = (payload.metas ?? []).slice(0, limit ?? Infinity);
+  // Each meta may cost a TMDB call: a Home row hydrates only what it shows unless filtering locally.
+  const rawMetas = payload.metas ?? [];
+  const metas = effectiveFilter ? rawMetas : rawMetas.slice(0, limit ?? Infinity);
   const hydrated = await Promise.all(metas.map((meta) => hydrateAddonMeta(meta, catalog.mediaType, language, addon, addons, catalogType).catch(() => null)));
-  return hydrated.filter((item): item is MediaItem => Boolean(item));
+  const items = hydrated.filter((item): item is MediaItem => Boolean(item));
+  if (effectiveFilter) {
+    const { filterClientCatalogItems } = await import('./clientCatalogLoader');
+    return filterClientCatalogItems(items, effectiveFilter, homeServers, limit);
+  }
+  return items;
 }
 
 
