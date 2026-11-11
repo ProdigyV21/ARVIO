@@ -124,6 +124,66 @@ class SaferAddonSyncAndVodCatalogTest {
     }
 
     @Test
+    fun `legacy toggle uses its envelope time without losing configured URL or metadata`() {
+        val current = Addon("legacy-test", "Family", "1", "", true, true, AddonType.CUSTOM,
+            url = "https://addon.example/p/family/manifest.json", setupUpdatedAt = 200,
+            metadataUpdatedAt = 300, manifest = AddonManifest("legacy-test", "Family", "1",
+                catalogs = listOf(AddonCatalog("movie", "row", "Row", clientDelegate = "vod:recent"))))
+        val legacy = current.copy(name = "Old device name", isEnabled = false, setupUpdatedAt = 0,
+            metadataUpdatedAt = 0, url = "https://addon.example/manifest.json", manifest = null)
+        val merged = reconcileExplicitAddonState(AddonCloudState(listOf(current), 200, emptyMap()),
+            AddonCloudState(listOf(legacy), 500, emptyMap())).addons.single()
+        assertFalse(merged.isEnabled)
+        assertEquals(500L, merged.setupUpdatedAt)
+        assertEquals(current.url, merged.url)
+        assertEquals(current.manifest, merged.manifest)
+        val stale = reconcileExplicitAddonState(AddonCloudState(listOf(merged), 500, emptyMap()),
+            AddonCloudState(listOf(legacy.copy(isEnabled = true)), 400, emptyMap())).addons.single()
+        assertFalse(stale.isEnabled)
+    }
+
+    @Test
+    fun `newer empty catalog and resource declarations survive older manifests in both directions`() {
+        val old = AddonManifest("a", "Addon", "1", resources = listOf(com.arflix.tv.data.model.AddonResource("catalog")),
+            catalogs = listOf(AddonCatalog("movie", "row", "Row", clientDelegate = "vod:recent")))
+        val cleared = old.copy(version = "2", catalogs = emptyList(), resources = emptyList())
+        for (reverse in listOf(false, true)) {
+            val merged = mergeAddonManifests(if (reverse) cleared else old, if (reverse) old else cleared,
+                if (reverse) 200L else 100L, if (reverse) 100L else 200L, true)!!
+            assertTrue(merged.catalogs.isEmpty())
+            assertTrue(merged.resources.isEmpty())
+            assertEquals("2", merged.version)
+        }
+    }
+
+    @Test
+    fun `a timed out addon does not prevent a healthy refresh or fabricate fresh cache metadata`() = runBlocking {
+        val slow = Addon("slow", "Slow", "1", "", true, true, AddonType.CUSTOM,
+            url = "https://slow.example/manifest.json", configureUrl = "https://slow.example/configure",
+            manifest = AddonManifest("slow", "Slow", "1"), metadataUpdatedAt = 1L)
+        val good = slow.copy(id = "good", name = "Good", url = "https://good.example/manifest.json",
+            configureUrl = "https://good.example/configure", manifest = AddonManifest("good", "Good", "1"))
+        streamRepository.applyAddonCloudState(listOf(slow, good), 100L, emptyMap())
+        coEvery { streamApi.getAddonManifest(slow.url!!) } coAnswers {
+            kotlinx.coroutines.delay(60_000)
+            error("The slow request must time out")
+        }
+        coEvery { streamApi.getAddonManifest(good.url!!) } returns StremioManifestResponse(
+            id = "good", name = "Good", version = "2", catalogs = listOf(
+                StremioCatalog("movie", "vod", "VOD", clientDelegate = "vod:recent")))
+        val report = streamRepository.refreshInstalledAddonsIfNeeded()
+        assertEquals(1, report?.refreshed)
+        assertEquals(1, report?.failed)
+        val state = streamRepository.exportAddonCloudState()
+        assertEquals(100L, state.updatedAt)
+        assertTrue(state.changes.isEmpty())
+        assertEquals("2", state.addons.first { it.id == "good" }.version)
+        assertEquals(1L, state.addons.first { it.id == "slow" }.metadataUpdatedAt)
+        assertEquals(1L, streamRepository.getAddonMetadataCache()["https://slow.example"]?.updatedAt)
+        assertNull(streamRepository.refreshInstalledAddonsIfNeeded())
+    }
+
+    @Test
     fun `mergeAddonPreservingSetupAndMetadata protects configured URL, omitted delegation fields, and setup toggle`() {
         val fullManifest = AddonManifest(
             id = "tv.arvio.discover",

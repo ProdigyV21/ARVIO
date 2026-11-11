@@ -12,6 +12,76 @@ const ids = (list) => list.map((a) => a.id);
 const removal = (updatedAt) => ({ removed: true, updatedAt });
 const explicit = (list, time, changes = {}) => ({ ...snapshot(list, time), addonChanges: changes });
 
+const metadataAddon = (setupUpdatedAt, metadataUpdatedAt, delegate = "trakt:watchlist") => ({
+  id: "family-addon", name: "My family addon", enabled: true, isEnabled: true,
+  url: "https://addon.example/p/family/manifest.json",
+  manifestUrl: "https://addon.example/p/family/manifest.json",
+  setupUpdatedAt, metadataUpdatedAt,
+  manifest: { id: "family-addon", version: String(metadataUpdatedAt),
+    catalogs: [{ id: "family", type: "movie", clientDelegate: delegate }], resources: ["catalog"] }
+});
+const addonPayload = (value, time) => ({ addons: [value], addonsByProfile: { p1: [value] },
+  addonsUpdatedAt: time, addonChanges: {} });
+
+test("setup and manifest winners are independent in both sync directions and survive cache replay", () => {
+  const settings = { ...metadataAddon(200, 300), enabled: false, isEnabled: false };
+  const metadata = metadataAddon(100, 400, "vod:recent");
+  for (const [stored, incoming] of [[settings, metadata], [metadata, settings]]) {
+    const result = guard({ payload: addonPayload(stored, 500) }, addonPayload(incoming, 600)).payload;
+    for (const entry of [result.addons[0], result.addonsByProfile.p1[0]]) {
+      assert.equal(entry.enabled, false);
+      assert.equal(entry.setupUpdatedAt, 200);
+      assert.equal(entry.metadataUpdatedAt, 400);
+      assert.equal(entry.manifest.version, "400");
+      assert.equal(entry.manifest.catalogs[0].clientDelegate, "vod:recent");
+    }
+    assert.deepEqual(guard({ payload: result }, result).payload, result);
+  }
+});
+
+test("a newer legacy toggle syncs without replacing a configured URL or erasing metadata", () => {
+  const stored = metadataAddon(200, 300);
+  const legacy = { id: stored.id, name: "Renamed on old TV", enabled: false, isEnabled: false,
+    url: "https://addon.example/manifest.json", manifestUrl: "https://addon.example/manifest.json" };
+  const result = guard({ payload: addonPayload(stored, 200) }, addonPayload(legacy, 500)).payload;
+  for (const entry of [result.addons[0], result.addonsByProfile.p1[0]]) {
+    assert.equal(entry.enabled, false);
+    assert.equal(entry.name, legacy.name);
+    assert.equal(entry.url, stored.url);
+    assert.equal(entry.manifestUrl, stored.manifestUrl);
+    assert.equal(entry.setupUpdatedAt, 500);
+    assert.equal(entry.manifest.catalogs[0].clientDelegate, "trakt:watchlist");
+  }
+  const stale = guard({ payload: result }, addonPayload({ ...legacy, enabled: true, isEnabled: true }, 400)).payload;
+  assert.equal(stale.addons[0].enabled, false);
+});
+
+test("a newer explicit empty manifest stays empty after older clients and cache replay", () => {
+  const old = metadataAddon(200, 300);
+  const cleared = { ...old, metadataUpdatedAt: 600,
+    manifest: { ...old.manifest, version: "600", catalogs: [], resources: [], types: [] } };
+  for (const [stored, incoming] of [[old, cleared], [cleared, old]]) {
+    let result = guard({ payload: addonPayload(stored, 500) }, addonPayload(incoming, 700)).payload;
+    result = guard({ payload: result }, addonPayload({ id: old.id, manifestUrl: old.url }, 800)).payload;
+    assert.deepEqual(result.addons[0].manifest.catalogs, []);
+    assert.deepEqual(result.addons[0].manifest.resources, []);
+    assert.equal(result.addons[0].metadataUpdatedAt, 600);
+    const cache = result.addonMetadataByKey["https://addon.example/p/family"];
+    assert.deepEqual(cache.catalogs, []);
+    assert.deepEqual(cache.resources, []);
+  }
+});
+
+test("legacy mode accepts a later toggle without requiring addonChanges", () => {
+  const stored = metadataAddon(200, 300);
+  const old = addonPayload(stored, 200);
+  const next = addonPayload({ ...stored, enabled: false, isEnabled: false }, 500);
+  delete old.addonChanges;
+  delete next.addonChanges;
+  delete next.addons[0].setupUpdatedAt;
+  assert.equal(guard({ payload: old }, next).payload.addons[0].enabled, false);
+});
+
 test("deliberate removal of several addons at once (3 -> 1) is kept", () => {
   const existing = { payload: snapshot(["opensubtitles", "a", "b"], 1000) };
   const { payload, guarded } = guard(existing, explicit(["opensubtitles"], 2000, { a: removal(2000), b: removal(2000) }));

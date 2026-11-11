@@ -1004,6 +1004,7 @@ function isConfiguredAddonUrl(raw: string | undefined): boolean {
 function mergeCatalogEntries(primary: unknown, fallback: unknown, allowClear: boolean) {
   const prim = Array.isArray(primary) ? primary : [];
   const fb = Array.isArray(fallback) ? fallback : [];
+  if (allowClear && Array.isArray(primary)) return prim;
   if (!prim.length) return fb;
   if (!fb.length || allowClear) return prim;
   const byKey = new Map<string, Record<string, unknown>>();
@@ -1063,8 +1064,8 @@ function mergeAddonPair(preferred: InstalledAddon, fallback: InstalledAddon): In
     logo: metaWinner.logo ?? metaOther.logo,
     background: metaWinner.background ?? metaOther.background,
     catalogs: mergedCatalogs as InstalledAddon["catalogs"],
-    resources: (winnerCompat.resources?.length ? winnerCompat.resources : otherCompat.resources) ?? [],
-    types: metaWinner.types?.length ? metaWinner.types : metaOther.types,
+    resources: (Array.isArray(winnerCompat.resources) && (allowClear || winnerCompat.resources.length) ? winnerCompat.resources : otherCompat.resources) ?? [],
+    types: Array.isArray(metaWinner.types) && (allowClear || metaWinner.types.length) ? metaWinner.types : metaOther.types,
     idPrefixes: metaWinner.idPrefixes ?? metaOther.idPrefixes,
     ...(mergedManifest ? { manifest: mergedManifest } : {}),
     ...(Math.max(pSetup, fSetup) > 0 ? { setupUpdatedAt: Math.max(pSetup, fSetup) } : {}),
@@ -1178,11 +1179,11 @@ export async function saveCloudAddons(
                   : {})
               }
             : undefined;
-          const mergedResources = addon.resources?.length ? addon.resources : prev?.resources;
+          const mergedResources = Array.isArray(addon.resources) && (allowClear || addon.resources.length) ? addon.resources : prev?.resources;
           nextMetaCache[key] = {
             ...(mergedManifest ? { manifest: mergedManifest } : {}),
-            ...(mergedCatalogs?.length ? { catalogs: mergedCatalogs } : {}),
-            ...(mergedResources?.length ? { resources: mergedResources } : {}),
+            ...(Array.isArray(mergedCatalogs) ? { catalogs: mergedCatalogs } : {}),
+            ...(Array.isArray(mergedResources) ? { resources: mergedResources } : {}),
             ...(Math.max(incomingMetaTs, prevMetaTs) > 0 ? { metadataUpdatedAt: Math.max(incomingMetaTs, prevMetaTs) } : {})
           };
         }

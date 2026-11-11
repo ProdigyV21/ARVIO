@@ -46,11 +46,11 @@ private fun mergeCatalogMetadata(
     fallback: List<AddonCatalog>,
     allowClearOmitted: Boolean
 ): List<AddonCatalog> {
+    if (allowClearOmitted) return primary
     if (primary.isEmpty()) return fallback
     if (fallback.isEmpty()) return primary
     val fallbackByKey = fallback.associateBy { "${it.type.lowercase(Locale.US)}:${it.id}" }
     return primary.map { catalog ->
-        if (allowClearOmitted) return@map catalog
         val fb = fallbackByKey["${catalog.type.lowercase(Locale.US)}:${catalog.id}"] ?: return@map catalog
         catalog.copy(
             clientDelegate = catalog.clientDelegate ?: fb.clientDelegate,
@@ -79,8 +79,8 @@ internal fun mergeAddonManifests(
         (!incomingWins && storedMetadataUpdatedAt > incomingMetadataUpdatedAt)
     val mergedCatalogs = mergeCatalogMetadata(primary.catalogs, fallback.catalogs, allowClearOmitted)
     return primary.copy(
-        resources = primary.resources.ifEmpty { fallback.resources },
-        types = primary.types.ifEmpty { fallback.types },
+        resources = if (allowClearOmitted) primary.resources else primary.resources.ifEmpty { fallback.resources },
+        types = if (allowClearOmitted) primary.types else primary.types.ifEmpty { fallback.types },
         idPrefixes = primary.idPrefixes ?: fallback.idPrefixes,
         behaviorHints = primary.behaviorHints ?: fallback.behaviorHints,
         catalogs = mergedCatalogs
@@ -95,11 +95,15 @@ internal fun mergeAddonManifests(
 internal fun mergeAddonPreservingSetupAndMetadata(
     stored: Addon,
     incoming: Addon,
-    preferIncomingOnTie: Boolean = true
+    preferIncomingOnTie: Boolean = true,
+    storedUpdatedAt: Long = 0L,
+    incomingUpdatedAt: Long = 0L
 ): Addon {
+    val storedSetupAt = stored.setupUpdatedAt.takeIf { it > 0L } ?: storedUpdatedAt
+    val incomingSetupAt = incoming.setupUpdatedAt.takeIf { it > 0L } ?: incomingUpdatedAt
     val setupWinner = when {
-        incoming.setupUpdatedAt > stored.setupUpdatedAt -> incoming
-        stored.setupUpdatedAt > incoming.setupUpdatedAt -> stored
+        incomingSetupAt > storedSetupAt -> incoming
+        storedSetupAt > incomingSetupAt -> stored
         preferIncomingOnTie -> incoming
         else -> stored
     }
@@ -108,7 +112,7 @@ internal fun mergeAddonPreservingSetupAndMetadata(
     val winnerUrl = setupWinner.url?.takeIf { it.isNotBlank() }
     val fallbackUrl = setupFallback.url?.takeIf { it.isNotBlank() }
     val keepFallbackConfiguredUrl = isConfiguredAddonUrl(fallbackUrl) && !isConfiguredAddonUrl(winnerUrl) &&
-        setupWinner.setupUpdatedAt <= setupFallback.setupUpdatedAt
+        setupWinner.setupUpdatedAt <= (if (setupWinner === incoming) storedSetupAt else incomingSetupAt)
 
     val resolvedUrl = if (keepFallbackConfiguredUrl) fallbackUrl else winnerUrl ?: fallbackUrl
     val resolvedTransport = if (keepFallbackConfiguredUrl) {
@@ -136,7 +140,7 @@ internal fun mergeAddonPreservingSetupAndMetadata(
         url = resolvedUrl,
         transportUrl = resolvedTransport,
         manifest = mergedManifest,
-        setupUpdatedAt = maxOf(stored.setupUpdatedAt, incoming.setupUpdatedAt),
+        setupUpdatedAt = maxOf(storedSetupAt, incomingSetupAt),
         metadataUpdatedAt = maxOf(stored.metadataUpdatedAt, incoming.metadataUpdatedAt)
     )
 }
@@ -155,9 +159,9 @@ internal fun enrichAddonWithMetadata(
         preferIncomingOnTie = false
     )
     return addon.copy(
-        version = addon.version.ifBlank { manifest.version },
-        description = addon.description.ifBlank { manifest.description },
-        logo = addon.logo ?: manifest.logo,
+        version = mergedManifest?.version ?: addon.version,
+        description = mergedManifest?.description ?: addon.description,
+        logo = mergedManifest?.logo ?: addon.logo,
         manifest = mergedManifest,
         metadataUpdatedAt = maxOf(addon.metadataUpdatedAt, metadataUpdatedAt)
     )
@@ -191,7 +195,9 @@ internal fun reconcileExplicitAddonState(local: AddonCloudState, remote: AddonCl
             l != null && r != null -> mergeAddonPreservingSetupAndMetadata(
                 stored = r,
                 incoming = l,
-                preferIncomingOnTie = localWinsOnTie
+                preferIncomingOnTie = localWinsOnTie,
+                storedUpdatedAt = remote.updatedAt,
+                incomingUpdatedAt = local.updatedAt
             )
             else -> entry
         }

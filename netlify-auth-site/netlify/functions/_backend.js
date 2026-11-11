@@ -1891,6 +1891,7 @@ function addonMatchKeys(addon) {
 function mergeCatalogMetadataList(primaryList, fallbackList, allowOverrideRemovedMetadata = false) {
   const primary = Array.isArray(primaryList) ? primaryList : [];
   const fallback = Array.isArray(fallbackList) ? fallbackList : [];
+  if (allowOverrideRemovedMetadata && Array.isArray(primaryList)) return primary;
   if (!primary.length) return fallback;
   if (!fallback.length) return primary;
   const fallbackByKey = new Map();
@@ -1916,14 +1917,14 @@ function mergeCatalogMetadataList(primaryList, fallbackList, allowOverrideRemove
 function extractAddonMetadata(addon) {
   if (!addon || typeof addon !== "object") return null;
   const manifest = isPlainObject(addon.manifest) ? addon.manifest : null;
-  const catalogs = Array.isArray(addon.catalogs) && addon.catalogs.length > 0
+  const catalogs = Array.isArray(addon.catalogs)
     ? addon.catalogs
-    : Array.isArray(manifest?.catalogs) && manifest.catalogs.length > 0
+    : Array.isArray(manifest?.catalogs)
       ? manifest.catalogs
       : null;
-  const resources = Array.isArray(addon.resources) && addon.resources.length > 0
+  const resources = Array.isArray(addon.resources)
     ? addon.resources
-    : Array.isArray(manifest?.resources) && manifest.resources.length > 0
+    : Array.isArray(manifest?.resources)
       ? manifest.resources
       : null;
   const metadataUpdatedAt = Number(addon.metadataUpdatedAt || manifest?.metadataUpdatedAt || 0) || 0;
@@ -1932,10 +1933,10 @@ function extractAddonMetadata(addon) {
   if (manifest) record.manifest = manifest;
   if (catalogs) record.catalogs = catalogs;
   if (resources) record.resources = resources;
-  if (Array.isArray(addon.types) && addon.types.length > 0) record.types = addon.types;
-  else if (Array.isArray(manifest?.types) && manifest.types.length > 0) record.types = manifest.types;
-  if (Array.isArray(addon.idPrefixes) && addon.idPrefixes.length > 0) record.idPrefixes = addon.idPrefixes;
-  else if (Array.isArray(manifest?.idPrefixes) && manifest.idPrefixes.length > 0) record.idPrefixes = manifest.idPrefixes;
+  if (Array.isArray(addon.types)) record.types = addon.types;
+  else if (Array.isArray(manifest?.types)) record.types = manifest.types;
+  if (Array.isArray(addon.idPrefixes)) record.idPrefixes = addon.idPrefixes;
+  else if (Array.isArray(manifest?.idPrefixes)) record.idPrefixes = manifest.idPrefixes;
   if (addon.version) record.version = addon.version;
   if (addon.description) record.description = addon.description;
   if (addon.logo) record.logo = addon.logo;
@@ -1953,23 +1954,22 @@ function mergeMetadataRecords(olderMeta, newerMeta) {
   const newerWins = newerTs >= olderTs && newerTs > 0;
   const primary = newerWins ? newerMeta : (olderTs > newerTs ? olderMeta : newerMeta);
   const fallback = primary === newerMeta ? olderMeta : newerMeta;
-  const allowClear = primary === newerMeta && newerTs > olderTs;
+  const allowClear = olderTs !== newerTs;
 
   const merged = { ...fallback, ...primary };
-  const mergedCatalogs = mergeCatalogMetadataList(
-    primary.catalogs || primary.manifest?.catalogs,
-    fallback.catalogs || fallback.manifest?.catalogs,
-    allowClear
-  );
-  if (merged.manifest || fallback.manifest) {
-    const pManifest = primary.manifest || {};
-    const fManifest = fallback.manifest || {};
-    const baseManifest = primary.manifest ? { ...fManifest, ...pManifest } : { ...fManifest };
-    baseManifest.catalogs = mergeCatalogMetadataList(pManifest.catalogs, fManifest.catalogs, allowClear);
-    merged.manifest = baseManifest;
+  for (const field of ["catalogs", "resources", "types", "idPrefixes"]) {
+    const p = primary[field] ?? primary.manifest?.[field];
+    const f = fallback[field] ?? fallback.manifest?.[field];
+    if (!Array.isArray(p) && !Array.isArray(f)) continue;
+    merged[field] = field === "catalogs"
+      ? mergeCatalogMetadataList(p, f, allowClear)
+      : Array.isArray(p) && (allowClear || p.length) ? p : (f ?? p);
   }
-  if (mergedCatalogs && (primary.catalogs || fallback.catalogs)) {
-    merged.catalogs = mergedCatalogs;
+  if (primary.manifest || fallback.manifest) {
+    merged.manifest = { ...fallback.manifest, ...primary.manifest };
+    for (const field of ["catalogs", "resources", "types", "idPrefixes"]) {
+      if (Array.isArray(merged[field])) merged.manifest[field] = merged[field];
+    }
   }
   const maxTs = Math.max(olderTs, newerTs);
   if (maxTs > 0) merged.metadataUpdatedAt = maxTs;
@@ -1979,35 +1979,17 @@ function mergeMetadataRecords(olderMeta, newerMeta) {
 function applyMetadataRecordToAddon(addon, metadataRecord) {
   if (!addon || typeof addon !== "object" || !metadataRecord) return addon;
   const out = { ...addon };
-  const addonMetaTs = Number(out.metadataUpdatedAt || 0) || 0;
-  const cacheTs = Number(metadataRecord.metadataUpdatedAt || 0) || 0;
-  const allowClear = addonMetaTs > cacheTs;
-
-  if (metadataRecord.manifest) {
-    if (!isPlainObject(out.manifest)) {
-      out.manifest = metadataRecord.manifest;
-    } else {
-      const mergedCats = mergeCatalogMetadataList(out.manifest.catalogs, metadataRecord.manifest.catalogs, allowClear);
-      out.manifest = {
-        ...metadataRecord.manifest,
-        ...out.manifest,
-        ...(mergedCats ? { catalogs: mergedCats } : {})
-      };
+  // The setup winner may carry an older manifest. Compare metadata independently;
+  // on equal timestamps keep the entry, filling only fields it omitted.
+  const merged = mergeMetadataRecords(metadataRecord, extractAddonMetadata(addon));
+  for (const field of ["manifest", "version", "description", "logo", "background", "metadataUpdatedAt"]) {
+    if (Object.prototype.hasOwnProperty.call(merged, field)) out[field] = merged[field];
+  }
+  for (const field of ["catalogs", "resources", "types", "idPrefixes"]) {
+    if (Array.isArray(merged[field]) && (out[field] !== undefined || addon.manifestUrl !== undefined)) {
+      out[field] = merged[field];
     }
   }
-  if (Array.isArray(out.catalogs) || Array.isArray(metadataRecord.catalogs)) {
-    const mergedTopCatalogs = mergeCatalogMetadataList(out.catalogs, metadataRecord.catalogs, allowClear);
-    if (Array.isArray(out.catalogs) && out.catalogs.length > 0) {
-      out.catalogs = mergedTopCatalogs;
-    } else if (Array.isArray(metadataRecord.catalogs) && (out.catalogs !== undefined || addon.manifestUrl !== undefined)) {
-      out.catalogs = mergedTopCatalogs;
-    }
-  }
-  if ((!Array.isArray(out.resources) || !out.resources.length) && Array.isArray(metadataRecord.resources) && (out.resources !== undefined || addon.manifestUrl !== undefined)) {
-    out.resources = metadataRecord.resources;
-  }
-  const maxTs = Math.max(addonMetaTs, cacheTs);
-  if (maxTs > 0) out.metadataUpdatedAt = maxTs;
   return out;
 }
 
@@ -2016,12 +1998,12 @@ function applyMetadataRecordToAddon(addon, metadataRecord) {
  * without letting legacy or metadata-stripped clients clobber newer metadata
  * or configured URLs.
  */
-function mergeAddonRecord(stored, incoming, preferIncomingOnTie = true) {
+function mergeAddonRecord(stored, incoming, preferIncomingOnTie = true, storedUpdatedAt = 0, incomingUpdatedAt = 0) {
   if (!stored) return incoming;
   if (!incoming) return stored;
 
-  const storedSetupTs = Number(stored.setupUpdatedAt || 0) || 0;
-  const incomingSetupTs = Number(incoming.setupUpdatedAt || 0) || 0;
+  const storedSetupTs = Number(stored.setupUpdatedAt || 0) || storedUpdatedAt;
+  const incomingSetupTs = Number(incoming.setupUpdatedAt || 0) || incomingUpdatedAt;
   const setupWinner = storedSetupTs > incomingSetupTs
     ? stored
     : (incomingSetupTs > storedSetupTs ? incoming : (preferIncomingOnTie ? incoming : stored));
@@ -2033,8 +2015,8 @@ function mergeAddonRecord(stored, incoming, preferIncomingOnTie = true) {
   const winnerUrl = addonUrlOf(setupWinner);
   const fallbackUrl = addonUrlOf(setupFallback);
   if (isConfiguredAddonUrl(fallbackUrl) && !isConfiguredAddonUrl(winnerUrl)) {
-    const explicitNewerUrl = (setupWinner === incoming && incomingSetupTs > storedSetupTs) ||
-      (setupWinner === stored && storedSetupTs > incomingSetupTs);
+    const explicitNewerUrl = Number(setupWinner.setupUpdatedAt || 0) >
+      (setupWinner === incoming ? storedSetupTs : incomingSetupTs);
     if (!explicitNewerUrl) {
       if (setupFallback.url) out.url = setupFallback.url;
       if (setupFallback.manifestUrl) out.manifestUrl = setupFallback.manifestUrl;
@@ -2047,7 +2029,11 @@ function mergeAddonRecord(stored, incoming, preferIncomingOnTie = true) {
   const mergedMeta = mergeMetadataRecords(storedMeta, incomingMeta);
   const enriched = mergedMeta ? applyMetadataRecordToAddon(out, mergedMeta) : out;
   const maxSetupTs = Math.max(storedSetupTs, incomingSetupTs);
-  if (maxSetupTs > 0) enriched.setupUpdatedAt = maxSetupTs;
+  const setupChanged = ["name", "enabled", "isEnabled", "url", "manifestUrl", "transportUrl"]
+    .some(key => stored[key] !== enriched[key]);
+  if (maxSetupTs > 0 && (stored.setupUpdatedAt || incoming.setupUpdatedAt || setupChanged)) {
+    enriched.setupUpdatedAt = maxSetupTs;
+  }
   return enriched;
 }
 
@@ -2069,7 +2055,7 @@ function findComparableAddonKey(map, addon) {
   return directKey;
 }
 
-function unionAddonLists(existingList, incomingList, incomingWinsOnTie = true) {
+function unionAddonLists(existingList, incomingList, incomingWinsOnTie = true, existingUpdatedAt = 0, incomingUpdatedAt = 0) {
   const merged = new Map();
   const ordered = incomingWinsOnTie
     ? incomingList.map(a => ({ addon: a, isIncoming: true })).concat(existingList.map(a => ({ addon: a, isIncoming: false })))
@@ -2085,8 +2071,8 @@ function unionAddonLists(existingList, incomingList, incomingWinsOnTie = true) {
       merged.set(
         key,
         isIncoming
-          ? mergeAddonRecord(prev, addon, incomingWinsOnTie)
-          : mergeAddonRecord(addon, prev, incomingWinsOnTie)
+          ? mergeAddonRecord(prev, addon, incomingWinsOnTie, existingUpdatedAt, incomingUpdatedAt)
+          : mergeAddonRecord(addon, prev, incomingWinsOnTie, existingUpdatedAt, incomingUpdatedAt)
       );
     }
   }
@@ -2154,7 +2140,7 @@ function mergeExplicitAddonChanges(existing, incoming) {
   const merge = (oldList, newList) => {
     const old = Array.isArray(oldList) ? oldList : [];
     const next = Array.isArray(newList) ? newList : [];
-    return (incomingIsNewer ? unionAddonLists(old, next, true) : unionAddonLists(old, next, false)).filter(keep);
+    return unionAddonLists(old, next, incomingIsNewer, addonsUpdatedAtOf(existing), addonsUpdatedAtOf(incoming)).filter(keep);
   };
   const byProfile = {};
   const profileLists = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -2220,7 +2206,9 @@ function applyAddonWipeGuard(existingSnapshot, incomingPayload) {
       const existingMatch = existingList.find(e =>
         addonIdentity(e) === addonIdentity(addon) || (e?.id && e.id === addon?.id)
       );
-      return existingMatch ? mergeAddonRecord(addon, existingMatch, true) : addon;
+      return existingMatch ? mergeAddonRecord(existingMatch, addon,
+        addonsUpdatedAtOf(incomingPayload) >= addonsUpdatedAtOf(existingPayload),
+        addonsUpdatedAtOf(existingPayload), addonsUpdatedAtOf(incomingPayload)) : addon;
     });
   };
 

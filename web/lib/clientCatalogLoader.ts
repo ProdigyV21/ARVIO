@@ -84,13 +84,10 @@ const services: ClientCatalogServices = {
     });
   },
   async hasHomeServerMatch(item, servers) {
-    const { resolveHomeServerMovieSources, resolveHomeServerEpisodeSources } = await import('./homeserver');
+    const { hasHomeServerTitleMatch } = await import('./homeserver');
     if (!servers.length) return false;
     const target = { title: item.title, year: Number(item.year) || undefined, tmdbId: item.id > 0 ? item.id : undefined };
-    const sources = item.mediaType === 'tv'
-      ? await resolveHomeServerEpisodeSources(servers, target, 1, 1).catch(() => [])
-      : await resolveHomeServerMovieSources(servers, target).catch(() => []);
-    return sources.length > 0;
+    return hasHomeServerTitleMatch(servers, target, item.mediaType);
   }
 };
 

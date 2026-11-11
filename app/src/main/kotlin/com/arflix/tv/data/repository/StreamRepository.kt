@@ -996,18 +996,22 @@ class StreamRepository @Inject constructor(
      * Refreshes installed custom addon manifests when the app version changes, metadata
      * is missing/incomplete, or the background TTL has elapsed.
      */
-    suspend fun refreshInstalledAddonsIfNeeded(force: Boolean = false): AddonRefreshReport? {
-        val prefs = context.streamDataStore.data.first()
-        val addons = readSharedOrLegacyAddons(prefs).orEmpty().filter(::isCustomRefreshableAddon)
-        if (addons.isEmpty()) return null
+    suspend fun refreshInstalledAddonsIfNeeded(force: Boolean = false): AddonRefreshReport? = withContext(Dispatchers.IO) {
+        manifestRefreshMutex.withLock {
+            val prefs = context.streamDataStore.data.first()
+            val addons = readSharedOrLegacyAddons(prefs).orEmpty().filter(::isCustomRefreshableAddon)
+            if (addons.isEmpty()) return@withLock null
 
-        val versionMismatch = prefs[addonManifestVersionCodeKey] != BuildConfig.VERSION_CODE
-        val missingMetadata = addons.any { it.manifest == null || it.metadataUpdatedAt <= 0L }
-        val lastRefreshed = prefs[addonManifestsRefreshedAtKey] ?: 0L
-        val ttlExpired = System.currentTimeMillis() - lastRefreshed > addonManifestAutoRefreshIntervalMs
-        if (!force && !versionMismatch && !missingMetadata && !ttlExpired) return null
+            val versionMismatch = prefs[addonManifestVersionCodeKey] != BuildConfig.VERSION_CODE
+            val missingMetadata = addons.any { it.manifest == null || it.metadataUpdatedAt <= 0L }
+            val lastRefreshed = prefs[addonManifestsRefreshedAtKey] ?: 0L
+            val ttlExpired = System.currentTimeMillis() - lastRefreshed > addonManifestAutoRefreshIntervalMs
+            if (!force && !versionMismatch && !missingMetadata && !ttlExpired) return@withLock null
+            // A failed legacy manifest must not restart a refresh on every Home reload.
+            if (!force && System.currentTimeMillis() - lastRefreshed in 0L until 60_000L) return@withLock null
 
-        return refreshInstalledAddons()
+            refreshInstalledAddonsLocked()
+        }
     }
 
     /**
@@ -1015,98 +1019,105 @@ class StreamRepository @Inject constructor(
      * and returning a refresh report.
      */
     suspend fun refreshInstalledAddons(): AddonRefreshReport = withContext(Dispatchers.IO) {
-        manifestRefreshMutex.withLock {
-            val currentAddons = installedAddons.first()
-            var refreshedCount = 0
-            var failedCount = 0
-            val now = System.currentTimeMillis()
+        manifestRefreshMutex.withLock { refreshInstalledAddonsLocked() }
+    }
 
-            val updatedAddons = currentAddons.map { oldAddon ->
-                val isRefreshable = oldAddon.isInstalled &&
-                    oldAddon.runtimeKind == RuntimeKind.STREMIO &&
-                    defaultAddons.none { it.id == oldAddon.id }
-                val addonUrl = oldAddon.url?.takeIf { isRefreshable && it.isNotBlank() }
-                if (addonUrl == null) {
-                    oldAddon
-                } else {
-                    try {
-                        val hydrated = hydrateCustomAddon(
+    private suspend fun refreshInstalledAddonsLocked(): AddonRefreshReport {
+        val currentAddons = installedAddons.first()
+        var refreshedCount = 0
+        var failedCount = 0
+        val now = System.currentTimeMillis()
+
+        val updatedAddons = currentAddons.map { oldAddon ->
+            val isRefreshable = oldAddon.isInstalled &&
+                oldAddon.runtimeKind == RuntimeKind.STREMIO &&
+                defaultAddons.none { it.id == oldAddon.id }
+            val addonUrl = oldAddon.url?.takeIf { isRefreshable && it.isNotBlank() }
+            if (addonUrl == null) {
+                oldAddon
+            } else {
+                try {
+                    val hydrated = withTimeoutOrNull(6_000L) {
+                        hydrateCustomAddon(
                             url = addonUrl,
                             customName = oldAddon.name,
                             probeParentConfigurePage = oldAddon.configureUrl == null
                         )
-                        refreshedCount++
-                        hydrated.copy(
-                            id = oldAddon.id,
-                            url = oldAddon.url,
-                            transportUrl = hydrated.transportUrl ?: oldAddon.transportUrl,
-                            configureUrl = hydrated.configureUrl ?: oldAddon.configureUrl,
-                            isEnabled = oldAddon.isEnabled,
-                            isInstalled = oldAddon.isInstalled,
-                            runtimeKind = oldAddon.runtimeKind,
-                            installSource = oldAddon.installSource,
-                            setupUpdatedAt = oldAddon.setupUpdatedAt,
-                            metadataUpdatedAt = now
-                        )
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        Log.w(TAG, "[AddonRefresh] Failed to refresh addon ${oldAddon.id} from $addonUrl", e)
-                        failedCount++
-                        oldAddon
-                    }
+                    } ?: throw java.io.IOException("Addon manifest refresh timed out")
+                    refreshedCount++
+                    hydrated.copy(
+                        id = oldAddon.id,
+                        url = oldAddon.url,
+                        transportUrl = hydrated.transportUrl ?: oldAddon.transportUrl,
+                        configureUrl = hydrated.configureUrl ?: oldAddon.configureUrl,
+                        isEnabled = oldAddon.isEnabled,
+                        isInstalled = oldAddon.isInstalled,
+                        runtimeKind = oldAddon.runtimeKind,
+                        installSource = oldAddon.installSource,
+                        setupUpdatedAt = oldAddon.setupUpdatedAt,
+                        metadataUpdatedAt = now
+                    )
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    Log.w(TAG, "[AddonRefresh] Failed to refresh addon ${oldAddon.id} from $addonUrl", e)
+                    failedCount++
+                    oldAddon
                 }
             }
-
-            val originalsById = currentAddons.associateBy { it.id }
-            val refreshedById = updatedAddons.associateBy { it.id }
-            updateAddons(stampChange = false) { latest ->
-                // A slow refresh must not undo an install, removal or toggle made while fetching,
-                // while still letting refreshed manifest metadata land on concurrently toggled entries.
-                latest.map { addon ->
-                    val refreshed = refreshedById[addon.id] ?: return@map addon
-                    if (addon == originalsById[addon.id]) {
-                        refreshed
-                    } else {
-                        addon.copy(
-                            version = refreshed.version.ifBlank { addon.version },
-                            description = refreshed.description.ifBlank { addon.description },
-                            logo = refreshed.logo ?: addon.logo,
-                            manifest = refreshed.manifest ?: addon.manifest,
-                            configureUrl = refreshed.configureUrl ?: addon.configureUrl,
-                            metadataUpdatedAt = maxOf(addon.metadataUpdatedAt, refreshed.metadataUpdatedAt)
-                        )
-                    }
-                }
-            }
-
-            synchronized(streamResultCache) { streamResultCache.clear() }
-            resolvedStreamCache.clear()
-            synchronized(streamAddonsCache) {
-                streamAddonsCache.clear()
-                cachedStreamAddonsFingerprint = null
-            }
-
-            runCatching {
-                val activeProfileId = profileManager.getProfileIdSync()
-                val bundleKey = streamResultCacheBundleKey(activeProfileId)
-                context.streamDataStore.edit { prefs ->
-                    prefs.remove(bundleKey)
-                    val cacheMap = readManifestCacheMap(prefs)
-                    for (addon in updatedAddons) {
-                        val manifest = addon.manifest ?: continue
-                        val key = normalizeAddonUrlKey(addon.url).ifBlank { addon.id }
-                        if (key.isNotBlank()) {
-                            cacheMap[key] = AddonManifestCacheEntry(manifest, maxOf(addon.metadataUpdatedAt, now))
-                        }
-                    }
-                    prefs[addonManifestCacheKey] = gson.toJson(cacheMap)
-                    prefs[addonManifestVersionCodeKey] = BuildConfig.VERSION_CODE
-                    prefs[addonManifestsRefreshedAtKey] = now
-                }
-            }
-
-            AddonRefreshReport(refreshed = refreshedCount, failed = failedCount)
         }
+
+        val originalsById = currentAddons.associateBy { it.id }
+        val refreshedById = updatedAddons.associateBy { it.id }
+        updateAddons(stampChange = false) { latest ->
+            // A slow refresh must not undo an install, removal or toggle made while fetching,
+            // while still letting refreshed manifest metadata land on concurrently toggled entries.
+            latest.map { addon ->
+                val refreshed = refreshedById[addon.id] ?: return@map addon
+                if (addon.url != originalsById[addon.id]?.url || refreshed.metadataUpdatedAt < addon.metadataUpdatedAt) return@map addon
+                if (addon == originalsById[addon.id]) {
+                    refreshed
+                } else {
+                    addon.copy(
+                        version = refreshed.version.ifBlank { addon.version },
+                        description = refreshed.description.ifBlank { addon.description },
+                        logo = refreshed.logo ?: addon.logo,
+                        manifest = mergeAddonManifests(addon.manifest, refreshed.manifest,
+                            addon.metadataUpdatedAt, refreshed.metadataUpdatedAt, preferIncomingOnTie = false),
+                        configureUrl = refreshed.configureUrl ?: addon.configureUrl,
+                        metadataUpdatedAt = maxOf(addon.metadataUpdatedAt, refreshed.metadataUpdatedAt)
+                    )
+                }
+            }
+        }
+
+        synchronized(streamResultCache) { streamResultCache.clear() }
+        resolvedStreamCache.clear()
+        synchronized(streamAddonsCache) {
+            streamAddonsCache.clear()
+            cachedStreamAddonsFingerprint = null
+        }
+
+        runCatching {
+            val activeProfileId = profileManager.getProfileIdSync()
+            val bundleKey = streamResultCacheBundleKey(activeProfileId)
+            context.streamDataStore.edit { prefs ->
+                prefs.remove(bundleKey)
+                val cacheMap = readManifestCacheMap(prefs)
+                for (addon in updatedAddons) {
+                    val manifest = addon.manifest ?: continue
+                    val key = normalizeAddonUrlKey(addon.url).ifBlank { addon.id }
+                    val cached = cacheMap[key]
+                    if (key.isNotBlank() && addon.metadataUpdatedAt > 0L && (cached == null || addon.metadataUpdatedAt > cached.updatedAt)) {
+                        cacheMap[key] = AddonManifestCacheEntry(manifest, addon.metadataUpdatedAt)
+                    }
+                }
+                prefs[addonManifestCacheKey] = gson.toJson(cacheMap)
+                prefs[addonManifestVersionCodeKey] = BuildConfig.VERSION_CODE
+                prefs[addonManifestsRefreshedAtKey] = now
+            }
+        }
+
+        return AddonRefreshReport(refreshed = refreshedCount, failed = failedCount)
     }
 
     private suspend fun installHttpLocalScraperCandidate(
@@ -1387,7 +1398,9 @@ class StreamRepository @Inject constructor(
                 val legacy = reconcileAddonsWithCloud(enrichedIncoming, local.addons, updatedAt, local.updatedAt).first
                     .map { addon ->
                         val prev = localById[addon.id]
-                        if (prev != null) mergeAddonPreservingSetupAndMetadata(prev, addon, preferIncomingOnTie = updatedAt >= local.updatedAt)
+                        if (prev != null) mergeAddonPreservingSetupAndMetadata(prev, addon,
+                            preferIncomingOnTie = updatedAt >= local.updatedAt,
+                            storedUpdatedAt = local.updatedAt, incomingUpdatedAt = updatedAt)
                         else addon
                     }
                 local.copy(addons = legacy.filterNot { local.changes[it.id]?.removed == true },
