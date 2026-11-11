@@ -15,8 +15,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -158,7 +160,18 @@ class AddonMetadataDeviceTest {
             }
         }
         compose.onNodeWithText("Family VOD Movie").assertIsDisplayed()
-        compose.onNodeWithTag("vod-card").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
+        val focusedArtwork = isFocused() and hasAnyAncestor(hasTestTag("vod-card"))
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(focusedArtwork, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { screenshot ->
+            java.io.File(context.cacheDir, "addon-vod-card.png").outputStream().use {
+                screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+            screenshot.recycle()
+        }
+        compose.onNode(focusedArtwork, useUnmergedTree = true).assertIsFocused()
+            .performKeyInput { pressKey(Key.DirectionCenter) }
         compose.runOnIdle { assertEquals(888001, selected.get()) }
     }
 }
