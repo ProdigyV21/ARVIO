@@ -103,6 +103,7 @@ import com.arflix.tv.data.model.MediaType
 import com.arflix.tv.data.model.StreamSource
 import com.arflix.tv.data.model.Subtitle
 import com.arflix.tv.data.repository.SkipInterval
+import com.arflix.tv.ui.screens.player.ActivePlaybackBadgeData
 import com.arflix.tv.ui.screens.player.AudioTrackInfo
 import com.arflix.tv.ui.screens.player.PlayerUiState
 import com.arflix.tv.ui.screens.player.localizedText
@@ -128,6 +129,7 @@ fun ArvioMobilePlayer(
     bufferedPositionMs: Long,
     audioTracks: List<AudioTrackInfo>,
     selectedAudioIndex: Int,
+    activePlaybackBadges: ActivePlaybackBadgeData? = null,
     currentPlaybackSpeed: Float,
     aspectModeLabel: String,
     isCasting: Boolean,
@@ -882,6 +884,7 @@ fun ArvioMobilePlayer(
                 MobilePlayerBottomSection(
                     eyebrow = eyebrowText,
                     mainTitle = mainTitleText,
+                    activePlaybackBadges = activePlaybackBadges,
                     currentPositionMs = currentPositionMs,
                     durationMs = durationMs,
                     bufferedPositionMs = bufferedPositionMs,
