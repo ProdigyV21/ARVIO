@@ -16,7 +16,14 @@ export function useAddonActions(store: StoreCore & Pick<ReturnType<typeof useUpd
     if (delivery?.active && !delivery.permissions?.addConnections) throw new Error("Connections are managed by your administrator.");
     const assigned = managed.ref.current.resources?.addons || [];
     if (options.removedIds?.some(id => assigned.some(addon => addon.id === id))) throw new Error("This connection is managed by your administrator.");
-    const normalized = normalizeAddons(next.filter(addon => !addon.managedOrganizationId));
+    const now = Date.now();
+    const previous = new Map(personalAddonsRef.current.map(addon => [addon.id, addon]));
+    const normalized = normalizeAddons(next.filter(addon => !addon.managedOrganizationId).map(addon => {
+      const old = previous.get(addon.id);
+      const changed = old && (old.name !== addon.name || old.manifestUrl !== addon.manifestUrl || old.enabled !== addon.enabled);
+      return changed ? { ...addon, isEnabled: addon.enabled !== false,
+        setupUpdatedAt: Math.max(now, Number(old.setupUpdatedAt || 0) + 1) } : addon;
+    }));
     queueAddons(authClient, normalized, activeProfileId, options.removedIds, options.addedIds);
     saveLocalAddons(normalized);
     if (!authClient.session && JSON.stringify(loadLocalAddons()) !== JSON.stringify(normalized)) throw new Error("Device storage is full. Keep this page open and retry saving.");

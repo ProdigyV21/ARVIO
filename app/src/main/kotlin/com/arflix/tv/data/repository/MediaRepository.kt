@@ -19,6 +19,7 @@ import com.arflix.tv.data.api.TraktApi
 import com.arflix.tv.data.api.TraktPublicListItem
 import com.arflix.tv.data.api.StremioMetaPreview
 import com.arflix.tv.data.model.Addon
+import com.arflix.tv.data.model.AddonCatalog
 import com.arflix.tv.data.model.CastMember
 import com.arflix.tv.data.model.CatalogConfig
 import com.arflix.tv.data.model.CatalogKind
@@ -115,7 +116,8 @@ class MediaRepository @Inject constructor(
     private val homeServerRepository: HomeServerRepository,
     private val simklListsRepository: com.arflix.tv.data.repository.simkl.SimklListsRepository? = null,
     private val simklSyncService: com.arflix.tv.data.repository.simkl.SimklSyncService? = null,
-    private val catalogRepository: CatalogRepository? = null
+    private val catalogRepository: CatalogRepository? = null,
+    private val iptvRepository: IptvRepository? = null
 ) {
 
     data class CategoryPageResult(
@@ -1025,6 +1027,10 @@ class MediaRepository @Inject constructor(
                 val page = loadDelegatedCatalogPage(delegated, 0, effectiveMaxItems)
                 return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
             }
+            resolveAddonClientFilter(catalog)?.let { filterJson ->
+                val page = loadFilteredAddonHttpPage(catalog, filterJson, 0, effectiveMaxItems)
+                return@coroutineScope page.items.takeIf { it.isNotEmpty() }?.let { Category(catalog.id, catalog.title, it) }
+            }
         }
         val mediaRefs = when (catalog.sourceType) {
             CatalogSourceType.TRAKT, CatalogSourceType.MDBLIST -> loadListCatalogRefs(catalog)
@@ -1088,6 +1094,9 @@ class MediaRepository @Inject constructor(
         } else if (catalog.sourceType == CatalogSourceType.ADDON) {
             resolveAddonClientCatalog(catalog)?.let { delegated ->
                 return@coroutineScope loadDelegatedCatalogPage(delegated, offset, effectiveLimit)
+            }
+            resolveAddonClientFilter(catalog)?.let { filterJson ->
+                return@coroutineScope loadFilteredAddonHttpPage(catalog, filterJson, offset, effectiveLimit)
             }
             val page = loadAddonCatalogRefsPage(catalog, offset, effectiveLimit)
             pageRefs = page.refs
@@ -1982,16 +1991,81 @@ class MediaRepository @Inject constructor(
         val nextOffset: Int
     )
 
+    private suspend fun resolveAddonCatalogDeclaration(catalog: CatalogConfig): AddonCatalog? {
+        val descriptor = resolveAddonCatalogDescriptor(catalog) ?: return null
+        return installedAddonsSnapshot().firstOrNull { it.id == descriptor.addonId && it.isEnabled }
+            ?.manifest?.catalogs?.firstOrNull {
+                it.id == descriptor.catalogId && it.type.equals(descriptor.catalogType, ignoreCase = true)
+            }
+    }
+
     private suspend fun resolveAddonClientCatalog(catalog: CatalogConfig): CatalogConfig? {
-        val descriptor = resolveAddonCatalogDescriptor(catalog)
-        val declaration = descriptor?.let { ref ->
-            installedAddonsSnapshot().firstOrNull { it.id == ref.addonId && it.isEnabled }
-                ?.manifest?.catalogs?.firstOrNull {
-                    it.id == ref.catalogId && it.type.equals(ref.catalogType, ignoreCase = true)
-                }
-        }
+        val declaration = resolveAddonCatalogDeclaration(catalog)
         val delegate = catalog.clientDelegate ?: declaration?.clientDelegate ?: return null
         return catalog.copy(clientDelegate = delegate, clientFilter = catalog.clientFilter ?: declaration?.clientFilter)
+    }
+
+    private suspend fun resolveAddonClientFilter(catalog: CatalogConfig): String? {
+        return catalog.clientFilter?.takeIf { it.isNotBlank() }
+            ?: resolveAddonCatalogDeclaration(catalog)?.clientFilter?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun passesAvailabilityFilter(item: MediaItem, availableOn: String?): Boolean {
+        return when (availableOn) {
+            null -> true
+            "vod" -> iptvRepository?.hasVodMatch(
+                mediaType = item.mediaType,
+                tmdbId = item.id.takeIf { it > 0 },
+                imdbId = item.homeServerImdbId,
+                title = item.title,
+                year = item.year.take(4).toIntOrNull()
+            ) == true
+            "homeserver" -> homeServerRepository.hasTitleMatch(
+                mediaType = item.mediaType,
+                imdbId = item.homeServerImdbId,
+                title = item.title,
+                year = item.year.take(4).toIntOrNull(),
+                tmdbId = item.id.takeIf { it > 0 }
+            )
+            else -> false
+        }
+    }
+
+    private suspend fun loadFilteredAddonHttpPage(
+        catalog: CatalogConfig,
+        filterJson: String,
+        offset: Int,
+        limit: Int
+    ): CategoryPageResult = coroutineScope {
+        val filter = ClientCatalogFilter.parse(filterJson)
+        val mediaTypeHint = addonCatalogTypeToMediaType(catalog.addonCatalogType)
+        clientCatalogPage(
+            offset = offset,
+            limit = limit,
+            mediaType = mediaTypeHint,
+            filter = filter,
+            extraPredicate = { item -> passesAvailabilityFilter(item, filter.availableOn) }
+        ) { start, size ->
+            val page = loadAddonCatalogRefsPage(catalog, start, size)
+            val permits = Semaphore(6)
+            val items = page.refs.map { (type, tmdbId) ->
+                async {
+                    permits.withPermit {
+                        runCatching { catalogItemFor(type, tmdbId) }.getOrNull()
+                    }
+                }
+            }.awaitAll().filterNotNull()
+            CategoryPageResult(items, page.hasMore, page.nextOffset)
+        }
+    }
+
+    private suspend fun resolveVodSeedToItem(seed: IptvRepository.VodCatalogSeed): MediaItem? {
+        val tmdbId = seed.tmdbId?.takeIf { it > 0 }
+            ?: seed.imdbId?.let { resolveImdbToTmdbRef(it, seed.mediaType)?.second }
+            ?: IptvTitleNormalizer.normalize(seed.title).takeIf { it.isNotBlank() }
+                ?.let { normalized -> resolveTitleToTmdbRef(normalized, seed.mediaType)?.second }
+            ?: return null
+        return catalogItemFor(seed.mediaType, tmdbId)
     }
 
     private suspend fun delegatedHomeSource(request: ClientCatalogRequest, catalog: CatalogConfig): String? {
@@ -2023,13 +2097,42 @@ class MediaRepository @Inject constructor(
     ): CategoryPageResult = coroutineScope {
         val request = ClientCatalogRequest.parse(requireNotNull(catalog.clientDelegate), catalog.addonCatalogType)
         val filter = ClientCatalogFilter.parse(catalog.clientFilter)
+        val extraPredicate: suspend (MediaItem) -> Boolean = { item -> passesAvailabilityFilter(item, filter.availableOn) }
+
         if (request.provider == "homeserver") {
             val source = delegatedHomeSource(request, catalog)
                 ?: return@coroutineScope CategoryPageResult(emptyList(), false)
-            return@coroutineScope clientCatalogPage(offset, limit, request.mediaType, filter) { start, size ->
+            return@coroutineScope clientCatalogPage(offset, limit, request.mediaType, filter, extraPredicate) { start, size ->
                 loadHomeServerCatalogPage(catalog.copy(sourceRef = source), start, size)
             }
         }
+
+        if (request.provider == "vod") {
+            val vodSeeds = iptvRepository?.getDelegatedVodCatalogSeeds(
+                mediaType = request.mediaType,
+                categoryFilter = request.category
+            ).orEmpty().take(500)
+            if (vodSeeds.isEmpty()) return@coroutineScope CategoryPageResult(emptyList(), false)
+            return@coroutineScope clientCatalogPage(offset, limit, request.mediaType, filter, extraPredicate) { start, size ->
+                val selected = vodSeeds.drop(start).take(size)
+                val permits = Semaphore(6)
+                val items = selected.map { seed ->
+                    async {
+                        permits.withPermit {
+                            try {
+                                resolveVodSeedToItem(seed)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                    }
+                }.awaitAll().filterNotNull()
+                CategoryPageResult(items, start + selected.size < vodSeeds.size, start + selected.size)
+            }
+        }
+
         val seeds = when (request.provider) {
             "trakt" -> when (request.action) {
                 "watchlist" -> traktRepository.getWatchlist()
@@ -2049,7 +2152,7 @@ class MediaRepository @Inject constructor(
         }.filter { it.id > 0 && (request.mediaType == null || it.mediaType == request.mediaType) }
             .distinctBy { it.mediaType to it.id }
 
-        clientCatalogPage(offset, limit, request.mediaType, filter) { start, size ->
+        clientCatalogPage(offset, limit, request.mediaType, filter, extraPredicate) { start, size ->
             val selected = seeds.drop(start).take(size)
             val permits = Semaphore(6)
             val items = selected.map { seed -> async {

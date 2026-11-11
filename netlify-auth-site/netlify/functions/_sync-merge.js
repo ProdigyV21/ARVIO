@@ -173,6 +173,50 @@ function activeProfileIds(payload) {
 
 // ── Timestamped settings (g:, p:, c:) and fieldUpdatedAt ──────────────────────
 
+function lookupCatalogDelegationFromMetadata(entry, metadataMap) {
+  if (!isPlainObject(metadataMap) || !entry?.addonCatalogId) return null;
+  const entryAddonId = String(entry.addonId || "").toLowerCase();
+  const entryCatId = String(entry.addonCatalogId || "");
+  const entryCatType = String(entry.addonCatalogType || "").toLowerCase();
+  for (const [key, meta] of Object.entries(metadataMap)) {
+    if (!isPlainObject(meta)) continue;
+    const manifestId = String(meta.manifest?.id || "").toLowerCase();
+    const matchesAddon = !entryAddonId || key === entryAddonId || (manifestId && entryAddonId.startsWith(manifestId));
+    if (!matchesAddon) continue;
+    const cats = Array.isArray(meta.catalogs) ? meta.catalogs : (Array.isArray(meta.manifest?.catalogs) ? meta.manifest.catalogs : []);
+    const found = cats.find(c =>
+      c && String(c.id || "") === entryCatId && (!entryCatType || String(c.type || "").toLowerCase() === entryCatType)
+    );
+    if (found && (found.clientDelegate != null || found.clientFilter != null)) return found;
+  }
+  return null;
+}
+
+function preserveCatalogDelegationFields(storedList, incomingList, metadataMap) {
+  const storedArr = Array.isArray(storedList) ? storedList : [];
+  const storedById = new Map();
+  for (const item of storedArr) {
+    if (isPlainObject(item) && typeof item.id === "string" && item.id) storedById.set(item.id, item);
+  }
+  let changed = false;
+  const result = incomingList.map((item) => {
+    if (!isPlainObject(item)) return item;
+    const prev = typeof item.id === "string" ? storedById.get(item.id) : null;
+    const fromMeta = lookupCatalogDelegationFromMetadata(item, metadataMap);
+    const needDelegate = !hasOwn(item, "clientDelegate") || item.clientDelegate == null;
+    const needFilter = !hasOwn(item, "clientFilter") || item.clientFilter == null;
+    const inheritedDelegate = needDelegate ? (prev?.clientDelegate ?? fromMeta?.clientDelegate) : undefined;
+    const inheritedFilter = needFilter ? (prev?.clientFilter ?? fromMeta?.clientFilter) : undefined;
+    if (inheritedDelegate == null && inheritedFilter == null) return item;
+    changed = true;
+    const next = { ...item };
+    if (inheritedDelegate != null) next.clientDelegate = inheritedDelegate;
+    if (inheritedFilter != null) next.clientFilter = inheritedFilter;
+    return next;
+  });
+  return changed ? result : incomingList;
+}
+
 function mergeTimestampedSettings(storedPayload, incoming) {
   const stored = plainObject(storedPayload);
   const storedTs = plainObject(stored.fieldUpdatedAt);
@@ -181,6 +225,10 @@ function mergeTimestampedSettings(storedPayload, incoming) {
   const isActive = (id) => !activeIds || activeIds.has(id);
   const keepIncomingTs = new Set();
   const output = { ...incoming };
+
+  if (isPlainObject(stored.addonMetadataByKey) && !hasOwn(output, "addonMetadataByKey")) {
+    output.addonMetadataByKey = stored.addonMetadataByKey;
+  }
 
   for (const key of GLOBAL_MERGE_KEYS) {
     if (!hasOwn(stored, key)) {
@@ -244,25 +292,44 @@ function mergeTimestampedSettings(storedPayload, incoming) {
     if (changed) output.profileSettingsById = next;
   }
 
+  const metadataMap = output.addonMetadataByKey || stored.addonMetadataByKey;
   for (const field of CATALOG_FIELDS) {
     const storedMap = stored[field];
     const incomingMap = incoming[field];
-    if (!isPlainObject(storedMap) || (incomingMap !== undefined && !isPlainObject(incomingMap))) continue;
+    if (!isPlainObject(storedMap) && (field !== "catalogsByProfile" || !isPlainObject(metadataMap))) continue;
+    if (incomingMap !== undefined && !isPlainObject(incomingMap)) continue;
     const next = { ...(incomingMap || {}) };
     let changed = false;
-    for (const [profileId, storedList] of Object.entries(storedMap)) {
-      if (!Array.isArray(storedList) || !isActive(profileId)) continue;
-      const own = next[profileId];
-      if (own === undefined) {
-        next[profileId] = storedList;
-        changed = true;
-        continue;
+    if (isPlainObject(storedMap)) {
+      for (const [profileId, storedList] of Object.entries(storedMap)) {
+        if (!Array.isArray(storedList) || !isActive(profileId)) continue;
+        const own = next[profileId];
+        if (own === undefined) {
+          next[profileId] = storedList;
+          changed = true;
+          continue;
+        }
+        if (!Array.isArray(own)) continue;
+        const key = `c:${profileId}:${field}`;
+        if (tsOf(storedTs, key) > tsOf(incomingTs, key)) {
+          next[profileId] = storedList;
+          changed = true;
+        } else if (field === "catalogsByProfile") {
+          const preserved = preserveCatalogDelegationFields(storedList, own, metadataMap);
+          if (preserved !== own) {
+            next[profileId] = preserved;
+            changed = true;
+          }
+        }
       }
-      if (!Array.isArray(own)) continue;
-      const key = `c:${profileId}:${field}`;
-      if (tsOf(storedTs, key) > tsOf(incomingTs, key)) {
-        next[profileId] = storedList;
-        changed = true;
+    } else if (field === "catalogsByProfile") {
+      for (const [profileId, own] of Object.entries(next)) {
+        if (!Array.isArray(own) || !isActive(profileId)) continue;
+        const preserved = preserveCatalogDelegationFields([], own, metadataMap);
+        if (preserved !== own) {
+          next[profileId] = preserved;
+          changed = true;
+        }
       }
     }
     if (changed) output[field] = next;

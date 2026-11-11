@@ -902,6 +902,33 @@ class HomeServerRepository @Inject constructor(
         }
     }
 
+    /**
+     * Checks whether any connected home server currently has a movie or series matching the item.
+     */
+    suspend fun hasTitleMatch(
+        mediaType: MediaType,
+        imdbId: String?,
+        title: String,
+        year: Int?,
+        tmdbId: Int?
+    ): Boolean = withContext(Dispatchers.IO) {
+        val connections = currentConnections().filter { it.isUsable }
+        if (connections.isEmpty()) return@withContext false
+        for (connection in connections) {
+            val matched = try {
+                when (mediaType) {
+                    MediaType.MOVIE -> findMovieMatches(connection, imdbId, title, year, tmdbId).isNotEmpty()
+                    MediaType.TV -> findSeriesMatches(connection, imdbId, title, year, tmdbId, tvdbId = null).isNotEmpty()
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                false
+            }
+            if (matched) return@withContext true
+        }
+        false
+    }
+
     private suspend fun saveConnection(connection: HomeServerConnection) {
         clearSourceCache()
         val existing = currentConnections()

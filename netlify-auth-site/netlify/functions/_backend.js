@@ -1838,20 +1838,243 @@ function payloadMetrics(payload) {
 // removals: a stale device may have toggled/refreshed its incomplete local list.
 // Keep removal records in the snapshot so later stale uploads cannot resurrect
 // them. Legacy snapshots retain the conservative shrink guard below.
+function addonUrlOf(addon) {
+  if (!addon || typeof addon !== "object") return "";
+  return String(addon.manifestUrl || addon.url || addon.transportUrl || "").trim();
+}
+
+function normalizeAddonUrlKey(raw) {
+  const trimmed = String(raw || "").trim().toLowerCase();
+  if (!trimmed) return "";
+  return trimmed.replace(/\/manifest\.json(\?.*)?$/, "$1").replace(/\/+$/, "");
+}
+
+function isConfiguredAddonUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    if (parsed.search && parsed.search.length > 1) return true;
+    const stripped = parsed.pathname.replace(/\/manifest\.json$/i, "").replace(/^\/+|\/+$/g, "");
+    return stripped.length > 0;
+  } catch {
+    return value.includes("?");
+  }
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function addonIdentity(addon) {
   if (!addon || typeof addon !== "object") return "";
   return String(addon.manifestUrl || addon.url || addon.transportUrl || addon.id || "").trim().toLowerCase();
 }
 
-function unionAddonLists(existingList, incomingList) {
-  const merged = new Map();
-  for (const addon of incomingList) {
-    const key = addonIdentity(addon);
-    if (key) merged.set(key, addon);
+function addonMetadataKey(addon) {
+  const urlKey = normalizeAddonUrlKey(addonUrlOf(addon));
+  if (urlKey) return urlKey;
+  return String(addon?.id || "").trim().toLowerCase();
+}
+
+function addonMatchKeys(addon) {
+  const keys = [];
+  const metaKey = addonMetadataKey(addon);
+  if (metaKey) keys.push(metaKey);
+  const id = String(addon?.id || "").trim().toLowerCase();
+  if (id && !keys.includes(id)) keys.push(id);
+  const manifestId = String(addon?.manifest?.id || "").trim().toLowerCase();
+  if (manifestId && !keys.includes(manifestId)) keys.push(manifestId);
+  return keys;
+}
+
+function mergeCatalogMetadataList(primaryList, fallbackList, allowOverrideRemovedMetadata = false) {
+  const primary = Array.isArray(primaryList) ? primaryList : [];
+  const fallback = Array.isArray(fallbackList) ? fallbackList : [];
+  if (allowOverrideRemovedMetadata && Array.isArray(primaryList)) return primary;
+  if (!primary.length) return fallback;
+  if (!fallback.length) return primary;
+  const fallbackByKey = new Map();
+  for (const cat of fallback) {
+    if (!cat || typeof cat !== "object") continue;
+    const key = `${String(cat.type || "").toLowerCase()}:${String(cat.id || "")}`;
+    if (cat.id) fallbackByKey.set(key, cat);
   }
-  for (const addon of existingList) {
-    const key = addonIdentity(addon);
-    if (key && !merged.has(key)) merged.set(key, addon);
+  return primary.map((cat) => {
+    if (!cat || typeof cat !== "object") return cat;
+    const key = `${String(cat.type || "").toLowerCase()}:${String(cat.id || "")}`;
+    const fb = fallbackByKey.get(key);
+    if (!fb) return cat;
+    const next = { ...cat };
+    if (!allowOverrideRemovedMetadata) {
+      if (next.clientDelegate == null && fb.clientDelegate != null) next.clientDelegate = fb.clientDelegate;
+      if (next.clientFilter == null && fb.clientFilter != null) next.clientFilter = fb.clientFilter;
+    }
+    return next;
+  });
+}
+
+function extractAddonMetadata(addon) {
+  if (!addon || typeof addon !== "object") return null;
+  const manifest = isPlainObject(addon.manifest) ? addon.manifest : null;
+  const catalogs = Array.isArray(addon.catalogs)
+    ? addon.catalogs
+    : Array.isArray(manifest?.catalogs)
+      ? manifest.catalogs
+      : null;
+  const resources = Array.isArray(addon.resources)
+    ? addon.resources
+    : Array.isArray(manifest?.resources)
+      ? manifest.resources
+      : null;
+  const metadataUpdatedAt = Number(addon.metadataUpdatedAt || manifest?.metadataUpdatedAt || 0) || 0;
+  if (!manifest && !catalogs && !resources && metadataUpdatedAt <= 0) return null;
+  const record = {};
+  if (manifest) record.manifest = manifest;
+  if (catalogs) record.catalogs = catalogs;
+  if (resources) record.resources = resources;
+  if (Array.isArray(addon.types)) record.types = addon.types;
+  else if (Array.isArray(manifest?.types)) record.types = manifest.types;
+  if (Array.isArray(addon.idPrefixes)) record.idPrefixes = addon.idPrefixes;
+  else if (Array.isArray(manifest?.idPrefixes)) record.idPrefixes = manifest.idPrefixes;
+  if (addon.version) record.version = addon.version;
+  if (addon.description) record.description = addon.description;
+  if (addon.logo) record.logo = addon.logo;
+  if (addon.background) record.background = addon.background;
+  if (isPlainObject(manifest?.behaviorHints)) record.behaviorHints = manifest.behaviorHints;
+  if (metadataUpdatedAt > 0) record.metadataUpdatedAt = metadataUpdatedAt;
+  return record;
+}
+
+function mergeMetadataRecords(olderMeta, newerMeta) {
+  if (!olderMeta) return newerMeta || null;
+  if (!newerMeta) return olderMeta || null;
+  const olderTs = Number(olderMeta.metadataUpdatedAt || 0) || 0;
+  const newerTs = Number(newerMeta.metadataUpdatedAt || 0) || 0;
+  const newerWins = newerTs >= olderTs && newerTs > 0;
+  const primary = newerWins ? newerMeta : (olderTs > newerTs ? olderMeta : newerMeta);
+  const fallback = primary === newerMeta ? olderMeta : newerMeta;
+  const allowClear = olderTs !== newerTs;
+
+  const merged = { ...fallback, ...primary };
+  for (const field of ["catalogs", "resources", "types", "idPrefixes"]) {
+    const p = primary[field] ?? primary.manifest?.[field];
+    const f = fallback[field] ?? fallback.manifest?.[field];
+    if (!Array.isArray(p) && !Array.isArray(f)) continue;
+    merged[field] = field === "catalogs"
+      ? mergeCatalogMetadataList(p, f, allowClear)
+      : Array.isArray(p) && (allowClear || p.length) ? p : (f ?? p);
+  }
+  if (primary.manifest || fallback.manifest) {
+    merged.manifest = { ...fallback.manifest, ...primary.manifest };
+    for (const field of ["catalogs", "resources", "types", "idPrefixes"]) {
+      if (Array.isArray(merged[field])) merged.manifest[field] = merged[field];
+    }
+  }
+  const maxTs = Math.max(olderTs, newerTs);
+  if (maxTs > 0) merged.metadataUpdatedAt = maxTs;
+  return merged;
+}
+
+function applyMetadataRecordToAddon(addon, metadataRecord) {
+  if (!addon || typeof addon !== "object" || !metadataRecord) return addon;
+  const out = { ...addon };
+  // The setup winner may carry an older manifest. Compare metadata independently;
+  // on equal timestamps keep the entry, filling only fields it omitted.
+  const merged = mergeMetadataRecords(metadataRecord, extractAddonMetadata(addon));
+  for (const field of ["manifest", "version", "description", "logo", "background", "metadataUpdatedAt"]) {
+    if (Object.prototype.hasOwnProperty.call(merged, field)) out[field] = merged[field];
+  }
+  for (const field of ["catalogs", "resources", "types", "idPrefixes"]) {
+    if (Array.isArray(merged[field]) && (out[field] !== undefined || addon.manifestUrl !== undefined)) {
+      out[field] = merged[field];
+    }
+  }
+  return out;
+}
+
+/**
+ * Merges two representations of the same addon (`stored` and `incoming`)
+ * without letting legacy or metadata-stripped clients clobber newer metadata
+ * or configured URLs.
+ */
+function mergeAddonRecord(stored, incoming, preferIncomingOnTie = true, storedUpdatedAt = 0, incomingUpdatedAt = 0) {
+  if (!stored) return incoming;
+  if (!incoming) return stored;
+
+  const storedSetupTs = Number(stored.setupUpdatedAt || 0) || storedUpdatedAt;
+  const incomingSetupTs = Number(incoming.setupUpdatedAt || 0) || incomingUpdatedAt;
+  const setupWinner = storedSetupTs > incomingSetupTs
+    ? stored
+    : (incomingSetupTs > storedSetupTs ? incoming : (preferIncomingOnTie ? incoming : stored));
+  const setupFallback = setupWinner === incoming ? stored : incoming;
+
+  const out = { ...setupFallback, ...setupWinner };
+
+  // Protect configured URLs against unconfigured generic URLs unless setupUpdatedAt explicitly changed it.
+  const winnerUrl = addonUrlOf(setupWinner);
+  const fallbackUrl = addonUrlOf(setupFallback);
+  if (isConfiguredAddonUrl(fallbackUrl) && !isConfiguredAddonUrl(winnerUrl)) {
+    const explicitNewerUrl = Number(setupWinner.setupUpdatedAt || 0) >
+      (setupWinner === incoming ? storedSetupTs : incomingSetupTs);
+    if (!explicitNewerUrl) {
+      if (setupFallback.url) out.url = setupFallback.url;
+      if (setupFallback.manifestUrl) out.manifestUrl = setupFallback.manifestUrl;
+      if (setupFallback.transportUrl) out.transportUrl = setupFallback.transportUrl;
+    }
+  }
+
+  const storedMeta = extractAddonMetadata(stored);
+  const incomingMeta = extractAddonMetadata(incoming);
+  const mergedMeta = mergeMetadataRecords(storedMeta, incomingMeta);
+  const enriched = mergedMeta ? applyMetadataRecordToAddon(out, mergedMeta) : out;
+  const maxSetupTs = Math.max(storedSetupTs, incomingSetupTs);
+  const setupChanged = ["name", "enabled", "isEnabled", "url", "manifestUrl", "transportUrl"]
+    .some(key => stored[key] !== enriched[key]);
+  if (maxSetupTs > 0 && (stored.setupUpdatedAt || incoming.setupUpdatedAt || setupChanged)) {
+    enriched.setupUpdatedAt = maxSetupTs;
+  }
+  return enriched;
+}
+
+function findComparableAddonKey(map, addon) {
+  const directKey = addonIdentity(addon);
+  if (directKey && map.has(directKey)) return directKey;
+  const urlNorm = normalizeAddonUrlKey(addonUrlOf(addon));
+  if (urlNorm) {
+    for (const [k, candidate] of map.entries()) {
+      if (normalizeAddonUrlKey(addonUrlOf(candidate)) === urlNorm) return k;
+    }
+  }
+  const addonId = String(addon?.id || "").trim();
+  if (addonId) {
+    for (const [k, candidate] of map.entries()) {
+      if (String(candidate?.id || "").trim() === addonId) return k;
+    }
+  }
+  return directKey;
+}
+
+function unionAddonLists(existingList, incomingList, incomingWinsOnTie = true, existingUpdatedAt = 0, incomingUpdatedAt = 0) {
+  const merged = new Map();
+  const ordered = incomingWinsOnTie
+    ? incomingList.map(a => ({ addon: a, isIncoming: true })).concat(existingList.map(a => ({ addon: a, isIncoming: false })))
+    : existingList.map(a => ({ addon: a, isIncoming: false })).concat(incomingList.map(a => ({ addon: a, isIncoming: true })));
+
+  for (const { addon, isIncoming } of ordered) {
+    const key = findComparableAddonKey(merged, addon);
+    if (!key) continue;
+    const prev = merged.get(key);
+    if (!prev) {
+      merged.set(key, addon);
+    } else {
+      merged.set(
+        key,
+        isIncoming
+          ? mergeAddonRecord(prev, addon, incomingWinsOnTie, existingUpdatedAt, incomingUpdatedAt)
+          : mergeAddonRecord(addon, prev, incomingWinsOnTie, existingUpdatedAt, incomingUpdatedAt)
+      );
+    }
   }
   return Array.from(merged.values());
 }
@@ -1871,6 +2094,38 @@ function addonChangesOf(payload) {
   ).map(([id, change]) => [id, { removed: change.removed, updatedAt: change.updatedAt }]));
 }
 
+function buildMergedAddonMetadataCache(existing, incoming, addonsList) {
+  const storedCache = isPlainObject(existing?.addonMetadataByKey) ? existing.addonMetadataByKey : null;
+  const incomingCache = isPlainObject(incoming?.addonMetadataByKey) ? incoming.addonMetadataByKey : null;
+  const nextCache = {};
+
+  if (storedCache) {
+    for (const [k, v] of Object.entries(storedCache)) {
+      if (isPlainObject(v)) nextCache[k] = v;
+    }
+  }
+  if (incomingCache) {
+    for (const [k, v] of Object.entries(incomingCache)) {
+      if (!isPlainObject(v)) continue;
+      nextCache[k] = mergeMetadataRecords(nextCache[k], v);
+    }
+  }
+  for (const addon of addonsList || []) {
+    const meta = extractAddonMetadata(addon);
+    const key = addonMetadataKey(addon);
+    if (meta && key) {
+      nextCache[key] = mergeMetadataRecords(nextCache[key], meta);
+    }
+  }
+  return Object.keys(nextCache).length > 0 ? nextCache : null;
+}
+
+function enrichAddonWithMetadataCache(addon, metadataCache) {
+  if (!addon || typeof addon !== "object" || !metadataCache) return addon;
+  const cacheEntry = addonMatchKeys(addon).map((k) => metadataCache[k]).find(Boolean);
+  return cacheEntry ? applyMetadataRecordToAddon(addon, cacheEntry) : addon;
+}
+
 function mergeExplicitAddonChanges(existing, incoming) {
   const changes = Object.assign(Object.create(null), addonChangesOf(existing));
   for (const [id, change] of Object.entries(addonChangesOf(incoming) || {})) {
@@ -1885,8 +2140,7 @@ function mergeExplicitAddonChanges(existing, incoming) {
   const merge = (oldList, newList) => {
     const old = Array.isArray(oldList) ? oldList : [];
     const next = Array.isArray(newList) ? newList : [];
-    // unionAddonLists gives the second list precedence for metadata/order.
-    return (incomingIsNewer ? unionAddonLists(old, next) : unionAddonLists(next, old)).filter(keep);
+    return unionAddonLists(old, next, incomingIsNewer, addonsUpdatedAtOf(existing), addonsUpdatedAtOf(incoming)).filter(keep);
   };
   const byProfile = {};
   const profileLists = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -1894,17 +2148,30 @@ function mergeExplicitAddonChanges(existing, incoming) {
   const newProfiles = profileLists(incoming.addonsByProfile);
   const allAddons = (root, profiles) => unionAddonLists(
     Object.values(profiles).flatMap(list => Array.isArray(list) ? list : []),
-    Array.isArray(root.addons) ? root.addons : []
+    Array.isArray(root.addons) ? root.addons : [],
+    true
   );
-  const shared = merge(allAddons(existing, oldProfiles), allAddons(incoming, newProfiles));
-  const canonical = new Map(shared.map(addon => [addonIdentity(addon), addon]));
+  const sharedRaw = merge(allAddons(existing, oldProfiles), allAddons(incoming, newProfiles));
+  const metadataCache = buildMergedAddonMetadataCache(existing, incoming, [
+    ...(Array.isArray(existing.addons) ? existing.addons : []),
+    ...sharedRaw
+  ]);
+  const shared = sharedRaw.map(addon => enrichAddonWithMetadataCache(addon, metadataCache));
+  const canonical = new Map();
+  for (const addon of shared) {
+    const key = addonIdentity(addon);
+    if (key) canonical.set(key, addon);
+    const id = String(addon?.id || "").trim();
+    if (id && !canonical.has(id)) canonical.set(id, addon);
+  }
+  const resolveCanonical = (addon) => canonical.get(addonIdentity(addon)) || canonical.get(String(addon?.id || "").trim()) || addon;
   for (const id of new Set([...Object.keys(oldProfiles), ...Object.keys(newProfiles)])) {
     Object.defineProperty(byProfile, id, {
-      value: unionAddonLists(shared, merge(oldProfiles[id], newProfiles[id]))
-        .map(addon => canonical.get(addonIdentity(addon))), enumerable: true
+      value: unionAddonLists(shared, merge(oldProfiles[id], newProfiles[id]), true).map(resolveCanonical),
+      enumerable: true
     });
   }
-  return {
+  const output = {
     ...incoming,
     addons: shared,
     addonsByProfile: byProfile,
@@ -1912,6 +2179,8 @@ function mergeExplicitAddonChanges(existing, incoming) {
     addonsUpdatedAt: Object.values(changes).reduce((time, change) => Math.max(time, change.updatedAt),
       Math.max(addonsUpdatedAtOf(existing), addonsUpdatedAtOf(incoming)))
   };
+  if (metadataCache) output.addonMetadataByKey = metadataCache;
+  return output;
 }
 
 function applyAddonWipeGuard(existingSnapshot, incomingPayload) {
@@ -1931,13 +2200,29 @@ function applyAddonWipeGuard(existingSnapshot, incomingPayload) {
     if (existingList.length >= 3 && incomingList.length <= 1) {
       guarded = true;
       restored = true;
-      return unionAddonLists(existingList, incomingList);
+      return unionAddonLists(existingList, incomingList, false);
     }
-    return incomingListRaw;
+    return incomingList.map(addon => {
+      const existingMatch = existingList.find(e =>
+        addonIdentity(e) === addonIdentity(addon) || (e?.id && e.id === addon?.id)
+      );
+      return existingMatch ? mergeAddonRecord(existingMatch, addon,
+        addonsUpdatedAtOf(incomingPayload) >= addonsUpdatedAtOf(existingPayload),
+        addonsUpdatedAtOf(existingPayload), addonsUpdatedAtOf(incomingPayload)) : addon;
+    });
   };
 
   const output = { ...incomingPayload };
-  output.addons = guardList(existingPayload.addons, incomingPayload.addons);
+  const mergedAddonsRaw = Array.isArray(incomingPayload.addons)
+    ? guardList(existingPayload.addons, incomingPayload.addons)
+    : incomingPayload.addons;
+  const metadataCache = buildMergedAddonMetadataCache(existingPayload, incomingPayload, [
+    ...(Array.isArray(existingPayload.addons) ? existingPayload.addons : []),
+    ...(Array.isArray(mergedAddonsRaw) ? mergedAddonsRaw : [])
+  ]);
+  output.addons = Array.isArray(mergedAddonsRaw)
+    ? mergedAddonsRaw.map(addon => enrichAddonWithMetadataCache(addon, metadataCache))
+    : mergedAddonsRaw;
 
   const existingByProfile = existingPayload.addonsByProfile;
   if (existingByProfile && typeof existingByProfile === "object" && !Array.isArray(existingByProfile)) {
@@ -1945,7 +2230,10 @@ function applyAddonWipeGuard(existingSnapshot, incomingPayload) {
     if (incomingByProfile && typeof incomingByProfile === "object" && !Array.isArray(incomingByProfile)) {
       const mergedByProfile = { ...incomingByProfile };
       for (const [profileId, existingList] of Object.entries(existingByProfile)) {
-        mergedByProfile[profileId] = guardList(existingList, mergedByProfile[profileId]);
+        const mergedProfile = guardList(existingList, mergedByProfile[profileId]);
+        mergedByProfile[profileId] = Array.isArray(mergedProfile)
+          ? mergedProfile.map(addon => enrichAddonWithMetadataCache(addon, metadataCache))
+          : mergedProfile;
       }
       output.addonsByProfile = mergedByProfile;
     } else if (Object.values(existingByProfile).some((list) => Array.isArray(list) && list.length > 0)) {
@@ -1954,6 +2242,7 @@ function applyAddonWipeGuard(existingSnapshot, incomingPayload) {
       guarded = true;
     }
   }
+  if (metadataCache) output.addonMetadataByKey = metadataCache;
 
   if (restored && Object.prototype.hasOwnProperty.call(existingPayload, "addonsUpdatedAt")) {
     output.addonsUpdatedAt = existingPayload.addonsUpdatedAt;

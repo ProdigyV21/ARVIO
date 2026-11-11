@@ -125,13 +125,28 @@ class CatalogRepository @Inject constructor(
     internal suspend fun applyCloudCatalogs(profileId: String, fields: Map<String, String>, timestamps: JSONObject): Boolean {
         var preservedLocal = false
         context.settingsDataStore.edit { prefs ->
+            val existingById = readCatalogsFromPrefs(profileId, prefs).associateBy { it.id }
             for ((field, json) in fields) {
                 if (CatalogCloudFields.isNewerLocal(prefs, profileId, field, timestamps)) {
                     preservedLocal = true
                     continue
                 }
                 val normalized = if (field == "catalogsByProfile") {
-                    gson.toJson(parseCatalogsJson(json).distinctBy { it.id })
+                    val incomingList = parseCatalogsJson(json).distinctBy { it.id }.map { item ->
+                        val prev = existingById[item.id]
+                        if (prev != null &&
+                            item.sourceType == CatalogSourceType.ADDON &&
+                            item.addonCatalogId == prev.addonCatalogId
+                        ) {
+                            item.copy(
+                                clientDelegate = item.clientDelegate ?: prev.clientDelegate,
+                                clientFilter = item.clientFilter ?: prev.clientFilter
+                            )
+                        } else {
+                            item
+                        }
+                    }
+                    gson.toJson(incomingList)
                 } else {
                     gson.toJson(gson.fromJson<List<String>>(json, hiddenListType).orEmpty().distinct())
                 }
@@ -635,7 +650,9 @@ class CatalogRepository @Inject constructor(
                 addonId = desired.addonId,
                 addonCatalogType = desired.addonCatalogType,
                 addonCatalogId = desired.addonCatalogId,
-                addonName = desired.addonName
+                addonName = desired.addonName,
+                clientDelegate = desired.clientDelegate,
+                clientFilter = desired.clientFilter
             )
             if (merged != existing) {
                 current[index] = merged
@@ -665,7 +682,7 @@ class CatalogRepository @Inject constructor(
      * affecting the sync outcome. Unlike the previous ID-only fingerprint, this includes:
      * - Active profile ID (so profile switches always trigger a fresh sync)
      * - Addon installed/enabled state, type, and URL
-     * - Manifest catalog contents (catalog type + ID per addon)
+     * - Manifest catalog contents (catalog type, ID, name, delegation, and filter per addon)
      *
      * This ensures that toggling an addon, switching profiles, or manifest catalog
      * changes never leave stale/missing catalogs.
@@ -686,6 +703,12 @@ class CatalogRepository @Inject constructor(
                     append(catalog.type)
                     append(':')
                     append(catalog.id)
+                    append(':')
+                    append(catalog.name)
+                    append(':')
+                    append(catalog.clientDelegate ?: "")
+                    append(':')
+                    append(catalog.clientFilter ?: "")
                     append(']')
                 }
                 append(',')

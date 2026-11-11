@@ -42,12 +42,41 @@ class ClientCatalogTest {
             MediaRepository.CategoryPageResult(items.drop(offset).take(size), offset + size < items.size)
         }
         val filter = ClientCatalogFilter(minYear = 2020)
-        val first = clientCatalogPage(0, 2, null, filter, fetch)
+        val first = clientCatalogPage(0, 2, null, filter, fetch = fetch)
         assertEquals(listOf(2, 4), first.items.map { it.id })
         assertEquals(4, first.nextOffset)
         assertTrue(first.hasMore)
-        val next = clientCatalogPage(first.nextOffset!!, 2, null, filter, fetch)
+        val next = clientCatalogPage(first.nextOffset!!, 2, null, filter, fetch = fetch)
         assertEquals(listOf(6, 8), next.items.map { it.id })
         assertFalse(next.hasMore)
+    }
+
+    @Test fun `vod delegates parse recent categories and category filter safely`() {
+        val recent = ClientCatalogRequest.parse("vod:recent?type=movie", fallbackType = null)
+        assertEquals("vod", recent.provider)
+        assertEquals("recent", recent.action)
+        assertEquals(MediaType.MOVIE, recent.mediaType)
+        assertNull(recent.category)
+
+        val categorized = ClientCatalogRequest.parse("vod:categories?type=series&category=Action%20%26%20Sci-Fi", fallbackType = null)
+        assertEquals("vod", categorized.provider)
+        assertEquals("categories", categorized.action)
+        assertEquals(MediaType.TV, categorized.mediaType)
+        assertEquals("Action & Sci-Fi", categorized.category)
+    }
+
+    @Test fun `client filter parses availableOn vod and homeserver while rejecting unknown values`() {
+        val vod = ClientCatalogFilter.parse("""{"availableOn":"vod","minYear":2021}""")
+        assertEquals("vod", vod.availableOn)
+        assertEquals(2021, vod.minYear)
+
+        val hs = ClientCatalogFilter.parse("""{"availableOn":"homeserver"}""")
+        assertEquals("homeserver", hs.availableOn)
+
+        try {
+            ClientCatalogFilter.parse("""{"availableOn":"unknown"}""")
+            fail("Expected exception for invalid availableOn")
+        } catch (_: IllegalArgumentException) {
+        }
     }
 }

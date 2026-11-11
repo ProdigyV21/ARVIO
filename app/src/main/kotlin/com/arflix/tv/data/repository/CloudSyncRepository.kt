@@ -179,10 +179,40 @@ class CloudSyncRepository @Inject constructor(
         addonLists.flatten().forEach { addon ->
             val id = addon.id.trim()
             if (id.isNotBlank()) {
-                merged.putIfAbsent(id, addon)
+                val existing = merged[id]
+                merged[id] = if (existing == null) addon
+                else mergeAddonPreservingSetupAndMetadata(existing, addon, preferIncomingOnTie = false)
             }
         }
         return merged.values.toList()
+    }
+
+    private fun parseAddonMetadataByKey(root: JSONObject): Map<String, AddonManifestCacheEntry> {
+        val obj = root.optJSONObject("addonMetadataByKey") ?: return emptyMap()
+        val result = linkedMapOf<String, AddonManifestCacheEntry>()
+        for (rawKey in obj.keys()) {
+            val entryObj = obj.optJSONObject(rawKey) ?: continue
+            val manifestObj = entryObj.optJSONObject("manifest") ?: continue
+            val manifest = runCatching {
+                gson.fromJson(manifestObj.toString(), com.arflix.tv.data.model.AddonManifest::class.java)
+            }.getOrNull() ?: continue
+            val updatedAt = entryObj.optLong("metadataUpdatedAt", entryObj.optLong("updatedAt", 0L))
+            val key = normalizeAddonUrlKey(rawKey).ifBlank { rawKey }
+            if (key.isNotBlank()) result[key] = AddonManifestCacheEntry(manifest, updatedAt)
+        }
+        return result
+    }
+
+    private fun enrichAddonsFromCloudMetadata(
+        addons: List<Addon>,
+        metadataMap: Map<String, AddonManifestCacheEntry>
+    ): List<Addon> {
+        if (metadataMap.isEmpty()) return addons
+        return addons.map { addon ->
+            val urlKey = normalizeAddonUrlKey(addon.url)
+            val cache = metadataMap[urlKey] ?: metadataMap[addon.id] ?: metadataMap[addon.manifest?.id]
+            if (cache != null) enrichAddonWithMetadata(addon, cache.manifest, cache.updatedAt) else addon
+        }
     }
 
     /**
@@ -908,6 +938,32 @@ class CloudSyncRepository @Inject constructor(
         // pull on apply (see reconcileAddonsWithCloud).
         root.put("addonsUpdatedAt", addonState.updatedAt)
         root.put("addonChanges", JSONObject(gson.toJson(addonState.changes)))
+
+        // Separate refreshable manifest cache so older clients that omit newer manifest fields
+        // cannot overwrite cached catalogs/delegation metadata in the cloud snapshot.
+        val localManifestCache = streamRepository.getAddonMetadataCache().toMutableMap()
+        installed.forEach { addon ->
+            val manifest = addon.manifest ?: return@forEach
+            val key = normalizeAddonUrlKey(addon.url).ifBlank { addon.id }
+            if (key.isNotBlank()) {
+                val existing = localManifestCache[key]
+                if (existing == null || addon.metadataUpdatedAt >= existing.updatedAt) {
+                    localManifestCache[key] = AddonManifestCacheEntry(manifest, maxOf(existing?.updatedAt ?: 0L, addon.metadataUpdatedAt))
+                }
+            }
+        }
+        if (localManifestCache.isNotEmpty()) {
+            val metadataJson = JSONObject()
+            localManifestCache.forEach { (key, entry) ->
+                val obj = JSONObject()
+                obj.put("manifest", JSONObject(gson.toJson(entry.manifest)))
+                obj.put("catalogs", org.json.JSONArray(gson.toJson(entry.manifest.catalogs)))
+                obj.put("resources", org.json.JSONArray(gson.toJson(entry.manifest.resources)))
+                if (entry.updatedAt > 0L) obj.put("metadataUpdatedAt", entry.updatedAt)
+                metadataJson.put(key, obj)
+            }
+            root.put("addonMetadataByKey", metadataJson)
+        }
 
         // Catalogs per profile
         val catalogsByProfile = buildMap<String, List<CatalogConfig>> {
@@ -1915,6 +1971,10 @@ class CloudSyncRepository @Inject constructor(
             val changes: Map<String, AddonChange>? = root.optJSONObject("addonChanges")?.let {
                 gson.fromJson(it.toString(), changeType)
             }
+            val cloudMetadataMap = parseAddonMetadataByKey(root)
+            if (cloudMetadataMap.isNotEmpty()) {
+                streamRepository.mergeAddonMetadataCache(cloudMetadataMap)
+            }
             root.optJSONObject("addonsByProfile")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
                 val type = TypeToken.getParameterized(Map::class.java, String::class.java, TypeToken.getParameterized(List::class.java, Addon::class.java).type).type
                 val map: Map<String, List<Addon>> = gson.fromJson(json, type) ?: emptyMap()
@@ -1922,14 +1982,21 @@ class CloudSyncRepository @Inject constructor(
                 val rootAddons: List<Addon> = root.optJSONArray("addons")?.let {
                     gson.fromJson(it.toString(), addonType)
                 } ?: emptyList()
-                val sharedAddons = mergeAddonsForSharedRestore(map.values + listOf(rootAddons))
+                val sharedAddons = enrichAddonsFromCloudMetadata(
+                    mergeAddonsForSharedRestore(map.values + listOf(rootAddons)),
+                    cloudMetadataMap
+                )
                 streamRepository.applyAddonCloudState(sharedAddons, cloudAddonsTs, changes)
             }
             root.optJSONArray("addons")?.toString()?.takeIf { it.isNotBlank() }?.let { json ->
                 if (!root.has("addonsByProfile")) {
                     val type = TypeToken.getParameterized(List::class.java, Addon::class.java).type
                     val addons: List<Addon> = gson.fromJson(json, type) ?: emptyList()
-                    streamRepository.applyAddonCloudState(addons, cloudAddonsTs, changes)
+                    streamRepository.applyAddonCloudState(
+                        enrichAddonsFromCloudMetadata(addons, cloudMetadataMap),
+                        cloudAddonsTs,
+                        changes
+                    )
                 }
             }
         } catch (e: Exception) {
