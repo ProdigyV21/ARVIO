@@ -778,3 +778,24 @@ h1 {
 }
 .footer-languages a { color: inherit; opacity: 0.72; text-decoration: none; }
 .footer-languages a:hover, .footer-languages a:focus-visible { opacity: 1; text-decoration: underline; }
+
+/* Right-to-left locales (Hebrew): mirror the few physical-direction rules above. */
+[dir="rtl"] .skip-link { left: auto; right: 12px; }
+[dir="rtl"] .feature-item { padding: 28px 0 30px 34px; }
+[dir="rtl"] .feature-item:nth-child(even) { padding-left: 0; padding-right: 34px; border-left: 0; border-right: 1px solid var(--line); }
+[dir="rtl"] .guide-card { padding: 34px 0 38px 34px; }
+[dir="rtl"] .guide-card:nth-child(even) { padding-left: 0; padding-right: 34px; border-left: 0; border-right: 1px solid var(--line); }
+[dir="rtl"] .faq-list summary { padding: 23px 0 23px 50px; }
+[dir="rtl"] .faq-list summary::after { right: auto; left: 8px; }
+[dir="rtl"] .guide-table { text-align: right; }
+[dir="rtl"] .setup-list { padding-left: 0; padding-right: 28px; }
+[dir="rtl"] .setup-list li { padding: 10px 16px 18px 0; }
+@media (max-width: 840px) {
+  [dir="rtl"] .feature-item,
+  [dir="rtl"] .feature-item:nth-child(even),
+  [dir="rtl"] .guide-card,
+  [dir="rtl"] .guide-card:nth-child(even) { padding-left: 0; padding-right: 0; border-right: 0; }
+}
+@media (max-width: 640px) {
+  [dir="rtl"] .setup-list li { padding-right: 4px; }
+}

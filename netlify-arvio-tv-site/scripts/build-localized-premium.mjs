@@ -20,7 +20,8 @@ export const premiumLocales = [
   { code: "da-DK", dir: "da", hreflang: "da" },
   { code: "no-NO", dir: "no", hreflang: "nb" },
   { code: "fi-FI", dir: "fi", hreflang: "fi" },
-  { code: "hi-IN", dir: "hi", hreflang: "hi" }
+  { code: "hi-IN", dir: "hi", hreflang: "hi" },
+  { code: "he-IL", dir: "he", hreflang: "he", rtl: true }
 ];
 
 const template = fs.readFileSync(path.join(siteRoot, "premium/index.html"), "utf8");
@@ -54,7 +55,7 @@ function render(locale) {
   const description = `${copy.lead} ${copy.fromPrice}`.trim();
   const url = `${base}/${locale.dir}/premium/`;
   html = html
-    .replace(/<html lang="[^"]*">/, `<html lang="${locale.hreflang}" data-page-lang="${locale.code}">`)
+    .replace(/<html lang="[^"]*">/, `<html lang="${locale.hreflang}"${locale.rtl ? ' dir="rtl"' : ""} data-page-lang="${locale.code}">`)
     .replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(title)}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${escapeAttr(description)}">`)
     .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${url}">`)
