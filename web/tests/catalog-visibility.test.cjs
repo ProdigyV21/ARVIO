@@ -3,7 +3,14 @@ const assert = require('node:assert/strict');
 const { load, storage } = require('./load.cjs');
 
 const { mergeCatalogs, defaultCatalogs, updateHiddenCatalogIds } = load('lib/catalogs.ts');
-const { collectionHomeCatalogs, collectionFolders } = load('lib/collectionPresentation.ts');
+const {
+  collectionHomeCatalogs,
+  collectionFolders,
+  collectionParentRail,
+  visibleHomeCatalogs,
+  orphanedEnabledFolders,
+  setCatalogsEnabledWithParentRails
+} = load('lib/collectionPresentation.ts');
 const ids = rows => Array.from(rows, row => row.id);
 const catalog = (id, patch = {}) => ({ id, name: id, sourceType: 'preinstalled', enabled: true, ...patch });
 const home = (saved, hidden = [], hiddenAddons = []) => collectionHomeCatalogs(
@@ -115,4 +122,37 @@ test('web addon visibility changes sync to Android with a per-profile timestamp 
   assert.equal(f.remote.fieldUpdatedAt['c:p1:hiddenAddonByProfile'], 500);
   const pulled = (await f.cloud.pullCloudPayload(auth, 'p1')).settings;
   assert.deepEqual(Array.from(pulled.hiddenAddonCatalogIds), ['local-hidden', 'remote-hidden']);
+});
+
+test('enabling collection folders after Hide all re-enables their parent rail while keeping empty/hidden rails off Home', () => {
+  const rail = catalog('collection_rail_service', { kind: 'COLLECTION_RAIL', collectionGroup: 'SERVICE' });
+  const otherRail = catalog('collection_rail_genre', { kind: 'COLLECTION_RAIL', collectionGroup: 'GENRE' });
+  const netflix = catalog('collection_service_netflix', { kind: 'COLLECTION', collectionGroup: 'SERVICE' });
+  const paramount = catalog('collection_service_paramountplus', { kind: 'COLLECTION', collectionGroup: 'SERVICE' });
+  const action = catalog('collection_genre_action', { kind: 'COLLECTION', collectionGroup: 'GENRE' });
+  const trending = catalog('trending_movies', { kind: 'STANDARD' });
+  const all = [trending, rail, otherRail, netflix, paramount, action];
+
+  // User clicks "Hide all".
+  const allHidden = setCatalogsEnabledWithParentRails(all, new Set(ids(all)), false);
+  assert.deepEqual(ids(visibleHomeCatalogs(allHidden)), []);
+
+  // User then enables only streaming platforms (Netflix, Paramount+).
+  const afterShowingPlatforms = setCatalogsEnabledWithParentRails(
+    allHidden,
+    new Set(['collection_service_netflix', 'collection_service_paramountplus']),
+    true
+  );
+  assert.deepEqual(ids(visibleHomeCatalogs(afterShowingPlatforms)), ['collection_rail_service']);
+  assert.deepEqual(ids(collectionFolders(rail, afterShowingPlatforms)), ['collection_service_netflix', 'collection_service_paramountplus']);
+  assert.equal(afterShowingPlatforms.find(c => c.id === 'collection_rail_genre').enabled, false);
+  assert.equal(collectionParentRail(netflix, afterShowingPlatforms).id, 'collection_rail_service');
+
+  // If a parent rail is already hidden (legacy state) while folders stay enabled, detect and recover it cleanly.
+  const orphaned = [ { ...rail, enabled: false }, netflix, paramount ];
+  assert.deepEqual(ids(visibleHomeCatalogs(orphaned)), []);
+  assert.deepEqual(ids(orphanedEnabledFolders(orphaned)), ['collection_service_netflix', 'collection_service_paramountplus']);
+
+  // An enabled rail with zero enabled folders does not render on Home.
+  assert.deepEqual(ids(visibleHomeCatalogs([rail, { ...netflix, enabled: false }])), []);
 });

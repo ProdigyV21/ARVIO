@@ -31,6 +31,7 @@ interface Props<T> {
   onMove: (from: number, to: number) => void;
   renderMain: (item: T, context: SortableRowContext) => ReactNode;
   renderActions?: (item: T, context: SortableRowContext) => ReactNode;
+  renderFooter?: (item: T, context: SortableRowContext) => ReactNode;
   /** Accessible name of the list (already translated). */
   label: string;
   /** Fixed row height in px: turns on virtualisation once the list is longer than `virtualizeAbove`. */
@@ -53,7 +54,7 @@ type Moving = { key: string; from: number; to: number; mode: "keyboard" | "point
 const OVERSCAN = 8;
 
 export function SortableList<T>({
-  items, getKey, getLabel, onMove, renderMain, renderActions, label, rowHeight, viewportHeight = 480,
+  items, getKey, getLabel, onMove, renderMain, renderActions, renderFooter, label, rowHeight, viewportHeight = 480,
   virtualizeAbove = 120, disabled, edgeButtons = true, rowClassName, className, emptyText,
 }: Props<T>) {
   const translateUi = useTranslation();
@@ -281,11 +282,12 @@ export function SortableList<T>({
     const isMoving = moving?.key === key;
     const context: SortableRowContext = { index: display, total, moving: isMoving };
     const itemLabel = getLabel(item);
+    const footer = renderFooter?.(item, context);
     rows.push(
       <li
         key={key}
         data-sort-key={key}
-        className={`st-sort-row${isMoving ? " is-moving" : ""}${moving?.mode === "pointer" && isMoving ? " is-dragging" : ""}${rowClassName ? ` ${rowClassName(item)}` : ""}`}
+        className={`st-sort-row${footer ? " has-footer" : ""}${isMoving ? " is-moving" : ""}${moving?.mode === "pointer" && isMoving ? " is-dragging" : ""}${rowClassName ? ` ${rowClassName(item)}` : ""}`}
         style={virtual && rowHeight ? { position: "absolute", top: display * rowHeight, left: 0, right: 0, height: rowHeight } : undefined}
         aria-posinset={virtual ? display + 1 : undefined}
         aria-setsize={virtual ? total : undefined}
@@ -341,6 +343,7 @@ export function SortableList<T>({
             </span>
           )}
         </div>
+        {footer && <div className="st-sort-footer">{footer}</div>}
       </li>
     );
   }

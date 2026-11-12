@@ -161,7 +161,7 @@ export function SettingsScreen() {
     clearSourceSettingsRequest();
     const navigate = (event: Event) => {
       const target = (event as CustomEvent).detail;
-      if (target !== "homeserver" && target !== "tv") return;
+      if (target !== "homeserver" && target !== "tv" && target !== "catalogs") return;
       clearSourceSettingsRequest();
       open(target);
     };
