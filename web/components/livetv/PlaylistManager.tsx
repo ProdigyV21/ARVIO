@@ -69,25 +69,51 @@ const emptyDraft: PlaylistDraft = { kind: "m3u", name: "", url: "", epg: "", hos
 
 export function playlistDraftFromEntry(playlist: IptvPlaylistEntry): PlaylistDraft {
   const xtream = xtreamInfoFromUrl(playlist.m3uUrl);
+  const draft = { ...emptyDraft, name: playlist.name, url: playlist.m3uUrl, epg: playlist.epgUrl ?? "" };
   return xtream
-    ? { ...emptyDraft, kind: "xtream", name: playlist.name, host: xtream.baseUrl, username: xtream.username, password: xtream.password }
-    : { ...emptyDraft, kind: "m3u", name: playlist.name, url: playlist.m3uUrl, epg: playlist.epgUrl ?? "" };
+    ? { ...draft, kind: "xtream", host: xtream.baseUrl, username: xtream.username, password: xtream.password }
+    : draft;
 }
 
 /** Draft → the playlist entry ARVIO stores (or an error to show under the form). */
 export type DraftProblem = "missing-xtream" | "missing-url" | "bad-url" | "bad-epg";
-export function playlistFromDraft(draft: Pick<PlaylistDraft, "kind" | "name" | "url" | "epg" | "host" | "username" | "password">, id: string): IptvPlaylistEntry | DraftProblem {
+export function playlistFromDraft(draft: Pick<PlaylistDraft, "kind" | "name" | "url" | "epg" | "host" | "username" | "password">, id: string, existing?: IptvPlaylistEntry): IptvPlaylistEntry | DraftProblem {
+  let entry: IptvPlaylistEntry;
   if (draft.kind === "xtream") {
     const urls = xtreamPlaylistUrls(draft.host, draft.username, draft.password);
     if (!urls) return "missing-xtream";
-    return { id, name: draft.name.trim() || "Playlist", m3uUrl: urls.m3uUrl, epgUrl: urls.epgUrl, enabled: true };
+    entry = { id, name: draft.name.trim() || "Playlist", m3uUrl: urls.m3uUrl, epgUrl: urls.epgUrl, enabled: true };
+  } else {
+    const url = draft.url.trim();
+    if (!url) return "missing-url";
+    if (!/^https?:\/\//i.test(normalizeIptvInput(url))) return "bad-url";
+    const epg = draft.epg.trim();
+    if (epg && !/^https?:\/\//i.test(epg)) return "bad-epg";
+    entry = { id, name: draft.name.trim() || "Playlist", m3uUrl: url, epgUrl: epg, enabled: true };
   }
-  const url = draft.url.trim();
-  if (!url) return "missing-url";
-  if (!/^https?:\/\//i.test(normalizeIptvInput(url))) return "bad-url";
-  const epg = draft.epg.trim();
-  if (epg && !/^https?:\/\//i.test(epg)) return "bad-epg";
-  return { id, name: draft.name.trim() || "Playlist", m3uUrl: url, epgUrl: epg, enabled: true };
+  if (!existing) return entry;
+
+  const original = playlistDraftFromEntry(existing);
+  const originalUrls = original.kind === "xtream" ? xtreamPlaylistUrls(original.host, original.username, original.password) : null;
+  const sameSource = draft.kind === original.kind && entry.m3uUrl === (originalUrls?.m3uUrl ?? existing.m3uUrl.trim());
+  if (sameSource) entry.m3uUrl = existing.m3uUrl;
+  const sameGuide = draft.epg.trim() === original.epg.trim();
+  const generatedGuide = originalUrls && existing.epgUrl === originalUrls.epgUrl;
+  const needsGeneratedGuide = draft.kind === "xtream" && !sameSource &&
+    (generatedGuide || (original.kind !== "xtream" && !existing.epgUrl && !existing.epgUrls?.length));
+
+  if (sameGuide && needsGeneratedGuide) {
+    // Refresh only the generated link; custom fallback guides belong to the user.
+    entry.epgUrls = existing.epgUrls?.map((url) => url === existing.epgUrl ? entry.epgUrl! : url);
+  } else if (sameGuide) {
+    entry.epgUrl = existing.epgUrl;
+    entry.epgUrls = existing.epgUrls;
+  } else {
+    entry.epgUrl = draft.epg.trim();
+    if (entry.epgUrl && !/^https?:\/\//i.test(entry.epgUrl)) return "bad-epg";
+    entry.epgUrls = entry.epgUrl ? [entry.epgUrl, ...(existing.epgUrls ?? []).filter((url) => url !== existing.epgUrl && url !== entry.epgUrl)] : [];
+  }
+  return { ...existing, ...entry, enabled: existing.enabled };
 }
 
 /** Validation message for a playlist draft (M3U or Xtream). */
@@ -156,7 +182,7 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
   useEffect(() => { if (editing) requestAnimationFrame(() => firstField.current?.focus()); }, [editing, draft.kind]);
 
   const set = (patch: Partial<PlaylistDraft>) => { setDraft((current) => ({ ...current, ...patch })); setTest({ state: "idle" }); setFormError(""); };
-  const candidate = () => draft.kind === "stalker" ? null : playlistFromDraft(draft, editing && editing !== "new" ? editing : crypto.randomUUID());
+  const candidate = () => draft.kind === "stalker" ? null : playlistFromDraft(draft, editing && editing !== "new" ? editing : crypto.randomUUID(), playlists.find((item) => item.id === editing));
 
   const runTest = async () => {
     const run = ++testRun.current;

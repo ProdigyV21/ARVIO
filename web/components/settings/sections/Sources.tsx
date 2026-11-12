@@ -234,7 +234,7 @@ export function LiveTvSection() {
                         name: entry.name,
                         m3uUrl: entry.m3uUrl,
                         epgUrl: entry.epgUrl,
-                        epgUrls: entry.epgUrl ? [entry.epgUrl] : []
+                        epgUrls: entry.epgUrls
                       });
                       setEditingPlaylistId(null);
                       setToast("IPTV playlist saved.");
@@ -374,6 +374,14 @@ function PlaylistForm({
   const run = useRef(0);
   const activeKind: PlaylistKind = controlledKind ?? (draft.kind === "m3u" ? "m3u" : "xtream");
 
+  useEffect(() => {
+    run.current++;
+    setTest({ state: "idle" });
+    setError("");
+    setShowPassword(false);
+    return () => { run.current++; };
+  }, [activeKind, userAgent]);
+
   const set = (patch: Partial<PlaylistDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     setTest({ state: "idle" });
@@ -382,7 +390,7 @@ function PlaylistForm({
   };
 
   const buildEntry = (): IptvPlaylistEntry | null => {
-    const result = playlistFromDraft({ ...draft, kind: activeKind }, playlist?.id ?? crypto.randomUUID());
+    const result = playlistFromDraft({ ...draft, kind: activeKind }, playlist?.id ?? crypto.randomUUID(), playlist);
     if (typeof result === "string") {
       setError(problemText(result));
       return null;
