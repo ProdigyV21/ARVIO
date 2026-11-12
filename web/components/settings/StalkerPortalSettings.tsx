@@ -94,7 +94,7 @@ export function StalkerPortalSettings({ settings, updateSettings }: {
 }
 
 /** Name, portal address and MAC, with a Test button that loads the portal's channel list. */
-function PortalForm({ portal, portals, userAgent, submitLabel, resetOnSubmit, onSubmit, onCancel }: {
+export function PortalForm({ portal, portals, userAgent, submitLabel, resetOnSubmit, onSubmit, onCancel }: {
   portal?: StalkerPortalEntry;
   portals: StalkerPortalEntry[];
   userAgent?: string;
