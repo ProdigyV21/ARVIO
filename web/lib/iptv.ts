@@ -13,30 +13,79 @@ const EPG_TTL_MS = 3 * 60 * 60 * 1000;
 const LARGE_IPTV_LIST_CHANNEL_COUNT = 10_000;
 const DEFAULT_IPTV_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20";
 
-type ProviderBudget = { starts: number[]; active: number; nextStart: number; blockedUntil: number };
+type ProviderBudget = {
+  starts: number[];
+  active: number;
+  nextStart: number;
+  blockedUntil: number;
+  blockedMessage?: string;
+};
 const providerBudgets = new Map<string, ProviderBudget>();
+const proxyPreferences = new Map<string, number>();
 const apiInFlight = new Map<string, Promise<unknown>>();
 const guideApiCache = new Map<string, { data: unknown; expires: number }>();
 
-// Shared by every visible row and fallback. Media segments do not use this path.
-async function providerTextRequest(providerUrl: string, requestUrl: string): Promise<string> {
+class ProviderPauseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderPauseError";
+  }
+}
+
+function providerHostKey(providerUrl: string): string {
   const url = new URL(providerUrl);
-  const key = url.hostname + (url.port && !["80", "443"].includes(url.port) ? `:${url.port}` : "");
+  return url.hostname + (url.port && !["80", "443"].includes(url.port) ? `:${url.port}` : "");
+}
+
+function providerBudgetFor(providerUrl: string): ProviderBudget {
+  const key = providerHostKey(providerUrl);
   let budget = providerBudgets.get(key);
   if (!budget) {
     budget = { starts: [], active: 0, nextStart: 0, blockedUntil: 0 };
     providerBudgets.set(key, budget);
   }
+  return budget;
+}
+
+function isRateOrServerStatus(status: number) {
+  return [429, 503, 513].includes(status) || (status >= 500 && status <= 599);
+}
+
+function shouldStopFallback(error: unknown) {
+  if (error instanceof ProviderPauseError) return true;
+  const status = Number((error as { status?: number })?.status);
+  return status === 451 || isRateOrServerStatus(status);
+}
+
+function preserveAuthStatusInError(error: unknown, status: number) {
+  if (![401, 403].includes(status) || !(error instanceof Error)) return error;
+  if (/\b(401|403)\b|unauthori[sz]ed|forbidden|expired|auth/i.test(error.message)) return error;
+  return Object.assign(new Error(`${error.message} (HTTP ${status})`), {
+    status,
+    retryAfter: (error as { retryAfter?: string | null }).retryAfter ?? null
+  });
+}
+
+// Shared by every visible row and fallback. Media segments do not use this path.
+async function providerTextRequest(
+  providerUrl: string,
+  requestUrl: string,
+  options: { deferAuthCooldown?: boolean } = {}
+): Promise<string> {
+  const budget = providerBudgetFor(providerUrl);
   const queuedAt = Date.now();
   while (true) {
     const now = Date.now();
     budget.starts = budget.starts.filter((at) => now - at < 60_000);
-    if (now < budget.blockedUntil || budget.starts.length >= 30 || now - queuedAt >= 5_000) {
-      throw new Error("IPTV provider requests are temporarily paused. Please wait before refreshing.");
+    if (now < budget.blockedUntil) {
+      throw new ProviderPauseError(budget.blockedMessage || "IPTV provider requests are temporarily paused. Please wait before refreshing.");
+    }
+    if (budget.starts.length >= 30 || now - queuedAt >= 5_000) {
+      throw new ProviderPauseError("IPTV provider requests are temporarily paused. Please wait before refreshing.");
     }
     if (budget.active < 2 && now >= budget.nextStart) break;
-    await new Promise((resolve) => setTimeout(resolve, budget!.active >= 2 ? 50
-      : Math.max(1, Math.min(100, budget!.nextStart - now))));
+    await new Promise((resolve) => setTimeout(resolve, budget.active >= 2 ? 50
+      : Math.max(1, Math.min(100, budget.nextStart - now))));
   }
   budget.starts.push(Date.now());
   budget.nextStart = Date.now() + 500;
@@ -44,15 +93,20 @@ async function providerTextRequest(providerUrl: string, requestUrl: string): Pro
   try { return await textRequest(requestUrl, { cache: "no-store" }); }
   catch (error) {
     const status = Number((error as { status?: number })?.status);
-    const cooldown = [401, 403, 451].includes(status) ? 900_000
+    const skipAuthCooldown = Boolean(options.deferAuthCooldown && [401, 403].includes(status));
+    const cooldown = skipAuthCooldown ? 0
+      : [401, 403, 451].includes(status) ? 900_000
       : [429, 503, 513].includes(status) ? 300_000 : status >= 500 && status <= 599 ? 60_000 : 0;
     if (cooldown) {
       const header = (error as { retryAfter?: string | null })?.retryAfter;
       const requested = header ? (/^\d+$/.test(header) ? Number(header) * 1000 : Date.parse(header) - Date.now()) : 0;
       budget.blockedUntil = Math.max(budget.blockedUntil, Date.now() + Math.max(cooldown,
         Number.isFinite(requested) ? Math.min(86_400_000, requested) : 0));
+      budget.blockedMessage = [401, 403, 451].includes(status)
+        ? `IPTV provider refused access (HTTP ${status}). Please check your login or wait before refreshing.`
+        : undefined;
     }
-    throw error;
+    throw preserveAuthStatusInError(error, status);
   } finally { budget.active--; }
 }
 
@@ -180,16 +234,33 @@ export async function loadIptvSnapshot(
   const enabled = normalizedPlaylists.filter((playlist) => playlist.enabled && playlist.importLiveTv !== false && playlist.m3uUrl.trim());
   const playlistWarnings: string[] = [];
   const playlistErrors: NonNullable<IptvSnapshot["playlistErrors"]> = [];
+  const hostChains = new Map<string, Promise<unknown>>();
+  const runForHost = <T>(playlistUrl: string, task: () => Promise<T>): Promise<T> => {
+    let key = playlistUrl;
+    try { key = providerHostKey(playlistUrl); } catch { /* Non-URL inputs keep their own chain. */ }
+    const previous = hostChains.get(key) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(task);
+    hostChains.set(key, current);
+    return current;
+  };
   const channelSets = await Promise.all(
-    enabled.map(async (playlist) => {
+    enabled.map((playlist) => runForHost(playlist.m3uUrl, async () => {
       try {
         // Xtream playlists load API-first: the JSON API is faster than a huge
         // M3U text, provides category names + EPG channel ids, and yields HLS
         // (.m3u8) stream URLs the browser can actually play.
         const isXtream = Boolean(xtreamInfoFromPlaylist(playlist.m3uUrl));
+        let xtreamError: unknown = null;
         if (isXtream) {
-          const xtreamChannels = await fetchXtreamChannels(playlist, options).catch(() => []);
-          if (xtreamChannels.length) return xtreamChannels;
+          try {
+            const xtreamChannels = await fetchXtreamChannels(playlist, options);
+            if (xtreamChannels.length) return xtreamChannels;
+          } catch (error) {
+            xtreamError = error;
+          }
+        }
+        if (xtreamError && shouldStopAfterXtreamError(xtreamError)) {
+          throw xtreamError;
         }
         try {
           const text = await fetchPlaylistText(playlist.m3uUrl, options);
@@ -198,6 +269,9 @@ export async function loadIptvSnapshot(
         } catch (m3uError) {
           const xtreamChannels = isXtream ? [] : await fetchXtreamChannels(playlist, options).catch(() => []);
           if (xtreamChannels.length) return xtreamChannels;
+          if (xtreamError && m3uError instanceof Error && /temporarily paused/i.test(m3uError.message)) {
+            throw xtreamError;
+          }
           throw m3uError;
         }
 
@@ -210,7 +284,7 @@ export async function loadIptvSnapshot(
         playlistErrors.push({ playlistId: playlist.id, name: playlist.name || playlist.m3uUrl, message });
         return [] as IptvChannel[];
       }
-    })
+    }))
   );
   // Portals after the playlists, as the single portal always was.
   channelSets.push(...await loadPortals(portalsOf(options), Boolean(options.freshPortals), playlistErrors, playlistWarnings));
@@ -422,15 +496,39 @@ function playlistTextUrl(url: string, headers?: Record<string, string>) {
   return target.toString();
 }
 
+function proxyPreferenceKey(url: string, headers: Record<string, string>) {
+  const endpoint = new URL(url);
+  // API actions share routing, but not with other endpoints, accounts or headers.
+  if (/\/player_api\.php$/i.test(endpoint.pathname)) {
+    endpoint.searchParams.delete("action");
+    endpoint.searchParams.delete("stream_id");
+  }
+  endpoint.searchParams.sort();
+  return JSON.stringify([endpoint.toString(), Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))]);
+}
+
+function rememberProxyPreference(key: string) {
+  proxyPreferences.delete(key);
+  proxyPreferences.set(key, Date.now() + 900_000);
+  while (proxyPreferences.size > 128) proxyPreferences.delete(proxyPreferences.keys().next().value!);
+}
+
+function shouldStopAfterXtreamError(error: unknown) {
+  const status = Number((error as { status?: number })?.status);
+  return [401, 403].includes(status) || shouldStopFallback(error);
+}
+
 async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
   return cachedRemoteText(
     `playlist:${url}`,
     PLAYLIST_TTL_MS,
     async () => {
       const headers = playlistProxyHeaders(options.userAgent);
-      const candidates: Array<{ label: string; load: () => Promise<string> }> = [
-        { label: "direct", load: () => providerTextRequest(url, url) },
-        { label: "proxy", load: () => providerTextRequest(url, playlistTextUrl(url)) },
+      const preferenceKey = proxyPreferenceKey(url, headers);
+      const preferProxy = Date.now() < (proxyPreferences.get(preferenceKey) ?? 0);
+      const candidates: Array<{ label: string; isDirect?: boolean; load: () => Promise<string> }> = [
+        ...(preferProxy ? [] : [{ label: "direct", isDirect: true, load: () => providerTextRequest(url, url, { deferAuthCooldown: true }) }]),
+        { label: "proxy", load: () => providerTextRequest(url, playlistTextUrl(url), { deferAuthCooldown: true }) },
         { label: "proxy with media headers", load: () => providerTextRequest(url, playlistTextUrl(url, headers)) }
       ];
       const errors: string[] = [];
@@ -439,9 +537,15 @@ async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
         try {
           const text = await candidate.load();
           assertPlaylistText(text);
+          if (!candidate.isDirect && !preferProxy) {
+            rememberProxyPreference(preferenceKey);
+          }
           return text;
         } catch (error) {
           errors.push(`${candidate.label}: ${error instanceof Error ? error.message : "failed"}`);
+          if (shouldStopFallback(error)) {
+            break;
+          }
         }
       }
 
@@ -702,17 +806,33 @@ async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) 
   try { return await task; } finally { if (apiInFlight.get(key) === task) apiInFlight.delete(key); }
 }
 
+async function requestWithProxyFallback(
+  url: string,
+  headers: Record<string, string>,
+  validate?: (text: string) => void
+): Promise<string> {
+  const preferenceKey = proxyPreferenceKey(url, headers);
+  const preferProxy = Date.now() < (proxyPreferences.get(preferenceKey) ?? 0);
+  if (!preferProxy) {
+    try {
+      const text = await providerTextRequest(url, url, { deferAuthCooldown: true });
+      validate?.(text);
+      return text;
+    } catch (error) {
+      if (shouldStopFallback(error)) throw error;
+    }
+  }
+  const text = await providerTextRequest(url, playlistTextUrl(url, headers));
+  validate?.(text);
+  if (!preferProxy) rememberProxyPreference(preferenceKey);
+  return text;
+}
+
 /** player_api.php text, directly and then through the app proxy (panels without CORS), both behind the provider request guard. */
 async function xtreamApiText(url: string, headers: Record<string, string>) {
-  try {
-    const text = await providerTextRequest(url, url);
+  return requestWithProxyFallback(url, headers, (text) => {
     jsonFromText(text);
-    return text;
-  } catch {
-    const text = await providerTextRequest(url, playlistTextUrl(url, headers));
-    jsonFromText(text);
-    return text;
-  }
+  });
 }
 
 /**
@@ -1082,13 +1202,7 @@ async function fetchEpgText(url: string) {
   return cachedRemoteText(
     `epg:${url}`,
     EPG_TTL_MS,
-    async () => {
-      try {
-        return await providerTextRequest(url, url);
-      } catch {
-        return providerTextRequest(url, proxiedUrl(url));
-      }
-    },
+    () => requestWithProxyFallback(url, playlistProxyHeaders()),
     isXmltvText
   );
 }
