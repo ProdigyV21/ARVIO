@@ -74,7 +74,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
   { section: "catalogs", label: "Filter rows by source", keywords: "tmdb addon trakt mdblist simkl home server collections youtube group", scope: "all" },
   { section: "catalogs", label: "Add a list", keywords: "trakt mdblist simkl list url catalog", scope: "all" },
   { section: "catalogs", label: "Collections", keywords: "import json pack", scope: "all" },
-  { section: "tv", label: "Add a playlist", keywords: "iptv m3u epg xmltv live tv", scope: "all" },
+  { section: "tv", label: "Add a playlist", id: "iptv-add", keywords: "iptv xtream username password m3u epg xmltv stalker mac portal live tv", scope: "all" },
   { section: "tv", label: "Live TV layout", id: "iptv-layout", keywords: "category order categories groups reorder drag hide show tv page", scope: "all" },
   { section: "tv", label: "Channel order", id: "iptv-layout", keywords: "which channel where reorder channels position move inside category", scope: "all" },
   { section: "tv", label: "Favourite channels", id: "iptv-layout", keywords: "favorites favourites star order reorder add remove", scope: "all" },

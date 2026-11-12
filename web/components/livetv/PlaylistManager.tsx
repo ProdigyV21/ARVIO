@@ -64,28 +64,65 @@ export function PlaylistErrors({ errors, retrying, onEdit, onRetry, onOpenSettin
 }
 
 type Kind = "m3u" | "xtream" | "stalker";
-type Draft = { kind: Kind; name: string; url: string; epg: string; host: string; username: string; password: string; portal: string; mac: string };
-const emptyDraft: Draft = { kind: "m3u", name: "", url: "", epg: "", host: "", username: "", password: "", portal: "", mac: "" };
+export type PlaylistDraft = { kind: Kind; name: string; url: string; epg: string; host: string; username: string; password: string; portal: string; mac: string };
+const emptyDraft: PlaylistDraft = { kind: "m3u", name: "", url: "", epg: "", host: "", username: "", password: "", portal: "", mac: "" };
 
-function draftFor(playlist: IptvPlaylistEntry): Draft {
+export function playlistDraftFromEntry(playlist: IptvPlaylistEntry): PlaylistDraft {
   const xtream = xtreamInfoFromUrl(playlist.m3uUrl);
+  const draft = { ...emptyDraft, name: playlist.name, url: playlist.m3uUrl, epg: playlist.epgUrl ?? "" };
   return xtream
-    ? { ...emptyDraft, kind: "xtream", name: playlist.name, host: xtream.baseUrl, username: xtream.username, password: xtream.password }
-    : { ...emptyDraft, kind: "m3u", name: playlist.name, url: playlist.m3uUrl, epg: playlist.epgUrl ?? "" };
+    ? { ...draft, kind: "xtream", host: xtream.baseUrl, username: xtream.username, password: xtream.password }
+    : draft;
 }
 
 /** Draft → the playlist entry ARVIO stores (or an error to show under the form). */
-export type DraftProblem = "missing-xtream" | "missing-url" | "bad-url";
-export function playlistFromDraft(draft: Pick<Draft, "kind" | "name" | "url" | "epg" | "host" | "username" | "password">, id: string): IptvPlaylistEntry | DraftProblem {
+export type DraftProblem = "missing-xtream" | "missing-url" | "bad-url" | "bad-epg";
+export function playlistFromDraft(draft: Pick<PlaylistDraft, "kind" | "name" | "url" | "epg" | "host" | "username" | "password">, id: string, existing?: IptvPlaylistEntry): IptvPlaylistEntry | DraftProblem {
+  let entry: IptvPlaylistEntry;
   if (draft.kind === "xtream") {
     const urls = xtreamPlaylistUrls(draft.host, draft.username, draft.password);
     if (!urls) return "missing-xtream";
-    return { id, name: draft.name.trim() || "Playlist", m3uUrl: urls.m3uUrl, epgUrl: urls.epgUrl, enabled: true };
+    entry = { id, name: draft.name.trim() || "Playlist", m3uUrl: urls.m3uUrl, epgUrl: urls.epgUrl, enabled: true };
+  } else {
+    const url = draft.url.trim();
+    if (!url) return "missing-url";
+    if (!/^https?:\/\//i.test(normalizeIptvInput(url))) return "bad-url";
+    const epg = draft.epg.trim();
+    if (epg && !/^https?:\/\//i.test(epg)) return "bad-epg";
+    entry = { id, name: draft.name.trim() || "Playlist", m3uUrl: url, epgUrl: epg, enabled: true };
   }
-  const url = draft.url.trim();
-  if (!url) return "missing-url";
-  if (!/^https?:\/\//i.test(normalizeIptvInput(url))) return "bad-url";
-  return { id, name: draft.name.trim() || "Playlist", m3uUrl: url, epgUrl: draft.epg.trim(), enabled: true };
+  if (!existing) return entry;
+
+  const original = playlistDraftFromEntry(existing);
+  const originalUrls = original.kind === "xtream" ? xtreamPlaylistUrls(original.host, original.username, original.password) : null;
+  const sameSource = draft.kind === original.kind && entry.m3uUrl === (originalUrls?.m3uUrl ?? existing.m3uUrl.trim());
+  if (sameSource) entry.m3uUrl = existing.m3uUrl;
+  const sameGuide = draft.epg.trim() === original.epg.trim();
+  const generatedGuide = originalUrls && existing.epgUrl === originalUrls.epgUrl;
+  const needsGeneratedGuide = draft.kind === "xtream" && !sameSource &&
+    (generatedGuide || (original.kind !== "xtream" && !existing.epgUrl && !existing.epgUrls?.length));
+
+  if (sameGuide && needsGeneratedGuide) {
+    // Refresh only the generated link; custom fallback guides belong to the user.
+    entry.epgUrls = existing.epgUrls?.map((url) => url === existing.epgUrl ? entry.epgUrl! : url);
+  } else if (sameGuide) {
+    entry.epgUrl = existing.epgUrl;
+    entry.epgUrls = existing.epgUrls;
+  } else {
+    entry.epgUrl = draft.epg.trim();
+    if (entry.epgUrl && !/^https?:\/\//i.test(entry.epgUrl)) return "bad-epg";
+    entry.epgUrls = entry.epgUrl ? [entry.epgUrl, ...(existing.epgUrls ?? []).filter((url) => url !== existing.epgUrl && url !== entry.epgUrl)] : [];
+  }
+  return { ...existing, ...entry, enabled: existing.enabled };
+}
+
+/** Validation message for a playlist draft (M3U or Xtream). */
+export function usePlaylistProblemText() {
+  const translateUi = useTranslation();
+  return (problem: DraftProblem) => problem === "missing-xtream" ? translateUi("Enter the server address, username and password.")
+    : problem === "missing-url" ? translateUi("Enter the playlist link from your provider.")
+    : problem === "bad-epg" ? translateUi("EPG URL must start with http:// or https://.")
+    : translateUi("The playlist link must start with http:// or https://.");
 }
 
 /** Message for a portal the user typed that cannot be saved or tested yet. */
@@ -117,25 +154,24 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
 }) {
   const translateUi = useTranslation();
   const causeText = usePlaylistErrorText();
+  const problemText = usePlaylistProblemText();
   const portalProblemText = usePortalProblemText();
   const formId = useId();
   const [editing, setEditing] = useState<string | null>(playlists.length || portals.length ? null : "new");
   const isPortal = (id: string | null) => Boolean(id && portals.some((portal) => portal.id === id));
   const portalsFull = portals.length >= MAX_STALKER_PORTALS;
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<PlaylistDraft>(emptyDraft);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [test, setTest] = useState<{ state: "idle" } | { state: "testing" } | { state: "ok"; channels: number } | { state: "error"; text: string }>({ state: "idle" });
   const [formError, setFormError] = useState("");
   const firstField = useRef<HTMLInputElement>(null);
-  const problemText = (problem: DraftProblem) => problem === "missing-xtream" ? translateUi("Enter the server address, username and password.")
-    : problem === "missing-url" ? translateUi("Enter the playlist link from your provider.") : translateUi("The playlist link must start with http:// or https://.");
   const testRun = useRef(0);
 
   const open = (id: string) => {
     if (isManagedId(id)) return;
     const playlist = playlists.find((item) => item.id === id);
     const portal = portals.find((item) => item.id === id);
-    setDraft(portal ? { ...emptyDraft, kind: "stalker", name: portal.name, portal: portal.portalUrl, mac: portal.macAddress } : playlist ? draftFor(playlist) : emptyDraft);
+    setDraft(portal ? { ...emptyDraft, kind: "stalker", name: portal.name, portal: portal.portalUrl, mac: portal.macAddress } : playlist ? playlistDraftFromEntry(playlist) : emptyDraft);
     setEditing(id);
     setTest({ state: "idle" });
     setFormError("");
@@ -145,8 +181,8 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
   }, [editRequest]);
   useEffect(() => { if (editing) requestAnimationFrame(() => firstField.current?.focus()); }, [editing, draft.kind]);
 
-  const set = (patch: Partial<Draft>) => { setDraft((current) => ({ ...current, ...patch })); setTest({ state: "idle" }); setFormError(""); };
-  const candidate = () => draft.kind === "stalker" ? null : playlistFromDraft(draft, editing && editing !== "new" ? editing : crypto.randomUUID());
+  const set = (patch: Partial<PlaylistDraft>) => { setDraft((current) => ({ ...current, ...patch })); setTest({ state: "idle" }); setFormError(""); };
+  const candidate = () => draft.kind === "stalker" ? null : playlistFromDraft(draft, editing && editing !== "new" ? editing : crypto.randomUUID(), playlists.find((item) => item.id === editing));
 
   const runTest = async () => {
     const run = ++testRun.current;
@@ -192,13 +228,13 @@ export function PlaylistManager({ playlists, hiddenGroups, groupNames, portals, 
     setDraft(emptyDraft);
   };
 
-  const field = (key: keyof Draft, label: string, help: string, options: { type?: string; placeholder?: string; autoComplete?: string; first?: boolean } = {}) => (
+  const field = (key: keyof PlaylistDraft, label: string, help: string, options: { type?: string; placeholder?: string; autoComplete?: string; first?: boolean } = {}) => (
     <div className="livetv-field">
       <label htmlFor={`${formId}-${key}-input`}>{label}</label>
       <input id={`${formId}-${key}-input`} ref={options.first ? firstField : undefined} type={options.type ?? "text"} value={draft[key]} placeholder={options.placeholder}
         autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete={options.autoComplete ?? "off"}
         inputMode={options.type === "url" ? "url" : undefined}
-        onChange={(event) => set({ [key]: event.target.value } as Partial<Draft>)} aria-describedby={help ? `${formId}-${key}` : undefined} />
+        onChange={(event) => set({ [key]: event.target.value } as Partial<PlaylistDraft>)} aria-describedby={help ? `${formId}-${key}` : undefined} />
       {help && <small id={`${formId}-${key}`}>{help}</small>}
     </div>
   );

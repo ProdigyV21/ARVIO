@@ -20,6 +20,7 @@
     "test:ui-refinements": "node scripts/check-ui-refinements.cjs",
     "test:site-diagnostics-ui": "node scripts/check-site-diagnostics-ui.cjs",
     "test:iptv-groups-ui": "node scripts/check-iptv-groups-ui.cjs",
+    "test:iptv-playlist-settings-ui": "node scripts/check-iptv-playlist-settings.cjs",
     "test:i18n-ui": "node scripts/check-i18n-ui.cjs",
     "test:partner-ui": "node scripts/check-partner-ui.cjs",
     "test:partner-management-ui": "node scripts/check-partner-management-ui.cjs",

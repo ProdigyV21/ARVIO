@@ -1,5 +1,8 @@
 {
   "Your browser. Your ARVIO.": "Tu navegador. Tu ARVIO.",
+  "EPG URL must start with http:// or https://.": "La URL de EPG debe empezar por http:// o https://.",
+  "For providers that give you a portal address and a MAC address instead of a playlist.": "Para proveedores que facilitan una dirección de portal y una dirección MAC en lugar de una lista de reproducción.",
+  "Name (e.g. My provider)": "Nombre (p. ej., Mi proveedor)",
   "Explore ARVIO Web": "Explora ARVIO Web",
   "Features": "Funciones",
   "Feature preview": "Vista previa de las funciones",
