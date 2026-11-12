@@ -56,7 +56,7 @@ export function AppProvider({
     view, cloudProfilesHydrated, profiles, activeProfile, activeProfileId, avatarImages, manageMode, setManageMode,
     section, setSection, categories, catalogConfigs, homeServerRows, continueWatching, watchlist, selected, streams, selectedEpisode,
     activeStream, activeChannel, addons, addonsReady, iptvSnapshot, query, setQuery, results, searchState, settingsSyncState,
-    settings, setSettings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode,
+    settings, setSettings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, mdblistDeviceCode,
     busy, toast, setToast
   } = core;
   const { refreshData } = useRefreshData(core);
@@ -73,7 +73,7 @@ export function AppProvider({
   const { loadCatalogRow, installAddon, removeAddon, setAddonsState } = useAddonActions({ ...core, updateSettings });
   const { signIn, signOut } = useAccountActions({ ...core, refreshData });
   const {
-    beginTrakt, pollTrakt, disconnectTrakt, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl,
+    beginTrakt, pollTrakt, disconnectTrakt, beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl,
     updateTrackingPreferences, loadTraktLists, loadTraktListItems, loadTrackerLibrary
   } = useTrackingActions({ ...core, refreshData });
   const {
@@ -140,6 +140,7 @@ export function AppProvider({
     updateTrackingPreferences,
     deviceCode,
     simklDeviceCode,
+    mdblistDeviceCode,
     busy,
     toast,
     setToast,
@@ -163,6 +164,9 @@ export function AppProvider({
     beginTrakt,
     pollTrakt,
     disconnectTrakt,
+    beginMdblist,
+    pollMdblist,
+    cancelMdblistLink,
     connectMdblist,
     disconnectMdblist,
     beginSimkl,
@@ -181,11 +185,11 @@ export function AppProvider({
     view, cloudProfilesHydrated, cloudLoginRequired, managedStatus, profiles, activeProfile, activeProfileId, avatarImages, manageMode,
     selectProfile, createProfile, updateProfileAction, deleteProfileAction, switchProfile, goToLogin, backToProfiles,
     section, categories, catalogConfigs, loadCatalogRow, homeServerRows, continueWatching, watchlist, isWatched, selected, streams, selectedEpisode, loadEpisodeStreams, advanceEpisode, activeStream, activeChannel,
-    addons, addonsReady, iptvSnapshot, query, results, searchState, settingsSyncState, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, busy, toast,
+    addons, addonsReady, iptvSnapshot, query, results, searchState, settingsSyncState, settings, auth, traktConnected, mdblistConnected, simklConnected, trackingPreferences, deviceCode, simklDeviceCode, mdblistDeviceCode, busy, toast,
     updateSettings, refreshData, openDetails, closeDetails, playStream, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer,
     refreshIptv, loadIptvGuide, favoriteTvChannels,
     installAddon, removeAddon, setAddonsState, signIn, signOut, beginTrakt, pollTrakt, disconnectTrakt,
-    connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences,
+    beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences,
     loadTraktLists, loadTraktListItems, loadTrackerLibrary,
     toggleWatchlist, toggleWatched, removeFromContinueWatching, activeContextMenu, openContextMenu, closeContextMenu
   ]);

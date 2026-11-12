@@ -1,6 +1,7 @@
 // App store (lib/store.tsx): The store's public types.
 import type { AddonInstallMode } from "../addonInstall";
 import type { TraktDeviceCode } from "../trakt";
+import type { MdbListDeviceCode } from "../mdblist";
 import type { SimklPinCode } from "../simkl";
 import type { TrackingPreferences } from "../sync";
 import type { ManagedDelivery } from "../managedConfiguration";
@@ -60,6 +61,7 @@ export interface AppStore {
   updateTrackingPreferences: (patch: Partial<TrackingPreferences>) => Promise<void>;
   deviceCode: TraktDeviceCode | null;
   simklDeviceCode: SimklPinCode | null;
+  mdblistDeviceCode: MdbListDeviceCode | null;
   busy: string;
   toast: string | null;
   setToast: (value: string | null) => void;
@@ -85,6 +87,9 @@ export interface AppStore {
   beginTrakt: () => Promise<void>;
   pollTrakt: () => Promise<void>;
   disconnectTrakt: () => void;
+  beginMdblist: () => Promise<void>;
+  pollMdblist: () => Promise<void>;
+  cancelMdblistLink: () => void;
   connectMdblist: (key: string) => Promise<void>;
   disconnectMdblist: () => void;
   beginSimkl: () => Promise<void>;

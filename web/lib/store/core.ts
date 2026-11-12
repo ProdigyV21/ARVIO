@@ -13,7 +13,7 @@ import { migrateLegacyIptvKeys } from "../stalkerPortals";
 import { loadStored, saveStored } from "../storage";
 import type { TraktDeviceCode } from "../trakt";
 import type { TraktActivitySnapshot } from "../traktActivity";
-import { mdblistClient } from "../mdblist";
+import { mdblistClient, type MdbListDeviceCode } from "../mdblist";
 import { simklClient, type SimklPinCode } from "../simkl";
 import { loadTrackingPreferences, type TrackingPreferences } from "../sync";
 import type { AppSettings, Category, InstalledAddon, IptvChannel, CatalogConfig, IptvSnapshot, MediaItem, NavSection, Profile, StreamSource } from "../types";
@@ -82,6 +82,7 @@ export function useStoreCore(initialView?: AppView) {
   const [simklConnected, setSimklConnected] = useState(() => simklClient.isConnected);
   const [deviceCode, setDeviceCode] = useState<TraktDeviceCode | null>(null);
   const [simklDeviceCode, setSimklDeviceCode] = useState<SimklPinCode | null>(null);
+  const [mdblistDeviceCode, setMdblistDeviceCode] = useState<MdbListDeviceCode | null>(null);
   const [busy, setBusy] = useState("Loading ARVIO");
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -201,6 +202,12 @@ export function useStoreCore(initialView?: AppView) {
     simklDeviceCodeRef.current = simklDeviceCode;
   }, [simklDeviceCode]);
 
+  const mdblistDeviceCodeRef = useRef(mdblistDeviceCode);
+  useEffect(() => {
+    mdblistDeviceCodeRef.current = mdblistDeviceCode;
+  }, [mdblistDeviceCode]);
+  useEffect(() => { setMdblistDeviceCode(null); }, [activeProfileId]);
+
   // Restore a saved Telegram (browser GramJS) session and prep the streaming
   // service worker so a connected user's sources resolve and play after a
   // reload — the browser equivalent of Android re-opening its TDLib database.
@@ -237,7 +244,7 @@ export function useStoreCore(initialView?: AppView) {
     };
     return () => { mdblistClient.onTokenRefreshed = undefined; };
   }, []);
-  return { managed, personalSettings, personalSettingsRef, personalAddons, personalAddonsRef, section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef };
+  return { managed, personalSettings, personalSettingsRef, personalAddons, personalAddonsRef, section, setSection, initialProfileId, initialCw, initialWatchlist, categories, setCategories, catalogConfigs, setCatalogConfigs, homeServerRows, setHomeServerRows, continueWatching, setContinueWatching, watchlist, setWatchlist, watchlistMutationRef, cwSourceRef, refreshKeyRef, refreshGenerationRef, traktActivityRef, watchedKeys, setWatchedKeys, selected, setSelected, streams, setStreams, streamsRef, selectedEpisode, setSelectedEpisode, activeStream, setActiveStream, activeChannel, setActiveChannel, playingRef, addons, setAddons, addonsReady, setAddonsReady, iptvSnapshot, setIptvSnapshot, query, setQuery, results, setResults, searchState, setSearchState, settingsSyncState, setSettingsSyncState, settings, setSettings, auth, setAuth, traktConnected, setTraktConnected, mdblistConnected, setMdblistConnected, simklConnected, setSimklConnected, deviceCode, setDeviceCode, simklDeviceCode, setSimklDeviceCode, mdblistDeviceCode, setMdblistDeviceCode, busy, setBusy, busyRef, toast, setToast, cloudProfilesHydrated, setCloudProfilesHydrated, refreshInFlightRef, lastRefreshStartedRef, previousSectionRef, iptvGuideInFlightRef, lastSyncedSettingsRef, sourceGeneration, playbackGeneration, playbackPreparation, ownedPlayback, stopOwnedPlayback, guideRetryAfter, profiles, setProfiles, activeProfileId, setActiveProfileId, activeProfileIdRef, trackingPreferences, setTrackingPreferences, avatarImages, setAvatarImagesState, setAvatarImages, manageMode, setManageMode, view, setView, activeProfile, activeProfileRef, addonsRef, settingsRef, deviceCodeRef, simklDeviceCodeRef, mdblistDeviceCodeRef };
 }
 
 export type StoreCore = ReturnType<typeof useStoreCore>;

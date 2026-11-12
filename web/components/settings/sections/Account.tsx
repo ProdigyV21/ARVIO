@@ -2,6 +2,8 @@
 import { CheckCircle2, ExternalLink, LogOut, RefreshCw, User, UserCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { weTrakrClient, type WeTrakrCode } from "@/lib/wetrakr";
+import { mdblistClient } from "@/lib/mdblist";
+import { simklClient } from "@/lib/simkl";
 import { useTranslation } from "@/lib/i18n";
 import { config, getAuthPortalUrl, hasNetlifyBackendConfig, hasSimklConfig, hasSupabaseConfig, hasTraktConfig } from "@/lib/config";
 import { useApp, useAppPick } from "@/lib/store";
@@ -152,9 +154,10 @@ export function ServicesSection() {
   const translateUi = useTranslation();
   const {
     traktConnected, mdblistConnected, simklConnected, trackingPreferences, updateTrackingPreferences,
-    deviceCode, simklDeviceCode, beginTrakt, pollTrakt, disconnectTrakt, connectMdblist, disconnectMdblist,
+    deviceCode, simklDeviceCode, mdblistDeviceCode, beginTrakt, pollTrakt, disconnectTrakt,
+    beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist,
     beginSimkl, pollSimkl, disconnectSimkl,
-  } = useAppPick("traktConnected", "mdblistConnected", "simklConnected", "trackingPreferences", "updateTrackingPreferences", "deviceCode", "simklDeviceCode", "beginTrakt", "pollTrakt", "disconnectTrakt", "connectMdblist", "disconnectMdblist", "beginSimkl", "pollSimkl", "disconnectSimkl");
+  } = useAppPick("traktConnected", "mdblistConnected", "simklConnected", "trackingPreferences", "updateTrackingPreferences", "deviceCode", "simklDeviceCode", "mdblistDeviceCode", "beginTrakt", "pollTrakt", "disconnectTrakt", "beginMdblist", "pollMdblist", "cancelMdblistLink", "connectMdblist", "disconnectMdblist", "beginSimkl", "pollSimkl", "disconnectSimkl");
   const { activeProfile, refreshData } = useAppPick("activeProfile", "refreshData");
   const [weTrakrConnected, setWeTrakrConnected] = useState(weTrakrClient.isConnected);
   const [weTrakrBusy, setWeTrakrBusy] = useState(false);
@@ -219,6 +222,70 @@ export function ServicesSection() {
   const [mdblistKey, setMdblistKey] = useState("");
   const [mdblistError, setMdblistError] = useState<string | null>(null);
   const [mdblistBusy, setMdblistBusy] = useState(false);
+  const [mdblistAuthBusy, setMdblistAuthBusy] = useState<"start" | "poll" | null>(null);
+  const [mdblistOauthConfigured, setMdblistOauthConfigured] = useState<boolean | null>(null);
+  const [mdblistApiKeyMode, setMdblistApiKeyMode] = useState(false);
+  const mdblistUiGeneration = useRef(0);
+  useEffect(() => {
+    mdblistUiGeneration.current++;
+    setMdblistKey(""); setMdblistError(null); setMdblistBusy(false); setMdblistAuthBusy(null);
+    return () => { mdblistUiGeneration.current++; };
+  }, [activeProfile?.id]);
+  const changeMdblistMode = (apiKey: boolean) => {
+    mdblistUiGeneration.current++;
+    cancelMdblistLink();
+    setMdblistError(null); setMdblistBusy(false); setMdblistAuthBusy(null); setMdblistApiKeyMode(apiKey);
+  };
+  const runMdblist = async (phase: "start" | "poll", task: () => Promise<void>) => {
+    const generation = mdblistUiGeneration.current;
+    setMdblistAuthBusy(phase); setMdblistError(null);
+    try { await task(); }
+    catch (error) { if (generation === mdblistUiGeneration.current) setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList."); }
+    finally { if (generation === mdblistUiGeneration.current) setMdblistAuthBusy(null); }
+  };
+  useEffect(() => {
+    if (mdblistConnected) { setMdblistApiKeyMode(false); return; }
+    let cancelled = false;
+    void mdblistClient.isOAuthConfigured().then((configured) => {
+      if (cancelled) return;
+      setMdblistOauthConfigured(configured);
+      if (!configured) setMdblistApiKeyMode(true);
+    });
+    return () => { cancelled = true; };
+  }, [mdblistConnected]);
+  useEffect(() => {
+    if (!mdblistDeviceCode || mdblistConnected || mdblistApiKeyMode) return;
+    let cancelled = false;
+    let delayMs = Math.max(5, mdblistDeviceCode.interval || 5) * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = mdblistDeviceCode.expiresAt ?? Date.now() + Math.max(1, mdblistDeviceCode.expires_in || 600) * 1000;
+    const tick = async () => {
+      if (cancelled) return;
+      if (Date.now() >= deadline) {
+        setMdblistError("This MDBList code has expired. Get a new code and try again.");
+        return;
+      }
+      let nextDelayMs = delayMs;
+      try {
+        await pollMdblist();
+        return;
+      } catch (error) {
+        if (cancelled) return;
+        const msg = error instanceof Error ? error.message.toLowerCase() : "";
+        if (msg.includes("limiting") || msg.includes("slow_down")) {
+          delayMs += 5000;
+        } else if (!msg.includes("not approved")) {
+          setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList.");
+          return;
+        }
+        const retryMs = Number((error as { retryAfter?: string | null })?.retryAfter) * 1000;
+        nextDelayMs = Math.max(delayMs, Number.isFinite(retryMs) ? retryMs : 0);
+      }
+      if (!cancelled && Date.now() < deadline) timer = setTimeout(tick, Math.min(nextDelayMs, deadline - Date.now()));
+    };
+    timer = setTimeout(tick, delayMs);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [mdblistDeviceCode, mdblistConnected, mdblistApiKeyMode, pollMdblist]);
 
   const run = async (
     busy: (v: "start" | "poll" | null) => void,
@@ -268,9 +335,11 @@ export function ServicesSection() {
         </div>
       </Group>
 
-      <Group title="Simkl" description="Tracks movies, shows and anime, and can fill your watchlist.">
+      <Group title="Simkl" description={simklConnected && !simklClient.isV2Connected
+        ? "Tracks movies, shows and anime, and can fill your watchlist."
+        : "Tracks movies, shows and anime, and can fill your watchlist. New Simkl connections belong to this browser and device."}>
         {simklError && <p className="st-error">{translateUi(simklError)}</p>}
-        <Row label="Status" scope="all">
+        <Row label="Status" scope={simklConnected && !simklClient.isV2Connected ? "all" : "browser"}>
           {simklConnected ? <Status tone="ok">{translateUi("Connected")}</Status> : hasSimklConfig() ? <Status tone="off">{translateUi("Not linked")}</Status> : <Status tone="warn">{translateUi("Missing config")}</Status>}
         </Row>
         {simklDeviceCode && !simklConnected && (
@@ -301,25 +370,62 @@ export function ServicesSection() {
           {translateUi(weTrakrBusy ? "Please wait..." : weTrakrConnected ? "Disconnect WeTrakr" : weTrakrCode ? "Cancel" : "Connect WeTrakr")}</button></div>
       </Group>
 
-      <Group title="MDBList" description={<>{translateUi("Lists and ratings from MDBList. Get your API key from")} <a className="st-link" href="https://mdblist.com/preferences/" target="_blank" rel="noreferrer">mdblist.com/preferences <ExternalLink size={12} /></a></>}>
+      <Group title="MDBList" description={mdblistApiKeyMode
+        ? <>{translateUi("Lists and ratings from MDBList. Get your API key from")} <a className="st-link" href="https://mdblist.com/preferences/" target="_blank" rel="noreferrer">mdblist.com/preferences <ExternalLink size={12} /></a></>
+        : translateUi("Lists, watchlists and ratings from MDBList. Connect with your MDBList account or an API key.")}>
         {mdblistError && <p className="st-error">{translateUi(mdblistError)}</p>}
         <Row label="Status" scope="all">
           {mdblistConnected ? <Status tone="ok">{translateUi("Connected")}</Status> : <Status tone="off">{translateUi("Not linked")}</Status>}
         </Row>
         {mdblistConnected ? (
           <div className="st-group-foot"><button type="button" className="st-btn is-danger" onClick={disconnectMdblist}>{translateUi("Disconnect MDBList")}</button></div>
-        ) : (
-          <div className="st-form">
-            <input className="st-input" type="password" placeholder={translateUi("MDBList API key")} aria-label={translateUi("MDBList API key")} value={mdblistKey} onChange={(e) => setMdblistKey(e.target.value)} autoComplete="new-password" data-1p-ignore="" data-lpignore="true" />
-            <div className="st-form-actions">
-              <button type="button" className="st-btn is-primary" disabled={mdblistBusy || !mdblistKey.trim()} onClick={async () => {
-                setMdblistBusy(true); setMdblistError(null);
-                try { await connectMdblist(mdblistKey); setMdblistKey(""); }
-                catch (error) { setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList."); }
-                finally { setMdblistBusy(false); }
-              }}>{mdblistBusy ? translateUi("Connecting...") : translateUi("Connect")}</button>
+        ) : mdblistApiKeyMode ? (
+          <>
+            <div className="st-form">
+              <input className="st-input" type="password" placeholder={translateUi("MDBList API key")} aria-label={translateUi("MDBList API key")} value={mdblistKey} onChange={(e) => setMdblistKey(e.target.value)} autoComplete="new-password" data-1p-ignore="" data-lpignore="true" />
+              <div className="st-form-actions">
+                <button type="button" className="st-btn is-primary" disabled={mdblistBusy || !mdblistKey.trim()} onClick={async () => {
+                  const generation = mdblistUiGeneration.current;
+                  setMdblistBusy(true); setMdblistError(null);
+                  try { await connectMdblist(mdblistKey); if (generation === mdblistUiGeneration.current) setMdblistKey(""); }
+                  catch (error) { if (generation === mdblistUiGeneration.current) setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList."); }
+                  finally { if (generation === mdblistUiGeneration.current) setMdblistBusy(false); }
+                }}>{mdblistBusy ? translateUi("Connecting...") : translateUi("Connect")}</button>
+              </div>
             </div>
-          </div>
+            {mdblistOauthConfigured !== false && (
+              <div className="st-group-foot">
+                <button type="button" className="st-btn" onClick={() => changeMdblistMode(false)}>{translateUi("Use device sign-in instead")}</button>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {mdblistDeviceCode && (
+              <div className="st-code">
+                <strong>{mdblistDeviceCode.user_code}</strong>
+                <p>{splitAroundLink(translateUi("Open {value0} and enter this code, then come back here.", { value0: LINK_SLOT })).map((part, index) => part === LINK_SLOT
+                  ? <a key={index} className="st-link" href={mdblistDeviceCode.verification_uri_complete || mdblistDeviceCode.verification_uri} target="_blank" rel="noreferrer">{mdblistDeviceCode.verification_uri_complete || mdblistDeviceCode.verification_uri}</a>
+                  : <span key={index}>{part}</span>)}</p>
+                <button type="button" className="st-btn is-primary" disabled={mdblistAuthBusy === "poll"} onClick={() => void runMdblist("poll", pollMdblist)}>
+                  {mdblistAuthBusy === "poll" ? translateUi("Checking...") : translateUi("I approved it")}
+                </button>
+              </div>
+            )}
+            <div className="st-group-foot">
+              <button type="button" className="st-btn is-primary" disabled={mdblistAuthBusy === "start"} onClick={() => void runMdblist("start", async () => {
+                try { await beginMdblist(); }
+                catch (error) {
+                  const status = (error as { status?: number } | null)?.status;
+                  if (status === 503) { setMdblistOauthConfigured(false); changeMdblistMode(true); }
+                  throw error;
+                }
+              })}>
+                {mdblistAuthBusy === "start" ? translateUi("Starting...") : translateUi(mdblistDeviceCode ? "Get a new code" : "Connect MDBList")}
+              </button>
+              <button type="button" className="st-btn" onClick={() => changeMdblistMode(true)}>{translateUi("Use API key instead")}</button>
+            </div>
+          </>
         )}
       </Group>
 

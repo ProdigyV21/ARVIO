@@ -1,10 +1,11 @@
 import { weTrakrClient } from "../wetrakr";
 // App store (lib/store.tsx): Trakt, Simkl and MDBList: connect and disconnect, read routing, lists and libraries.
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { HttpError } from "../http";
 import { saveCloudTrackingSelection } from "../cloud";
 import { dedupeMedia, hydrateTraktItems, traktItemToMedia } from "../mappers";
 import { loadStored } from "../storage";
-import { mdblistClient } from "../mdblist";
+import { mdblistClient, type MdbListDeviceCode, type MdbListOAuthToken } from "../mdblist";
 import { simklClient } from "../simkl";
 import { loadTrackingPreferences, saveTrackingPreferences, type TrackingPreferences } from "../sync";
 import type { MediaItem } from "../types";
@@ -13,8 +14,40 @@ import { saveCachedList } from "./listCache";
 import type { useRefreshData } from "./refresh";
 import type { StoreCore } from "./core";
 
+type MdblistAttempt = {
+  profileId: string | null;
+  accountId: string | null;
+  controller: AbortController;
+  code: MdbListDeviceCode | null;
+  polling: Promise<void> | null;
+  intervalMs: number;
+  nextPollAt: number;
+};
+
 export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof useRefreshData>, "refreshData">) {
-  const { activeProfileIdRef, deviceCodeRef, refreshData, setDeviceCode, setMdblistConnected, setSimklConnected, setSimklDeviceCode, setTrackingPreferences, setTraktConnected, simklDeviceCodeRef } = store;
+  const { activeProfileIdRef, deviceCodeRef, mdblistDeviceCodeRef, refreshData, setDeviceCode, setMdblistConnected, setMdblistDeviceCode, setSimklConnected, setSimklDeviceCode, setTrackingPreferences, setTraktConnected, simklDeviceCodeRef } = store;
+  const mdblistAttempt = useRef<MdblistAttempt | null>(null);
+  const cancelMdblistLink = useCallback(() => {
+    mdblistAttempt.current?.controller.abort();
+    mdblistAttempt.current = null;
+    mdblistDeviceCodeRef.current = null;
+    setMdblistDeviceCode(null);
+  }, []);
+  useEffect(() => {
+    cancelMdblistLink();
+    return cancelMdblistLink;
+  }, [store.activeProfileId, store.auth?.userId, cancelMdblistLink]);
+  const isCurrentMdblistAttempt = useCallback((attempt: MdblistAttempt) =>
+    mdblistAttempt.current === attempt && !attempt.controller.signal.aborted &&
+    activeProfileIdRef.current === attempt.profileId && (authClient.session?.userId ?? null) === attempt.accountId, []);
+  const newMdblistAttempt = useCallback(() => {
+    cancelMdblistLink();
+    const attempt: MdblistAttempt = { profileId: activeProfileIdRef.current, accountId: authClient.session?.userId ?? null,
+      controller: new AbortController(), code: null, polling: null, intervalMs: 5000, nextPollAt: 0 };
+    mdblistAttempt.current = attempt;
+    mdblistClient.setProfile(attempt.profileId);
+    return attempt;
+  }, [cancelMdblistLink]);
   const beginTrakt = useCallback(async () => {
     traktClient.setProfile(activeProfileIdRef.current);
     setDeviceCode(await traktClient.beginDeviceLink());
@@ -100,16 +133,20 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     }
   }, [refreshData]);
 
-  const connectMdblist = useCallback(async (key: string) => {
-    const targetProfileId = activeProfileIdRef.current;
-    const ok = await mdblistClient.validateKey(key);
-    if (!ok) throw new Error("Invalid MDBList API key");
-    if (activeProfileIdRef.current !== targetProfileId) return;
+  const finalizeMdblistConnection = useCallback(async (
+    attempt: MdblistAttempt,
+    credential: { apiKey: string | null; token: MdbListOAuthToken | null }
+  ) => {
+    if (!isCurrentMdblistAttempt(attempt)) return;
+    const targetProfileId = attempt.profileId;
     traktClient.setProfile(targetProfileId);
     mdblistClient.setProfile(targetProfileId);
     simklClient.setProfile(targetProfileId);
-    mdblistClient.setKey(key);
+    if (credential.token) mdblistClient.setToken(credential.token);
+    else mdblistClient.setKey(credential.apiKey);
     setMdblistConnected(true);
+    mdblistDeviceCodeRef.current = null;
+    setMdblistDeviceCode(null);
     const currentPreferences = loadTrackingPreferences(targetProfileId);
     const hasPrimaryTracker = traktClient.isConnected || simklClient.isConnected;
     const mdbPreferences: TrackingPreferences = {
@@ -125,25 +162,81 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
       await saveCloudTrackingSelection(authClient, targetProfileId, {
         provider: traktClient.isConnected ? "TRAKT" : simklClient.isConnected ? "SIMKL" : "MDBLIST",
         traktToken: traktClient.token,
-        mdbListApiKey: key,
-        mdbListAccessToken: null,
-        mdbListRefreshToken: null,
-        mdbListTokenExpiresAt: null,
+        mdbListApiKey: credential.apiKey,
+        mdbListAccessToken: credential.token?.accessToken ?? null,
+        mdbListRefreshToken: credential.token?.refreshToken ?? null,
+        mdbListTokenExpiresAt: credential.token?.expiresAt ?? null,
         simklToken: simklClient.token,
         trackingPreferences: mdbPreferences,
         changedDomains: ["routing", "mdblist"]
       }).catch(() => undefined);
     }
-    if (activeProfileIdRef.current === targetProfileId) {
+    if (isCurrentMdblistAttempt(attempt)) {
       await refreshData(targetProfileId);
     }
-  }, [refreshData]);
+    if (isCurrentMdblistAttempt(attempt)) mdblistAttempt.current = null;
+  }, [refreshData, isCurrentMdblistAttempt]);
+
+  const beginMdblist = useCallback(async () => {
+    const attempt = newMdblistAttempt();
+    try {
+      const code = await mdblistClient.beginDeviceLink(attempt.controller.signal);
+      if (!isCurrentMdblistAttempt(attempt)) return;
+      attempt.code = code;
+      attempt.intervalMs = Math.max(5, code.interval || 5) * 1000;
+      mdblistDeviceCodeRef.current = code;
+      setMdblistDeviceCode(code);
+    } catch (error) {
+      if (isCurrentMdblistAttempt(attempt)) throw error;
+    }
+  }, [newMdblistAttempt, isCurrentMdblistAttempt]);
+
+  const pollMdblist = useCallback((): Promise<void> => {
+    const attempt = mdblistAttempt.current;
+    const code = mdblistDeviceCodeRef.current;
+    if (!attempt || !code || attempt.code !== code || !isCurrentMdblistAttempt(attempt)) return Promise.resolve();
+    if (attempt.polling) return attempt.polling;
+    // Both the timer and the manual button share one exchange and one commit.
+    const task = Promise.resolve().then(async () => {
+      if (!isCurrentMdblistAttempt(attempt)) return;
+      if (code.expiresAt && Date.now() >= code.expiresAt) {
+        throw new HttpError(400, "This MDBList code has expired. Get a new code and try again.");
+      }
+      if (Date.now() < attempt.nextPollAt) {
+        throw new HttpError(400, "MDBList has not approved this device yet.", String(Math.ceil((attempt.nextPollAt - Date.now()) / 1000)));
+      }
+      try {
+        const token = await mdblistClient.pollDeviceToken(code.device_code, attempt.controller.signal);
+        if (!isCurrentMdblistAttempt(attempt) || mdblistDeviceCodeRef.current !== code) return;
+        await finalizeMdblistConnection(attempt, { apiKey: null, token });
+      } catch (error) {
+        if (!isCurrentMdblistAttempt(attempt)) return;
+        if (error instanceof HttpError && (/limiting|slow_down/i.test(error.message) || error.status === 429)) attempt.intervalMs += 5000;
+        const retryAfter = (error as { retryAfter?: string | null })?.retryAfter;
+        const retryMs = retryAfter ? (/^\d+$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now()) : 0;
+        attempt.nextPollAt = Date.now() + Math.max(attempt.intervalMs, Number.isFinite(retryMs) ? Math.min(86_400_000, retryMs) : 0);
+        throw error;
+      }
+    }).finally(() => { if (attempt.polling === task) attempt.polling = null; });
+    attempt.polling = task;
+    return task;
+  }, [finalizeMdblistConnection, isCurrentMdblistAttempt]);
+
+  const connectMdblist = useCallback(async (key: string) => {
+    const attempt = newMdblistAttempt();
+    const ok = await mdblistClient.validateKey(key, attempt.controller.signal);
+    if (!isCurrentMdblistAttempt(attempt)) return;
+    if (!ok) throw new Error("Invalid MDBList API key");
+    await finalizeMdblistConnection(attempt, { apiKey: key, token: null });
+  }, [finalizeMdblistConnection, newMdblistAttempt, isCurrentMdblistAttempt]);
 
   const disconnectMdblist = useCallback(async () => {
+    cancelMdblistLink();
     const targetProfileId = activeProfileIdRef.current;
     mdblistClient.setProfile(targetProfileId);
     mdblistClient.disconnect();
     setMdblistConnected(false);
+    setMdblistDeviceCode(null);
     const current = loadTrackingPreferences(targetProfileId);
     const fallback = traktClient.isConnected
         ? "trakt" as const
@@ -177,7 +270,7 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     if (activeProfileIdRef.current === targetProfileId) {
       await refreshData(targetProfileId);
     }
-  }, [refreshData]);
+  }, [refreshData, cancelMdblistLink]);
 
   const beginSimkl = useCallback(async () => {
     simklClient.setProfile(activeProfileIdRef.current);
@@ -368,5 +461,5 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     const rows = await simklClient.library(source as "plantowatch" | "watching" | "completed" | "hold" | "dropped");
     return hydrateTraktItems(dedupeMedia(rows.map(traktItemToMedia)));
   }, [fetchTraktListItems]);
-  return { beginTrakt, pollTrakt, disconnectTrakt, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences, loadTraktLists, fetchTraktListItems, loadTraktListItems, loadTrackerLibrary };
+  return { beginTrakt, pollTrakt, disconnectTrakt, beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences, loadTraktLists, fetchTraktListItems, loadTraktListItems, loadTrackerLibrary };
 }
