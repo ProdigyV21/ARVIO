@@ -34,9 +34,10 @@ const extrasFor = (item: MediaItem | null) => item && item.id > 0 && !item.isHom
  * rotation or a card hover re-renders only this component. Its box is
  * reserved from the first paint (no layout shift when the first title lands).
  */
-export function HomeHero({ controller, fallback, onOpen, onPlay }: {
+export function HomeHero({ controller, fallback, loading = true, onOpen, onPlay }: {
   controller: HeroController;
   fallback: MediaItem | null;
+  loading?: boolean;
   onOpen: (item: MediaItem) => void;
   onPlay: (item: MediaItem) => void;
 }) {
@@ -103,6 +104,7 @@ export function HomeHero({ controller, fallback, onOpen, onPlay }: {
   const showToggle = state.pool.length >= 2;
   const paused = state.paused || state.pinned;
   const toggleLabel = paused ? translateUi("Resume slideshow") : translateUi("Pause slideshow");
+  if (!item && !loading) return null;
 
   return (
     <section className={`hero home-hero ${item ? "" : "is-empty"}`} aria-roledescription={translateUi("Featured")}

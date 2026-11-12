@@ -20,8 +20,9 @@ export function wetrakrRequestContext(request: NextRequest) {
 }
 
 export function wetrakrSessions() {
+  // Device-code sign-in uses ARVIO's public app key for hosted and self-hosted installs.
   const clientId = process.env.WETRAKR_CLIENT_ID || process.env.NEXT_PUBLIC_WETRAKR_CLIENT_ID ||
-    (process.env.NEXT_PUBLIC_SELF_HOSTED === "true" ? "" : "a96545eae15256f3302c72377acd3ade");
+    "a96545eae15256f3302c72377acd3ade";
   return new WeTrakrSessions(wetrakrSessionStore(), clientId);
 }
 

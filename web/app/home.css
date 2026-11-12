@@ -443,3 +443,35 @@
   }
   .home-screen .hero-actions .secondary span { white-space: normal; }
 }
+
+.home-empty-state {
+  max-width: 560px;
+  margin: clamp(48px, 12vh, 120px) auto 40px;
+  padding: 28px clamp(20px, 4vw, 32px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  justify-items: center;
+}
+.home-empty-state h2 {
+  margin: 0;
+  font-size: clamp(20px, 2.4vw, 24px);
+  font-weight: 700;
+  color: #fff;
+}
+.home-empty-state p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.home-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 6px;
+}

@@ -953,11 +953,18 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
       .map((repo) => ({ id: stringValue(repo?.id), name: stringValue(repo?.name), enabled: repo?.enabled !== false }))
       .filter((repo) => repo.id);
   }
+  const enrichedAddons = enrichAddonsWithMetadataCache(
+    unionAddons(arrayValue<InstalledAddon>(profileAddons), arrayValue<InstalledAddon>(root.addons)),
+    objectRecord<Record<string, unknown>>(root.addonMetadataByKey)
+  );
+  if (Array.isArray(catalogSettings.catalogs) && enrichedAddons.length > 0) {
+    catalogSettings.catalogs = enrichCatalogsFromAddons(catalogSettings.catalogs, enrichedAddons);
+  }
   return {
     version: typeof root.version === "number" ? root.version : 1,
     // Union the per-profile scope with the global list. An empty/partial profile
     // scope must never hide the shared library (that was a wipe amplifier).
-    addons: unionAddons(arrayValue<InstalledAddon>(profileAddons), arrayValue<InstalledAddon>(root.addons)),
+    addons: enrichedAddons,
     settings: {
       ...legacySettings,
       // Explicitly unset, so a profile without them never keeps the previous profile's values.
@@ -976,13 +983,147 @@ export async function pullCloudPayload(auth: AuthClient, profileId?: string | nu
   };
 }
 
-function unionAddons(primary: InstalledAddon[], existing: unknown): InstalledAddon[] {
-  const byKey = new Map<string, InstalledAddon>();
-  for (const addon of [...primary, ...arrayValue<InstalledAddon>(existing)]) {
-    const key = addon?.manifestUrl || addon?.id;
-    if (key && !byKey.has(key)) byKey.set(key, addon);
+function normalizeAddonUrlKey(raw: string | undefined): string {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return "";
+  return value.replace(/\/manifest\.json(\?.*)?$/, "$1").replace(/\/+$/, "");
+}
+
+function isConfiguredAddonUrl(raw: string | undefined): boolean {
+  const value = String(raw ?? "").trim();
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    if (parsed.search && parsed.search.length > 1) return true;
+    return parsed.pathname.replace(/\/manifest\.json$/i, "").replace(/^\/+|\/+$/g, "").length > 0;
+  } catch {
+    return value.includes("?");
   }
-  return [...byKey.values()];
+}
+
+function mergeCatalogEntries(primary: unknown, fallback: unknown, allowClear: boolean) {
+  const prim = Array.isArray(primary) ? primary : [];
+  const fb = Array.isArray(fallback) ? fallback : [];
+  if (allowClear && Array.isArray(primary)) return prim;
+  if (!prim.length) return fb;
+  if (!fb.length || allowClear) return prim;
+  const byKey = new Map<string, Record<string, unknown>>();
+  for (const item of fb) {
+    if (!item || typeof item !== "object") continue;
+    const cat = item as Record<string, unknown>;
+    if (cat.id) byKey.set(`${String(cat.type ?? "").toLowerCase()}:${String(cat.id)}`, cat);
+  }
+  return prim.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const cat = item as Record<string, unknown>;
+    const prev = cat.id ? byKey.get(`${String(cat.type ?? "").toLowerCase()}:${String(cat.id)}`) : undefined;
+    if (!prev) return item;
+    return {
+      ...cat,
+      ...(cat.clientDelegate == null && prev.clientDelegate != null ? { clientDelegate: prev.clientDelegate } : {}),
+      ...(cat.clientFilter == null && prev.clientFilter != null ? { clientFilter: prev.clientFilter } : {})
+    };
+  });
+}
+
+function mergeAddonPair(preferred: InstalledAddon, fallback: InstalledAddon): InstalledAddon {
+  const pSetup = Number(preferred.setupUpdatedAt ?? 0) || 0;
+  const fSetup = Number(fallback.setupUpdatedAt ?? 0) || 0;
+  const setupWinner = fSetup > pSetup ? fallback : preferred;
+  const setupOther = setupWinner === preferred ? fallback : preferred;
+
+  const winnerUrl = setupWinner.manifestUrl;
+  const otherUrl = setupOther.manifestUrl;
+  const keepConfiguredUrl = isConfiguredAddonUrl(otherUrl) && !isConfiguredAddonUrl(winnerUrl) &&
+    Number(setupWinner.setupUpdatedAt ?? 0) <= Number(setupOther.setupUpdatedAt ?? 0);
+
+  const pMeta = Number(preferred.metadataUpdatedAt ?? 0) || 0;
+  const fMeta = Number(fallback.metadataUpdatedAt ?? 0) || 0;
+  const metaWinner = fMeta > pMeta ? fallback : preferred;
+  const metaOther = metaWinner === preferred ? fallback : preferred;
+  const allowClear = Math.max(pMeta, fMeta) > 0 && pMeta !== fMeta;
+
+  const winnerCompat = metaWinner as InstalledAddon & { manifest?: { catalogs?: unknown[]; resources?: unknown[] } };
+  const otherCompat = metaOther as InstalledAddon & { manifest?: { catalogs?: unknown[]; resources?: unknown[] } };
+  const mergedCatalogs = mergeCatalogEntries(winnerCompat.catalogs, otherCompat.catalogs, allowClear);
+  const mergedManifest = winnerCompat.manifest || otherCompat.manifest
+    ? {
+        ...(otherCompat.manifest ?? {}),
+        ...(winnerCompat.manifest ?? {}),
+        catalogs: mergeCatalogEntries(winnerCompat.manifest?.catalogs, otherCompat.manifest?.catalogs, allowClear)
+      }
+    : undefined;
+
+  return {
+    ...setupOther,
+    ...setupWinner,
+    manifestUrl: keepConfiguredUrl ? otherUrl : winnerUrl,
+    ...(keepConfiguredUrl ? { url: otherUrl, transportUrl: otherUrl.replace(/\/manifest\.json$/, "") } : {}),
+    version: metaWinner.version || metaOther.version,
+    description: metaWinner.description ?? metaOther.description,
+    logo: metaWinner.logo ?? metaOther.logo,
+    background: metaWinner.background ?? metaOther.background,
+    catalogs: mergedCatalogs as InstalledAddon["catalogs"],
+    resources: (Array.isArray(winnerCompat.resources) && (allowClear || winnerCompat.resources.length) ? winnerCompat.resources : otherCompat.resources) ?? [],
+    types: Array.isArray(metaWinner.types) && (allowClear || metaWinner.types.length) ? metaWinner.types : metaOther.types,
+    idPrefixes: metaWinner.idPrefixes ?? metaOther.idPrefixes,
+    ...(mergedManifest ? { manifest: mergedManifest } : {}),
+    ...(Math.max(pSetup, fSetup) > 0 ? { setupUpdatedAt: Math.max(pSetup, fSetup) } : {}),
+    ...(Math.max(pMeta, fMeta) > 0 ? { metadataUpdatedAt: Math.max(pMeta, fMeta) } : {})
+  };
+}
+
+function enrichAddonsWithMetadataCache(
+  addons: InstalledAddon[],
+  metadataCache: Record<string, Record<string, unknown>>
+): InstalledAddon[] {
+  if (!metadataCache || !Object.keys(metadataCache).length) return addons;
+  return addons.map((addon) => {
+    const key = normalizeAddonUrlKey(addon.manifestUrl) || addon.id;
+    const cached = metadataCache[key] || metadataCache[addon.id];
+    if (!cached) return addon;
+    const fakeCached = { ...addon, ...cached } as InstalledAddon;
+    return mergeAddonPair(addon, fakeCached);
+  });
+}
+
+function enrichCatalogsFromAddons(catalogs: AppSettings["catalogs"], addons: InstalledAddon[]) {
+  return catalogs.map((catalog) => {
+    if (catalog.sourceType !== "addon" || (catalog.clientDelegate && catalog.clientFilter)) return catalog;
+    const addon = addons.find((a) => a.id === catalog.addonId || a.manifestUrl === catalog.sourceUrl || a.name === catalog.addonName);
+    const catId = catalog.addonCatalogId || catalog.sourceRef || catalog.id;
+    const decl = addon?.catalogs?.find((c) => c.id === catId);
+    if (!decl || (!decl.clientDelegate && !decl.clientFilter)) return catalog;
+    return {
+      ...catalog,
+      ...(catalog.clientDelegate == null && decl.clientDelegate != null ? { clientDelegate: decl.clientDelegate } : {}),
+      ...(catalog.clientFilter == null && decl.clientFilter != null ? { clientFilter: decl.clientFilter } : {})
+    };
+  });
+}
+
+function unionAddons(primary: InstalledAddon[], existing: unknown): InstalledAddon[] {
+  const result: InstalledAddon[] = [];
+  const indexById = new Map<string, number>();
+  const indexByUrl = new Map<string, number>();
+  for (const addon of [...primary, ...arrayValue<InstalledAddon>(existing)]) {
+    if (!addon || (!addon.id && !addon.manifestUrl)) continue;
+    const urlKey = normalizeAddonUrlKey(addon.manifestUrl);
+    let idx = addon.id ? indexById.get(addon.id) : undefined;
+    if (idx === undefined && urlKey) idx = indexByUrl.get(urlKey);
+    if (idx !== undefined) {
+      result[idx] = mergeAddonPair(result[idx], addon);
+      if (result[idx].id) indexById.set(result[idx].id, idx);
+      const mergedUrlKey = normalizeAddonUrlKey(result[idx].manifestUrl);
+      if (mergedUrlKey) indexByUrl.set(mergedUrlKey, idx);
+    } else {
+      const nextIdx = result.length;
+      result.push(addon);
+      if (addon.id) indexById.set(addon.id, nextIdx);
+      if (urlKey) indexByUrl.set(urlKey, nextIdx);
+    }
+  }
+  return result;
 }
 
 export async function saveCloudAddons(
@@ -1011,6 +1152,44 @@ export async function saveCloudAddons(
       const scoped = scopedValue<InstalledAddon[]>(root, "addonsByProfile", profileId);
       setScopedValue(root, "addonsByProfile", profileId, applyRemovals(unionAddons(addons, scoped)));
     }
+    const existingMetaCache = objectRecord<Record<string, unknown>>(root.addonMetadataByKey);
+    const nextMetaCache: Record<string, Record<string, unknown>> = { ...existingMetaCache };
+    for (const addon of addons) {
+      const key = normalizeAddonUrlKey(addon.manifestUrl) || addon.id;
+      if (!key) continue;
+      const compat = addon as InstalledAddon & { manifest?: { catalogs?: unknown[]; resources?: unknown[] } };
+      if (compat.manifest || addon.catalogs?.length || addon.resources?.length || addon.metadataUpdatedAt) {
+        const prev = nextMetaCache[key] as {
+          manifest?: { catalogs?: unknown[]; resources?: unknown[] };
+          catalogs?: unknown[];
+          resources?: unknown[];
+          metadataUpdatedAt?: number;
+        } | undefined;
+        const incomingMetaTs = Number(addon.metadataUpdatedAt ?? 0) || 0;
+        const prevMetaTs = Number(prev?.metadataUpdatedAt ?? 0) || 0;
+        if (!prev || incomingMetaTs >= prevMetaTs) {
+          const allowClear = incomingMetaTs > 0 && prevMetaTs > 0 && incomingMetaTs > prevMetaTs;
+          const mergedCatalogs = prev ? mergeCatalogEntries(addon.catalogs, prev.catalogs, allowClear) : addon.catalogs;
+          const mergedManifest = compat.manifest || prev?.manifest
+            ? {
+                ...(prev?.manifest ?? {}),
+                ...(compat.manifest ?? {}),
+                ...(compat.manifest?.catalogs || prev?.manifest?.catalogs
+                  ? { catalogs: mergeCatalogEntries(compat.manifest?.catalogs, prev?.manifest?.catalogs, allowClear) }
+                  : {})
+              }
+            : undefined;
+          const mergedResources = Array.isArray(addon.resources) && (allowClear || addon.resources.length) ? addon.resources : prev?.resources;
+          nextMetaCache[key] = {
+            ...(mergedManifest ? { manifest: mergedManifest } : {}),
+            ...(Array.isArray(mergedCatalogs) ? { catalogs: mergedCatalogs } : {}),
+            ...(Array.isArray(mergedResources) ? { resources: mergedResources } : {}),
+            ...(Math.max(incomingMetaTs, prevMetaTs) > 0 ? { metadataUpdatedAt: Math.max(incomingMetaTs, prevMetaTs) } : {})
+          };
+        }
+      }
+    }
+    if (Object.keys(nextMetaCache).length > 0) root.addonMetadataByKey = nextMetaCache;
     // Set-level timestamp: lets Android tell an intentional "removed everything" from a blank pull,
     // so removing the last add-on(s) from web actually propagates (reconcileAddonsWithCloud).
     root.addonsUpdatedAt = timestamp;

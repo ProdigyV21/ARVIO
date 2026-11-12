@@ -3069,6 +3069,19 @@ class HomeViewModel @Inject constructor(
                             CollectionTemplateManifest.autoInstalledAddonUrls() +
                                 listOf(MediaRepository.STREAMING_COLLECTION_ADDON_URL)
                         )
+                        // Keep Home usable during upgrades. Each manifest has its own timeout;
+                        // a slow addon must not cancel the whole refresh or starve healthy ones.
+                        viewModelScope.launch(Dispatchers.IO) {
+                            val report = runCatching { streamRepository.refreshInstalledAddonsIfNeeded() }.getOrNull()
+                            if (report != null && report.refreshed > 0) {
+                                val changed = runCatching {
+                                    catalogRepository.syncAddonCatalogs(streamRepository.installedAddons.first())
+                                }.getOrDefault(false)
+                                if (changed) {
+                                    loadHomeData()
+                                }
+                            }
+                        }
                         val addons = streamRepository.installedAddons.first()
                         catalogRepository.syncAddonCatalogs(addons)
                         catalogRepository.syncHomeServerCatalogs(homeServerRepository.getCatalogCandidates())

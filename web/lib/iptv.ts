@@ -1329,3 +1329,101 @@ export function iptvPlaylistSignature(playlists: IptvPlaylistEntry[]): string {
 
 /** How long an in-memory channel snapshot stays good before a rebuild. */
 export const IPTV_SNAPSHOT_TTL_MS = 6 * 60 * 60 * 1000;
+
+export type XtreamVodCatalogSeed = {
+  id: number;
+  imdbId?: string;
+  title: string;
+  mediaType: "movie" | "tv";
+  year?: string;
+  categoryId?: string;
+  addedAt: number;
+};
+
+type RawXtreamVodEntry = {
+  stream_id?: number | string;
+  series_id?: number | string;
+  name?: string;
+  title?: string;
+  tmdb?: number | string;
+  tmdb_id?: number | string;
+  imdb?: string;
+  imdb_id?: string;
+  year?: string;
+  category_id?: string | number;
+  added?: string | number;
+  last_modified?: string | number;
+};
+
+const vodCatalogMemoryCache = new Map<string, { expiresAt: number; items: XtreamVodCatalogSeed[] }>();
+
+async function fetchXtreamVodEntriesForPlaylist(playlist: IptvPlaylistEntry, type: "movie" | "tv"): Promise<XtreamVodCatalogSeed[]> {
+  if (!playlist.enabled) return [];
+  if (type === "movie" && playlist.importVod === false) return [];
+  if (type === "tv" && playlist.importSeries === false) return [];
+  const info = xtreamInfoFromPlaylist(playlist.m3uUrl);
+  if (!info) return [];
+  const action = type === "movie" ? "get_vod_streams" : "get_series";
+  const url = buildXtreamPlayerApiUrl(info.baseUrl, info.username, info.password, action);
+  const raw = await fetchXtreamJson<RawXtreamVodEntry[]>(url, playlistProxyHeaders()).catch(() => []);
+  if (!Array.isArray(raw)) return [];
+  const seeds: XtreamVodCatalogSeed[] = [];
+  for (const entry of raw) {
+    const title = String(entry.name ?? entry.title ?? "").trim();
+    if (!title) continue;
+    const tmdb = Number(entry.tmdb ?? entry.tmdb_id ?? 0);
+    const id = Number.isSafeInteger(tmdb) && tmdb > 0 ? tmdb : 0;
+    const imdbRaw = String(entry.imdb ?? entry.imdb_id ?? "").trim();
+    const imdbId = /^tt\d+$/i.test(imdbRaw) ? imdbRaw : undefined;
+    const fallbackId = Number(entry.stream_id ?? entry.series_id ?? 0) || 0;
+    const addedAt = Number(entry.added ?? entry.last_modified ?? 0) || fallbackId;
+    seeds.push({
+      id,
+      imdbId,
+      title,
+      mediaType: type,
+      year: entry.year ? String(entry.year).trim() : undefined,
+      categoryId: entry.category_id != null ? String(entry.category_id) : undefined,
+      addedAt
+    });
+  }
+  return seeds;
+}
+
+export async function loadXtreamVodCatalogSeeds(
+  playlists: IptvPlaylistEntry[],
+  mediaType: "movie" | "tv" | null,
+  categoryFilter?: string
+): Promise<XtreamVodCatalogSeed[]> {
+  const sig = `${iptvPlaylistSignature(playlists)}:${mediaType ?? "all"}`;
+  const cached = vodCatalogMemoryCache.get(sig);
+  let all: XtreamVodCatalogSeed[];
+  if (cached && cached.expiresAt > Date.now()) {
+    all = cached.items;
+  } else {
+    const active = playlists.filter((p) => p.enabled);
+    const jobs: Array<Promise<XtreamVodCatalogSeed[]>> = [];
+    for (const p of active) {
+      if (mediaType !== "tv") jobs.push(fetchXtreamVodEntriesForPlaylist(p, "movie"));
+      if (mediaType !== "movie") jobs.push(fetchXtreamVodEntriesForPlaylist(p, "tv"));
+    }
+    const lists = await Promise.all(jobs);
+    all = lists.flat().sort((a, b) => b.addedAt - a.addedAt);
+    vodCatalogMemoryCache.set(sig, { expiresAt: Date.now() + 10 * 60_000, items: all });
+  }
+  if (!categoryFilter?.trim()) return all;
+  const catNorm = categoryFilter.trim().toLowerCase();
+  return all.filter((seed) => seed.categoryId?.toLowerCase() === catNorm);
+}
+
+export async function hasXtreamVodMatch(
+  playlists: IptvPlaylistEntry[],
+  item: { id: number; mediaType: "movie" | "tv"; title: string; imdbId?: string }
+): Promise<boolean> {
+  const seeds = await loadXtreamVodCatalogSeeds(playlists, item.mediaType);
+  if (!seeds.length) return false;
+  if (item.id > 0 && seeds.some((s) => s.id === item.id)) return true;
+  if (item.imdbId && seeds.some((s) => s.imdbId?.toLowerCase() === item.imdbId!.toLowerCase())) return true;
+  const targetTitle = item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return Boolean(targetTitle) && seeds.some((s) => s.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === targetTitle);
+}

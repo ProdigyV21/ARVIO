@@ -47,3 +47,12 @@ h1 .headline{display:block;color:#f7f7f7}h1 .headline-accent{display:block;margi
 @media(max-width:600px){h1{font-size:38px;letter-spacing:-1px}.hero-benefits{font-size:15px}.membership-actions{display:grid;justify-items:stretch}.plans{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.plan{padding:26px 14px 16px;border-radius:16px}.plan h3{font-size:14px}.plan-price strong{font-size:30px;letter-spacing:-1px}.plan-price span{font-size:12px}.plan-note{margin-bottom:16px;font-size:12px}.plan-badge{inset-inline-start:10px;max-width:calc(100% - 20px);padding:4px 8px;font-size:10px}.plan-button{padding:12px 8px;font-size:14px}.refund{font-size:14px}.plans-section h2{margin-bottom:30px}}
 .plan .plan-button{min-height:52px;display:flex;align-items:center;justify-content:center}
 .plan-price span{white-space:nowrap}.plan-badge{top:auto;bottom:calc(100% - 13px)}
+
+/* Let both header controls shrink instead of widening a narrow viewport. */
+@media (max-width: 600px) {
+  header { gap: 16px; }
+  .brand { flex: 0 1 160px; min-width: 0; }
+  .brand img { width: 100%; height: auto; }
+  .language { flex: 0 1 150px; min-width: 0; overflow-wrap: anywhere; }
+  .language select { width: 100%; min-width: 0; }
+}

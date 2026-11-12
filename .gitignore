@@ -43,6 +43,9 @@ captures/
 *.ipr
 *.iws
 
+# Visual Studio local state
+.vs/
+
 # Keystore files
 # Uncomment if you have a release keystore that needs to be kept secret
 #*.jks

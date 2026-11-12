@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load, storage } = require('./load.cjs');
 const { defaultCatalogs, legacyWebDefaultCatalogs, mergeCatalogs, setDefaultCollectionsEnabled,
-  DEFAULT_COLLECTIONS_DISABLED } = load('lib/catalogs.ts');
+  addMissingDefaultCollections, DEFAULT_COLLECTIONS_DISABLED } = load('lib/catalogs.ts');
 const { collectionHomeCatalogs, collectionFolders, collectionMediaTypes } = load('lib/collectionPresentation.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 const ids = rows => Array.from(rows, row => row.id);
@@ -119,4 +119,20 @@ test('default service genre discover and franchise sources load without add-ons'
   assert.ok(calls.some(url => url.searchParams.get('with_runtime.lte') === '120'));
   const films = await api.loadCollectionSource({ kind: 'TMDB_COLLECTION', tmdbCollectionId: 1241 }, 'en-US', []);
   assert.deepEqual(ids(films), [1, 2]);
+});
+
+test('addMissingDefaultCollections appends built-in collections without dropping custom rows', () => {
+  const customPack = { id: 'collection_rail_custom', kind: 'COLLECTION_RAIL', collectionRailKey: 'my_pack', name: 'My Pack', sourceType: 'preinstalled', enabled: true };
+  const existingNetflix = { ...defaultCatalogs.find(c => c.id === 'collection_service_netflix'), enabled: false };
+  const current = [custom, customPack, existingNetflix];
+  const added = addMissingDefaultCollections(current, [DEFAULT_COLLECTIONS_DISABLED, 'collection_service_netflix', 'collection_rail_service', 'collection_row_service']);
+  assert.equal(added.catalogs[0].id, custom.id);
+  assert.equal(added.catalogs[1].id, customPack.id);
+  assert.equal(added.catalogs.find(c => c.id === 'collection_service_netflix').enabled, false, 'existing folder visibility stays intact');
+  assert.equal(added.catalogs.filter(c => c.id === 'collection_service_netflix').length, 1, 'no duplicates');
+  assert.ok(added.catalogs.some(c => c.id === 'collection_rail_service' && c.enabled));
+  assert.ok(!added.hiddenIds.includes(DEFAULT_COLLECTIONS_DISABLED));
+  assert.ok(!added.hiddenIds.includes('collection_row_service'));
+  assert.ok(added.hiddenIds.includes('collection_service_netflix'));
+  assert.equal(mergeCatalogs(added.catalogs, added.hiddenIds).find(c => c.id === 'collection_rail_service').enabled, true);
 });

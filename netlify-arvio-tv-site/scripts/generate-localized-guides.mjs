@@ -823,8 +823,8 @@ const localeKeys = ["pt", "es", ...extraLocaleKeys];
 const premiumRoutesFile = path.join(siteRoot, "premium/localized-routes.json");
 const premiumRoutes = fs.existsSync(premiumRoutesFile) ? JSON.parse(fs.readFileSync(premiumRoutesFile, "utf8")) : [];
 
-const privacyLabels = { pt: "Privacidade", es: "Privacidad", de: "Datenschutz", fr: "Confidentialité", nl: "Privacy", it: "Privacy", sv: "Integritet", da: "Privatliv", nb: "Personvern", fi: "Tietosuoja", hi: "गोपनीयता" };
-const languageNames = { pt: "Português (Brasil)", es: "Español", de: "Deutsch", fr: "Français", nl: "Nederlands", it: "Italiano", sv: "Svenska", da: "Dansk", nb: "Norsk", fi: "Suomi", hi: "हिन्दी" };
+const privacyLabels = { pt: "Privacidade", es: "Privacidad", de: "Datenschutz", fr: "Confidentialité", nl: "Privacy", it: "Privacy", sv: "Integritet", da: "Privatliv", nb: "Personvern", fi: "Tietosuoja", hi: "गोपनीयता", he: "פרטיות" };
+const languageNames = { pt: "Português (Brasil)", es: "Español", de: "Deutsch", fr: "Français", nl: "Nederlands", it: "Italiano", sv: "Svenska", da: "Dansk", nb: "Norsk", fi: "Suomi", hi: "हिन्दी", he: "עברית" };
 
 function absolute(urlPath) {
   return `${baseUrl}${urlPath}`;
@@ -910,7 +910,7 @@ function renderFeaturePage(localeKey, key) {
   const premiumPage = premiumRoutes.find((route) => route === `${pageMap.home[localeKey]}premium/`);
   const primaryHref = key === "web" && premiumPage ? premiumPage : page.ctaPrimaryHref || playUrl;
   return `<!DOCTYPE html>
-<html lang="${locale.htmlLang}">
+<html lang="${locale.htmlLang}"${locale.dir ? ` dir="${locale.dir}"` : ""}>
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${page.title}</title>
@@ -977,7 +977,7 @@ function renderDirectory(localeKey, isHome = false) {
   const ctaTitle = isHome ? copy.freeTitle : copy.ctaTitle;
   const ctaCopy = isHome ? copy.freeCopy : copy.ctaCopy;
   return `<!DOCTYPE html>
-<html lang="${locale.htmlLang}">
+<html lang="${locale.htmlLang}"${locale.dir ? ` dir="${locale.dir}"` : ""}>
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${copy.title}</title>

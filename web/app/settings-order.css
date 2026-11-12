@@ -149,3 +149,30 @@
 .st-confirm { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .st-sort-main .addon-url { max-width: 100%; }
 @media (max-width: 760px) { .st-addon-installer { padding-inline-start: 16px; padding-inline-end: 16px; } }
+
+/* Nested collection folders inside a COLLECTION_RAIL row */
+.st-sort-row.has-footer { flex-wrap: wrap; }
+.st-sort-footer {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 12px 4px 4px;
+  padding-inline-start: 46px;
+  border-top: 1px dashed var(--st-line-strong);
+}
+.st-rail-folders { display: grid; gap: 10px; }
+.st-rail-folders-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.st-rail-folders-note { color: var(--st-soft); font-size: 12.5px; margin-inline-end: auto; }
+.st-folder-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-folder-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px;
+  border-radius: 999px; border: 1px solid var(--st-line-strong); background: rgba(255, 255, 255, 0.05);
+  color: var(--st-text); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.st-folder-chip.is-off { background: transparent; color: var(--st-soft); opacity: 0.72; }
+@media (hover: hover) and (pointer: fine) {
+  .st-folder-chip:hover { border-color: var(--st-accent); color: var(--st-text); opacity: 1; }
+}
+@media (max-width: 760px) {
+  .st-sort-footer { padding-inline-start: 8px; }
+}

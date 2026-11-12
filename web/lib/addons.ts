@@ -194,30 +194,42 @@ export function saveLocalAddons(addons: InstalledAddon[]) {
   saveStored(ADDON_KEY, normalizeAddons(addons));
 }
 
-export async function installAddon(rawUrl: string) {
-  const manifestUrl = normalizeManifestUrl(rawUrl);
-  const manifest = await addonJsonRequest<RawManifest>(manifestUrl);
+function buildAddonFromManifest(
+  manifestUrl: string,
+  manifest: RawManifest,
+  existing?: Partial<InstalledAddon> & { setupUpdatedAt?: number }
+): InstalledAddon {
+  const now = Date.now();
   const resourceNames = (manifest.resources ?? [])
     .map((resource) => typeof resource === "string" ? resource : (resource as { name?: string } | null)?.name ?? "")
     .filter(Boolean);
   const subtitleOnly = resourceNames.includes("subtitles") && !resourceNames.includes("stream");
+  const enabled = existing?.enabled ?? (manifest.behaviorHints?.configurationRequired !== true);
+  const setupUpdatedAt = existing?.setupUpdatedAt && existing.setupUpdatedAt > 0 ? existing.setupUpdatedAt : now;
+  const resolvedName = typeof existing?.name === "string" && existing.name.trim()
+    ? existing.name
+    : (manifest.name ?? "Unnamed addon");
+
   return normalizeAddon({
-    id: manifest.id ?? manifestUrl,
-    name: manifest.name ?? "Unnamed addon",
-    version: manifest.version ?? "1.0.0",
+    ...(existing as Record<string, unknown>),
+    id: existing?.id || manifest.id || manifestUrl,
+    name: resolvedName,
+    version: manifest.version ?? existing?.version ?? "1.0.0",
     manifestUrl,
-    description: manifest.description ?? null,
+    description: manifest.description ?? existing?.description ?? null,
     catalogs: manifest.catalogs,
     resources: manifest.resources,
     types: manifest.types,
     idPrefixes: manifest.idPrefixes,
-    logo: manifest.logo ?? null,
-    background: manifest.background ?? null,
-    enabled: true,
+    logo: manifest.logo ?? existing?.logo ?? null,
+    background: manifest.background ?? existing?.background ?? null,
+    enabled,
+    setupUpdatedAt,
+    metadataUpdatedAt: now,
     // Android-app compatibility: its Addon model needs these to parse and use
     // a cloud-synced entry (see normalizeAddon comment).
     isInstalled: true,
-    isEnabled: true,
+    isEnabled: enabled,
     type: subtitleOnly ? "SUBTITLE" : "COMMUNITY",
     runtimeKind: "STREMIO",
     installSource: "DIRECT_URL",
@@ -244,8 +256,8 @@ export async function installAddon(rawUrl: string) {
         id: String((catalog as { id?: string })?.id ?? ""),
         name: String((catalog as { name?: string })?.name ?? (catalog as { id?: string })?.id ?? ""),
         extra: catalog.extra,
-        clientDelegate: typeof catalog.clientDelegate === 'string' ? catalog.clientDelegate : undefined,
-        clientFilter: typeof catalog.clientFilter === 'string' ? catalog.clientFilter : undefined
+        clientDelegate: typeof catalog.clientDelegate === "string" ? catalog.clientDelegate : undefined,
+        clientFilter: typeof catalog.clientFilter === "string" ? catalog.clientFilter : undefined
       })),
       // Same booleans as Android's AddonBehaviorHints; "configurable" drives the Configure link.
       behaviorHints: {
@@ -256,6 +268,47 @@ export async function installAddon(rawUrl: string) {
       }
     }
   })!;
+}
+
+export async function installAddon(rawUrl: string) {
+  const manifestUrl = normalizeManifestUrl(rawUrl);
+  const manifest = await addonJsonRequest<RawManifest>(manifestUrl);
+  return buildAddonFromManifest(manifestUrl, manifest);
+}
+
+/**
+ * Re-fetches manifest metadata while keeping the user's configured URL,
+ * custom name, and enabled state intact.
+ */
+export async function refreshAddonManifest(addon: InstalledAddon): Promise<InstalledAddon> {
+  const manifestUrl = manifestUrlFor(addon);
+  if (!manifestUrl) return addon;
+  const manifest = await addonJsonRequest<RawManifest>(manifestUrl);
+  return buildAddonFromManifest(manifestUrl, manifest, addon);
+}
+
+export async function refreshStaleAddons(
+  addons: InstalledAddon[],
+  maxAgeMs = 15 * 60_000
+): Promise<{ addons: InstalledAddon[]; refreshed: number }> {
+  const now = Date.now();
+  let refreshed = 0;
+  const updated = await Promise.all(addons.map(async (addon) => {
+    if (addon.enabled === false) return addon;
+    const url = manifestUrlFor(addon);
+    if (!url || url === BUILTIN_OPENSUBTITLES.manifestUrl) return addon;
+    const age = now - Number(addon.metadataUpdatedAt || 0);
+    const missingMeta = !addon.metadataUpdatedAt || !Array.isArray(addon.catalogs);
+    if (!missingMeta && age < maxAgeMs) return addon;
+    try {
+      const next = await refreshAddonManifest(addon);
+      refreshed++;
+      return next;
+    } catch {
+      return addon;
+    }
+  }));
+  return { addons: updated, refreshed };
 }
 
 export async function getStreams(addons: InstalledAddon[], item: MediaItem, season?: number, episode?: number) {

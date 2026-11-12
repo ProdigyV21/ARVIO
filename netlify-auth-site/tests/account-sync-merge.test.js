@@ -187,6 +187,44 @@ test("catalog lists merge by c: timestamps, including deliberately empty lists",
   assert.deepEqual(result.hiddenAddonByProfile.p1, []);
 });
 
+test("older client catalogsByProfile push preserves omitted clientDelegate, clientFilter, and addonMetadataByKey", () => {
+  const stored = androidPayload({
+    fieldUpdatedAt: { "c:p1:catalogsByProfile": 200 },
+    addonMetadataByKey: {
+      "https://addon.example/p/p1": {
+        metadataUpdatedAt: 500,
+        catalogs: [{ id: "vod-recent", type: "movie", clientDelegate: "vod:recent?type=movie" }]
+      }
+    }
+  });
+  stored.catalogsByProfile.p1 = [{
+    id: "addon_1",
+    title: "VOD Recent",
+    sourceType: "ADDON",
+    addonId: "tv.arvio.discover_abc",
+    addonCatalogId: "vod-recent",
+    addonCatalogType: "movie",
+    clientDelegate: "vod:recent?type=movie",
+    clientFilter: "{\"minYear\":2022}"
+  }];
+
+  const legacyMobile = androidPayload({ fieldUpdatedAt: { "c:p1:catalogsByProfile": 400 } });
+  legacyMobile.catalogsByProfile.p1 = [{
+    id: "addon_1",
+    title: "VOD Recent Reordered",
+    sourceType: "ADDON",
+    addonId: "tv.arvio.discover_abc",
+    addonCatalogId: "vod-recent",
+    addonCatalogType: "movie"
+  }];
+
+  const result = merge(stored, legacyMobile);
+  assert.equal(result.catalogsByProfile.p1[0].title, "VOD Recent Reordered");
+  assert.equal(result.catalogsByProfile.p1[0].clientDelegate, "vod:recent?type=movie");
+  assert.equal(result.catalogsByProfile.p1[0].clientFilter, "{\"minYear\":2022}");
+  assert.equal(result.addonMetadataByKey["https://addon.example/p/p1"].metadataUpdatedAt, 500);
+});
+
 test("a deleted profile stays deleted when a stale device still pushes it", () => {
   const stored = androidPayload({ deletedProfileIds: ["p2"] });
   stored.profiles = stored.profiles.filter((profile) => profile.id !== "p2");

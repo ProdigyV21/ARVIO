@@ -11,32 +11,34 @@ internal data class ClientCatalogRequest(
     val provider: String,
     val action: String,
     val mediaType: MediaType?,
-    val source: String?
+    val source: String?,
+    val category: String? = null
 ) {
     companion object {
         fun parse(value: String, fallbackType: String?): ClientCatalogRequest {
             val uri = URI(value.trim())
             require(uri.rawFragment == null) { "Client delegation does not support fragments" }
             var provider = uri.scheme?.lowercase(Locale.US).orEmpty()
-            require(provider in setOf("trakt", "simkl", "homeserver", "hybrid")) { "Unsupported client delegate" }
+            require(provider in setOf("trakt", "simkl", "homeserver", "hybrid", "vod")) { "Unsupported client delegate" }
             val rest = uri.rawSchemeSpecificPart.removePrefix("//")
             val action = rest.substringBefore('?').trim('/').lowercase(Locale.US)
             val parameters = linkedMapOf<String, String>()
             rest.substringAfter('?', "").split('&').filter { it.isNotEmpty() }.forEach { pair ->
                 val key = URLDecoder.decode(pair.substringBefore('='), "UTF-8")
-                require(key in setOf("type", "source", "tracker") && key !in parameters) { "Unsupported or repeated delegate parameter" }
+                require(key in setOf("type", "source", "tracker", "category") && key !in parameters) { "Unsupported or repeated delegate parameter" }
                 parameters[key] = URLDecoder.decode(pair.substringAfter('=', ""), "UTF-8")
             }
             if (provider == "hybrid") provider = parameters["tracker"]?.lowercase(Locale.US) ?: "trakt"
-            require(provider in setOf("trakt", "simkl", "homeserver")) { "Unsupported hybrid tracker" }
+            require(provider in setOf("trakt", "simkl", "homeserver", "vod")) { "Unsupported hybrid tracker" }
             val normalizedAction = if (action in setOf("plan", "watchlist") && provider == "simkl") "plantowatch" else action
             require(when (provider) {
                 "trakt" -> normalizedAction in setOf("watchlist", "watched")
                 "simkl" -> normalizedAction in setOf("plantowatch", "completed", "watching", "hold", "dropped")
+                "vod" -> normalizedAction in setOf("recent", "categories")
                 else -> normalizedAction == "library"
             }) { "Unsupported client delegate action" }
             return ClientCatalogRequest(provider, normalizedAction,
-                clientCatalogMediaType(parameters["type"] ?: fallbackType), parameters["source"])
+                clientCatalogMediaType(parameters["type"] ?: fallbackType), parameters["source"], parameters["category"])
         }
     }
 }
@@ -53,7 +55,8 @@ internal data class ClientCatalogFilter(
     val genreIds: Set<Int> = emptySet(),
     val minYear: Int? = null,
     val maxYear: Int? = null,
-    val minRating: Double? = null
+    val minRating: Double? = null,
+    val availableOn: String? = null
 ) {
     fun matches(item: MediaItem): Boolean {
         if (mediaType != null && item.mediaType != mediaType) return false
@@ -71,7 +74,7 @@ internal data class ClientCatalogFilter(
             val json = JsonParser.parseString(value)
             require(json.isJsonObject) { "clientFilter must be a JSON object" }
             val obj = json.asJsonObject
-            require(obj.keySet().all { it in setOf("mediaType", "genreIds", "minYear", "maxYear", "minRating") }) { "Unsupported clientFilter field" }
+            require(obj.keySet().all { it in setOf("mediaType", "genreIds", "minYear", "maxYear", "minRating", "availableOn") }) { "Unsupported clientFilter field" }
             fun number(key: String): Double? = obj.get(key)?.let {
                 require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) { "$key must be numeric" }
                 it.asDouble.also { number -> require(number.isFinite()) }
@@ -98,7 +101,13 @@ internal data class ClientCatalogFilter(
             require(min == null || max == null || min <= max) { "Invalid year range" }
             val rating = number("minRating")
             require(rating == null || rating in 0.0..10.0) { "Invalid rating" }
-            return ClientCatalogFilter(type, genres, min, max, rating)
+            val availableOn = obj.get("availableOn")?.let { el ->
+                require(el.isJsonPrimitive && el.asJsonPrimitive.isString) { "availableOn must be a string" }
+                el.asString.trim().lowercase(Locale.US).also { target ->
+                    require(target in setOf("vod", "homeserver")) { "Unsupported availableOn target" }
+                }
+            }
+            return ClientCatalogFilter(type, genres, min, max, rating, availableOn)
         }
     }
 }
@@ -109,6 +118,7 @@ internal suspend fun clientCatalogPage(
     limit: Int,
     mediaType: MediaType?,
     filter: ClientCatalogFilter,
+    extraPredicate: suspend (MediaItem) -> Boolean = { true },
     fetch: suspend (Int, Int) -> MediaRepository.CategoryPageResult
 ): MediaRepository.CategoryPageResult {
     require(offset >= 0 && limit > 0)
@@ -118,8 +128,15 @@ internal suspend fun clientCatalogPage(
     var more = true
     while (items.size < limit && more) {
         val page = fetch(cursor, (limit - items.size).coerceAtMost(50))
-        page.items.forEach { item ->
-            if ((mediaType == null || mediaType == item.mediaType) && filter.matches(item) && seen.add(item.mediaType to item.id)) items += item
+        for (item in page.items) {
+            if (items.size < limit &&
+                (mediaType == null || mediaType == item.mediaType) &&
+                filter.matches(item) &&
+                extraPredicate(item) &&
+                seen.add(item.mediaType to item.id)
+            ) {
+                items += item
+            }
         }
         val next = page.nextOffset ?: (cursor + page.items.size)
         more = page.hasMore && next > cursor

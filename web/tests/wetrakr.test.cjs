@@ -121,3 +121,33 @@ test('reads fetch every page and discard already watched or invented next episod
   const rows = await client.playback(); assert.equal(rows.length, 1); assert.equal(rows[0].episode.number, 3); assert.equal(rows[0].is_up_next, true);
   await client.watchlist(); assert.equal(requests.filter(url => url.includes('/planning/')).length, 2, 'cached lists do not repeatedly spend the provider quota');
 });
+
+for (const [name, env, expectedKey] of [
+  ['hosted default', {}, 'a96545eae15256f3302c72377acd3ade'],
+  ['self-hosted default', { NEXT_PUBLIC_SELF_HOSTED: 'true' }, 'a96545eae15256f3302c72377acd3ade'],
+  ['self-hosted blank example values', { NEXT_PUBLIC_SELF_HOSTED: 'true', WETRAKR_CLIENT_ID: '', NEXT_PUBLIC_WETRAKR_CLIENT_ID: '' }, 'a96545eae15256f3302c72377acd3ade'],
+  ['runtime override takes precedence', { NEXT_PUBLIC_SELF_HOSTED: 'true', WETRAKR_CLIENT_ID: 'runtime-public-key', NEXT_PUBLIC_WETRAKR_CLIENT_ID: 'build-public-key' }, 'runtime-public-key'],
+  ['build-time override', { NEXT_PUBLIC_SELF_HOSTED: 'true', NEXT_PUBLIC_WETRAKR_CLIENT_ID: 'build-public-key' }, 'build-public-key'],
+]) {
+  test('device-code request uses the correct public key: ' + name, async () => {
+    const requests = [], store = new Store();
+    const sessionModule = load('lib/server/weTrakrSession.ts', {}, {
+      fetch: async (url, init) => {
+        requests.push({ url, init, body: JSON.parse(init.body) });
+        return Response.json(device);
+      },
+    });
+    const http = load('lib/server/weTrakrSessionHttp.ts', {
+      'next/server': {},
+      './weTrakrSession': sessionModule,
+      './weTrakrSessionStore': { wetrakrSessionStore: () => store },
+    }, { process: { env } });
+    const result = await http.wetrakrSessions().start(sessionModule.newWeTrakrSessionId(), 'isolated-profile');
+    assert.equal(result.user_code, device.user_code);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, 'https://api.wetrakr.com/oauth/device/code');
+    assert.equal(requests[0].init.headers['wetrakr-api-key'], expectedKey);
+    assert.equal(requests[0].body.client_id, expectedKey);
+    assert.equal('client_secret' in requests[0].body, false);
+  });
+}
