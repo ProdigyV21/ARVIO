@@ -22,6 +22,15 @@ export interface MdbListOAuthToken {
   expiresAt?: number | null;
 }
 
+export interface MdbListDeviceCode {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete?: string;
+  expires_in: number;
+  interval: number;
+}
+
 /**
  * MDBList client. Per-profile alternative to Trakt, authenticated with either
  * OAuth 2.0 Bearer tokens or a static user API key (mdblist.com/preferences).
@@ -117,6 +126,79 @@ export class MdbListClient {
     } catch {
       return false;
     }
+  }
+
+  async isOAuthConfigured(): Promise<boolean> {
+    try {
+      const res = await jsonRequest<{ oauthConfigured?: boolean }>(
+        new URL("/api/mdblist/oauth/status/", window.location.origin).toString(),
+        { cache: "no-store" }
+      );
+      return Boolean(res?.oauthConfigured);
+    } catch {
+      return false;
+    }
+  }
+
+  async beginDeviceLink(): Promise<MdbListDeviceCode> {
+    const response = await jsonRequest<Partial<MdbListDeviceCode>>(
+      new URL("/api/mdblist/oauth/device-authorization/", window.location.origin).toString(),
+      { method: "POST", body: JSON.stringify({}) }
+    );
+    if (!response.device_code?.trim() || !response.user_code?.trim()) {
+      throw new Error("MDBList did not return a device code.");
+    }
+    return {
+      device_code: response.device_code.trim(),
+      user_code: response.user_code.trim(),
+      verification_uri: response.verification_uri?.trim() || "https://mdblist.com/oauth/device",
+      verification_uri_complete: response.verification_uri_complete?.trim() || undefined,
+      expires_in: typeof response.expires_in === "number" && response.expires_in > 0 ? response.expires_in : 600,
+      interval: typeof response.interval === "number" && response.interval > 0 ? response.interval : 5
+    };
+  }
+
+  async pollDeviceToken(deviceCode: string): Promise<MdbListOAuthToken> {
+    const code = deviceCode.trim();
+    if (!code) throw new Error("Missing MDBList device code.");
+    let response: { access_token?: string; refresh_token?: string; expires_in?: number };
+    try {
+      response = await jsonRequest<{ access_token?: string; refresh_token?: string; expires_in?: number }>(
+        new URL("/api/mdblist/oauth/token/", window.location.origin).toString(),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: code
+          })
+        }
+      );
+    } catch (error) {
+      if (error instanceof HttpError) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes("authorization_pending") || msg.includes("pending")) {
+          throw new HttpError(error.status, "MDBList has not approved this device yet.", error.retryAfter);
+        }
+        if (msg.includes("slow_down") || error.status === 429) {
+          throw new HttpError(error.status, "MDBList is limiting requests. Please wait a moment and try again.", error.retryAfter);
+        }
+        if (msg.includes("access_denied") || error.status === 403) {
+          throw new HttpError(error.status, "MDBList authorization was declined. Get a new code to try again.", error.retryAfter);
+        }
+        if (msg.includes("expired_token") || msg.includes("expired")) {
+          throw new HttpError(error.status, "This MDBList code has expired. Get a new code and try again.", error.retryAfter);
+        }
+      }
+      throw error;
+    }
+    if (!response.access_token?.trim()) throw new Error("MDBList returned an empty access token.");
+    return {
+      accessToken: response.access_token.trim(),
+      refreshToken: response.refresh_token?.trim() || null,
+      expiresAt: typeof response.expires_in === "number" && response.expires_in > 0
+        ? Date.now() + response.expires_in * 1000
+        : null
+    };
   }
 
   async externalRatings(mediaType: "movie" | "tv", tmdbId: number): Promise<MdbExternalRating[]> {
