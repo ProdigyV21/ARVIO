@@ -19,9 +19,9 @@ type ProviderBudget = {
   nextStart: number;
   blockedUntil: number;
   blockedMessage?: string;
-  preferProxyUntil?: number;
 };
 const providerBudgets = new Map<string, ProviderBudget>();
+const proxyPreferences = new Map<string, number>();
 const apiInFlight = new Map<string, Promise<unknown>>();
 const guideApiCache = new Map<string, { data: unknown; expires: number }>();
 
@@ -496,6 +496,23 @@ function playlistTextUrl(url: string, headers?: Record<string, string>) {
   return target.toString();
 }
 
+function proxyPreferenceKey(url: string, headers: Record<string, string>) {
+  const endpoint = new URL(url);
+  // API actions share routing, but not with other endpoints, accounts or headers.
+  if (/\/player_api\.php$/i.test(endpoint.pathname)) {
+    endpoint.searchParams.delete("action");
+    endpoint.searchParams.delete("stream_id");
+  }
+  endpoint.searchParams.sort();
+  return JSON.stringify([endpoint.toString(), Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))]);
+}
+
+function rememberProxyPreference(key: string) {
+  proxyPreferences.delete(key);
+  proxyPreferences.set(key, Date.now() + 900_000);
+  while (proxyPreferences.size > 128) proxyPreferences.delete(proxyPreferences.keys().next().value!);
+}
+
 function shouldStopAfterXtreamError(error: unknown) {
   const status = Number((error as { status?: number })?.status);
   return [401, 403].includes(status) || shouldStopFallback(error);
@@ -507,8 +524,8 @@ async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
     PLAYLIST_TTL_MS,
     async () => {
       const headers = playlistProxyHeaders(options.userAgent);
-      const budget = providerBudgetFor(url);
-      const preferProxy = Date.now() < (budget.preferProxyUntil ?? 0);
+      const preferenceKey = proxyPreferenceKey(url, headers);
+      const preferProxy = Date.now() < (proxyPreferences.get(preferenceKey) ?? 0);
       const candidates: Array<{ label: string; isDirect?: boolean; load: () => Promise<string> }> = [
         ...(preferProxy ? [] : [{ label: "direct", isDirect: true, load: () => providerTextRequest(url, url, { deferAuthCooldown: true }) }]),
         { label: "proxy", load: () => providerTextRequest(url, playlistTextUrl(url), { deferAuthCooldown: true }) },
@@ -521,7 +538,7 @@ async function fetchPlaylistText(url: string, options: IptvLoadOptions = {}) {
           const text = await candidate.load();
           assertPlaylistText(text);
           if (!candidate.isDirect && !preferProxy) {
-            budget.preferProxyUntil = Date.now() + 900_000;
+            rememberProxyPreference(preferenceKey);
           }
           return text;
         } catch (error) {
@@ -791,11 +808,11 @@ async function fetchXtreamJson<T>(url: string, headers: Record<string, string>) 
 
 async function requestWithProxyFallback(
   url: string,
-  proxyUrl: string,
+  headers: Record<string, string>,
   validate?: (text: string) => void
 ): Promise<string> {
-  const budget = providerBudgetFor(url);
-  const preferProxy = Date.now() < (budget.preferProxyUntil ?? 0);
+  const preferenceKey = proxyPreferenceKey(url, headers);
+  const preferProxy = Date.now() < (proxyPreferences.get(preferenceKey) ?? 0);
   if (!preferProxy) {
     try {
       const text = await providerTextRequest(url, url, { deferAuthCooldown: true });
@@ -805,15 +822,15 @@ async function requestWithProxyFallback(
       if (shouldStopFallback(error)) throw error;
     }
   }
-  const text = await providerTextRequest(url, proxyUrl);
+  const text = await providerTextRequest(url, playlistTextUrl(url, headers));
   validate?.(text);
-  if (!preferProxy) budget.preferProxyUntil = Date.now() + 900_000;
+  if (!preferProxy) rememberProxyPreference(preferenceKey);
   return text;
 }
 
 /** player_api.php text, directly and then through the app proxy (panels without CORS), both behind the provider request guard. */
 async function xtreamApiText(url: string, headers: Record<string, string>) {
-  return requestWithProxyFallback(url, playlistTextUrl(url, headers), (text) => {
+  return requestWithProxyFallback(url, headers, (text) => {
     jsonFromText(text);
   });
 }
@@ -1185,7 +1202,7 @@ async function fetchEpgText(url: string) {
   return cachedRemoteText(
     `epg:${url}`,
     EPG_TTL_MS,
-    () => requestWithProxyFallback(url, proxiedUrl(url)),
+    () => requestWithProxyFallback(url, playlistProxyHeaders()),
     isXmltvText
   );
 }

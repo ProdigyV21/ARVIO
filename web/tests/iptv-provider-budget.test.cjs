@@ -9,10 +9,15 @@ function fixture(respond = async () => '{"epg_listings":[]}') {
   const api = load('lib/iptv.ts', {
     './storage': storage(),
     './http': {
-      proxiedUrl: (url) => `https://relay.invalid/?url=${encodeURIComponent(url)}`,
+      proxiedUrl: (url, headers) => {
+        const proxy = new URL('https://relay.invalid/');
+        proxy.searchParams.set('url', url);
+        if (headers) proxy.searchParams.set('headers', btoa(JSON.stringify(headers)));
+        return proxy.toString();
+      },
       textRequest: async (url) => { hits.push(url); return respond(url); },
     },
-  }, { Date: TestDate, setTimeout: (fn, ms) => { now += ms; Promise.resolve().then(fn); return 1; } });
+  }, { Date: TestDate, Error, TypeError, setTimeout: (fn, ms) => { now += ms; Promise.resolve().then(fn); return 1; } });
   const url = (id) => `https://provider.invalid/player_api.php?username=test&password=test&action=get_short_epg&stream_id=${id}`;
   return { api, hits, url, advance: (ms) => { now += ms; } };
 }
@@ -68,7 +73,7 @@ test('direct 401/403 permits one media-header proxy fallback, then locks out on 
   }
 });
 
-test('direct 401/403 succeeds via media-header proxy fallback and remembers proxy preference for the host', async () => {
+test('direct 401/403 succeeds via media-header proxy fallback and remembers the API route preference', async () => {
   const f = fixture(async (url) => {
     if (!url.startsWith('https://relay.invalid/')) {
       throw Object.assign(new Error('{"user_info":{"auth":0}}'), { status: 401 });
@@ -87,9 +92,83 @@ test('direct 401/403 succeeds via media-header proxy fallback and remembers prox
   assert.equal(snapshot.channels.length, 1);
   assert.equal(snapshot.channels[0].name, 'News HD');
   const hitsBefore = f.hits.length;
-  await f.api.fetchXtreamJson(f.url(99), {});
+  await f.api.fetchXtreamJson(f.url(99), f.api.playlistProxyHeaders());
   assert.equal(f.hits.length, hitsBefore + 1, 'subsequent call skips failing direct hop');
   assert.ok(f.hits.at(-1).startsWith('https://relay.invalid/'));
+});
+
+test('API proxy preference does not skip working direct playlist and EPG endpoints or block later API calls', async () => {
+  const f = fixture(async (raw) => {
+    const request = new URL(raw);
+    const proxy = request.hostname === 'relay.invalid';
+    const target = proxy ? new URL(request.searchParams.get('url')) : request;
+    if (target.pathname === '/player_api.php') {
+      if (!proxy) throw new TypeError('Failed to fetch');
+      return '{"epg_listings":[]}';
+    }
+    if (proxy) throw Object.assign(new Error('Forbidden proxy user agent'), { status: 403 });
+    if (target.pathname === '/channels.m3u') return '#EXTM3U\n#EXTINF:-1 tvg-id="news",News\nhttps://streams.invalid/news.m3u8';
+    return '<tv><programme start="19700101000001 +0000" stop="19700102000000 +0000" channel="news"><title>News</title></programme></tv>';
+  });
+  const headers = f.api.playlistProxyHeaders();
+  await f.api.fetchXtreamJson(f.url(1), headers);
+  const playlists = [{ id: 'list_1', name: 'Test', enabled: true,
+    m3uUrl: 'https://provider.invalid/channels.m3u', epgUrl: 'https://provider.invalid/guide.xml' }];
+  const snapshot = await f.api.loadIptvSnapshot(playlists);
+  assert.equal(snapshot.channels.length, 1);
+  const guide = await f.api.loadIptvGuideForChannels(playlists, snapshot.channels);
+  assert.equal(Object.keys(guide).length, 1);
+  assert.equal(guide[snapshot.channels[0].id].now.title, 'News');
+  assert.ok(f.hits.includes(playlists[0].m3uUrl));
+  assert.ok(f.hits.includes(playlists[0].epgUrl));
+  const hitsBefore = f.hits.length;
+  await f.api.fetchXtreamJson(f.url(2), headers);
+  assert.equal(f.hits.length, hitsBefore + 1, 'API preference still skips its failing direct hop');
+});
+
+test('XMLTV proxy fallback carries media-player headers after a direct auth refusal', async () => {
+  for (const status of [401, 403]) {
+    const f = fixture(async (raw) => {
+      const request = new URL(raw);
+      if (request.pathname === '/channels.m3u') return '#EXTM3U\n#EXTINF:-1 tvg-id="news",News\nhttps://streams.invalid/news.m3u8';
+      if (request.hostname !== 'relay.invalid') throw Object.assign(new Error('Forbidden browser user agent'), { status });
+      const headers = JSON.parse(atob(request.searchParams.get('headers') || btoa('{}')));
+      assert.match(headers['User-Agent'] || '', /^VLC\//);
+      return '<tv><programme start="19700101000001 +0000" stop="19700102000000 +0000" channel="news"><title>News</title></programme></tv>';
+    });
+    const playlists = [{ id: 'list_1', name: 'Test', enabled: true,
+      m3uUrl: 'https://provider.invalid/channels.m3u', epgUrl: 'https://provider.invalid/guide.xml' }];
+    const snapshot = await f.api.loadIptvSnapshot(playlists);
+    const guide = await f.api.loadIptvGuideForChannels(playlists, snapshot.channels);
+    assert.equal(Object.keys(guide).length, 1);
+    assert.equal(f.hits.length, 3, 'one playlist load plus direct EPG and one proxy fallback');
+  }
+});
+
+test('API proxy preferences are isolated by endpoint, account and request headers and expire', async () => {
+  const f = fixture(async (raw) => {
+    const request = new URL(raw);
+    if (request.hostname !== 'relay.invalid') throw Object.assign(new Error('Forbidden'), { status: 403 });
+    return '{"epg_listings":[]}';
+  });
+  const headers = f.api.playlistProxyHeaders();
+  await f.api.fetchXtreamJson(f.url(1), headers);
+  let hitsBefore = f.hits.length;
+  await f.api.fetchXtreamJson(f.url(2), headers);
+  assert.equal(f.hits.length, hitsBefore + 1);
+  for (const [url, changedHeaders] of [
+    [f.url(3).replace('/player_api.php', '/other/player_api.php'), headers],
+    [f.url(4).replace('username=test', 'username=other'), headers],
+    [f.url(5), f.api.playlistProxyHeaders('CustomPlayer/1.0')],
+  ]) {
+    hitsBefore = f.hits.length;
+    await f.api.fetchXtreamJson(url, changedHeaders);
+    assert.equal(f.hits.length, hitsBefore + 2, 'a different request context tries its own direct route');
+  }
+  f.advance(900_001);
+  hitsBefore = f.hits.length;
+  await f.api.fetchXtreamJson(f.url(6), headers);
+  assert.equal(f.hits.length, hitsBefore + 2, 'expired preferences retry the direct route');
 });
 
 test('Retry-After HTTP dates are respected across guide and catalog calls', async () => {
