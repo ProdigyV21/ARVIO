@@ -156,7 +156,8 @@
   flex: 1 0 100%;
   min-width: 0;
   margin-top: 6px;
-  padding: 12px 4px 4px 46px;
+  padding: 12px 4px 4px;
+  padding-inline-start: 46px;
   border-top: 1px dashed var(--st-line-strong);
 }
 .st-rail-folders { display: grid; gap: 10px; }

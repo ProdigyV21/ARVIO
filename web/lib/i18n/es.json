@@ -777,5 +777,18 @@
   "Back to details": "Volver a los detalles",
   "Cached": "En caché",
   "Not cached": "Sin caché",
-  "View on Trakt": "Ver en Trakt"
+  "View on Trakt": "Ver en Trakt",
+  "Your selected collections are in a hidden rail": "Tus colecciones seleccionadas están en una fila oculta",
+  "You enabled {value0}, which lives inside the hidden {value1} rail.": "Has activado {value0}, que está dentro de la fila oculta {value1}.",
+  "Show {value0} on Home": "Mostrar {value0} en Inicio",
+  "Customize Home rows": "Personalizar filas de Inicio",
+  "No Home rows are shown": "No se muestran filas en Inicio",
+  "Turn rows back on in Settings to populate your Home screen.": "Activa filas en Ajustes para llenar tu pantalla de Inicio.",
+  "{value0}/{value1} items shown": "{value0}/{value1} elementos visibles",
+  "Collection rail": "Fila de colecciones",
+  "Hide or show individual items inside {value0}.": "Oculta o muestra elementos individuales de {value0}.",
+  "{value0} is hidden on Home — showing any item turns {value0} back on.": "{value0} está oculta en Inicio; al mostrar cualquier elemento, se vuelve a activar {value0}.",
+  "No rows are currently shown on Home.": "Actualmente no se muestran filas en Inicio.",
+  "Add default collections": "Añadir colecciones predeterminadas",
+  "Add Featured, Services, Genres, Franchises and Decades without changing your other rows.": "Añade Destacados, Servicios, Géneros, Franquicias y Décadas sin modificar tus otras filas."
 }
