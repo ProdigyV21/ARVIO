@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { saveCloudTrackingSelection } from "../cloud";
 import { dedupeMedia, hydrateTraktItems, traktItemToMedia } from "../mappers";
 import { loadStored } from "../storage";
-import { mdblistClient } from "../mdblist";
+import { mdblistClient, type MdbListOAuthToken } from "../mdblist";
 import { simklClient } from "../simkl";
 import { loadTrackingPreferences, saveTrackingPreferences, type TrackingPreferences } from "../sync";
 import type { MediaItem } from "../types";
@@ -14,7 +14,7 @@ import type { useRefreshData } from "./refresh";
 import type { StoreCore } from "./core";
 
 export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof useRefreshData>, "refreshData">) {
-  const { activeProfileIdRef, deviceCodeRef, refreshData, setDeviceCode, setMdblistConnected, setSimklConnected, setSimklDeviceCode, setTrackingPreferences, setTraktConnected, simklDeviceCodeRef } = store;
+  const { activeProfileIdRef, deviceCodeRef, mdblistDeviceCodeRef, refreshData, setDeviceCode, setMdblistConnected, setMdblistDeviceCode, setSimklConnected, setSimklDeviceCode, setTrackingPreferences, setTraktConnected, simklDeviceCodeRef } = store;
   const beginTrakt = useCallback(async () => {
     traktClient.setProfile(activeProfileIdRef.current);
     setDeviceCode(await traktClient.beginDeviceLink());
@@ -100,16 +100,18 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     }
   }, [refreshData]);
 
-  const connectMdblist = useCallback(async (key: string) => {
-    const targetProfileId = activeProfileIdRef.current;
-    const ok = await mdblistClient.validateKey(key);
-    if (!ok) throw new Error("Invalid MDBList API key");
+  const finalizeMdblistConnection = useCallback(async (
+    targetProfileId: string | null,
+    credential: { apiKey: string | null; token: MdbListOAuthToken | null }
+  ) => {
     if (activeProfileIdRef.current !== targetProfileId) return;
     traktClient.setProfile(targetProfileId);
     mdblistClient.setProfile(targetProfileId);
     simklClient.setProfile(targetProfileId);
-    mdblistClient.setKey(key);
+    if (credential.token) mdblistClient.setToken(credential.token);
+    else mdblistClient.setKey(credential.apiKey);
     setMdblistConnected(true);
+    setMdblistDeviceCode(null);
     const currentPreferences = loadTrackingPreferences(targetProfileId);
     const hasPrimaryTracker = traktClient.isConnected || simklClient.isConnected;
     const mdbPreferences: TrackingPreferences = {
@@ -125,10 +127,10 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
       await saveCloudTrackingSelection(authClient, targetProfileId, {
         provider: traktClient.isConnected ? "TRAKT" : simklClient.isConnected ? "SIMKL" : "MDBLIST",
         traktToken: traktClient.token,
-        mdbListApiKey: key,
-        mdbListAccessToken: null,
-        mdbListRefreshToken: null,
-        mdbListTokenExpiresAt: null,
+        mdbListApiKey: credential.apiKey,
+        mdbListAccessToken: credential.token?.accessToken ?? null,
+        mdbListRefreshToken: credential.token?.refreshToken ?? null,
+        mdbListTokenExpiresAt: credential.token?.expiresAt ?? null,
         simklToken: simklClient.token,
         trackingPreferences: mdbPreferences,
         changedDomains: ["routing", "mdblist"]
@@ -139,11 +141,32 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     }
   }, [refreshData]);
 
+  const beginMdblist = useCallback(async () => {
+    mdblistClient.setProfile(activeProfileIdRef.current);
+    setMdblistDeviceCode(await mdblistClient.beginDeviceLink());
+  }, []);
+
+  const pollMdblist = useCallback(async () => {
+    const targetProfileId = activeProfileIdRef.current;
+    const code = mdblistDeviceCodeRef.current;
+    if (!code) return;
+    const token = await mdblistClient.pollDeviceToken(code.device_code);
+    await finalizeMdblistConnection(targetProfileId, { apiKey: null, token });
+  }, [finalizeMdblistConnection]);
+
+  const connectMdblist = useCallback(async (key: string) => {
+    const targetProfileId = activeProfileIdRef.current;
+    const ok = await mdblistClient.validateKey(key);
+    if (!ok) throw new Error("Invalid MDBList API key");
+    await finalizeMdblistConnection(targetProfileId, { apiKey: key, token: null });
+  }, [finalizeMdblistConnection]);
+
   const disconnectMdblist = useCallback(async () => {
     const targetProfileId = activeProfileIdRef.current;
     mdblistClient.setProfile(targetProfileId);
     mdblistClient.disconnect();
     setMdblistConnected(false);
+    setMdblistDeviceCode(null);
     const current = loadTrackingPreferences(targetProfileId);
     const fallback = traktClient.isConnected
         ? "trakt" as const
@@ -368,5 +391,5 @@ export function useTrackingActions(store: StoreCore & Pick<ReturnType<typeof use
     const rows = await simklClient.library(source as "plantowatch" | "watching" | "completed" | "hold" | "dropped");
     return hydrateTraktItems(dedupeMedia(rows.map(traktItemToMedia)));
   }, [fetchTraktListItems]);
-  return { beginTrakt, pollTrakt, disconnectTrakt, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences, loadTraktLists, fetchTraktListItems, loadTraktListItems, loadTrackerLibrary };
+  return { beginTrakt, pollTrakt, disconnectTrakt, beginMdblist, pollMdblist, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences, loadTraktLists, fetchTraktListItems, loadTraktListItems, loadTrackerLibrary };
 }
