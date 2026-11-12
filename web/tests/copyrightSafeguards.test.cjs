@@ -24,11 +24,17 @@ test('onboarding offers configuration, not an unvetted external addon directory'
   assert.match(prompt, /setSection\("settings"\)/);
 });
 
-test('Android has no direct YouTube extraction implementation', () => {
-  const dir = path.join(root, 'app/src/main/kotlin');
-  for (const file of fs.readdirSync(dir, { recursive: true }).filter(name => name.endsWith('.kt'))) {
-    const source = fs.readFileSync(path.join(dir, file), 'utf8');
-    assert.doesNotMatch(source, /extractPlaybackSource|youtubei\/v1\/player|InAppYouTubeExtractor/, file);
+// This suite gates the web deployment. Android's restored native trailer player
+// is a separate implementation; keep this guard on the web code being shipped.
+test('web runtime has no direct YouTube extraction implementation', () => {
+  for (const folder of ['web/app', 'web/components', 'web/lib']) {
+    const dir = path.join(root, folder);
+    const files = fs.readdirSync(dir, { recursive: true }).filter(name => /\.(?:[cm]?js|jsx|ts|tsx)$/.test(name));
+    assert.ok(files.length > 0, folder);
+    for (const file of files) {
+      const source = fs.readFileSync(path.join(dir, file), 'utf8');
+      assert.doesNotMatch(source, /extractPlaybackSource|youtubei\/v1\/player|InAppYouTubeExtractor/, path.join(folder, file));
+    }
   }
 });
 
