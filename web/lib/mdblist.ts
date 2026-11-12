@@ -29,6 +29,7 @@ export interface MdbListDeviceCode {
   verification_uri_complete?: string;
   expires_in: number;
   interval: number;
+  expiresAt?: number;
 }
 
 /**
@@ -119,9 +120,9 @@ export class MdbListClient {
     this.setToken(null);
   }
 
-  async validateKey(key: string): Promise<boolean> {
+  async validateKey(key: string, signal?: AbortSignal): Promise<boolean> {
     try {
-      const user = await this.request<{ username?: string }>("user", { headers: { "x-mdblist-key": key.trim() } });
+      const user = await this.request<{ username?: string }>("user", { headers: { "x-mdblist-key": key.trim() }, signal });
       return Boolean(user?.username);
     } catch {
       return false;
@@ -140,25 +141,27 @@ export class MdbListClient {
     }
   }
 
-  async beginDeviceLink(): Promise<MdbListDeviceCode> {
+  async beginDeviceLink(signal?: AbortSignal): Promise<MdbListDeviceCode> {
     const response = await jsonRequest<Partial<MdbListDeviceCode>>(
       new URL("/api/mdblist/oauth/device-authorization/", window.location.origin).toString(),
-      { method: "POST", body: JSON.stringify({}) }
+      { method: "POST", body: JSON.stringify({}), signal }
     );
     if (!response.device_code?.trim() || !response.user_code?.trim()) {
       throw new Error("MDBList did not return a device code.");
     }
+    const expiresIn = typeof response.expires_in === "number" && response.expires_in > 0 ? response.expires_in : 600;
     return {
       device_code: response.device_code.trim(),
       user_code: response.user_code.trim(),
       verification_uri: response.verification_uri?.trim() || "https://mdblist.com/oauth/device",
       verification_uri_complete: response.verification_uri_complete?.trim() || undefined,
-      expires_in: typeof response.expires_in === "number" && response.expires_in > 0 ? response.expires_in : 600,
+      expires_in: expiresIn,
+      expiresAt: Date.now() + expiresIn * 1000,
       interval: typeof response.interval === "number" && response.interval > 0 ? response.interval : 5
     };
   }
 
-  async pollDeviceToken(deviceCode: string): Promise<MdbListOAuthToken> {
+  async pollDeviceToken(deviceCode: string, signal?: AbortSignal): Promise<MdbListOAuthToken> {
     const code = deviceCode.trim();
     if (!code) throw new Error("Missing MDBList device code.");
     let response: { access_token?: string; refresh_token?: string; expires_in?: number };
@@ -170,7 +173,8 @@ export class MdbListClient {
           body: JSON.stringify({
             grant_type: "urn:ietf:params:oauth:grant-type:device_code",
             device_code: code
-          })
+          }),
+          signal
         }
       );
     } catch (error) {

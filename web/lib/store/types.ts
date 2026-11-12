@@ -89,6 +89,7 @@ export interface AppStore {
   disconnectTrakt: () => void;
   beginMdblist: () => Promise<void>;
   pollMdblist: () => Promise<void>;
+  cancelMdblistLink: () => void;
   connectMdblist: (key: string) => Promise<void>;
   disconnectMdblist: () => void;
   beginSimkl: () => Promise<void>;

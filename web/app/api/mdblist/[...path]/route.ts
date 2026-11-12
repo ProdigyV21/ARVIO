@@ -6,6 +6,13 @@ function configuredClientId() {
     ? clientId : "";
 }
 
+function oauthResponse(response: Response) {
+  const headers = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) headers.set("retry-after", retryAfter);
+  return new NextResponse(response.body, { status: response.status, headers });
+}
+
 // Proxies MDBList (https://api.mdblist.com) so browser calls avoid CORS and the
 // user's credentials are attached server-side.
 // - OAuth Bearer token can arrive via `authorization: Bearer <token>` or `x-mdblist-token`.
@@ -33,13 +40,11 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
       const response = await fetch("https://api.mdblist.com/oauth/device-authorization/", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ client_id: clientId, scope: "read write" }),
+        body: new URLSearchParams({ client_id: clientId, scope: "write" }),
         cache: "no-store",
         signal: AbortSignal.timeout(15_000)
       });
-      return new NextResponse(response.body, { status: response.status, headers: {
-        "content-type": "application/json", "cache-control": "no-store"
-      } });
+      return oauthResponse(response);
     }
     let payload: Record<string, unknown>;
     try {
@@ -73,9 +78,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
       cache: "no-store",
       signal: AbortSignal.timeout(15_000)
     });
-    return new NextResponse(response.body, { status: response.status, headers: {
-      "content-type": "application/json", "cache-control": "no-store"
-    } });
+    return oauthResponse(response);
   }
 
   const authHeader = request.headers.get("authorization") ?? "";

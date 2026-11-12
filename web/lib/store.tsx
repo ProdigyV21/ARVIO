@@ -73,7 +73,7 @@ export function AppProvider({
   const { loadCatalogRow, installAddon, removeAddon, setAddonsState } = useAddonActions({ ...core, updateSettings });
   const { signIn, signOut } = useAccountActions({ ...core, refreshData });
   const {
-    beginTrakt, pollTrakt, disconnectTrakt, beginMdblist, pollMdblist, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl,
+    beginTrakt, pollTrakt, disconnectTrakt, beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl,
     updateTrackingPreferences, loadTraktLists, loadTraktListItems, loadTrackerLibrary
   } = useTrackingActions({ ...core, refreshData });
   const {
@@ -166,6 +166,7 @@ export function AppProvider({
     disconnectTrakt,
     beginMdblist,
     pollMdblist,
+    cancelMdblistLink,
     connectMdblist,
     disconnectMdblist,
     beginSimkl,
@@ -188,7 +189,7 @@ export function AppProvider({
     updateSettings, refreshData, openDetails, closeDetails, playStream, playTrailer, playChannel, recordChannelPlayback, playCatchup, closePlayer,
     refreshIptv, loadIptvGuide, favoriteTvChannels,
     installAddon, removeAddon, setAddonsState, signIn, signOut, beginTrakt, pollTrakt, disconnectTrakt,
-    beginMdblist, pollMdblist, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences,
+    beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist, beginSimkl, pollSimkl, disconnectSimkl, updateTrackingPreferences,
     loadTraktLists, loadTraktListItems, loadTrackerLibrary,
     toggleWatchlist, toggleWatched, removeFromContinueWatching, activeContextMenu, openContextMenu, closeContextMenu
   ]);

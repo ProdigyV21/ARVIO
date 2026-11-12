@@ -130,7 +130,7 @@ test('proxy device-authorization and device_code token exchange use server clien
   assert.equal(startRes.status, 200);
   assert.equal(calls[0][0], 'https://api.mdblist.com/oauth/device-authorization/');
   assert.equal(calls[0][1].body.get('client_id'), 'public-client');
-  assert.equal(calls[0][1].body.get('scope'), 'read write');
+  assert.equal(calls[0][1].body.get('scope'), 'write');
 
   const pollRes = await route.POST(new Request('https://arvio.test/api/mdblist/oauth/token/', {
     method: 'POST', body: JSON.stringify({ device_code: 'dc-1', client_id: 'untrusted' })
@@ -140,6 +140,22 @@ test('proxy device-authorization and device_code token exchange use server clien
   assert.equal(calls[1][1].body.get('grant_type'), 'urn:ietf:params:oauth:grant-type:device_code');
   assert.equal(calls[1][1].body.get('client_id'), 'public-client');
   assert.equal(calls[1][1].body.get('device_code'), 'dc-1');
+});
+
+test('OAuth proxy preserves provider Retry-After for both authorization and token polling', async () => {
+  class NextResponse extends Response { static json(value, init) { return Response.json(value, init); } }
+  const route = load('app/api/mdblist/[...path]/route.ts', { 'next/server': { NextResponse } }, {
+    process: { env: { MDBLIST_CLIENT_ID: 'public-client' } },
+    fetch: async () => Response.json({ error: 'slow_down' }, { status: 429, headers: { 'retry-after': '60' } }),
+  });
+  for (const endpoint of ['device-authorization', 'token']) {
+    const result = await route.POST(new Request(`https://arvio.test/api/mdblist/oauth/${endpoint}/`, {
+      method: 'POST', body: JSON.stringify({ device_code: 'fixture' }),
+    }), { params: Promise.resolve({ path: ['oauth', endpoint] }) });
+    assert.equal(result.status, 429);
+    assert.equal(result.headers.get('retry-after'), '60');
+    assert.equal(result.headers.get('cache-control'), 'no-store');
+  }
 });
 
 test('client begins device link, handles pending/denied/expired errors, and exchanges token', async () => {

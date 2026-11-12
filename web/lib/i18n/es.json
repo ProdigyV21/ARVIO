@@ -1,5 +1,8 @@
 {
   "Your browser. Your ARVIO.": "Tu navegador. Tu ARVIO.",
+  "Lists, watchlists and ratings from MDBList. Connect with your MDBList account or an API key.": "Listas, listas de seguimiento y valoraciones de MDBList. Conecta tu cuenta de MDBList o usa una clave de API.",
+  "Use API key instead": "Usar una clave de API en su lugar",
+  "Use device sign-in instead": "Usar el inicio de sesión con código en su lugar",
   "EPG URL must start with http:// or https://.": "La URL de EPG debe empezar por http:// o https://.",
   "For providers that give you a portal address and a MAC address instead of a playlist.": "Para proveedores que facilitan una dirección de portal y una dirección MAC en lugar de una lista de reproducción.",
   "Name (e.g. My provider)": "Nombre (p. ej., Mi proveedor)",

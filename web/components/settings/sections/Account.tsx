@@ -155,9 +155,9 @@ export function ServicesSection() {
   const {
     traktConnected, mdblistConnected, simklConnected, trackingPreferences, updateTrackingPreferences,
     deviceCode, simklDeviceCode, mdblistDeviceCode, beginTrakt, pollTrakt, disconnectTrakt,
-    beginMdblist, pollMdblist, connectMdblist, disconnectMdblist,
+    beginMdblist, pollMdblist, cancelMdblistLink, connectMdblist, disconnectMdblist,
     beginSimkl, pollSimkl, disconnectSimkl,
-  } = useAppPick("traktConnected", "mdblistConnected", "simklConnected", "trackingPreferences", "updateTrackingPreferences", "deviceCode", "simklDeviceCode", "mdblistDeviceCode", "beginTrakt", "pollTrakt", "disconnectTrakt", "beginMdblist", "pollMdblist", "connectMdblist", "disconnectMdblist", "beginSimkl", "pollSimkl", "disconnectSimkl");
+  } = useAppPick("traktConnected", "mdblistConnected", "simklConnected", "trackingPreferences", "updateTrackingPreferences", "deviceCode", "simklDeviceCode", "mdblistDeviceCode", "beginTrakt", "pollTrakt", "disconnectTrakt", "beginMdblist", "pollMdblist", "cancelMdblistLink", "connectMdblist", "disconnectMdblist", "beginSimkl", "pollSimkl", "disconnectSimkl");
   const { activeProfile, refreshData } = useAppPick("activeProfile", "refreshData");
   const [weTrakrConnected, setWeTrakrConnected] = useState(weTrakrClient.isConnected);
   const [weTrakrBusy, setWeTrakrBusy] = useState(false);
@@ -225,6 +225,24 @@ export function ServicesSection() {
   const [mdblistAuthBusy, setMdblistAuthBusy] = useState<"start" | "poll" | null>(null);
   const [mdblistOauthConfigured, setMdblistOauthConfigured] = useState<boolean | null>(null);
   const [mdblistApiKeyMode, setMdblistApiKeyMode] = useState(false);
+  const mdblistUiGeneration = useRef(0);
+  useEffect(() => {
+    mdblistUiGeneration.current++;
+    setMdblistKey(""); setMdblistError(null); setMdblistBusy(false); setMdblistAuthBusy(null);
+    return () => { mdblistUiGeneration.current++; };
+  }, [activeProfile?.id]);
+  const changeMdblistMode = (apiKey: boolean) => {
+    mdblistUiGeneration.current++;
+    cancelMdblistLink();
+    setMdblistError(null); setMdblistBusy(false); setMdblistAuthBusy(null); setMdblistApiKeyMode(apiKey);
+  };
+  const runMdblist = async (phase: "start" | "poll", task: () => Promise<void>) => {
+    const generation = mdblistUiGeneration.current;
+    setMdblistAuthBusy(phase); setMdblistError(null);
+    try { await task(); }
+    catch (error) { if (generation === mdblistUiGeneration.current) setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList."); }
+    finally { if (generation === mdblistUiGeneration.current) setMdblistAuthBusy(null); }
+  };
   useEffect(() => {
     if (mdblistConnected) { setMdblistApiKeyMode(false); return; }
     let cancelled = false;
@@ -236,13 +254,18 @@ export function ServicesSection() {
     return () => { cancelled = true; };
   }, [mdblistConnected]);
   useEffect(() => {
-    if (!mdblistDeviceCode || mdblistConnected) return;
+    if (!mdblistDeviceCode || mdblistConnected || mdblistApiKeyMode) return;
     let cancelled = false;
     let delayMs = Math.max(5, mdblistDeviceCode.interval || 5) * 1000;
     let timer: ReturnType<typeof setTimeout>;
-    const deadline = Date.now() + Math.max(60, mdblistDeviceCode.expires_in || 600) * 1000;
+    const deadline = mdblistDeviceCode.expiresAt ?? Date.now() + Math.max(1, mdblistDeviceCode.expires_in || 600) * 1000;
     const tick = async () => {
-      if (cancelled || Date.now() >= deadline) return;
+      if (cancelled) return;
+      if (Date.now() >= deadline) {
+        setMdblistError("This MDBList code has expired. Get a new code and try again.");
+        return;
+      }
+      let nextDelayMs = delayMs;
       try {
         await pollMdblist();
         return;
@@ -255,12 +278,14 @@ export function ServicesSection() {
           setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList.");
           return;
         }
+        const retryMs = Number((error as { retryAfter?: string | null })?.retryAfter) * 1000;
+        nextDelayMs = Math.max(delayMs, Number.isFinite(retryMs) ? retryMs : 0);
       }
-      if (!cancelled && Date.now() < deadline) timer = setTimeout(tick, delayMs);
+      if (!cancelled && Date.now() < deadline) timer = setTimeout(tick, Math.min(nextDelayMs, deadline - Date.now()));
     };
     timer = setTimeout(tick, delayMs);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [mdblistDeviceCode, mdblistConnected, pollMdblist]);
+  }, [mdblistDeviceCode, mdblistConnected, mdblistApiKeyMode, pollMdblist]);
 
   const run = async (
     busy: (v: "start" | "poll" | null) => void,
@@ -360,16 +385,17 @@ export function ServicesSection() {
               <input className="st-input" type="password" placeholder={translateUi("MDBList API key")} aria-label={translateUi("MDBList API key")} value={mdblistKey} onChange={(e) => setMdblistKey(e.target.value)} autoComplete="new-password" data-1p-ignore="" data-lpignore="true" />
               <div className="st-form-actions">
                 <button type="button" className="st-btn is-primary" disabled={mdblistBusy || !mdblistKey.trim()} onClick={async () => {
+                  const generation = mdblistUiGeneration.current;
                   setMdblistBusy(true); setMdblistError(null);
-                  try { await connectMdblist(mdblistKey); setMdblistKey(""); }
-                  catch (error) { setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList."); }
-                  finally { setMdblistBusy(false); }
+                  try { await connectMdblist(mdblistKey); if (generation === mdblistUiGeneration.current) setMdblistKey(""); }
+                  catch (error) { if (generation === mdblistUiGeneration.current) setMdblistError(error instanceof Error ? error.message : "Could not connect MDBList."); }
+                  finally { if (generation === mdblistUiGeneration.current) setMdblistBusy(false); }
                 }}>{mdblistBusy ? translateUi("Connecting...") : translateUi("Connect")}</button>
               </div>
             </div>
             {mdblistOauthConfigured !== false && (
               <div className="st-group-foot">
-                <button type="button" className="st-btn" onClick={() => { setMdblistError(null); setMdblistApiKeyMode(false); }}>{translateUi("Use device sign-in instead")}</button>
+                <button type="button" className="st-btn" onClick={() => changeMdblistMode(false)}>{translateUi("Use device sign-in instead")}</button>
               </div>
             )}
           </>
@@ -381,23 +407,23 @@ export function ServicesSection() {
                 <p>{splitAroundLink(translateUi("Open {value0} and enter this code, then come back here.", { value0: LINK_SLOT })).map((part, index) => part === LINK_SLOT
                   ? <a key={index} className="st-link" href={mdblistDeviceCode.verification_uri_complete || mdblistDeviceCode.verification_uri} target="_blank" rel="noreferrer">{mdblistDeviceCode.verification_uri_complete || mdblistDeviceCode.verification_uri}</a>
                   : <span key={index}>{part}</span>)}</p>
-                <button type="button" className="st-btn is-primary" disabled={mdblistAuthBusy === "poll"} onClick={() => void run(setMdblistAuthBusy, setMdblistError, "poll", pollMdblist, "MDBList has not approved this device yet.")}>
+                <button type="button" className="st-btn is-primary" disabled={mdblistAuthBusy === "poll"} onClick={() => void runMdblist("poll", pollMdblist)}>
                   {mdblistAuthBusy === "poll" ? translateUi("Checking...") : translateUi("I approved it")}
                 </button>
               </div>
             )}
             <div className="st-group-foot">
-              <button type="button" className="st-btn is-primary" disabled={mdblistAuthBusy === "start"} onClick={() => void run(setMdblistAuthBusy, setMdblistError, "start", async () => {
+              <button type="button" className="st-btn is-primary" disabled={mdblistAuthBusy === "start"} onClick={() => void runMdblist("start", async () => {
                 try { await beginMdblist(); }
                 catch (error) {
                   const status = (error as { status?: number } | null)?.status;
-                  if (status === 503) { setMdblistOauthConfigured(false); setMdblistApiKeyMode(true); }
+                  if (status === 503) { setMdblistOauthConfigured(false); changeMdblistMode(true); }
                   throw error;
                 }
-              }, "Could not start MDBList device link.")}>
+              })}>
                 {mdblistAuthBusy === "start" ? translateUi("Starting...") : translateUi(mdblistDeviceCode ? "Get a new code" : "Connect MDBList")}
               </button>
-              <button type="button" className="st-btn" onClick={() => { setMdblistError(null); setMdblistApiKeyMode(true); }}>{translateUi("Use API key instead")}</button>
+              <button type="button" className="st-btn" onClick={() => changeMdblistMode(true)}>{translateUi("Use API key instead")}</button>
             </div>
           </>
         )}
