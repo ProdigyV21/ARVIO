@@ -19,13 +19,16 @@ const CATALOG_ROW_CACHE_TTL = 12 * 60 * 60 * 1000;
 const CATALOG_ROW_FRESH_MS = 30 * 60 * 1000;
 type CatalogRowCache = Record<string, { at: number; category: Category }>;
 
-export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, onLoaded, emptyContent, onViewAll, limit = HOME_ROW_LIMIT }: {
+export type LazyRailOutcome = "loading" | "ready" | "empty" | "error";
+
+export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, onLoaded, onSettled, emptyContent, onViewAll, limit = HOME_ROW_LIMIT }: {
   catalog: CatalogConfig;
   eager?: boolean;
   posterMode?: boolean;
   onOpen: (item: MediaItem) => void;
   onFocus?: (item: MediaItem) => void;
   onLoaded?: (category: Category) => void;
+  onSettled?: (catalogId: string, outcome: LazyRailOutcome) => void;
   emptyContent?: ReactNode;
   /** Opens the full row; rows show `limit` titles and end with a "View all" tile. */
   onViewAll?: (catalog: CatalogConfig, category: Category) => void;
@@ -35,10 +38,14 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
   const translateUi = useTranslation();
   const sources = useRef({ addons, homeServers: settings.homeServers });
   sources.current = { addons, homeServers: settings.homeServers };
+  const settledRef = useRef(onSettled);
+  settledRef.current = onSettled;
   const cacheKey = catalogCacheKey(catalog, settings.language);
   const ref = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
   const [category, setCategory] = useState<Category | null>(() => readCachedCatalog(cacheKey, limit));
+  const categoryRef = useRef(category);
+  categoryRef.current = category;
   const effectivePosterMode = catalog.layout === "poster" || category?.layout === "poster" || (posterMode ?? (settings.cardLayoutMode === "poster"));
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [attempt, setAttempt] = useState(0);
@@ -47,10 +54,12 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
     const cached = readCachedCatalog(cacheKey, limit);
     if (cached) {
       setCategory(cached);
+      categoryRef.current = cached;
       onLoaded?.(cached);
     }
     startedRef.current = false;
     setStatus("idle");
+    settledRef.current?.(catalog.id, cached ? "ready" : "loading");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
@@ -60,7 +69,11 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
     const load = () => {
       if (startedRef.current) return;
       startedRef.current = true;
-      if (attempt === 0 && cachedCatalogAge(cacheKey) < CATALOG_ROW_FRESH_MS) { setStatus("done"); return; }
+      if (attempt === 0 && cachedCatalogAge(cacheKey) < CATALOG_ROW_FRESH_MS) {
+        setStatus("done");
+        settledRef.current?.(catalog.id, readCachedCatalog(cacheKey, limit) || categoryRef.current ? "ready" : "empty");
+        return;
+      }
       setStatus("loading");
       // Rows take network priority over card decoration (logos, badges, ratings).
       void homeFetchPriority.trackRow(loadCatalog(catalog, settings.language, sources.current.addons, sources.current.homeServers, { limit }))
@@ -68,14 +81,17 @@ export function LazyRail({ catalog, eager = false, posterMode, onOpen, onFocus, 
           setStatus("done");
           if (row?.items.length) {
             setCategory(row);
+            categoryRef.current = row;
             writeCachedCatalog(cacheKey, row);
             onLoaded?.(row);
           }
+          settledRef.current?.(catalog.id, row?.items.length || categoryRef.current ? "ready" : "empty");
         })
         .catch(() => {
           // A cached copy stays on screen; without one the row offers a retry
           // instead of silently disappearing.
           setStatus("error");
+          settledRef.current?.(catalog.id, categoryRef.current ? "ready" : "error");
         });
     };
 

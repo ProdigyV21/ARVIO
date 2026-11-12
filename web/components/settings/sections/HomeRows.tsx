@@ -4,16 +4,17 @@
 // fields the Android app reads (catalogsByProfile, hidden*ByProfile and
 // catalogueRowLayoutModes).
 
-import { Download, Eye, EyeOff, Image as PosterIcon, Plus, RectangleHorizontal, RotateCcw, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Eye, EyeOff, Image as PosterIcon, Plus, RectangleHorizontal, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "@/lib/i18n";
-import { defaultCatalogs, isDefaultCollection, mergeCatalogs, setDefaultCollectionsEnabled, updateHiddenCatalogIds } from "@/lib/catalogs";
+import { DEFAULT_COLLECTIONS_DISABLED, addMissingDefaultCollections, defaultCatalogs, isDefaultCollection, mergeCatalogs, setDefaultCollectionsEnabled, updateHiddenCatalogIds } from "@/lib/catalogs";
 import { parseCustomCollections, mergeImportedCollections } from "@/lib/customCollections";
 import { loadSimklCustomList, parseSimklListUrl, searchSimklCustomLists, type SimklCustomList } from "@/lib/simklLists";
 import { textRequest, proxiedUrl } from "@/lib/http";
 import { buildHomeServerCatalogConfigs } from "@/lib/homeserver";
+import { collectionFolders, collectionGroupKey, setCatalogsEnabledWithParentRails, visibleHomeCatalogs } from "@/lib/collectionPresentation";
 import { HOME_ROW_SOURCES, homeRowSource, withRowLayoutMode, type HomeRowSource } from "@/lib/homeRows";
-import { moveIndex, moveWithinSubset } from "@/lib/ordering";
+import { moveWithinSubset } from "@/lib/ordering";
 import { useAppPick } from "@/lib/store";
 import type { AppSettings, CatalogConfig } from "@/lib/types";
 import { SortableList } from "../SortableList";
@@ -33,6 +34,7 @@ export function CatalogsSection() {
   const [importingCollections, setImportingCollections] = useState(false);
   const [source, setSource] = useState<HomeRowSource | "all">("all");
   const [query, setQuery] = useState("");
+  const [expandedRails, setExpandedRails] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => { setSimklResults([]); setSimklQuery(""); }, [activeProfile?.id]);
   const catalogs = [...homeServerCatalogs, ...standardCatalogs];
   const currentImportTarget = useRef({ profileId: activeProfile?.id, catalogs });
@@ -51,9 +53,12 @@ export function CatalogsSection() {
   const updateCatalogs = (next: CatalogConfig[], hiddenIds = settings.hiddenCatalogIds, extra: Partial<AppSettings> = {}) => {
     const homeServer = next.filter((catalog) => catalog.sourceType === "home-server");
     const standard = next.filter((catalog) => catalog.sourceType !== "home-server");
+    const clearedDefaultsMarker = next.some((catalog) => isDefaultCollection(catalog) && catalog.enabled)
+      ? hiddenIds.filter((id) => id !== DEFAULT_COLLECTIONS_DISABLED)
+      : hiddenIds;
     updateSettings({
       catalogs: next,
-      hiddenCatalogIds: updateHiddenCatalogIds(standard, hiddenIds),
+      hiddenCatalogIds: updateHiddenCatalogIds(standard, clearedDefaultsMarker),
       hiddenAddonCatalogIds: updateHiddenCatalogIds(standard.filter((catalog) => catalog.sourceType === "addon"), settings.hiddenAddonCatalogIds),
       hiddenHomeServerCatalogIds: updateHiddenCatalogIds(homeServer, settings.hiddenHomeServerCatalogIds),
       ...extra,
@@ -61,28 +66,71 @@ export function CatalogsSection() {
   };
   const patchCatalog = (id: string, patch: Partial<CatalogConfig>, extra?: Partial<AppSettings>) =>
     updateCatalogs(catalogs.map((c) => c.id === id ? { ...c, ...patch } : c), settings.hiddenCatalogIds, extra);
+  const setRowsEnabled = (ids: Set<string>, enabled: boolean) =>
+    updateCatalogs(setCatalogsEnabledWithParentRails(catalogs, ids, enabled));
 
   const sourceLabel = (id: HomeRowSource) => ({
     tmdb: translateUi("Built-in"), addon: translateUi("Addon catalogs"), lists: translateUi("Trakt, MDBList and SIMKL lists"),
     "home-server": translateUi("Home server libraries"), collections: translateUi("Collections"), youtube: translateUi("YouTube"),
   })[id];
-  const counts = useMemo(() => {
-    const map = new Map<HomeRowSource, number>();
-    for (const catalog of catalogs) map.set(homeRowSource(catalog), (map.get(homeRowSource(catalog)) ?? 0) + 1);
+  const foldersByGroup = useMemo(() => {
+    const map = new Map<string, CatalogConfig[]>();
+    for (const catalog of catalogs) {
+      if (String(catalog.kind).toUpperCase() !== "COLLECTION") continue;
+      const key = collectionGroupKey(catalog);
+      if (!key) continue;
+      const list = map.get(key) ?? [];
+      list.push(catalog);
+      map.set(key, list);
+    }
     return map;
   }, [catalogs]);
+  const foldersFor = (rail: CatalogConfig) => {
+    const key = collectionGroupKey(rail);
+    return key ? (foldersByGroup.get(key) ?? []) : [];
+  };
+  const topLevelCatalogs = useMemo(
+    () => catalogs.filter((catalog) => String(catalog.kind).toUpperCase() !== "COLLECTION"),
+    [catalogs]
+  );
+  const counts = useMemo(() => {
+    const map = new Map<HomeRowSource, number>();
+    for (const catalog of topLevelCatalogs) map.set(homeRowSource(catalog), (map.get(homeRowSource(catalog)) ?? 0) + 1);
+    return map;
+  }, [topLevelCatalogs]);
   const needle = query.trim().toLowerCase();
-  const filtered = catalogs.filter((catalog) => (source === "all" || homeRowSource(catalog) === source) &&
-    (!needle || catalog.name.toLowerCase().includes(needle)));
+  const filtered = topLevelCatalogs.filter((catalog) => {
+    if (source !== "all" && homeRowSource(catalog) !== source) return false;
+    if (!needle) return true;
+    if (catalog.name.toLowerCase().includes(needle)) return true;
+    return foldersFor(catalog).some((folder) => folder.name.toLowerCase().includes(needle));
+  });
   const filteredKeys = filtered.map((catalog) => catalog.id);
   const isFiltered = source !== "all" || Boolean(needle);
   const move = (from: number, to: number) => {
-    const next = isFiltered ? moveWithinSubset(catalogs, (catalog) => catalog.id, filteredKeys, from, to) : moveIndex(catalogs, from, to);
+    const next = moveWithinSubset(catalogs, (catalog) => catalog.id, filteredKeys, from, to);
     if (next !== catalogs) updateCatalogs(next);
   };
-  const setFilteredEnabled = (enabled: boolean) => {
-    const ids = new Set(filteredKeys);
-    updateCatalogs(catalogs.map((catalog) => ids.has(catalog.id) ? { ...catalog, enabled } : catalog));
+  const setFilteredEnabled = (enabled: boolean) => setRowsEnabled(new Set(filteredKeys), enabled);
+  const toggleRailExpanded = (railId: string) => {
+    setExpandedRails((prev) => {
+      const next = new Set(prev);
+      if (next.has(railId)) next.delete(railId);
+      else next.add(railId);
+      return next;
+    });
+  };
+  const catalogSubtitle = (catalog: CatalogConfig) => {
+    const kind = String(catalog.kind ?? "").toUpperCase();
+    if (kind === "COLLECTION_RAIL") {
+      const total = foldersFor(catalog).length;
+      const enabledCount = collectionFolders(catalog, catalogs).length;
+      return total
+        ? `${sourceLabel("collections")} · ${translateUi("{value0}/{value1} items shown", { value0: enabledCount, value1: total })}`
+        : `${sourceLabel("collections")} · ${translateUi("Collection rail")}`;
+    }
+    const detail = catalog.sourceUrl || catalog.endpoint || catalog.addonCatalogId;
+    return `${sourceLabel(homeRowSource(catalog))}${detail ? ` · ${detail}` : ""}`;
   };
 
   const addSimklCatalog = async (rawUrl: string) => {
@@ -135,7 +183,8 @@ export function CatalogsSection() {
     }
   };
 
-  const shown = catalogs.filter((c) => c.enabled);
+  const enabledCount = topLevelCatalogs.filter((c) => c.enabled).length;
+  const shown = visibleHomeCatalogs(catalogs);
   const collectionPacks = Array.from(new Map(catalogs.filter((c) => c.packId?.startsWith("usercol_")).map((c) => [c.packId!, c.packName || c.name])).entries());
   const hasDefaultCollections = catalogs.some((c) => isDefaultCollection(c) && c.kind === "COLLECTION_RAIL");
 
@@ -145,10 +194,10 @@ export function CatalogsSection() {
         <button type="button" className="st-btn" onClick={() => updateCatalogs([...homeServerCatalogs, ...defaultCatalogs])}><RotateCcw size={16} /> {translateUi("Reset to defaults")}</button>
       </SectionHeader>
 
-      <Group title={`${translateUi("Rows")} · ${shown.length}/${catalogs.length} ${translateUi("shown")}`}
+      <Group title={`${translateUi("Rows")} · ${enabledCount}/${topLevelCatalogs.length} ${translateUi("shown")}`}
         description={<>{translateUi("Drag rows, or use the arrows, to set the order. Filter by source to arrange one kind of row at a time; rows you can't see keep their place.")} <ScopeBadge scope="all" /></>}>
         <div className="st-chips" role="group" aria-label={translateUi("Filter by source")}>
-          <button type="button" className="st-chip" aria-pressed={source === "all"} onClick={() => setSource("all")}>{translateUi("All")} <small>{catalogs.length}</small></button>
+          <button type="button" className="st-chip" aria-pressed={source === "all"} onClick={() => setSource("all")}>{translateUi("All")} <small>{topLevelCatalogs.length}</small></button>
           {HOME_ROW_SOURCES.filter(([id]) => counts.get(id)).map(([id]) => (
             <button type="button" key={id} className="st-chip" aria-pressed={source === id} onClick={() => setSource(id)}>{sourceLabel(id)} <small>{counts.get(id)}</small></button>
           ))}
@@ -172,29 +221,77 @@ export function CatalogsSection() {
                 <>
                   <input className="st-input is-wide" aria-label={`${translateUi("Row name")}: ${catalog.name}`} value={catalog.name}
                     onChange={(e) => patchCatalog(catalog.id, { name: e.target.value, title: e.target.value })} />
-                  <span className="st-sort-sub">{sourceLabel(homeRowSource(catalog))}{(catalog.sourceUrl || catalog.endpoint || catalog.addonCatalogId) ? ` · ${catalog.sourceUrl || catalog.endpoint || catalog.addonCatalogId}` : ""}</span>
+                  <span className="st-sort-sub">{catalogSubtitle(catalog)}</span>
                 </>
               )}
-              renderActions={(catalog) => (
-                <>
-                  <Segmented label={`${translateUi("Card style")}: ${catalog.name}`} value={catalog.layout ?? "landscape"} options={[["landscape", "Wide"], ["poster", "Poster"]]}
-                    onChange={(layout) => patchCatalog(catalog.id, { layout }, { catalogueRowLayoutModes: withRowLayoutMode(settings.catalogueRowLayoutModes, catalog.id, layout) })} />
+              renderActions={(catalog) => {
+                const isRail = String(catalog.kind ?? "").toUpperCase() === "COLLECTION_RAIL";
+                const railFolders = isRail ? foldersFor(catalog) : [];
+                const enabledFoldersCount = railFolders.filter((folder) => folder.enabled).length;
+                const expanded = isRail && (expandedRails.has(catalog.id) || (Boolean(needle) && railFolders.some((folder) => folder.name.toLowerCase().includes(needle))));
+                return <>
+                  {isRail && railFolders.length > 0 ? (
+                    <button type="button" className="st-btn" aria-expanded={expanded} onClick={() => toggleRailExpanded(catalog.id)}>
+                      {enabledFoldersCount}/{railFolders.length} {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                    </button>
+                  ) : !isRail ? (
+                    <Segmented label={`${translateUi("Card style")}: ${catalog.name}`} value={catalog.layout ?? "landscape"} options={[["landscape", "Wide"], ["poster", "Poster"]]}
+                      onChange={(layout) => patchCatalog(catalog.id, { layout }, { catalogueRowLayoutModes: withRowLayoutMode(settings.catalogueRowLayoutModes, catalog.id, layout) })} />
+                  ) : null}
                   <button type="button" className="st-icon-btn" aria-label={`${catalog.enabled ? translateUi("Hide") : translateUi("Show")} ${catalog.name}`}
-                    onClick={() => patchCatalog(catalog.id, { enabled: !catalog.enabled })}>
+                    onClick={() => setRowsEnabled(new Set([catalog.id]), !catalog.enabled)}>
                     {catalog.enabled ? <Eye size={17} /> : <EyeOff size={17} />}
                   </button>
                   {!catalog.isPreinstalled && catalog.sourceType !== "home-server" && (
                     <button type="button" className="st-icon-btn is-danger" aria-label={translateUi("Remove {value0}", { value0: catalog.name })}
                       onClick={() => updateCatalogs(catalogs.filter((c) => c.id !== catalog.id))}><Trash2 size={17} /></button>
                   )}
-                </>
-              )}
+                </>;
+              }}
+              renderFooter={(catalog) => {
+                if (String(catalog.kind ?? "").toUpperCase() !== "COLLECTION_RAIL") return null;
+                const railFolders = foldersFor(catalog);
+                if (!railFolders.length) return null;
+                const matching = needle ? railFolders.filter((folder) => folder.name.toLowerCase().includes(needle)) : [];
+                const expanded = expandedRails.has(catalog.id) || matching.length > 0;
+                if (!expanded) return null;
+                const shownFolders = needle && !catalog.name.toLowerCase().includes(needle) && matching.length > 0 ? matching : railFolders;
+                const folderIds = new Set(shownFolders.map((folder) => folder.id));
+                return (
+                  <div className="st-rail-folders">
+                    <div className="st-rail-folders-head">
+                      <span className="st-rail-folders-note">
+                        {catalog.enabled
+                          ? translateUi("Hide or show individual items inside {value0}.", { value0: catalog.name })
+                          : translateUi("{value0} is hidden on Home — showing any item turns {value0} back on.", { value0: catalog.name })}
+                      </span>
+                      <button type="button" className="st-btn" onClick={() => setRowsEnabled(folderIds, true)}>{translateUi("Show all")}</button>
+                      <button type="button" className="st-btn" onClick={() => setRowsEnabled(folderIds, false)}>{translateUi("Hide all")}</button>
+                    </div>
+                    <div className="st-folder-chips">
+                      {shownFolders.map((folder) => (
+                        <button
+                          key={folder.id}
+                          type="button"
+                          className={`st-folder-chip${folder.enabled ? "" : " is-off"}`}
+                          aria-pressed={folder.enabled}
+                          onClick={() => setRowsEnabled(new Set([folder.id]), !folder.enabled)}
+                        >
+                          {folder.enabled ? <Eye size={13} /> : <EyeOff size={13} />}
+                          <span>{folder.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }}
             />
           </div>
           <aside className="st-preview" aria-label={translateUi("Preview")}>
             <h4>{translateUi("Preview")} · {translateUi("Home")}</h4>
             <p>{translateUi("Rows that are shown, top to bottom. Rows with nothing to show are skipped on Home.")}</p>
             <ol>
+              {shown.length === 0 && <li className="st-preview-more">{translateUi("No rows are currently shown on Home.")}</li>}
               {shown.slice(0, 16).map((catalog) => (
                 <li key={catalog.id} className={filteredKeys.includes(catalog.id) && isFiltered ? "is-focus" : ""}>
                   {catalog.layout === "poster" ? <PosterIcon size={13} aria-label={translateUi("Poster")} /> : <RectangleHorizontal size={13} aria-label={translateUi("Wide")} />}
@@ -244,10 +341,19 @@ export function CatalogsSection() {
       </Group>
 
       <Group title="Collections" description="Import a collections pack from a URL or paste its JSON.">
-        {hasDefaultCollections && (
+        {hasDefaultCollections ? (
           <Row id="default-collections" label="Default collections" scope="all">
             <Toggle label="Default collections" value={catalogs.some((c) => isDefaultCollection(c) && c.kind === "COLLECTION_RAIL" && c.enabled)}
               onChange={(enabled) => { const next = setDefaultCollectionsEnabled(catalogs, settings.hiddenCatalogIds, enabled); updateCatalogs(next.catalogs, next.hiddenIds); }} />
+          </Row>
+        ) : (
+          <Row id="default-collections" label="Default collections" hint="Add Featured, Services, Genres, Franchises and Decades without changing your other rows." scope="all">
+            <button type="button" className="st-btn" onClick={() => {
+              const next = addMissingDefaultCollections(catalogs, settings.hiddenCatalogIds);
+              updateCatalogs(next.catalogs, next.hiddenIds);
+            }}>
+              <Plus size={16} /> {translateUi("Add default collections")}
+            </button>
           </Row>
         )}
         {collectionPacks.length > 0 && (

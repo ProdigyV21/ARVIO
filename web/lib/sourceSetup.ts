@@ -33,7 +33,7 @@ export function sourceSetupState(addons: InstalledAddon[], settings: Pick<AppSet
   };
 }
 
-export type SourceSettingsSection = "homeserver" | "tv";
+export type SourceSettingsSection = "homeserver" | "tv" | "catalogs";
 export const SOURCE_SETTINGS_EVENT = "arvio:source-settings";
 let requestedSection: SourceSettingsSection | null = null;
 
