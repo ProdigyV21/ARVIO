@@ -8047,13 +8047,22 @@ class PlayerViewModel @Inject constructor(
         playbackState: Int,
         closing: Boolean = false
     ): Job? {
-        if (progressDiscardedForIdle || duration <= 0) return null
+        val matchedIptvVod = isMatchedIptvVodPlayback(
+            currentMediaType, currentMediaId, currentSeason, currentEpisode,
+            _uiState.value.selectedStream?.addonId, currentIsLiveStreamPlayback
+        )
+        if (progressDiscardedForIdle || (duration <= 0 && !matchedIptvVod)) return null
+        val unknownDurationProgress = if (duration <= 0) unknownDurationVodProgress(
+            position, _uiState.value.expectedDurationMs, playbackState == Player.STATE_ENDED
+        ) else null
+        val trackingDuration = unknownDurationProgress?.durationMs ?: duration
+        val trackingPercent = unknownDurationProgress?.percent?.toInt() ?: progressPercent
         noteRecentSourcePlayback(position, isPlaying)
 
         // A completion transaction must not be cancelled/restarted by the ended polling tick
         // or the player's disposal save. It can finish after the UI's short navigation wait.
         if (progressSaveCompleting && progressSaveJob?.isActive == true) return progressSaveJob
-        val completing = playbackState == Player.STATE_ENDED || progressPercent >= Constants.WATCHED_THRESHOLD
+        val completing = playbackState == Player.STATE_ENDED || trackingPercent >= Constants.WATCHED_THRESHOLD
 
         // On pause/stop, replace an in-flight periodic save. During normal playback,
         // debounce by returning the save that is already running.
@@ -8069,12 +8078,14 @@ class PlayerViewModel @Inject constructor(
             // A surviving final save still belongs to the profile that watched this video.
             profileManager.activeProfileId.first { it != completionProfileId }
         }) {
+            val duration = trackingDuration
+            val progressPercent = trackingPercent
             val currentTime = System.currentTimeMillis()
             val progressFraction = (progressPercent / 100f).coerceIn(0f, 1f)
             // Trackers store a percentage, never a position, so a resume time on
             // another device is only ever as precise as this number. Sending the
             // truncated integer percent costs up to a minute on a feature film.
-            val scrobbleProgressPercent = if (duration > 0L) {
+            val scrobbleProgressPercent = unknownDurationProgress?.percent ?: if (duration > 0L) {
                 (position.toDouble() / duration.toDouble() * 100.0).toFloat().coerceIn(0f, 100f)
             } else {
                 progressPercent.toFloat()
@@ -8172,7 +8183,7 @@ class PlayerViewModel @Inject constructor(
             // the next-episode CW entry, and saving the finished episode's full position here
             // would contaminate the next episode's resume time via show-level history fallback.
             val isAtWatchedThreshold = progressPercent >= Constants.WATCHED_THRESHOLD
-            val durationSeconds = (duration / 1000L).coerceAtLeast(1L)
+            val durationSeconds = if (duration > 0L) (duration / 1000L).coerceAtLeast(1L) else 0L
             val positionSeconds = (position / 1000L).coerceAtLeast(0L)
             val hasSeekJump = lastWatchHistorySavedPositionSeconds >= 0L &&
                 kotlin.math.abs(positionSeconds - lastWatchHistorySavedPositionSeconds) >= 20L
@@ -8344,6 +8355,8 @@ class PlayerViewModel @Inject constructor(
      */
     fun onLivePlaybackDetected() {
         if (currentIsLiveStreamPlayback) return
+        if (isMatchedIptvVodPlayback(currentMediaType, currentMediaId, currentSeason, currentEpisode,
+                _uiState.value.selectedStream?.addonId)) return
         currentIsLiveStreamPlayback = true
         val mediaType = currentMediaType
         val mediaId = currentMediaId

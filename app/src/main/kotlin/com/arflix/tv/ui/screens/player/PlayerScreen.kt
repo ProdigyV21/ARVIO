@@ -509,12 +509,17 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var confirmedSource by remember { mutableStateOf<String?>(null) }
     fun selectedSourceKey(): String? =
         latestUiState.selectedStreamUrl?.let { "${latestUiState.streamSelectionNonce}|$it" }
+    fun matchedIptvVodPlayback(): Boolean = isMatchedIptvVodPlayback(
+        args.mediaType, args.mediaId, args.tmdbSeasonNumber ?: args.seasonNumber,
+        args.tmdbEpisodeNumber ?: args.episodeNumber, latestUiState.selectedStream?.addonId, args.isLiveStream
+    )
     fun playbackVideoStatus(): PlaybackVideoStatus = classifyPlaybackVideo(
-        durationMs = duration,
+        durationMs = playbackTrackingDurationMs(duration, currentSourceIsLive, matchedIptvVodPlayback()),
         expectedDurationMs = latestUiState.expectedDurationMs,
         playbackUrl = latestUiState.selectedStreamUrl,
         metadataPending = latestUiState.isLoadingPlaybackMetadata,
-        isLive = args.isLiveStream || currentSourceIsLive
+        isLive = args.isLiveStream || (currentSourceIsLive && !matchedIptvVodPlayback()),
+        allowUnknownDurationVod = matchedIptvVodPlayback() && hasPlaybackStarted
     )
     fun playingCheckedRealSource(): Boolean = canPersistPlaybackSource(
         selectedSourceKey(), loadedSource, placeholderCheckedSource, playbackVideoStatus()
@@ -645,7 +650,7 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
                 nextEpisodeTransitionInProgress = true
 
                 val positionSnapshot = currentPosition
-                val durationSnapshot = duration
+                val durationSnapshot = playbackTrackingDurationMs(duration, currentSourceIsLive, matchedIptvVodPlayback())
                 val playbackStateSnapshot = currentPlaybackState
                 val progressPercentSnapshot = if (durationSnapshot > 0L) {
                     ((positionSnapshot.toDouble() / durationSnapshot.toDouble()) * 100.0)
@@ -817,7 +822,8 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
     var autoAdvanceAttempts by remember { mutableIntStateOf(0) }
     var triedStreamIndexes by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var isAutoAdvancing by remember { mutableStateOf(false) }
-    var lastProgressReportSecond by remember { mutableLongStateOf(-1L) }
+    var lastProgressReportSecond by remember(selectedSourceKey()) { mutableLongStateOf(-1L) }
+    var lastProgressReportPlaying by remember(selectedSourceKey()) { mutableStateOf<Boolean?>(null) }
     // Guard against accessing a released ExoPlayer from long-running coroutines (can crash on some devices).
     // AtomicBoolean gives cross-thread visibility; Compose state drives recomposition.
     val playerReleasedAtomic = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
@@ -2284,7 +2290,10 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
         // navigation hostage. The save job belongs to the ViewModel, not this waiting coroutine.
         showControls = true
         val finalPosition = exoPlayer.currentPosition
-        val finalDuration = exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: duration
+        val finalDuration = playbackTrackingDurationMs(
+            exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: duration,
+            exoPlayer.isCurrentMediaItemLive, matchedIptvVodPlayback()
+        )
         coroutineScope.launch {
             try {
                 withTimeoutOrNull(2_000L) {
@@ -3553,17 +3562,19 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             // Someone watching without touching the remote is not idle.
             if (exoPlayer.isPlaying) viewModel.idleReturnCoordinator.markActive()
 
-            if (!leftForIdle && currentPosition > 0 && duration > 0 && playingCheckedRealSource()) {
+            if (!leftForIdle && canReportPlaybackProgress(currentPosition, duration, matchedIptvVodPlayback()) && playingCheckedRealSource()) {
                 val currentSecond = (currentPosition / 1000L).coerceAtLeast(0L)
-                val shouldReport =
-                    (!exoPlayer.isPlaying && currentSecond != lastProgressReportSecond) ||
-                        (exoPlayer.isPlaying && (lastProgressReportSecond < 0L || currentSecond - lastProgressReportSecond >= 3L))
+                val shouldReport = shouldReportPlaybackProgress(
+                    lastProgressReportSecond, currentSecond, lastProgressReportPlaying, exoPlayer.isPlaying
+                )
                 if (shouldReport) {
                     lastProgressReportSecond = currentSecond
-                    val progressPercent = (currentPosition.toFloat() / duration.toFloat() * 100).toInt()
+                    lastProgressReportPlaying = exoPlayer.isPlaying
+                    val trackingDuration = playbackTrackingDurationMs(duration, currentSourceIsLive, matchedIptvVodPlayback())
+                    val progressPercent = if (trackingDuration > 0L) (currentPosition.toFloat() / trackingDuration.toFloat() * 100).toInt() else 0
                     viewModel.saveProgress(
                         currentPosition,
-                        duration,
+                        trackingDuration,
                         progressPercent,
                         isPlaying = exoPlayer.isPlaying,
                         playbackState = exoPlayer.playbackState
@@ -3593,7 +3604,9 @@ private fun PlayerScreenContent(args: PlayerScreenArgs, viewModel: PlayerViewMod
             if (!nextEpisodeTransitionInProgress && !leftForIdle && playingCheckedRealSource()) {
                 runCatching {
                     if (exoPlayer.isCurrentMediaItemLive) viewModel.onLivePlaybackDetected()
-                    val safeDuration = exoPlayer.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
+                    val safeDuration = playbackTrackingDurationMs(
+                        exoPlayer.duration, exoPlayer.isCurrentMediaItemLive, matchedIptvVodPlayback()
+                    )
                     val safeProgressPercent = if (safeDuration > 0L) {
                         ((exoPlayer.currentPosition.toDouble() / safeDuration.toDouble()) * 100.0)
                             .toInt()
