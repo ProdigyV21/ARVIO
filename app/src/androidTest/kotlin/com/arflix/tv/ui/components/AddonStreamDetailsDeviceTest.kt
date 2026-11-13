@@ -46,12 +46,12 @@ class AddonStreamDetailsDeviceTest {
         description = "$description\nSource: $index"
     ) }
 
-    @Before fun resetPreference() = runBlocking {
+    @Before fun resetPreference(): Unit = runBlocking {
         context.profilesDataStore.edit { previousProfile = it[activeProfile]; it[activeProfile] = profile }
         context.settingsDataStore.edit { it.remove(addonStreamDetailsKey(profile)) }
     }
 
-    @After fun restoreProfile() = runBlocking {
+    @After fun restoreProfile(): Unit = runBlocking {
         context.profilesDataStore.edit { prefs ->
             previousProfile?.let { prefs[activeProfile] = it } ?: prefs.remove(activeProfile)
         }
