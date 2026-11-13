@@ -2324,7 +2324,7 @@ private fun OledSourceRow(
         val description = remember(presentation.stream.description, showAddonStreamDetails) {
             tvAddonStreamDescription(presentation.stream.description, showAddonStreamDetails)
         }
-        if (description != null) {
+        if (description != null && expandedLines > 0) {
             Spacer(Modifier.height(8.dp))
             Text(
                 text = description,
@@ -2338,7 +2338,7 @@ private fun OledSourceRow(
 }
 
 internal fun addonDescriptionMaxLines(availableHeight: Float, lineHeight: Float): Int =
-    (availableHeight / lineHeight).toInt().coerceIn(1, 12)
+    (availableHeight / lineHeight).toInt().coerceIn(0, 12)
 
 internal fun tvAddonStreamDescription(raw: String?, enabled: Boolean): String? =
     if (enabled) raw?.trim()?.takeIf { it.isNotBlank() }?.let(::withEmojiPresentation) else null
