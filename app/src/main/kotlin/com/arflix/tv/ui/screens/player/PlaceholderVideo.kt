@@ -19,12 +19,13 @@ internal fun classifyPlaybackVideo(
     expectedDurationMs: Long,
     playbackUrl: String?,
     metadataPending: Boolean,
-    isLive: Boolean
+    isLive: Boolean,
+    allowUnknownDurationVod: Boolean = false
 ): PlaybackVideoStatus {
     if (isLive || durationMs > PLACEHOLDER_MAX_DURATION_MS) return PlaybackVideoStatus.REAL
     val path = runCatching { URI(playbackUrl.orEmpty()).path?.lowercase(Locale.US) }.getOrNull()
     if (path in PLACEHOLDER_PATHS) return PlaybackVideoStatus.PLACEHOLDER
-    if (durationMs <= 0L) return PlaybackVideoStatus.PENDING
+    if (durationMs <= 0L) return if (allowUnknownDurationVod) PlaybackVideoStatus.REAL else PlaybackVideoStatus.PENDING
     // Wait for the actual episode's runtime, not the show's average (specials may be short).
     if (metadataPending) return PlaybackVideoStatus.PENDING
     return if (expectedDurationMs > PLACEHOLDER_MAX_DURATION_MS && durationMs <= expectedDurationMs / 3) {

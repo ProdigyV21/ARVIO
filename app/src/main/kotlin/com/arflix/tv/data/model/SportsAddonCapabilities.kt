@@ -161,6 +161,7 @@ object SportsAddonCapabilities {
 
     fun isLiveStreamAddon(addon: Addon?): Boolean {
         if (addon == null) return false
+        if (IptvVodSourceIds.isIptvVodAddonId(addon.id)) return false
         val manifest = addon.manifest
         return if (manifest != null) {
             isLiveStreamManifest(manifest)
