@@ -40,6 +40,7 @@ import org.junit.runner.RunWith
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Provider
 
@@ -67,6 +68,7 @@ class IptvVodTrackingDeviceTest {
                     val path = request.requestUrl!!.encodedPath
                     if (path == "/episode.ts") return MockResponse().addHeader("Content-Type", "video/mp2t")
                         .setChunkedBody(Buffer().write(bytes), 188 * 4)
+                        .throttleBody(188 * 4L, 250, TimeUnit.MILLISECONDS)
                     if (path == "/episode.m3u8") return MockResponse().addHeader("Content-Type", "application/vnd.apple.mpegurl")
                         .setBody("#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:21\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:20.5,\nepisode.ts\n")
                     if (path.startsWith("/scrobble/")) {
@@ -139,7 +141,7 @@ class IptvVodTrackingDeviceTest {
     private fun state() = field("_uiState").get(model) as MutableStateFlow<PlayerUiState>
     private fun select(id: String) {
         state().value = state().value.copy(selectedStream = StreamSource("Episode", "IPTV VOD", id, "", "",
-            url = server.url("/episode.ts").toString()), expectedDurationMs = 600_000)
+            url = server.url("/episode.ts").toString()), expectedDurationMs = 20_500)
         val manifest = AddonManifest("live-parent", "IPTV", "1", types = listOf("tv"))
         field("currentInstalledAddons").set(model, listOf(Addon(id, "IPTV", "1", "", true,
             type = AddonType.COMMUNITY, manifest = manifest)))
@@ -172,7 +174,7 @@ class IptvVodTrackingDeviceTest {
     private suspend fun report(player: ExoPlayer, closing: Boolean = false) {
         val matched = isMatchedIptvVodPlayback(MediaType.TV, 1416, 22, 15, model.uiState.value.selectedStream?.addonId)
         val duration = playbackTrackingDurationMs(player.duration, player.isCurrentMediaItemLive, matched)
-        val status = classifyPlaybackVideo(duration, 600_000, model.uiState.value.selectedStream?.url, false,
+        val status = classifyPlaybackVideo(duration, model.uiState.value.expectedDurationMs, model.uiState.value.selectedStream?.url, false,
             player.isCurrentMediaItemLive && !matched, allowUnknownDurationVod = matched && firstFrame.get())
         assertEquals(PlaybackVideoStatus.REAL, status)
         assertTrue(canPersistPlaybackSource("fixture", "fixture", "fixture", status))
