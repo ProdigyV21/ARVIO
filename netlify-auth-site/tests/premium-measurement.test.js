@@ -103,6 +103,54 @@ test('valid marketing tags cannot alter object prototypes or corrupt counts', ()
   }
 });
 
+test('all released checkout entry labels are counted and unknown labels remain unspecified', () => {
+  const valid = ['trial_nav', 'trial_mobile_nav', 'paywall', 'account_settings', 'account_settings_yearly', 'feature_preview',
+    ...['play', 'live', 'external', 'download', 'copy'].flatMap(intent => ['monthly', 'yearly'].map(plan => `explore_${intent}_${plan}`))];
+  const invalid = ['explore_private_yearly', 'explore_play_daily', 'account_settings_forever', 'https://private.test/path', 'person@example.test', 'explore_play_yearly/private', '__proto__'];
+  const records = [...valid, ...invalid].flatMap((entry, index) => [
+    { accountKey: `buyer-${index}`, eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata: { source: 'reddit', entry } },
+    { accountKey: `buyer-${index}`, eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' }
+  ]);
+  const report = measurement.summarizeMeasurements(records, []);
+  for (const entry of valid) {
+    assert.equal(report.paymentAttribution.byCheckoutEntry[entry], 1);
+    assert.equal(report.checkoutDiagnostics.byEntry[entry].membershipLinkOpened, 1);
+  }
+  for (const entry of invalid) {
+    assert.equal(Object.hasOwn(report.paymentAttribution.byCheckoutEntry, entry), false);
+    assert.equal(Object.hasOwn(report.checkoutDiagnostics.byEntry, entry), false);
+  }
+  assert.equal(report.paymentAttribution.byCheckoutEntry.unknown, invalid.length);
+  assert.equal(report.checkoutDiagnostics.byEntry.unspecified.membershipLinkOpened, invalid.length);
+  assert.equal(Object.values(report.paymentAttribution.byCheckoutEntry).reduce((sum, count) => sum + count, 0), valid.length + invalid.length);
+});
+
+test('checkout entry attribution uses the latest retained click before payment, never a later click', () => {
+  const record = (eventName, time, entry) => ({ accountKey: 'buyer', eventName, firstAt: `2026-11-10T${time}:00Z`, metadata: { source: 'reddit', entry } });
+  const result = measurement.summarizeMeasurements([
+    record('checkout_opened', '10:00', 'feature_preview'),
+    record('checkout_opened', '10:01', 'explore_play_yearly'),
+    record('subscription_started', '10:05'),
+    record('checkout_opened', '10:06', 'explore_play_monthly')
+  ], []).paymentAttribution;
+  assert.deepEqual(result.byCheckoutEntry, { explore_play_yearly: 1 });
+});
+
+test('internal legacy hostname sources cannot inflate referral medium counts', () => {
+  const inputs = [
+    { source: 'arvio.tv', medium: 'referral', referrer: 'arvio.tv' },
+    { source: 'direct', medium: 'referral', referrer: 'web.arvio.tv' },
+    { source: 'newsletter', medium: 'email', referrer: 'arvio.tv' }
+  ];
+  const records = inputs.flatMap((metadata, index) => [
+    { accountKey: `buyer-${index}`, eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata },
+    { accountKey: `buyer-${index}`, eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' }
+  ]);
+  const result = measurement.summarizeMeasurements(records, []).paymentAttribution;
+  assert.deepEqual(result.bySource, { internal: 2, newsletter: 1 });
+  assert.deepEqual(result.byMedium, { internal: 2, email: 1 });
+});
+
 test('unknown payments remain unknown and post-payment visits cannot claim them', () => {
   const records = [
     { accountKey: 'later', eventName: 'subscription_started', firstAt: '2026-11-10T10:00:00Z' },

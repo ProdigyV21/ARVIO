@@ -13,7 +13,8 @@ const CHECKOUT_EVENTS = {
   membership_link_started: "billingLinkStarted", membership_linked: "billingLinkReportedComplete",
   membership_link_failed: "billingLinkFailed", billing_email_verified: "billingOwnershipVerified"
 };
-const CHECKOUT_ENTRIES = new Set(["trial_nav", "trial_mobile_nav", "paywall", "account_settings", "feature_preview"]);
+const CHECKOUT_ENTRIES = new Set(["trial_nav", "trial_mobile_nav", "paywall", "account_settings", "account_settings_yearly", "feature_preview",
+  ...["play", "live", "external", "download", "copy"].flatMap(intent => ["monthly", "yearly"].map(plan => `explore_${intent}_${plan}`))]);
 const CHECKOUT_FLOW_VERSIONS = new Set(["direct_v2", "paid_only_v1", "explore_v1"]);
 const ATTRIBUTION_EVENTS = new Set(["journey_connected", "web_opened", "account_connected", "paywall_view", "membership_cta_viewed", "checkout_opened"]);
 const PAGE_LABELS = new Set(["home", "premium", "handoff", "web", ...GUIDE_PAGES]);
@@ -81,7 +82,10 @@ function paymentSource(input) {
     basis = "internal";
   } else if (source === "direct") basis = "direct";
   if (!source || ["unknown", "unattributed"].includes(source)) return null;
-  let medium = metadata.medium;
+  // An ARVIO-to-ARVIO navigation is internal even when an older client called
+  // its hostname referrer a referral. Explicit external campaign sources keep
+  // their supplied medium.
+  let medium = source === "internal" ? "internal" : metadata.medium;
   if (!medium || medium === "web") {
     const organic = /^(?:www\.)?google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(referrer || "") ||
       ["bing.com", "www.bing.com", "duckduckgo.com", "www.duckduckgo.com"].includes(referrer);
