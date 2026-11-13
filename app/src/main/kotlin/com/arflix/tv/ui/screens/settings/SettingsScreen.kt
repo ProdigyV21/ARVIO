@@ -340,7 +340,7 @@ internal fun tvGeneralRowsForSection(section: String): List<Int> {
             (if (BuildConfig.AUDIO_SYNC_AVAILABLE) listOf(48) else emptyList()) +
             listOf(39, 9, 45)
         "ai_subtitles" -> listOf(28, 29, 30, 31, 32, 33) + LIVE_AI_SUBS_ROWS
-        "playback" -> listOf(10, 11, 12, 43, 44, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54)
+        "playback" -> listOf(10, 11, 12, 43, 44, 55, 13, 14, 34, 37, 16, 15, 40, 27, 53, 54)
         "appearance" -> listOf(17, 49, 50, 18, 20, 21, 24, 23, 22, 41, 46, 36, 47)
         "profiles" -> listOf(19)
         "network" -> listOf(25, 26, 35)
@@ -1507,6 +1507,7 @@ fun SettingsScreen(
                                                 50 -> viewModel.setWatchlistOnHome(!uiState.watchlistOnHome)
                                                 53 -> viewModel.cyclePlaybackCacheSize()
                                                 54 -> viewModel.clearPlaybackCache()
+                                                55 -> viewModel.setShowAddonStreamDetails(!uiState.showAddonStreamDetails)
                                             }
                                         }
                                         "iptv" -> {
@@ -2195,7 +2196,9 @@ fun SettingsScreen(
                             playbackCacheUsedBytes = uiState.playbackCacheUsedBytes,
                             playbackCacheMaxBytes = uiState.playbackCacheMaxBytes,
                             onPlaybackCacheSizeClick = { viewModel.cyclePlaybackCacheSize() },
-                            onClearPlaybackCacheClick = { viewModel.clearPlaybackCache() }
+                            onClearPlaybackCacheClick = { viewModel.clearPlaybackCache() },
+                            showAddonStreamDetails = uiState.showAddonStreamDetails,
+                            onShowAddonStreamDetailsToggle = { viewModel.setShowAddonStreamDetails(it) }
                         )
                         if (showAiModelDialog) {
                             AiModelDialog(
@@ -6901,12 +6904,17 @@ private fun TvGeneralSettingsRows(
     playbackCacheUsedBytes: Long = 0L,
     playbackCacheMaxBytes: Long = 0L,
     onPlaybackCacheSizeClick: () -> Unit = {},
-    onClearPlaybackCacheClick: () -> Unit = {}
+    onClearPlaybackCacheClick: () -> Unit = {},
+    showAddonStreamDetails: Boolean = false,
+    onShowAddonStreamDetailsToggle: (Boolean) -> Unit = {}
 ) {
     Column {
         tvGeneralRowsForSection(section).forEachIndexed { localIndex, rowId ->
             if (localIndex > 0) Spacer(modifier = Modifier.height(10.dp))
             when (rowId) {
+                55 -> SettingsToggleRow(stringResource(R.string.show_addon_stream_details),
+                    stringResource(R.string.show_addon_stream_details_desc), showAddonStreamDetails,
+                    focusedIndex == localIndex, onShowAddonStreamDetailsToggle, Modifier.settingsFocusSlot(localIndex))
                 0 -> SettingsRow(
                     icon = Icons.Default.Language,
                     title = stringResource(R.string.app_language),

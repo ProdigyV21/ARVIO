@@ -242,6 +242,7 @@ data class SettingsUiState(
     val secondarySubtitle: String = "Off",
     val trailerAutoPlay: Boolean = true,
     val trailerSoundEnabled: Boolean = false,
+    val showAddonStreamDetails: Boolean = false,
     val trailerDelaySeconds: Int = 1,
     /** 0 keeps the fixed row height; 6..10 divides the TV guide into that many rows. */
     val guideRowCount: Int = 0,
@@ -567,6 +568,7 @@ class SettingsViewModel @Inject constructor(
     private fun autoPlayMinQualityKeyFor(profileId: String) = profileManager.profileStringKeyFor(profileId, "auto_play_min_quality")
     private fun trailerAutoPlayKey() = profileManager.profileBooleanKey("trailer_auto_play")
     private fun trailerSoundEnabledKey() = profileManager.profileBooleanKey("trailer_sound_enabled")
+    private fun addonStreamDetailsKey() = com.arflix.tv.util.addonStreamDetailsKey(profileManager.getProfileIdSync())
     private fun trailerDelayKey() = profileManager.profileStringKey("trailer_delay_seconds")
     private fun guideRowCountKey() = profileManager.profileStringKey("guide_row_count")
     private fun trailerInCardsKey() = profileManager.profileBooleanKey("trailer_in_cards")
@@ -871,6 +873,7 @@ class SettingsViewModel @Inject constructor(
             val autoPlayMaxSizeGb = AutoplayLimits.normalizeSizeGb(prefs[profileManager.profileIntKey("auto_play_max_size_gb")] ?: 0)
             val trailerAutoPlay = prefs[trailerAutoPlayKey()] ?: true
             val trailerSoundEnabled = prefs[trailerSoundEnabledKey()] ?: false
+            val showAddonStreamDetails = prefs[addonStreamDetailsKey()] ?: false
             val trailerDelaySeconds = prefs[trailerDelayKey()]?.toIntOrNull() ?: 1
             val guideRowCount = prefs[guideRowCountKey()]?.toIntOrNull()
                 ?.takeIf { it in 6..10 } ?: 0
@@ -995,6 +998,7 @@ class SettingsViewModel @Inject constructor(
                 autoPlayMaxSizeGb = autoPlayMaxSizeGb,
                 trailerAutoPlay = trailerAutoPlay,
                 trailerSoundEnabled = trailerSoundEnabled,
+                showAddonStreamDetails = showAddonStreamDetails,
                 trailerDelaySeconds = trailerDelaySeconds,
                 guideRowCount = guideRowCount,
                 trailerInCards = trailerInCards,
@@ -2089,6 +2093,11 @@ class SettingsViewModel @Inject constructor(
     fun setTrailerSoundEnabled(enabled: Boolean) {
         if (!canManage("playback")) return
         preferenceWriter.save(trailerSoundEnabledKey(), enabled, { it.trailerSoundEnabled }, { state, value -> state.copy(trailerSoundEnabled = value) })
+    }
+
+    fun setShowAddonStreamDetails(enabled: Boolean) {
+        if (!canManage("playback")) return
+        preferenceWriter.save(addonStreamDetailsKey(), enabled, { it.showAddonStreamDetails }, { state, value -> state.copy(showAddonStreamDetails = value) })
     }
 
     fun setTrailerInCards(enabled: Boolean) {
