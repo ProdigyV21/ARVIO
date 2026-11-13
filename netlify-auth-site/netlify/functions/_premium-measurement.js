@@ -15,6 +15,9 @@ const CHECKOUT_EVENTS = {
 };
 const CHECKOUT_ENTRIES = new Set(["trial_nav", "trial_mobile_nav", "paywall", "account_settings", "feature_preview"]);
 const CHECKOUT_FLOW_VERSIONS = new Set(["direct_v2", "paid_only_v1", "explore_v1"]);
+const ATTRIBUTION_EVENTS = new Set(["journey_connected", "web_opened", "account_connected", "paywall_view", "membership_cta_viewed", "checkout_opened"]);
+const PAGE_LABELS = new Set(["home", "premium", "handoff", "web", ...GUIDE_PAGES]);
+const INTERNAL_HOSTS = new Set(["arvio.tv", "www.arvio.tv", "web.arvio.tv", "auth.arvio.tv"]);
 
 function summarizeCheckoutDiagnostics(records) {
   const empty = () => Object.fromEntries(Object.values(CHECKOUT_EVENTS).map(name => [name, new Set()]));
@@ -55,7 +58,121 @@ function marketingMetadata(input) {
     // Drop addresses/URLs entirely rather than turning private input into a tag.
     if (typeof value === "string" && /^[a-z0-9._-]{1,80}$/i.test(value)) result[name] = value.toLowerCase();
   }
-  if (["home", "premium", "handoff"].includes(input?.page) || GUIDE_PAGES.has(input?.page)) result.page = input.page;
+  for (const name of ["page", "landing_page"]) if (PAGE_LABELS.has(input?.[name])) result[name] = input[name];
+  // Hostname only: no full URLs, search terms, paths, email addresses or IPs.
+  if (typeof input?.referrer === "string" && input.referrer.length <= 120 && /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/i.test(input.referrer)) {
+    result.referrer = input.referrer.toLowerCase();
+  }
+  return result;
+}
+
+function paymentSource(input) {
+  const metadata = marketingMetadata(input);
+  let source = metadata.source;
+  const referrer = metadata.referrer;
+  let basis = "recorded_source";
+  if ((!source || source === "direct") && referrer && !INTERNAL_HOSTS.has(referrer)) {
+    // Older web clients labelled every untagged visit 'direct', even when the
+    // hostname referrer was recorded. Use that observation, never a guessed UTM.
+    source = referrer;
+    basis = "observed_referrer";
+  } else if (INTERNAL_HOSTS.has(source) || ((!source || source === "direct") && INTERNAL_HOSTS.has(referrer))) {
+    source = "internal";
+    basis = "internal";
+  } else if (source === "direct") basis = "direct";
+  if (!source || ["unknown", "unattributed"].includes(source)) return null;
+  let medium = metadata.medium;
+  if (!medium || medium === "web") {
+    const organic = /^(?:www\.)?google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(referrer || "") ||
+      ["bing.com", "www.bing.com", "duckduckgo.com", "www.duckduckgo.com"].includes(referrer);
+    medium = source === "internal" ? "internal" : source === "direct" ? "direct" :
+      referrer === source ? organic ? "organic" : "referral" : "unknown";
+  }
+  return { ...metadata, source, medium, basis, landing: metadata.landing_page || metadata.page || "unknown" };
+}
+
+function summarizePaymentAttribution(records, contextRecords, verifiedLinks, connectedJourneys) {
+  const owners = new Map();
+  for (const { billingKey, accountKey } of verifiedLinks) {
+    const previous = owners.get(billingKey);
+    owners.set(billingKey, previous === undefined || previous === accountKey ? accountKey : null);
+  }
+  const payments = new Map();
+  for (const record of records) {
+    if (record.eventName !== "subscription_started" || !record.accountKey) continue;
+    const id = owners.get(record.accountKey) || record.accountKey;
+    const at = record.firstAt;
+    if (typeof at !== "string" || !Number.isFinite(Date.parse(at))) continue;
+    const previous = payments.get(id);
+    if (!previous || at < previous.at) payments.set(id, { at, ambiguous: owners.has(record.accountKey) && owners.get(record.accountKey) === null });
+  }
+  const result = {
+    unit: "unique server-confirmed buying identities in this report, including annual upgrades; renewals excluded",
+    lookbackDays: 30,
+    confirmedBuyingAccounts: payments.size, attributedAccounts: 0, externallyAttributedAccounts: 0, directOrInternalAccounts: 0, unattributedAccounts: 0,
+    bySource: {}, byMedium: {}, byCampaign: {}, byLandingPage: {}, byCheckoutEntry: {}, byMethod: {}, bySourceBasis: {}, unattributedReasons: {},
+    note: "Connected anonymous journeys take priority; otherwise the first retained authenticated source observed in the 30 days before payment is used. Each buyer is counted once at their first payment in this period. The same strict 30-day lookback applies regardless of report length. This is observed attribution, not proof of the original acquisition source. Direct/internal means no external acquisition source was observed. Unknowns, privacy opt-outs and direct Ko-fi purchases are never assigned a guessed source. Page and entry labels are bounded; no URLs, account IDs or email addresses are returned."
+  };
+  // Campaign labels are untrusted strings, including valid tags such as
+  // 'constructor' and '__proto__'. Treat every label as an own data property.
+  const bump = (bucket, value) => {
+    const count = Object.hasOwn(bucket, value) ? bucket[value] : 0;
+    Object.defineProperty(bucket, value, { value: count + 1, writable: true, enumerable: true, configurable: true });
+  };
+  const touches = new Map();
+  for (const record of [...contextRecords, ...records]) {
+    if (!payments.has(record.accountKey) || !ATTRIBUTION_EVENTS.has(record.eventName) ||
+        typeof record.firstAt !== "string" || !Number.isFinite(Date.parse(record.firstAt))) continue;
+    const prior = touches.get(record.accountKey) || [];
+    prior.push(record);
+    touches.set(record.accountKey, prior);
+  }
+  for (const prior of touches.values()) prior.sort((a, b) => a.firstAt.localeCompare(b.firstAt) || a.eventName.localeCompare(b.eventName));
+  const journeys = [...connectedJourneys].sort((a, b) => a.firstAt.localeCompare(b.firstAt));
+  for (const [id, payment] of payments) {
+    const paymentTime = Date.parse(payment.at);
+    const cutoff = paymentTime - 30 * 86400000;
+    const prior = (touches.get(id) || []).filter(record => Date.parse(record.firstAt) >= cutoff && Date.parse(record.firstAt) <= paymentTime);
+    let source = null;
+    if (!payment.ambiguous) {
+      // Evaluate every connected journey, not just the legacy earliest match:
+      // a stale, malformed or post-first-purchase journey must not hide a later
+      // eligible source. Numeric timestamps make the cutoff independent of ISO
+      // formatting and report-window length.
+      for (const journey of journeys) {
+        const first = Date.parse(journey.firstAt);
+        const connected = Date.parse(journey.connectedAt);
+        if (journey.accountId !== id || !Number.isFinite(first) || !Number.isFinite(connected) ||
+            first < cutoff || first > paymentTime || connected < first || connected > paymentTime) continue;
+        source = paymentSource(journey.metadata);
+        if (source) break;
+      }
+    }
+    let method = source ? "connected_journey" : "unknown";
+    if (!source && !payment.ambiguous) {
+      for (const record of prior) {
+        source = paymentSource(record.metadata);
+        if (source) { method = "authenticated_event"; break; }
+      }
+    }
+    const checkout = prior.filter(record => record.eventName === "checkout_opened" && CHECKOUT_ENTRIES.has(record.metadata?.entry)).at(-1);
+    if (source) {
+      result.attributedAccounts++;
+      if (["direct", "internal"].includes(source.source)) result.directOrInternalAccounts++;
+      else result.externallyAttributedAccounts++;
+    }
+    else {
+      result.unattributedAccounts++;
+      bump(result.unattributedReasons, payment.ambiguous ? "ambiguous_billing_identity" : prior.length ? "missing_source_metadata" : "no_pre_payment_event");
+    }
+    bump(result.byMethod, method);
+    bump(result.bySource, source?.source || "unknown");
+    bump(result.byMedium, source?.medium || "unknown");
+    bump(result.byCampaign, source?.campaign || "unknown");
+    bump(result.byLandingPage, source?.landing || "unknown");
+    bump(result.bySourceBasis, source?.basis || "unknown");
+    bump(result.byCheckoutEntry, !payment.ambiguous && checkout ? checkout.metadata.entry : "unknown");
+  }
   return result;
 }
 
@@ -177,7 +294,8 @@ function summarizeMeasurements(records, journeys, verifiedLinks = [], { contextR
     if (!journey.currentEvents.size && !accounts.has(journeyOwners.get(key))) continue;
     const source = marketingMetadata(journey.metadata).source || "unattributed";
     const row = sources.get(source) || empty();
-    const landing = marketingMetadata(journey.metadata).page || "unattributed";
+    const safeMarketing = marketingMetadata(journey.metadata);
+    const landing = safeMarketing.landing_page || safeMarketing.page || "unattributed";
     const landingRow = landings.get(landing) || empty();
     const accountId = journeyOwners.get(key);
     // One account can navigate through multiple anonymous landing pages. Count
@@ -250,8 +368,9 @@ function summarizeMeasurements(records, journeys, verifiedLinks = [], { contextR
     checkoutRecovery: { ...recovery, note: "Membership clicks and returns are browser diagnostics, not Ko-fi checkout attempts. Chronological chains use retained first account-event-day timestamps and can miss repeated same-day attempts. Paid counts require server payment events. Return/status diagnostics began October 13, 2026; earlier absence means unmeasured returns, not abandonment." },
     checkoutDiagnostics: summarizeCheckoutDiagnostics(records),
     attributionDiagnostics: { ...attributionDiagnostics, note: "These are overlapping diagnostic counts, not inferred traffic sources. Journey attribution requires an authenticated connection before the attributed event; a later login cannot retroactively credit an earlier payment. Different billing emails require verified linking; direct anonymous Ko-fi purchases can remain unattributed." },
+    paymentAttribution: summarizePaymentAttribution(records, contextRecords, verifiedLinks, grouped.values()),
     playbackDiagnostics: { unit: "account-event-day", classification: "first recorded failure of each account per UTC day", ...diagnostics }
   };
 }
 
-module.exports = { journeyKey, marketingMetadata, recordJourneyEvent, summarizeMeasurements, FAILURE_KINDS, TRANSPORTS, PHASES, CHECKOUT_FLOW_VERSIONS };
+module.exports = { journeyKey, marketingMetadata, recordJourneyEvent, summarizeMeasurements, FAILURE_KINDS, TRANSPORTS, PHASES, CHECKOUT_FLOW_VERSIONS, ATTRIBUTION_EVENTS };

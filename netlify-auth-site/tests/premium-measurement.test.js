@@ -34,6 +34,213 @@ test('a retained earlier authenticated journey explains a later payment without 
   assert.equal(result.paymentActivation.confirmedNewMemberships, 1);
 });
 
+test('payment attribution recovers authenticated checkout sources without fabricating anonymous journeys', () => {
+  const record = (eventName, time, metadata = {}) => ({ accountKey: 'buyer', eventName, firstAt: `2026-11-10T${time}:00Z`, metadata });
+  const records = [record('checkout_opened', '10:00', { source: 'reddit', medium: 'social', campaign: 'launch', page: 'web', landing_page: 'browser', entry: 'feature_preview' }),
+    record('subscription_started', '10:05'), record('paid_access_observed', '10:06')];
+  const result = measurement.summarizeMeasurements(records, []);
+  assert.equal(result.journeys.confirmedNewMemberships, 0);
+  assert.equal(result.journeys.confirmedPaymentsNotMatchedToJourney, 1);
+  assert.equal(result.paymentAttribution.confirmedBuyingAccounts, 1);
+  assert.equal(result.paymentAttribution.attributedAccounts, 1);
+  assert.equal(result.paymentAttribution.unattributedAccounts, 0);
+  assert.deepEqual(result.paymentAttribution.bySource, { reddit: 1 });
+  assert.deepEqual(result.paymentAttribution.byLandingPage, { browser: 1 });
+  assert.deepEqual(result.paymentAttribution.byCheckoutEntry, { feature_preview: 1 });
+  assert.deepEqual(result.paymentAttribution.byMethod, { authenticated_event: 1 });
+  const unpaid = measurement.summarizeMeasurements(records.filter(record => record.eventName !== 'subscription_started'), []);
+  assert.equal(unpaid.paymentAttribution.confirmedBuyingAccounts, 0);
+});
+
+test('connected journeys remain the preferred source and each buyer is counted once', () => {
+  const records = [
+    { accountKey: 'buyer', eventName: 'checkout_opened', firstAt: '2026-11-10T10:05:00Z', metadata: { journey_key: journeyKey, source: 'google', entry: 'paywall' } },
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-10T10:10:00Z' },
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-11T10:10:00Z' },
+    { accountKey: 'renewal', eventName: 'subscription_renewed', firstAt: '2026-11-10T10:10:00Z' }
+  ];
+  const journeys = [{ journeyKey, eventName: 'premium_page_view', firstAt: '2026-11-10T10:00:00Z', metadata: { source: 'discord', medium: 'social', landing_page: 'home', page: 'premium' } }];
+  const result = measurement.summarizeMeasurements(records, journeys).paymentAttribution;
+  assert.equal(result.confirmedBuyingAccounts, 1);
+  assert.deepEqual(result.bySource, { discord: 1 });
+  assert.deepEqual(result.byMethod, { connected_journey: 1 });
+  assert.deepEqual(result.byLandingPage, { home: 1 });
+  assert.deepEqual(result.byCheckoutEntry, { paywall: 1 });
+});
+
+test('legacy direct labels use observed external referrers and keep internal traffic separate', () => {
+  const records = ['organic', 'internal', 'direct', 'tagged'].flatMap((accountKey, index) => [
+    { accountKey, eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata: [
+      { source: 'direct', medium: 'web', referrer: 'www.google.nl' },
+      { source: 'direct', medium: 'web', referrer: 'arvio.tv' },
+      { source: 'direct', medium: 'web' },
+      { source: 'newsletter', medium: 'email', referrer: 'arvio.tv' }
+    ][index] },
+    { accountKey, eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' }
+  ]);
+  const result = measurement.summarizeMeasurements(records, []).paymentAttribution;
+  assert.deepEqual(result.bySource, { 'www.google.nl': 1, internal: 1, direct: 1, newsletter: 1 });
+  assert.deepEqual(result.byMedium, { organic: 1, internal: 1, direct: 1, email: 1 });
+  assert.deepEqual(result.bySourceBasis, { observed_referrer: 1, internal: 1, direct: 1, recorded_source: 1 });
+  assert.equal(result.externallyAttributedAccounts, 2);
+  assert.equal(result.directOrInternalAccounts, 2);
+  assert.equal(result.externallyAttributedAccounts + result.directOrInternalAccounts + result.unattributedAccounts, result.confirmedBuyingAccounts);
+});
+
+test('valid marketing tags cannot alter object prototypes or corrupt counts', () => {
+  const records = ['constructor', 'toString', '__proto__'].flatMap((tag, index) => [
+    { accountKey: `buyer-${index}`, eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata: { source: tag, campaign: tag } },
+    { accountKey: `buyer-${index}`, eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' }
+  ]);
+  const result = measurement.summarizeMeasurements(records, []).paymentAttribution;
+  for (const name of ['bySource', 'byCampaign']) {
+    assert.equal(Object.getPrototypeOf(result[name]), Object.prototype);
+    for (const tag of ['constructor', 'tostring', '__proto__']) {
+      assert.equal(Object.hasOwn(result[name], tag), true);
+      assert.equal(result[name][tag], 1);
+    }
+    assert.equal(Object.values(JSON.parse(JSON.stringify(result[name]))).reduce((sum, count) => sum + count, 0), 3);
+  }
+});
+
+test('unknown payments remain unknown and post-payment visits cannot claim them', () => {
+  const records = [
+    { accountKey: 'later', eventName: 'subscription_started', firstAt: '2026-11-10T10:00:00Z' },
+    { accountKey: 'later', eventName: 'checkout_opened', firstAt: '2026-11-10T10:01:00Z', metadata: { source: 'google' } },
+    { accountKey: 'invalid', eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata: { source: 'https://private.test/?email=person@example.test', referrer: '192.0.2.1', page: '/private/path' } },
+    { accountKey: 'invalid', eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' },
+    { accountKey: 'provider', eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z', metadata: { source: 'kofi' } }
+  ];
+  const result = measurement.summarizeMeasurements(records, []).paymentAttribution;
+  assert.equal(result.confirmedBuyingAccounts, 3);
+  assert.equal(result.attributedAccounts, 0);
+  assert.equal(result.unattributedAccounts, 3);
+  assert.deepEqual(result.bySource, { unknown: 3 });
+  assert.deepEqual(result.unattributedReasons, { no_pre_payment_event: 2, missing_source_metadata: 1 });
+  assert.equal(JSON.stringify(result).includes('private.test'), false);
+  assert.equal(JSON.stringify(result).includes('person@example.test'), false);
+});
+
+test('a journey measured after the first purchase cannot claim it through a later same-account purchase', () => {
+  const records = [
+    { accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-11-10T10:00:00Z', metadata: { journey_key: journeyKey } },
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' },
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-11T10:05:00Z' }
+  ];
+  const result = measurement.summarizeMeasurements(records, [{ journeyKey, eventName: 'premium_page_view', firstAt: '2026-11-10T10:10:00Z', metadata: { source: 'google' } }]).paymentAttribution;
+  assert.equal(result.confirmedBuyingAccounts, 1);
+  assert.deepEqual(result.bySource, { unknown: 1 });
+});
+
+test('payment attribution joins only verified billing owners and rejects ambiguous transfers', () => {
+  const records = [
+    { accountKey: 'account', eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata: { source: 'reddit', entry: 'paywall' } },
+    { accountKey: 'billing', eventName: 'subscription_started', firstAt: '2026-11-10T10:05:00Z' }
+  ];
+  const verified = [{ billingKey: 'billing', accountKey: 'account' }];
+  const joined = measurement.summarizeMeasurements(records, [], verified).paymentAttribution;
+  assert.deepEqual(joined.bySource, { reddit: 1 });
+  const unverified = measurement.summarizeMeasurements(records, []).paymentAttribution;
+  assert.deepEqual(unverified.bySource, { unknown: 1 });
+  const ambiguous = measurement.summarizeMeasurements([
+    ...records, { accountKey: 'billing', eventName: 'checkout_opened', firstAt: '2026-11-10T10:00:00Z', metadata: { source: 'google' } }
+  ], [], [...verified, { billingKey: 'billing', accountKey: 'other' }]).paymentAttribution;
+  assert.deepEqual(ambiguous.bySource, { unknown: 1 });
+  assert.deepEqual(ambiguous.unattributedReasons, { ambiguous_billing_identity: 1 });
+});
+
+test('short reports recover retained authenticated sources without increasing period checkout counts', async () => {
+  const store = memoryStore();
+  const put = (date, accountKey, eventName, metadata = {}) => store.data.set(`events/date/${date}/account/${accountKey}/${eventName}.json`, { date, accountKey, eventName, metadata, firstAt: `${date}T12:00:00Z` });
+  put('2026-10-01', 'buyer', 'checkout_opened', { source: 'newsletter', medium: 'email', landing_page: 'premium', entry: 'account_settings' });
+  put('2026-10-10', 'buyer', 'subscription_started');
+  put('2026-08-01', 'old', 'checkout_opened', { source: 'google' });
+  put('2026-10-10', 'old', 'subscription_started');
+  put('2026-10-13', 'future', 'subscription_started');
+  const module = fixtureModule('_premium-funnel', { '@netlify/blobs': { connectLambda() {}, getStore: () => store }, './_backend': { privacyHash: (_namespace, value) => value }, './_premium-measurement': measurement });
+  const result = await module.premiumFunnelReport({}, 5, '2026-10-12');
+  assert.equal(result.paymentAttribution.confirmedBuyingAccounts, 2);
+  assert.deepEqual(result.paymentAttribution.bySource, { newsletter: 1, unknown: 1 });
+  assert.equal(result.checkoutDiagnostics.membershipLinkOpened, 0);
+  assert.equal(result.journeys.journeys, 0);
+  assert.equal(result.paymentAttribution.attributedAccounts + result.paymentAttribution.unattributedAccounts, result.paymentActivation.confirmedNewMemberships);
+  for (const name of ['bySource', 'byMedium', 'byCampaign', 'byLandingPage', 'byCheckoutEntry', 'byMethod', 'bySourceBasis']) {
+    assert.equal(Object.values(result.paymentAttribution[name]).reduce((sum, count) => sum + count, 0), 2);
+  }
+});
+
+test('authenticated payment attribution uses a strict per-payment 30-day cutoff independent of report length', () => {
+  const stale = { accountKey: 'buyer', eventName: 'checkout_opened', firstAt: '2026-10-10T12:00:00Z', metadata: { source: 'old-campaign', entry: 'account_settings' } };
+  const recent = { accountKey: 'buyer', eventName: 'checkout_opened', firstAt: '2026-10-20T12:00:00Z', metadata: { source: 'recent-campaign', entry: 'paywall' } };
+  const sale = { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-10T12:00:00Z' };
+  const long = measurement.summarizeMeasurements([stale, recent, sale], []).paymentAttribution;
+  const short = measurement.summarizeMeasurements([sale], [], [], { contextRecords: [stale, recent] }).paymentAttribution;
+  assert.equal(short.lookbackDays, 30);
+  assert.deepEqual(short, long);
+  assert.deepEqual(short.bySource, { 'recent-campaign': 1 });
+  assert.deepEqual(short.byCheckoutEntry, { paywall: 1 });
+  const staleOnly = measurement.summarizeMeasurements([stale, sale], []).paymentAttribution;
+  assert.deepEqual(staleOnly.bySource, { unknown: 1 });
+  assert.deepEqual(staleOnly.byCheckoutEntry, { unknown: 1 });
+});
+
+test('a stale first journey cannot hide a later eligible journey inside the strict payment lookback', () => {
+  const recentKey = 'b'.repeat(64);
+  const sale = { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-10T12:00:00Z' };
+  const connections = [
+    { accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-10-10T12:01:00Z', metadata: { journey_key: journeyKey } },
+    { accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-10-20T12:01:00Z', metadata: { journey_key: recentKey } }
+  ];
+  const journeys = [
+    { journeyKey, eventName: 'premium_page_view', firstAt: '2026-10-10T12:00:00Z', metadata: { source: 'old-campaign' } },
+    { journeyKey: recentKey, eventName: 'premium_page_view', firstAt: '2026-10-20T12:00:00Z', metadata: { source: 'recent-campaign' } }
+  ];
+  const long = measurement.summarizeMeasurements([...connections, sale], journeys);
+  const short = measurement.summarizeMeasurements([sale], [], [], { contextRecords: connections, contextJourneys: journeys });
+  assert.deepEqual(short.paymentAttribution, long.paymentAttribution);
+  assert.deepEqual(short.paymentAttribution.bySource, { 'recent-campaign': 1 });
+  assert.deepEqual(short.paymentAttribution.byMethod, { connected_journey: 1 });
+  assert.equal(long.journeys.bySource['old-campaign'].confirmedNewMemberships, 1);
+});
+
+test('an earlier source-less journey cannot hide a later source inside the strict payment lookback', () => {
+  const recentKey = 'c'.repeat(64);
+  const records = [
+    { accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-11-09T12:01:00Z', metadata: { journey_key: journeyKey } },
+    { accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-11-10T12:01:00Z', metadata: { journey_key: recentKey } },
+    { accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-11-10T12:05:00Z' }
+  ];
+  const journeys = [
+    { journeyKey, eventName: 'premium_page_view', firstAt: '2026-11-09T12:00:00Z', metadata: { source: 'https://private.test/' } },
+    { journeyKey: recentKey, eventName: 'premium_page_view', firstAt: '2026-11-10T12:00:00Z', metadata: { source: 'discord' } }
+  ];
+  const result = measurement.summarizeMeasurements(records, journeys).paymentAttribution;
+  assert.deepEqual(result.bySource, { discord: 1 });
+  assert.deepEqual(result.byMethod, { connected_journey: 1 });
+});
+
+test('an earlier anonymous visit can be recovered when its authenticated connection is inside the report', async () => {
+  const store = memoryStore();
+  store.data.set(`journeys/date/2026-10-07/${journeyKey}/premium_page_view.json`, { date: '2026-10-07', journeyKey, eventName: 'premium_page_view', firstAt: '2026-10-07T12:00:00Z', metadata: { source: 'discord' } });
+  store.data.set('events/date/2026-10-10/account/buyer/_journey.json', { date: '2026-10-10', accountKey: 'buyer', eventName: 'journey_connected', firstAt: '2026-10-10T12:00:00Z', metadata: { journey_key: journeyKey } });
+  store.data.set('events/date/2026-10-10/account/buyer/subscription_started.json', { date: '2026-10-10', accountKey: 'buyer', eventName: 'subscription_started', firstAt: '2026-10-10T12:05:00Z' });
+  const module = fixtureModule('_premium-funnel', { '@netlify/blobs': { connectLambda() {}, getStore: () => store }, './_backend': { privacyHash: (_namespace, value) => value }, './_premium-measurement': measurement });
+  const result = await module.premiumFunnelReport({}, 5, '2026-10-12');
+  assert.deepEqual(result.paymentAttribution.bySource, { discord: 1 });
+  assert.deepEqual(result.paymentAttribution.byMethod, { connected_journey: 1 });
+  assert.equal(result.journeys.premiumPageViews, 0);
+});
+
+test('landing and referrer metadata accepts bounded labels and hostname only', () => {
+  assert.deepEqual(measurement.marketingMetadata({ page: 'web', landing_page: 'servers', referrer: 'WWW.REDDIT.COM' }), { page: 'web', landing_page: 'servers', referrer: 'www.reddit.com' });
+  for (const referrer of ['https://reddit.com/private', 'person@example.test', '192.0.2.1', 'reddit.com/private', 'reddit.com?private=true']) {
+    assert.deepEqual(measurement.marketingMetadata({ referrer, landing_page: '/private/path?secret=true' }), {});
+  }
+  assert.deepEqual(funnel._test.sanitizeMetadata({ page: 'web', landing_page: 'jellyfin', unknown: 'no' }), { page: 'web', landing_page: 'jellyfin' });
+  assert.deepEqual(funnel._test.sanitizeMetadata({ page: 'private-path', landing_page: '/private/path' }), {});
+  assert.deepEqual(funnel._test.sanitizeMetadata({ source: '/private/path', medium: 'person@example.test', campaign: 'secret?token=123', content: 'https://private.test', referrer: 'reddit.com/private' }), {});
+});
+
 test('earlier clicks cannot inflate period events, attribute anonymous sales, or override an ambiguous owner', () => {
   const earlier = { journeyKey, eventName: 'membership_clicked', firstAt: '2026-10-01T10:00:00Z', metadata: { source: 'google' } };
   const contextRecords = ['buyer', 'other'].map(accountKey => ({ accountKey, eventName: 'journey_connected', firstAt: '2026-10-01T11:00:00Z', metadata: { journey_key: journeyKey } }));

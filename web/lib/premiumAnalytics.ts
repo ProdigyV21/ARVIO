@@ -34,11 +34,14 @@ const JOURNEY_KEY = "arvio.premium.journey.v1";
 const ATTRIBUTION_OWNER_KEY = "arvio.premium.attribution-owner.v1";
 const ATTRIBUTION_TTL = 24 * 60 * 60 * 1000;
 const JOURNEY_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const LANDING_PAGES = new Set(["home", "premium", "web", "guides", "android", "jellyfin", "servers", "addons", "debrid", "tracking", "live", "subtitles", "firetv", "browser", "collections", "selfhost", "playback"]);
+const INTERNAL_HOSTS = new Set(["arvio.tv", "www.arvio.tv", "web.arvio.tv", "auth.arvio.tv"]);
 let capturedQuery = "";
 let memoryAttribution: Record<string, string> = {};
 let memoryJourney = "";
 let attributionExpiresAt = 0;
 let attributionOwner = "";
+let suppressDocumentReferrer = false;
 export const TRIAL_INTENT_KEY = "arvio.premium.trial-intent.v1";
 const inFlight = new Set<string>();
 const dailyRecorded = new Map<string, string>();
@@ -67,6 +70,20 @@ function clean(value: string | null, max = 80) {
   return /^[a-z0-9._-]+$/i.test(text) ? text.slice(0, max).toLowerCase() : "";
 }
 
+function landingPage(value: string | null | undefined) {
+  return value && LANDING_PAGES.has(value) ? value : "";
+}
+
+function referral() {
+  let referrer = "";
+  if (!suppressDocumentReferrer) {
+    try { referrer = clean(new URL(document.referrer).hostname); } catch { /* no usable referring site */ }
+  }
+  const organic = /^(?:www\.)?google\.(?:com|[a-z]{2}|com\.[a-z]{2}|co\.[a-z]{2})$/.test(referrer) ||
+    ["www.bing.com", "bing.com", "duckduckgo.com", "www.duckduckgo.com"].includes(referrer);
+  return { referrer, source: referrer || "direct", medium: INTERNAL_HOSTS.has(referrer) ? "internal" : organic ? "organic" : referrer ? "referral" : "direct" };
+}
+
 // A page-navigation ID links the public Premium page to this signed-in session.
 // It is never a cookie, persistent browser ID, URL sent to Ko-fi, or an identity
 // proof. Attribution expires after a day and resets when the account changes.
@@ -87,10 +104,20 @@ export function capturePremiumAttribution() {
       attributionOwner = storageGet(disk, ATTRIBUTION_OWNER_KEY) || "";
     } catch { /* storage is optional */ }
   }
-  if (attributionExpiresAt <= now) { memoryAttribution = {}; memoryJourney = ""; }
+  if (attributionExpiresAt && attributionExpiresAt <= now) {
+    memoryAttribution = {}; memoryJourney = "";
+    // document.referrer belongs to the original document, not a fresh visit a
+    // day later. Expiry must not resurrect that earlier campaign/referral.
+    suppressDocumentReferrer = true;
+  }
   const freshQuery = query !== capturedQuery;
   const incomingJourney = params.get("arvio_journey") || "";
   const incoming = freshQuery && JOURNEY_ID.test(incomingJourney) ? incomingJourney.toLowerCase() : "";
+  const incomingSource = freshQuery ? clean(params.get("utm_source")) : "";
+  const changedCampaign = freshQuery && ["source", "medium", "campaign", "content"].some(name => {
+    const value = clean(params.get(`utm_${name}`));
+    return value && value !== memoryAttribution[name];
+  });
   if (incoming) {
     memoryJourney = incoming;
     memoryAttribution = {};
@@ -99,18 +126,20 @@ export function capturePremiumAttribution() {
     try {
       const url = new URL(window.location.href);
       url.searchParams.delete("arvio_journey");
+      url.searchParams.delete("arvio_landing");
       window.history.replaceState(window.history.state, "", url.toString());
     } catch { /* optional in embedded/restricted browsers */ }
+  } else if (changedCampaign) {
+    memoryAttribution = {}; memoryJourney = "";
+    attributionExpiresAt = now + ATTRIBUTION_TTL;
   }
-  let referrer = memoryAttribution.referrer || "";
-  if (!referrer) {
-    try { referrer = document.referrer ? new URL(document.referrer).hostname : ""; } catch { /* invalid referrer */ }
-  }
-  const tag = (name: string, fallback: string) => clean((freshQuery ? params.get(`utm_${name}`) : null) || memoryAttribution[name] || fallback);
+  const observed = referral();
+  const tag = (name: string, fallback: string) => (freshQuery ? clean(params.get(`utm_${name}`)) : "") || clean(memoryAttribution[name]) || fallback;
   memoryAttribution = {
-    source: tag("source", "direct"), medium: tag("medium", "web"),
+    source: tag("source", observed.source), medium: tag("medium", incomingSource ? "campaign" : observed.medium),
     campaign: tag("campaign", "premium"), content: tag("content", "unspecified"),
-    referrer: clean(referrer)
+    referrer: clean(memoryAttribution.referrer || observed.referrer), page: "web",
+    landing_page: (freshQuery && landingPage(params.get("arvio_landing"))) || landingPage(memoryAttribution.landing_page) || "web"
   };
   if (!attributionExpiresAt || attributionExpiresAt <= now) attributionExpiresAt = now + ATTRIBUTION_TTL;
   capturedQuery = window.location.search;
@@ -125,6 +154,7 @@ function attributionForAccount(accountId: string) {
     memoryAttribution = {};
     memoryJourney = "";
     attributionExpiresAt = 0;
+    suppressDocumentReferrer = true;
     const disk = browserStorage("sessionStorage");
     storageSet(disk, ATTRIBUTION_KEY, "{}");
     storageSet(disk, JOURNEY_KEY, "");

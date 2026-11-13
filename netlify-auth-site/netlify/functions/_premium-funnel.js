@@ -1,6 +1,6 @@
 const { connectLambda, getStore } = require("@netlify/blobs");
 const { privacyHash } = require("./_backend");
-const { journeyKey, summarizeMeasurements, FAILURE_KINDS, TRANSPORTS, PHASES, CHECKOUT_FLOW_VERSIONS } = require("./_premium-measurement");
+const { journeyKey, marketingMetadata, summarizeMeasurements, FAILURE_KINDS, TRANSPORTS, PHASES, CHECKOUT_FLOW_VERSIONS, ATTRIBUTION_EVENTS } = require("./_premium-measurement");
 
 const PREMIUM_EVENTS = new Set([
   "journey_connected", "web_opened", "sources_configured", "sources_missing",
@@ -64,13 +64,18 @@ function premiumFunnelStore(event) {
 function sanitizeMetadata(metadata) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
   const result = {};
-  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version", "platform", "method", "container", "host_type", "outcome", "attempt"]);
+  const allowed = new Set(["source", "medium", "campaign", "content", "referrer", "page", "landing_page", "playback_type", "entry", "player", "stage", "status", "destination", "duration_days", "tier", "provider", "successful", "billing_key", "failure_kind", "transport", "phase", "flow_version", "platform", "method", "container", "host_type", "outcome", "attempt"]);
   const enumerated = { failure_kind: FAILURE_KINDS, transport: TRANSPORTS, phase: PHASES, flow_version: CHECKOUT_FLOW_VERSIONS,
     platform: PLAYBACK_PLATFORMS, method: PLAYBACK_METHODS, container: PLAYBACK_CONTAINERS, host_type: PLAYBACK_HOST_TYPES, outcome: PLAYBACK_OUTCOMES };
   // Attribution (5) + playback diagnostics (12) must fit; unknown keys are
   // skipped before they count.
   for (const [key, value] of Object.entries(metadata).slice(0, 24)) {
     if (!allowed.has(key)) continue;
+    if (["source", "medium", "campaign", "content", "page", "landing_page", "referrer"].includes(key)) {
+      const safe = marketingMetadata({ [key]: value });
+      if (safe[key]) result[key] = safe[key];
+      continue;
+    }
     if (enumerated[key] && !enumerated[key].has(value)) continue;
     if (key === "attempt" && value !== true) continue;
     if (!/^[a-z][a-z0-9_]{0,31}$/i.test(key)) continue;
@@ -305,18 +310,24 @@ async function premiumFunnelReport(event, days = 30, endDate) {
   const inContext = key => key.split("/")[2] >= contextStart && key.split("/")[2] < dates[0];
   const allJourneyKeys = await listKeys(store, "journeys/date/");
   const journeyKeys = allJourneyKeys.filter(key => dateSet.has(key.split("/")[2]));
-  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed"]);
-  const detailKeys = keys.filter(key => detailedEvents.has(key.split("/")[5]?.replace(/\.json$/, "")));
   // Look back only for actual new payers, not every historic visitor or trial.
   // This avoids turning a small period report into thousands of extra reads.
   const accountKeys = new Set(keys.filter(key => key.endsWith("/subscription_started.json")).map(key => key.split("/")[4]));
   for (const { billingKey, accountKey } of verifiedLinks) if (accountKeys.has(billingKey)) accountKeys.add(accountKey);
-  const contextLinkKeys = allKeys.filter(key => inContext(key) && key.endsWith("/_journey.json") && accountKeys.has(key.split("/")[4]));
+  const detailedEvents = new Set(["_journey", "trial_started", "subscription_started", "paid_access_observed", "membership_cta_viewed", "checkout_opened", "checkout_returned", "payment_status_checked", "checkout_recovery_opened", "checkout_recovery_closed", "membership_link_started", "membership_linked", "membership_link_failed", "billing_email_verified", "playback_failed"]);
+  const detailKeys = keys.filter(key => {
+    const name = key.split("/")[5]?.replace(/\.json$/, "");
+    // Extra authenticated source observations are needed only for confirmed
+    // buyers. Existing diagnostic event reads and key-based totals stay intact.
+    return detailedEvents.has(name) || (ATTRIBUTION_EVENTS.has(name) && accountKeys.has(key.split("/")[4]));
+  });
+  const contextLinkKeys = allKeys.filter(key => inContext(key) && accountKeys.has(key.split("/")[4]) &&
+    (key.endsWith("/_journey.json") || ATTRIBUTION_EVENTS.has(key.split("/")[5]?.replace(/\.json$/, ""))));
   const [records, journeys, contextRecords, attemptRecords] = await Promise.all([
     readMany(detailKeys), readMany(journeyKeys), readMany(contextLinkKeys),
     readMany(keys.filter(key => key.endsWith("/_playback_attempts.json")))
   ]);
-  const contextJourneyIds = new Set(contextRecords.map(record => record.metadata?.journey_key).filter(Boolean));
+  const contextJourneyIds = new Set([...contextRecords, ...records.filter(record => accountKeys.has(record.accountKey))].map(record => record.metadata?.journey_key).filter(Boolean));
   const contextJourneys = await readMany(allJourneyKeys.filter(key => inContext(key) && contextJourneyIds.has(key.split("/")[3])));
   const generatedAt = new Date().toISOString();
   const observationEnd = endDate && endDate < today ? new Date(Date.parse(endDate) + 86400000).toISOString() : generatedAt;
@@ -324,7 +335,7 @@ async function premiumFunnelReport(event, days = 30, endDate) {
   return { ...summary, generatedAt, periodStart: dates[0], periodEnd: dates.at(-1),
     ...summarizeMeasurements(records, journeys, verifiedLinks, { contextRecords, contextJourneys }),
     playbackAttempts: summarizePlaybackAttempts(attemptRecords),
-    attributionLookback: { days: 30, contextStart, note: "Earlier retained journeys can explain payments in this period; they do not increase period visit counts. Expired or unlinked journeys remain unattributed." } };
+    attributionLookback: { days: 30, contextStart, note: "Earlier retained journeys and authenticated pre-payment source observations can explain payments in this period; they do not increase period visit counts. Unknown or post-payment sources remain unattributed. paymentAttribution includes authenticated fallbacks; legacy journey counts still require a connected anonymous journey." } };
 
 }
 

@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
   const root = path.resolve(__dirname, '..');
   const fixture = name => path.join(root, 'tests/fixtures', name);
   const regionalOnly = process.env.PAYMENT_UI_ONLY === 'regional-pricing';
+  const attributionOnly = process.env.PAYMENT_UI_ONLY === 'attribution';
   const yearlyUrl = 'https://ko-fi.com/s/373de24a07';
   const regionalUrl = 'https://ko-fi.com/arvio/link/ARVIOREGION50';
   const result = await esbuild.build({
@@ -119,6 +120,46 @@ const assert = require('node:assert/strict');
       await popup.close();
     };
     const returnToApp = () => page.evaluate(() => { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')); });
+    if (attributionOnly) {
+      process.env.ARVIO_AUTH_SECRET = 'isolated-browser-attribution-test-secret-32-bytes';
+      const { summarizeMeasurements } = require('../../netlify-auth-site/netlify/functions/_premium-measurement');
+      const journey = 'a1101111-2222-4333-8444-555566667777';
+      for (const [query, source, landing] of [
+        [`arvio_journey=${journey}&arvio_landing=jellyfin&utm_source=www.google.com&utm_medium=organic&utm_campaign=discovery`, 'www.google.com', 'jellyfin'],
+        ['utm_source=reddit&utm_medium=social&utm_campaign=community', 'reddit', 'web']
+      ]) {
+        await page.goto(`${base}/?case=checkout&${query}`);
+        await page.getByRole('link', { name: /Keep Premium/ }).waitFor();
+        await handoff(page.getByRole('link', { name: /Keep Premium/ }));
+        const recorded = await page.evaluate(() => window.__premiumFixture.events);
+        const checkout = recorded.find(event => event.event_name === 'checkout_opened');
+        assert.equal(checkout.metadata.source, source);
+        assert.equal(checkout.metadata.landing_page, landing);
+        assert.equal(checkout.metadata.entry, 'account_settings');
+        const records = recorded.map((event, index) => ({ accountKey: 'isolated-buyer', eventName: event.event_name,
+          firstAt: new Date(Date.UTC(2026, 10, 13, 10, 0, index)).toISOString(), metadata: event.metadata }));
+        assert.equal(summarizeMeasurements(records, []).paymentAttribution.confirmedBuyingAccounts, 0,
+          'browser checkout events cannot create a payment');
+        // Simulate only the server-confirmed event locally. There is no Ko-fi
+        // request or production write, and the missing anonymous beacon stays
+        // missing: the authenticated checkout is sufficient evidence.
+        records.push({ accountKey: 'isolated-buyer', eventName: 'subscription_started', firstAt: '2026-11-13T11:00:00.000Z' });
+        const report = summarizeMeasurements(records, []).paymentAttribution;
+        assert.equal(report.bySource[source], 1);
+        assert.equal(report.byLandingPage[landing], 1);
+        assert.equal(report.byCheckoutEntry.account_settings, 1);
+        assert.equal(report.byMethod.authenticated_event, 1);
+        await page.evaluate(() => window.__premiumFixture.markPaid());
+        await page.getByRole('dialog').getByRole('button', { name: 'Check payment status', exact: true }).click();
+        await page.getByTestId('activation-result').filter({ hasText: /^Paid activation/ }).waitFor();
+        await page.evaluate(() => sessionStorage.clear());
+      }
+      assert.deepEqual(errors, []);
+      assert.ok(externalAttempts.length >= 2);
+      assert.equal(externalAttempts.every(url => url === 'https://ko-fi.com/arvio/tiers'), true);
+      console.log('Attribution browser scenarios passed: source + landing + checkout entry survive native payment handoff; missing anonymous beacons recover from authenticated events; activation works; real billing/network blocked.');
+      return;
+    }
     const noOverflow = async name => {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name}: no page overflow`);
       for (const dialog of await page.getByRole('dialog').all()) assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth), false, `${name}: no dialog overflow`);
