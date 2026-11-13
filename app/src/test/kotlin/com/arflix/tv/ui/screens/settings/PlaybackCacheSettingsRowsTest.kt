@@ -14,6 +14,14 @@ import org.robolectric.annotation.ConscryptMode
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class PlaybackCacheSettingsRowsTest {
     @Test
+    fun `addon details has its own reachable playback slot`() {
+        val playback = tvGeneralRowsForSection("playback")
+        assertEquals(1, playback.count { it == 55 })
+        assertTrue(playback.indexOf(55) > playback.indexOf(44))
+        assertEquals(listOf(53, 54), playback.takeLast(2))
+    }
+
+    @Test
     fun `cache actions do not reuse live AI subtitle actions`() {
         val playback = tvGeneralRowsForSection("playback")
         val ai = tvGeneralRowsForSection("ai_subtitles")

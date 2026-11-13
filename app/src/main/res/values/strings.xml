@@ -2118,4 +2118,6 @@
     <string name="live_ai_subs_needs_key">Add a Google Gemini API key first</string>
     <string name="live_ai_subs_auto_title">Auto-translate when a channel starts</string>
     <string name="live_ai_subs_auto_desc">Every channel starts with AI subtitles on, without picking them in the subtitle menu</string>
+    <string name="show_addon_stream_details">Show add-on stream details</string>
+    <string name="show_addon_stream_details_desc">Show add-on descriptions below source badges on TV. Focus a source to expand its details.</string>
 </resources>

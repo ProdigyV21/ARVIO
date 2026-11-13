@@ -351,6 +351,8 @@ class CloudSyncRepository @Inject constructor(
         val animeEpisodeStructuring: String = AnimeStructuringStyle.BROADCAST.id,
         val iptvFavoritesOnHome: Boolean = true,
         val showLoadingStats: Boolean? = null,
+        // Older clients omit this field; do not reset an opted-in TV on restore.
+        val showAddonStreamDetails: Boolean? = null,
         val spoilerBlurEnabled: Boolean = false,
         val volumeBoostDb: Int = 0,
         val includeSpecials: Boolean = false,
@@ -750,6 +752,7 @@ class CloudSyncRepository @Inject constructor(
                         animeEpisodeStructuring = prefs[animeEpisodeStructuringKeyFor(profile.id)] ?: AnimeStructuringStyle.BROADCAST.id,
                         iptvFavoritesOnHome = prefs[iptvFavoritesOnHomeKeyFor(profile.id)] ?: true,
                         showLoadingStats = prefs[showLoadingStatsKeyFor(profile.id)] ?: true,
+                        showAddonStreamDetails = prefs[com.arflix.tv.util.addonStreamDetailsKey(profile.id)] ?: false,
                         spoilerBlurEnabled = prefs[spoilerBlurKeyFor(profile.id)] ?: false,
                         volumeBoostDb = prefs[volumeBoostDbKeyFor(profile.id)]?.toIntOrNull()?.coerceIn(0, 15) ?: 0,
                         dnsProvider = prefs[dnsProviderKeyFor(profile.id)] ?: globalDnsProvider,
@@ -1747,6 +1750,7 @@ class CloudSyncRepository @Inject constructor(
                         prefs[animeEpisodeStructuringKeyFor(profileId)] = state.animeEpisodeStructuring.ifBlank { AnimeStructuringStyle.BROADCAST.id }
                         prefs[iptvFavoritesOnHomeKeyFor(profileId)] = state.iptvFavoritesOnHome
                         state.showLoadingStats?.let { prefs[showLoadingStatsKeyFor(profileId)] = it }
+                        state.showAddonStreamDetails?.let { prefs[com.arflix.tv.util.addonStreamDetailsKey(profileId)] = it }
                         prefs[spoilerBlurKeyFor(profileId)] = state.spoilerBlurEnabled
                         prefs[volumeBoostDbKeyFor(profileId)] = state.volumeBoostDb.coerceIn(0, 15).toString()
                         prefs[dnsProviderKeyFor(profileId)] = state.dnsProvider.ifBlank { "system" }

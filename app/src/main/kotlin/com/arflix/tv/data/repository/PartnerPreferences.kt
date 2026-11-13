@@ -57,7 +57,7 @@ internal object PartnerPreferencePolicy {
             "oled_black_background", "smooth_scrolling", "guide_row_count").any { key.endsWith(it) } -> permissions.editAppearance
         listOf("auto_play", "trailer_", "subtitle_size", "subtitle_color", "subtitle_style", "subtitle_font",
             "subtitle_offset", "subtitle_ai_", "dolby_vision", "frame_rate_matching", "volume_boost",
-            "include_specials", "quality_filters", "stream_search_mode").any { key.contains(it) } -> permissions.editPlayback
+            "include_specials", "quality_filters", "stream_search_mode", "show_addon_stream_details").any { key.contains(it) } -> permissions.editPlayback
         else -> true
     }
 }

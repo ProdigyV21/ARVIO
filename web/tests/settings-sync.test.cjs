@@ -84,6 +84,17 @@ test('Android-only profile settings are written only once chosen on the web', as
   assert.equal(pulled.streamSearchMode, 'sequential');
 });
 
+test('web saves preserve the TV-only addon details setting for every profile', async () => {
+  const h = cloudHarness({ profileSettingsById: { p1: { showAddonStreamDetails: true }, p2: { showAddonStreamDetails: false } } });
+  const base = webDefaults();
+  await h.cloud.saveCloudSettings(h.auth, { ...base, showBudget: !base.showBudget }, [], 'p1', [], base);
+  assert.equal(h.remote().profileSettingsById.p1.showAddonStreamDetails, true);
+  assert.equal(h.remote().profileSettingsById.p2.showAddonStreamDetails, false);
+  await h.cloud.saveCloudSettings(h.auth, base, [], 'p2', []);
+  assert.equal(h.remote().profileSettingsById.p1.showAddonStreamDetails, true);
+  assert.equal(h.remote().profileSettingsById.p2.showAddonStreamDetails, false);
+});
+
 test('account-wide Android toggles round-trip through the root of the payload', async () => {
   const h = cloudHarness({ subtitleAiEnabled: false, subtitlePreloadEnabled: true, dolbyVisionCompatEnabled: true, telegramSearchOnClickOnly: true, profileSettingsById: { p1: {} } });
   const base = webDefaults();
